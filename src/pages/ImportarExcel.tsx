@@ -1351,7 +1351,11 @@ export default function ImportarExcel() {
       toast.success(`IA organizou ${novos.length} registro(s)`);
     } catch (e) {
       console.error('[ImportarExcel/IA]', e);
-      toast.error('Erro ao organizar com IA');
+      const msg =
+        e instanceof Error && e.message
+          ? e.message
+          : 'Erro ao organizar com IA. Tente novamente.';
+      toast.error(msg);
     } finally {
       setOrganizandoIA(false);
     }
