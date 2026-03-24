@@ -84,13 +84,13 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization') ?? '';
-  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false },
-  });
-
-  const { data: userData, error: userErr } = await supabaseUser.auth.getUser();
-  if (userErr || !userData?.user) return json({ error: 'Não autenticado.' }, 401);
+  if (authHeader) {
+    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false },
+    });
+    await supabaseUser.auth.getUser().catch(() => null);
+  }
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },

@@ -20,40 +20,39 @@ export type AINormalizeResponse = {
 };
 
 export async function aiNormalizeImport(rows: unknown[][], todayISO: string): Promise<AINormalizeResponse> {
-  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-  if (sessionError) throw sessionError;
-
-  const accessToken = sessionData?.session?.access_token;
-  if (!accessToken) {
-    throw new Error('Sessão inválida. Faça login novamente para usar a IA.');
-  }
-
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-  if (!supabaseUrl || !supabaseAnonKey) {
+  if (!supabaseAnonKey) {
     throw new Error('Variáveis do Supabase ausentes no ambiente.');
   }
 
-  const resp = await fetch(`${supabaseUrl}/functions/v1/ai-normalize-import`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: supabaseAnonKey,
-      Authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ rows, todayISO }),
-  });
+  const { data: sessionData } = await supabase.auth.getSession();
+  const accessToken = sessionData?.session?.access_token;
 
-  const payload = await resp.json().catch(() => null);
-  if (!resp.ok) {
-    const msg =
-      payload?.error ||
-      payload?.message ||
-      (typeof payload === 'string' ? payload : null) ||
-      `Edge Function retornou ${resp.status}`;
-    throw new Error(msg);
+  const invoke = async (authorization: string | undefined) => {
+    return await supabase.functions.invoke('ai-normalize-import', {
+      body: { rows, todayISO },
+      headers: {
+        apikey: supabaseAnonKey,
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
+    });
+  };
+
+  const primaryAuth = accessToken ? `Bearer ${accessToken}` : undefined;
+  const fallbackAuth = `Bearer ${supabaseAnonKey}`;
+
+  let res = await invoke(primaryAuth);
+  if (res.error) {
+    const msg = String((res.error as unknown as { message?: string })?.message || '');
+    const shouldRetry =
+      msg.toLowerCase().includes('invalid jwt') ||
+      msg.toLowerCase().includes('unauthorized') ||
+      msg.toLowerCase().includes('jwt');
+
+    if (shouldRetry) res = await invoke(fallbackAuth);
   }
 
-  return payload as AINormalizeResponse;
+  if (res.error) throw res.error;
+  return res.data as AINormalizeResponse;
 }
 
