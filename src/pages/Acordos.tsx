@@ -378,30 +378,6 @@ export default function Acordos() {
             </p>
           </div>
           <div className="flex gap-2">
-            {selecionados.length > 1 && (
-              <Button
-                variant="destructive"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => setConfirmandoExclusaoLote(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Excluir ({selecionados.length})
-              </Button>
-            )}
-            {selecionados.length > 0 && (
-              <Button
-                size="sm"
-                className="gap-1.5 bg-success hover:bg-success/90 text-white"
-                onClick={() => {
-                  const lista = acordos.filter(a => selecionados.includes(a.id));
-                  prepararFila(lista);
-                }}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Lembrete ({selecionados.length})
-              </Button>
-            )}
             {acordosHoje.length > 0 && selecionados.length === 0 && (
               <Button
                 variant="outline"
@@ -479,7 +455,33 @@ export default function Acordos() {
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
                       <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
-                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">
+                        <div className="flex items-center justify-end gap-2">
+                          {selecionados.length > 0 && (
+                            <div className="flex items-center gap-1 mr-2 animate-in fade-in slide-in-from-right-2">
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                className="h-7 px-2 text-[10px] gap-1"
+                                onClick={() => setConfirmandoExclusaoLote(true)}
+                              >
+                                <Trash2 className="w-3 h-3" /> Excluir ({selecionados.length})
+                              </Button>
+                              <Button
+                                size="sm"
+                                className="h-7 px-2 text-[10px] gap-1 bg-success hover:bg-success/90 text-white"
+                                onClick={() => {
+                                  const lista = acordos.filter(a => selecionados.includes(a.id));
+                                  prepararFila(lista);
+                                }}
+                              >
+                                <MessageSquare className="w-3 h-3" /> Lembrete ({selecionados.length})
+                              </Button>
+                            </div>
+                          )}
+                          AÇÕES
+                        </div>
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -558,12 +560,44 @@ export default function Acordos() {
       {/* Modais */}
       {confirmandoExclusao && (
         <Dialog open onOpenChange={() => setConfirmandoExclusao(null)}>
-          <DialogContent className="max-w-sm">
-            <DialogHeader><DialogTitle>Confirmar Exclusão</DialogTitle></DialogHeader>
-            <div className="py-4 text-sm">Deseja excluir permanentemente o acordo #{confirmandoExclusao.nr_cliente}?</div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" size="sm" onClick={() => setConfirmandoExclusao(null)}>Cancelar</Button>
-              <Button variant="destructive" size="sm" onClick={() => excluirAcordo(confirmandoExclusao)}>Excluir</Button>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="w-5 h-5" /> Confirmar exclusão
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-4">
+              <div className="text-sm text-foreground">
+                <p>Tem certeza que deseja excluir o acordo abaixo?</p>
+                <p>Esta ação não pode ser desfeita.</p>
+              </div>
+              
+              <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">NR: <span className="text-primary font-mono font-bold">#{confirmandoExclusao.nr_cliente}</span></span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Cliente: <span className="text-foreground font-bold">{confirmandoExclusao.nome_cliente.toUpperCase()}</span></span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Valor: <span className="text-foreground font-bold">{formatCurrency(confirmandoExclusao.valor)}</span></span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Vencimento: <span className="text-foreground">{formatDate(confirmandoExclusao.vencimento)}</span></span>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end mt-4">
+              <Button variant="outline" onClick={() => setConfirmandoExclusao(null)}>
+                Cancelar
+              </Button>
+              <Button 
+                variant="destructive" 
+                className="bg-destructive hover:bg-destructive/90 text-white gap-2"
+                onClick={() => excluirAcordo(confirmandoExclusao)}
+              >
+                <Trash2 className="w-4 h-4" /> Excluir definitivamente
+              </Button>
             </div>
           </DialogContent>
         </Dialog>

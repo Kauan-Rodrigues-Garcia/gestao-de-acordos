@@ -108,7 +108,8 @@ export default function AcordoForm() {
       const valorNum = parseCurrencyInput(data.valor);
       if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); setLoading(false); return; }
 
-      const payload = {
+      // Payload base — colunas que EXISTEM no schema original (01_schema_completo.sql)
+      const payload: any = {
         nome_cliente:  data.nome_cliente.trim(),
         nr_cliente:    data.nr_cliente.trim(),
         data_cadastro: new Date().toISOString().split('T')[0],
@@ -120,42 +121,38 @@ export default function AcordoForm() {
         status:        data.status,
         observacoes:   data.observacoes?.trim() || null,
         operador_id:   uid,
-        setor_id:      p?.setor_id ?? null,
       };
 
-      // Tentar incluir `instituicao` — só funciona após a migration ser aplicada
-      const payloadFinal: Record<string, any> = { ...payload };
-      const instVal = data.instituicao?.trim() || null;
-      payloadFinal.instituicao = instVal;
+      // Adicionar colunas extras APENAS se houver valor, e tentar tratar erro se a coluna não existir
+      // Nota: setor_id e instituicao não estão no schema inicial de 01_schema_completo.sql
+      if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
+      if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      console.log('[AcordoForm] payload:', payloadFinal);
+      console.log('[AcordoForm] payload:', payload);
 
       let resultError = null;
-      let resultData: { id: string } | null = null;
 
       if (isEdit && id) {
-        const { error, data: upd } = await supabase
-          .from('acordos').update(payloadFinal).eq('id', id).select('id').single();
+        const { error } = await supabase.from('acordos').update(payload).eq('id', id);
         
-        // Se falhou por causa da coluna instituicao, retentar sem ela
-        if (error && (error.message.includes('instituicao') || error.code === '42703')) {
-          const { instituicao: _i, ...semInst } = payloadFinal;
-          const { error: e2, data: u2 } = await supabase.from('acordos').update(semInst).eq('id', id).select('id').single();
-          resultError = e2; resultData = u2;
+        // Fallback: se falhou por coluna inexistente, remover extras e retentar
+        if (error && (error.code === '42703' || error.message.includes('column'))) {
+          const { instituicao, setor_id, ...cleanPayload } = payload;
+          const { error: e2 } = await supabase.from('acordos').update(cleanPayload).eq('id', id);
+          resultError = e2;
         } else {
-          resultError = error; resultData = upd;
+          resultError = error;
         }
       } else {
-        const { error, data: ins } = await supabase
-          .from('acordos').insert(payloadFinal).select('id').single();
+        const { error } = await supabase.from('acordos').insert(payload);
         
-        // Se falhou por causa da coluna instituicao, retentar sem ela
-        if (error && (error.message.includes('instituicao') || error.code === '42703')) {
-          const { instituicao: _i, ...semInst } = payloadFinal;
-          const { error: e2, data: i2 } = await supabase.from('acordos').insert(semInst).select('id').single();
-          resultError = e2; resultData = i2;
+        // Fallback: se falhou por coluna inexistente, remover extras e retentar
+        if (error && (error.code === '42703' || error.message.includes('column'))) {
+          const { instituicao, setor_id, ...cleanPayload } = payload;
+          const { error: e2 } = await supabase.from('acordos').insert(cleanPayload);
+          resultError = e2;
         } else {
-          resultError = error; resultData = ins;
+          resultError = error;
         }
       }
 
