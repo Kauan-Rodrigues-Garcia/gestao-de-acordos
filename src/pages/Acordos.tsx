@@ -5,7 +5,7 @@ import {
   Plus, Search, MessageSquare, Edit, Eye,
   Filter, RefreshCw, X, CheckCircle2, Hash,
   Send, Copy, ChevronDown, ChevronUp, AlertCircle,
-  Trash2, ChevronLeft, ChevronRight
+  Trash2, ChevronLeft, ChevronRight, CheckCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -254,6 +254,7 @@ export default function Acordos() {
   const [filaWhatsApp, setFilaWhatsApp] = useState<ItemFila[]>([]);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<Acordo | null>(null);
+  const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
 
   // Debounce para busca
   useEffect(() => {
@@ -334,6 +335,34 @@ export default function Acordos() {
     setExcluindoId(null);
   }
 
+  async function excluirSelecionados() {
+    setConfirmandoExclusaoLote(false);
+    try {
+      const { error } = await supabase.from('acordos').delete().in('id', selecionados);
+      if (error) throw error;
+      toast.success(`${selecionados.length} acordos excluídos com sucesso!`);
+      setSelecionados([]);
+      refetch();
+    } catch (err) {
+      toast.error('Erro ao excluir acordos em lote');
+      console.error(err);
+    }
+  }
+
+  function enviarLembretesHoje() {
+    const lista = acordos.filter(a => a.vencimento === hoje);
+    if (lista.length === 0) { toast.info('Nenhum acordo vence hoje'); return; }
+    prepararFila(lista);
+  }
+
+  function enviarUmWhatsapp(a: Acordo) {
+    if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
+    const mensagem = buildMensagem(a);
+    window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(mensagem)}`, '_blank');
+  }
+
+  const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
+
   return (
     <div className="p-6">
       <div className="max-w-[1400px] mx-auto">
@@ -349,6 +378,41 @@ export default function Acordos() {
             </p>
           </div>
           <div className="flex gap-2">
+            {selecionados.length > 1 && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => setConfirmandoExclusaoLote(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Excluir ({selecionados.length})
+              </Button>
+            )}
+            {selecionados.length > 0 && (
+              <Button
+                size="sm"
+                className="gap-1.5 bg-success hover:bg-success/90 text-white"
+                onClick={() => {
+                  const lista = acordos.filter(a => selecionados.includes(a.id));
+                  prepararFila(lista);
+                }}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Lembrete ({selecionados.length})
+              </Button>
+            )}
+            {acordosHoje.length > 0 && selecionados.length === 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-success/40 text-success hover:bg-success/10"
+                onClick={enviarLembretesHoje}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Lembretes do dia ({acordosHoje.length})
+              </Button>
+            )}
             <Button variant="outline" size="icon" className="w-8 h-8" onClick={refetch}>
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             </Button>
@@ -434,8 +498,41 @@ export default function Acordos() {
                           <Badge className={cn('text-[10px]', STATUS_COLORS[a.status])}>{STATUS_LABELS[a.status]}</Badge>
                         </td>
                         <td className="px-3 py-2.5 text-right space-x-1">
+                          {a.status !== 'pago' && a.status !== 'cancelado' && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-success hover:bg-success/10"
+                              title="Marcar como Pago"
+                              disabled={atualizandoStatus === a.id}
+                              onClick={() => marcarComoPago(a.id)}
+                            >
+                              <CheckCircle className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={cn('w-7 h-7', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
+                            title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
+                            onClick={() => enviarUmWhatsapp(a)}
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </Button>
                           <Button asChild variant="ghost" size="icon" className="w-7 h-7"><Link to={`/acordos/${a.id}`}><Eye className="w-3.5 h-3.5" /></Link></Button>
                           <Button asChild variant="ghost" size="icon" className="w-7 h-7"><Link to={`/acordos/${a.id}/editar`}><Edit className="w-3.5 h-3.5" /></Link></Button>
+                          {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="w-7 h-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                              title="Excluir acordo"
+                              disabled={excluindoId === a.id}
+                              onClick={() => setConfirmandoExclusao(a)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -470,6 +567,42 @@ export default function Acordos() {
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {/* ── Modal confirmação exclusão lote ── */}
+      {confirmandoExclusaoLote && (
+        <Dialog open onOpenChange={() => setConfirmandoExclusaoLote(false)}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-destructive">
+                <Trash2 className="w-4 h-4" /> Excluir {selecionados.length} acordos
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-2 space-y-2">
+              <p className="text-sm text-foreground">
+                Tem certeza que deseja excluir os <strong>{selecionados.length}</strong> acordos selecionados? Esta ação não pode ser desfeita.
+              </p>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" size="sm" onClick={() => setConfirmandoExclusaoLote(false)}>Cancelar</Button>
+              <Button
+                variant="destructive" size="sm"
+                className="gap-1.5"
+                onClick={excluirSelecionados}
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Excluir Tudo
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ── Modal fila WhatsApp ── */}
+      {filaAberta && (
+        <ModalFilaWhatsApp
+          fila={filaWhatsApp}
+          onClose={() => { setFilaAberta(false); setSelecionados([]); }}
+        />
       )}
     </div>
   );

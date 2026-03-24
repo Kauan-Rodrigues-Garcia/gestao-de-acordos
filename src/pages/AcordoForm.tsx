@@ -124,9 +124,9 @@ export default function AcordoForm() {
       };
 
       // Tentar incluir `instituicao` — só funciona após a migration ser aplicada
-      const payloadFinal: Record<string, unknown> = { ...payload };
+      const payloadFinal: Record<string, any> = { ...payload };
       const instVal = data.instituicao?.trim() || null;
-      if (instVal) payloadFinal.instituicao = instVal;
+      payloadFinal.instituicao = instVal;
 
       console.log('[AcordoForm] payload:', payloadFinal);
 
@@ -136,21 +136,27 @@ export default function AcordoForm() {
       if (isEdit && id) {
         const { error, data: upd } = await supabase
           .from('acordos').update(payloadFinal).eq('id', id).select('id').single();
-        // fallback: se falhou por coluna instituicao, retentar sem ela
-        if (error?.message.includes('instituicao')) {
+        
+        // Se falhou por causa da coluna instituicao, retentar sem ela
+        if (error && (error.message.includes('instituicao') || error.code === '42703')) {
           const { instituicao: _i, ...semInst } = payloadFinal;
           const { error: e2, data: u2 } = await supabase.from('acordos').update(semInst).eq('id', id).select('id').single();
           resultError = e2; resultData = u2;
-        } else { resultError = error; resultData = upd; }
+        } else {
+          resultError = error; resultData = upd;
+        }
       } else {
         const { error, data: ins } = await supabase
           .from('acordos').insert(payloadFinal).select('id').single();
-        // fallback: se falhou por coluna instituicao, retentar sem ela
-        if (error?.message.includes('instituicao')) {
+        
+        // Se falhou por causa da coluna instituicao, retentar sem ela
+        if (error && (error.message.includes('instituicao') || error.code === '42703')) {
           const { instituicao: _i, ...semInst } = payloadFinal;
           const { error: e2, data: i2 } = await supabase.from('acordos').insert(semInst).select('id').single();
           resultError = e2; resultData = i2;
-        } else { resultError = error; resultData = ins; }
+        } else {
+          resultError = error; resultData = ins;
+        }
       }
 
       if (resultError) {
