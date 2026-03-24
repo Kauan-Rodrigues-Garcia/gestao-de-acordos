@@ -12,6 +12,7 @@ type AIConfig = {
 type NormalizeRequest = {
   rows: unknown[][];
   todayISO?: string;
+  prompt?: string;
 };
 
 function json(data: unknown, status = 200) {
@@ -147,6 +148,11 @@ Deno.serve(async (req) => {
     tsv,
   ].join('\n');
 
+  const systemPrompt =
+    typeof body.prompt === 'string' && body.prompt.trim().length > 0
+      ? body.prompt.trim()
+      : cfg.prompt_system;
+
   const openaiResp = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -158,7 +164,7 @@ Deno.serve(async (req) => {
       temperature: cfg.temperature,
       response_format: { type: 'json_object' },
       messages: [
-        { role: 'system', content: cfg.prompt_system },
+        { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
     }),

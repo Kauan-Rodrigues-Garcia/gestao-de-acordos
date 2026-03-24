@@ -1180,7 +1180,7 @@ function montarAcordo(
 
 // ─── Componente principal ──────────────────────────────────────────────────
 
-type Etapa = 'upload' | 'preview' | 'resultado';
+type Etapa = 'upload' | 'escolha' | 'preview' | 'resultado';
 
 interface ResultadoImportacao {
   ok:    number;
@@ -1206,6 +1206,8 @@ export default function ImportarExcel() {
   const [aiDisponivel, setAiDisponivel] = useState(false);
   const [usarIA, setUsarIA] = useState(false);
   const [organizandoIA, setOrganizandoIA] = useState(false);
+  const [lendoArquivo, setLendoArquivo] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -1214,46 +1216,45 @@ export default function ImportarExcel() {
         const enabled = Boolean(cfg?.enabled);
         setAiDisponivel(enabled);
         setUsarIA(enabled);
+        setAiPrompt(cfg?.prompt_system || null);
       } catch {
         setAiDisponivel(false);
         setUsarIA(false);
+        setAiPrompt(null);
       }
     })();
   }, []);
 
   const processarArquivo = useCallback((file: File) => {
+    rawRowsRef.current = null;
     setArquivo(file);
-    const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        const wb  = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
-        const ws  = wb.Sheets[wb.SheetNames[0]];
-
-        // Usar sheet_to_json com header:1 para ter array de arrays (sem header automático)
-        const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
-        rawRowsRef.current = rawRows as unknown[][];
-
-        if (rawRows.length === 0) { toast.error('Planilha vazia ou sem dados'); return; }
-
-        const res = parsearPlanilha(rawRows as unknown[][]);
-
-        if (res.registros.length === 0) {
-          toast.warning('Nenhum registro reconhecido. Verifique o formato da planilha.');
-          return;
-        }
-
-        setRegistrosOriginais(res.registros);
-        setRegistros(res.registros);
-        setModoParsed(res.modo);
-        setBlocosDetectados(res.blocos ?? 0);
-        setEtapa('preview');
-        toast.success(`${res.registros.length} registro(s) lido(s) — modo ${res.modo === 'blocos' ? 'por blocos' : 'tabela'}`);
-      } catch (err) {
-        toast.error('Erro ao ler arquivo: ' + (err instanceof Error ? err.message : String(err)));
-      }
-    };
-    reader.readAsArrayBuffer(file);
+    setResultado(null);
+    setRegistros([]);
+    setRegistrosOriginais(null);
+    setFiltroPreview('todos');
+    setModoParsed('tabela');
+    setBlocosDetectados(0);
+    setEtapa('escolha');
+    toast.success('Arquivo enviado. Escolha como deseja organizar os dados.');
   }, []);
+
+  function lerArquivoComoMatriz(file: File): Promise<unknown[][]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const wb = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
+          resolve(rawRows as unknown[][]);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Falha ao ler arquivo'));
+      reader.readAsArrayBuffer(file);
+    });
+  }
 
   function truncarParaIA(rows: unknown[][]) {
     const maxRows = 160;
@@ -1261,18 +1262,58 @@ export default function ImportarExcel() {
     return rows.slice(0, maxRows).map(r => (Array.isArray(r) ? r.slice(0, maxCols) : []));
   }
 
-  async function organizarComIA() {
-    const raw = rawRowsRef.current;
-    if (!raw || raw.length === 0) {
-      toast.error('Arquivo não disponível para organização com IA');
-      return;
-    }
+  async function obterRawRows(): Promise<unknown[][]> {
+    if (rawRowsRef.current && rawRowsRef.current.length > 0) return rawRowsRef.current;
+    if (!arquivo) throw new Error('Nenhum arquivo selecionado');
 
+    const rawRows = await lerArquivoComoMatriz(arquivo);
+    rawRowsRef.current = rawRows;
+    return rawRows;
+  }
+
+  async function organizarLocal() {
+    if (!arquivo) { toast.error('Selecione um arquivo primeiro'); return; }
+    setUsarIA(false);
+    setLendoArquivo(true);
+    try {
+      const rawRows = await obterRawRows();
+      if (rawRows.length === 0) { toast.error('Planilha vazia ou sem dados'); return; }
+
+      const res = parsearPlanilha(rawRows);
+      if (res.registros.length === 0) {
+        toast.warning('Nenhum registro reconhecido. Verifique o formato da planilha.');
+        return;
+      }
+
+      setRegistrosOriginais(res.registros);
+      setRegistros(res.registros);
+      setModoParsed(res.modo);
+      setBlocosDetectados(res.blocos ?? 0);
+      setEtapa('preview');
+      toast.success(`${res.registros.length} registro(s) lido(s) — modo ${res.modo === 'blocos' ? 'por blocos' : 'tabela'}`);
+    } catch (err) {
+      toast.error('Erro ao ler arquivo: ' + (err instanceof Error ? err.message : String(err)));
+    } finally {
+      setLendoArquivo(false);
+    }
+  }
+
+  async function organizarComIA() {
+    if (!arquivo) { toast.error('Selecione um arquivo primeiro'); return; }
     setOrganizandoIA(true);
     try {
       const hoje = new Date().toISOString().split('T')[0];
+      const raw = await obterRawRows();
+      if (raw.length === 0) { toast.error('Planilha vazia ou sem dados'); return; }
+
+      // Mantém um fallback do parser local (sem interferir no fluxo), útil para alternar depois.
+      if (!registrosOriginais) {
+        const baseline = parsearPlanilha(raw);
+        if (baseline.registros.length > 0) setRegistrosOriginais(baseline.registros);
+      }
+
       const payloadRows = truncarParaIA(raw);
-      const res = await aiNormalizeImport(payloadRows, hoje);
+      const res = await aiNormalizeImport(payloadRows, hoje, aiPrompt || undefined);
 
       const records = Array.isArray(res?.records) ? res.records : [];
       if (records.length === 0) {
@@ -1305,6 +1346,8 @@ export default function ImportarExcel() {
       }
 
       setRegistros(novos);
+      setUsarIA(true);
+      setEtapa('preview');
       toast.success(`IA organizou ${novos.length} registro(s)`);
     } catch (e) {
       console.error('[ImportarExcel/IA]', e);
@@ -1437,10 +1480,10 @@ export default function ImportarExcel() {
 
       {/* Steps */}
       <div className="flex items-center gap-2 mb-6 text-xs">
-        {(['upload','preview','resultado'] as Etapa[]).map((e, i) => {
-          const labels = ['Upload','Pré-visualização','Resultado'];
+        {(['upload','escolha','preview','resultado'] as Etapa[]).map((e, i) => {
+          const labels = ['Upload','Escolha','Pré-visualização','Resultado'];
           const ativo  = etapa === e;
-          const feito  = ['upload','preview','resultado'].indexOf(etapa) > i;
+          const feito  = ['upload','escolha','preview','resultado'].indexOf(etapa) > i;
           return (
             <div key={e} className="flex items-center gap-2">
               <div className={cn('flex items-center gap-1.5 px-3 py-1 rounded-full font-medium',
@@ -1448,7 +1491,7 @@ export default function ImportarExcel() {
                 feito ? 'bg-success/20 text-success' : 'bg-muted text-muted-foreground')}>
                 <span>{i+1}.</span> {labels[i]}
               </div>
-              {i < 2 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
+              {i < 3 && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
             </div>
           );
         })}
@@ -1508,6 +1551,77 @@ export default function ImportarExcel() {
                     <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
                   ))}
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* ─── ETAPA 2: ESCOLHA ─── */}
+      {etapa === 'escolha' && (
+        <div className="space-y-4">
+          <Card className="border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-success" /> Arquivo enviado
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between gap-3 p-3 bg-muted/30 border border-border rounded-lg flex-wrap">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{arquivo?.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Selecione como deseja organizar os dados antes da pré-visualização.
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => { setEtapa('upload'); setArquivo(null); rawRowsRef.current = null; }}
+                    disabled={lendoArquivo || organizandoIA}
+                  >
+                    Trocar arquivo
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid sm:grid-cols-2 gap-3">
+                <Card className="border-border">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-sm font-semibold text-foreground">Organizar</p>
+                    <p className="text-xs text-muted-foreground">
+                      Usa o parser atual do sistema (recomendado para planilhas já bem estruturadas).
+                    </p>
+                    <Button onClick={organizarLocal} disabled={lendoArquivo || organizandoIA} className="w-full gap-2">
+                      <Layers className="w-4 h-4" />
+                      {lendoArquivo ? 'Lendo...' : 'Organizar'}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card className="border-primary/30 bg-primary/5">
+                  <CardContent className="p-4 space-y-2">
+                    <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-primary" /> Organizar com IA
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Envia a planilha + prompt para a IA e retorna os registros normalizados.
+                    </p>
+                    <Button
+                      onClick={organizarComIA}
+                      disabled={!aiDisponivel || lendoArquivo || organizandoIA}
+                      className="w-full gap-2"
+                    >
+                      <Bot className="w-4 h-4" />
+                      {organizandoIA ? 'Analisando...' : 'Organizar com IA'}
+                    </Button>
+                    {!aiDisponivel && (
+                      <p className="text-[11px] text-muted-foreground">
+                        IA desabilitada. Ative em Admin → IA.
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
               </div>
             </CardContent>
           </Card>

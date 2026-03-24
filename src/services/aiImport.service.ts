@@ -19,7 +19,11 @@ export type AINormalizeResponse = {
   notes?: string[];
 };
 
-export async function aiNormalizeImport(rows: unknown[][], todayISO: string): Promise<AINormalizeResponse> {
+export async function aiNormalizeImport(
+  rows: unknown[][],
+  todayISO: string,
+  prompt?: string,
+): Promise<AINormalizeResponse> {
   const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
   if (!supabaseAnonKey) {
     throw new Error('Variáveis do Supabase ausentes no ambiente.');
@@ -30,7 +34,7 @@ export async function aiNormalizeImport(rows: unknown[][], todayISO: string): Pr
 
   const invoke = async (authorization: string | undefined) => {
     return await supabase.functions.invoke('ai-normalize-import', {
-      body: { rows, todayISO },
+      body: { rows, todayISO, prompt },
       headers: {
         apikey: supabaseAnonKey,
         ...(authorization ? { Authorization: authorization } : {}),
