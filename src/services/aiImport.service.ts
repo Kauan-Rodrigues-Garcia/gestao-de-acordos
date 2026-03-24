@@ -28,14 +28,32 @@ export async function aiNormalizeImport(rows: unknown[][], todayISO: string): Pr
     throw new Error('Sessão inválida. Faça login novamente para usar a IA.');
   }
 
-  const { data, error } = await supabase.functions.invoke('ai-normalize-import', {
-    body: { rows, todayISO },
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  if (!supabaseUrl || !supabaseAnonKey) {
+    throw new Error('Variáveis do Supabase ausentes no ambiente.');
+  }
+
+  const resp = await fetch(`${supabaseUrl}/functions/v1/ai-normalize-import`, {
+    method: 'POST',
     headers: {
+      'Content-Type': 'application/json',
+      apikey: supabaseAnonKey,
       Authorization: `Bearer ${accessToken}`,
     },
+    body: JSON.stringify({ rows, todayISO }),
   });
 
-  if (error) throw error;
-  return data as AINormalizeResponse;
+  const payload = await resp.json().catch(() => null);
+  if (!resp.ok) {
+    const msg =
+      payload?.error ||
+      payload?.message ||
+      (typeof payload === 'string' ? payload : null) ||
+      `Edge Function retornou ${resp.status}`;
+    throw new Error(msg);
+  }
+
+  return payload as AINormalizeResponse;
 }
 
