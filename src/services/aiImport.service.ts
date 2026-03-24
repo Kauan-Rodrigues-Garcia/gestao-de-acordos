@@ -24,40 +24,48 @@ export async function aiNormalizeImport(
   todayISO: string,
   prompt?: string,
 ): Promise<AINormalizeResponse> {
-  const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-  const anonLooksJwt = typeof supabaseAnonKey === 'string' && supabaseAnonKey.startsWith('eyJ');
-  if (!supabaseAnonKey) throw new Error('Variáveis do Supabase ausentes no ambiente.');
+  const getStatus = (err: unknown): number | null => {
+    const e = err as Record<string, unknown> | null;
+    const context = (e && (e as any).context) || null;
+    const status = context && typeof (context as any).status === 'number' ? (context as any).status : null;
+    return status;
+  };
 
-  const invoke = async (authorization: string | undefined) => {
+  const invokeDefault = async () => {
     return await supabase.functions.invoke('ai-normalize-import', {
       body: { rows, todayISO, prompt },
-      headers: authorization ? { Authorization: authorization } : {},
     });
   };
 
   const session = (await supabase.auth.getSession()).data.session;
-  const primaryAuth = session?.access_token ? `Bearer ${session.access_token}` : undefined;
-  const fallbackAuth = anonLooksJwt ? `Bearer ${supabaseAnonKey}` : undefined;
+  if (!session) {
+    throw new Error('Você precisa estar logado para usar a IA. Faça login novamente.');
+  }
 
-  let res = await invoke(primaryAuth || fallbackAuth);
+  let res = await invokeDefault();
 
   if (res.error) {
+    const status = getStatus(res.error);
     const msg = String((res.error as unknown as { message?: string })?.message || '').toLowerCase();
-    const shouldRefresh =
-      msg.includes('invalid jwt') || msg.includes('jwt') || msg.includes('unauthorized') || msg.includes('401');
+    const isAuthProblem =
+      status === 401 ||
+      msg.includes('invalid jwt') ||
+      msg.includes('jwt') ||
+      msg.includes('unauthorized') ||
+      msg.includes('401');
 
-    if (shouldRefresh) {
+    if (isAuthProblem) {
       await supabase.auth.refreshSession().catch(() => null);
       const refreshed = (await supabase.auth.getSession()).data.session;
-      const refreshedAuth = refreshed?.access_token ? `Bearer ${refreshed.access_token}` : undefined;
-      res = await invoke(refreshedAuth || fallbackAuth);
+      if (!refreshed) {
+        await supabase.auth.signOut().catch(() => null);
+        throw new Error('Sessão inválida. Faça login novamente para usar a IA.');
+      }
+
+      res = await invokeDefault();
     }
 
-    if (res.error && fallbackAuth && primaryAuth) {
-      res = await invoke(fallbackAuth);
-    }
-
-    if (res.error && shouldRefresh) {
+    if (res.error && isAuthProblem) {
       await supabase.auth.signOut().catch(() => null);
       throw new Error('Sessão inválida. Faça login novamente para usar a IA.');
     }
