@@ -1,0 +1,214 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+==========================================================================
+【AI HANDOVER NOTE】
+1. DESIGN PHILOSOPHY:
+   - Enterprise Data-First: This is a mission-critical internal business tool for financial agreement management. The design prioritizes data density, scanning efficiency, and operational speed over decorative elements.
+   - Professional Minimalism: Clean, corporate aesthetic with subtle depth cues. The interface should feel like a sophisticated spreadsheet evolved into a modern web application.
+   - Status-Driven Color System: Visual hierarchy is built around agreement status (Pago/Pendente/Vencido/Verificar/Cancelado/Em acompanhamento). Color coding must be instantly recognizable across tables, cards, and dashboards.
+   - Role-Based Clarity: Three distinct user experiences (Operador/Líder/Administrador) require clear visual separation while maintaining consistent design language.
+
+2. TYPOGRAPHY:
+   - Inter: Selected for exceptional legibility in dense data tables and UI elements. Its neutral, professional character suits corporate environments. The wide range of weights (400-700) supports clear hierarchy in dashboards and forms.
+   - JetBrains Mono: Used for NR (client numbers), monetary values (R$), dates, and WhatsApp numbers. Its tabular figures ensure perfect alignment in financial columns, critical for rapid data scanning.
+
+3. COLOR SYSTEM:
+   - Brand Foundation: Deep professional blue (H: 220) establishes trust and corporate authority. This maps to --primary for CTAs, --sidebar-primary for navigation, and --ring for focus states.
+   - Semantic Status Colors:
+     * Success (Pago): H: 145 - vibrant green for paid agreements, high visibility in tables
+     * Warning (Pendente/Verificar): H: 45 - amber/yellow for pending items requiring attention
+     * Destructive (Vencido/Cancelado): H: 10 - red-orange for overdue/cancelled, immediate alert
+     * Info (Em acompanhamento): H: 200 - cyan-blue for tracking status
+   - Neutral Palette: Sophisticated grays with slight blue undertone (H: 220) maintain cohesion. --muted backgrounds for secondary cards, --border for table cells and dividers.
+   - Dark Mode: Designed for extended use during business hours. Background L: 0.12 (deep charcoal) reduces eye strain. Foreground L: 0.92 ensures WCAG AAA compliance. Slightly elevated chroma (C: 0.02-0.04) adds subtle warmth to prevent clinical coldness.
+
+4. USAGE GUIDE:
+   - Layout: Full-width dashboard with persistent sidebar navigation. Main content area uses Bento-style card grid for metrics (Acordos do dia, Valor recebido, etc.). Tables occupy full card width for maximum data visibility.
+   - Table Design: Replicate reference image structure - alternating row backgrounds (--muted with 40% opacity), 1px borders (--border), sticky headers, dropdown indicators for TIPO/STATUS columns. Use --mono font for NR, VALOR, WHATS columns.
+   - Status Badges: Pill-shaped badges with status-specific background colors at 15% opacity, bold text in full saturation color. Example: PAGO uses success/15% background with success foreground.
+   - Dashboard Cards: Subtle elevation with 1px border (--border), no shadows. Use --card background with --card-foreground text. Metric values in 2xl-3xl font size with --mono for numbers.
+   - Interactive States: --ring (brand blue) for focus outlines, --accent for hover states on table rows, --primary for action buttons (Cadastrar Acordo, Enviar Lembretes).
+   - WhatsApp Integration: Use --success color for WhatsApp-related actions (send reminder buttons), maintaining brand association with the messaging platform.
+   - Filters: Implement as compact dropdowns in table headers (matching reference image) or as sidebar filter panel. Use --popover for dropdown menus with --popover-foreground text.
+   - Charts: Assign chart_1-5 to different operators or status categories in performance graphs. Ensure sufficient contrast between adjacent chart colors for accessibility.
+==========================================================================
+*/
+
+:root {
+  /* Typography */
+  --font-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: JetBrains Mono, 'Courier New', monospace;
+  
+  /* Radius */
+  --radius: 0.5rem;
+
+  /* Core UI Tokens */
+  --background: oklch(0.99 0 0);
+  --foreground: oklch(0.15 0.01 220);
+  --card: oklch(0.98 0.005 220);
+  --card-foreground: oklch(0.15 0.01 220);
+  --popover: oklch(0.99 0 0);
+  --popover-foreground: oklch(0.15 0.01 220);
+  --primary: oklch(0.45 0.15 220);
+  --primary-foreground: oklch(0.98 0.005 220);
+  --secondary: oklch(0.92 0.01 220);
+  --secondary-foreground: oklch(0.20 0.01 220);
+  --muted: oklch(0.95 0.008 220);
+  --muted-foreground: oklch(0.48 0.02 220);
+  --accent: oklch(0.94 0.012 220);
+  --accent-foreground: oklch(0.25 0.02 220);
+  --destructive: oklch(0.55 0.22 10);
+  --destructive-foreground: oklch(0.98 0.005 10);
+  --border: oklch(0.88 0.01 220);
+  --input: oklch(0.88 0.01 220);
+  --ring: oklch(0.45 0.15 220);
+  
+  /* Chart Tokens */
+  --chart-1: oklch(0.50 0.18 220);
+  --chart-2: oklch(0.58 0.20 145);
+  --chart-3: oklch(0.62 0.18 45);
+  --chart-4: oklch(0.55 0.16 280);
+  --chart-5: oklch(0.60 0.17 10);
+  
+  /* Sidebar Tokens */
+  --sidebar: oklch(0.97 0.006 220);
+  --sidebar-foreground: oklch(0.25 0.02 220);
+  --sidebar-primary: oklch(0.45 0.15 220);
+  --sidebar-primary-foreground: oklch(0.98 0.005 220);
+  --sidebar-accent: oklch(0.92 0.01 220);
+  --sidebar-accent-foreground: oklch(0.25 0.02 220);
+  --sidebar-border: oklch(0.88 0.01 220);
+  --sidebar-ring: oklch(0.45 0.15 220);
+}
+
+.dark {
+  --background: oklch(0.12 0.015 220);
+  --foreground: oklch(0.92 0.01 220);
+  --card: oklch(0.15 0.018 220);
+  --card-foreground: oklch(0.92 0.01 220);
+  --popover: oklch(0.14 0.017 220);
+  --popover-foreground: oklch(0.92 0.01 220);
+  --primary: oklch(0.62 0.18 220);
+  --primary-foreground: oklch(0.12 0.015 220);
+  --secondary: oklch(0.22 0.025 220);
+  --secondary-foreground: oklch(0.88 0.012 220);
+  --muted: oklch(0.20 0.022 220);
+  --muted-foreground: oklch(0.65 0.03 220);
+  --accent: oklch(0.25 0.028 220);
+  --accent-foreground: oklch(0.90 0.012 220);
+  --destructive: oklch(0.60 0.24 10);
+  --destructive-foreground: oklch(0.95 0.008 10);
+  --border: oklch(0.28 0.03 220);
+  --input: oklch(0.28 0.03 220);
+  --ring: oklch(0.62 0.18 220);
+  
+  /* Chart Tokens */
+  --chart-1: oklch(0.65 0.20 220);
+  --chart-2: oklch(0.68 0.22 145);
+  --chart-3: oklch(0.72 0.20 45);
+  --chart-4: oklch(0.65 0.18 280);
+  --chart-5: oklch(0.68 0.20 10);
+  
+  /* Sidebar Tokens */
+  --sidebar: oklch(0.10 0.012 220);
+  --sidebar-foreground: oklch(0.85 0.015 220);
+  --sidebar-primary: oklch(0.62 0.18 220);
+  --sidebar-primary-foreground: oklch(0.10 0.012 220);
+  --sidebar-accent: oklch(0.22 0.025 220);
+  --sidebar-accent-foreground: oklch(0.88 0.012 220);
+  --sidebar-border: oklch(0.25 0.028 220);
+  --sidebar-ring: oklch(0.62 0.18 220);
+}
+
+@theme inline {
+  /* Shadcn Core Mapping */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* Charts Mapping */
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Sidebar Mapping */
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Typography */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+
+  /* Radius */
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    @apply scroll-smooth antialiased;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans min-h-screen;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+
+  code, pre {
+    @apply font-mono;
+  }
+
+  ::selection {
+    @apply bg-primary/20 text-primary;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/40;
+  }
+}
