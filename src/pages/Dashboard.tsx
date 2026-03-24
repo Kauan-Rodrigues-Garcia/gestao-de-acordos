@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useDashboardMetricas, useAcordos } from '@/hooks/useAcordos';
 import { ROUTE_PATHS, formatCurrency, formatDate, STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, getTodayISO } from '@/lib/index';
@@ -24,9 +25,10 @@ const fadeUp = {
   visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } }
 };
 
-function StatCard({ title, value, subtitle, icon: Icon, color, trend }: {
+function StatCard({ title, value, subtitle, icon: Icon, color, trend, loading }: {
   title: string; value: string | number; subtitle?: string;
   icon: React.ElementType; color: string; trend?: 'up' | 'down' | 'neutral';
+  loading?: boolean;
 }) {
   return (
     <motion.div variants={fadeUp}>
@@ -36,7 +38,7 @@ function StatCard({ title, value, subtitle, icon: Icon, color, trend }: {
             <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', color)}>
               <Icon className="w-5 h-5" />
             </div>
-            {trend && (
+            {!loading && trend && (
               <span className={cn('flex items-center gap-1 text-xs font-medium',
                 trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
               )}>
@@ -45,9 +47,18 @@ function StatCard({ title, value, subtitle, icon: Icon, color, trend }: {
             )}
           </div>
           <div className="mt-3">
-            <p className="text-2xl font-bold font-mono text-foreground">{value}</p>
-            <p className="text-xs font-medium text-muted-foreground mt-0.5">{title}</p>
-            {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
+            {loading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-7 w-20" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+            ) : (
+              <>
+                <p className="text-2xl font-bold font-mono text-foreground">{value}</p>
+                <p className="text-xs font-medium text-muted-foreground mt-0.5">{title}</p>
+                {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -116,18 +127,18 @@ export default function Dashboard() {
         animate="visible"
         className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6"
       >
-        <StatCard title="Acordos Hoje" value={loadingMetricas ? '...' : metricas.acordos_hoje}
-          icon={CalendarDays} color="bg-primary/10 text-primary" trend="neutral" />
-        <StatCard title="Pagos Hoje" value={loadingMetricas ? '...' : metricas.pagos_hoje}
-          icon={CheckCircle2} color="bg-success/10 text-success" trend="up" />
-        <StatCard title="Pendentes" value={loadingMetricas ? '...' : metricas.pendentes_hoje}
-          icon={Clock} color="bg-warning/10 text-warning" />
-        <StatCard title="Vencidos" value={loadingMetricas ? '...' : metricas.vencidos}
-          icon={AlertTriangle} color="bg-destructive/10 text-destructive" trend="down" />
-        <StatCard title="Previsto Hoje" value={loadingMetricas ? '...' : formatCurrency(metricas.valor_previsto_hoje)}
-          icon={DollarSign} color="bg-info/10 text-info" />
-        <StatCard title="Recebido Hoje" value={loadingMetricas ? '...' : formatCurrency(metricas.valor_recebido_hoje)}
-          icon={TrendingUp} color="bg-success/10 text-success" trend="up" />
+        <StatCard title="Acordos Hoje" value={metricas.acordos_hoje}
+          icon={CalendarDays} color="bg-primary/10 text-primary" trend="neutral" loading={loadingMetricas} />
+        <StatCard title="Pagos Hoje" value={metricas.pagos_hoje}
+          icon={CheckCircle2} color="bg-success/10 text-success" trend="up" loading={loadingMetricas} />
+        <StatCard title="Pendentes" value={metricas.pendentes_hoje}
+          icon={Clock} color="bg-warning/10 text-warning" loading={loadingMetricas} />
+        <StatCard title="Vencidos" value={metricas.vencidos}
+          icon={AlertTriangle} color="bg-destructive/10 text-destructive" trend="down" loading={loadingMetricas} />
+        <StatCard title="Previsto Hoje" value={formatCurrency(metricas.valor_previsto_hoje)}
+          icon={DollarSign} color="bg-info/10 text-info" loading={loadingMetricas} />
+        <StatCard title="Recebido Hoje" value={formatCurrency(metricas.valor_recebido_hoje)}
+          icon={TrendingUp} color="bg-success/10 text-success" trend="up" loading={loadingMetricas} />
       </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -168,7 +179,17 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent className="p-0">
               {loadingHoje ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">Carregando...</div>
+                <div className="p-4 space-y-3">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex items-center gap-4">
+                      <Skeleton className="h-4 flex-1" />
+                      <Skeleton className="h-4 w-20" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-4 w-16" />
+                      <Skeleton className="h-6 w-6 rounded-full" />
+                    </div>
+                  ))}
+                </div>
               ) : acordosHoje.length === 0 ? (
                 <div className="p-8 text-center">
                   <CheckCircle2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />

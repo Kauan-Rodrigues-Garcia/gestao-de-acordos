@@ -22,19 +22,19 @@ import { cn } from '@/lib/utils';
 
 // data_cadastro: opcional no form — preenchida automaticamente pelo sistema
 const schema = z.object({
-  nome_cliente: z.string().min(2, 'Nome obrigatório (mín. 2 caracteres)'),
-  nr_cliente:   z.string().min(1, 'NR do cliente obrigatório'),
-  vencimento:   z.string().min(1, 'Data de vencimento obrigatória'),
-  valor: z.string().min(1, 'Valor obrigatório').refine(v => {
+  nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
+  nr_cliente:   z.string().min(1, 'NR do cliente é obrigatório').regex(/^\d+$/, 'NR deve conter apenas números'),
+  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
+  valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);
     return !isNaN(n) && n > 0;
   }, 'Valor deve ser maior que zero'),
   tipo:        z.enum(['boleto', 'pix', 'cartao']),
-  parcelas:    z.string().optional(),
-  whatsapp:    z.string().optional(),
-  instituicao: z.string().optional(),
+  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas entre 1 e 60'),
+  whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
+  instituicao: z.string().optional().max(100, 'Nome da instituição muito longo'),
   status:      z.enum(['pendente', 'pago', 'verificar', 'vencido', 'cancelado', 'em_acompanhamento']),
-  observacoes: z.string().optional(),
+  observacoes: z.string().optional().max(500, 'Observações muito longas'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -108,7 +108,8 @@ export default function AcordoForm() {
       const valorNum = parseCurrencyInput(data.valor);
       if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); setLoading(false); return; }
 
-      const payload = {
+      // Payload base — colunas que EXISTEM no schema original (01_schema_completo.sql)
+      const payload: any = {
         nome_cliente:  data.nome_cliente.trim(),
         nr_cliente:    data.nr_cliente.trim(),
         data_cadastro: new Date().toISOString().split('T')[0],
@@ -120,53 +121,44 @@ export default function AcordoForm() {
         status:        data.status,
         observacoes:   data.observacoes?.trim() || null,
         operador_id:   uid,
-        setor_id:      p?.setor_id ?? null,
       };
 
-      // Tentar incluir `instituicao` — só funciona após a migration ser aplicada
-      const payloadFinal: Record<string, unknown> = { ...payload };
-      const instVal = data.instituicao?.trim() || null;
-      if (instVal) payloadFinal.instituicao = instVal;
+      // Adicionar colunas extras APENAS se houver valor, e tentar tratar erro se a coluna não existir
+      if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
+      if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      console.log('[AcordoForm] payload:', payloadFinal);
+      console.log('[AcordoForm] payload:', payload);
 
       let resultError = null;
-      let resultData: { id: string } | null = null;
 
       if (isEdit && id) {
-        const { error, data: upd } = await supabase
-          .from('acordos').update(payloadFinal).eq('id', id).select('id').single();
-        // fallback: se falhou por coluna instituicao, retentar sem ela
-        if (error?.message.includes('instituicao')) {
-          const { instituicao: _i, ...semInst } = payloadFinal;
-          const { error: e2, data: u2 } = await supabase.from('acordos').update(semInst).eq('id', id).select('id').single();
-          resultError = e2; resultData = u2;
-        } else { resultError = error; resultData = upd; }
+        const { error } = await supabase.from('acordos').update(payload).eq('id', id);
+        
+        // Fallback: se falhou por coluna inexistente, remover extras e retentar
+        if (error && (error.code === '42703' || error.message.includes('column'))) {
+          const { instituicao, setor_id, ...cleanPayload } = payload;
+          const { error: e2 } = await supabase.from('acordos').update(cleanPayload).eq('id', id);
+          resultError = e2;
+        } else {
+          resultError = error;
+        }
       } else {
-        const { error, data: ins } = await supabase
-          .from('acordos').insert(payloadFinal).select('id').single();
-        // fallback: se falhou por coluna instituicao, retentar sem ela
-        if (error?.message.includes('instituicao')) {
-          const { instituicao: _i, ...semInst } = payloadFinal;
-          const { error: e2, data: i2 } = await supabase.from('acordos').insert(semInst).select('id').single();
-          resultError = e2; resultData = i2;
-        } else { resultError = error; resultData = ins; }
+        const { error } = await supabase.from('acordos').insert(payload);
+        
+        // Fallback: se falhou por coluna inexistente, remover extras e retentar
+        if (error && (error.code === '42703' || error.message.includes('column'))) {
+          const { instituicao, setor_id, ...cleanPayload } = payload;
+          const { error: e2 } = await supabase.from('acordos').insert(cleanPayload);
+          resultError = e2;
+        } else {
+          resultError = error;
+        }
       }
 
       if (resultError) {
         console.error('[AcordoForm] error:', resultError);
         toast.error(`Erro ao salvar: ${resultError.message}`);
         return;
-      }
-
-      if (resultData?.id) {
-        supabase.from('historico_acordos').insert({
-          acordo_id:      resultData.id,
-          usuario_id:     uid,
-          campo_alterado: isEdit ? 'atualização_geral' : 'criação',
-          valor_anterior: null,
-          valor_novo:     `${data.status} – ${data.nome_cliente}`,
-        }).then(({ error: he }) => { if (he) console.warn('[historico]', he); });
       }
 
       toast.success(isEdit ? 'Acordo atualizado!' : 'Acordo cadastrado com sucesso!');

@@ -1,6 +1,7 @@
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/hooks/useAuth';
+import { ThemeProvider } from 'next-themes';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -44,86 +45,89 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            <Route path={ROUTE_PATHS.LOGIN} element={
-              <PublicRoute><Login /></PublicRoute>
-            } />
-            <Route path="/registro" element={
-              <PublicRoute><Registro /></PublicRoute>
-            } />
+    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+      <AuthProvider>
+        <Router>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* ... rotas ... */}
+              <Route path={ROUTE_PATHS.LOGIN} element={
+                <PublicRoute><Login /></PublicRoute>
+              } />
+              <Route path="/registro" element={
+                <PublicRoute><Registro /></PublicRoute>
+              } />
 
-            <Route path={ROUTE_PATHS.DASHBOARD} element={
-              <LayoutWrapper><Dashboard /></LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ACORDOS} element={
-              <LayoutWrapper><Acordos /></LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
-              <LayoutWrapper><AcordoForm /></LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
-              <LayoutWrapper><AcordoForm /></LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
-              <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
-            } />
+              <Route path={ROUTE_PATHS.DASHBOARD} element={
+                <LayoutWrapper><Dashboard /></LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDOS} element={
+                <LayoutWrapper><Acordos /></LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
+                <LayoutWrapper><AcordoForm /></LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
+                <LayoutWrapper><AcordoForm /></LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
+                <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
+              } />
 
-            {/* Importar Excel — operadores, líderes e admins */}
-            <Route path="/acordos/importar" element={
-              <LayoutWrapper><ImportarExcel /></LayoutWrapper>
-            } />
+              {/* Importar Excel — operadores, líderes e admins */}
+              <Route path="/acordos/importar" element={
+                <LayoutWrapper><ImportarExcel /></LayoutWrapper>
+              } />
 
-            <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['lider','administrador']}>
-                  <PainelLider />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['lider','administrador']}>
-                  <PainelLider />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['administrador']}>
-                  <AdminUsuarios />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ADMIN_SETORES} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['administrador']}>
-                  <AdminSetores />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['administrador']}>
-                  <AdminConfiguracoes />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
-            <Route path={ROUTE_PATHS.ADMIN_LOGS} element={
-              <LayoutWrapper>
-                <ProtectedRoute roles={['administrador']}>
-                  <AdminLogs />
-                </ProtectedRoute>
-              </LayoutWrapper>
-            } />
+              <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['lider','administrador']}>
+                    <PainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['lider','administrador']}>
+                    <PainelLider />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['administrador']}>
+                    <AdminUsuarios />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['administrador']}>
+                    <AdminSetores />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['administrador']}>
+                    <AdminConfiguracoes />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['administrador']}>
+                    <AdminLogs />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
 
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Suspense>
-        <Toaster richColors position="top-right" />
-      </Router>
-    </AuthProvider>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
+          <Toaster richColors position="top-right" />
+        </Router>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
