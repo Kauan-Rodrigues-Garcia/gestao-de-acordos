@@ -22,19 +22,19 @@ import { cn } from '@/lib/utils';
 
 // data_cadastro: opcional no form — preenchida automaticamente pelo sistema
 const schema = z.object({
-  nome_cliente: z.string().min(2, 'Nome obrigatório (mín. 2 caracteres)'),
-  nr_cliente:   z.string().min(1, 'NR do cliente obrigatório'),
-  vencimento:   z.string().min(1, 'Data de vencimento obrigatória'),
-  valor: z.string().min(1, 'Valor obrigatório').refine(v => {
+  nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
+  nr_cliente:   z.string().min(1, 'NR do cliente é obrigatório').regex(/^\d+$/, 'NR deve conter apenas números'),
+  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
+  valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);
     return !isNaN(n) && n > 0;
   }, 'Valor deve ser maior que zero'),
   tipo:        z.enum(['boleto', 'pix', 'cartao']),
-  parcelas:    z.string().optional(),
-  whatsapp:    z.string().optional(),
-  instituicao: z.string().optional(),
+  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas entre 1 e 60'),
+  whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
+  instituicao: z.string().optional().max(100, 'Nome da instituição muito longo'),
   status:      z.enum(['pendente', 'pago', 'verificar', 'vencido', 'cancelado', 'em_acompanhamento']),
-  observacoes: z.string().optional(),
+  observacoes: z.string().optional().max(500, 'Observações muito longas'),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -157,16 +157,6 @@ export default function AcordoForm() {
         console.error('[AcordoForm] error:', resultError);
         toast.error(`Erro ao salvar: ${resultError.message}`);
         return;
-      }
-
-      if (resultData?.id) {
-        supabase.from('historico_acordos').insert({
-          acordo_id:      resultData.id,
-          usuario_id:     uid,
-          campo_alterado: isEdit ? 'atualização_geral' : 'criação',
-          valor_anterior: null,
-          valor_novo:     `${data.status} – ${data.nome_cliente}`,
-        }).then(({ error: he }) => { if (he) console.warn('[historico]', he); });
       }
 
       toast.success(isEdit ? 'Acordo atualizado!' : 'Acordo cadastrado com sucesso!');
