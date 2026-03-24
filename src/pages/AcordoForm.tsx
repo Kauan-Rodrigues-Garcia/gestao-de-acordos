@@ -32,9 +32,9 @@ const schema = z.object({
   tipo:        z.enum(['boleto', 'pix', 'cartao']),
   parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas entre 1 e 60'),
   whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
-  instituicao: z.string().optional().max(100, 'Nome da instituição muito longo'),
+  instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
   status:      z.enum(['pendente', 'pago', 'verificar', 'vencido', 'cancelado', 'em_acompanhamento']),
-  observacoes: z.string().optional().max(500, 'Observações muito longas'),
+  observacoes: z.string().max(500, 'Observações muito longas').optional(),
 });
 
 type FormData = z.infer<typeof schema>;

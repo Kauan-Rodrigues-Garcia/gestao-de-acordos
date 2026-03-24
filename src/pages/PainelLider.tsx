@@ -282,12 +282,15 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 Acordos
                 <Badge variant="secondary">{acordosFiltrados.length}</Badge>
               </CardTitle>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <Select
+                value={filtroStatus || 'all'}
+                onValueChange={(v) => setFiltroStatus(v === 'all' ? '' : v)}
+              >
                 <SelectTrigger className="w-40 h-7 text-xs">
                   <SelectValue placeholder="Todos os status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
+                  <SelectItem value="all">Todos</SelectItem>
                   {Object.entries(STATUS_LABELS).map(([k,v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
