@@ -18,6 +18,7 @@ const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
 const AdminSetores      = lazy(() => import('@/pages/AdminSetores'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
 const AdminLogs         = lazy(() => import('@/pages/AdminLogs'));
+const AdminIA           = lazy(() => import('@/pages/AdminIA'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
@@ -118,6 +119,13 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute roles={['administrador']}>
                     <AdminLogs />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path={ROUTE_PATHS.ADMIN_IA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute roles={['administrador']}>
+                    <AdminIA />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

@@ -16,25 +16,28 @@
  * - Pré-visualização mostra o que foi reconhecido e o que tem problema
  * - Relatório final completo
  */
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
 import { motion } from 'framer-motion';
 import {
   Upload, FileSpreadsheet, ArrowLeft, CheckCircle2,
   XCircle, ChevronRight, RefreshCw, AlertCircle,
-  ArrowRight, Info, Building2, Eye, Layers
+  ArrowRight, Info, Building2, Eye, Layers, Bot
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { ROUTE_PATHS, formatDate, formatCurrency } from '@/lib/index';
 import { safeNum } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { fetchAIConfig } from '@/services/aiConfig.service';
+import { aiNormalizeImport } from '@/services/aiImport.service';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -1189,15 +1192,34 @@ export default function ImportarExcel() {
   const { perfil } = useAuth();
   const navigate   = useNavigate();
   const inputRef   = useRef<HTMLInputElement>(null);
+  const rawRowsRef = useRef<unknown[][] | null>(null);
 
   const [etapa,     setEtapa]     = useState<Etapa>('upload');
   const [arquivo,   setArquivo]   = useState<File | null>(null);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
   const [importando, setImportando] = useState(false);
   const [registros, setRegistros] = useState<AcordoImportado[]>([]);
+  const [registrosOriginais, setRegistrosOriginais] = useState<AcordoImportado[] | null>(null);
   const [modoParsed, setModoParsed] = useState<'tabela'|'blocos'>('tabela');
   const [blocosDetectados, setBlocosDetectados] = useState(0);
   const [filtroPreview, setFiltroPreview] = useState<'todos'|'validos'|'erros'>('todos');
+  const [aiDisponivel, setAiDisponivel] = useState(false);
+  const [usarIA, setUsarIA] = useState(false);
+  const [organizandoIA, setOrganizandoIA] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const cfg = await fetchAIConfig();
+        const enabled = Boolean(cfg?.enabled);
+        setAiDisponivel(enabled);
+        setUsarIA(enabled);
+      } catch {
+        setAiDisponivel(false);
+        setUsarIA(false);
+      }
+    })();
+  }, []);
 
   const processarArquivo = useCallback((file: File) => {
     setArquivo(file);
@@ -1209,6 +1231,7 @@ export default function ImportarExcel() {
 
         // Usar sheet_to_json com header:1 para ter array de arrays (sem header automático)
         const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
+        rawRowsRef.current = rawRows as unknown[][];
 
         if (rawRows.length === 0) { toast.error('Planilha vazia ou sem dados'); return; }
 
@@ -1219,6 +1242,7 @@ export default function ImportarExcel() {
           return;
         }
 
+        setRegistrosOriginais(res.registros);
         setRegistros(res.registros);
         setModoParsed(res.modo);
         setBlocosDetectados(res.blocos ?? 0);
@@ -1230,6 +1254,74 @@ export default function ImportarExcel() {
     };
     reader.readAsArrayBuffer(file);
   }, []);
+
+  function truncarParaIA(rows: unknown[][]) {
+    const maxRows = 160;
+    const maxCols = 24;
+    return rows.slice(0, maxRows).map(r => (Array.isArray(r) ? r.slice(0, maxCols) : []));
+  }
+
+  async function organizarComIA() {
+    const raw = rawRowsRef.current;
+    if (!raw || raw.length === 0) {
+      toast.error('Arquivo não disponível para organização com IA');
+      return;
+    }
+
+    setOrganizandoIA(true);
+    try {
+      const hoje = new Date().toISOString().split('T')[0];
+      const payloadRows = truncarParaIA(raw);
+      const res = await aiNormalizeImport(payloadRows, hoje);
+
+      const records = Array.isArray(res?.records) ? res.records : [];
+      if (records.length === 0) {
+        toast.warning('A IA não retornou registros para importar');
+        return;
+      }
+
+      const novos: AcordoImportado[] = [];
+      for (const rec of records) {
+        const linhaOriginal = typeof rec?.linhaOriginal === 'number' ? rec.linhaOriginal : 0;
+        const dados: Record<string, unknown> = {
+          nome_cliente: rec?.nome_cliente ?? '',
+          nr_cliente: rec?.nr_cliente ?? '',
+          vencimento: rec?.vencimento ?? null,
+          valor: rec?.valor ?? null,
+          whatsapp: rec?.whatsapp ?? null,
+          status: rec?.status ?? '',
+          tipo: rec?.tipo ?? '',
+          parcelas: rec?.parcelas ?? '',
+          observacoes: rec?.observacoes ?? '',
+          instituicao: rec?.instituicao ?? '',
+        };
+        const acordo = montarAcordo(dados, hoje, linhaOriginal, undefined);
+        if (acordo) novos.push(acordo);
+      }
+
+      if (novos.length === 0) {
+        toast.warning('A IA não conseguiu montar registros válidos');
+        return;
+      }
+
+      setRegistros(novos);
+      toast.success(`IA organizou ${novos.length} registro(s)`);
+    } catch (e) {
+      console.error('[ImportarExcel/IA]', e);
+      toast.error('Erro ao organizar com IA');
+    } finally {
+      setOrganizandoIA(false);
+    }
+  }
+
+  async function toggleIA(v: boolean) {
+    setUsarIA(v);
+    if (!v) {
+      if (registrosOriginais) setRegistros(registrosOriginais);
+      return;
+    }
+    await organizarComIA();
+  }
 
   const registrosFiltrados = registros.filter(r => {
     if (filtroPreview === 'validos') return r.valido;
@@ -1471,6 +1563,24 @@ export default function ImportarExcel() {
                 <span className="text-muted-foreground">·</span>
                 <Building2 className="w-3.5 h-3.5 text-primary" />
                 <span className="font-medium text-foreground">{(perfil.setores as { nome?: string })?.nome}</span>
+              </>
+            )}
+            {aiDisponivel && (
+              <>
+                <span className="text-muted-foreground">·</span>
+                <Bot className="w-3.5 h-3.5 text-primary" />
+                <span className="text-muted-foreground">IA</span>
+                <Switch checked={usarIA} onCheckedChange={toggleIA} disabled={organizandoIA} />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-[11px] px-2 gap-1.5"
+                  disabled={!usarIA || organizandoIA}
+                  onClick={organizarComIA}
+                >
+                  <RefreshCw className={cn('w-3 h-3', organizandoIA && 'animate-spin')} />
+                  Organizar
+                </Button>
               </>
             )}
           </div>

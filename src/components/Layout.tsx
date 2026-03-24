@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight, Bell,
-  Shield, BarChart3, ClipboardList, Building2, Upload
+  Shield, BarChart3, ClipboardList, Building2, Upload, Bot
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Usuários',      icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['administrador'] },
   { label: 'Setores',       icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
   { label: 'Configurações', icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
+  { label: 'IA',            icon: Bot,             to: ROUTE_PATHS.ADMIN_IA,            roles: ['administrador'] },
   { label: 'Logs',          icon: ClipboardList,   to: ROUTE_PATHS.ADMIN_LOGS,          roles: ['administrador'] },
 ];
 

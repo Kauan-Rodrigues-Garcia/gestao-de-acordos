@@ -11,6 +11,7 @@ export const ROUTE_PATHS = {
   ADMIN_SETORES: '/admin/setores',
   ADMIN_CONFIGURACOES: '/admin/configuracoes',
   ADMIN_LOGS: '/admin/logs',
+  ADMIN_IA: '/admin/ia',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
