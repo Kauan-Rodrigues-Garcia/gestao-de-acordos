@@ -13,7 +13,6 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { ThemeToggle } from './ThemeToggle';
 
 interface NavItem {
   label: string;
@@ -180,7 +179,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
-            <ThemeToggle />
             <Button variant="ghost" size="icon" className="w-8 h-8">
               <Bell className="w-4 h-4" />
             </Button>

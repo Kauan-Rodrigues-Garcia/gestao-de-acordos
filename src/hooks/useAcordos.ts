@@ -9,7 +9,6 @@ import { useAuth } from './useAuth';
 import { getTodayISO } from '@/lib/index';
 import {
   type FiltrosAcordo,
-  fetchAcordos as fetchAcordosService,
   calcularMetricasDashboard,
   type MetricasDashboard,
 } from '@/services/acordos.service';
@@ -19,7 +18,6 @@ export type { FiltrosAcordo };
 export function useAcordos(filtros?: FiltrosAcordo) {
   const { perfil } = useAuth();
   const [acordos, setAcordos] = useState<Acordo[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
@@ -28,9 +26,28 @@ export function useAcordos(filtros?: FiltrosAcordo) {
     setLoading(true);
     setError(null);
     try {
-      const { data, count } = await fetchAcordosService(filtros);
-      setAcordos(data);
-      setTotalCount(count);
+      let query = supabase
+        .from('acordos')
+        .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)')
+        .order('vencimento', { ascending: true });
+
+      if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
+      if (filtros?.status)      query = query.eq('status', filtros.status);
+      if (filtros?.tipo)        query = query.eq('tipo', filtros.tipo);
+      if (filtros?.operador_id) query = query.eq('operador_id', filtros.operador_id);
+      if (filtros?.setor_id)    query = query.eq('setor_id', filtros.setor_id);
+      if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
+      if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);
+      if (filtros?.data_fim)    query = query.lte('vencimento', filtros.data_fim);
+      if (filtros?.busca) {
+        query = query.or(
+          `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%`
+        );
+      }
+
+      const { data, error: err } = await query;
+      if (err) throw err;
+      setAcordos((data as Acordo[]) || []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erro ao carregar acordos');
       console.error('[useAcordos]', e);
@@ -42,7 +59,7 @@ export function useAcordos(filtros?: FiltrosAcordo) {
 
   useEffect(() => { fetchAcordos(); }, [fetchAcordos]);
 
-  return { acordos, totalCount, loading, error, refetch: fetchAcordos };
+  return { acordos, loading, error, refetch: fetchAcordos };
 }
 
 /** Hook de métricas do dashboard — usa calcularMetricasDashboard do service */

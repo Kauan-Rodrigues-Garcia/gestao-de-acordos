@@ -1,8 +1,7 @@
 {
-  "name": "gestao-de-acordos",
+  "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "1.0.0",
-  "description": "Sistema de Gestão de Acordos Financeiros",
+  "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite",

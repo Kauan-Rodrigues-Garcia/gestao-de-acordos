@@ -18,15 +18,13 @@ export interface FiltrosAcordo {
   busca?: string;
   vencimento?: string;
   apenas_hoje?: boolean;
-  page?: number;
-  perPage?: number;
 }
 
-/** Busca acordos com filtros opcionais e suporte a paginação */
-export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
+/** Busca acordos com filtros opcionais */
+export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<Acordo[]> {
   let query = supabase
     .from('acordos')
-    .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
+    .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)')
     .order('vencimento', { ascending: true });
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
@@ -37,25 +35,15 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
   if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);
   if (filtros?.data_fim)    query = query.lte('vencimento', filtros.data_fim);
-
-  if (filtros?.page && filtros?.perPage) {
-    const from = (filtros.page - 1) * filtros.perPage;
-    const to = from + filtros.perPage - 1;
-    query = query.range(from, to);
-  }
-
   if (filtros?.busca) {
     query = query.or(
       `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%`
     );
   }
 
-  const { data, error, count } = await query;
+  const { data, error } = await query;
   if (error) throw error;
-  return {
-    data: (data as Acordo[]) || [],
-    count: count || 0
-  };
+  return (data as Acordo[]) || [];
 }
 
 // ─── Cálculos agregados ──────────────────────────────────────────────────

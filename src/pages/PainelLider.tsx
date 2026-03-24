@@ -163,12 +163,37 @@ function CardOperador({
 interface AnaliticoOperadorProps {
   operadorId:   string;
   operadorNome: string;
-  acordos:      Acordo[];
   onFechar:     () => void;
 }
 
-function AnaliticoOperador({ operadorId, operadorNome, acordos, onFechar }: AnaliticoOperadorProps) {
+function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOperadorProps) {
+  const [acordos,       setAcordos]       = useState<Acordo[]>([]);
+  const [loadingLocal,  setLoadingLocal]  = useState(true);
+  const [erroLocal,     setErroLocal]     = useState<string | null>(null);
   const [filtroStatus,  setFiltroStatus]  = useState('');
+
+  const carregarAcordos = useCallback(async () => {
+    setLoadingLocal(true);
+    setErroLocal(null);
+    try {
+      const { data, error } = await supabase
+        .from('acordos')
+        .select('*')
+        .eq('operador_id', operadorId)
+        .order('vencimento', { ascending: true });
+
+      if (error) throw new Error(error.message);
+      setAcordos((data as Acordo[]) || []);
+    } catch (e) {
+      setErroLocal(e instanceof Error ? e.message : 'Erro ao carregar acordos');
+    } finally {
+      setLoadingLocal(false);
+    }
+  }, [operadorId]);
+
+  useEffect(() => {
+    carregarAcordos();
+  }, [carregarAcordos]);
 
   const hoje = getTodayISO();
   const mes  = calcularMetricasMes(acordos);
@@ -204,34 +229,49 @@ function AnaliticoOperador({ operadorId, operadorNome, acordos, onFechar }: Anal
             <div className="flex-1">
               <h3 className="font-bold text-foreground">{operadorNome}</h3>
               <p className="text-xs text-muted-foreground">
-                {acordos.length} acordos na carteira
+                {loadingLocal ? 'Carregando...' : `${acordos.length} acordos na carteira`}
               </p>
             </div>
             <div className="flex items-center gap-1">
+              <Button variant="ghost" size="icon" className="w-7 h-7" onClick={carregarAcordos} title="Recarregar">
+                <RefreshCw className="w-3.5 h-3.5" />
+              </Button>
               <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onFechar}>
                 <X className="w-4 h-4" />
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: 'A receber/mês', value: formatBRL(mes.valorAReceber),  cls: 'text-primary',     sub: `${mes.pendentesNoMes} aberto(s) no mês` },
-              { label: 'Recebido/mês',  value: formatBRL(mes.valorRecebido),  cls: 'text-success',     sub: `${mes.pagosNoMes} pago(s) no mês` },
-              { label: 'Total vencidos',value: String(vencidos.length),       cls: 'text-destructive', sub: `${formatBRL(sumSafe(vencidos.map(a=>a.valor)))} em atraso` },
-              { label: 'Total pagos',   value: String(pagos.length),          cls: 'text-success',     sub: formatBRL(sumSafe(pagos.map(a=>a.valor))) },
-            ].map(({ label, value, cls, sub }) => (
-              <div key={label} className="p-3 bg-background rounded-lg border border-border">
-                <p className="text-[10px] text-muted-foreground">{label}</p>
-                <p className={cn('text-base font-bold font-mono mt-0.5', cls)}>{value}</p>
-                <p className="text-[10px] text-muted-foreground/70 mt-0.5">{sub}</p>
-              </div>
-            ))}
-          </div>
+          {loadingLocal ? (
+            <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Carregando acordos...</span>
+            </div>
+          ) : erroLocal ? (
+            <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive">
+              {erroLocal}
+              <Button size="sm" variant="link" className="text-destructive ml-2 h-auto p-0" onClick={carregarAcordos}>
+                Tentar novamente
+              </Button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'A receber/mês', value: formatBRL(mes.valorAReceber),  cls: 'text-primary',     sub: `${mes.pendentesNoMes} aberto(s) no mês` },
+                { label: 'Recebido/mês',  value: formatBRL(mes.valorRecebido),  cls: 'text-success',     sub: `${mes.pagosNoMes} pago(s) no mês` },
+                { label: 'Total vencidos',value: String(vencidos.length),       cls: 'text-destructive', sub: `${formatBRL(sumSafe(vencidos.map(a=>a.valor)))} em atraso` },
+                { label: 'Total pagos',   value: String(pagos.length),          cls: 'text-success',     sub: formatBRL(sumSafe(pagos.map(a=>a.valor))) },
+              ].map(({ label, value, cls, sub }) => (
+                <div key={label} className="p-3 bg-background rounded-lg border border-border">
+                  <p className="text-[10px] text-muted-foreground">{label}</p>
+                  <p className={cn('text-base font-bold font-mono mt-0.5', cls)}>{value}</p>
+                  <p className="text-[10px] text-muted-foreground/70 mt-0.5">{sub}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
-      
-      {/* ... rest of the component remains similar ... */}
 
       {/* Lista de acordos */}
       {!loadingLocal && !erroLocal && (
@@ -476,7 +516,7 @@ export default function PainelLider() {
       const ids = listaOps.map(o => o.id);
       const { data: acData, error: acErr } = await supabase
         .from('acordos')
-        .select('*')
+        .select('id, nome_cliente, nr_cliente, vencimento, valor, status, tipo, operador_id, setor_id, parcelas, whatsapp, observacoes, data_cadastro, criado_em, atualizado_em')
         .in('operador_id', ids)
         .order('vencimento', { ascending: true });
 
@@ -622,7 +662,6 @@ export default function PainelLider() {
                   key={opSel.id}
                   operadorId={opSel.id}
                   operadorNome={opSel.nome}
-                  acordos={acordosPorOperador[opSel.id] || []}
                   onFechar={() => setOpSel(null)}
                 />
               )}
