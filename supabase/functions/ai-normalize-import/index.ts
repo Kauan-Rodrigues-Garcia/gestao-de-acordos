@@ -85,13 +85,15 @@ Deno.serve(async (req) => {
   }
 
   const authHeader = req.headers.get('Authorization') ?? '';
-  if (authHeader) {
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-      auth: { persistSession: false },
-    });
-    await supabaseUser.auth.getUser().catch(() => null);
-  }
+  if (!authHeader) return json({ error: 'Não autenticado.' }, 401);
+
+  const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+    global: { headers: { Authorization: authHeader } },
+    auth: { persistSession: false },
+  });
+
+  const { data: userData, error: userErr } = await supabaseUser.auth.getUser();
+  if (userErr || !userData?.user) return json({ error: 'JWT inválido ou expirado.' }, 401);
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
     auth: { persistSession: false },
