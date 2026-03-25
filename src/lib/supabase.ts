@@ -1,15 +1,32 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-  auth: {
-    persistSession: true,
-    autoRefreshToken: true,
-    detectSessionInUrl: true,
-  },
-});
+function getSupabase(): SupabaseClient {
+  if (typeof window !== 'undefined') {
+    if (!(window as any).__supabaseInstance) {
+      (window as any).__supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+          detectSessionInUrl: true,
+        },
+      });
+    }
+    return (window as any).__supabaseInstance;
+  }
+  
+  return createClient(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  });
+}
+
+export const supabase = getSupabase();
 
 export type PerfilUsuario = 'operador' | 'lider' | 'administrador';
 export type StatusAcordo = 'pendente' | 'pago' | 'verificar' | 'vencido' | 'cancelado' | 'em_acompanhamento';

@@ -53,7 +53,7 @@ export default function Login() {
             >
               <Shield className="w-7 h-7 text-primary-foreground" />
             </motion.div>
-            <h1 className="text-2xl font-bold text-foreground">AcordosPRO</h1>
+            <h1 className="text-2xl font-bold text-foreground">Gestão de Acordos</h1>
             <p className="text-sm text-muted-foreground mt-1">Sistema de Gestão de Acordos</p>
           </CardHeader>
 
@@ -139,7 +139,7 @@ export default function Login() {
         </Card>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          AcordosPRO © {new Date().getFullYear()} · Uso interno
+          Gestão de Acordos © {new Date().getFullYear()} · Uso interno
         </p>
       </motion.div>
     </div>

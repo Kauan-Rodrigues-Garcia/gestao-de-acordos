@@ -157,7 +157,7 @@ export default function Registro() {
               <Shield className="w-7 h-7 text-primary-foreground" />
             </motion.div>
             <h1 className="text-2xl font-bold text-foreground">Criar Conta</h1>
-            <p className="text-sm text-muted-foreground mt-1">AcordosPRO · Sistema de Gestão de Acordos</p>
+            <p className="text-sm text-muted-foreground mt-1">Gestão de Acordos · Sistema de Gestão</p>
           </CardHeader>
 
           <CardContent className="pb-8">

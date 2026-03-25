@@ -60,7 +60,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              <p className="font-bold text-sm text-sidebar-foreground leading-none">AcordosPRO</p>
+              <p className="font-bold text-sm text-sidebar-foreground leading-none">Gestão de Acordos</p>
               <p className="text-xs text-sidebar-foreground/50 mt-0.5">Gestão de Acordos</p>
             </motion.div>
           )}
