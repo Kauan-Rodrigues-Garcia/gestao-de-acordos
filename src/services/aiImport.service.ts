@@ -24,6 +24,18 @@ export async function aiNormalizeImport(
   todayISO: string,
   prompt?: string,
 ): Promise<AINormalizeResponse> {
+  // Garante que o token de acesso está válido antes de invocar a Edge Function.
+  // O gateway do Supabase valida o JWT antes de encaminhar a requisição, por isso
+  // um token expirado resulta em 401 antes mesmo de o código da função executar.
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+
+  if (sessionError || !sessionData.session) {
+    const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+    if (refreshError || !refreshData.session) {
+      throw new Error('Sessão expirada. Faça login novamente.');
+    }
+  }
+
   const { data, error } = await supabase.functions.invoke('ai-normalize-import', {
     body: { rows, todayISO, prompt },
   });
