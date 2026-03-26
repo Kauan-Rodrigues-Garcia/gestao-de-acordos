@@ -1,27 +1,140 @@
-# 技术栈
+# AcordosPRO — Sistema de Gestão de Acordos Financeiros
 
-该项目使用以下技术栈
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Plataforma web para gerenciamento de acordos financeiros com controle de acesso por perfis (RBAC), dashboard analítico, importação via planilha Excel e integração com IA (OpenAI) para normalização de dados.
 
+---
 
-# 开发流程
+## 🛠️ Stack Tecnológica
 
-1. 参考用户需求，调整 src/index.css 与 tailwind.config.ts 的主题风格
-2. 根据用户需求，划分出所需要实现的页面
-3. 整理好每个页面需要实现的功能，在 pages 下创建对应的文件夹及其下入口 Index.tsx
-4. 在 App.tsx 中创建路由配置，引入刚才的各个入口文件 Index.tsx
-5. 根据刚才整理的需求，如果需求简单，可以直接在 Index.tsx 中完成该页面的全部工作
-6. 如果需求复杂，可以将 page 拆分为若干个组件来实现，目录结构如下：
-    - Index.tsx 入口
-    - /components/ 组件
-    - /hooks/ 钩子
-    - /stores/ 如果有复杂交互通信时，可以使用 zustand 进行通信
-7. 在完成需求后，需要进行 pnpm i 安装依赖，并使用 npm run lint & npx tsc --noEmit -p tsconfig.app.json --strict 进行检查，并修复问题
+| Camada | Tecnologia |
+|---|---|
+| **UI** | React 18, TypeScript, Vite 5 (SWC) |
+| **Estilização** | Tailwind CSS 4, shadcn/ui (Radix UI) |
+| **Roteamento** | React Router DOM 6 (HashRouter) |
+| **Formulários** | React Hook Form + Zod |
+| **Estado servidor** | TanStack React Query |
+| **Estado local** | Zustand |
+| **Animações** | Framer Motion |
+| **Gráficos** | Recharts |
+| **Planilhas** | xlsx |
+| **Backend/BaaS** | Supabase (Auth, PostgreSQL, Edge Functions) |
+| **IA** | OpenAI API via Supabase Edge Function (Deno) |
 
-# 接入后端接口
-- 当需要新增接口或者操作 supabase 时，需要先在 src/api 新增对应 api 文件，并导出对应的数据类型，可以参考 src/demo.ts 文件，如果是 supabase 还需要做好实现
-- 前端与 supabase 做实现时，都需要完全按照数据类型进行实现，尽可能避免修改定好的数据类型，如果出现修改，需要检查所有引用该类型的文件
+---
+
+## ✅ Pré-requisitos
+
+- **Node.js** 18 ou superior
+- **npm** (incluído com o Node.js)
+
+---
+
+## 🚀 Instalação
+
+```bash
+# 1. Clone o repositório
+git clone https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos.git
+cd gestao-de-acordos
+
+# 2. Instale as dependências
+npm install
+
+# 3. Configure as variáveis de ambiente (veja a seção abaixo)
+cp .env.example .env.local   # ou crie o arquivo manualmente
+
+# 4. Inicie o servidor de desenvolvimento
+npm run dev
+```
+
+---
+
+## 📜 Scripts Disponíveis
+
+| Comando | Descrição |
+|---|---|
+| `npm run dev` | Inicia o servidor de desenvolvimento |
+| `npm run build` | Gera o build de produção |
+| `npm run build:dev` | Build em modo development com sourcemaps |
+| `npm run build:map` | Build de produção com sourcemaps |
+| `npm run preview` | Visualiza o build localmente |
+| `npm run lint` | Executa o ESLint |
+| `npm run test:edge-functions` | Testa as Edge Functions (Deno) |
+
+---
+
+## 🔑 Variáveis de Ambiente
+
+Crie um arquivo `.env.local` na raiz do projeto com as seguintes variáveis:
+
+```env
+VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
+VITE_SUPABASE_ANON_KEY=<sua-anon-key>
+```
+
+> As chaves `SUPABASE_SERVICE_ROLE_KEY` e `OPENAI_API_KEY` são configuradas diretamente nos **Secrets** do Supabase (usadas pelas Edge Functions — nunca devem ser expostas no frontend).
+
+---
+
+## 📁 Estrutura do Projeto
+
+```
+gestao-de-acordos/
+├── src/
+│   ├── App.tsx                     # Roteamento principal (lazy loading)
+│   ├── main.tsx                    # Entry point
+│   ├── index.css                   # Estilos globais + tema
+│   ├── components/
+│   │   ├── ui/                     # Componentes shadcn/ui (não editar manualmente)
+│   │   ├── Layout.tsx              # Layout com sidebar
+│   │   ├── ProtectedRoute.tsx      # Guard de rotas por perfil
+│   │   └── ThemeToggle.tsx         # Alternância dark/light mode
+│   ├── hooks/
+│   │   ├── useAuth.tsx             # Autenticação + perfil + setor
+│   │   └── useAcordos.ts           # Acordos + métricas do dashboard
+│   ├── services/
+│   │   ├── acordos.service.ts      # Lógica de negócio de acordos
+│   │   ├── setores.service.ts      # Lógica de setores
+│   │   └── aiImport.service.ts     # Integração com IA para importação
+│   ├── integrations/ai/            # Camada de IA (OpenAI)
+│   ├── lib/
+│   │   ├── supabase.ts             # Cliente Supabase + tipos TypeScript
+│   │   ├── money.ts                # Utilitários monetários (BRL)
+│   │   ├── motion.ts               # Presets de animação
+│   │   └── utils.ts                # Helpers gerais
+│   └── pages/                      # 13 páginas da aplicação
+├── supabase/
+│   ├── migrations/                 # Scripts SQL (PostgreSQL)
+│   └── functions/
+│       └── ai-normalize-import/    # Edge Function de normalização IA (Deno)
+└── [vite.config.ts, tsconfig.json, eslint.config.js, ...]
+```
+
+---
+
+## 🔐 Perfis de Acesso (RBAC)
+
+| Perfil | Permissões |
+|---|---|
+| **operador** | Acessa apenas seus próprios acordos |
+| **lider** | Acessa acordos e operadores do seu setor |
+| **administrador** | Acesso total — todos os setores, acordos, configurações e logs |
+
+As rotas são protegidas pelo componente `ProtectedRoute` com validação de perfil.
+
+---
+
+## 🤖 Integração com IA
+
+A funcionalidade de **Organizar com IA** na tela de importação de planilhas utiliza uma **Supabase Edge Function** (`ai-normalize-import`) que:
+
+1. Recebe as linhas brutas da planilha
+2. Envia para a OpenAI API (modelo configurável via Admin → IA)
+3. Retorna os dados normalizados nos campos corretos do sistema
+
+A chave da OpenAI é armazenada nos Secrets do Supabase e nunca é exposta no frontend.
+
+---
+
+## 📖 Documentação de Arquitetura
+
+Para detalhes técnicos sobre a estrutura de componentes, camada de serviços, banco de dados e decisões de arquitetura, consulte o arquivo [ARQUITETURA.md](./ARQUITETURA.md).
