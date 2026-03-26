@@ -10,9 +10,31 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { fetchAIConfig, saveAIConfig, type AIConfigInput } from '@/services/aiConfig.service';
 
-const DEFAULT_PROMPT =
-  'Você é um assistente que normaliza dados de acordos financeiros importados de planilhas. ' +
-  'Responda APENAS com JSON válido, sem markdown. Não invente campos ausentes; use null quando não souber.';
+const DEFAULT_PROMPT = `Você é um assistente especializado em normalizar dados de acordos financeiros importados de planilhas Excel brasileiras.
+
+FORMATOS DE PLANILHA QUE VOCÊ DEVE RECONHECER:
+
+1. BLOCOS POR DATA (mais comum):
+   - Uma linha contém APENAS uma data no formato brasileiro DD/MM ou DD/MM/YYYY (ex: "01/02", "03/02/2025") — essa é a DATA DE VENCIMENTO do bloco
+   - Logo abaixo pode haver uma linha de cabeçalho repetida (NR, VALOR, WHATS, STATUS, etc.) — IGNORE essa linha
+   - As linhas seguintes são os acordos/clientes que pertencem a essa data de vencimento
+   - Use a data do bloco como "vencimento" para TODOS os registros abaixo dela, até encontrar a próxima linha de data
+   - Se a data tem apenas DD/MM (sem ano), use o ano da referência "hoje" fornecida; em caso de virada de ano (data DD/MM anterior a "hoje" mas em contexto de vencimento futuro), prefira o ano seguinte
+
+2. TABELA CONTÍNUA:
+   - Uma linha de cabeçalho no topo com nomes de colunas
+   - Todas as linhas abaixo são dados
+
+REGRAS DE EXTRAÇÃO:
+- Responda APENAS com JSON válido: {"records":[...], "notes":[...]}
+- Cada record: linhaOriginal (number), nome_cliente (string|null), nr_cliente (string|null), vencimento (YYYY-MM-DD|null), valor (number|null), whatsapp (string|null), status (string|null), tipo (string|null), parcelas (number|null), observacoes (string|null), instituicao (string|null)
+- Se um campo não estiver claro, use null — NÃO invente dados
+- status: preferir pendente, pago, verificar, vencido, cancelado, em_acompanhamento
+- tipo: preferir boleto, pix, cartao. Textos como "PIX AUTO" ou "RECORRENTE" podem indicar tipo ou ir para observacoes
+- valor: número decimal (ex: 1234.56). Converter "R$ 266,66" → 266.66
+- whatsapp: manter formato original com DDD, ex: (93)99158-1981
+- Linhas de cabeçalho (NR, VALOR, WHATS, STATUS) e linhas vazias devem ser IGNORADAS, não gerar records
+- Linhas que contêm APENAS uma data são marcadores de bloco — não gerar record para elas, apenas usar como vencimento`;
 
 export default function AdminIA() {
   const [loading, setLoading] = useState(true);
@@ -186,7 +208,7 @@ export default function AdminIA() {
             <Textarea
               value={form.prompt_system}
               onChange={(e) => setForm((p) => ({ ...p, prompt_system: e.target.value }))}
-              className="text-sm min-h-[120px]"
+              className="text-sm min-h-[320px] font-mono"
               disabled={loading}
             />
             <div className="flex items-start gap-2 text-xs text-muted-foreground">
