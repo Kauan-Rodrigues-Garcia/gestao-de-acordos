@@ -27,7 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Acordos',       icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador'] },
   { label: 'Novo Acordo',   icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador'] },
   { label: 'Painel Líder',  icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador'] },
-  { label: 'Usuários',      icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['administrador'] },
+  { label: 'Usuários',      icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador'] },
   { label: 'Setores',       icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
   { label: 'Configurações', icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
   { label: 'IA',            icon: Bot,             to: ROUTE_PATHS.ADMIN_IA,            roles: ['administrador'] },

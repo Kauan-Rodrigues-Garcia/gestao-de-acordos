@@ -96,7 +96,7 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['administrador']}>
+                  <ProtectedRoute roles={['lider', 'administrador']}>
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>

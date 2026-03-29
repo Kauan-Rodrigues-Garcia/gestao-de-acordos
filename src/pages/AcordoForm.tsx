@@ -223,41 +223,65 @@ export default function AcordoForm() {
     if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
     setAutorizando(true);
     try {
-      // Usar cliente separado com storage isolado para não sobrescrever a sessão do operador atual
-      const { createClient } = await import('@supabase/supabase-js');
-      const tempClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL as string,
-        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+
+      if (!supabaseUrl || !supabaseAnon) {
+        toast.error('Configuração do Supabase ausente. Contate o suporte.');
+        return;
+      }
+
+      // Verificar credenciais do líder via fetch direto, sem criar uma segunda instância
+      // GoTrueClient (que causava "Multiple GoTrueClient instances" e corrupção de sessão)
+      const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseAnon,
+        },
+        body: JSON.stringify({ email: liderEmail, password: liderSenha }),
+      });
+
+      if (!authRes.ok) {
+        const errBody = await authRes.json().catch(() => ({}));
+        console.error('[autorizarLider] auth error:', authRes.status, errBody);
+        if (authRes.status === 400 || authRes.status === 401 || authRes.status === 422) {
+          toast.error('Credenciais do líder inválidas');
+        } else {
+          toast.error(`Erro ao autenticar líder (${authRes.status}). Tente novamente.`);
+        }
+        return;
+      }
+
+      const authData = await authRes.json();
+      const liderUid   = authData.user?.id as string | undefined;
+      const liderToken = authData.access_token as string | undefined;
+
+      if (!liderUid || !liderToken) {
+        toast.error('Credenciais do líder inválidas');
+        return;
+      }
+
+      // Verificar perfil do líder usando o token do líder via REST direto
+      // A sessão do operador (supabase global) não é tocada
+      const perfilRes = await fetch(
+        `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
         {
-          auth: {
-            persistSession: false,
-            autoRefreshToken: false,
-            storageKey: 'sb-lider-auth-temp-' + Date.now(),
-            storage: {
-              getItem: () => null,
-              setItem: () => {},
-              removeItem: () => {},
-            },
+          headers: {
+            'apikey': supabaseAnon,
+            'Authorization': `Bearer ${liderToken}`,
           },
         }
       );
 
-      const { data: authData, error: authError } = await tempClient.auth.signInWithPassword({
-        email: liderEmail,
-        password: liderSenha,
-      });
-      if (authError || !authData.user) { toast.error('Credenciais do líder inválidas'); return; }
+      if (!perfilRes.ok) {
+        console.error('[autorizarLider] perfil fetch error:', perfilRes.status);
+        toast.error('Erro ao verificar perfil do líder');
+        return;
+      }
 
-      const liderUid = authData.user.id;
-
-      // Verificar se o usuário autenticado é líder ou administrador
-      const { data: liderPerfil } = await tempClient
-        .from('perfis')
-        .select('perfil, nome')
-        .eq('id', liderUid)
-        .single();
-
-      // Descartar tempClient sem chamar signOut (persistSession: false + storage no-op já garantem isolamento)
+      const perfilArr = await perfilRes.json();
+      const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
 
       if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
         toast.error('O usuário informado não tem permissão de líder');
@@ -267,7 +291,7 @@ export default function AcordoForm() {
       const uid = perfilLocal?.id ?? user?.id ?? '';
       const nrCliente = pendingPayload.nr_cliente as string;
 
-      // Registrar log de transferência
+      // Registrar log de transferência com a sessão do operador (não alterada)
       await supabase.from('logs_sistema').insert({
         usuario_id: uid,
         acao: 'transferencia_nr',
@@ -282,11 +306,10 @@ export default function AcordoForm() {
         },
       });
 
-      // Garantir que a sessão do operador está válida antes de salvar
-      await supabase.auth.refreshSession();
-
+      // Salvar o acordo com a sessão do operador (intacta, sem refreshSession)
       const resultError = await salvarAcordo(pendingPayload, uid);
       if (resultError) {
+        console.error('[autorizarLider] save error:', resultError);
         toast.error(`Erro ao salvar: ${resultError.message}`);
         return;
       }
@@ -296,6 +319,7 @@ export default function AcordoForm() {
       setPendingPayload(null);
       navigate(ROUTE_PATHS.ACORDOS);
     } catch (e) {
+      console.error('[autorizarLider] unexpected:', e);
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
     } finally {
       setAutorizando(false);
