@@ -1,264 +1,31 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit, Eye,
-  Filter, RefreshCw, X, CheckCircle2, Hash,
-  Send, Copy, ChevronDown, ChevronUp, AlertCircle,
+  Filter, RefreshCw, X,
   Trash2, ChevronLeft, ChevronRight, CheckCircle
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
-  formatCurrency, formatDate, getTodayISO, isAtrasado, gerarLinkWhatsapp
+  formatCurrency, formatDate, getTodayISO, isAtrasado
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
-
-// ─── Fila de envio WhatsApp ────────────────────────────────────────────────
-const WHATSAPP_SEND_DELAY_MS = 2500;
-
-interface ItemFila {
-  id: string;
-  nome_cliente: string;
-  nr_cliente: string;
-  whatsapp: string;
-  valor: number;
-  vencimento: string;
-  mensagem: string;
-  link: string;
-  enviado: boolean;
-}
+import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 
 function buildMensagem(a: Acordo): string {
   return `Olá *${a.nome_cliente}*, passando para lembrar do seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*. Qualquer dúvida, estamos à disposição. 😊`;
-}
-
-// ─── Modal de fila de lembretes ────────────────────────────────────────────
-function ModalFilaWhatsApp({
-  fila,
-  onClose,
-}: {
-  fila: ItemFila[];
-  onClose: () => void;
-}) {
-  const [filaLocal, setFilaLocal] = useState<ItemFila[]>(fila);
-  const [expandido, setExpandido] = useState<string | null>(null);
-  const [enviandoAuto, setEnviandoAuto] = useState(false);
-  const cancelarAutoRef = useRef(false);
-
-  const total     = filaLocal.length;
-  const enviados  = filaLocal.filter(i => i.enviado).length;
-  const restantes = total - enviados;
-
-  function abrirProximo() {
-    const pendentes = filaLocal.filter(i => !i.enviado);
-    if (pendentes.length === 0) { toast.success('Todos os lembretes foram enviados!'); onClose(); return; }
-    const item = pendentes[0];
-    window.open(item.link, '_blank');
-    setFilaLocal(prev => prev.map(i => i.id === item.id ? { ...i, enviado: true } : i));
-  }
-
-  async function enviarTodosAuto() {
-    setEnviandoAuto(true);
-    cancelarAutoRef.current = false;
-    const pendentes = filaLocal.filter(i => !i.enviado);
-    for (let i = 0; i < pendentes.length; i++) {
-      if (cancelarAutoRef.current) break;
-      const item = pendentes[i];
-      const opened = window.open(item.link, '_blank');
-      if (!opened) {
-        toast.warning('Popup bloqueado! Permita popups para este site.');
-      }
-      setFilaLocal(prev => prev.map(fi => fi.id === item.id ? { ...fi, enviado: true } : fi));
-      if (i < pendentes.length - 1) {
-        await new Promise(r => setTimeout(r, WHATSAPP_SEND_DELAY_MS));
-      }
-    }
-    const foiCancelado = cancelarAutoRef.current;
-    setEnviandoAuto(false);
-    cancelarAutoRef.current = false;
-    if (!foiCancelado) {
-      toast.success('Envio automático concluído!');
-    }
-  }
-
-  function marcarEnviado(id: string) {
-    setFilaLocal(prev => prev.map(i => i.id === id ? { ...i, enviado: true } : i));
-  }
-
-  function copiarMensagem(msg: string) {
-    navigator.clipboard.writeText(msg).then(() => toast.success('Mensagem copiada!'));
-  }
-
-  function copiarTodasMensagens() {
-    const texto = filaLocal
-      .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente} (NR ${i.nr_cliente})\n${i.mensagem}`)
-      .join('\n\n---\n\n');
-    navigator.clipboard.writeText(texto).then(() => toast.success(`${total} mensagens copiadas!`));
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <MessageSquare className="w-4 h-4 text-success" />
-            Fila de Lembretes WhatsApp
-          </DialogTitle>
-        </DialogHeader>
-
-        {/* Progresso */}
-        <div className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-          <div className="flex-1">
-            <div className="flex justify-between text-xs mb-1.5">
-              <span className="text-muted-foreground">{enviados} enviado(s)</span>
-              <span className="font-medium text-foreground">{total} total</span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className="h-full bg-success transition-all duration-300 rounded-full"
-                style={{ width: total > 0 ? `${(enviados / total) * 100}%` : '0%' }}
-              />
-            </div>
-          </div>
-          <span className="text-sm font-bold text-success tabular-nums">{enviados}/{total}</span>
-        </div>
-
-        {/* Botões de ação */}
-        <div className="flex gap-2">
-          {restantes > 0 ? (
-            <>
-              {enviandoAuto ? (
-                <Button
-                  onClick={() => { cancelarAutoRef.current = true; }}
-                  className="flex-1 gap-2"
-                  variant="outline"
-                >
-                  <X className="w-4 h-4 text-destructive" />
-                  Cancelar envio automático
-                </Button>
-              ) : (
-                <>
-                  <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90">
-                    <Send className="w-4 h-4" />
-                    Abrir próximo no WhatsApp
-                    <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
-                  </Button>
-                  <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs" title="Enviar todos automaticamente (2.5s entre cada)">
-                    <Send className="w-3.5 h-3.5" />
-                    Enviar todos
-                  </Button>
-                </>
-              )}
-            </>
-          ) : (
-            <Button onClick={onClose} className="flex-1 gap-2" variant="outline">
-              <CheckCircle2 className="w-4 h-4 text-success" />
-              Todos enviados! Fechar
-            </Button>
-          )}
-          <Button variant="outline" size="icon" onClick={copiarTodasMensagens} title="Copiar todas as mensagens">
-            <Copy className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Lista */}
-        <div className="flex-1 overflow-y-auto space-y-2 pr-1">
-          {filaLocal.map((item, idx) => (
-            <div
-              key={item.id}
-              className={cn(
-                'border rounded-lg transition-colors',
-                item.enviado
-                  ? 'border-success/30 bg-success/5 opacity-70'
-                  : 'border-border bg-card'
-              )}
-            >
-              <div className="flex items-center gap-3 p-3">
-                {/* Número na fila */}
-                <div className={cn(
-                  'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
-                  item.enviado ? 'bg-success text-white' : 'bg-muted text-muted-foreground'
-                )}>
-                  {item.enviado ? '✓' : idx + 1}
-                </div>
-
-                {/* Info do cliente */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono font-bold text-primary">#{item.nr_cliente}</span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs font-medium text-foreground truncate">{item.nome_cliente}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground font-mono">
-                    {formatCurrency(item.valor)} · Vence {formatDate(item.vencimento)}
-                  </p>
-                </div>
-
-                {/* Ações */}
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7"
-                    onClick={() => copiarMensagem(item.mensagem)}
-                    title="Copiar mensagem"
-                  >
-                    <Copy className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7 text-success hover:bg-success/10"
-                    onClick={() => { window.open(item.link, '_blank'); marcarEnviado(item.id); }}
-                    title="Abrir no WhatsApp"
-                  >
-                    <Send className="w-3.5 h-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="w-7 h-7"
-                    onClick={() => setExpandido(expandido === item.id ? null : item.id)}
-                  >
-                    {expandido === item.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                  </Button>
-                </div>
-              </div>
-
-              {/* Mensagem expandida */}
-              <AnimatePresence>
-                {expandido === item.id && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="px-3 pb-3 pt-0">
-                      <div className="p-2.5 bg-muted/40 rounded text-xs text-muted-foreground leading-relaxed border border-border/50">
-                        {item.mensagem}
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          ))}
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 // ─── Tabela Skeleton ────────────────────────────────────────────────────────
@@ -283,6 +50,7 @@ const PER_PAGE = 20;
 
 export default function Acordos() {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Estados locais sincronizados com URL
@@ -475,6 +243,24 @@ export default function Acordos() {
     if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
     const mensagem = buildMensagem(a);
     window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(mensagem)}`, '_blank');
+    // Registrar log (best-effort)
+    if (perfil?.id) {
+      supabase.from('logs_sistema').insert({
+        usuario_id: perfil.id,
+        acao: 'envio_lembrete_whatsapp',
+        tabela: 'acordos',
+        registro_id: a.id,
+        empresa_id: empresa?.id ?? null,
+        detalhes: {
+          acordo_id:    a.id,
+          nome_cliente: a.nome_cliente,
+          nr_cliente:   a.nr_cliente,
+          modo:         'individual',
+        },
+      }).then(({ error }) => {
+        if (error) console.warn('[enviarUmWhatsapp] log error:', error.message);
+      });
+    }
   }
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
@@ -538,31 +324,6 @@ export default function Acordos() {
             </button>
           ))}
         </div>
-
-        {/* ── Seleção múltipla ── */}
-        <AnimatePresence>
-          {selecionados.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 mb-4 w-fit"
-            >
-              <span className="text-xs text-destructive font-medium">
-                {selecionados.length} selecionado(s)
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-destructive hover:bg-destructive/20"
-                onClick={() => setConfirmandoExclusaoLote(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5 mr-1" />
-                Excluir
-              </Button>
-            </motion.div>
-          )}
-        </AnimatePresence>
 
         {/* ── Filtros ── */}
         <Card className="border-border mb-4">
@@ -847,9 +608,64 @@ export default function Acordos() {
       {filaAberta && (
         <ModalFilaWhatsApp
           fila={filaWhatsApp}
+          usuarioId={perfil?.id}
+          empresaId={empresa?.id}
+          modo="lote"
           onClose={() => { setFilaAberta(false); setSelecionados([]); }}
         />
       )}
+
+      {/* ── Floating Action Bar (seleção múltipla) ── */}
+      <AnimatePresence>
+        {selecionados.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 80 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 80 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+          >
+            <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border border-white/10 bg-gray-900/95 backdrop-blur-md text-white">
+              <span className="text-sm font-semibold tabular-nums whitespace-nowrap">
+                {selecionados.length} selecionado(s)
+              </span>
+              <div className="w-px h-5 bg-white/20" />
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 text-green-400 hover:text-green-300 hover:bg-white/10 text-xs h-8 px-3"
+                onClick={() => {
+                  const lista = acordos.filter(a => selecionados.includes(a.id));
+                  prepararFila(lista);
+                }}
+              >
+                <MessageSquare className="w-3.5 h-3.5" />
+                Enviar Lembretes
+              </Button>
+              {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
+                  onClick={() => setConfirmandoExclusaoLote(true)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Excluir Selecionados
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1 text-white/60 hover:text-white hover:bg-white/10 text-xs h-8 px-2"
+                onClick={() => setSelecionados([])}
+              >
+                <X className="w-3.5 h-3.5" />
+                Limpar
+              </Button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

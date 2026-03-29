@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   TrendingUp, CheckCircle2,
   DollarSign, Users, CalendarDays,
-  ArrowRight, MessageSquare, Plus
+  ArrowRight, MessageSquare, Plus, Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,65 +11,30 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { useDashboardMetricas, useAcordos } from '@/hooks/useAcordos';
 import { ROUTE_PATHS, formatCurrency, formatDate, STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, getTodayISO } from '@/lib/index';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { cn } from '@/lib/utils';
+import { StatCard } from '@/components/StatCard';
+
+function saudacao(): string {
+  const hora = new Date().getHours();
+  if (hora >= 5 && hora < 12) return 'Bom dia';
+  if (hora >= 12 && hora < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
 
 const stagger = {
   hidden: {},
   visible: { transition: { staggerChildren: 0.07 } }
 };
-const fadeUp = {
-  hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { type: 'spring', stiffness: 300, damping: 30 } }
-};
-
-function StatCard({ title, value, subtitle, icon: Icon, color, trend, loading }: {
-  title: string; value: string | number; subtitle?: string;
-  icon: React.ElementType; color: string; trend?: 'up' | 'down' | 'neutral';
-  loading?: boolean;
-}) {
-  return (
-    <motion.div variants={fadeUp}>
-      <Card className="border-border hover:border-primary/30 transition-colors">
-        <CardContent className="p-5">
-          <div className="flex items-start justify-between">
-            <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center', color)}>
-              <Icon className="w-5 h-5" />
-            </div>
-            {!loading && trend && (
-              <span className={cn('flex items-center gap-1 text-xs font-medium',
-                trend === 'up' ? 'text-success' : trend === 'down' ? 'text-destructive' : 'text-muted-foreground'
-              )}>
-                {trend === 'up' ? <TrendingUp className="w-3 h-3" /> : trend === 'down' ? <TrendingDown className="w-3 h-3" /> : null}
-              </span>
-            )}
-          </div>
-          <div className="mt-3">
-            {loading ? (
-              <div className="space-y-2">
-                <Skeleton className="h-7 w-20" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-            ) : (
-              <>
-                <p className="text-2xl font-bold font-mono text-foreground">{value}</p>
-                <p className="text-xs font-medium text-muted-foreground mt-0.5">{title}</p>
-                {subtitle && <p className="text-xs text-muted-foreground/70 mt-0.5">{subtitle}</p>}
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
 
 const PIE_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function Dashboard() {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const { metricas, loading: loadingMetricas } = useDashboardMetricas();
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
   const { acordos: todosAcordos } = useAcordos();
@@ -98,11 +63,17 @@ export default function Dashboard() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">
-            Bom dia, {nome}! 👋
+            {saudacao()}, {nome}! 👋
           </h1>
           <p className="text-sm text-muted-foreground capitalize mt-0.5">
             {diaSemana}, {dataFormatada}
           </p>
+          {empresa && (
+            <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {empresa.nome}
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline" size="sm">
