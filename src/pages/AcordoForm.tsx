@@ -223,12 +223,23 @@ export default function AcordoForm() {
     if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
     setAutorizando(true);
     try {
-      // Usar cliente separado para não sobrescrever a sessão do operador atual
+      // Usar cliente separado com storage isolado para não sobrescrever a sessão do operador atual
       const { createClient } = await import('@supabase/supabase-js');
       const tempClient = createClient(
         import.meta.env.VITE_SUPABASE_URL as string,
         import.meta.env.VITE_SUPABASE_ANON_KEY as string,
-        { auth: { persistSession: false, autoRefreshToken: false } }
+        {
+          auth: {
+            persistSession: false,
+            autoRefreshToken: false,
+            storageKey: 'sb-lider-auth-temp-' + Date.now(),
+            storage: {
+              getItem: () => null,
+              setItem: () => {},
+              removeItem: () => {},
+            },
+          },
+        }
       );
 
       const { data: authData, error: authError } = await tempClient.auth.signInWithPassword({
@@ -246,8 +257,7 @@ export default function AcordoForm() {
         .eq('id', liderUid)
         .single();
 
-      // Encerrar sessão temporária do líder imediatamente
-      await tempClient.auth.signOut();
+      // Descartar tempClient sem chamar signOut (persistSession: false + storage no-op já garantem isolamento)
 
       if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
         toast.error('O usuário informado não tem permissão de líder');
@@ -271,6 +281,9 @@ export default function AcordoForm() {
           transferido_em: new Date().toISOString(),
         },
       });
+
+      // Garantir que a sessão do operador está válida antes de salvar
+      await supabase.auth.refreshSession();
 
       const resultError = await salvarAcordo(pendingPayload, uid);
       if (resultError) {
