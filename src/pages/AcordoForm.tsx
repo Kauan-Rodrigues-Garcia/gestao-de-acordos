@@ -314,6 +314,31 @@ export default function AcordoForm() {
         return;
       }
 
+      // Notificar o operador sobre a autorização
+      supabase.from('notificacoes').insert({
+        usuario_id: uid,
+        titulo: 'NR Autorizado pelo Líder',
+        mensagem: `O líder ${liderPerfil.nome} autorizou a tabulação do NR ${nrCliente}.`,
+      }).then(({ error: notifError }) => {
+        if (notifError) console.warn('[autorizarLider] notificacao error:', notifError.message);
+      });
+
+      // Registrar log detalhado da autorização
+      supabase.from('logs_sistema').insert({
+        usuario_id: uid,
+        acao: 'autorizacao_nr_lider',
+        tabela: 'acordos',
+        registro_id: null,
+        detalhes: {
+          nr_cliente: nrCliente,
+          lider_id: liderUid,
+          lider_nome: liderPerfil.nome,
+          tipo: 'nr_duplicado_autorizado',
+        },
+      }).then(({ error: logError }) => {
+        if (logError) console.warn('[autorizarLider] log error:', logError.message);
+      });
+
       toast.success('NR registrado com autorização do líder');
       setNrDuplicado(false);
       setPendingPayload(null);

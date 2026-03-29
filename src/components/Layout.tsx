@@ -7,10 +7,10 @@ import {
   Shield, BarChart3, ClipboardList, Building2, Upload, Bot
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotificacoes } from '@/hooks/useNotificacoes';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -35,7 +35,8 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { perfil, signOut } = useAuth();
+  const { perfil, empresa, signOut } = useAuth();
+  const { naoLidas } = useNotificacoes();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -61,7 +62,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
               <p className="font-bold text-sm text-sidebar-foreground leading-none">Gestão de Acordos</p>
-              <p className="text-xs text-sidebar-foreground/50 mt-0.5">Gestão de Acordos</p>
+              <p className="text-xs text-sidebar-foreground/50 mt-0.5">{empresa?.nome ?? 'Sistema de Acordos'}</p>
             </motion.div>
           )}
         </AnimatePresence>
@@ -182,8 +183,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" className="w-8 h-8">
+            <Button variant="ghost" size="icon" className="w-8 h-8 relative">
               <Bell className="w-4 h-4" />
+              {naoLidas > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] rounded-full flex items-center justify-center font-bold">
+                  {naoLidas > 9 ? '9+' : naoLidas}
+                </span>
+              )}
             </Button>
 
             {/* Perfil no header */}
