@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,8 @@ interface UserForm {
 }
 
 export default function AdminUsuarios() {
+  const { perfil: perfilAtual } = useAuth();
+  const isAdmin = perfilAtual?.perfil === 'administrador';
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -83,10 +86,14 @@ export default function AdminUsuarios() {
     setSaving(true);
     try {
       if (editando) {
-        const { error } = await supabase.from('perfis')
+        const { data: linhasAtualizadas, error } = await supabase.from('perfis')
           .update({ nome: form.nome, perfil: form.perfil, setor_id: form.setor_id || null })
-          .eq('id', editando.id);
+          .eq('id', editando.id)
+          .select('id');
         if (error) throw error;
+        if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
+          throw new Error('Sem permissão para editar este usuário');
+        }
         toast.success('Usuário atualizado!');
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
@@ -116,12 +123,17 @@ export default function AdminUsuarios() {
       const setorAnterior = (moverUsuario.setores as { nome?: string } | undefined)?.nome ?? '—';
       const setorNovo = setores.find(s => s.id === moverSetorId)?.nome ?? moverSetorId;
 
-      const { error } = await supabase
+      const { data: linhasAtualizadas, error } = await supabase
         .from('perfis')
         .update({ setor_id: moverSetorId })
-        .eq('id', moverUsuario.id);
+        .eq('id', moverUsuario.id)
+        .select('id');
 
       if (error) throw error;
+
+      if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
+        throw new Error('Sem permissão para mover este usuário. Verifique as políticas de acesso.');
+      }
 
       toast.success(`${moverUsuario.nome} movido de "${setorAnterior}" → "${setorNovo}"`);
       setMoverDialog(false);
@@ -153,7 +165,7 @@ export default function AdminUsuarios() {
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>
+          {isAdmin && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
       </div>
 
@@ -199,7 +211,10 @@ export default function AdminUsuarios() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
+                      {isAdmin
+                        ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
+                        : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
+                      }
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-0.5">
@@ -210,9 +225,11 @@ export default function AdminUsuarios() {
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5" />
                         </Button>
-                        <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
+                        {isAdmin && (
+                          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
+                            <Edit className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                       </div>
                     </td>
                   </motion.tr>
