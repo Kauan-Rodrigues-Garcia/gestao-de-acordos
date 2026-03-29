@@ -32,11 +32,22 @@ export type PerfilUsuario = 'operador' | 'lider' | 'administrador';
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
 export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 
+export interface Empresa {
+  id: string;
+  nome: string;
+  slug: string;
+  ativo: boolean;
+  config: Record<string, unknown>;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export interface Setor {
   id: string;
   nome: string;
   descricao: string | null;
   ativo: boolean;
+  empresa_id?: string;
   criado_em: string;
   atualizado_em: string;
 }
@@ -49,9 +60,11 @@ export interface Perfil {
   ativo: boolean;
   lider_id: string | null;
   setor_id: string | null;
+  empresa_id?: string;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;
+  empresas?: Empresa;
 }
 
 export interface Acordo {
@@ -67,12 +80,14 @@ export interface Acordo {
   status: StatusAcordo;
   operador_id: string;
   setor_id: string | null;
+  empresa_id?: string;
   observacoes: string | null;
   instituicao: string | null;
   criado_em: string;
   atualizado_em: string;
   perfis?: Perfil;
   setores?: Setor;
+  empresas?: Empresa;
 }
 
 export interface HistoricoAcordo {
@@ -99,6 +114,7 @@ export interface ModeloMensagem {
   nome: string;
   conteudo: string;
   ativo: boolean;
+  empresa_id?: string;
   criado_em: string;
 }
 
@@ -108,7 +124,18 @@ export interface LogSistema {
   acao: string;
   tabela: string | null;
   registro_id: string | null;
+  empresa_id?: string;
   detalhes: Record<string, unknown> | null;
   criado_em: string;
   perfis?: Perfil;
+}
+
+export interface Notificacao {
+  id: string;
+  usuario_id: string;
+  titulo: string;
+  mensagem: string;
+  lida: boolean;
+  empresa_id?: string;
+  criado_em: string;
 }

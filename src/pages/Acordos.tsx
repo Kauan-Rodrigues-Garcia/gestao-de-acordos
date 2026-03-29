@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -25,6 +25,8 @@ import {
 import { cn } from '@/lib/utils';
 
 // ─── Fila de envio WhatsApp ────────────────────────────────────────────────
+const WHATSAPP_SEND_DELAY_MS = 2500;
+
 interface ItemFila {
   id: string;
   nome_cliente: string;
@@ -50,8 +52,9 @@ function ModalFilaWhatsApp({
   onClose: () => void;
 }) {
   const [filaLocal, setFilaLocal] = useState<ItemFila[]>(fila);
-  const [enviadosCount, setEnviadosCount] = useState(0);
   const [expandido, setExpandido] = useState<string | null>(null);
+  const [enviandoAuto, setEnviandoAuto] = useState(false);
+  const cancelarAutoRef = useRef(false);
 
   const total     = filaLocal.length;
   const enviados  = filaLocal.filter(i => i.enviado).length;
@@ -63,7 +66,30 @@ function ModalFilaWhatsApp({
     const item = pendentes[0];
     window.open(item.link, '_blank');
     setFilaLocal(prev => prev.map(i => i.id === item.id ? { ...i, enviado: true } : i));
-    setEnviadosCount(prev => prev + 1);
+  }
+
+  async function enviarTodosAuto() {
+    setEnviandoAuto(true);
+    cancelarAutoRef.current = false;
+    const pendentes = filaLocal.filter(i => !i.enviado);
+    for (let i = 0; i < pendentes.length; i++) {
+      if (cancelarAutoRef.current) break;
+      const item = pendentes[i];
+      const opened = window.open(item.link, '_blank');
+      if (!opened) {
+        toast.warning('Popup bloqueado! Permita popups para este site.');
+      }
+      setFilaLocal(prev => prev.map(fi => fi.id === item.id ? { ...fi, enviado: true } : fi));
+      if (i < pendentes.length - 1) {
+        await new Promise(r => setTimeout(r, WHATSAPP_SEND_DELAY_MS));
+      }
+    }
+    const foiCancelado = cancelarAutoRef.current;
+    setEnviandoAuto(false);
+    cancelarAutoRef.current = false;
+    if (!foiCancelado) {
+      toast.success('Envio automático concluído!');
+    }
   }
 
   function marcarEnviado(id: string) {
@@ -108,14 +134,33 @@ function ModalFilaWhatsApp({
           <span className="text-sm font-bold text-success tabular-nums">{enviados}/{total}</span>
         </div>
 
-        {/* Botão de ação principal */}
+        {/* Botões de ação */}
         <div className="flex gap-2">
           {restantes > 0 ? (
-            <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90">
-              <Send className="w-4 h-4" />
-              Abrir próximo no WhatsApp
-              <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
-            </Button>
+            <>
+              {enviandoAuto ? (
+                <Button
+                  onClick={() => { cancelarAutoRef.current = true; }}
+                  className="flex-1 gap-2"
+                  variant="outline"
+                >
+                  <X className="w-4 h-4 text-destructive" />
+                  Cancelar envio automático
+                </Button>
+              ) : (
+                <>
+                  <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90">
+                    <Send className="w-4 h-4" />
+                    Abrir próximo no WhatsApp
+                    <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
+                  </Button>
+                  <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs" title="Enviar todos automaticamente (2.5s entre cada)">
+                    <Send className="w-3.5 h-3.5" />
+                    Enviar todos
+                  </Button>
+                </>
+              )}
+            </>
           ) : (
             <Button onClick={onClose} className="flex-1 gap-2" variant="outline">
               <CheckCircle2 className="w-4 h-4 text-success" />
@@ -246,6 +291,9 @@ export default function Acordos() {
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
+  const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos'>(
+    (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos'
+  );
 
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [atualizandoStatus, setAtualizandoStatus] = useState<string | null>(null);
@@ -263,16 +311,26 @@ export default function Acordos() {
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo) params.set('tipo', filtroTipo); else params.delete('tipo');
       if (filtroData) params.set('data', filtroData); else params.delete('data');
+      if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, currentPage, setSearchParams]);
+
+  // Calcular status baseado na tab ativa e filtro manual
+  const statusFiltro = filtroStatus && filtroStatus !== 'all'
+    ? filtroStatus
+    : activeTab === 'pagos'
+    ? 'pago'
+    : activeTab === 'nao_pagos'
+    ? 'nao_pago'
+    : filtroStatus || undefined;
 
   const { acordos, totalCount, loading, refetch } = useAcordos({
     busca:       busca || undefined,
-    status:      filtroStatus || undefined,
-    tipo:        filtroTipo || undefined,
+    status:      statusFiltro,
+    tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
     vencimento:  filtroData || undefined,
     operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
     page:        currentPage,
@@ -459,6 +517,53 @@ export default function Acordos() {
           </div>
         </div>
 
+        {/* ── Tabs ── */}
+        <div className="flex items-center gap-1 mb-4 border-b border-border">
+          {([
+            { key: 'todos',    label: 'Todos' },
+            { key: 'pagos',    label: 'Pagos / Quitados' },
+            { key: 'nao_pagos', label: 'Não Pagos' },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => { setActiveTab(tab.key); setCurrentPage(1); }}
+              className={cn(
+                'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+                activeTab === tab.key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Seleção múltipla ── */}
+        <AnimatePresence>
+          {selecionados.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 mb-4 w-fit"
+            >
+              <span className="text-xs text-destructive font-medium">
+                {selecionados.length} selecionado(s)
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-destructive hover:bg-destructive/20"
+                onClick={() => setConfirmandoExclusaoLote(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                Excluir
+              </Button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── Filtros ── */}
         <Card className="border-border mb-4">
           <CardContent className="p-3">
@@ -525,21 +630,7 @@ export default function Acordos() {
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
                       <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
-                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">
-                        <div className="flex items-center justify-end gap-2">
-                          {selecionados.length > 1 && (
-                            <Button
-                              variant="destructive"
-                              size="sm"
-                              className="h-7 px-2 text-[10px] gap-1 animate-in fade-in slide-in-from-right-2"
-                              onClick={() => setConfirmandoExclusaoLote(true)}
-                            >
-                              <Trash2 className="w-3 h-3" /> Excluir ({selecionados.length})
-                            </Button>
-                          )}
-                          AÇÕES
-                        </div>
-                      </th>
+                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -586,6 +677,9 @@ export default function Acordos() {
                           </td>
                           <td className="px-3 py-2.5">
                             <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                            {a.instituicao && (
+                              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
+                            )}
                             {a.whatsapp && (
                               <p className="font-mono text-muted-foreground/70 text-[10px] mt-0.5">{a.whatsapp}</p>
                             )}

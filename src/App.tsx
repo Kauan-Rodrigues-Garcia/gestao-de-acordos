@@ -1,6 +1,7 @@
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/hooks/useAuth';
+import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { ThemeProvider } from 'next-themes';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
@@ -48,6 +49,7 @@ export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
+        <EmpresaProvider>
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>
@@ -135,6 +137,7 @@ export default function App() {
           </Suspense>
           <Toaster richColors position="top-right" />
         </Router>
+        </EmpresaProvider>
       </AuthProvider>
     </ThemeProvider>
   );

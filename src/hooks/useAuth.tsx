@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, Perfil } from '@/lib/supabase';
+import { supabase, Perfil, Empresa } from '@/lib/supabase';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   perfil: Perfil | null;
+  empresa: Empresa | null;
   loading: boolean;
   perfilLoading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -19,16 +20,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser]               = useState<User | null>(null);
   const [session, setSession]         = useState<Session | null>(null);
   const [perfil, setPerfil]           = useState<Perfil | null>(null);
+  const [empresa, setEmpresa]         = useState<Empresa | null>(null);
   const [loading, setLoading]         = useState(true);
   const [perfilLoading, setPerfilLoading] = useState(false);
 
   async function fetchPerfil(userId: string): Promise<void> {
     setPerfilLoading(true);
     try {
-      // Tentativa 1: com join de setores
+      // Tentativa 1: com join de setores e empresas
       const { data, error } = await supabase
         .from('perfis')
-        .select('*, setores(id, nome)')
+        .select('*, setores(id, nome), empresas(id, nome, slug, ativo, config, criado_em, atualizado_em)')
         .eq('id', userId)
         .single();
 
@@ -46,11 +48,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error('[useAuth] fetchPerfil falhou mesmo sem join:', error2.message);
           return;
         }
-        if (data2) setPerfil(data2 as Perfil);
+        if (data2) {
+          setPerfil(data2 as Perfil);
+          setEmpresa(null);
+        }
         return;
       }
 
-      if (data) setPerfil(data as Perfil);
+      if (data) {
+        const { empresas: emp, ...perfilData } = data as Perfil & { empresas?: Empresa };
+        setPerfil(perfilData as Perfil);
+        setEmpresa(emp ?? null);
+      }
     } catch (e) {
       console.error('[useAuth] fetchPerfil inesperado:', e);
     } finally {
@@ -88,6 +97,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         fetchPerfil(s.user.id);
       } else {
         setPerfil(null);
+        setEmpresa(null);
         setLoading(false);
       }
     });
@@ -108,12 +118,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signOut() {
     await supabase.auth.signOut();
     setPerfil(null);
+    setEmpresa(null);
     setUser(null);
     setSession(null);
   }
 
   const value: AuthContextType = {
-    user, session, perfil, loading, perfilLoading, signIn, signOut, refreshPerfil,
+    user, session, perfil, empresa, loading, perfilLoading, signIn, signOut, refreshPerfil,
   };
 
   return (

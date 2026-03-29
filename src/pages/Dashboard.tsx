@@ -1,8 +1,8 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import {
-  TrendingUp, TrendingDown, Clock, CheckCircle2,
-  AlertTriangle, DollarSign, Users, CalendarDays,
+  TrendingUp, CheckCircle2,
+  DollarSign, Users, CalendarDays,
   ArrowRight, MessageSquare, Plus
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -125,16 +125,12 @@ export default function Dashboard() {
         variants={stagger}
         initial="hidden"
         animate="visible"
-        className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6"
+        className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
       >
         <StatCard title="Acordos Hoje" value={metricas.acordos_hoje}
           icon={CalendarDays} color="bg-primary/10 text-primary" trend="neutral" loading={loadingMetricas} />
         <StatCard title="Pagos Hoje" value={metricas.pagos_hoje}
           icon={CheckCircle2} color="bg-success/10 text-success" trend="up" loading={loadingMetricas} />
-        <StatCard title="Pendentes" value={metricas.pendentes_hoje}
-          icon={Clock} color="bg-warning/10 text-warning" loading={loadingMetricas} />
-        <StatCard title="Vencidos" value={metricas.vencidos}
-          icon={AlertTriangle} color="bg-destructive/10 text-destructive" trend="down" loading={loadingMetricas} />
         <StatCard title="Previsto Hoje" value={formatCurrency(metricas.valor_previsto_hoje)}
           icon={DollarSign} color="bg-info/10 text-info" loading={loadingMetricas} />
         <StatCard title="Recebido Hoje" value={formatCurrency(metricas.valor_recebido_hoje)}
@@ -212,6 +208,9 @@ export default function Dashboard() {
                         <tr key={a.id} className={cn('border-b border-border/50 hover:bg-accent/50 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
                           <td className="px-4 py-2.5">
                             <p className="font-medium text-foreground">{a.nome_cliente}</p>
+                            {a.instituicao && (
+                              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
+                            )}
                             <p className="text-muted-foreground font-mono">{a.nr_cliente}</p>
                           </td>
                           <td className="px-4 py-2.5 font-mono font-semibold text-foreground">{formatCurrency(a.valor)}</td>
