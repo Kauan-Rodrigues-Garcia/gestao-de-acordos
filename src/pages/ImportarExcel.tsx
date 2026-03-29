@@ -284,16 +284,16 @@ function normalizarParcelas(v: unknown): number {
 
 function normalizarStatus(v: unknown): string {
   const s = norm(String(v || ''));
-  if (s.includes('pago') || s.includes('quitado')) return 'pago';
-  if (s.includes('vencido') || s.includes('atraso')) return 'vencido';
-  if (s.includes('cancelado')) return 'cancelado';
-  if (s.includes('acompanha')) return 'em_acompanhamento';
-  if (s.includes('verificar') || s.includes('analise') || s.includes('análise')) return 'verificar';
-  return 'pendente';
+  if (s.includes('pago') || s.includes('quitado') || s.includes('liquidado') || s.includes('baixado')) return 'pago';
+  if (s.includes('nao pago') || s.includes('nao_pago') || s.includes('cancelado') || s.includes('inadimplente')) return 'nao_pago';
+  // Mapear antigos → verificar_pendente
+  return 'verificar_pendente';
 }
 
 function normalizarTipo(v: unknown): string {
   const s = String(v || '').toLowerCase();
+  if (s.includes('recorrente')) return 'cartao_recorrente';
+  if (s.includes('automatico') || s.includes('automático') || (s.includes('pix') && s.includes('auto'))) return 'pix_automatico';
   if (s.includes('pix')) return 'pix';
   if (s.includes('cart')) return 'cartao';
   return 'boleto';
@@ -724,6 +724,7 @@ function mapaAcordoBloco(row: unknown[]): Record<number, CampoDestino> {
       'inadimplente','atrasado','negociado','em negociacao',
       'pago parcial','pago parcialmente','liquidado','baixado','aguardando',
       'vencido','a vencer','pago total','sem retorno',
+      'verificar pendente','verificar_pendente','nao pago','nao_pago',
     ]);
     if (VALS_STATUS.has(norm(s4)) || detectarCampo(s4) === 'status') {
       mapa[4] = 'status';
@@ -812,6 +813,7 @@ function mapaAcordoContinuo(row: unknown[]): Record<number, CampoDestino> {
     'pago','quitado','pendente','aberto','em aberto','cancelado',
     'inadimplente','atrasado','negociado','em negociacao',
     'pago parcial','pago parcialmente','liquidado','baixado','aguardando',
+    'verificar pendente','verificar_pendente','nao pago','nao_pago',
   ]);
 
   for (let ci = 4; ci < row.length; ci++) {

@@ -133,7 +133,7 @@ export default function AcordoDetalhe() {
                     <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', TIPO_COLORS[acordo.tipo])}>
                       {TIPO_LABELS[acordo.tipo]}
                     </span>
-                    {acordo.tipo === 'boleto' && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
+                    {(['boleto', 'cartao_recorrente'] as const).includes(acordo.tipo as 'boleto' | 'cartao_recorrente') && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
                   </div>
                 </div>
                 <div className="flex items-start gap-2">

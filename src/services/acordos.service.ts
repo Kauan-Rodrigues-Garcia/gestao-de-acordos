@@ -77,24 +77,23 @@ export interface MetricasAcordos {
 export function calcularMetricas(acordos: Acordo[]): MetricasAcordos {
   const hoje = getTodayISO();
 
-  const pagos           = acordos.filter(a => a.status === 'pago');
-  const pendentes       = acordos.filter(a => a.status === 'pendente');
-  const emAcompanhamento = acordos.filter(a => a.status === 'em_acompanhamento');
-  const cancelados      = acordos.filter(a => a.status === 'cancelado');
-  const vencidos        = acordos.filter(a =>
-    !['pago', 'cancelado'].includes(a.status) && a.vencimento < hoje
+  const pagos            = acordos.filter(a => a.status === 'pago');
+  const verificarPendentes = acordos.filter(a => a.status === 'verificar_pendente');
+  const naoPagos         = acordos.filter(a => a.status === 'nao_pago');
+  const vencidos         = acordos.filter(a =>
+    !['pago', 'nao_pago'].includes(a.status) && a.vencimento < hoje
   );
 
   return {
     total:             acordos.length,
     pagos:             pagos.length,
-    pendentes:         pendentes.length + emAcompanhamento.length,
+    pendentes:         verificarPendentes.length,
     vencidos:          vencidos.length,
-    em_acompanhamento: emAcompanhamento.length,
-    cancelados:        cancelados.length,
+    em_acompanhamento: 0,
+    cancelados:        naoPagos.length,
     valorTotal:    sumSafe(acordos.map(a => a.valor)),
     valorPago:     sumSafe(pagos.map(a => a.valor)),
-    valorPendente: sumSafe([...pendentes, ...emAcompanhamento].map(a => a.valor)),
+    valorPendente: sumSafe(verificarPendentes.map(a => a.valor)),
     valorVencido:  sumSafe(vencidos.map(a => a.valor)),
   };
 }
@@ -122,9 +121,9 @@ export function calcularMetricasMes(acordos: Acordo[]): MetricasMes {
     a.vencimento >= inicioMes && a.vencimento <= fimMes
   );
   const pagosNoMes   = noMes.filter(a => a.status === 'pago');
-  const abertosNoMes = noMes.filter(a => !['pago', 'cancelado'].includes(a.status));
+  const abertosNoMes = noMes.filter(a => !['pago', 'nao_pago'].includes(a.status));
   const vencidosNoMes = noMes.filter(a =>
-    !['pago', 'cancelado'].includes(a.status) && a.vencimento < hoje
+    !['pago', 'nao_pago'].includes(a.status) && a.vencimento < hoje
   );
 
   return {
@@ -161,10 +160,10 @@ export function calcularMetricasDashboard(
     total_geral:          acordos.length,
     acordos_hoje:         hoje_arr.length,
     pagos_hoje:           hoje_arr.filter(a => a.status === 'pago').length,
-    pendentes_hoje:       hoje_arr.filter(a => a.status === 'pendente').length,
-    vencidos:             acordos.filter(a => a.vencimento < hoje && !['pago','cancelado'].includes(a.status)).length,
+    pendentes_hoje:       hoje_arr.filter(a => a.status === 'verificar_pendente').length,
+    vencidos:             acordos.filter(a => a.vencimento < hoje && !['pago','nao_pago'].includes(a.status)).length,
     valor_previsto_hoje:  sumSafe(hoje_arr.map(a => a.valor)),
     valor_recebido_hoje:  sumSafe(hoje_arr.filter(a => a.status === 'pago').map(a => a.valor)),
-    em_acompanhamento:    acordos.filter(a => a.status === 'em_acompanhamento').length,
+    em_acompanhamento:    0,
   };
 }

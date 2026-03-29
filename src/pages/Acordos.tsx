@@ -344,7 +344,25 @@ export default function Acordos() {
     setExcluindoId(a.id);
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) toast.error('Erro ao excluir acordo: ' + error.message);
-    else { toast.success(`Acordo #${a.nr_cliente} excluído!`); refetch(); }
+    else {
+      // Registrar log de exclusão (best-effort — não bloqueia em caso de falha)
+      supabase.from('logs_sistema').insert({
+        usuario_id: perfil?.id ?? null,
+        acao: 'exclusao_acordo',
+        tabela: 'acordos',
+        registro_id: a.id,
+        detalhes: {
+          nome_cliente: a.nome_cliente,
+          nr_cliente: a.nr_cliente,
+          excluido_por: perfil?.nome ?? perfil?.email ?? null,
+          excluido_em: new Date().toISOString(),
+        },
+      }).then(({ error: logError }) => {
+        if (logError) console.warn('[excluirAcordo] log error:', logError.message);
+      });
+      toast.success(`Acordo #${a.nr_cliente} excluído!`);
+      refetch();
+    }
     setExcluindoId(null);
   }
 
@@ -556,7 +574,7 @@ export default function Acordos() {
                             </span>
                           </td>
                           <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">
-                            {a.tipo === 'boleto' ? a.parcelas : '—'}
+                            {['boleto', 'cartao_recorrente'].includes(a.tipo) ? a.parcelas : '—'}
                           </td>
                           <td className="px-3 py-2.5">
                             <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
@@ -568,7 +586,7 @@ export default function Acordos() {
                           </td>
                           <td className="px-3 py-2.5">
                             <div className="flex items-center justify-end gap-0.5">
-                              {a.status !== 'pago' && a.status !== 'cancelado' && (
+                              {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                 <Button
                                   variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
                                   title="Marcar como Pago"
