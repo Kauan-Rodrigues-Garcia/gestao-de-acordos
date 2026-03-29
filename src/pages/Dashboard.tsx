@@ -78,13 +78,13 @@ export default function Dashboard() {
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
   // Data para gráfico de status
-  const statusData = ['pendente', 'pago', 'verificar', 'vencido', 'cancelado', 'em_acompanhamento'].map(s => ({
+  const statusData = ['verificar_pendente', 'pago', 'nao_pago'].map(s => ({
     name: STATUS_LABELS[s],
     value: todosAcordos.filter(a => a.status === s).length,
   })).filter(d => d.value > 0);
 
   // Data para gráfico por tipo
-  const tipoData = ['boleto', 'pix', 'cartao'].map(t => ({
+  const tipoData = ['boleto', 'cartao_recorrente', 'pix_automatico', 'cartao', 'pix'].map(t => ({
     name: TIPO_LABELS[t],
     acordos: todosAcordos.filter(a => a.tipo === t).length,
     valor: todosAcordos.filter(a => a.tipo === t).reduce((s, a) => s + Number(a.valor), 0),

@@ -15,33 +15,31 @@ export const ROUTE_PATHS = {
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
-  pendente: 'Pendente',
+  verificar_pendente: 'Verificar / Pendente',
   pago: 'Pago',
-  verificar: 'Verificar',
-  vencido: 'Vencido',
-  cancelado: 'Cancelado',
-  em_acompanhamento: 'Em Acompanhamento',
+  nao_pago: 'Não Pago',
 };
 
 export const STATUS_COLORS: Record<string, string> = {
-  pendente: 'bg-warning/15 text-warning border-warning/30',
+  verificar_pendente: 'bg-warning/15 text-warning border-warning/30',
   pago: 'bg-success/15 text-success border-success/30',
-  verificar: 'bg-info/15 text-info border-info/30',
-  vencido: 'bg-destructive/15 text-destructive border-destructive/30',
-  cancelado: 'bg-muted text-muted-foreground border-border',
-  em_acompanhamento: 'bg-primary/15 text-primary border-primary/30',
+  nao_pago: 'bg-destructive/15 text-destructive border-destructive/30',
 };
 
 export const TIPO_LABELS: Record<string, string> = {
   boleto: 'Boleto',
-  pix: 'PIX',
+  cartao_recorrente: 'Cartão Recorrente',
+  pix_automatico: 'Pix automático',
   cartao: 'Cartão',
+  pix: 'Pix',
 };
 
 export const TIPO_COLORS: Record<string, string> = {
   boleto: 'bg-chart-1/15 text-chart-1 border-chart-1/30',
-  pix: 'bg-chart-2/15 text-chart-2 border-chart-2/30',
+  cartao_recorrente: 'bg-chart-3/15 text-chart-3 border-chart-3/30',
+  pix_automatico: 'bg-chart-2/15 text-chart-2 border-chart-2/30',
   cartao: 'bg-chart-3/15 text-chart-3 border-chart-3/30',
+  pix: 'bg-chart-2/15 text-chart-2 border-chart-2/30',
 };
 
 export const PERFIL_LABELS: Record<string, string> = {
@@ -102,6 +100,6 @@ export function parseCurrencyInput(v: string): number {
 }
 
 export function isAtrasado(vencimento: string, status: string): boolean {
-  if (['pago', 'cancelado'].includes(status)) return false;
+  if (['pago', 'nao_pago'].includes(status)) return false;
   return vencimento < getTodayISO();
 }

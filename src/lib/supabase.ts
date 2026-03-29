@@ -29,8 +29,8 @@ function getSupabase(): SupabaseClient {
 export const supabase = getSupabase();
 
 export type PerfilUsuario = 'operador' | 'lider' | 'administrador';
-export type StatusAcordo = 'pendente' | 'pago' | 'verificar' | 'vencido' | 'cancelado' | 'em_acompanhamento';
-export type TipoAcordo = 'boleto' | 'pix' | 'cartao';
+export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
+export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 
 export interface Setor {
   id: string;

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import {
   Save, ArrowLeft, User, Hash, Calendar,
-  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2
+  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, Shield
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase, Perfil } from '@/lib/supabase';
-import { ROUTE_PATHS, parseCurrencyInput } from '@/lib/index';
+import { ROUTE_PATHS, parseCurrencyInput, getTodayISO } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -29,11 +30,11 @@ const schema = z.object({
     const n = parseCurrencyInput(v);
     return !isNaN(n) && n > 0;
   }, 'Valor deve ser maior que zero'),
-  tipo:        z.enum(['boleto', 'pix', 'cartao']),
+  tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
   parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas entre 1 e 60'),
   whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
   instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
-  status:      z.enum(['pendente', 'pago', 'verificar', 'vencido', 'cancelado', 'em_acompanhamento']),
+  status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
   observacoes: z.string().max(500, 'Observações muito longas').optional(),
 });
 
@@ -48,11 +49,19 @@ export default function AcordoForm() {
   const [loadingData, setLoadingData] = useState(isEdit);
   const [perfilLocal, setPerfilLocal] = useState<Perfil | null>(null);
 
+  // NR duplicate / leader auth state
+  const [nrDuplicado, setNrDuplicado]       = useState(false);
+  const [pendingPayload, setPendingPayload]   = useState<Record<string, unknown> | null>(null);
+  const [liderEmail, setLiderEmail]           = useState('');
+  const [liderSenha, setLiderSenha]           = useState('');
+  const [autorizando, setAutorizando]         = useState(false);
+  const [nrOriginalEdit, setNrOriginalEdit]   = useState<string | null>(null);
+
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: {
       tipo:     'boleto',
-      status:   'pendente',
+      status:   'verificar_pendente',
       parcelas: '1',
     },
   });
@@ -80,6 +89,7 @@ export default function AcordoForm() {
     supabase.from('acordos').select('*').eq('id', id).single().then(({ data, error }) => {
       if (error) { toast.error('Erro ao carregar acordo'); navigate(ROUTE_PATHS.ACORDOS); return; }
       if (data) {
+        setNrOriginalEdit(data.nr_cliente);
         reset({
           nome_cliente: data.nome_cliente,
           nr_cliente:   data.nr_cliente,
@@ -97,26 +107,64 @@ export default function AcordoForm() {
     });
   }, [id, isEdit, reset, navigate]);
 
+  // ── Salvar acordo (após autorização ou direto) ────────────────────────
+  async function salvarAcordo(payload: Record<string, unknown>, uid: string) {
+    const isEditMode = isEdit && !!id;
+    let resultError = null;
+
+    if (isEditMode) {
+      const { error } = await supabase.from('acordos').update(payload).eq('id', id!);
+      if (error && (error.code === '42703' || error.message.includes('column'))) {
+        const { instituicao: _i, setor_id: _s, ...cleanPayload } = payload;
+        const { error: e2 } = await supabase.from('acordos').update(cleanPayload).eq('id', id!);
+        resultError = e2;
+      } else {
+        resultError = error;
+      }
+    } else {
+      const { error } = await supabase.from('acordos').insert(payload);
+      if (error && (error.code === '42703' || error.message.includes('column'))) {
+        const { instituicao: _i, setor_id: _s, ...cleanPayload } = payload;
+        const { error: e2 } = await supabase.from('acordos').insert(cleanPayload);
+        resultError = e2;
+      } else {
+        resultError = error;
+      }
+    }
+    return resultError;
+  }
+
   // ── Submit ────────────────────────────────────────────────────────────
   async function onSubmit(data: FormData) {
     const p   = perfilLocal ?? perfil;
     const uid = p?.id ?? user?.id;
     if (!uid) { toast.error('Não foi possível identificar o usuário. Recarregue a página.'); return; }
 
+    // Validar data de vencimento apenas em novos acordos
+    if (!isEdit) {
+      const today = getTodayISO();
+      if (data.vencimento < today) {
+        toast.error('A data de vencimento não pode ser anterior à data atual');
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const valorNum = parseCurrencyInput(data.valor);
       if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); setLoading(false); return; }
 
+      const nrTrimmed = data.nr_cliente.trim();
+
       // Payload base — colunas que EXISTEM no schema original (01_schema_completo.sql)
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         nome_cliente:  data.nome_cliente.trim(),
-        nr_cliente:    data.nr_cliente.trim(),
+        nr_cliente:    nrTrimmed,
         data_cadastro: new Date().toISOString().split('T')[0],
         vencimento:    data.vencimento,
         valor:         valorNum,
         tipo:          data.tipo,
-        parcelas:      data.tipo === 'boleto' ? parseInt(data.parcelas || '1', 10) : 1,
+        parcelas:      (['boleto', 'cartao_recorrente'].includes(data.tipo)) ? parseInt(data.parcelas || '1', 10) : 1,
         whatsapp:      data.whatsapp?.trim() || null,
         status:        data.status,
         observacoes:   data.observacoes?.trim() || null,
@@ -129,31 +177,29 @@ export default function AcordoForm() {
 
       console.log('[AcordoForm] payload:', payload);
 
-      let resultError = null;
+      // Verificar unicidade do NR: só bloquear se NR mudou (ou é novo cadastro)
+      const nrMudou = !isEdit || nrTrimmed !== nrOriginalEdit;
+      if (nrMudou) {
+        let nrQuery = supabase
+          .from('acordos')
+          .select('id, operador_id, perfis(nome)')
+          .eq('nr_cliente', nrTrimmed)
+          .neq('operador_id', uid)
+          .limit(1);
 
-      if (isEdit && id) {
-        const { error } = await supabase.from('acordos').update(payload).eq('id', id);
-        
-        // Fallback: se falhou por coluna inexistente, remover extras e retentar
-        if (error && (error.code === '42703' || error.message.includes('column'))) {
-          const { instituicao, setor_id, ...cleanPayload } = payload;
-          const { error: e2 } = await supabase.from('acordos').update(cleanPayload).eq('id', id);
-          resultError = e2;
-        } else {
-          resultError = error;
-        }
-      } else {
-        const { error } = await supabase.from('acordos').insert(payload);
-        
-        // Fallback: se falhou por coluna inexistente, remover extras e retentar
-        if (error && (error.code === '42703' || error.message.includes('column'))) {
-          const { instituicao, setor_id, ...cleanPayload } = payload;
-          const { error: e2 } = await supabase.from('acordos').insert(cleanPayload);
-          resultError = e2;
-        } else {
-          resultError = error;
+        // Na edição, excluir o próprio registro
+        if (isEdit && id) nrQuery = nrQuery.neq('id', id);
+
+        const { data: existente } = await nrQuery;
+        if (existente && existente.length > 0) {
+          setPendingPayload(payload);
+          setNrDuplicado(true);
+          setLoading(false);
+          return;
         }
       }
+
+      const resultError = await salvarAcordo(payload, uid);
 
       if (resultError) {
         console.error('[AcordoForm] error:', resultError);
@@ -171,6 +217,78 @@ export default function AcordoForm() {
     }
   }
 
+  // ── Autorização do líder para NR duplicado ────────────────────────────
+  async function autorizarLider() {
+    if (!pendingPayload) return;
+    if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
+    setAutorizando(true);
+    try {
+      // Usar cliente separado para não sobrescrever a sessão do operador atual
+      const { createClient } = await import('@supabase/supabase-js');
+      const tempClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL as string,
+        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
+
+      const { data: authData, error: authError } = await tempClient.auth.signInWithPassword({
+        email: liderEmail,
+        password: liderSenha,
+      });
+      if (authError || !authData.user) { toast.error('Credenciais do líder inválidas'); return; }
+
+      const liderUid = authData.user.id;
+
+      // Verificar se o usuário autenticado é líder ou administrador
+      const { data: liderPerfil } = await tempClient
+        .from('perfis')
+        .select('perfil, nome')
+        .eq('id', liderUid)
+        .single();
+
+      // Encerrar sessão temporária do líder imediatamente
+      await tempClient.auth.signOut();
+
+      if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
+        toast.error('O usuário informado não tem permissão de líder');
+        return;
+      }
+
+      const uid = perfilLocal?.id ?? user?.id ?? '';
+      const nrCliente = pendingPayload.nr_cliente as string;
+
+      // Registrar log de transferência
+      await supabase.from('logs_sistema').insert({
+        usuario_id: uid,
+        acao: 'transferencia_nr',
+        tabela: 'acordos',
+        registro_id: null,
+        detalhes: {
+          nr: nrCliente,
+          aprovado_por: liderPerfil.nome,
+          aprovado_por_id: liderUid,
+          operador_novo: uid,
+          transferido_em: new Date().toISOString(),
+        },
+      });
+
+      const resultError = await salvarAcordo(pendingPayload, uid);
+      if (resultError) {
+        toast.error(`Erro ao salvar: ${resultError.message}`);
+        return;
+      }
+
+      toast.success('NR registrado com autorização do líder');
+      setNrDuplicado(false);
+      setPendingPayload(null);
+      navigate(ROUTE_PATHS.ACORDOS);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+    } finally {
+      setAutorizando(false);
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   if (loadingData) return <div className="p-6 text-center text-muted-foreground">Carregando...</div>;
   if (!perfilLocal && perfilLoading) return <div className="p-6 text-center text-muted-foreground">Carregando perfil...</div>;
@@ -181,6 +299,52 @@ export default function AcordoForm() {
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
+
+      {/* Modal de autorização do líder */}
+      <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-warning" />
+              NR já vinculado
+            </DialogTitle>
+            <DialogDescription>
+              Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Email do Líder</Label>
+              <Input
+                type="email"
+                placeholder="lider@empresa.com"
+                value={liderEmail}
+                onChange={e => setLiderEmail(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Senha do Líder</Label>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={liderSenha}
+                onChange={e => setLiderSenha(e.target.value)}
+                className="h-9 text-sm"
+              />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>
+                Cancelar
+              </Button>
+              <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
+                <Shield className="w-4 h-4" />
+                {autorizando ? 'Verificando...' : 'Autorizar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Cabeçalho */}
       <div className="flex items-center gap-3 mb-6">
@@ -249,6 +413,7 @@ export default function AcordoForm() {
                   <input
                     type="date"
                     {...register('vencimento')}
+                    min={!isEdit ? getTodayISO() : undefined}
                     className={cn(
                       'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
                       'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
@@ -338,18 +503,20 @@ export default function AcordoForm() {
                 <Label className="text-xs font-medium">Tipo *</Label>
                 <Select
                   value={watch('tipo')}
-                  onValueChange={v => setValue('tipo', v as 'boleto'|'pix'|'cartao', { shouldValidate: true })}
+                  onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
                 >
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="boleto">Boleto</SelectItem>
-                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="cartao_recorrente">Cartão Recorrente</SelectItem>
+                    <SelectItem value="pix_automatico">Pix automático</SelectItem>
                     <SelectItem value="cartao">Cartão</SelectItem>
+                    <SelectItem value="pix">Pix</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {tipoAtual === 'boleto' && (
+              {(['boleto', 'cartao_recorrente'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente') && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Parcelas</Label>
                   <Input
@@ -369,12 +536,9 @@ export default function AcordoForm() {
                 >
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pendente">⏳ Pendente</SelectItem>
+                    <SelectItem value="verificar_pendente">🔍 Verificar / Pendente</SelectItem>
                     <SelectItem value="pago">✅ Pago</SelectItem>
-                    <SelectItem value="verificar">🔍 Verificar</SelectItem>
-                    <SelectItem value="vencido">❌ Vencido</SelectItem>
-                    <SelectItem value="cancelado">🚫 Cancelado</SelectItem>
-                    <SelectItem value="em_acompanhamento">👀 Em Acompanhamento</SelectItem>
+                    <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

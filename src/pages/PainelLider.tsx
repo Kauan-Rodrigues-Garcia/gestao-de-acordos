@@ -53,7 +53,7 @@ interface OperadorResumo {
 function buildResumo(perfil: Perfil, acordos: Acordo[]): OperadorResumo {
   const hoje    = getTodayISO();
   const pagos   = acordos.filter(a => a.status === 'pago');
-  const abertos = acordos.filter(a => !['pago','cancelado'].includes(a.status));
+  const abertos = acordos.filter(a => !['pago','nao_pago'].includes(a.status));
   const vencidos = abertos.filter(a => a.vencimento < hoje);
   return {
     perfil,
@@ -198,7 +198,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   const hoje = getTodayISO();
   const mes  = calcularMetricasMes(acordos);
 
-  const abertos  = acordos.filter(a => !['pago','cancelado'].includes(a.status));
+  const abertos  = acordos.filter(a => !['pago','nao_pago'].includes(a.status));
   const pagos    = acordos.filter(a => a.status === 'pago');
   const vencidos = abertos.filter(a => a.vencimento < hoje);
 
@@ -319,7 +319,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                   </thead>
                   <tbody>
                     {acordosFiltrados.map((a, i) => {
-                      const atrasado  = a.vencimento < hoje && !['pago','cancelado'].includes(a.status);
+                      const atrasado  = a.vencimento < hoje && !['pago','nao_pago'].includes(a.status);
                       const venceHoje = a.vencimento === hoje && a.status !== 'pago';
                       return (
                         <tr
