@@ -368,19 +368,49 @@ export default function Acordos() {
 
   async function excluirSelecionados() {
     setConfirmandoExclusaoLote(false);
-    setLoading(true);
-    try {
-      const { error } = await supabase.from('acordos').delete().in('id', selecionados);
-      if (error) throw error;
-      toast.success(`${selecionados.length} acordos excluídos com sucesso!`);
-      setSelecionados([]);
-      refetch();
-    } catch (err) {
-      toast.error('Erro ao excluir acordos em lote');
-      console.error(err);
-    } finally {
-      setLoading(false);
+    let deletedCount = 0;
+    let failedCount = 0;
+
+    for (const id of selecionados) {
+      setExcluindoId(id);
+      const acordo = acordos.find(a => a.id === id);
+      const { error } = await supabase.from('acordos').delete().eq('id', id);
+      if (error) {
+        failedCount++;
+        console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
+      } else {
+        deletedCount++;
+        if (acordo) {
+          supabase.from('logs_sistema').insert({
+            usuario_id: perfil?.id ?? null,
+            acao: 'exclusao_acordo',
+            tabela: 'acordos',
+            registro_id: id,
+            detalhes: {
+              nome_cliente: acordo.nome_cliente,
+              nr_cliente: acordo.nr_cliente,
+              excluido_por: perfil?.nome ?? perfil?.email ?? null,
+              excluido_em: new Date().toISOString(),
+              modo: 'lote',
+            },
+          }).then(({ error: logError }) => {
+            if (logError) console.warn('[excluirSelecionados] log error:', logError.message);
+          });
+        }
+      }
     }
+
+    setExcluindoId(null);
+    setSelecionados([]);
+
+    if (deletedCount > 0) {
+      toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
+    }
+    if (failedCount > 0) {
+      toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
+    }
+
+    refetch();
   }
 
   function enviarUmWhatsapp(a: Acordo) {
