@@ -14,7 +14,10 @@ export async function fetchNotificacoes(userId: string): Promise<Notificacao[]> 
     .order('criado_em', { ascending: false })
     .limit(50);
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[notificacoes.service] fetchNotificacoes error:', error.message);
+    return [];
+  }
   return (data as Notificacao[]) || [];
 }
 
@@ -25,7 +28,10 @@ export async function marcarComoLida(id: string): Promise<void> {
     .update({ lida: true })
     .eq('id', id);
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[notificacoes.service] marcarComoLida error:', error.message);
+    return;
+  }
 }
 
 /** Marca todas as notificações do usuário como lidas */
@@ -36,7 +42,10 @@ export async function marcarTodasLidas(userId: string): Promise<void> {
     .eq('usuario_id', userId)
     .eq('lida', false);
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[notificacoes.service] marcarTodasLidas error:', error.message);
+    return;
+  }
 }
 
 /** Cria uma nova notificação */
@@ -50,5 +59,8 @@ export async function criarNotificacao(params: {
     .from('notificacoes')
     .insert(params);
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[notificacoes.service] criarNotificacao error:', error.message);
+    return;
+  }
 }

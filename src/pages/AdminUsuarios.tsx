@@ -55,16 +55,45 @@ export default function AdminUsuarios() {
 
   async function fetchDados() {
     setLoading(true);
-    const [{ data: u }, { data: s }, emps] = await Promise.all([
-      supabase.from('perfis').select('*, setores(id,nome), empresas(id,nome)').order('nome'),
-      supabase.from('setores').select('*').eq('ativo', true).order('nome'),
-      fetchEmpresas(),
-    ]);
-    setUsuarios((u as Perfil[]) || []);
-    setSetores((s as Setor[]) || []);
+    let usuariosData: Perfil[] = [];
+    try {
+      const { data: uJoin, error: eJoin } = await supabase
+        .from('perfis')
+        .select('*, setores(id,nome), empresas(id,nome)')
+        .order('nome');
+      if (eJoin) {
+        console.warn('[AdminUsuarios] fetchDados join error, tentando sem join de empresas:', eJoin.message);
+        const { data: uSimple, error: eSimple } = await supabase
+          .from('perfis')
+          .select('*, setores(id,nome)')
+          .order('nome');
+        if (eSimple) {
+          console.warn('[AdminUsuarios] fetchDados fallback error:', eSimple.message);
+        }
+        usuariosData = (uSimple as Perfil[]) || [];
+      } else {
+        usuariosData = (uJoin as Perfil[]) || [];
+      }
+    } catch (err) {
+      console.warn('[AdminUsuarios] fetchDados error:', err);
+    }
+    let setoresData: Setor[] = [];
+    let emps: Empresa[] = [];
+    try {
+      const [{ data: s }, empresasList] = await Promise.all([
+        supabase.from('setores').select('*').eq('ativo', true).order('nome'),
+        fetchEmpresas(),
+      ]);
+      setoresData = (s as Setor[]) || [];
+      emps = empresasList;
+    } catch (err) {
+      console.warn('[AdminUsuarios] fetchDados setores/empresas error:', err);
+    }
+    setUsuarios(usuariosData);
+    setSetores(setoresData);
     setEmpresas(emps);
-    if (s && s.length > 0 && !form.setor_id) {
-      setForm(f => ({ ...f, setor_id: s[0].id }));
+    if (setoresData.length > 0 && !form.setor_id) {
+      setForm(f => ({ ...f, setor_id: setoresData[0].id }));
     }
     setLoading(false);
   }

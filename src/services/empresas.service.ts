@@ -13,7 +13,10 @@ export async function fetchEmpresas(): Promise<Empresa[]> {
     .eq('ativo', true)
     .order('nome');
 
-  if (error) throw error;
+  if (error) {
+    console.warn('[empresas.service] fetchEmpresas error:', error.message);
+    return [];
+  }
   return (data as Empresa[]) || [];
 }
 

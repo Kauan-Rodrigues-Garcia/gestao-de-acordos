@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit, Eye,
   Filter, RefreshCw, X,
-  Trash2, ChevronLeft, ChevronRight, CheckCircle
+  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
