@@ -154,7 +154,7 @@ function isCelulaData(valor: unknown): string | null {
   if (!s) return null;
 
   // ── dd/mm/yyyy ou dd-mm-yyyy (1 ou 2 dígitos no dia/mês) ────────────────
-  const m1 = s.match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})$/);
+  const m1 = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
   if (m1) {
     const [, d, mo, y] = m1;
     const year = y.length === 2 ? `20${y}` : y;
@@ -169,7 +169,7 @@ function isCelulaData(valor: unknown): string | null {
   }
   // ── dd/mm SEM ANO (ex: "01/02", "15/03") ─────────────────────────────────
   // Usa o ano atual como fallback. Ocorre frequentemente em planilhas de blocos.
-  const mSemAno = s.match(/^(\d{1,2})[\/.-](\d{1,2})$/);
+  const mSemAno = s.match(/^(\d{1,2})[/.-](\d{1,2})$/);
   if (mSemAno) {
     const [, d, mo] = mSemAno;
     const dd = d.padStart(2, '0');
@@ -344,7 +344,7 @@ function pareceNomeCompleto(valor: unknown): boolean {
 
   // Só dígitos, pontos, vírgulas, R$, % ou espaços → não é nome
   // ("R$ 250,00", "1.234,56", "250")
-  if (/^[\d.,R$%\s+\-]+$/.test(s)) return false;
+  if (/^[\d.,R$%\s+-]+$/.test(s)) return false;
 
   // Sequência de 5+ dígitos consecutivos → CPF, CNPJ, número de contrato
   if (/\d{5,}/.test(s)) return false;
@@ -558,7 +558,7 @@ function classificarLinha(row: unknown[]): TipoLinha {
       'julho','agosto','setembro','outubro','novembro','dezembro',
     ]);
     // Regex para rótulos de mês/período como "NOVEMBRO/2025", "FEV/2026", "02/2026"
-    const REG_LABEL_PERIODO = /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez|[a-z]{4,})[\/\-]?\d{0,4}$/i;
+    const REG_LABEL_PERIODO = /^(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez|[a-z]{4,})[/-]?\d{0,4}$/i;
     const REG_MES_ANO       = /^\d{1,2}\/\d{4}$/;  // "02/2026"
 
     let dataCandidato: string | null = null;

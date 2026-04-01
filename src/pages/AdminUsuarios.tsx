@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -211,10 +211,13 @@ export default function AdminUsuarios() {
         </div>
         <div className="flex gap-2">
           {empresas.length > 1 && (
-            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <Select
+              value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
+            >
               <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas Empresas</SelectItem>
+                <SelectItem value={TODAS_EMPRESAS_SELECT_VALUE}>Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>
