@@ -24,6 +24,8 @@ const PERFIL_BADGE: Record<string, string> = {
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
+const TODAS_EMPRESAS_VALUE = 'all';
+
 interface UserForm {
   nome:       string;
   email:      string;
@@ -211,10 +213,13 @@ export default function AdminUsuarios() {
         </div>
         <div className="flex gap-2">
           {empresas.length > 1 && (
-            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <Select
+              value={filtroEmpresa || TODAS_EMPRESAS_VALUE}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_VALUE ? '' : value)}
+            >
               <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas Empresas</SelectItem>
+                <SelectItem value={TODAS_EMPRESAS_VALUE}>Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>

@@ -16,6 +16,8 @@ const ACAO_CORES: Record<string, string> = {
   LOGIN: 'bg-primary/10 text-primary border-primary/30',
 };
 
+const TODAS_EMPRESAS_VALUE = 'all';
+
 export default function AdminLogs() {
   const [logs, setLogs] = useState<LogSistema[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,10 +56,13 @@ export default function AdminLogs() {
         </div>
         <div className="flex gap-2">
           {empresas.length > 1 && (
-            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <Select
+              value={filtroEmpresa || TODAS_EMPRESAS_VALUE}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_VALUE ? '' : value)}
+            >
               <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Todas Empresas</SelectItem>
+                <SelectItem value={TODAS_EMPRESAS_VALUE}>Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>
