@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,8 @@ import { Switch } from '@/components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { Badge } from '@/components/ui/badge';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -25,6 +27,7 @@ export default function AdminConfiguracoes() {
   const [editando, setEditando] = useState<ModeloMensagem | null>(null);
   const [form, setForm] = useState({ nome: '', conteudo: '' });
   const [saving, setSaving] = useState(false);
+  const { empresa } = useEmpresa();
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -44,13 +47,15 @@ export default function AdminConfiguracoes() {
     });
   }
 
-  async function fetchModelos() {
-    const { data } = await supabase.from('modelos_mensagem').select('*').order('criado_em');
+  async function fetchModelos(empresaId?: string) {
+    let query = supabase.from('modelos_mensagem').select('*').order('criado_em');
+    if (empresaId) query = query.eq('empresa_id', empresaId);
+    const { data } = await query;
     setModelos((data as ModeloMensagem[]) || []);
     setLoading(false);
   }
 
-  useEffect(() => { fetchModelos(); }, []);
+  useEffect(() => { fetchModelos(empresa?.id); }, [empresa?.id]);
 
   function abrirCriar() {
     setEditando(null);
@@ -101,6 +106,12 @@ export default function AdminConfiguracoes() {
             <Settings className="w-5 h-5 text-primary" /> Configurações
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">Modelos de mensagem e configurações do sistema</p>
+          {empresa && (
+            <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              Configurações de <span className="font-medium text-foreground">{empresa.nome}</span>
+            </p>
+          )}
         </div>
       </div>
 
