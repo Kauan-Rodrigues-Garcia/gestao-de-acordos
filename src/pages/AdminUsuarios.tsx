@@ -183,14 +183,14 @@ export default function AdminUsuarios() {
         <div className="flex gap-2">
           {empresas.length > 1 && (
             <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
-              <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Empresa" /></SelectTrigger>
+              <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="">Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           )}
-          {filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
+          {filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {isAdmin && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
