@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { supabase, Setor } from '@/lib/supabase';
 import SeedSetores from '@/components/SeedSetores';
 import { toast } from 'sonner';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { Badge } from '@/components/ui/badge';
 
 export default function AdminSetores() {
   const [setores, setSetores] = useState<(Setor & { total_usuarios?: number; total_acordos?: number })[]>([]);
@@ -18,6 +20,7 @@ export default function AdminSetores() {
   const [editando, setEditando] = useState<Setor | null>(null);
   const [form, setForm] = useState({ nome: '', descricao: '' });
   const [saving, setSaving] = useState(false);
+  const { empresa } = useEmpresa();
 
   async function fetchSetores() {
     setLoading(true);
@@ -57,7 +60,7 @@ export default function AdminSetores() {
       const { error } = await supabase.from('setores').update({ nome: form.nome.trim(), descricao: form.descricao || null }).eq('id', editando.id);
       if (!error) toast.success('Setor atualizado!'); else toast.error(error.message);
     } else {
-      const { error } = await supabase.from('setores').insert({ nome: form.nome.trim(), descricao: form.descricao || null });
+      const { error } = await supabase.from('setores').insert({ nome: form.nome.trim(), descricao: form.descricao || null, empresa_id: empresa?.id ?? null });
       if (!error) toast.success('Setor criado!'); else toast.error(error.message);
     }
     setSaving(false);
@@ -103,6 +106,11 @@ export default function AdminSetores() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-sm font-semibold truncate">{s.nome}</CardTitle>
+                    {empresa && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-normal text-muted-foreground">
+                        {empresa.nome}
+                      </Badge>
+                    )}
                     {s.descricao && <p className="text-xs text-muted-foreground mt-0.5 truncate">{s.descricao}</p>}
                   </div>
                   <Switch checked={s.ativo} onCheckedChange={() => toggleAtivo(s)} />
