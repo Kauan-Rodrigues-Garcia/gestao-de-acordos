@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ClipboardList, RefreshCw, Filter } from 'lucide-react';
+import { ClipboardList, RefreshCw, Filter, Building2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { supabase, LogSistema } from '@/lib/supabase';
+import { supabase, LogSistema, Empresa } from '@/lib/supabase';
+import { fetchEmpresas } from '@/services/empresas.service';
 import { cn } from '@/lib/utils';
 
 const ACAO_CORES: Record<string, string> = {
@@ -19,21 +20,26 @@ export default function AdminLogs() {
   const [logs, setLogs] = useState<LogSistema[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTabela, setFiltroTabela] = useState('');
+  const [filtroEmpresa, setFiltroEmpresa] = useState('');
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+
+  useEffect(() => { fetchEmpresas().then(setEmpresas).catch(() => {}); }, []);
 
   async function fetchLogs() {
     setLoading(true);
     let query = supabase
       .from('logs_sistema')
-      .select('*, perfis(nome,email)')
+      .select('*, perfis(nome,email), empresas(id,nome)')
       .order('criado_em', { ascending: false })
       .limit(200);
     if (filtroTabela) query = query.eq('tabela', filtroTabela);
+    if (filtroEmpresa) query = query.eq('empresa_id', filtroEmpresa);
     const { data } = await query;
     setLogs((data as LogSistema[]) || []);
     setLoading(false);
   }
 
-  useEffect(() => { fetchLogs(); }, [filtroTabela]);
+  useEffect(() => { fetchLogs(); }, [filtroTabela, filtroEmpresa]);
 
   const tabelas = ['acordos', 'perfis', 'modelos_mensagem'];
 
@@ -47,6 +53,15 @@ export default function AdminLogs() {
           <p className="text-sm text-muted-foreground mt-0.5">Registro de todas as ações realizadas</p>
         </div>
         <div className="flex gap-2">
+          {empresas.length > 1 && (
+            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+              <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Empresa" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas Empresas</SelectItem>
+                {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={filtroTabela} onValueChange={setFiltroTabela}>
             <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Filtrar tabela" /></SelectTrigger>
             <SelectContent>
@@ -66,6 +81,7 @@ export default function AdminLogs() {
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">DATA/HORA</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">USUÁRIO</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground">EMPRESA</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">AÇÃO</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">TABELA</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground">REGISTRO</th>
@@ -74,10 +90,10 @@ export default function AdminLogs() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">Carregando logs...</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Carregando logs...</td></tr>
                 ) : logs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center">
+                    <td colSpan={7} className="px-4 py-12 text-center">
                       <ClipboardList className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
                       <p className="text-muted-foreground">Nenhum log encontrado</p>
                     </td>
@@ -95,6 +111,12 @@ export default function AdminLogs() {
                     </td>
                     <td className="px-4 py-2.5 text-foreground">
                       {(log.perfis as { nome?: string; email?: string } | undefined)?.nome || (log.perfis as { email?: string } | undefined)?.email || 'Sistema'}
+                    </td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3" />
+                        {(log as any).empresas?.nome || '—'}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold border',
