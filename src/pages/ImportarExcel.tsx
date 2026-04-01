@@ -31,6 +31,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
 import { ROUTE_PATHS, formatDate, formatCurrency } from '@/lib/index';
 import { safeNum } from '@/lib/money';
@@ -1192,6 +1193,7 @@ interface ResultadoImportacao {
 
 export default function ImportarExcel() {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const navigate   = useNavigate();
   const inputRef   = useRef<HTMLInputElement>(null);
   const rawRowsRef = useRef<unknown[][] | null>(null);
@@ -1427,6 +1429,7 @@ export default function ImportarExcel() {
           data_cadastro: hoje,
           operador_id:   perfil!.id,
           setor_id:      perfil?.setor_id ?? null,
+          empresa_id:    empresa?.id ?? null,
         };
 
         // Só incluir `instituicao` se a coluna existir no banco

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
-import { supabase, Perfil, PerfilUsuario, Setor } from '@/lib/supabase';
+import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
+import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -23,23 +25,27 @@ const PERFIL_BADGE: Record<string, string> = {
 };
 
 interface UserForm {
-  nome:     string;
-  email:    string;
-  senha:    string;
-  perfil:   PerfilUsuario;
-  setor_id: string;
+  nome:       string;
+  email:      string;
+  senha:      string;
+  perfil:     PerfilUsuario;
+  setor_id:   string;
+  empresa_id: string;
 }
 
 export default function AdminUsuarios() {
   const { perfil: perfilAtual } = useAuth();
+  const { empresa: empresaAtual } = useEmpresa();
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
+  const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [editando,    setEditando]    = useState<Perfil | null>(null);
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
   const [saving,      setSaving]      = useState(false);
-  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: '' });
+  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
   // ── Mover usuário entre setores ─────────────────────────────────────────
   const [moverDialog, setMoverDialog]       = useState(false);
@@ -49,12 +55,14 @@ export default function AdminUsuarios() {
 
   async function fetchDados() {
     setLoading(true);
-    const [{ data: u }, { data: s }] = await Promise.all([
-      supabase.from('perfis').select('*, setores(id,nome)').order('nome'),
+    const [{ data: u }, { data: s }, emps] = await Promise.all([
+      supabase.from('perfis').select('*, setores(id,nome), empresas(id,nome)').order('nome'),
       supabase.from('setores').select('*').eq('ativo', true).order('nome'),
+      fetchEmpresas(),
     ]);
     setUsuarios((u as Perfil[]) || []);
     setSetores((s as Setor[]) || []);
+    setEmpresas(emps);
     if (s && s.length > 0 && !form.setor_id) {
       setForm(f => ({ ...f, setor_id: s[0].id }));
     }
@@ -65,13 +73,13 @@ export default function AdminUsuarios() {
 
   function abrirCriar() {
     setEditando(null);
-    setForm({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: setores[0]?.id ?? '' });
+    setForm({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: setores[0]?.id ?? '', empresa_id: empresaAtual?.id ?? '' });
     setDialogOpen(true);
   }
 
   function abrirEditar(u: Perfil) {
     setEditando(u);
-    setForm({ nome: u.nome, email: u.email, senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '' });
+    setForm({ nome: u.nome, email: u.email, senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
     setDialogOpen(true);
   }
 
@@ -87,7 +95,12 @@ export default function AdminUsuarios() {
     try {
       if (editando) {
         const { data: linhasAtualizadas, error } = await supabase.from('perfis')
-          .update({ nome: form.nome, perfil: form.perfil, setor_id: form.setor_id || null })
+          .update({
+            nome:       form.nome,
+            perfil:     form.perfil,
+            setor_id:   form.setor_id || null,
+            empresa_id: form.empresa_id || null,
+          })
           .eq('id', editando.id)
           .select('id');
         if (error) throw error;
@@ -101,7 +114,7 @@ export default function AdminUsuarios() {
           email: form.email,
           password: form.senha,
           options: {
-            data: { nome: form.nome, perfil: form.perfil, setor_id: form.setor_id }
+            data: { nome: form.nome, perfil: form.perfil, setor_id: form.setor_id, empresa_id: form.empresa_id }
           }
         });
         if (error) throw error;
@@ -153,6 +166,10 @@ export default function AdminUsuarios() {
   }
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
+  const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
+  const usuariosFiltrados = filtroEmpresa
+    ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
+    : usuarios;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -161,9 +178,19 @@ export default function AdminUsuarios() {
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" /> Usuários
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{usuarios.length} usuário(s)</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{usuariosFiltrados.length} usuário(s)</p>
         </div>
         <div className="flex gap-2">
+          {empresas.length > 1 && (
+            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+              <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas Empresas</SelectItem>
+                {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {isAdmin && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
@@ -179,14 +206,15 @@ export default function AdminUsuarios() {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">E-MAIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">PERFIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">SETOR</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">EMPRESA</th>
                   <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs">ATIVO</th>
                   <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs">AÇÕES</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
-                ) : usuarios.map((u, i) => (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
+                ) : usuariosFiltrados.map((u, i) => (
                   <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
                     className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
                     <td className="px-4 py-3">
@@ -208,6 +236,11 @@ export default function AdminUsuarios() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Building2 className="w-3 h-3" /> {nomeSetor(u)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3" /> {nomeEmpresa(u)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -278,6 +311,15 @@ export default function AdminUsuarios() {
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
                 <SelectContent>
                   {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Empresa</Label>
+              <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v }))}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
+                <SelectContent>
+                  {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

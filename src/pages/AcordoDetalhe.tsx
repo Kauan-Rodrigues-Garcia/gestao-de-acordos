@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase, Acordo, HistoricoAcordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils';
 export default function AcordoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const navigate = useNavigate();
   const [acordo, setAcordo] = useState<Acordo | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
@@ -117,6 +119,7 @@ export default function AcordoDetalhe() {
                   { label: 'Valor', value: formatCurrency(acordo.valor), icon: DollarSign, mono: true },
                   { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
                   { label: 'Instituição', value: acordo.instituicao || '-', icon: Building2 },
+                  { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },
                 ].map(({ label, value, icon: Icon, mono, danger }) => (
                   <div key={label} className="flex items-start gap-2">
                     <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
