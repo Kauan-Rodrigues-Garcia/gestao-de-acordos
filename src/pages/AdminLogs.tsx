@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { supabase, LogSistema, Empresa } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
+import { TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
 import { cn } from '@/lib/utils';
 
 const ACAO_CORES: Record<string, string> = {
@@ -15,8 +16,6 @@ const ACAO_CORES: Record<string, string> = {
   DELETE: 'bg-destructive/10 text-destructive border-destructive/30',
   LOGIN: 'bg-primary/10 text-primary border-primary/30',
 };
-
-const TODAS_EMPRESAS_VALUE = 'all';
 
 export default function AdminLogs() {
   const [logs, setLogs] = useState<LogSistema[]>([]);
@@ -57,12 +56,12 @@ export default function AdminLogs() {
         <div className="flex gap-2">
           {empresas.length > 1 && (
             <Select
-              value={filtroEmpresa || TODAS_EMPRESAS_VALUE}
-              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_VALUE ? '' : value)}
+              value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
             >
               <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={TODAS_EMPRESAS_VALUE}>Todas Empresas</SelectItem>
+                <SelectItem value={TODAS_EMPRESAS_SELECT_VALUE}>Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>

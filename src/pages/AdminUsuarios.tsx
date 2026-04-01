@@ -14,7 +14,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -23,8 +23,6 @@ const PERFIL_BADGE: Record<string, string> = {
   lider:         'bg-warning/10 text-warning border-warning/30',
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
 };
-
-const TODAS_EMPRESAS_VALUE = 'all';
 
 interface UserForm {
   nome:       string;
@@ -214,12 +212,12 @@ export default function AdminUsuarios() {
         <div className="flex gap-2">
           {empresas.length > 1 && (
             <Select
-              value={filtroEmpresa || TODAS_EMPRESAS_VALUE}
-              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_VALUE ? '' : value)}
+              value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
             >
               <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={TODAS_EMPRESAS_VALUE}>Todas Empresas</SelectItem>
+                <SelectItem value={TODAS_EMPRESAS_SELECT_VALUE}>Todas Empresas</SelectItem>
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>

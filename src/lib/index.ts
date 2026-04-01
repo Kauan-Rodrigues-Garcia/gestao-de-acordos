@@ -54,6 +54,8 @@ export const PERFIL_COLORS: Record<string, string> = {
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
 };
 
+export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
+
 export function getTodayISO(): string {
   return new Date().toISOString().split('T')[0];
 }
