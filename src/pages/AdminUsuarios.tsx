@@ -166,6 +166,10 @@ export default function AdminUsuarios() {
   }
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
+  const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
+  const usuariosFiltrados = filtroEmpresa
+    ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
+    : usuarios;
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -174,9 +178,19 @@ export default function AdminUsuarios() {
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <Users className="w-5 h-5 text-primary" /> Usuários
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{usuarios.length} usuário(s)</p>
+          <p className="text-sm text-muted-foreground mt-0.5">{usuariosFiltrados.length} usuário(s)</p>
         </div>
         <div className="flex gap-2">
+          {empresas.length > 1 && (
+            <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+              <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Empresa" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">Todas Empresas</SelectItem>
+                {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          {filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {isAdmin && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
@@ -192,14 +206,15 @@ export default function AdminUsuarios() {
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">E-MAIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">PERFIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">SETOR</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">EMPRESA</th>
                   <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs">ATIVO</th>
                   <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs">AÇÕES</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
-                ) : usuarios.map((u, i) => (
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
+                ) : usuariosFiltrados.map((u, i) => (
                   <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
                     className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
                     <td className="px-4 py-3">
@@ -221,6 +236,11 @@ export default function AdminUsuarios() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Building2 className="w-3 h-3" /> {nomeSetor(u)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Building2 className="w-3 h-3" /> {nomeEmpresa(u)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
@@ -291,6 +311,15 @@ export default function AdminUsuarios() {
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
                 <SelectContent>
                   {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Empresa</Label>
+              <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v }))}>
+                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
+                <SelectContent>
+                  {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
