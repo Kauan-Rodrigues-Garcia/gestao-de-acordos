@@ -19,7 +19,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ArrowRight, Calendar,
   BarChart3, ChevronRight, RefreshCw, X, Trophy, Target,
-  TrendingUp, Loader2, DollarSign, Hash
+  TrendingUp, Loader2, DollarSign, Hash, Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -28,6 +28,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
 import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO } from '@/lib/index';
 import { calcularMetricasMes } from '@/services/acordos.service';
@@ -482,6 +483,7 @@ interface OperadorInfo { id: string; nome: string; perfil: Perfil; }
 
 export default function PainelLider() {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
 
   const [operadores,          setOperadores]          = useState<Perfil[]>([]);
   const [acordosPorOperador,  setAcordosPorOperador]  = useState<Record<string, Acordo[]>>({});
@@ -602,6 +604,12 @@ export default function PainelLider() {
             {operadores.length} operador(es)
             {nomeSetor && <span className="text-primary font-medium"> · {nomeSetor}</span>}
           </p>
+          {empresa && (
+            <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
+              <Building2 className="w-3 h-3" />
+              {empresa.nome}
+            </p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={carregarDados}>
           <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Atualizar
