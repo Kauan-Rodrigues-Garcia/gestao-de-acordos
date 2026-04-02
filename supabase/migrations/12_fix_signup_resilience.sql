@@ -30,10 +30,15 @@ BEGIN
   v_empresa_slug := lower(NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'empresa_slug', '')), ''));
   v_setor_id_meta := NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'setor_id', '')), '');
 
-  IF v_empresa_id_meta ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
-    SELECT id INTO v_empresa_id
-    FROM public.empresas
-    WHERE id = v_empresa_id_meta::UUID;
+  IF v_empresa_id_meta IS NOT NULL THEN
+    BEGIN
+      SELECT id INTO v_empresa_id
+      FROM public.empresas
+      WHERE id = v_empresa_id_meta::UUID;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        v_empresa_id := NULL;
+    END;
   END IF;
 
   IF v_empresa_id IS NULL AND v_empresa_slug IS NOT NULL THEN
@@ -66,17 +71,22 @@ BEGIN
     RAISE EXCEPTION 'Não foi possível resolver empresa_id para o novo usuário.';
   END IF;
 
-  IF v_setor_id_meta ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' THEN
-    SELECT s.id INTO v_setor_id
-    FROM public.setores s
-    WHERE s.id = v_setor_id_meta::UUID
-      AND s.empresa_id = v_empresa_id;
+  IF v_setor_id_meta IS NOT NULL THEN
+    BEGIN
+      SELECT s.id INTO v_setor_id
+      FROM public.setores s
+      WHERE s.id = v_setor_id_meta::UUID
+        AND s.empresa_id = v_empresa_id;
+    EXCEPTION
+      WHEN invalid_text_representation THEN
+        v_setor_id := NULL;
+    END;
   END IF;
 
   INSERT INTO public.perfis (id, nome, email, perfil, setor_id, empresa_id)
   VALUES (
     NEW.id,
-    COALESCE(v_nome, NULLIF(split_part(v_email, '@', 1), ''), 'Usuário'),
+    COALESCE(v_nome, NULLIF(split_part(NULLIF(v_email, ''), '@', 1), ''), NEW.id::text),
     v_email,
     CASE
       WHEN v_perfil_meta IN ('operador', 'lider', 'administrador', 'super_admin')
