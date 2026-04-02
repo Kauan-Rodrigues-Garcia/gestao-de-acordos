@@ -29,7 +29,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
     try {
       if (!config.slug) {
-        throw new Error('VITE_TENANT_SLUG não foi configurado.');
+        throw new Error('Configuração da empresa do site não foi encontrada. Entre em contato com o suporte.');
       }
 
       const tenantEmpresa = await fetchEmpresaBySlug(config.slug);
@@ -37,7 +37,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
       if (!tenantEmpresa) {
         const { data: { session } } = await supabase.auth.getSession();
         setEmpresa(null);
-        setError(session ? `Tenant "${config.slug}" não encontrado na tabela empresas.` : null);
+        setError(session ? `A empresa configurada para este site não foi encontrada.` : null);
         return;
       }
 

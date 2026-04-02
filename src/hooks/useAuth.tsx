@@ -31,8 +31,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const tenantSlug = getConfiguredTenantSlug();
     const companyName = currentEmpresa?.nome ?? 'outra empresa';
     const message = tenantSlug
-      ? `Seu usuário pertence a ${companyName}. Use o site do tenant correto (${tenantSlug}).`
-      : `Seu usuário pertence a ${companyName}. Este site não está configurado para o seu tenant.`;
+      ? `Seu usuário está vinculado a ${companyName}. Acesse pelo site correto da sua empresa.`
+      : `Seu usuário está vinculado a ${companyName}. Este site não está disponível para a sua empresa.`;
 
     setAuthError(message);
     setPerfil(null);

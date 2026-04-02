@@ -24,7 +24,7 @@ export default function SeedSetores({ onSeedComplete }: Props) {
 
   async function executarSeed() {
     if (!empresa?.id) {
-      toast.error('Tenant do site não carregado.');
+      toast.error('Não foi possível identificar a empresa do site.');
       return;
     }
     setLoading(true);

@@ -25,6 +25,7 @@ export default function AdminSetores() {
   async function fetchSetores() {
     setLoading(true);
     if (!empresa?.id) {
+      console.warn('[AdminSetores] empresa do site indisponível durante carregamento dos setores');
       setSetores([]);
       setLoading(false);
       return;

@@ -41,27 +41,36 @@ FROM public.perfis p
 WHERE l.usuario_id = p.id
   AND l.empresa_id IS NULL;
 
-DO $$ BEGIN
-  UPDATE public.ai_config
-  SET empresa_id = (SELECT id FROM public.empresas WHERE slug = 'bookplay')
+DO $$
+DECLARE
+  v_empresa_padrao UUID;
+BEGIN
+  SELECT id INTO v_empresa_padrao
+  FROM public.empresas
+  WHERE slug = 'bookplay';
+
+  BEGIN
+    UPDATE public.ai_config
+    SET empresa_id = v_empresa_padrao
+    WHERE empresa_id IS NULL;
+  EXCEPTION WHEN undefined_table THEN NULL; END;
+
+  UPDATE public.logs_sistema
+  SET empresa_id = v_empresa_padrao
   WHERE empresa_id IS NULL;
-EXCEPTION WHEN undefined_table THEN NULL; END $$;
 
-UPDATE public.logs_sistema
-SET empresa_id = (SELECT id FROM public.empresas WHERE slug = 'bookplay')
-WHERE empresa_id IS NULL;
+  UPDATE public.notificacoes
+  SET empresa_id = v_empresa_padrao
+  WHERE empresa_id IS NULL;
 
-UPDATE public.notificacoes
-SET empresa_id = (SELECT id FROM public.empresas WHERE slug = 'bookplay')
-WHERE empresa_id IS NULL;
+  UPDATE public.historico_acordos
+  SET empresa_id = v_empresa_padrao
+  WHERE empresa_id IS NULL;
 
-UPDATE public.historico_acordos
-SET empresa_id = (SELECT id FROM public.empresas WHERE slug = 'bookplay')
-WHERE empresa_id IS NULL;
-
-UPDATE public.logs_whatsapp
-SET empresa_id = (SELECT id FROM public.empresas WHERE slug = 'bookplay')
-WHERE empresa_id IS NULL;
+  UPDATE public.logs_whatsapp
+  SET empresa_id = v_empresa_padrao
+  WHERE empresa_id IS NULL;
+END $$;
 
 -- ── 4. Restrições e índices ─────────────────────────────────────────────────
 DO $$ BEGIN
@@ -82,7 +91,7 @@ EXCEPTION WHEN OTHERS THEN NULL; END $$;
 
 DO $$ BEGIN
   ALTER TABLE public.ai_config ALTER COLUMN empresa_id SET NOT NULL;
-EXCEPTION WHEN OTHERS THEN NULL; WHEN undefined_table THEN NULL; END $$;
+EXCEPTION WHEN undefined_table OR OTHERS THEN NULL; END $$;
 
 CREATE INDEX IF NOT EXISTS idx_historico_empresa ON public.historico_acordos(empresa_id);
 CREATE INDEX IF NOT EXISTS idx_logs_whatsapp_empresa ON public.logs_whatsapp(empresa_id);

@@ -51,7 +51,7 @@ export default function Registro() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!tenantSlug) { setErro('Tenant do site não configurado.'); return; }
+    if (!tenantSlug) { setErro('Não foi possível identificar a empresa deste site. Entre em contato com o suporte.'); return; }
     const msg = validar();
     if (msg) { setErro(msg); return; }
 

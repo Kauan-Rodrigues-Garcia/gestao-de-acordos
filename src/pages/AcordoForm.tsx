@@ -141,7 +141,7 @@ export default function AcordoForm() {
     const p   = perfilLocal ?? perfil;
     const uid = p?.id ?? user?.id;
     if (!uid) { toast.error('Não foi possível identificar o usuário. Recarregue a página.'); return; }
-    if (!empresa?.id) { toast.error('Tenant do site não carregado.'); return; }
+    if (!empresa?.id) { toast.error('Empresa não identificada. Recarregue a página.'); return; }
 
     // Validar data de vencimento apenas em novos acordos
     if (!isEdit) {

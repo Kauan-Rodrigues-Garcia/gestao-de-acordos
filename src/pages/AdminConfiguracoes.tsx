@@ -49,6 +49,7 @@ export default function AdminConfiguracoes() {
 
   async function fetchModelos(empresaId?: string) {
     if (!empresaId) {
+      console.warn('[AdminConfiguracoes] empresa do site indisponível durante carregamento dos modelos');
       setModelos([]);
       setLoading(false);
       return;

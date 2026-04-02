@@ -164,7 +164,7 @@ export default function AdminUsuarios() {
   async function salvar() {
     const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
     if (!form.nome || !form.email) { toast.error('Preencha nome e e-mail'); return; }
-    if (!empresaId) { toast.error('Empresa do tenant não carregada.'); return; }
+    if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
     setSaving(true);
     try {
       if (editando) {
