@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +11,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 
 export default function Login() {
-  const { signIn } = useAuth();
+  const { signIn, authError } = useAuth();
+  const { branding, empresa, error: tenantError } = useEmpresa();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -25,7 +27,7 @@ export default function Login() {
     setError('');
     const { error: err } = await signIn(email, password);
     if (err) {
-      setError('E-mail ou senha inválidos. Verifique suas credenciais.');
+      setError(err);
       setLoading(false);
     } else {
       navigate(ROUTE_PATHS.DASHBOARD);
@@ -53,8 +55,8 @@ export default function Login() {
             >
               <Shield className="w-7 h-7 text-primary-foreground" />
             </motion.div>
-            <h1 className="text-2xl font-bold text-foreground">Gestão de Acordos</h1>
-            <p className="text-sm text-muted-foreground mt-1">Sistema de Gestão de Acordos</p>
+            <h1 className="text-2xl font-bold text-foreground">{branding.loginTitle}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{empresa?.nome ?? branding.loginSubtitle}</p>
           </CardHeader>
 
           <CardContent className="pb-8">
@@ -98,14 +100,14 @@ export default function Login() {
                 </div>
               </div>
 
-              {error && (
+              {(tenantError || authError || error) && (
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3"
                 >
                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
-                  <p className="text-xs text-destructive">{error}</p>
+                  <p className="text-xs text-destructive">{tenantError || error || authError}</p>
                 </motion.div>
               )}
 
@@ -133,13 +135,13 @@ export default function Login() {
             </div>
 
             <p className="text-center text-xs text-muted-foreground/60 mt-3">
-              Problemas com acesso? Contate o administrador do sistema.
+              {branding.supportText}
             </p>
           </CardContent>
         </Card>
 
         <p className="text-center text-xs text-muted-foreground/50 mt-4">
-          Gestão de Acordos © {new Date().getFullYear()} · Uso interno
+          {branding.appName} © {new Date().getFullYear()} · Uso interno
         </p>
       </motion.div>
     </div>

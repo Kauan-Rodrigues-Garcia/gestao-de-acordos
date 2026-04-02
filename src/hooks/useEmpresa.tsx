@@ -1,16 +1,16 @@
-/**
- * src/hooks/useEmpresa.tsx
- * ─────────────────────────────────────────────────────────────────────────
- * Hook/Context para fornecer o contexto da empresa ativa do usuário logado.
- * Usado por todos os serviços para filtrar queries por empresa.
- */
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { Empresa } from '@/lib/supabase';
-import { fetchEmpresaAtual } from '@/services/empresas.service';
+import { Empresa, supabase } from '@/lib/supabase';
+import { fetchEmpresaBySlug } from '@/services/empresas.service';
+import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
+  branding: TenantBranding;
+  features: TenantFeatures;
+  tenantSlug: string;
+  siteUrl: string | null;
   loading: boolean;
+  error: string | null;
   refresh: () => Promise<void>;
 }
 
@@ -19,15 +19,33 @@ const EmpresaContext = createContext<EmpresaContextType | undefined>(undefined);
 export function EmpresaProvider({ children }: { children: ReactNode }) {
   const [empresa, setEmpresa] = useState<Empresa | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   async function load() {
+    const config = getTenantRuntimeConfig();
+
     setLoading(true);
+    setError(null);
+
     try {
-      const emp = await fetchEmpresaAtual();
-      setEmpresa(emp);
+      if (!config.slug) {
+        throw new Error('VITE_TENANT_SLUG não foi configurado.');
+      }
+
+      const tenantEmpresa = await fetchEmpresaBySlug(config.slug);
+
+      if (!tenantEmpresa) {
+        const { data: { session } } = await supabase.auth.getSession();
+        setEmpresa(null);
+        setError(session ? `Tenant "${config.slug}" não encontrado na tabela empresas.` : null);
+        return;
+      }
+
+      setEmpresa(tenantEmpresa);
     } catch (e) {
       console.warn('[useEmpresa] load error:', e);
       setEmpresa(null);
+      setError(e instanceof Error ? e.message : 'Erro ao carregar tenant.');
     } finally {
       setLoading(false);
     }
@@ -35,10 +53,31 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     load();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+      load();
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
+  const runtimeConfig = getTenantRuntimeConfig(empresa);
+
   return (
-    <EmpresaContext.Provider value={{ empresa, loading, refresh: load }}>
+    <EmpresaContext.Provider
+      value={{
+        empresa,
+        branding: runtimeConfig.branding,
+        features: runtimeConfig.features,
+        tenantSlug: runtimeConfig.slug,
+        siteUrl: runtimeConfig.siteUrl,
+        loading,
+        error,
+        refresh: load,
+      }}
+    >
       {children}
     </EmpresaContext.Provider>
   );

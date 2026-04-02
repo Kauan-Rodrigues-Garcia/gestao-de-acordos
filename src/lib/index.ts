@@ -46,12 +46,14 @@ export const PERFIL_LABELS: Record<string, string> = {
   operador: 'Operador',
   lider: 'Líder',
   administrador: 'Administrador',
+  super_admin: 'Super Admin',
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
   operador: 'bg-primary/10 text-primary border-primary/30',
   lider: 'bg-warning/10 text-warning border-warning/30',
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
+  super_admin: 'bg-chart-1/10 text-chart-1 border-chart-1/30',
 };
 
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';

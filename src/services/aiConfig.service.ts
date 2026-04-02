@@ -1,23 +1,17 @@
-import { supabase } from '@/lib/supabase';
+import { supabase, AIConfig } from '@/lib/supabase';
 
-export type AIConfig = {
-  id: string;
-  enabled: boolean;
-  model: string;
-  temperature: number;
-  max_rows: number;
-  max_cols: number;
-  prompt_system: string;
-  updated_at: string;
-};
-
-export async function fetchAIConfig(): Promise<AIConfig | null> {
-  const { data, error } = await supabase
+export async function fetchAIConfig(empresaId?: string): Promise<AIConfig | null> {
+  let query = supabase
     .from('ai_config')
     .select('*')
     .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+
+  if (empresaId) {
+    query = query.eq('empresa_id', empresaId);
+  }
+
+  const { data, error } = await query.maybeSingle();
 
   if (error) throw error;
   return (data as AIConfig | null) ?? null;
@@ -25,11 +19,11 @@ export async function fetchAIConfig(): Promise<AIConfig | null> {
 
 export type AIConfigInput = Pick<
   AIConfig,
-  'enabled' | 'model' | 'temperature' | 'max_rows' | 'max_cols' | 'prompt_system'
+  'enabled' | 'model' | 'temperature' | 'max_rows' | 'max_cols' | 'prompt_system' | 'empresa_id'
 >;
 
 export async function saveAIConfig(input: AIConfigInput): Promise<void> {
-  const current = await fetchAIConfig().catch(() => null);
+  const current = await fetchAIConfig(input.empresa_id).catch(() => null);
 
   if (current?.id) {
     const { error } = await supabase
@@ -45,4 +39,3 @@ export async function saveAIConfig(input: AIConfigInput): Promise<void> {
     .insert({ ...input, updated_at: new Date().toISOString() });
   if (error) throw error;
 }
-

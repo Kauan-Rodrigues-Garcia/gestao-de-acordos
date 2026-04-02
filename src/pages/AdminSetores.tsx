@@ -24,7 +24,13 @@ export default function AdminSetores() {
 
   async function fetchSetores() {
     setLoading(true);
-    const { data } = await supabase.from('setores').select('*').order('nome');
+    if (!empresa?.id) {
+      setSetores([]);
+      setLoading(false);
+      return;
+    }
+
+    const { data } = await supabase.from('setores').select('*').eq('empresa_id', empresa.id).order('nome');
     if (data) {
       // Buscar contagens
       const enriched = await Promise.all((data as Setor[]).map(async s => {
@@ -39,7 +45,7 @@ export default function AdminSetores() {
     setLoading(false);
   }
 
-  useEffect(() => { fetchSetores(); }, []);
+  useEffect(() => { fetchSetores(); }, [empresa?.id]);
 
   function abrirCriar() {
     setEditando(null);

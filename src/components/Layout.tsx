@@ -7,6 +7,7 @@ import {
   Shield, BarChart3, ClipboardList, Building2, Upload, Bot
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { useNotificacoes } from '@/hooks/useNotificacoes';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -35,14 +36,17 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { perfil, empresa, signOut } = useAuth();
+  const { perfil, signOut } = useAuth();
+  const { empresa, branding } = useEmpresa();
   const { naoLidas } = useNotificacoes();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const userRole = perfil?.perfil ?? 'operador';
-  const navItems = NAV_ITEMS.filter(item => !item.roles || item.roles.includes(userRole));
+  const navItems = NAV_ITEMS.filter(item =>
+    !item.roles || item.roles.includes(userRole) || userRole === 'super_admin'
+  );
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
@@ -61,8 +65,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
-              <p className="font-bold text-sm text-sidebar-foreground leading-none">Gestão de Acordos</p>
-              <p className="text-xs text-sidebar-foreground/50 mt-0.5">{empresa?.nome ?? 'Sistema de Acordos'}</p>
+              <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
+              <p className="text-xs text-sidebar-foreground/50 mt-0.5">{empresa?.nome ?? branding.shortName}</p>
             </motion.div>
           )}
         </AnimatePresence>

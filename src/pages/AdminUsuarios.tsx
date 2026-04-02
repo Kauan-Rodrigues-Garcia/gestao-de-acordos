@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
+import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
 import { toast } from 'sonner';
@@ -22,6 +23,7 @@ const PERFIL_BADGE: Record<string, string> = {
   operador:      'bg-primary/10 text-primary border-primary/30',
   lider:         'bg-warning/10 text-warning border-warning/30',
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
+  super_admin:   'bg-chart-1/10 text-chart-1 border-chart-1/30',
 };
 
 interface UserForm {
@@ -37,6 +39,7 @@ export default function AdminUsuarios() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const isAdmin = perfilAtual?.perfil === 'administrador';
+  const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -53,20 +56,42 @@ export default function AdminUsuarios() {
   const [moverSetorId, setMoverSetorId]     = useState('');
   const [moverSaving, setMoverSaving]       = useState(false);
 
+  useEffect(() => {
+    if (empresaAtual?.id) {
+      setFiltroEmpresa((current) => current || empresaAtual.id);
+      setForm((current) => ({
+        ...current,
+        empresa_id: current.empresa_id || empresaAtual.id,
+      }));
+    }
+  }, [empresaAtual?.id]);
+
   async function fetchDados() {
     setLoading(true);
     let usuariosData: Perfil[] = [];
     try {
-      const { data: uJoin, error: eJoin } = await supabase
+      let usersQuery = supabase
         .from('perfis')
         .select('*, setores(id,nome), empresas(id,nome)')
         .order('nome');
+      if (!isSuperAdmin && empresaAtual?.id) {
+        usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);
+      } else if (filtroEmpresa) {
+        usersQuery = usersQuery.eq('empresa_id', filtroEmpresa);
+      }
+      const { data: uJoin, error: eJoin } = await usersQuery;
       if (eJoin) {
         console.warn('[AdminUsuarios] fetchDados join error, tentando sem join de empresas:', eJoin.message);
-        const { data: uSimple, error: eSimple } = await supabase
+        let fallbackQuery = supabase
           .from('perfis')
           .select('*, setores(id,nome)')
           .order('nome');
+        if (!isSuperAdmin && empresaAtual?.id) {
+          fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);
+        } else if (filtroEmpresa) {
+          fallbackQuery = fallbackQuery.eq('empresa_id', filtroEmpresa);
+        }
+        const { data: uSimple, error: eSimple } = await fallbackQuery;
         if (eSimple) {
           console.warn('[AdminUsuarios] fetchDados fallback error:', eSimple.message);
         }
@@ -80,10 +105,21 @@ export default function AdminUsuarios() {
     let setoresData: Setor[] = [];
     let emps: Empresa[] = [];
     try {
-      const [{ data: s }, empresasList] = await Promise.all([
-        supabase.from('setores').select('*').eq('ativo', true).order('nome'),
-        fetchEmpresas(),
-      ]);
+      const setoresPromise = (() => {
+        let query = supabase.from('setores').select('*').eq('ativo', true).order('nome');
+        if (!isSuperAdmin && empresaAtual?.id) {
+          query = query.eq('empresa_id', empresaAtual.id);
+        } else if (filtroEmpresa) {
+          query = query.eq('empresa_id', filtroEmpresa);
+        }
+        return query;
+      })();
+
+      const empresasPromise = isSuperAdmin
+        ? fetchEmpresas()
+        : Promise.resolve(empresaAtual ? [empresaAtual] : []);
+
+      const [{ data: s }, empresasList] = await Promise.all([setoresPromise, empresasPromise]);
       setoresData = (s as Setor[]) || [];
       emps = empresasList;
     } catch (err) {
@@ -98,11 +134,18 @@ export default function AdminUsuarios() {
     setLoading(false);
   }
 
-  useEffect(() => { fetchDados(); }, []);
+  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
 
   function abrirCriar() {
     setEditando(null);
-    setForm({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: setores[0]?.id ?? '', empresa_id: empresaAtual?.id ?? '' });
+    setForm({
+      nome: '',
+      email: '',
+      senha: '',
+      perfil: 'operador',
+      setor_id: setores[0]?.id ?? '',
+      empresa_id: empresaAtual?.id ?? '',
+    });
     setDialogOpen(true);
   }
 
@@ -119,7 +162,9 @@ export default function AdminUsuarios() {
   }
 
   async function salvar() {
+    const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
     if (!form.nome || !form.email) { toast.error('Preencha nome e e-mail'); return; }
+    if (!empresaId) { toast.error('Empresa do tenant não carregada.'); return; }
     setSaving(true);
     try {
       if (editando) {
@@ -128,7 +173,7 @@ export default function AdminUsuarios() {
             nome:       form.nome,
             perfil:     form.perfil,
             setor_id:   form.setor_id || null,
-            empresa_id: form.empresa_id || null,
+            empresa_id: empresaId,
           })
           .eq('id', editando.id)
           .select('id');
@@ -143,7 +188,14 @@ export default function AdminUsuarios() {
           email: form.email,
           password: form.senha,
           options: {
-            data: { nome: form.nome, perfil: form.perfil, setor_id: form.setor_id, empresa_id: form.empresa_id }
+            emailRedirectTo: buildAuthRedirectUrl(),
+            data: {
+              nome: form.nome,
+              perfil: form.perfil,
+              setor_id: form.setor_id,
+              empresa_id: empresaId,
+              empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,
+            }
           }
         });
         if (error) throw error;
@@ -196,7 +248,7 @@ export default function AdminUsuarios() {
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
-  const usuariosFiltrados = filtroEmpresa
+  const usuariosFiltrados = isSuperAdmin && filtroEmpresa
     ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
     : usuarios;
 
@@ -210,7 +262,7 @@ export default function AdminUsuarios() {
           <p className="text-sm text-muted-foreground mt-0.5">{usuariosFiltrados.length} usuário(s)</p>
         </div>
         <div className="flex gap-2">
-          {empresas.length > 1 && (
+          {isSuperAdmin && empresas.length > 1 && (
             <Select
               value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
               onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
@@ -222,9 +274,12 @@ export default function AdminUsuarios() {
               </SelectContent>
             </Select>
           )}
-          {filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
+          {!isSuperAdmin && empresaAtual && (
+            <Badge variant="outline" className="h-8 px-3 text-xs">{empresaAtual.nome}</Badge>
+          )}
+          {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          {isAdmin && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
+          {(isAdmin || isSuperAdmin) && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
       </div>
 
@@ -276,7 +331,7 @@ export default function AdminUsuarios() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
-                      {isAdmin
+                      {(isAdmin || isSuperAdmin)
                         ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
                         : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
                       }
@@ -290,7 +345,7 @@ export default function AdminUsuarios() {
                         >
                           <ArrowRightLeft className="w-3.5 h-3.5" />
                         </Button>
-                        {isAdmin && (
+                        {(isAdmin || isSuperAdmin) && (
                           <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
                             <Edit className="w-3.5 h-3.5" />
                           </Button>
@@ -328,15 +383,16 @@ export default function AdminUsuarios() {
             )}
             <div className="space-y-1.5">
               <Label className="text-xs">Perfil *</Label>
-              <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="operador">Operador</SelectItem>
-                  <SelectItem value="lider">Líder</SelectItem>
-                  <SelectItem value="administrador">Administrador</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+               <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
+                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                 <SelectContent>
+                   <SelectItem value="operador">Operador</SelectItem>
+                   <SelectItem value="lider">Líder</SelectItem>
+                   <SelectItem value="administrador">Administrador</SelectItem>
+                   {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
+                 </SelectContent>
+               </Select>
+             </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Setor</Label>
               <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
@@ -346,15 +402,19 @@ export default function AdminUsuarios() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs">Empresa</Label>
-              <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v }))}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
-                <SelectContent>
-                  {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+             <div className="space-y-1.5">
+               <Label className="text-xs">Empresa</Label>
+               {isSuperAdmin ? (
+                 <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v }))}>
+                   <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
+                   <SelectContent>
+                     {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
+                   </SelectContent>
+                 </Select>
+               ) : (
+                 <Input value={empresaAtual?.nome ?? 'Tenant atual'} readOnly className="h-9 text-sm bg-muted/40" />
+               )}
+             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
