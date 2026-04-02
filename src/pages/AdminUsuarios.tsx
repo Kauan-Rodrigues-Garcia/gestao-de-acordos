@@ -185,15 +185,16 @@ export default function AdminUsuarios() {
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
         const authRedirectUrl = buildAuthRedirectUrl();
+        const normalizedEmail = form.email.trim().toLowerCase();
         const { error } = await supabase.auth.signUp({
-          email: form.email,
+          email: normalizedEmail,
           password: form.senha,
           options: {
             ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
             data: {
-              nome: form.nome,
+              nome: form.nome.trim(),
               perfil: form.perfil,
-              setor_id: form.setor_id,
+              setor_id: form.setor_id || null,
               empresa_id: empresaId,
               empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,
             }

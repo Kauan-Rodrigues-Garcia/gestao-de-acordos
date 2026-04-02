@@ -87,16 +87,9 @@ export default function Registro() {
         return;
       }
 
-      // Se criou, tentar atualizar o perfil com o nome (trigger do Supabase já pode ter feito isso)
-      if (data.user) {
-        await supabase.from('perfis').upsert({
-          id: data.user.id,
-          nome: nome.trim(),
-          email: email.trim().toLowerCase(),
-          perfil: 'operador',
-          ativo: true,
-          empresa_id: empresa?.id ?? null,
-        }, { onConflict: 'id' });
+      if (!data.user) {
+        setErro('Não foi possível concluir o cadastro. Tente novamente.');
+        return;
       }
 
       setSucesso(true);
