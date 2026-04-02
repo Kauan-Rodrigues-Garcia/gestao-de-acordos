@@ -45,7 +45,7 @@ export async function fetchEmpresaBySlug(slug: string): Promise<Empresa | null> 
     .from('empresas')
     .select('*')
     .eq('slug', slug)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.warn('[empresas.service] fetchEmpresaBySlug error:', error.message);

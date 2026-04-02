@@ -70,9 +70,19 @@ export function getConfiguredSiteUrl(): string | null {
   return null;
 }
 
+export function getConfiguredAuthRedirectUrl(): string | null {
+  const redirectUrl = (import.meta.env.VITE_AUTH_REDIRECT_URL as string | undefined)?.trim();
+
+  if (!redirectUrl) {
+    return null;
+  }
+
+  return redirectUrl.replace(/\/+$/, '');
+}
+
 export function buildAuthRedirectUrl(): string | undefined {
-  const siteUrl = getConfiguredSiteUrl();
-  return siteUrl ? `${siteUrl}/` : undefined;
+  const authRedirectUrl = getConfiguredAuthRedirectUrl();
+  return authRedirectUrl ? `${authRedirectUrl}/` : undefined;
 }
 
 export function getTenantBranding(slug: string, empresa?: Empresa | null): TenantBranding {
