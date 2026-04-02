@@ -19,12 +19,14 @@ DECLARE
   v_empresa_slug TEXT;
   v_nome TEXT;
   v_email TEXT;
+  v_email_nome_base TEXT;
   v_perfil_meta TEXT;
   v_setor_id UUID;
   v_setor_id_meta TEXT;
 BEGIN
   v_nome := NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'nome', '')), '');
   v_email := lower(BTRIM(COALESCE(NEW.email, '')));
+  v_email_nome_base := NULLIF(split_part(NULLIF(v_email, ''), '@', 1), '');
   v_perfil_meta := lower(NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'perfil', '')), ''));
   v_empresa_id_meta := NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'empresa_id', '')), '');
   v_empresa_slug := lower(NULLIF(BTRIM(COALESCE(NEW.raw_user_meta_data->>'empresa_slug', '')), ''));
@@ -86,7 +88,7 @@ BEGIN
   INSERT INTO public.perfis (id, nome, email, perfil, setor_id, empresa_id)
   VALUES (
     NEW.id,
-    COALESCE(v_nome, NULLIF(split_part(NULLIF(v_email, ''), '@', 1), ''), NEW.id::text),
+    COALESCE(v_nome, v_email_nome_base, NEW.id::text),
     v_email,
     CASE
       WHEN v_perfil_meta IN ('operador', 'lider', 'administrador', 'super_admin')
@@ -100,8 +102,8 @@ BEGIN
     nome = EXCLUDED.nome,
     email = EXCLUDED.email,
     perfil = EXCLUDED.perfil,
-    setor_id = COALESCE(EXCLUDED.setor_id, public.perfis.setor_id),
-    empresa_id = COALESCE(EXCLUDED.empresa_id, public.perfis.empresa_id);
+    setor_id = COALESCE(public.perfis.setor_id, EXCLUDED.setor_id),
+    empresa_id = COALESCE(public.perfis.empresa_id, EXCLUDED.empresa_id);
 
   RETURN NEW;
 END;
