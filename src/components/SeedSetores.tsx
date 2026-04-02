@@ -10,6 +10,7 @@ import { AlertCircle, Building2, Loader2, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { seedSetoresIniciais, SETORES_INICIAIS } from '@/services/setores.service';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 
 interface Props {
@@ -17,13 +18,18 @@ interface Props {
 }
 
 export default function SeedSetores({ onSeedComplete }: Props) {
+  const { empresa } = useEmpresa();
   const [loading, setLoading]   = useState(false);
   const [resultado, setResultado] = useState<{ inseridos: number; erros: string[] } | null>(null);
 
   async function executarSeed() {
+    if (!empresa?.id) {
+      toast.error('Não foi possível identificar a empresa do site.');
+      return;
+    }
     setLoading(true);
     try {
-      const res = await seedSetoresIniciais();
+      const res = await seedSetoresIniciais(empresa.id);
       setResultado({ inseridos: res.inseridos, erros: res.erros });
       if (res.erros.length === 0) {
         toast.success(`${res.inseridos} setor(es) cadastrado(s) com sucesso!`);

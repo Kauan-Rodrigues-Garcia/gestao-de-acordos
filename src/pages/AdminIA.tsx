@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { fetchAIConfig, saveAIConfig, type AIConfigInput } from '@/services/aiConfig.service';
+import { useEmpresa } from '@/hooks/useEmpresa';
 
 const DEFAULT_PROMPT = `Você é um assistente especializado em normalizar dados de acordos financeiros importados de planilhas Excel brasileiras.
 
@@ -37,6 +38,7 @@ REGRAS DE EXTRAÇÃO:
 - Linhas que contêm APENAS uma data são marcadores de bloco — não gerar record para elas, apenas usar como vencimento`;
 
 export default function AdminIA() {
+  const { empresa } = useEmpresa();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AIConfigInput>({
@@ -51,9 +53,11 @@ export default function AdminIA() {
   const tempText = useMemo(() => String(form.temperature ?? 0.2), [form.temperature]);
 
   useEffect(() => {
+    if (!empresa?.id) return;
+
     (async () => {
       try {
-        const cfg = await fetchAIConfig();
+        const cfg = await fetchAIConfig(empresa?.id);
         if (cfg) {
           setForm({
             enabled: cfg.enabled,
@@ -70,7 +74,7 @@ export default function AdminIA() {
         setLoading(false);
       }
     })();
-  }, []);
+  }, [empresa?.id]);
 
   async function salvar() {
     setSaving(true);
@@ -100,6 +104,7 @@ export default function AdminIA() {
         max_rows: Math.trunc(form.max_rows),
         max_cols: Math.trunc(form.max_cols),
         prompt_system: form.prompt_system?.trim() || DEFAULT_PROMPT,
+        empresa_id: empresa?.id,
       });
       toast.success('Configurações de IA salvas!');
     } catch (e) {
@@ -230,4 +235,3 @@ export default function AdminIA() {
     </div>
   );
 }
-

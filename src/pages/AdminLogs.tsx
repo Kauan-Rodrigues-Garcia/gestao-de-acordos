@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, LogSistema, Empresa } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
@@ -18,13 +20,29 @@ const ACAO_CORES: Record<string, string> = {
 };
 
 export default function AdminLogs() {
+  const { perfil } = useAuth();
+  const { empresa: tenantEmpresa } = useEmpresa();
+  const isSuperAdmin = perfil?.perfil === 'super_admin';
   const [logs, setLogs] = useState<LogSistema[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTabela, setFiltroTabela] = useState('');
-  const [filtroEmpresa, setFiltroEmpresa] = useState('');
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
 
-  useEffect(() => { fetchEmpresas().then(setEmpresas).catch(() => {}); }, []);
+  useEffect(() => {
+    if (tenantEmpresa?.id) {
+      setFiltroEmpresa((current) => current || tenantEmpresa.id);
+    }
+  }, [tenantEmpresa?.id]);
+
+  useEffect(() => {
+    if (isSuperAdmin) {
+      fetchEmpresas().then(setEmpresas).catch(() => {});
+      return;
+    }
+
+    setEmpresas(tenantEmpresa ? [tenantEmpresa] : []);
+  }, [isSuperAdmin, tenantEmpresa]);
 
   async function fetchLogs() {
     setLoading(true);
@@ -34,13 +52,17 @@ export default function AdminLogs() {
       .order('criado_em', { ascending: false })
       .limit(200);
     if (filtroTabela) query = query.eq('tabela', filtroTabela);
-    if (filtroEmpresa) query = query.eq('empresa_id', filtroEmpresa);
+    if (isSuperAdmin) {
+      if (filtroEmpresa) query = query.eq('empresa_id', filtroEmpresa);
+    } else if (tenantEmpresa?.id) {
+      query = query.eq('empresa_id', tenantEmpresa.id);
+    }
     const { data } = await query;
     setLogs((data as LogSistema[]) || []);
     setLoading(false);
   }
 
-  useEffect(() => { fetchLogs(); }, [filtroTabela, filtroEmpresa]);
+  useEffect(() => { fetchLogs(); }, [filtroTabela, filtroEmpresa, tenantEmpresa?.id, isSuperAdmin]);
 
   const tabelas = ['acordos', 'perfis', 'modelos_mensagem'];
 
@@ -54,7 +76,7 @@ export default function AdminLogs() {
           <p className="text-sm text-muted-foreground mt-0.5">Registro de todas as ações realizadas</p>
         </div>
         <div className="flex gap-2">
-          {empresas.length > 1 && (
+          {isSuperAdmin && empresas.length > 1 && (
             <Select
               value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
               onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
@@ -65,6 +87,11 @@ export default function AdminLogs() {
                 {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
               </SelectContent>
             </Select>
+          )}
+          {!isSuperAdmin && tenantEmpresa && (
+            <Badge variant="outline" className="h-8 px-3 text-xs">
+              {tenantEmpresa.nome}
+            </Badge>
           )}
           <Select value={filtroTabela} onValueChange={setFiltroTabela}>
             <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Filtrar tabela" /></SelectTrigger>

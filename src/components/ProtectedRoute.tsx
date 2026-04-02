@@ -25,7 +25,7 @@ export function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
-  if (roles && perfil && !roles.includes(perfil.perfil)) {
+  if (roles && perfil && perfil.perfil !== 'super_admin' && !roles.includes(perfil.perfil)) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 

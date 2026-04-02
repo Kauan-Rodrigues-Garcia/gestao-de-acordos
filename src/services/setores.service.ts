@@ -40,7 +40,7 @@ export async function listarSetoresAdmin(): Promise<Setor[]> {
 
 /** Verifica e insere setores iniciais se estiverem ausentes.
  *  Retorna { inseridos, existentes } */
-export async function seedSetoresIniciais(): Promise<{ inseridos: number; existentes: number; erros: string[] }> {
+export async function seedSetoresIniciais(empresaId: string): Promise<{ inseridos: number; existentes: number; erros: string[] }> {
   const { data: existentes } = await supabase
     .from('setores')
     .select('nome');
@@ -56,9 +56,9 @@ export async function seedSetoresIniciais(): Promise<{ inseridos: number; existe
   let inseridos = 0;
 
   for (const setor of faltantes) {
-    const { error } = await supabase
-      .from('setores')
-      .insert({ nome: setor.nome, descricao: setor.descricao, ativo: true });
+      const { error } = await supabase
+        .from('setores')
+        .insert({ nome: setor.nome, descricao: setor.descricao, ativo: true, empresa_id: empresaId });
     if (error) {
       erros.push(`${setor.nome}: ${error.message}`);
     } else {

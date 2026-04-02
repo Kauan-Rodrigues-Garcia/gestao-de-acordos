@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
 import { ROUTE_PATHS, parseCurrencyInput, getTodayISO } from '@/lib/index';
 import { toast } from 'sonner';
@@ -44,6 +45,7 @@ export default function AcordoForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const { perfil, user, perfilLoading } = useAuth();
+  const { empresa } = useEmpresa();
   const navigate = useNavigate();
   const [loading, setLoading]         = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
@@ -139,6 +141,7 @@ export default function AcordoForm() {
     const p   = perfilLocal ?? perfil;
     const uid = p?.id ?? user?.id;
     if (!uid) { toast.error('Não foi possível identificar o usuário. Recarregue a página.'); return; }
+    if (!empresa?.id) { toast.error('Empresa não identificada. Recarregue a página.'); return; }
 
     // Validar data de vencimento apenas em novos acordos
     if (!isEdit) {
@@ -169,6 +172,7 @@ export default function AcordoForm() {
         status:        data.status,
         observacoes:   data.observacoes?.trim() || null,
         operador_id:   uid,
+        empresa_id:    empresa.id,
       };
 
       // Adicionar colunas extras APENAS se houver valor, e tentar tratar erro se a coluna não existir
@@ -297,6 +301,7 @@ export default function AcordoForm() {
         acao: 'transferencia_nr',
         tabela: 'acordos',
         registro_id: null,
+        empresa_id: empresa?.id ?? null,
         detalhes: {
           nr: nrCliente,
           aprovado_por: liderPerfil.nome,
@@ -319,6 +324,7 @@ export default function AcordoForm() {
         usuario_id: uid,
         titulo: 'NR Autorizado pelo Líder',
         mensagem: `O líder ${liderPerfil.nome} autorizou a tabulação do NR ${nrCliente}.`,
+        empresa_id: empresa?.id ?? null,
       }).then(({ error: notifError }) => {
         if (notifError) console.warn('[autorizarLider] notificacao error:', notifError.message);
       });
@@ -329,6 +335,7 @@ export default function AcordoForm() {
         acao: 'autorizacao_nr_lider',
         tabela: 'acordos',
         registro_id: null,
+        empresa_id: empresa?.id ?? null,
         detalhes: {
           nr_cliente: nrCliente,
           lider_id: liderUid,

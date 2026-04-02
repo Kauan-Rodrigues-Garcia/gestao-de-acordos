@@ -6,6 +6,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth } from './useAuth';
+import { useEmpresa } from './useEmpresa';
 import { getTodayISO } from '@/lib/index';
 import {
   type FiltrosAcordo,
@@ -18,17 +19,21 @@ export type { FiltrosAcordo };
 
 export function useAcordos(filtros?: FiltrosAcordo) {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
 
   const fetchAcordos = useCallback(async () => {
-    if (!perfil) return;
+    if (!perfil || !empresa?.id) return;
     setLoading(true);
     setError(null);
     try {
-      const { data, count } = await fetchAcordosService(filtros);
+      const { data, count } = await fetchAcordosService({
+        ...filtros,
+        empresa_id: filtros?.empresa_id ?? empresa?.id,
+      });
       setAcordos(data);
       setTotalCount(count);
     } catch (e) {
@@ -38,7 +43,7 @@ export function useAcordos(filtros?: FiltrosAcordo) {
       setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfil, JSON.stringify(filtros)]);
+  }, [perfil, empresa?.id, JSON.stringify(filtros)]);
 
   useEffect(() => { fetchAcordos(); }, [fetchAcordos]);
 
@@ -48,6 +53,7 @@ export function useAcordos(filtros?: FiltrosAcordo) {
 /** Hook de métricas do dashboard — usa calcularMetricasDashboard do service */
 export function useDashboardMetricas() {
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const [metricas, setMetricas] = useState<MetricasDashboard>({
     acordos_hoje:        0,
     pagos_hoje:          0,
@@ -61,11 +67,12 @@ export function useDashboardMetricas() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!perfil) return;
+    if (!perfil || !empresa?.id) return;
     async function fetchMetricas() {
       const { data, error } = await supabase
         .from('acordos')
-        .select('status, valor, vencimento');
+        .select('status, valor, vencimento')
+        .eq('empresa_id', empresa.id);
 
       if (error) { console.error('[useDashboardMetricas]', error); setLoading(false); return; }
       if (data) {
@@ -76,7 +83,7 @@ export function useDashboardMetricas() {
       setLoading(false);
     }
     fetchMetricas();
-  }, [perfil]);
+  }, [perfil, empresa?.id]);
 
   return { metricas, loading };
 }

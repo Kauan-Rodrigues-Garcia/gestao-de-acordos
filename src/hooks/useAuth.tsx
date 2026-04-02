@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
+import { getConfiguredTenantSlug } from '@/lib/tenant';
 
 interface AuthContextType {
   user: User | null;
@@ -9,6 +10,7 @@ interface AuthContextType {
   empresa: Empresa | null;
   loading: boolean;
   perfilLoading: boolean;
+  authError: string | null;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshPerfil: () => Promise<void>;
@@ -23,9 +25,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [empresa, setEmpresa]         = useState<Empresa | null>(null);
   const [loading, setLoading]         = useState(true);
   const [perfilLoading, setPerfilLoading] = useState(false);
+  const [authError, setAuthError]     = useState<string | null>(null);
 
-  async function fetchPerfil(userId: string): Promise<void> {
+  async function rejectTenantMismatch(currentEmpresa: Empresa | null) {
+    const tenantSlug = getConfiguredTenantSlug();
+    const companyName = currentEmpresa?.nome ?? 'outra empresa';
+    const message = tenantSlug
+      ? `Seu usuário está vinculado a ${companyName}. Acesse pelo site correto da sua empresa.`
+      : `Seu usuário está vinculado a ${companyName}. Este site não está disponível para a sua empresa.`;
+
+    setAuthError(message);
+    setPerfil(null);
+    setEmpresa(null);
+    await supabase.auth.signOut();
+    return { tenantMismatch: message };
+  }
+
+  async function fetchPerfil(userId: string): Promise<{ tenantMismatch: string | null }> {
     setPerfilLoading(true);
+    setAuthError(null);
     try {
       // Tentativa 1: com join de setores e empresas
       const { data, error } = await supabase
@@ -46,25 +64,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (error2) {
           console.error('[useAuth] fetchPerfil falhou mesmo sem join:', error2.message);
-          return;
+          return { tenantMismatch: null };
         }
         if (data2) {
           setPerfil(data2 as Perfil);
           setEmpresa(null);
         }
-        return;
+        return { tenantMismatch: null };
       }
 
       if (data) {
         const { empresas: emp, ...perfilData } = data as Perfil & { empresas?: Empresa };
-        setPerfil(perfilData as Perfil);
+        const nextPerfil = perfilData as Perfil;
+        const tenantSlug = getConfiguredTenantSlug();
+        const isSuperAdmin = nextPerfil.perfil === 'super_admin';
+
+        if (!isSuperAdmin && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
+          return rejectTenantMismatch(emp);
+        }
+
+        setPerfil(nextPerfil);
         setEmpresa(emp ?? null);
       }
     } catch (e) {
       console.error('[useAuth] fetchPerfil inesperado:', e);
+      return { tenantMismatch: null };
     } finally {
       setPerfilLoading(false);
     }
+
+    return { tenantMismatch: null };
   }
 
   async function refreshPerfil() {
@@ -111,7 +140,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(email: string, password: string) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
-    if (data.user) await fetchPerfil(data.user.id);
+    if (data.user) {
+      const { tenantMismatch } = await fetchPerfil(data.user.id);
+      if (tenantMismatch) {
+        return { error: tenantMismatch };
+      }
+    }
     return { error: null };
   }
 
@@ -121,10 +155,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEmpresa(null);
     setUser(null);
     setSession(null);
+    setAuthError(null);
   }
 
   const value: AuthContextType = {
-    user, session, perfil, empresa, loading, perfilLoading, signIn, signOut, refreshPerfil,
+    user, session, perfil, empresa, loading, perfilLoading, authError, signIn, signOut, refreshPerfil,
   };
 
   return (

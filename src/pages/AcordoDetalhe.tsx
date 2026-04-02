@@ -51,6 +51,7 @@ export default function AcordoDetalhe() {
       await supabase.from('historico_acordos').insert({
         acordo_id: acordo.id,
         usuario_id: perfil.id,
+        empresa_id: empresa?.id ?? null,
         campo_alterado: 'status',
         valor_anterior: statusAnterior,
         valor_novo: novoStatus,

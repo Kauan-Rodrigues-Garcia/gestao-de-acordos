@@ -17,6 +17,8 @@ import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ROUTE_PATHS } from '@/lib/index';
+import { buildAuthRedirectUrl } from '@/lib/tenant';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +27,7 @@ import { cn } from '@/lib/utils';
 
 export default function Registro() {
   const navigate = useNavigate();
+  const { empresa, branding, loading: tenantLoading, error: tenantError, tenantSlug } = useEmpresa();
 
   const [nome,     setNome]     = useState('');
   const [email,    setEmail]    = useState('');
@@ -48,6 +51,7 @@ export default function Registro() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!tenantSlug) { setErro('Não foi possível identificar a empresa deste site. Entre em contato com o suporte.'); return; }
     const msg = validar();
     if (msg) { setErro(msg); return; }
 
@@ -55,15 +59,17 @@ export default function Registro() {
     setErro('');
 
     try {
-      // Tentar criar o usuário diretamente via signUp
       const { data, error } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password: senha,
         options: {
+          emailRedirectTo: buildAuthRedirectUrl(),
           data: {
-            nome:    nome.trim(),
-            perfil:  'operador',  // perfil padrão — admin altera depois
+            nome: nome.trim(),
+            perfil: 'operador',
             setor_id: null,
+            empresa_id: empresa?.id ?? null,
+            empresa_slug: tenantSlug,
           }
         }
       });
@@ -83,11 +89,12 @@ export default function Registro() {
       // Se criou, tentar atualizar o perfil com o nome (trigger do Supabase já pode ter feito isso)
       if (data.user) {
         await supabase.from('perfis').upsert({
-          id:      data.user.id,
-          nome:    nome.trim(),
-          email:   email.trim().toLowerCase(),
-          perfil:  'operador',
-          ativo:   true,
+          id: data.user.id,
+          nome: nome.trim(),
+          email: email.trim().toLowerCase(),
+          perfil: 'operador',
+          ativo: true,
+          empresa_id: empresa?.id ?? null,
         }, { onConflict: 'id' });
       }
 
@@ -124,8 +131,8 @@ export default function Registro() {
                 Bem-vindo(a), <strong className="text-foreground">{nome.trim().split(' ')[0]}</strong>!
               </p>
               <p className="text-sm text-muted-foreground mb-6">
-                Sua conta foi criada com sucesso. Um administrador irá definir seu setor e perfil de acesso em breve.
-              </p>
+                 Sua conta foi criada com sucesso e já está vinculada a <strong className="text-foreground">{empresa?.nome ?? branding.shortName}</strong>.
+               </p>
               <Button className="w-full" onClick={() => navigate(ROUTE_PATHS.LOGIN)}>
                 Ir para o Login
               </Button>
@@ -156,13 +163,17 @@ export default function Registro() {
             >
               <Shield className="w-7 h-7 text-primary-foreground" />
             </motion.div>
-            <h1 className="text-2xl font-bold text-foreground">Criar Conta</h1>
-            <p className="text-sm text-muted-foreground mt-1">Gestão de Acordos · Sistema de Gestão</p>
-          </CardHeader>
+             <h1 className="text-2xl font-bold text-foreground">{branding.appName}</h1>
+             <p className="text-sm text-muted-foreground mt-1">{branding.registerSubtitle}</p>
+           </CardHeader>
 
-          <CardContent className="pb-8">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Nome */}
+           <CardContent className="pb-8">
+             <form onSubmit={handleSubmit} className="space-y-4">
+               <div className="space-y-1.5">
+                 <Label className="text-sm font-medium">Empresa do site</Label>
+                 <Input value={empresa?.nome ?? branding.shortName ?? tenantSlug} readOnly className="h-9 text-sm bg-muted/40" />
+               </div>
+               {/* Nome */}
               <div className="space-y-1.5">
                 <Label htmlFor="nome" className="text-sm font-medium">Nome completo *</Label>
                 <div className="relative">
@@ -245,24 +256,24 @@ export default function Registro() {
               </div>
 
               {/* Erro */}
-              {erro && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3"
-                >
-                  <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
-                  <p className="text-xs text-destructive">{erro}</p>
-                </motion.div>
-              )}
+               {(tenantError || erro) && (
+                 <motion.div
+                   initial={{ opacity: 0, y: -4 }}
+                   animate={{ opacity: 1, y: 0 }}
+                   className="flex items-center gap-2 bg-destructive/10 border border-destructive/20 rounded-lg p-3"
+                 >
+                   <AlertCircle className="w-4 h-4 text-destructive flex-shrink-0" />
+                   <p className="text-xs text-destructive">{tenantError || erro}</p>
+                 </motion.div>
+               )}
 
-              <Button type="submit" className="w-full font-semibold" disabled={loading}>
-                {loading ? (
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                    Criando conta...
-                  </div>
-                ) : 'Criar conta'}
+               <Button type="submit" className="w-full font-semibold" disabled={loading || tenantLoading || !tenantSlug}>
+                 {loading || tenantLoading ? (
+                   <div className="flex items-center gap-2">
+                     <div className="w-4 h-4 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                     Preparando cadastro...
+                   </div>
+                 ) : 'Criar conta'}
               </Button>
             </form>
 
@@ -275,9 +286,9 @@ export default function Registro() {
               </p>
             </div>
 
-            <p className="text-center text-xs text-muted-foreground/60 mt-3">
-              Após o cadastro, um administrador definirá seu setor e nível de acesso.
-            </p>
+             <p className="text-center text-xs text-muted-foreground/60 mt-3">
+               Após o cadastro, seu acesso ficará vinculado automaticamente ao tenant deste site.
+             </p>
           </CardContent>
         </Card>
 

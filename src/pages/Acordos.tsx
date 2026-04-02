@@ -177,6 +177,7 @@ export default function Acordos() {
         acao: 'exclusao_acordo',
         tabela: 'acordos',
         registro_id: a.id,
+        empresa_id: empresa?.id ?? null,
         detalhes: {
           nome_cliente: a.nome_cliente,
           nr_cliente: a.nr_cliente,
@@ -212,6 +213,7 @@ export default function Acordos() {
             acao: 'exclusao_acordo',
             tabela: 'acordos',
             registro_id: id,
+            empresa_id: empresa?.id ?? null,
             detalhes: {
               nome_cliente: acordo.nome_cliente,
               nr_cliente: acordo.nr_cliente,

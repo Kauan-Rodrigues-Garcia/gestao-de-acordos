@@ -48,8 +48,18 @@ export default function AdminConfiguracoes() {
   }
 
   async function fetchModelos(empresaId?: string) {
-    let query = supabase.from('modelos_mensagem').select('*').order('criado_em');
-    if (empresaId) query = query.eq('empresa_id', empresaId);
+    if (!empresaId) {
+      console.warn('[AdminConfiguracoes] empresa do site indisponível durante carregamento dos modelos');
+      setModelos([]);
+      setLoading(false);
+      return;
+    }
+
+    const query = supabase
+      .from('modelos_mensagem')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('criado_em');
     const { data } = await query;
     setModelos((data as ModeloMensagem[]) || []);
     setLoading(false);
@@ -76,24 +86,28 @@ export default function AdminConfiguracoes() {
       const { error } = await supabase.from('modelos_mensagem').update({ nome: form.nome, conteudo: form.conteudo }).eq('id', editando.id);
       if (!error) toast.success('Modelo atualizado!'); else toast.error('Erro ao atualizar');
     } else {
-      const { error } = await supabase.from('modelos_mensagem').insert({ nome: form.nome, conteudo: form.conteudo });
+      const { error } = await supabase.from('modelos_mensagem').insert({
+        nome: form.nome,
+        conteudo: form.conteudo,
+        empresa_id: empresa?.id ?? null,
+      });
       if (!error) toast.success('Modelo criado!'); else toast.error('Erro ao criar');
     }
     setSaving(false);
     setDialogOpen(false);
-    fetchModelos();
+    fetchModelos(empresa?.id);
   }
 
   async function toggleAtivo(m: ModeloMensagem) {
     await supabase.from('modelos_mensagem').update({ ativo: !m.ativo }).eq('id', m.id);
-    fetchModelos();
+    fetchModelos(empresa?.id);
   }
 
   async function excluir(id: string) {
     if (!confirm('Excluir este modelo?')) return;
     await supabase.from('modelos_mensagem').delete().eq('id', id);
     toast.success('Modelo excluído');
-    fetchModelos();
+    fetchModelos(empresa?.id);
   }
 
   const variaveis = ['{{nome_cliente}}', '{{nr_cliente}}', '{{valor}}', '{{vencimento}}'];

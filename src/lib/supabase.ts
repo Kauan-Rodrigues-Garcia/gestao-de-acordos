@@ -28,7 +28,7 @@ function getSupabase(): SupabaseClient {
 
 export const supabase = getSupabase();
 
-export type PerfilUsuario = 'operador' | 'lider' | 'administrador';
+export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin';
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
 export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 
@@ -94,6 +94,7 @@ export interface HistoricoAcordo {
   id: string;
   acordo_id: string;
   usuario_id: string;
+   empresa_id?: string;
   campo_alterado: string;
   valor_anterior: string | null;
   valor_novo: string | null;
@@ -105,6 +106,7 @@ export interface LogWhatsapp {
   id: string;
   acordo_id: string;
   usuario_id: string;
+  empresa_id?: string;
   mensagem: string;
   enviado_em: string;
 }
@@ -138,4 +140,16 @@ export interface Notificacao {
   lida: boolean;
   empresa_id?: string;
   criado_em: string;
+}
+
+export interface AIConfig {
+  id: string;
+  enabled: boolean;
+  model: string;
+  temperature: number;
+  max_rows: number;
+  max_cols: number;
+  prompt_system: string;
+  empresa_id?: string;
+  updated_at: string;
 }
