@@ -184,11 +184,12 @@ export default function AdminUsuarios() {
         toast.success('Usuário atualizado!');
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
+        const authRedirectUrl = buildAuthRedirectUrl();
         const { error } = await supabase.auth.signUp({
           email: form.email,
           password: form.senha,
           options: {
-            emailRedirectTo: buildAuthRedirectUrl(),
+            ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
             data: {
               nome: form.nome,
               perfil: form.perfil,

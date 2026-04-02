@@ -54,6 +54,7 @@ export default function Registro() {
     if (!tenantSlug) { setErro('Não foi possível identificar a empresa deste site. Entre em contato com o suporte.'); return; }
     const msg = validar();
     if (msg) { setErro(msg); return; }
+    const authRedirectUrl = buildAuthRedirectUrl();
 
     setLoading(true);
     setErro('');
@@ -63,7 +64,7 @@ export default function Registro() {
         email: email.trim().toLowerCase(),
         password: senha,
         options: {
-          emailRedirectTo: buildAuthRedirectUrl(),
+          ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
           data: {
             nome: nome.trim(),
             perfil: 'operador',
