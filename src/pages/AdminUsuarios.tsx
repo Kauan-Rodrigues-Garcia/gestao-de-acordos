@@ -200,7 +200,12 @@ export default function AdminUsuarios() {
             }
           }
         });
-        if (error) throw error;
+        if (error) {
+          if (error.message.toLowerCase().includes('database error')) {
+            throw new Error('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
+          }
+          throw error;
+        }
         toast.success('Usuário criado! Ele receberá um e-mail de confirmação.');
       }
       setDialogOpen(false);

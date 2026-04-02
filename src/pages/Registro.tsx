@@ -81,6 +81,8 @@ export default function Registro() {
             error.message.toLowerCase().includes('user already exists') ||
             error.message.toLowerCase().includes('email address is already')) {
           setErro('Este e-mail já está cadastrado. Tente fazer login ou use outro e-mail.');
+        } else if (error.message.toLowerCase().includes('database error')) {
+          setErro('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
         } else {
           setErro(error.message);
         }
