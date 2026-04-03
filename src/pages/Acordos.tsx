@@ -146,6 +146,8 @@ export default function Acordos() {
         }
       });
       refetch();
+    }).catch(e => {
+      console.warn('[Acordos] erro ao mover atrasados:', e);
     });
   }, [acordos, loading]);
 
