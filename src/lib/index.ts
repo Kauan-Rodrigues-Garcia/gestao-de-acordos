@@ -107,3 +107,76 @@ export function isAtrasado(vencimento: string, status: string): boolean {
   if (['pago', 'nao_pago'].includes(status)) return false;
   return vencimento < getTodayISO();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PaguePlay-specific constants and helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const TIPO_OPTIONS_PAGUEPLAY = ['pix', 'boleto', 'cartao'] as const;
+export const PARCELAS_MAX_PAGUEPLAY = 12;
+export const ESTADOS_BRASIL = [
+  'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
+  'PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO',
+] as const;
+
+export const STATUS_LABELS_PAGUEPLAY: Record<string, string> = {
+  verificar_pendente: 'Pendente',
+  pago: 'Pago',
+  nao_pago: 'Não Pago',
+};
+
+export const TIPO_LABELS_PAGUEPLAY: Record<string, string> = {
+  boleto: 'Boleto',
+  cartao: 'Cartão de Crédito',
+  pix: 'Pix',
+};
+
+export function isPaguePlay(slug: string): boolean {
+  return slug === 'pagueplay';
+}
+
+export function getStatusLabels(slug: string): Record<string, string> {
+  return isPaguePlay(slug) ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
+}
+
+export function getTipoLabels(slug: string): Record<string, string> {
+  return isPaguePlay(slug) ? TIPO_LABELS_PAGUEPLAY : TIPO_LABELS;
+}
+
+export function getTipoOptions(slug: string): readonly string[] {
+  return isPaguePlay(slug) ? TIPO_OPTIONS_PAGUEPLAY : (Object.keys(TIPO_LABELS) as string[]);
+}
+
+export const PARCELAS_MAX_DEFAULT = 60;
+
+export function getMaxParcelas(slug: string): number {
+  return isPaguePlay(slug) ? PARCELAS_MAX_PAGUEPLAY : PARCELAS_MAX_DEFAULT;
+}
+
+/**
+ * Extracts the Brazilian state code stored as a prefix in the observacoes field.
+ * Format: "[ESTADO:SP]\nRest of text"
+ */
+export function extractEstado(observacoes: string | null | undefined): string {
+  if (!observacoes) return '';
+  const match = observacoes.match(/^\[ESTADO:([A-Z]{2})\]/);
+  return match ? match[1] : '';
+}
+
+/**
+ * Extracts the link/observation text from observacoes, stripping any estado prefix.
+ */
+export function extractLinkAcordo(observacoes: string | null | undefined): string {
+  if (!observacoes) return '';
+  return observacoes.replace(/^\[ESTADO:[A-Z]{2}\]\n?/, '');
+}
+
+/**
+ * Builds the observacoes string from estado + link for PaguePlay storage.
+ */
+export function buildObservacoesComEstado(estado: string, link: string): string | null {
+  const parts: string[] = [];
+  if (estado) parts.push(`[ESTADO:${estado}]`);
+  if (link?.trim()) parts.push(link.trim());
+  return parts.length > 0 ? parts.join('\n') : null;
+}

@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit, Eye,
   Filter, RefreshCw, X,
-  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash
+  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,10 +19,14 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
-  formatCurrency, formatDate, getTodayISO, isAtrasado
+  formatCurrency, formatDate, getTodayISO, isAtrasado,
+  isPaguePlay, getStatusLabels, getTipoLabels,
+  STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
+  extractEstado, extractLinkAcordo,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
+import { AcordoEditInline } from '@/components/AcordoEditInline';
 
 function buildMensagem(a: Acordo): string {
   return `Olá *${a.nome_cliente}*, passando para lembrar do seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*. Qualquer dúvida, estamos à disposição. 😊`;
@@ -50,7 +54,10 @@ const PER_PAGE = 20;
 
 export default function Acordos() {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
+  const isPP = isPaguePlay(tenantSlug);
+  const statusLabels = getStatusLabels(tenantSlug);
+  const tipoLabels   = getTipoLabels(tenantSlug);
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Estados locais sincronizados com URL
@@ -70,6 +77,8 @@ export default function Acordos() {
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
   const [confirmandoExclusao, setConfirmandoExclusao] = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
+  // Inline edit — PaguePlay only
+  const [editandoInlineId, setEditandoInlineId] = useState<string | null>(null);
 
   // Debounce para busca
   useEffect(() => {
@@ -344,14 +353,14 @@ export default function Acordos() {
                 <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos Status</SelectItem>
-                  {Object.entries(STATUS_LABELS).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  {Object.entries(statusLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filtroTipo} onValueChange={(v) => { setFiltroTipo(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos Tipos</SelectItem>
-                  {Object.entries(TIPO_LABELS).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                  {Object.entries(tipoLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
               <input
@@ -385,14 +394,29 @@ export default function Acordos() {
                           onChange={selecionarTodos}
                         />
                       </th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NR</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CLIENTE</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
-                      <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
-                      <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
+                      {isPP ? (
+                        <>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NOME</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CPF</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">WHATSAPP</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                        </>
+                      ) : (
+                        <>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NR</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CLIENTE</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
+                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
+                        </>
+                      )}
                       <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
                     </tr>
                   </thead>
@@ -411,7 +435,9 @@ export default function Acordos() {
                       const atrasado  = isAtrasado(a.vencimento, a.status);
                       const venceHoje = a.vencimento === hoje;
                       const sel       = selecionados.includes(a.id);
+                      const isEditingThis = editandoInlineId === a.id;
                       return (
+                        <>
                         <motion.tr
                           key={a.id}
                           initial={{ opacity: 0 }}
@@ -422,7 +448,8 @@ export default function Acordos() {
                             i % 2 === 0 && 'bg-muted/10',
                             atrasado  && 'bg-destructive/5',
                             venceHoje && a.status !== 'pago' && 'bg-warning/5',
-                            sel && 'bg-primary/5 border-primary/20'
+                            sel && 'bg-primary/5 border-primary/20',
+                            isEditingThis && 'bg-primary/5'
                           )}
                         >
                           <td className="px-3 py-2.5">
@@ -433,44 +460,98 @@ export default function Acordos() {
                               onChange={() => toggleSelecionado(a.id)}
                             />
                           </td>
-                          <td className="px-3 py-2.5">
-                            <span className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded">
-                              <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
-                            {a.instituicao && (
-                              <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
-                            )}
-                            {a.whatsapp && (
-                              <p className="font-mono text-muted-foreground/70 text-[10px] mt-0.5">{a.whatsapp}</p>
-                            )}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <span className={cn('font-mono', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
-                              {formatDate(a.vencimento)}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
-                            {formatCurrency(a.valor)}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                              {TIPO_LABELS[a.tipo]}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">
-                            {['boleto', 'cartao_recorrente'].includes(a.tipo) ? a.parcelas : '—'}
-                          </td>
-                          <td className="px-3 py-2.5">
-                            <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                              {STATUS_LABELS[a.status]}
-                            </span>
-                          </td>
-                          <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                            {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
-                          </td>
+                          {isPP ? (
+                            <>
+                              {/* Nome do profissional */}
+                              <td className="px-3 py-2.5">
+                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                              </td>
+                              {/* CPF */}
+                              <td className="px-3 py-2.5">
+                                <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold">
+                                  <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
+                                </span>
+                              </td>
+                              {/* Inscrição */}
+                              <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
+                                {a.instituicao || '—'}
+                              </td>
+                              {/* WhatsApp */}
+                              <td className="px-3 py-2.5 font-mono text-muted-foreground text-[11px]">
+                                {a.whatsapp || '—'}
+                              </td>
+                              {/* Estado */}
+                              <td className="px-3 py-2.5">
+                                {extractEstado(a.observacoes) ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                                    <MapPin className="w-2.5 h-2.5" />{extractEstado(a.observacoes)}
+                                  </span>
+                                ) : '—'}
+                              </td>
+                              {/* Forma de pagamento */}
+                              <td className="px-3 py-2.5">
+                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+                                  {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
+                                </span>
+                              </td>
+                              {/* Link do acordo */}
+                              <td className="px-3 py-2.5 max-w-[120px]">
+                                {extractLinkAcordo(a.observacoes) ? (
+                                  <span className="inline-flex items-center gap-1 text-[11px] text-primary truncate">
+                                    <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                                    <span className="truncate">{extractLinkAcordo(a.observacoes)}</span>
+                                  </span>
+                                ) : '—'}
+                              </td>
+                              {/* Status */}
+                              <td className="px-3 py-2.5">
+                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+                                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
+                                </span>
+                              </td>
+                            </>
+                          ) : (
+                            <>
+                              <td className="px-3 py-2.5">
+                                <span className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded">
+                                  <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                {a.instituicao && (
+                                  <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
+                                )}
+                                {a.whatsapp && (
+                                  <p className="font-mono text-muted-foreground/70 text-[10px] mt-0.5">{a.whatsapp}</p>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={cn('font-mono', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
+                                  {formatDate(a.vencimento)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
+                                {formatCurrency(a.valor)}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+                                  {TIPO_LABELS[a.tipo]}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">
+                                {['boleto', 'cartao_recorrente'].includes(a.tipo) ? a.parcelas : '—'}
+                              </td>
+                              <td className="px-3 py-2.5">
+                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
+                                  {STATUS_LABELS[a.status]}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
+                                {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
+                              </td>
+                            </>
+                          )}
                           <td className="px-3 py-2.5">
                             <div className="flex items-center justify-end gap-0.5">
                               {a.status !== 'pago' && a.status !== 'nao_pago' && (
@@ -494,9 +575,20 @@ export default function Acordos() {
                               <Button asChild variant="ghost" size="icon" className="w-6 h-6">
                                 <Link to={`/acordos/${a.id}`} title="Ver detalhe"><Eye className="w-3 h-3" /></Link>
                               </Button>
-                              <Button asChild variant="ghost" size="icon" className="w-6 h-6">
-                                <Link to={`/acordos/${a.id}/editar`} title="Editar"><Edit className="w-3 h-3" /></Link>
-                              </Button>
+                              {/* PaguePlay: inline edit; others: navigate to edit page */}
+                              {isPP ? (
+                                <Button
+                                  variant="ghost" size="icon" className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
+                                  title={isEditingThis ? 'Fechar editor' : 'Editar'}
+                                  onClick={() => setEditandoInlineId(isEditingThis ? null : a.id)}
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                              ) : (
+                                <Button asChild variant="ghost" size="icon" className="w-6 h-6">
+                                  <Link to={`/acordos/${a.id}/editar`} title="Editar"><Edit className="w-3 h-3" /></Link>
+                                </Button>
+                              )}
                               {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
                                 <Button
                                   variant="ghost" size="icon"
@@ -511,6 +603,16 @@ export default function Acordos() {
                             </div>
                           </td>
                         </motion.tr>
+                        {/* Inline edit row — PaguePlay only */}
+                        {isPP && isEditingThis && (
+                          <AcordoEditInline
+                            key={`inline-${a.id}`}
+                            acordo={a}
+                            onSaved={() => { setEditandoInlineId(null); refetch(); }}
+                            onCancel={() => setEditandoInlineId(null)}
+                          />
+                        )}
+                        </>
                       );
                     })}
                   </tbody>

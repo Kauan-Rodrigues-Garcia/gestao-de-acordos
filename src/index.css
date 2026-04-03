@@ -125,6 +125,32 @@
   --sidebar-ring: oklch(0.62 0.18 220);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   PaguePlay tenant theme — green professional palette (hue 155)
+   Applied when <html data-tenant="pagueplay"> is set.
+   Only overrides brand tokens; all other tokens remain from :root / .dark.
+   ────────────────────────────────────────────────────────────────────────── */
+
+[data-tenant="pagueplay"] {
+  --primary: oklch(0.45 0.15 155);
+  --primary-foreground: oklch(0.98 0.005 155);
+  --ring: oklch(0.45 0.15 155);
+  --sidebar-primary: oklch(0.45 0.15 155);
+  --sidebar-primary-foreground: oklch(0.98 0.005 155);
+  --sidebar-ring: oklch(0.45 0.15 155);
+  --chart-1: oklch(0.50 0.18 155);
+}
+
+.dark[data-tenant="pagueplay"] {
+  --primary: oklch(0.62 0.18 155);
+  --primary-foreground: oklch(0.12 0.015 155);
+  --ring: oklch(0.62 0.18 155);
+  --sidebar-primary: oklch(0.62 0.18 155);
+  --sidebar-primary-foreground: oklch(0.10 0.012 155);
+  --sidebar-ring: oklch(0.62 0.18 155);
+  --chart-1: oklch(0.65 0.20 155);
+}
+
 @theme inline {
   /* Shadcn Core Mapping */
   --color-background: var(--background);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Edit, MessageSquare, CheckCircle2, Clock, Hash, User, Calendar, DollarSign, Smartphone, FileText, AlertCircle, Building2 } from 'lucide-react';
+import { ArrowLeft, Edit, MessageSquare, CheckCircle2, Clock, Hash, User, Calendar, DollarSign, Smartphone, FileText, AlertCircle, Building2, MapPin, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -13,15 +13,20 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
-  formatCurrency, formatDate, isAtrasado
+  formatCurrency, formatDate, isAtrasado,
+  isPaguePlay, getStatusLabels,
+  STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
+  extractEstado, extractLinkAcordo,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 
 export default function AcordoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   const navigate = useNavigate();
+  const isPP = isPaguePlay(tenantSlug);
+  const statusLabels = getStatusLabels(tenantSlug);
   const [acordo, setAcordo] = useState<Acordo | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
   const [loading, setLoading] = useState(true);
@@ -83,11 +88,11 @@ export default function AcordoDetalhe() {
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-bold text-foreground">{acordo.nome_cliente}</h1>
             <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
-              {STATUS_LABELS[acordo.status]}
+              {statusLabels[acordo.status] || STATUS_LABELS[acordo.status]}
             </span>
             {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
           </div>
-          <p className="text-sm text-muted-foreground font-mono mt-0.5">NR: {acordo.nr_cliente}</p>
+          <p className="text-sm text-muted-foreground font-mono mt-0.5">{isPP ? 'CPF' : 'NR'}: {acordo.nr_cliente}</p>
         </div>
         <div className="flex gap-2">
           {acordo.whatsapp && (
@@ -112,43 +117,88 @@ export default function AcordoDetalhe() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
-                {[
-                  { label: 'Cliente', value: acordo.nome_cliente, icon: User },
-                  { label: 'NR', value: acordo.nr_cliente, icon: Hash, mono: true },
-                  { label: 'Cadastrado', value: formatDate(acordo.data_cadastro), icon: Calendar },
-                  { label: 'Vencimento', value: formatDate(acordo.vencimento), icon: Calendar, danger: atrasado },
-                  { label: 'Valor', value: formatCurrency(acordo.valor), icon: DollarSign, mono: true },
-                  { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
-                  { label: 'Instituição', value: acordo.instituicao || '-', icon: Building2 },
-                  { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },
-                ].map(({ label, value, icon: Icon, mono, danger }) => (
-                  <div key={label} className="flex items-start gap-2">
-                    <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground">{label}</p>
-                      <p className={cn('font-medium', mono && 'font-mono', danger && 'text-destructive')}>{value}</p>
+                {isPP ? (
+                  // PaguePlay-specific fields
+                  <>
+                    {[
+                      { label: 'Nome do Profissional', value: acordo.nome_cliente, icon: User },
+                      { label: 'CPF', value: acordo.nr_cliente, icon: Hash, mono: true },
+                      { label: 'Inscrição', value: acordo.instituicao || '-', icon: Building2 },
+                      { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
+                      { label: 'Estado', value: extractEstado(acordo.observacoes) || '-', icon: MapPin },
+                      { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },
+                    ].map(({ label, value, icon: Icon, mono }) => (
+                      <div key={label} className="flex items-start gap-2">
+                        <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <p className={cn('font-medium', mono && 'font-mono')}>{value}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {/* Forma de pagamento */}
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Forma de Pagamento</p>
+                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', TIPO_COLORS[acordo.tipo])}>
+                          {TIPO_LABELS_PAGUEPLAY[acordo.tipo] || TIPO_LABELS[acordo.tipo]}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                <div className="flex items-start gap-2">
-                  <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Tipo</p>
-                    <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', TIPO_COLORS[acordo.tipo])}>
-                      {TIPO_LABELS[acordo.tipo]}
-                    </span>
-                    {(['boleto', 'cartao_recorrente'] as const).includes(acordo.tipo as 'boleto' | 'cartao_recorrente') && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <User className="w-4 h-4 text-muted-foreground mt-0.5" />
-                  <div>
-                    <p className="text-xs text-muted-foreground">Operador</p>
-                    <p className="font-medium">{(acordo.perfis as { nome?: string } | undefined)?.nome || '-'}</p>
-                  </div>
-                </div>
+                    {/* Link do acordo */}
+                    {extractLinkAcordo(acordo.observacoes) && (
+                      <div className="flex items-start gap-2 col-span-2">
+                        <Link2 className="w-4 h-4 text-muted-foreground mt-0.5" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">Link do Acordo</p>
+                          <p className="font-medium text-primary break-all">{extractLinkAcordo(acordo.observacoes)}</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  // Standard fields
+                  <>
+                    {[
+                      { label: 'Cliente', value: acordo.nome_cliente, icon: User },
+                      { label: 'NR', value: acordo.nr_cliente, icon: Hash, mono: true },
+                      { label: 'Cadastrado', value: formatDate(acordo.data_cadastro), icon: Calendar },
+                      { label: 'Vencimento', value: formatDate(acordo.vencimento), icon: Calendar, danger: atrasado },
+                      { label: 'Valor', value: formatCurrency(acordo.valor), icon: DollarSign, mono: true },
+                      { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
+                      { label: 'Instituição', value: acordo.instituicao || '-', icon: Building2 },
+                      { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },
+                    ].map(({ label, value, icon: Icon, mono, danger }) => (
+                      <div key={label} className="flex items-start gap-2">
+                        <Icon className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-muted-foreground">{label}</p>
+                          <p className={cn('font-medium', mono && 'font-mono', danger && 'text-destructive')}>{value}</p>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="flex items-start gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Tipo</p>
+                        <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', TIPO_COLORS[acordo.tipo])}>
+                          {TIPO_LABELS[acordo.tipo]}
+                        </span>
+                        {(['boleto', 'cartao_recorrente'] as const).includes(acordo.tipo as 'boleto' | 'cartao_recorrente') && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <User className="w-4 h-4 text-muted-foreground mt-0.5" />
+                      <div>
+                        <p className="text-xs text-muted-foreground">Operador</p>
+                        <p className="font-medium">{(acordo.perfis as { nome?: string } | undefined)?.nome || '-'}</p>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-              {acordo.observacoes && (
+              {!isPP && acordo.observacoes && (
                 <>
                   <Separator className="my-4" />
                   <div>
@@ -204,7 +254,7 @@ export default function AcordoDetalhe() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                  {Object.entries(statusLabels).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>

@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import {
   Save, ArrowLeft, User, Hash, Calendar,
-  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, Shield
+  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, Shield, MapPin, Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,25 +18,29 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
-import { ROUTE_PATHS, parseCurrencyInput, getTodayISO } from '@/lib/index';
+import {
+  ROUTE_PATHS, parseCurrencyInput, getTodayISO,
+  isPaguePlay, ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
+  getMaxParcelas, extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+} from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 // data_cadastro: opcional no form — preenchida automaticamente pelo sistema
 const schema = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
-  nr_cliente:   z.string().min(1, 'NR do cliente é obrigatório').regex(/^\d+$/, 'NR deve conter apenas números'),
+  nr_cliente:   z.string().min(1, 'Campo obrigatório').regex(/^\d+$/, 'Deve conter apenas números'),
   vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);
     return !isNaN(n) && n > 0;
   }, 'Valor deve ser maior que zero'),
   tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
-  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas entre 1 e 60'),
+  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
   whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
   instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
   status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
-  observacoes: z.string().max(500, 'Observações muito longas').optional(),
+  observacoes: z.string().max(500, 'Campo muito longo').optional(),
 });
 
 type FormData = z.infer<typeof schema>;
@@ -45,11 +49,15 @@ export default function AcordoForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const { perfil, user, perfilLoading } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   const navigate = useNavigate();
   const [loading, setLoading]         = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
   const [perfilLocal, setPerfilLocal] = useState<Perfil | null>(null);
+  const [estadoSelecionado, setEstadoSelecionado] = useState('');
+
+  const isPP = isPaguePlay(tenantSlug);
+  const maxParcelas = getMaxParcelas(tenantSlug);
 
   // NR duplicate / leader auth state
   const [nrDuplicado, setNrDuplicado]       = useState(false);
@@ -92,6 +100,13 @@ export default function AcordoForm() {
       if (error) { toast.error('Erro ao carregar acordo'); navigate(ROUTE_PATHS.ACORDOS); return; }
       if (data) {
         setNrOriginalEdit(data.nr_cliente);
+        // For PaguePlay, parse estado from observacoes prefix
+        const obs = data.observacoes || '';
+        const estado = extractEstado(obs);
+        const link   = extractLinkAcordo(obs);
+        if (isPaguePlay(tenantSlug)) {
+          setEstadoSelecionado(estado || '');
+        }
         reset({
           nome_cliente: data.nome_cliente,
           nr_cliente:   data.nr_cliente,
@@ -102,7 +117,8 @@ export default function AcordoForm() {
           whatsapp:     data.whatsapp || '',
           instituicao:  data.instituicao || '',
           status:       data.status,
-          observacoes:  data.observacoes || '',
+          // For PaguePlay show only the link part (strip [ESTADO:XX] prefix)
+          observacoes:  isPaguePlay(tenantSlug) ? link : (data.observacoes || ''),
         });
       }
       setLoadingData(false);
@@ -170,7 +186,10 @@ export default function AcordoForm() {
         parcelas:      (['boleto', 'cartao_recorrente'].includes(data.tipo)) ? parseInt(data.parcelas || '1', 10) : 1,
         whatsapp:      data.whatsapp?.trim() || null,
         status:        data.status,
-        observacoes:   data.observacoes?.trim() || null,
+        // For PaguePlay: combine [ESTADO:XX] prefix + link text in observacoes
+        observacoes:   isPP
+          ? buildObservacoesComEstado(estadoSelecionado, data.observacoes || '')
+          : (data.observacoes?.trim() || null),
         operador_id:   uid,
         empresa_id:    empresa.id,
       };
@@ -457,14 +476,14 @@ export default function AcordoForm() {
             </CardHeader>
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-              {/* NR — identificador principal */}
+              {/* NR / CPF — identificador principal */}
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-primary">NR do Cliente *</Label>
+                <Label className="text-xs font-semibold text-primary">{isPP ? 'CPF *' : 'NR do Cliente *'}</Label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
                   <Input
                     {...register('nr_cliente')}
-                    placeholder="000000"
+                    placeholder={isPP ? '000.000.000-00' : '000000'}
                     className={cn(
                       'h-10 text-sm pl-8 font-mono font-bold border-primary/40 focus:border-primary',
                       errors.nr_cliente && 'border-destructive'
@@ -545,16 +564,38 @@ export default function AcordoForm() {
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Instituição</Label>
+                <Label className="text-xs font-medium">{isPP ? 'Inscrição' : 'Instituição'}</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                   <Input
                     {...register('instituicao')}
-                    placeholder="Banco, financeira, empresa..."
+                    placeholder={isPP ? 'Número de inscrição (opcional)' : 'Banco, financeira, empresa...'}
                     className="h-9 text-sm pl-8"
                   />
                 </div>
               </div>
+
+              {/* Estado — PaguePlay only */}
+              {isPP && (
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-medium">Estado *</Label>
+                  <div className="relative">
+                    <Select value={estadoSelecionado} onValueChange={setEstadoSelecionado}>
+                      <SelectTrigger className="h-9 text-sm">
+                        <div className="flex items-center gap-2">
+                          <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="Selecione o estado" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {ESTADOS_BRASIL.map(uf => (
+                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
 
             </CardContent>
           </Card>
@@ -569,18 +610,28 @@ export default function AcordoForm() {
             <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Tipo *</Label>
+                <Label className="text-xs font-medium">{isPP ? 'Forma de Pagamento *' : 'Tipo *'}</Label>
                 <Select
                   value={watch('tipo')}
                   onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
                 >
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="boleto">Boleto</SelectItem>
-                    <SelectItem value="cartao_recorrente">Cartão Recorrente</SelectItem>
-                    <SelectItem value="pix_automatico">Pix automático</SelectItem>
-                    <SelectItem value="cartao">Cartão</SelectItem>
-                    <SelectItem value="pix">Pix</SelectItem>
+                    {isPP ? (
+                      <>
+                        <SelectItem value="pix">{TIPO_LABELS_PAGUEPLAY.pix}</SelectItem>
+                        <SelectItem value="boleto">{TIPO_LABELS_PAGUEPLAY.boleto}</SelectItem>
+                        <SelectItem value="cartao">{TIPO_LABELS_PAGUEPLAY.cartao}</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="boleto">Boleto</SelectItem>
+                        <SelectItem value="cartao_recorrente">Cartão Recorrente</SelectItem>
+                        <SelectItem value="pix_automatico">Pix automático</SelectItem>
+                        <SelectItem value="cartao">Cartão</SelectItem>
+                        <SelectItem value="pix">Pix</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -589,7 +640,7 @@ export default function AcordoForm() {
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Parcelas</Label>
                   <Input
-                    type="number" min="1" max="60"
+                    type="number" min="1" max={maxParcelas}
                     {...register('parcelas')}
                     placeholder="1"
                     className="h-9 text-sm font-mono"
@@ -605,9 +656,19 @@ export default function AcordoForm() {
                 >
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="verificar_pendente">🔍 Verificar / Pendente</SelectItem>
-                    <SelectItem value="pago">✅ Pago</SelectItem>
-                    <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
+                    {isPP ? (
+                      <>
+                        <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
+                        <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
+                        <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
+                      </>
+                    ) : (
+                      <>
+                        <SelectItem value="verificar_pendente">🔍 Verificar / Pendente</SelectItem>
+                        <SelectItem value="pago">✅ Pago</SelectItem>
+                        <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
+                      </>
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -615,17 +676,19 @@ export default function AcordoForm() {
             </CardContent>
           </Card>
 
-          {/* ══ BLOCO 4: Observações (opcional, colapsado visualmente) ══ */}
+          {/* ══ BLOCO 4: Observações / Link do Acordo ══ */}
           <Card className="border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                <Info className="w-4 h-4" /> Observações <span className="text-xs font-normal">(opcional)</span>
+                {isPP ? <Link2 className="w-4 h-4" /> : <Info className="w-4 h-4" />}
+                {isPP ? 'Link do Acordo' : 'Observações'}
+                <span className="text-xs font-normal">(opcional)</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
               <Textarea
                 {...register('observacoes')}
-                placeholder="Informações adicionais..."
+                placeholder={isPP ? 'Cole aqui o link do acordo...' : 'Informações adicionais...'}
                 className="text-sm resize-none"
                 rows={2}
               />

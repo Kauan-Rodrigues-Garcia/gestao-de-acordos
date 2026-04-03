@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useDashboardMetricas, useAcordos } from '@/hooks/useAcordos';
-import { ROUTE_PATHS, formatCurrency, formatDate, STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, getTodayISO } from '@/lib/index';
+import { ROUTE_PATHS, formatCurrency, formatDate, STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, getTodayISO, isPaguePlay, getTipoLabels, getStatusLabels, TIPO_OPTIONS_PAGUEPLAY } from '@/lib/index';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from 'recharts';
 import { cn } from '@/lib/utils';
 import { StatCard } from '@/components/StatCard';
@@ -34,7 +34,10 @@ const PIE_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--cha
 
 export default function Dashboard() {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
+  const isPP = isPaguePlay(tenantSlug);
+  const statusLabels = getStatusLabels(tenantSlug);
+  const tipoLabels   = getTipoLabels(tenantSlug);
   const { metricas, loading: loadingMetricas } = useDashboardMetricas();
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
   const { acordos: todosAcordos } = useAcordos();
@@ -44,13 +47,16 @@ export default function Dashboard() {
 
   // Data para gráfico de status
   const statusData = ['verificar_pendente', 'pago', 'nao_pago'].map(s => ({
-    name: STATUS_LABELS[s],
+    name: statusLabels[s] || STATUS_LABELS[s],
     value: todosAcordos.filter(a => a.status === s).length,
   })).filter(d => d.value > 0);
 
-  // Data para gráfico por tipo
-  const tipoData = ['boleto', 'cartao_recorrente', 'pix_automatico', 'cartao', 'pix'].map(t => ({
-    name: TIPO_LABELS[t],
+  // Data para gráfico por tipo — filter to PaguePlay types when applicable
+  const tipoKeys = isPP
+    ? [...TIPO_OPTIONS_PAGUEPLAY]
+    : ['boleto', 'cartao_recorrente', 'pix_automatico', 'cartao', 'pix'];
+  const tipoData = tipoKeys.map(t => ({
+    name: tipoLabels[t] || TIPO_LABELS[t],
     acordos: todosAcordos.filter(a => a.tipo === t).length,
     valor: todosAcordos.filter(a => a.tipo === t).reduce((s, a) => s + Number(a.valor), 0),
   }));
@@ -186,11 +192,11 @@ export default function Dashboard() {
                           </td>
                           <td className="px-4 py-2.5 font-mono font-semibold text-foreground">{formatCurrency(a.valor)}</td>
                           <td className="px-4 py-2.5">
-                            <span className="capitalize text-muted-foreground">{TIPO_LABELS[a.tipo]}</span>
+                            <span className="capitalize text-muted-foreground">{tipoLabels[a.tipo] || TIPO_LABELS[a.tipo]}</span>
                           </td>
                           <td className="px-4 py-2.5">
                             <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[a.status])}>
-                              {STATUS_LABELS[a.status]}
+                              {statusLabels[a.status] || STATUS_LABELS[a.status]}
                             </span>
                           </td>
                           <td className="px-4 py-2.5 text-right">
