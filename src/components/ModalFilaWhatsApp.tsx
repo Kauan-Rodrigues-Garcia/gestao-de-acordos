@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { isPaguePlay } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -43,6 +45,9 @@ export function ModalFilaWhatsApp({
   modo = 'lote',
   onClose,
 }: ModalFilaWhatsAppProps) {
+  const { tenantSlug } = useEmpresa();
+  const isPP = isPaguePlay(tenantSlug);
+  const nrLabel = isPP ? 'CPF' : 'NR';
   const [filaLocal, setFilaLocal] = useState<ItemFila[]>(fila);
   const [expandido, setExpandido] = useState<string | null>(null);
   const [enviandoAuto, setEnviandoAuto] = useState(false);
@@ -215,7 +220,7 @@ export function ModalFilaWhatsApp({
                 {/* Info do cliente */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono font-bold text-primary">#{item.nr_cliente}</span>
+                    <span className="text-xs font-mono font-bold text-primary">{nrLabel} {item.nr_cliente}</span>
                     <span className="text-xs text-muted-foreground">·</span>
                     <span className="text-xs font-medium text-foreground truncate">{item.nome_cliente}</span>
                   </div>

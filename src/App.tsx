@@ -6,8 +6,9 @@ import { ThemeProvider } from 'next-themes';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { ROUTE_PATHS } from '@/lib/index';
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useEmpresa } from '@/hooks/useEmpresa';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -45,11 +46,23 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+function TenantThemeApplier() {
+  const { tenantSlug } = useEmpresa();
+  useEffect(() => {
+    document.documentElement.setAttribute('data-tenant', tenantSlug);
+    return () => {
+      document.documentElement.removeAttribute('data-tenant');
+    };
+  }, [tenantSlug]);
+  return null;
+}
+
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
+        <TenantThemeApplier />
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>

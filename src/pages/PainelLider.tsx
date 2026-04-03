@@ -30,7 +30,7 @@ import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay } from '@/lib/index';
 import { calcularMetricasMes } from '@/services/acordos.service';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -292,7 +292,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(STATUS_LABELS).map(([k,v]) => (
+                   {Object.entries(statusLabels).map(([k,v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>
@@ -310,7 +310,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm border-b border-border z-10">
                     <tr>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">NR</th>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{nrLabel}</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CLIENTE</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">VENCIMENTO</th>
                       <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
@@ -348,7 +348,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                           <td className="px-3 py-2 text-right font-mono font-semibold">{formatBRL(a.valor)}</td>
                           <td className="px-3 py-2">
                             <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status] ?? 'bg-muted text-muted-foreground border-border')}>
-                              {STATUS_LABELS[a.status] ?? a.status}
+                              {statusLabels[a.status] ?? STATUS_LABELS[a.status] ?? a.status}
                             </span>
                           </td>
                           <td className="px-3 py-2">
@@ -483,7 +483,9 @@ interface OperadorInfo { id: string; nome: string; perfil: Perfil; }
 
 export default function PainelLider() {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
+  const statusLabels = getStatusLabels(tenantSlug);
+  const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
 
   const [operadores,          setOperadores]          = useState<Perfil[]>([]);
   const [acordosPorOperador,  setAcordosPorOperador]  = useState<Record<string, Acordo[]>>({});
