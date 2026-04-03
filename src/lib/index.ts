@@ -147,8 +147,10 @@ export function getTipoOptions(slug: string): readonly string[] {
   return isPaguePlay(slug) ? TIPO_OPTIONS_PAGUEPLAY : (Object.keys(TIPO_LABELS) as string[]);
 }
 
+export const PARCELAS_MAX_DEFAULT = 60;
+
 export function getMaxParcelas(slug: string): number {
-  return isPaguePlay(slug) ? PARCELAS_MAX_PAGUEPLAY : 48;
+  return isPaguePlay(slug) ? PARCELAS_MAX_PAGUEPLAY : PARCELAS_MAX_DEFAULT;
 }
 
 /**

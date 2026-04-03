@@ -68,7 +68,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
         observacoes:  buildObservacoesComEstado(estado, link),
       };
 
-      if (instituicao.trim()) payload.instituicao = instituicao.trim();
+      if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
 
       const { error } = await supabase.from('acordos').update(payload).eq('id', acordo.id);
       if (error) {
@@ -87,7 +87,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
 
   return (
     <tr>
-      <td colSpan={12} className="p-0">
+      <td colSpan={10} className="p-0">
         <motion.div
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}

@@ -104,8 +104,8 @@ export default function AcordoForm() {
         const obs = data.observacoes || '';
         const estado = extractEstado(obs);
         const link   = extractLinkAcordo(obs);
-        if (isPaguePlay(tenantSlug) && estado) {
-          setEstadoSelecionado(estado);
+        if (isPaguePlay(tenantSlug)) {
+          setEstadoSelecionado(estado || '');
         }
         reset({
           nome_cliente: data.nome_cliente,

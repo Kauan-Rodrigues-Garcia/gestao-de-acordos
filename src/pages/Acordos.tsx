@@ -423,7 +423,7 @@ export default function Acordos() {
                   <tbody>
                     {acordos.length === 0 ? (
                       <tr>
-                        <td colSpan={isPP ? 10 : 11} className="px-4 py-12 text-center">
+                        <td colSpan={10} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
                             <Filter className="w-8 h-8 opacity-30" />
                             <p className="font-medium">Nenhum acordo encontrado</p>
