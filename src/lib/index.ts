@@ -15,7 +15,7 @@ export const ROUTE_PATHS = {
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
-  verificar_pendente: 'Verificar / Pendente',
+  verificar_pendente: 'Verificar',
   pago: 'Pago',
   nao_pago: 'Não Pago',
 };
@@ -148,6 +148,13 @@ export function getTipoOptions(slug: string): readonly string[] {
 }
 
 export const PARCELAS_MAX_DEFAULT = 60;
+
+export const INSTITUICOES_OPTIONS = [
+  'MUNDIAL EDITORA',
+  'BOOKPLAY',
+  'FACULDADE BOOKPLAY',
+  'FACULDADE PLAY',
+] as const;
 
 export function getMaxParcelas(slug: string): number {
   return isPaguePlay(slug) ? PARCELAS_MAX_PAGUEPLAY : PARCELAS_MAX_DEFAULT;

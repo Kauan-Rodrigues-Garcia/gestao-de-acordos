@@ -19,10 +19,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
 import {
-  ROUTE_PATHS, parseCurrencyInput, getTodayISO,
+  ROUTE_PATHS, parseCurrencyInput,
   isPaguePlay, ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   getMaxParcelas, extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+  INSTITUICOES_OPTIONS,
 } from '@/lib/index';
+import { criarNotificacao } from '@/services/notificacoes.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -159,15 +161,6 @@ export default function AcordoForm() {
     if (!uid) { toast.error('Não foi possível identificar o usuário. Recarregue a página.'); return; }
     if (!empresa?.id) { toast.error('Empresa não identificada. Recarregue a página.'); return; }
 
-    // Validar data de vencimento apenas em novos acordos
-    if (!isEdit) {
-      const today = getTodayISO();
-      if (data.vencimento < today) {
-        toast.error('A data de vencimento não pode ser anterior à data atual');
-        return;
-      }
-    }
-
     setLoading(true);
     try {
       const valorNum = parseCurrencyInput(data.valor);
@@ -183,7 +176,7 @@ export default function AcordoForm() {
         vencimento:    data.vencimento,
         valor:         valorNum,
         tipo:          data.tipo,
-        parcelas:      (['boleto', 'cartao_recorrente'].includes(data.tipo)) ? parseInt(data.parcelas || '1', 10) : 1,
+        parcelas:      (['boleto', 'cartao_recorrente', 'pix_automatico'].includes(data.tipo)) ? parseInt(data.parcelas || '1', 10) : 1,
         whatsapp:      data.whatsapp?.trim() || null,
         status:        data.status,
         // For PaguePlay: combine [ESTADO:XX] prefix + link text in observacoes
@@ -231,6 +224,14 @@ export default function AcordoForm() {
       }
 
       toast.success(isEdit ? 'Acordo atualizado!' : 'Acordo cadastrado com sucesso!');
+      if (!isEdit && p?.lider_id) {
+        criarNotificacao({
+          usuario_id: p.lider_id,
+          titulo: 'Novo acordo cadastrado',
+          mensagem: `${p.nome} cadastrou o acordo NR ${nrTrimmed} - ${data.nome_cliente.trim()}`,
+          empresa_id: empresa?.id,
+        });
+      }
       navigate(ROUTE_PATHS.ACORDOS);
     } catch (e) {
       console.error('[AcordoForm] unexpected:', e);
@@ -501,7 +502,6 @@ export default function AcordoForm() {
                   <input
                     type="date"
                     {...register('vencimento')}
-                    min={!isEdit ? getTodayISO() : undefined}
                     className={cn(
                       'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
                       'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
@@ -565,14 +565,33 @@ export default function AcordoForm() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">{isPP ? 'Inscrição' : 'Instituição'}</Label>
-                <div className="relative">
-                  <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <Input
-                    {...register('instituicao')}
-                    placeholder={isPP ? 'Número de inscrição (opcional)' : 'Banco, financeira, empresa...'}
-                    className="h-9 text-sm pl-8"
-                  />
-                </div>
+                {isPP ? (
+                  <div className="relative">
+                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                    <Input
+                      {...register('instituicao')}
+                      placeholder="Número de inscrição (opcional)"
+                      className="h-9 text-sm pl-8"
+                    />
+                  </div>
+                ) : (
+                  <Select
+                    value={watch('instituicao') || ''}
+                    onValueChange={v => setValue('instituicao', v, { shouldValidate: true })}
+                  >
+                    <SelectTrigger className="h-9 text-sm">
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <SelectValue placeholder="Selecione a instituição" />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {INSTITUICOES_OPTIONS.map(inst => (
+                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               {/* Estado — PaguePlay only */}
@@ -636,7 +655,7 @@ export default function AcordoForm() {
                 </Select>
               </div>
 
-              {(['boleto', 'cartao_recorrente'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente') && (
+              {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && (
                 <div className="space-y-1.5">
                   <Label className="text-xs font-medium">Parcelas</Label>
                   <Input
@@ -664,7 +683,7 @@ export default function AcordoForm() {
                       </>
                     ) : (
                       <>
-                        <SelectItem value="verificar_pendente">🔍 Verificar / Pendente</SelectItem>
+                        <SelectItem value="verificar_pendente">🔍 Verificar</SelectItem>
                         <SelectItem value="pago">✅ Pago</SelectItem>
                         <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
                       </>

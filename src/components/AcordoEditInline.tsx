@@ -62,7 +62,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
         vencimento,
         valor:        valorNum,
         tipo,
-        parcelas:     ['boleto', 'cartao_recorrente'].includes(tipo) ? parseInt(parcelas || '1', 10) : 1,
+        parcelas:     ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) ? parseInt(parcelas || '1', 10) : 1,
         whatsapp:     whatsapp.trim() || null,
         status,
         observacoes:  buildObservacoesComEstado(estado, link),
@@ -211,8 +211,8 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
                   </Select>
                 </div>
 
-                {/* Parcelas — only for boleto */}
-                {tipo === 'boleto' && (
+                {/* Parcelas — only for boleto, cartao_recorrente, pix_automatico */}
+                {['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && (
                   <div className="space-y-1">
                     <Label className="text-xs font-medium">Parcelas</Label>
                     <Input

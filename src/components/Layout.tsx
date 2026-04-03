@@ -13,6 +13,8 @@ import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -38,7 +40,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
-  const { naoLidas } = useNotificacoes();
+  const { naoLidas, notificacoes, marcarLida, marcarTodasLidas } = useNotificacoes();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -187,14 +189,54 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <Button variant="ghost" size="icon" className="w-8 h-8 relative">
-              <Bell className="w-4 h-4" />
-              {naoLidas > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] rounded-full flex items-center justify-center font-bold">
-                  {naoLidas > 9 ? '9+' : naoLidas}
-                </span>
-              )}
-            </Button>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-8 h-8 relative">
+                  <Bell className="w-4 h-4" />
+                  {naoLidas > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-destructive text-destructive-foreground text-[10px] rounded-full flex items-center justify-center font-bold">
+                      {naoLidas > 9 ? '9+' : naoLidas}
+                    </span>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                  <p className="text-sm font-semibold">Notificações</p>
+                  {naoLidas > 0 && (
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={marcarTodasLidas}>
+                      Marcar todas como lidas
+                    </Button>
+                  )}
+                </div>
+                <ScrollArea className="max-h-80">
+                  {notificacoes.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Nenhuma notificação</p>
+                  ) : (
+                    <div className="divide-y divide-border">
+                      {notificacoes.map(n => (
+                        <button
+                          key={n.id}
+                          onClick={() => { if (!n.lida) marcarLida(n.id); }}
+                          className={cn(
+                            'w-full text-left px-4 py-3 hover:bg-accent/50 transition-colors',
+                            !n.lida && 'bg-primary/5'
+                          )}
+                        >
+                          <p className={cn('text-xs font-medium leading-none', !n.lida && 'text-foreground', n.lida && 'text-muted-foreground')}>
+                            {n.titulo}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1 leading-snug">{n.mensagem}</p>
+                          <p className="text-[10px] text-muted-foreground/60 mt-1">
+                            {new Date(n.criado_em).toLocaleString('pt-BR')}
+                          </p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
 
             {/* Perfil no header */}
             <div className="flex items-center gap-2.5 pl-2 border-l border-border">
