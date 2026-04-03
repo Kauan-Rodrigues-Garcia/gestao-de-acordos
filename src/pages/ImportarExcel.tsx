@@ -39,6 +39,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { fetchAIConfig } from '@/services/aiConfig.service';
 import { aiNormalizeImport } from '@/services/aiImport.service';
+import { criarNotificacao } from '@/services/notificacoes.service';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -285,9 +286,10 @@ function normalizarParcelas(v: unknown): number {
 
 function normalizarStatus(v: unknown): string {
   const s = norm(String(v || ''));
-  if (s.includes('pago') || s.includes('quitado') || s.includes('liquidado') || s.includes('baixado')) return 'pago';
-  if (s.includes('nao pago') || s.includes('nao_pago') || s.includes('cancelado') || s.includes('inadimplente')) return 'nao_pago';
-  // Mapear antigos → verificar_pendente
+  if (s.includes('pago') || s.includes('quitado') || s.includes('liquidado')
+      || s.includes('baixado') || s.includes('pago total')) return 'pago';
+  if (s.includes('nao pago') || s.includes('nao_pago') || s.includes('cancelado')
+      || s.includes('inadimplente') || s.includes('sem retorno')) return 'nao_pago';
   return 'verificar_pendente';
 }
 
@@ -726,6 +728,8 @@ function mapaAcordoBloco(row: unknown[]): Record<number, CampoDestino> {
       'pago parcial','pago parcialmente','liquidado','baixado','aguardando',
       'vencido','a vencer','pago total','sem retorno',
       'verificar pendente','verificar_pendente','nao pago','nao_pago',
+      'acordo','verificar','proximo','próximo','em acordo','ativo',
+      'regular','irregular','renegociado','cobrar','em cobranca',
     ]);
     if (VALS_STATUS.has(norm(s4)) || detectarCampo(s4) === 'status') {
       mapa[4] = 'status';
@@ -815,6 +819,9 @@ function mapaAcordoContinuo(row: unknown[]): Record<number, CampoDestino> {
     'inadimplente','atrasado','negociado','em negociacao',
     'pago parcial','pago parcialmente','liquidado','baixado','aguardando',
     'verificar pendente','verificar_pendente','nao pago','nao_pago',
+    'acordo','verificar','proximo','próximo','em acordo','ativo',
+    'regular','irregular','renegociado','cobrar','em cobranca',
+    'vencido','a vencer','pago total','sem retorno',
   ]);
 
   for (let ci = 4; ci < row.length; ci++) {
@@ -1464,7 +1471,17 @@ export default function ImportarExcel() {
     setResultado({ ok, erros: aImportar.length - ok + invalidos, msgs: errosMsgs });
     setImportando(false);
     setEtapa('resultado');
-    if (ok > 0) toast.success(`${ok} acordo(s) importado(s)!`);
+    if (ok > 0) {
+      toast.success(`${ok} acordo(s) importado(s)!`);
+      if (perfil?.lider_id) {
+        criarNotificacao({
+          usuario_id: perfil.lider_id,
+          titulo: 'Importação de acordos concluída',
+          mensagem: `${perfil.nome} importou ${ok} acordo(s) via Excel.`,
+          empresa_id: empresa?.id,
+        });
+      }
+    }
     if (!temInstituicao && ok > 0) {
       toast.warning('Coluna "instituição" não existe no banco. Execute a migration SQL para ativá-la.', { duration: 8000 });
     }

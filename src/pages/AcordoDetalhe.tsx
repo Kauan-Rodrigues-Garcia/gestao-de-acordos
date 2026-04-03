@@ -69,7 +69,12 @@ export default function AcordoDetalhe() {
 
   function enviarWhatsapp() {
     if (!acordo?.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
-    const msg = `Olá, ${acordo.nome_cliente}, passando para lembrar do seu acordo NR ${acordo.nr_cliente}, no valor de ${formatCurrency(acordo.valor)}, com vencimento em ${formatDate(acordo.vencimento)}. Qualquer dúvida, estamos à disposição.`;
+    let msg: string;
+    if (acordo.status === 'nao_pago') {
+      msg = `Olá, ${acordo.nome_cliente}, identificamos que o seu acordo NR ${acordo.nr_cliente}, no valor de ${formatCurrency(acordo.valor)}, com vencimento em ${formatDate(acordo.vencimento)}, encontra-se em atraso. Por favor, entre em contato conosco para regularizar sua situação. Estamos à disposição.`;
+    } else {
+      msg = `Olá, ${acordo.nome_cliente}, passando para lembrar do seu acordo NR ${acordo.nr_cliente}, no valor de ${formatCurrency(acordo.valor)}, com vencimento em ${formatDate(acordo.vencimento)}. Qualquer dúvida, estamos à disposição.`;
+    }
     window.open(`https://wa.me/55${acordo.whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
   }
 
@@ -185,7 +190,7 @@ export default function AcordoDetalhe() {
                         <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', TIPO_COLORS[acordo.tipo])}>
                           {TIPO_LABELS[acordo.tipo]}
                         </span>
-                        {(['boleto', 'cartao_recorrente'] as const).includes(acordo.tipo as 'boleto' | 'cartao_recorrente') && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
+                        {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(acordo.tipo as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && <p className="text-xs text-muted-foreground mt-0.5">{acordo.parcelas}x parcela(s)</p>}
                       </div>
                     </div>
                     <div className="flex items-start gap-2">

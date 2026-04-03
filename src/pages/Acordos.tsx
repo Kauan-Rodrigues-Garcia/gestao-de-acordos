@@ -27,9 +27,13 @@ import {
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { criarNotificacao } from '@/services/notificacoes.service';
 
 function buildMensagem(a: Acordo): string {
-  return `Olá *${a.nome_cliente}*, passando para lembrar do seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*. Qualquer dúvida, estamos à disposição. 😊`;
+  if (a.status === 'nao_pago') {
+    return `Olá *${a.nome_cliente}*, identificamos que o seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*, encontra-se em atraso. Por favor, entre em contato conosco o mais breve possível para regularizar sua situação. Estamos à disposição para ajudar.`;
+  }
+  return `Olá *${a.nome_cliente}*, passando para lembrar do seu acordo *NR ${a.nr_cliente}*, no valor de *${formatCurrency(a.valor)}*, com vencimento em *${formatDate(a.vencimento)}*. Qualquer dúvida, estamos à disposição.`;
 }
 
 // ─── Tabela Skeleton ────────────────────────────────────────────────────────
@@ -117,6 +121,33 @@ export default function Acordos() {
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje = getTodayISO();
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
+
+  // ── Mover acordos atrasados (verificar_pendente + vencimento passado) para nao_pago ──
+  useEffect(() => {
+    if (loading || acordos.length === 0) return;
+    const atrasados = acordos.filter(a =>
+      a.status === 'verificar_pendente' && a.vencimento < hoje
+    );
+    if (atrasados.length === 0) return;
+    Promise.all(
+      atrasados.map(a =>
+        supabase.from('acordos').update({ status: 'nao_pago' }).eq('id', a.id)
+      )
+    ).then(() => {
+      toast.info(`${atrasados.length} acordo(s) atrasado(s) movido(s) para "Não Pago"`);
+      atrasados.forEach(a => {
+        if (a.operador_id) {
+          criarNotificacao({
+            usuario_id: a.operador_id,
+            titulo: 'Acordo movido para Não Pago',
+            mensagem: `O acordo NR ${a.nr_cliente} foi movido para "Não Pago" por atraso.`,
+            empresa_id: empresa?.id,
+          });
+        }
+      });
+      refetch();
+    });
+  }, [acordos, loading]);
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setCurrentPage(1);
@@ -540,7 +571,7 @@ export default function Acordos() {
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 text-center font-mono text-muted-foreground">
-                                {['boleto', 'cartao_recorrente'].includes(a.tipo) ? a.parcelas : '—'}
+                                {['boleto', 'cartao_recorrente', 'pix_automatico'].includes(a.tipo) ? a.parcelas : '—'}
                               </td>
                               <td className="px-3 py-2.5">
                                 <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>

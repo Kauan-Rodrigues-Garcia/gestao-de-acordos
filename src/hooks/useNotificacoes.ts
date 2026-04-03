@@ -37,6 +37,8 @@ export function useNotificacoes(): UseNotificacoesResult {
 
   useEffect(() => {
     load();
+    const interval = setInterval(load, 30_000);
+    return () => clearInterval(interval);
   }, [load]);
 
   async function marcarLida(id: string) {
