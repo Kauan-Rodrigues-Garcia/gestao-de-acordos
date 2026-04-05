@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Notificacao } from '@/lib/supabase';
-import { fetchNotificacoes, marcarComoLida, marcarTodasLidas } from '@/services/notificacoes.service';
+import { fetchNotificacoes, marcarComoLida, marcarTodasLidas, limparTodasNotificacoes } from '@/services/notificacoes.service';
 import { useAuth } from '@/hooks/useAuth';
 
 interface UseNotificacoesResult {
@@ -14,6 +14,7 @@ interface UseNotificacoesResult {
   loading: boolean;
   marcarLida: (id: string) => Promise<void>;
   marcarTodasLidas: () => Promise<void>;
+  limparTodas: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -52,6 +53,12 @@ export function useNotificacoes(): UseNotificacoesResult {
     setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
   }
 
+  async function limparTodas() {
+    if (!user?.id) return;
+    await limparTodasNotificacoes(user.id);
+    setNotificacoes([]);
+  }
+
   const naoLidas = notificacoes.filter(n => !n.lida).length;
 
   return {
@@ -60,6 +67,7 @@ export function useNotificacoes(): UseNotificacoesResult {
     loading,
     marcarLida,
     marcarTodasLidas: marcarTodas,
+    limparTodas,
     refresh: load,
   };
 }

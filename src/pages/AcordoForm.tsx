@@ -25,6 +25,7 @@ import {
   INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { verificarNrDuplicado } from '@/services/acordos.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -192,6 +193,21 @@ export default function AcordoForm() {
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
       console.log('[AcordoForm] payload:', payload);
+
+      // Verificar NR duplicado dentro da mesma empresa (qualquer status)
+      const nrChanged = !isEdit || nrTrimmed !== nrOriginalEdit;
+      if (nrChanged) {
+        const { duplicado, statusExistente } = await verificarNrDuplicado(
+          nrTrimmed,
+          empresa.id,
+          isEdit ? id : undefined
+        );
+        if (duplicado) {
+          toast.error(`NR ${nrTrimmed} já existe nesta empresa (status: ${statusExistente ?? 'desconhecido'}). Não é possível criar duplicatas.`);
+          setLoading(false);
+          return;
+        }
+      }
 
       // Verificar unicidade do NR: só bloquear se NR mudou (ou é novo cadastro)
       const nrMudou = !isEdit || nrTrimmed !== nrOriginalEdit;

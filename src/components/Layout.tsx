@@ -40,7 +40,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
-  const { naoLidas, notificacoes, marcarLida, marcarTodasLidas } = useNotificacoes();
+  const { naoLidas, notificacoes, marcarLida, marcarTodasLidas, limparTodas } = useNotificacoes();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -101,23 +101,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         ))}
 
         {/* Importar Excel */}
-        {(sidebarOpen || mobileOpen) && (
-          <NavLink
-            to="/acordos/importar"
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-              isActive
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+        <NavLink
+          to="/acordos/importar"
+          onClick={() => setMobileOpen(false)}
+          className={({ isActive }) => cn(
+            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+            isActive
+              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+          )}
+        >
+          <Upload className="w-4 h-4 flex-shrink-0" />
+          <AnimatePresence>
+            {(sidebarOpen || mobileOpen) && (
+              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                Importar Excel
+              </motion.span>
             )}
-          >
-            <Upload className="w-4 h-4 flex-shrink-0" />
-            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
-              Importar Excel
-            </motion.span>
-          </NavLink>
-        )}
+          </AnimatePresence>
+        </NavLink>
       </nav>
 
       <Separator className="bg-sidebar-border" />
@@ -181,7 +183,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Header */}
         <header className="h-14 border-b border-border bg-card flex items-center px-4 gap-3 flex-shrink-0">
           <Button variant="ghost" size="icon" className="w-8 h-8"
-            onClick={() => { setSidebarOpen(!sidebarOpen); setMobileOpen(!mobileOpen); }}>
+            onClick={() => {
+              if (window.innerWidth >= 768) {
+                setSidebarOpen(prev => !prev);
+              } else {
+                setMobileOpen(prev => !prev);
+              }
+            }}>
             {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
           </Button>
 
@@ -203,10 +211,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <PopoverContent className="w-80 p-0" align="end">
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border">
                   <p className="text-sm font-semibold">Notificações</p>
-                  {naoLidas > 0 && (
-                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={marcarTodasLidas}>
-                      Marcar todas como lidas
-                    </Button>
+                  {notificacoes.length > 0 && (
+                    <div className="flex items-center gap-1">
+                      {naoLidas > 0 && (
+                        <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={marcarTodasLidas}>
+                          Marcar todas como lidas
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-6 text-xs px-2 text-destructive hover:text-destructive" onClick={limparTodas}>
+                        Limpar todas
+                      </Button>
+                    </div>
                   )}
                 </div>
                 <ScrollArea className="max-h-80">

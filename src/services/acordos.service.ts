@@ -141,6 +141,28 @@ export function calcularMetricasMes(acordos: Acordo[]): MetricasMes {
   };
 }
 
+/** Verifica se um NR já existe para a empresa */
+export async function verificarNrDuplicado(
+  nrCliente: string,
+  empresaId: string,
+  acordoIdExcluir?: string
+): Promise<{ duplicado: boolean; statusExistente?: string; acordoIdExistente?: string }> {
+  let query = supabase
+    .from('acordos')
+    .select('id, status')
+    .eq('nr_cliente', nrCliente)
+    .eq('empresa_id', empresaId)
+    .limit(1);
+  if (acordoIdExcluir) {
+    query = query.neq('id', acordoIdExcluir);
+  }
+  const { data } = await query;
+  if (data && data.length > 0) {
+    return { duplicado: true, statusExistente: data[0].status, acordoIdExistente: data[0].id };
+  }
+  return { duplicado: false };
+}
+
 /** Métricas do dashboard (hoje) */
 export interface MetricasDashboard {
   acordos_hoje:       number;
