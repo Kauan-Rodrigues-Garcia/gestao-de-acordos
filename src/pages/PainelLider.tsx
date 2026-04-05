@@ -168,6 +168,9 @@ interface AnaliticoOperadorProps {
 }
 
 function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOperadorProps) {
+  const { tenantSlug } = useEmpresa();
+  const statusLabels = getStatusLabels(tenantSlug);
+  const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
   const [acordos,       setAcordos]       = useState<Acordo[]>([]);
   const [loadingLocal,  setLoadingLocal]  = useState(true);
   const [erroLocal,     setErroLocal]     = useState<string | null>(null);

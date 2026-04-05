@@ -48,6 +48,17 @@ export async function marcarTodasLidas(userId: string): Promise<void> {
   }
 }
 
+/** Remove todas as notificações do usuário (limpar todas) */
+export async function limparTodasNotificacoes(userId: string): Promise<void> {
+  const { error } = await supabase
+    .from('notificacoes')
+    .delete()
+    .eq('usuario_id', userId);
+  if (error) {
+    console.warn('[notificacoes.service] limparTodasNotificacoes error:', error.message);
+  }
+}
+
 /** Cria uma nova notificação */
 export async function criarNotificacao(params: {
   usuario_id: string;

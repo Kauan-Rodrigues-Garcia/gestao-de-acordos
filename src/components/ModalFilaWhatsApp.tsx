@@ -126,7 +126,7 @@ export function ModalFilaWhatsApp({
 
   function copiarTodasMensagens() {
     const texto = filaLocal
-      .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente} (NR ${i.nr_cliente})\n${i.mensagem}`)
+      .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente} (${nrLabel} ${i.nr_cliente})\n${i.mensagem}`)
       .join('\n\n---\n\n');
     navigator.clipboard.writeText(texto).then(() => toast.success(`${total} mensagens copiadas!`));
   }
@@ -159,7 +159,7 @@ export function ModalFilaWhatsApp({
         </div>
 
         {/* Botões de ação */}
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-stretch">
           {restantes > 0 ? (
             <>
               {enviandoAuto ? (
@@ -178,7 +178,7 @@ export function ModalFilaWhatsApp({
                     Abrir próximo no WhatsApp
                     <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
                   </Button>
-                  <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs" title="Enviar todos automaticamente (2.5s entre cada)">
+                  <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3" title="Enviar todos automaticamente (2.5s entre cada)">
                     <Send className="w-3.5 h-3.5" />
                     Enviar todos
                   </Button>
@@ -191,7 +191,7 @@ export function ModalFilaWhatsApp({
               Todos enviados! Fechar
             </Button>
           )}
-          <Button variant="outline" size="icon" onClick={copiarTodasMensagens} title="Copiar todas as mensagens">
+          <Button variant="outline" size="icon" className="flex-shrink-0" onClick={copiarTodasMensagens} title="Copiar todas as mensagens">
             <Copy className="w-4 h-4" />
           </Button>
         </div>
@@ -230,11 +230,11 @@ export function ModalFilaWhatsApp({
                 </div>
 
                 {/* Ações */}
-                <div className="flex items-center gap-1 flex-shrink-0">
+                <div className="flex items-center gap-1.5 flex-shrink-0 pl-2 border-l border-border/50">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-7 h-7"
+                    className="w-8 h-8 rounded-md"
                     onClick={() => copiarMensagem(item.mensagem)}
                     title="Copiar mensagem"
                   >
@@ -243,7 +243,7 @@ export function ModalFilaWhatsApp({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-7 h-7 text-success hover:bg-success/10"
+                    className="w-8 h-8 rounded-md text-success hover:bg-success/10"
                     onClick={() => { window.open(item.link, '_blank'); marcarEnviadoManual(item.id); }}
                     title="Abrir no WhatsApp"
                   >
@@ -252,7 +252,7 @@ export function ModalFilaWhatsApp({
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="w-7 h-7"
+                    className="w-8 h-8 rounded-md"
                     onClick={() => setExpandido(expandido === item.id ? null : item.id)}
                   >
                     {expandido === item.id ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
