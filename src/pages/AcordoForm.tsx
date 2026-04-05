@@ -210,8 +210,7 @@ export default function AcordoForm() {
       }
 
       // Verificar unicidade do NR: só bloquear se NR mudou (ou é novo cadastro)
-      const nrMudou = !isEdit || nrTrimmed !== nrOriginalEdit;
-      if (nrMudou) {
+      if (nrChanged) {
         let nrQuery = supabase
           .from('acordos')
           .select('id, operador_id, perfis(nome)')
