@@ -29,7 +29,7 @@ export async function fetchEmpresaAtual(): Promise<Empresa | null> {
     .from('perfis')
     .select('empresas(*)')
     .eq('id', user.id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.warn('[empresas.service] fetchEmpresaAtual error:', error.message);
