@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ClipboardList, RefreshCw, Filter, Building2 } from 'lucide-react';
+import { ClipboardList, RefreshCw, Filter, Building2, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -11,6 +11,7 @@ import { supabase, LogSistema, Empresa } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const ACAO_CORES: Record<string, string> = {
   INSERT: 'bg-success/10 text-success border-success/30',
@@ -23,6 +24,7 @@ export default function AdminLogs() {
   const { perfil } = useAuth();
   const { empresa: tenantEmpresa } = useEmpresa();
   const isSuperAdmin = perfil?.perfil === 'super_admin';
+  const isAdmin = perfil?.perfil === 'administrador' || isSuperAdmin;
   const [logs, setLogs] = useState<LogSistema[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroTabela, setFiltroTabela] = useState('');
@@ -64,6 +66,29 @@ export default function AdminLogs() {
 
   useEffect(() => { fetchLogs(); }, [filtroTabela, filtroEmpresa, tenantEmpresa?.id, isSuperAdmin]);
 
+  async function limparLogs() {
+    const confirmed = window.confirm('Tem certeza que deseja apagar todos os logs? Esta ação não pode ser desfeita.');
+    if (!confirmed) return;
+
+    try {
+      let query = supabase.from('logs_sistema').delete();
+      if (isSuperAdmin && filtroEmpresa) {
+        query = query.eq('empresa_id', filtroEmpresa);
+      } else if (isSuperAdmin) {
+        // Delete all — use a condition that is always true
+        query = query.neq('id', '00000000-0000-0000-0000-000000000000');
+      } else if (tenantEmpresa?.id) {
+        query = query.eq('empresa_id', tenantEmpresa.id);
+      }
+      const { error } = await query;
+      if (error) throw error;
+      toast.success('Logs apagados com sucesso.');
+      await fetchLogs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao apagar logs');
+    }
+  }
+
   const tabelas = ['acordos', 'perfis', 'modelos_mensagem'];
 
   return (
@@ -101,6 +126,11 @@ export default function AdminLogs() {
           </Select>
           {filtroTabela && <Button variant="ghost" size="sm" className="h-8" onClick={() => setFiltroTabela('')}>Limpar</Button>}
           <Button variant="outline" size="sm" className="h-8" onClick={fetchLogs}><RefreshCw className="w-4 h-4" /></Button>
+          {isAdmin && (
+            <Button variant="destructive" size="sm" className="h-8 gap-1" onClick={limparLogs}>
+              <Trash2 className="w-4 h-4" /> Limpar Logs
+            </Button>
+          )}
         </div>
       </div>
 

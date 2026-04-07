@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Shield, Eye, EyeOff, Lock, Mail, AlertCircle } from 'lucide-react';
+import { Shield, Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -14,7 +14,7 @@ export default function Login() {
   const { signIn, authError } = useAuth();
   const { branding, empresa, error: tenantError } = useEmpresa();
   const navigate = useNavigate();
-  const [email, setEmail] = useState('');
+  const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -22,10 +22,10 @@ export default function Login() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!email || !password) { setError('Preencha todos os campos.'); return; }
+    if (!identifier || !password) { setError('Preencha todos os campos.'); return; }
     setLoading(true);
     setError('');
-    const { error: err } = await signIn(email, password);
+    const { error: err } = await signIn(identifier, password);
     if (err) {
       setError(err);
       setLoading(false);
@@ -62,17 +62,17 @@ export default function Login() {
           <CardContent className="pb-8">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-medium">E-mail</Label>
+                <Label htmlFor="identifier" className="text-sm font-medium">Usuário</Label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
+                    id="identifier"
+                    type="text"
+                    placeholder="seu_usuario"
+                    value={identifier}
+                    onChange={e => setIdentifier(e.target.value)}
                     className="pl-9"
-                    autoComplete="email"
+                    autoComplete="username"
                   />
                 </div>
               </div>

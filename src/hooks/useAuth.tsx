@@ -11,7 +11,7 @@ interface AuthContextType {
   loading: boolean;
   perfilLoading: boolean;
   authError: string | null;
-  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
+  signIn: (identifier: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   refreshPerfil: () => Promise<void>;
 }
@@ -137,7 +137,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  async function signIn(email: string, password: string) {
+  async function signIn(identifier: string, password: string) {
+    let email = identifier.trim();
+
+    // If identifier does not contain '@', treat it as a username and look up email
+    if (!email.includes('@')) {
+      const { data: perfilData, error: lookupError } = await supabase
+        .from('perfis')
+        .select('email')
+        .eq('usuario', email)
+        .limit(1)
+        .single();
+
+      if (lookupError || !perfilData?.email) {
+        return { error: 'Usuário não encontrado.' };
+      }
+      email = perfilData.email;
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
     if (data.user) {

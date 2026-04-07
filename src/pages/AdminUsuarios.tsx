@@ -29,6 +29,7 @@ const PERFIL_BADGE: Record<string, string> = {
 interface UserForm {
   nome:       string;
   email:      string;
+  usuario:    string;
   senha:      string;
   perfil:     PerfilUsuario;
   setor_id:   string;
@@ -48,7 +49,7 @@ export default function AdminUsuarios() {
   const [editando,    setEditando]    = useState<Perfil | null>(null);
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
   const [saving,      setSaving]      = useState(false);
-  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
+  const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
   // ── Mover usuário entre setores ─────────────────────────────────────────
   const [moverDialog, setMoverDialog]       = useState(false);
@@ -141,6 +142,7 @@ export default function AdminUsuarios() {
     setForm({
       nome: '',
       email: '',
+      usuario: '',
       senha: '',
       perfil: 'operador',
       setor_id: setores[0]?.id ?? '',
@@ -151,7 +153,7 @@ export default function AdminUsuarios() {
 
   function abrirEditar(u: Perfil) {
     setEditando(u);
-    setForm({ nome: u.nome, email: u.email, senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
+    setForm({ nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
     setDialogOpen(true);
   }
 
@@ -163,18 +165,22 @@ export default function AdminUsuarios() {
 
   async function salvar() {
     const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
-    if (!form.nome || !form.email) { toast.error('Preencha nome e e-mail'); return; }
+    if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
     setSaving(true);
     try {
       if (editando) {
+        const updatePayload: Record<string, unknown> = {
+          nome:       form.nome,
+          perfil:     form.perfil,
+          setor_id:   form.setor_id || null,
+          empresa_id: empresaId,
+        };
+        if (form.usuario.trim()) {
+          updatePayload.usuario = form.usuario.trim();
+        }
         const { data: linhasAtualizadas, error } = await supabase.from('perfis')
-          .update({
-            nome:       form.nome,
-            perfil:     form.perfil,
-            setor_id:   form.setor_id || null,
-            empresa_id: empresaId,
-          })
+          .update(updatePayload)
           .eq('id', editando.id)
           .select('id');
         if (error) throw error;
@@ -185,15 +191,19 @@ export default function AdminUsuarios() {
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
         const authRedirectUrl = buildAuthRedirectUrl();
-        const normalizedEmail = form.email.trim().toLowerCase();
+        // Use real email if provided, otherwise generate synthetic one from username
+        const resolvedEmail = form.email.trim().toLowerCase().includes('@')
+          ? form.email.trim().toLowerCase()
+          : `${(form.usuario.trim() || form.email.trim()).toLowerCase()}@interno.sistema`;
         const { error } = await supabase.auth.signUp({
-          email: normalizedEmail,
+          email: resolvedEmail,
           password: form.senha,
           options: {
             ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
             data: {
               nome: form.nome.trim(),
               perfil: form.perfil,
+              usuario: form.usuario.trim() || null,
               setor_id: form.setor_id || null,
               empresa_id: empresaId,
               empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,
@@ -297,6 +307,7 @@ export default function AdminUsuarios() {
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">USUÁRIO</th>
+                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">LOGIN</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">E-MAIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">PERFIL</th>
                   <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">SETOR</th>
@@ -307,7 +318,7 @@ export default function AdminUsuarios() {
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
                 ) : usuariosFiltrados.map((u, i) => (
                   <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
                     className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
@@ -321,6 +332,7 @@ export default function AdminUsuarios() {
                         <span className="font-medium text-foreground">{u.nome}</span>
                       </div>
                     </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{u.usuario ?? '—'}</td>
                     <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{u.email}</td>
                     <td className="px-4 py-3">
                       <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', PERFIL_BADGE[u.perfil])}>
@@ -379,7 +391,12 @@ export default function AdminUsuarios() {
               <Input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} placeholder="Nome completo" className="h-9 text-sm" />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">E-mail *</Label>
+              <Label className="text-xs">Login (usuário)</Label>
+              <Input value={form.usuario} onChange={e => setForm(f => ({ ...f, usuario: e.target.value }))} placeholder="kauan_teixeira" className="h-9 text-sm font-mono" />
+              <p className="text-xs text-muted-foreground">Usado para login sem e-mail. Opcional se usar e-mail.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">E-mail {!editando && <span className="text-muted-foreground font-normal">(opcional se definir usuário)</span>}</Label>
               <Input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} placeholder="email@empresa.com" className="h-9 text-sm font-mono" disabled={!!editando} />
             </div>
             {!editando && (
