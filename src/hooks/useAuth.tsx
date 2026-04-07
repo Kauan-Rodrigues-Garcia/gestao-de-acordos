@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
@@ -26,6 +26,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading]         = useState(true);
   const [perfilLoading, setPerfilLoading] = useState(false);
   const [authError, setAuthError]     = useState<string | null>(null);
+  const isSigningIn                   = useRef(false);
 
   async function rejectTenantMismatch(currentEmpresa: Empresa | null) {
     const tenantSlug = getConfiguredTenantSlug();
@@ -45,46 +46,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfilLoading(true);
     setAuthError(null);
     try {
-      // Tentativa 1: com join de setores e empresas
-      const { data, error } = await supabase
-        .from('perfis')
-        .select('*, setores(id, nome), empresas(id, nome, slug, ativo, config, criado_em, atualizado_em)')
-        .eq('id', userId)
-        .single();
+      const MAX_ATTEMPTS = 3;
+      const RETRY_DELAY_MS = 500;
 
-      if (error) {
-        console.warn('[useAuth] fetchPerfil erro:', error.message, '— tentando sem join...');
-
-        // Tentativa 2: sem join (mais simples, evita falha de RLS em relação)
-        const { data: data2, error: error2 } = await supabase
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        // Tentativa 1: com join de setores e empresas
+        const { data, error } = await supabase
           .from('perfis')
-          .select('*')
+          .select('*, setores(id, nome), empresas(id, nome, slug, ativo, config, criado_em, atualizado_em)')
           .eq('id', userId)
-          .single();
+          .maybeSingle();
 
-        if (error2) {
-          console.error('[useAuth] fetchPerfil falhou mesmo sem join:', error2.message);
+        if (error) {
+          console.warn('[useAuth] fetchPerfil erro:', error.message, '— tentando sem join...');
+
+          // Tentativa 2: sem join (mais simples, evita falha de RLS em relação)
+          const { data: data2, error: error2 } = await supabase
+            .from('perfis')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle();
+
+          if (error2) {
+            console.error('[useAuth] fetchPerfil falhou mesmo sem join:', error2.message);
+            return { tenantMismatch: null };
+          }
+          if (data2) {
+            setPerfil(data2 as Perfil);
+            setEmpresa(null);
+            return { tenantMismatch: null };
+          }
+        } else if (data) {
+          const { empresas: emp, ...perfilData } = data as Perfil & { empresas?: Empresa };
+          const nextPerfil = perfilData as Perfil;
+          const tenantSlug = getConfiguredTenantSlug();
+          const isSuperAdmin = nextPerfil.perfil === 'super_admin';
+
+          if (!isSuperAdmin && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
+            return rejectTenantMismatch(emp);
+          }
+
+          setPerfil(nextPerfil);
+          setEmpresa(emp ?? null);
           return { tenantMismatch: null };
         }
-        if (data2) {
-          setPerfil(data2 as Perfil);
-          setEmpresa(null);
+
+        // Perfil ainda não criado pelo trigger — condição de corrida
+        if (attempt < MAX_ATTEMPTS) {
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS));
         }
-        return { tenantMismatch: null };
-      }
-
-      if (data) {
-        const { empresas: emp, ...perfilData } = data as Perfil & { empresas?: Empresa };
-        const nextPerfil = perfilData as Perfil;
-        const tenantSlug = getConfiguredTenantSlug();
-        const isSuperAdmin = nextPerfil.perfil === 'super_admin';
-
-        if (!isSuperAdmin && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
-          return rejectTenantMismatch(emp);
-        }
-
-        setPerfil(nextPerfil);
-        setEmpresa(emp ?? null);
       }
     } catch (e) {
       console.error('[useAuth] fetchPerfil inesperado:', e);
@@ -123,7 +133,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(s);
       setUser(s?.user ?? null);
       if (s?.user) {
-        fetchPerfil(s.user.id);
+        // Pular se signIn já está buscando o perfil manualmente
+        if (!isSigningIn.current) {
+          fetchPerfil(s.user.id);
+        }
       } else {
         setPerfil(null);
         setEmpresa(null);
@@ -152,23 +165,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email = emailResult as string;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) {
-      if (error.message.toLowerCase().includes('email not confirmed')) {
-        return { error: 'Email não confirmado. Entre em contato com o administrador.' };
+    isSigningIn.current = true;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.toLowerCase().includes('email not confirmed')) {
+          return { error: 'Email não confirmado. Entre em contato com o administrador.' };
+        }
+        if (error.message.toLowerCase().includes('invalid login credentials')) {
+          return { error: 'Credenciais inválidas. Verifique seu usuário e senha.' };
+        }
+        return { error: error.message };
       }
-      if (error.message.toLowerCase().includes('invalid login credentials')) {
-        return { error: 'Credenciais inválidas. Verifique seu usuário e senha.' };
+      if (data.user) {
+        const { tenantMismatch } = await fetchPerfil(data.user.id);
+        if (tenantMismatch) {
+          return { error: tenantMismatch };
+        }
       }
-      return { error: error.message };
+      return { error: null };
+    } finally {
+      isSigningIn.current = false;
     }
-    if (data.user) {
-      const { tenantMismatch } = await fetchPerfil(data.user.id);
-      if (tenantMismatch) {
-        return { error: tenantMismatch };
-      }
-    }
-    return { error: null };
   }
 
   async function signOut() {
