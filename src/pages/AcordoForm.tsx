@@ -85,10 +85,10 @@ export default function AcordoForm() {
   useEffect(() => {
     if (perfil) { setPerfilLocal(perfil); return; }
     if (!user) return;
-    supabase.from('perfis').select('*, setores(id, nome)').eq('id', user.id).single()
+    supabase.from('perfis').select('*, setores(id, nome)').eq('id', user.id).maybeSingle()
       .then(({ data, error }) => {
         if (error) {
-          supabase.from('perfis').select('*').eq('id', user.id).single()
+          supabase.from('perfis').select('*').eq('id', user.id).maybeSingle()
             .then(({ data: d2 }) => { if (d2) setPerfilLocal(d2 as Perfil); });
           return;
         }
