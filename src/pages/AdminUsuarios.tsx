@@ -203,7 +203,7 @@ export default function AdminUsuarios() {
             data: {
               nome: form.nome.trim(),
               perfil: form.perfil,
-              usuario: form.usuario.trim().toLowerCase() || null,
+              usuario: form.usuario.trim() ? form.usuario.trim().toLowerCase() : null,
               setor_id: form.setor_id || null,
               empresa_id: empresaId,
               empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,

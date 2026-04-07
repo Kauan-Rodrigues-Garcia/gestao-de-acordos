@@ -155,7 +155,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) {
       if (error.message.toLowerCase().includes('email not confirmed')) {
-        return { error: 'Email não confirmado. Peça ao administrador para confirmar seu acesso ou desabilitar confirmação de email no painel.' };
+        return { error: 'Email não confirmado. Entre em contato com o administrador.' };
       }
       if (error.message.toLowerCase().includes('invalid login credentials')) {
         return { error: 'Credenciais inválidas. Verifique seu usuário e senha.' };
