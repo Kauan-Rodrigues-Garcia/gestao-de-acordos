@@ -30,6 +30,7 @@ export default function Registro() {
   const { empresa, branding, loading: tenantLoading, error: tenantError, tenantSlug } = useEmpresa();
 
   const [nome,     setNome]     = useState('');
+  const [usuario,  setUsuario]  = useState('');
   const [email,    setEmail]    = useState('');
   const [senha,    setSenha]    = useState('');
   const [confirma, setConfirma] = useState('');
@@ -41,8 +42,9 @@ export default function Registro() {
   function validar(): string | null {
     if (!nome.trim())       return 'Informe seu nome completo.';
     if (nome.trim().length < 3) return 'Nome deve ter pelo menos 3 caracteres.';
-    if (!email.trim())      return 'Informe seu e-mail.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'E-mail inválido.';
+    if (!usuario.trim())    return 'Informe um nome de usuário.';
+    if (!/^[a-zA-Z0-9_.-]+$/.test(usuario.trim())) return 'Usuário deve conter apenas letras, números, _ . ou -';
+    if (email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return 'E-mail inválido.';
     if (!senha)             return 'Informe uma senha.';
     if (senha.length < 6)   return 'A senha deve ter pelo menos 6 caracteres.';
     if (senha !== confirma) return 'As senhas não coincidem.';
@@ -59,15 +61,21 @@ export default function Registro() {
     setLoading(true);
     setErro('');
 
+    // Use real email if provided, otherwise generate a synthetic one
+    const resolvedEmail = email.trim()
+      ? email.trim().toLowerCase()
+      : `${usuario.trim().toLowerCase()}@interno.sistema`;
+
     try {
       const { data, error } = await supabase.auth.signUp({
-        email: email.trim().toLowerCase(),
+        email: resolvedEmail,
         password: senha,
         options: {
           ...(authRedirectUrl ? { emailRedirectTo: authRedirectUrl } : {}),
           data: {
             nome: nome.trim(),
             perfil: 'operador',
+            usuario: usuario.trim(),
             setor_id: null,
             empresa_id: empresa?.id ?? null,
             empresa_slug: tenantSlug,
@@ -80,7 +88,7 @@ export default function Registro() {
         if (error.message.toLowerCase().includes('already registered') ||
             error.message.toLowerCase().includes('user already exists') ||
             error.message.toLowerCase().includes('email address is already')) {
-          setErro('Este e-mail já está cadastrado. Tente fazer login ou use outro e-mail.');
+          setErro('Este usuário ou e-mail já está cadastrado. Tente fazer login ou use outro usuário.');
         } else if (error.message.toLowerCase().includes('database error')) {
           setErro('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
         } else {
@@ -187,9 +195,27 @@ export default function Registro() {
                 </div>
               </div>
 
-              {/* E-mail */}
+              {/* Usuário */}
               <div className="space-y-1.5">
-                <Label htmlFor="email" className="text-sm font-medium">E-mail (será seu login) *</Label>
+                <Label htmlFor="usuario" className="text-sm font-medium">Usuário (login) *</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="usuario"
+                    type="text"
+                    placeholder="kauan_teixeira"
+                    value={usuario}
+                    onChange={e => setUsuario(e.target.value)}
+                    className="pl-9"
+                    autoComplete="username"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">Será usado para fazer login. Apenas letras, números, _ . ou -</p>
+              </div>
+
+              {/* E-mail (opcional) */}
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-sm font-medium">E-mail <span className="text-muted-foreground font-normal">(opcional)</span></Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
