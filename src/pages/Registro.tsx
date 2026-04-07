@@ -75,7 +75,7 @@ export default function Registro() {
           data: {
             nome: nome.trim(),
             perfil: 'operador',
-            usuario: usuario.trim(),
+            usuario: usuario.trim().toLowerCase(),
             setor_id: null,
             empresa_id: empresa?.id ?? null,
             empresa_slug: tenantSlug,

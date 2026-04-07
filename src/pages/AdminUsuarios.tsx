@@ -177,7 +177,7 @@ export default function AdminUsuarios() {
           empresa_id: empresaId,
         };
         if (form.usuario.trim()) {
-          updatePayload.usuario = form.usuario.trim();
+          updatePayload.usuario = form.usuario.trim().toLowerCase();
         }
         const { data: linhasAtualizadas, error } = await supabase.from('perfis')
           .update(updatePayload)
@@ -203,7 +203,7 @@ export default function AdminUsuarios() {
             data: {
               nome: form.nome.trim(),
               perfil: form.perfil,
-              usuario: form.usuario.trim() || null,
+              usuario: form.usuario.trim() ? form.usuario.trim().toLowerCase() : null,
               setor_id: form.setor_id || null,
               empresa_id: empresaId,
               empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,

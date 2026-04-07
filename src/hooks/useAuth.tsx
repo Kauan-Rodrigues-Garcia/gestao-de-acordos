@@ -141,22 +141,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let email = identifier.trim();
 
     // If identifier does not contain '@', treat it as a username and look up email
+    // Uses RPC with SECURITY DEFINER to bypass RLS (query runs before authentication)
     if (!email.includes('@')) {
-      const { data: perfilData, error: lookupError } = await supabase
-        .from('perfis')
-        .select('email')
-        .eq('usuario', email)
-        .limit(1)
-        .single();
+      const { data: emailResult, error: lookupError } = await supabase
+        .rpc('buscar_email_por_usuario', { p_usuario: email });
 
-      if (lookupError || !perfilData?.email) {
+      if (lookupError || !emailResult) {
         return { error: 'Usuário não encontrado.' };
       }
-      email = perfilData.email;
+      email = emailResult as string;
     }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    if (error) {
+      if (error.message.toLowerCase().includes('email not confirmed')) {
+        return { error: 'Email não confirmado. Entre em contato com o administrador.' };
+      }
+      if (error.message.toLowerCase().includes('invalid login credentials')) {
+        return { error: 'Credenciais inválidas. Verifique seu usuário e senha.' };
+      }
+      return { error: error.message };
+    }
     if (data.user) {
       const { tenantMismatch } = await fetchPerfil(data.user.id);
       if (tenantMismatch) {
