@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Building2, Plus, Save, Edit, RefreshCw, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +22,7 @@ export default function AdminSetores() {
   const [form, setForm] = useState({ nome: '', descricao: '' });
   const [saving, setSaving] = useState(false);
   const { empresa } = useEmpresa();
+  const navigate = useNavigate();
 
   async function fetchSetores() {
     setLoading(true);
@@ -91,6 +93,9 @@ export default function AdminSetores() {
           <p className="text-sm text-muted-foreground mt-0.5">{setores.length} setor(es) cadastrado(s)</p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => navigate('/admin/equipes')}>
+            Gerenciar Todas as Equipes
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchSetores}><RefreshCw className="w-4 h-4" /></Button>
           <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Setor</Button>
         </div>
@@ -132,9 +137,14 @@ export default function AdminSetores() {
                     📋 {s.total_acordos} acordo(s)
                   </span>
                 </div>
-                <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => abrirEditar(s)}>
-                  <Edit className="w-3 h-3 mr-1.5" /> Editar
-                </Button>
+                <div className="flex flex-col gap-2">
+                  <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => abrirEditar(s)}>
+                    <Edit className="w-3 h-3 mr-1.5" /> Editar
+                  </Button>
+                  <Button variant="outline" size="sm" className="w-full h-7 text-xs" onClick={() => navigate(`/admin/equipes?setor_id=${s.id}`)}>
+                    Gerenciar Equipes →
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           </motion.div>
