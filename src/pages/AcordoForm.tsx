@@ -29,8 +29,8 @@ import { verificarNrDuplicado } from '@/services/acordos.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-// data_cadastro: opcional no form — preenchida automaticamente pelo sistema
-const schema = z.object({
+// ── Schema base (Bookplay / !isPP) ─────────────────────────────────────
+const schemaBase = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
   nr_cliente:   z.string().min(1, 'Campo obrigatório').regex(/^\d+$/, 'Deve conter apenas números'),
   vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
@@ -46,7 +46,27 @@ const schema = z.object({
   observacoes: z.string().max(500, 'Campo muito longo').optional(),
 });
 
-type FormData = z.infer<typeof schema>;
+// ── Schema PaguePay (isPP) — nr_cliente opcional, instituicao obrigatória ──
+const schemaPP = z.object({
+  nome_cliente: z.string().max(100, 'Nome muito longo').optional().or(z.literal('')),
+  nr_cliente:   z.string().optional().or(z.literal('')),
+  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
+  valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
+    const n = parseCurrencyInput(v);
+    return !isNaN(n) && n > 0;
+  }, 'Valor deve ser maior que zero'),
+  tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
+  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
+  whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
+  instituicao: z.string().min(1, 'Inscrição é obrigatória').max(100, 'Nome da instituição muito longo'),
+  status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
+  observacoes: z.string().max(500, 'Campo muito longo').optional(),
+});
+
+// data_cadastro: opcional no form — preenchida automaticamente pelo sistema
+const schema = schemaBase; // usado como type base; resolvido condicionalmente no useForm
+
+type FormData = z.infer<typeof schemaBase>;
 
 export default function AcordoForm() {
   const { id } = useParams<{ id: string }>();
@@ -71,7 +91,7 @@ export default function AcordoForm() {
   const [nrOriginalEdit, setNrOriginalEdit]   = useState<string | null>(null);
 
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(isPP ? schemaPP : schemaBase),
     defaultValues: {
       tipo:     'boleto',
       status:   'verificar_pendente',
@@ -167,17 +187,21 @@ export default function AcordoForm() {
       const valorNum = parseCurrencyInput(data.valor);
       if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); setLoading(false); return; }
 
-      const nrTrimmed = data.nr_cliente.trim();
+      const nrTrimmed = (data.nr_cliente ?? '').trim();
 
       // Payload base — colunas que EXISTEM no schema original (01_schema_completo.sql)
       const payload: Record<string, unknown> = {
-        nome_cliente:  data.nome_cliente.trim(),
+        nome_cliente:  (data.nome_cliente ?? '').trim(),
         nr_cliente:    nrTrimmed,
         data_cadastro: new Date().toISOString().split('T')[0],
         vencimento:    data.vencimento,
         valor:         valorNum,
         tipo:          data.tipo,
-        parcelas:      (['boleto', 'cartao_recorrente', 'pix_automatico'].includes(data.tipo)) ? parseInt(data.parcelas || '1', 10) : 1,
+        parcelas:      isPP
+          ? parseInt(data.parcelas || '1', 10)
+          : (['boleto', 'cartao_recorrente', 'pix_automatico'].includes(data.tipo))
+            ? parseInt(data.parcelas || '1', 10)
+            : 1,
         whatsapp:      data.whatsapp?.trim() || null,
         status:        data.status,
         // For PaguePlay: combine [ESTADO:XX] prefix + link text in observacoes
@@ -195,7 +219,7 @@ export default function AcordoForm() {
       console.log('[AcordoForm] payload:', payload);
 
       // Verificar NR duplicado dentro da mesma empresa (qualquer status)
-      const nrChanged = !isEdit || nrTrimmed !== nrOriginalEdit;
+      const nrChanged = nrTrimmed && (!isEdit || nrTrimmed !== nrOriginalEdit);
       if (nrChanged) {
         const { duplicado, statusExistente } = await verificarNrDuplicado(
           nrTrimmed,
@@ -243,7 +267,7 @@ export default function AcordoForm() {
         criarNotificacao({
           usuario_id: p.lider_id,
           titulo: 'Novo acordo cadastrado',
-          mensagem: `${p.nome} cadastrou o acordo NR ${nrTrimmed} - ${data.nome_cliente.trim()}`,
+          mensagem: `${p.nome} cadastrou o acordo NR ${nrTrimmed} - ${(data.nome_cliente ?? '').trim()}`,
           empresa_id: empresa?.id,
         });
       }
@@ -482,142 +506,81 @@ export default function AcordoForm() {
       <form onSubmit={handleSubmit(onSubmit)}>
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
-          {/* ══ BLOCO 1: NR + Vencimento + Valor — campos operacionais prioritários ══ */}
-          <Card className="border-primary/30 bg-primary/3">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
-                <Hash className="w-4 h-4" /> Dados Principais
-                <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {isPP ? (
+            /* ══════════════════════════════════════════════════════════════
+               LAYOUT PAGUEPLAY
+               Ordem: 1) Dados Principais  2) Tipo e Status  3) Dados do Profissional  4) Link do Acordo
+            ══════════════════════════════════════════════════════════════ */
+            <>
+              {/* ── PP BLOCO 1: Dados Principais (Inscrição, Vencimento, Valor, Estado) ── */}
+              <Card className="border-primary/30 bg-primary/3">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+                    <Hash className="w-4 h-4" /> Dados Principais
+                    <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-              {/* NR / CPF — identificador principal */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-primary">{isPP ? 'CPF *' : 'NR do Cliente *'}</Label>
-                <div className="relative">
-                  <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                  <Input
-                    {...register('nr_cliente')}
-                    placeholder={isPP ? '000.000.000-00' : '000000'}
-                    className={cn(
-                      'h-10 text-sm pl-8 font-mono font-bold border-primary/40 focus:border-primary',
-                      errors.nr_cliente && 'border-destructive'
-                    )}
-                  />
-                </div>
-                {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
-              </div>
-
-              {/* Vencimento — campo prioritário */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-primary">Vencimento *</Label>
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                  <input
-                    type="date"
-                    {...register('vencimento')}
-                    className={cn(
-                      'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
-                      'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
-                      errors.vencimento && 'border-destructive'
-                    )}
-                  />
-                </div>
-                {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
-              </div>
-
-              {/* Valor */}
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold text-primary">Valor *</Label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                  <Input
-                    {...register('valor')}
-                    placeholder="0.00"
-                    className={cn(
-                      'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
-                      errors.valor && 'border-destructive'
-                    )}
-                  />
-                </div>
-                {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
-              </div>
-
-            </CardContent>
-          </Card>
-
-          {/* ══ BLOCO 2: Dados do cliente ══ */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <User className="w-4 h-4 text-muted-foreground" /> Dados do Cliente
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label className="text-xs font-medium">Nome do Cliente *</Label>
-                <Input
-                  {...register('nome_cliente')}
-                  placeholder="Nome completo"
-                  className={cn('h-9 text-sm', errors.nome_cliente && 'border-destructive')}
-                />
-                {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">WhatsApp</Label>
-                <div className="relative">
-                  <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                  <Input
-                    {...register('whatsapp')}
-                    placeholder="(11) 99999-9999"
-                    className="h-9 text-sm pl-8 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">{isPP ? 'Inscrição' : 'Instituição'}</Label>
-                {isPP ? (
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                    <Input
-                      {...register('instituicao')}
-                      placeholder="Número de inscrição (opcional)"
-                      className="h-9 text-sm pl-8"
-                    />
+                  {/* Inscrição — obrigatório no PP */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Inscrição *</Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <Input
+                        {...register('instituicao')}
+                        placeholder="Número de inscrição"
+                        className={cn(
+                          'h-10 text-sm pl-8 border-primary/40 focus:border-primary',
+                          errors.instituicao && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.instituicao && <p className="text-xs text-destructive">{errors.instituicao.message}</p>}
                   </div>
-                ) : (
-                  <Select
-                    value={watch('instituicao') || ''}
-                    onValueChange={v => setValue('instituicao', v, { shouldValidate: true })}
-                  >
-                    <SelectTrigger className="h-9 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                        <SelectValue placeholder="Selecione a instituição" />
-                      </div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {INSTITUICOES_OPTIONS.map(inst => (
-                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
 
-              {/* Estado — PaguePlay only */}
-              {isPP && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Estado *</Label>
-                  <div className="relative">
+                  {/* Vencimento */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Vencimento *</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <input
+                        type="date"
+                        {...register('vencimento')}
+                        className={cn(
+                          'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
+                          'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
+                          errors.vencimento && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
+                  </div>
+
+                  {/* Valor */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Valor *</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <Input
+                        {...register('valor')}
+                        placeholder="0.00"
+                        className={cn(
+                          'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
+                          errors.valor && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
+                  </div>
+
+                  {/* Estado — obrigatório no PP */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Estado *</Label>
                     <Select value={estadoSelecionado} onValueChange={setEstadoSelecionado}>
-                      <SelectTrigger className="h-9 text-sm">
+                      <SelectTrigger className="h-10 text-sm border-primary/40 focus:border-primary">
                         <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                          <MapPin className="w-3.5 h-3.5 text-primary/60" />
                           <SelectValue placeholder="Selecione o estado" />
                         </div>
                       </SelectTrigger>
@@ -628,109 +591,349 @@ export default function AcordoForm() {
                       </SelectContent>
                     </Select>
                   </div>
-                </div>
-              )}
 
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          {/* ══ BLOCO 3: Tipo, parcelas e status ══ */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <FileText className="w-4 h-4 text-muted-foreground" /> Tipo e Status
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* ── PP BLOCO 2: Tipo e Status ── */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" /> Tipo e Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">{isPP ? 'Forma de Pagamento *' : 'Tipo *'}</Label>
-                <Select
-                  value={watch('tipo')}
-                  onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
-                >
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {isPP ? (
-                      <>
-                        <SelectItem value="pix">{TIPO_LABELS_PAGUEPLAY.pix}</SelectItem>
-                        <SelectItem value="boleto">{TIPO_LABELS_PAGUEPLAY.boleto}</SelectItem>
-                        <SelectItem value="cartao">{TIPO_LABELS_PAGUEPLAY.cartao}</SelectItem>
-                      </>
-                    ) : (
-                      <>
+                  {/* Forma de Pagamento — apenas boleto e cartao para PP */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Forma de Pagamento *</Label>
+                    <Select
+                      value={watch('tipo')}
+                      onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="boleto">Boleto / PIX</SelectItem>
+                        <SelectItem value="cartao">Cartão de Crédito</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Parcelas — Select 1-12 para PP (sempre visível para boleto e cartao) */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Parcelas</Label>
+                    <Select
+                      value={watch('parcelas') || '1'}
+                      onValueChange={v => setValue('parcelas', v, { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                          <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Status */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Status *</Label>
+                    <Select
+                      value={watch('status')}
+                      onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
+                        <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
+                        <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                </CardContent>
+              </Card>
+
+              {/* ── PP BLOCO 3: Dados do Profissional (opcional) ── */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <User className="w-4 h-4 text-muted-foreground" />
+                    Dados do Profissional{' '}
+                    <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  {/* Nome do Cliente — opcional, sem asterisco */}
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Nome do Cliente</Label>
+                    <Input
+                      {...register('nome_cliente')}
+                      placeholder="Nome completo"
+                      className={cn('h-9 text-sm', errors.nome_cliente && 'border-destructive')}
+                    />
+                    {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
+                  </div>
+
+                  {/* WhatsApp — oculto visualmente, mas presente no formulário */}
+                  <div style={{ display: 'none' }}>
+                    <Label className="text-xs font-medium">WhatsApp</Label>
+                    <div className="relative">
+                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        {...register('whatsapp')}
+                        placeholder="(11) 99999-9999"
+                        className="h-9 text-sm pl-8 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CPF (nr_cliente) — opcional no PP */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">CPF</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        {...register('nr_cliente')}
+                        placeholder="000.000.000-00"
+                        className={cn(
+                          'h-9 text-sm pl-8 font-mono',
+                          errors.nr_cliente && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
+                  </div>
+
+                </CardContent>
+              </Card>
+
+              {/* ── PP BLOCO 4: Link do Acordo ── */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                    <Link2 className="w-4 h-4" />
+                    Link do Acordo
+                    <span className="text-xs font-normal">(opcional)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    {...register('observacoes')}
+                    placeholder="Cole aqui o link do acordo..."
+                    className="text-sm resize-none"
+                    rows={2}
+                  />
+                  <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                    📅 Data de cadastro registrada automaticamente pelo sistema
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          ) : (
+            /* ══════════════════════════════════════════════════════════════
+               LAYOUT BOOKPLAY (!isPP) — IDÊNTICO AO ORIGINAL, SEM ALTERAÇÕES
+            ══════════════════════════════════════════════════════════════ */
+            <>
+              {/* ══ BLOCO 1: NR + Vencimento + Valor — campos operacionais prioritários ══ */}
+              <Card className="border-primary/30 bg-primary/3">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+                    <Hash className="w-4 h-4" /> Dados Principais
+                    <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                  {/* NR / CPF — identificador principal */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">NR do Cliente *</Label>
+                    <div className="relative">
+                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <Input
+                        {...register('nr_cliente')}
+                        placeholder="000000"
+                        className={cn(
+                          'h-10 text-sm pl-8 font-mono font-bold border-primary/40 focus:border-primary',
+                          errors.nr_cliente && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
+                  </div>
+
+                  {/* Vencimento — campo prioritário */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Vencimento *</Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <input
+                        type="date"
+                        {...register('vencimento')}
+                        className={cn(
+                          'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
+                          'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
+                          errors.vencimento && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
+                  </div>
+
+                  {/* Valor */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-primary">Valor *</Label>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                      <Input
+                        {...register('valor')}
+                        placeholder="0.00"
+                        className={cn(
+                          'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
+                          errors.valor && 'border-destructive'
+                        )}
+                      />
+                    </div>
+                    {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
+                  </div>
+
+                </CardContent>
+              </Card>
+
+              {/* ══ BLOCO 2: Dados do cliente ══ */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <User className="w-4 h-4 text-muted-foreground" /> Dados do Cliente
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Label className="text-xs font-medium">Nome do Cliente *</Label>
+                    <Input
+                      {...register('nome_cliente')}
+                      placeholder="Nome completo"
+                      className={cn('h-9 text-sm', errors.nome_cliente && 'border-destructive')}
+                    />
+                    {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">WhatsApp</Label>
+                    <div className="relative">
+                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        {...register('whatsapp')}
+                        placeholder="(11) 99999-9999"
+                        className="h-9 text-sm pl-8 font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Instituição</Label>
+                    <Select
+                      value={watch('instituicao') || ''}
+                      onValueChange={v => setValue('instituicao', v, { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                          <SelectValue placeholder="Selecione a instituição" />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INSTITUICOES_OPTIONS.map(inst => (
+                          <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                </CardContent>
+              </Card>
+
+              {/* ══ BLOCO 3: Tipo, parcelas e status ══ */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-muted-foreground" /> Tipo e Status
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Tipo *</Label>
+                    <Select
+                      value={watch('tipo')}
+                      onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
                         <SelectItem value="boleto">Boleto</SelectItem>
                         <SelectItem value="cartao_recorrente">Cartão Recorrente</SelectItem>
                         <SelectItem value="pix_automatico">Pix automático</SelectItem>
                         <SelectItem value="cartao">Cartão</SelectItem>
                         <SelectItem value="pix">Pix</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-              {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && (
-                <div className="space-y-1.5">
-                  <Label className="text-xs font-medium">Parcelas</Label>
-                  <Input
-                    type="number" min="1" max={maxParcelas}
-                    {...register('parcelas')}
-                    placeholder="1"
-                    className="h-9 text-sm font-mono"
-                  />
-                </div>
-              )}
+                  {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Parcelas</Label>
+                      <Input
+                        type="number" min="1" max={maxParcelas}
+                        {...register('parcelas')}
+                        placeholder="1"
+                        className="h-9 text-sm font-mono"
+                      />
+                    </div>
+                  )}
 
-              <div className="space-y-1.5">
-                <Label className="text-xs font-medium">Status *</Label>
-                <Select
-                  value={watch('status')}
-                  onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
-                >
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {isPP ? (
-                      <>
-                        <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
-                        <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
-                        <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
-                      </>
-                    ) : (
-                      <>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Status *</Label>
+                    <Select
+                      value={watch('status')}
+                      onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
                         <SelectItem value="verificar_pendente">🔍 Verificar</SelectItem>
                         <SelectItem value="pago">✅ Pago</SelectItem>
                         <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
 
-          {/* ══ BLOCO 4: Observações / Link do Acordo ══ */}
-          <Card className="border-border">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                {isPP ? <Link2 className="w-4 h-4" /> : <Info className="w-4 h-4" />}
-                {isPP ? 'Link do Acordo' : 'Observações'}
-                <span className="text-xs font-normal">(opcional)</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Textarea
-                {...register('observacoes')}
-                placeholder={isPP ? 'Cole aqui o link do acordo...' : 'Informações adicionais...'}
-                className="text-sm resize-none"
-                rows={2}
-              />
-              <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                📅 Data de cadastro registrada automaticamente pelo sistema
-              </p>
-            </CardContent>
-          </Card>
+              {/* ══ BLOCO 4: Observações ══ */}
+              <Card className="border-border">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                    <Info className="w-4 h-4" />
+                    Observações
+                    <span className="text-xs font-normal">(opcional)</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Textarea
+                    {...register('observacoes')}
+                    placeholder="Informações adicionais..."
+                    className="text-sm resize-none"
+                    rows={2}
+                  />
+                  <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                    📅 Data de cadastro registrada automaticamente pelo sistema
+                  </p>
+                </CardContent>
+              </Card>
+            </>
+          )}
 
           {/* Ações */}
           <div className="flex gap-3 justify-end pt-1">

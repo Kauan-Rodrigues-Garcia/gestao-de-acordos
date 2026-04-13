@@ -351,7 +351,7 @@ export default function Dashboard() {
           {isPP && acordosDeHoje.length > 0 && (
             <Button
               variant="outline" size="sm"
-              className="text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10"
+              className="hidden text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10"
               onClick={enviarLembretesHoje}
             >
               <MessageSquare className="w-3.5 h-3.5" />
@@ -402,7 +402,7 @@ export default function Dashboard() {
                 {acordosDeHoje.length > 0 && (
                   <Button
                     variant="outline" size="sm"
-                    className="text-xs h-7 gap-1.5 text-success border-success/30 hover:bg-success/10"
+                    className="hidden text-xs h-7 gap-1.5 text-success border-success/30 hover:bg-success/10"
                     onClick={() => prepararFila(acordosDeHoje)}
                   >
                     <MessageSquare className="w-3 h-3" />
@@ -437,6 +437,7 @@ export default function Dashboard() {
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">CPF / Inscrição</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">WhatsApp</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Estado</th>
+                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Link</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Pagamento</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
                         <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Ações</th>
@@ -476,6 +477,21 @@ export default function Dashboard() {
                                   </span>
                                 ) : '—'}
                               </td>
+                              <td className="px-4 py-2.5 max-w-[120px]">
+                                {extractLinkAcordo(a.observacoes) ? (
+                                  <a
+                                    href={extractLinkAcordo(a.observacoes)!}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
+                                    title={extractLinkAcordo(a.observacoes)!}
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
+                                    <span className="truncate">ver link</span>
+                                  </a>
+                                ) : '—'}
+                              </td>
                               <td className="px-4 py-2.5">
                                 <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
                                   {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
@@ -500,7 +516,7 @@ export default function Dashboard() {
                                   )}
                                   <Button
                                     variant="ghost" size="icon"
-                                    className={cn('w-6 h-6', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
+                                    className={cn('w-6 h-6 hidden', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
                                     title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
                                     onClick={() => enviarUmWhatsapp(a)}
                                   >
@@ -556,7 +572,7 @@ export default function Dashboard() {
                   <>
                     <Button
                       variant="outline" size="sm"
-                      className="gap-1.5 border-success/40 text-success hover:bg-success/10 text-xs h-8"
+                      className="hidden gap-1.5 border-success/40 text-success hover:bg-success/10 text-xs h-8"
                       onClick={() => prepararFila(acordos.filter(a => selecionados.includes(a.id)))}
                     >
                       <MessageSquare className="w-3.5 h-3.5" />
@@ -746,10 +762,17 @@ export default function Dashboard() {
                                 {/* Link do acordo */}
                                 <td className="px-3 py-2.5 max-w-[120px]">
                                   {extractLinkAcordo(a.observacoes) ? (
-                                    <span className="inline-flex items-center gap-1 text-[11px] text-primary truncate">
+                                    <a
+                                      href={extractLinkAcordo(a.observacoes)!}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
+                                      title={extractLinkAcordo(a.observacoes)!}
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
                                       <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-                                      <span className="truncate">{extractLinkAcordo(a.observacoes)}</span>
-                                    </span>
+                                      <span className="truncate">ver link</span>
+                                    </a>
                                   ) : '—'}
                                 </td>
                                 {/* Status */}
@@ -773,7 +796,7 @@ export default function Dashboard() {
                                     )}
                                     <Button
                                       variant="ghost" size="icon"
-                                      className={cn('w-6 h-6', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
+                                      className={cn('w-6 h-6 hidden', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
                                       title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
                                       onClick={() => enviarUmWhatsapp(a)}
                                     >
