@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock, User, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -123,18 +123,13 @@ export default function Login() {
                   </div>
                 ) : 'Entrar'}
               </Button>
+
+              <p className="text-xs text-center text-muted-foreground mt-4">
+                Acesso restrito. Solicite seu cadastro ao administrador.
+              </p>
             </form>
 
-            <div className="mt-6 pt-4 border-t border-border text-center">
-              <p className="text-xs text-muted-foreground">
-                Ainda não tem conta?{' '}
-                <Link to="/registro" className="text-primary hover:underline font-medium">
-                  Criar uma conta
-                </Link>
-              </p>
-            </div>
-
-            <p className="text-center text-xs text-muted-foreground/60 mt-3">
+            <p className="text-center text-xs text-muted-foreground/60 mt-4">
               {branding.supportText}
             </p>
           </CardContent>
