@@ -40,6 +40,14 @@ import { cn } from '@/lib/utils';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
+interface EquipeInfo {
+  id: string;
+  nome: string;
+  setor_id: string;
+  empresa_id: string;
+  membros?: { count: number }[];
+}
+
 interface OperadorResumo {
   perfil:        Perfil;
   totalAcordos:  number;
@@ -496,6 +504,8 @@ export default function PainelLider() {
   const [erro,                setErro]                = useState<string | null>(null);
   const [opSel,               setOpSel]               = useState<OperadorInfo | null>(null);
   const [aba,                 setAba]                 = useState<Aba>('equipe');
+  const [equipes,             setEquipes]             = useState<EquipeInfo[]>([]);
+  const [filtroEquipe,        setFiltroEquipe]        = useState<string>('todas');
 
   const carregarDados = useCallback(async () => {
     if (!perfil) return;
@@ -503,6 +513,16 @@ export default function PainelLider() {
     setErro(null);
 
     try {
+      // 0. Buscar equipes do setor do líder
+      if (perfil.setor_id && empresa?.id) {
+        const { data: eqData } = await supabase
+          .from('equipes')
+          .select('*, membros:perfis(count)')
+          .eq('setor_id', perfil.setor_id)
+          .eq('empresa_id', empresa.id);
+        if (eqData) setEquipes(eqData as EquipeInfo[]);
+      }
+
       // 1. Buscar operadores (filtrado por setor se for líder)
       let q = supabase
         .from('perfis')
@@ -559,6 +579,17 @@ export default function PainelLider() {
   const resumos = useMemo<OperadorResumo[]>(() =>
     operadores.map(op => buildResumo(op, acordosPorOperador[op.id] ?? [])),
     [operadores, acordosPorOperador]
+  );
+
+  // Operadores filtrados pela equipe selecionada
+  const operadoresFiltrados = useMemo(() => {
+    if (filtroEquipe === 'todas') return operadores;
+    return operadores.filter(op => (op as any).equipe_id === filtroEquipe);
+  }, [operadores, filtroEquipe, equipes]);
+
+  const resumosFiltrados = useMemo<OperadorResumo[]>(() =>
+    operadoresFiltrados.map(op => buildResumo(op, acordosPorOperador[op.id] ?? [])),
+    [operadoresFiltrados, acordosPorOperador]
   );
 
   function selecionarOperador(op: Perfil) {
@@ -621,6 +652,60 @@ export default function PainelLider() {
         </Button>
       </div>
 
+      {/* Seção: Minhas Equipes */}
+      {equipes.length > 0 && (
+        <div className="mb-5">
+          <h2 className="text-sm font-semibold text-foreground mb-2 flex items-center gap-1.5">
+            <Users className="w-4 h-4 text-primary" /> Minhas Equipes
+          </h2>
+          <div className="flex flex-wrap gap-2">
+            {equipes.map(eq => {
+              const qtd = eq.membros?.[0]?.count ?? 0;
+              return (
+                <div key={eq.id} className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 border border-border rounded-lg text-sm">
+                  <Users className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="font-medium text-foreground">{eq.nome}</span>
+                  <span className="text-xs text-muted-foreground bg-background rounded px-1.5 py-0.5 border">
+                    {qtd} {qtd === 1 ? 'membro' : 'membros'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Filtro por equipe */}
+      {equipes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 mb-4">
+          <button
+            onClick={() => setFiltroEquipe('todas')}
+            className={cn(
+              'px-3 py-1 rounded-lg text-xs font-medium border transition-colors',
+              filtroEquipe === 'todas'
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+            )}
+          >
+            Todas as equipes
+          </button>
+          {equipes.map(eq => (
+            <button
+              key={eq.id}
+              onClick={() => setFiltroEquipe(eq.id)}
+              className={cn(
+                'px-3 py-1 rounded-lg text-xs font-medium border transition-colors',
+                filtroEquipe === eq.id
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground border-border hover:border-primary/50 hover:text-foreground'
+              )}
+            >
+              {eq.nome}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Abas */}
       <div className="flex gap-1 p-1 bg-muted/40 rounded-xl mb-5 w-fit">
         {([
@@ -659,9 +744,9 @@ export default function PainelLider() {
               ? 'grid-cols-1 lg:grid-cols-[300px_1fr]'
               : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
           )}>
-            {/* Coluna esquerda: cards dos operadores */}
+            {/* Coluna esquerda: cards dos operadores (respeitando filtro de equipe) */}
             <div className="space-y-3">
-              {resumos.map(resumo => (
+              {resumosFiltrados.map(resumo => (
                 <CardOperador
                   key={resumo.perfil.id}
                   resumo={resumo}
@@ -688,7 +773,7 @@ export default function PainelLider() {
 
       {/* Aba: Analítico do setor */}
       {aba === 'analitico' && (
-        resumos.length === 0 ? (
+        resumosFiltrados.length === 0 ? (
           <Card className="border-border">
             <CardContent className="p-10 text-center text-muted-foreground">
               <TrendingUp className="w-10 h-10 opacity-30 mx-auto mb-3" />
@@ -697,7 +782,7 @@ export default function PainelLider() {
             </CardContent>
           </Card>
         ) : (
-          <AnaliticoSetor resumos={resumos} />
+          <AnaliticoSetor resumos={resumosFiltrados} />
         )
       )}
     </div>
