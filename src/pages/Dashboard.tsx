@@ -45,6 +45,13 @@ import { criarNotificacao } from '@/services/notificacoes.service';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
+/** Garante que a URL seja absoluta (com esquema http/https). */
+function ensureAbsoluteUrl(url: string): string {
+  if (!url) return '#';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return 'https://' + url;
+}
+
 function saudacao(): string {
   const hora = new Date().getHours();
   if (hora >= 5 && hora < 12) return 'Bom dia';
@@ -125,6 +132,12 @@ export default function Dashboard() {
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
   const [editandoInlineId,        setEditandoInlineId]        = useState<string | null>(null);
+
+  // Auto-refresh das métricas a cada 30 segundos
+  useEffect(() => {
+    const interval = setInterval(() => { refetch(); }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   // sync URL (apenas PaguePay)
   useEffect(() => {
@@ -480,7 +493,7 @@ export default function Dashboard() {
                               <td className="px-4 py-2.5 max-w-[120px]">
                                 {extractLinkAcordo(a.observacoes) ? (
                                   <a
-                                    href={extractLinkAcordo(a.observacoes)!}
+                                    href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
@@ -763,7 +776,7 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5 max-w-[120px]">
                                   {extractLinkAcordo(a.observacoes) ? (
                                     <a
-                                      href={extractLinkAcordo(a.observacoes)!}
+                                      href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
