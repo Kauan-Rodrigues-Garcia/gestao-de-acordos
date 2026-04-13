@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { Empresa, supabase } from '@/lib/supabase';
-import { fetchEmpresaBySlug } from '@/services/empresas.service';
+import { fetchEmpresaBySlug, fetchEmpresaAtual } from '@/services/empresas.service';
 import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
 
 interface EmpresaContextType {
@@ -29,7 +29,12 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
 
     try {
       if (!config.slug) {
-        throw new Error('Configuração da empresa do site não foi encontrada. Entre em contato com o suporte.');
+        // VITE_TENANT_SLUG not configured — fall back to the empresa linked to the
+        // currently-authenticated user's profile (single-tenant / dev environments).
+        const fallbackEmpresa = await fetchEmpresaAtual();
+        setEmpresa(fallbackEmpresa);
+        // No error: the app is usable as long as the user is logged in.
+        return;
       }
 
       const tenantEmpresa = await fetchEmpresaBySlug(config.slug);

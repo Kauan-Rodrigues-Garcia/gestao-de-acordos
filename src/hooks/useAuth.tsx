@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .rpc('buscar_email_por_usuario', { p_usuario: email });
 
       if (lookupError || !emailResult) {
-        return { error: 'Usuário não encontrado.' };
+        return { error: 'Usuário não encontrado. Tente novamente com seu e-mail.' };
       }
       email = emailResult as string;
     }
