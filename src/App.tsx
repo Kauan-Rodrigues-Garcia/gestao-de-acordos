@@ -18,6 +18,7 @@ const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
 const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
 const AdminSetores      = lazy(() => import('@/pages/AdminSetores'));
+const AdminEquipes      = lazy(() => import('@/pages/AdminEquipes'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
 const AdminLogs         = lazy(() => import('@/pages/AdminLogs'));
 const AdminIA           = lazy(() => import('@/pages/AdminIA'));
@@ -120,6 +121,13 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute roles={['administrador']}>
                     <AdminSetores />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+              <Route path="/admin/equipes" element={
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['administrador', 'lider']}>
+                    <AdminEquipes />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
