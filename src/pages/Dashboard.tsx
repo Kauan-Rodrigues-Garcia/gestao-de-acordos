@@ -111,6 +111,12 @@ export default function Dashboard() {
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
+  // ── filtro de mês (PaguePay — tabela completa e seção hoje) ────────────────────
+  const [mesFiltro, setMesFiltro] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   // ── estados da tabela completa (PaguePay only) ───────────────────────────────
   const [searchParams, setSearchParams] = useSearchParams();
   const [busca,        setBusca]        = useState(searchParams.get('busca')  || '');
@@ -142,15 +148,27 @@ export default function Dashboard() {
     : activeTab === 'nao_pagos' ? 'nao_pago'
     : filtroStatus || undefined;
 
+  // Calcular início/fim do mês filtrado para PaguePay
+  const mesFiltroInicio = mesFiltro ? `${mesFiltro}-01` : undefined;
+  const mesFiltroFim = mesFiltro
+    ? (() => {
+        const [y, m] = mesFiltro.split('-').map(Number);
+        const ultimo = new Date(y, m, 0).getDate();
+        return `${mesFiltro}-${String(ultimo).padStart(2, '0')}`;
+      })()
+    : undefined;
+
   const { acordos, totalCount, loading, refetch } = useAcordos(
     isPP ? {
-      busca:       busca || undefined,
-      status:      statusFiltroComputed,
-      tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-      vencimento:  filtroData || undefined,
-      operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
-      page:        currentPage,
-      perPage:     PER_PAGE,
+      busca:           busca || undefined,
+      status:          statusFiltroComputed,
+      tipo:            filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+      vencimento:      filtroData || undefined,
+      vencimento_gte:  mesFiltroInicio,
+      vencimento_lte:  mesFiltroFim,
+      operador_id:     perfil?.perfil === 'operador' ? perfil.id : undefined,
+      page:            currentPage,
+      perPage:         PER_PAGE,
     } : {},
   );
 
@@ -651,6 +669,48 @@ export default function Dashboard() {
 
           {/* ── Seção 2: Tabela completa de Acordos ── */}
           <div>
+            {/* Seletor de mês */}
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const prev = new Date(y, m - 2, 1);
+                    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <span className="text-sm font-semibold min-w-[110px] text-center">
+                  {mesFiltro ? new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Todos'}
+                </span>
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const next = new Date(y, m, 1);
+                    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
+                  onClick={() => {
+                    const d = new Date();
+                    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  Mês atual
+                </Button>
+              </div>
+            </div>
+
             {/* Cabeçalho da seção */}
             <div className="flex items-center justify-between mb-4">
               <div>
