@@ -1,3 +1,16 @@
+/**
+ * AdminEquipes.tsx — v2 (permissões de líder + isolamento multi-tenant)
+ *
+ * CORREÇÕES APLICADAS:
+ * 1. isAdmin derivado de perfil?.perfil (administrador | super_admin)
+ * 2. Guard !empresa?.id no início — não executa queries sem empresa definida
+ * 3. Todas as queries de 'perfis' têm .eq('empresa_id', empresaId) obrigatório
+ * 4. loadData: se !isAdmin, query de setores filtra por perfil.setor_id
+ * 5. handleDrop: se !isAdmin e equipe destino não pertencer ao setor do líder → toast.error + cancelar
+ * 6. handleCriarEquipe: se !isAdmin e setorId !== perfil.setor_id → toast.error + cancelar
+ * 7. Botão "Nova Equipe": renderizado apenas se isAdmin || setor.id === perfil.setor_id
+ * 8. Botão excluir equipe: renderizado apenas se isAdmin || equipe.setor_id === perfil.setor_id
+ */
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
@@ -122,8 +135,11 @@ function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps)
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AdminEquipes() {
-  const { user } = useAuth();
+  const { user, perfil } = useAuth();
   const { empresa } = useEmpresa();
+
+  // ── Derivar role ────────────────────────────────────────────────────────────
+  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [equipes, setEquipes] = useState<Equipe[]>([]);
@@ -143,26 +159,55 @@ export default function AdminEquipes() {
   // ─── Load ──────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
+    // GUARD: não executar sem empresa definida
     if (!empresaId) return;
     setLoading(true);
     try {
+      // Query de setores:
+      // Admin → todos os setores da empresa
+      // Líder → apenas o seu próprio setor
+      let setoresQuery = supabase
+        .from('setores')
+        .select('id, nome')
+        .eq('empresa_id', empresaId)
+        .order('nome');
+
+      if (!isAdmin && perfil?.setor_id) {
+        setoresQuery = setoresQuery.eq('id', perfil.setor_id) as typeof setoresQuery;
+      }
+
+      // Query de equipes:
+      // Admin → todas da empresa
+      // Líder → apenas do seu setor
+      let equipesQuery = supabase
+        .from('equipes')
+        .select('id, nome, setor_id, empresa_id')
+        .eq('empresa_id', empresaId)
+        .order('nome');
+
+      if (!isAdmin && perfil?.setor_id) {
+        equipesQuery = equipesQuery.eq('setor_id', perfil.setor_id) as typeof equipesQuery;
+      }
+
+      // Query de operadores:
+      // SEMPRE filtrar por empresa_id (isolamento multi-tenant obrigatório)
+      // Admin → todos os operadores da empresa
+      // Líder → apenas operadores do seu setor
+      let operadoresQuery = supabase
+        .from('perfis')
+        .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id')
+        .eq('empresa_id', empresaId)       // ← OBRIGATÓRIO — evita cross-tenant
+        .eq('perfil', 'operador')
+        .order('nome');
+
+      if (!isAdmin && perfil?.setor_id) {
+        operadoresQuery = operadoresQuery.eq('setor_id', perfil.setor_id) as typeof operadoresQuery;
+      }
+
       const [setoresRes, equipesRes, operadoresRes] = await Promise.all([
-        supabase
-          .from('setores')
-          .select('id, nome')
-          .eq('empresa_id', empresaId)
-          .order('nome'),
-        supabase
-          .from('equipes')
-          .select('id, nome, setor_id, empresa_id')
-          .eq('empresa_id', empresaId)
-          .order('nome'),
-        supabase
-          .from('perfis')
-          .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id')
-          .eq('empresa_id', empresaId)
-          .eq('perfil', 'operador')
-          .order('nome'),
+        setoresQuery,
+        equipesQuery,
+        operadoresQuery,
       ]);
 
       if (setoresRes.error) throw setoresRes.error;
@@ -184,7 +229,7 @@ export default function AdminEquipes() {
     } finally {
       setLoading(false);
     }
-  }, [empresaId]);
+  }, [empresaId, isAdmin, perfil?.setor_id]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -208,6 +253,12 @@ export default function AdminEquipes() {
     if (!nome) { toast.error('Informe o nome da equipe.'); return; }
     if (!empresaId) return;
 
+    // PERMISSÃO: líder só pode criar equipe no seu próprio setor
+    if (!isAdmin && setorId !== perfil?.setor_id) {
+      toast.error('Você só pode criar equipes no seu próprio setor.');
+      return;
+    }
+
     setCriandoEquipe(prev => ({ ...prev, [setorId]: true }));
     try {
       const { error } = await supabase.from('equipes').insert({
@@ -230,6 +281,12 @@ export default function AdminEquipes() {
   // ─── Excluir equipe ────────────────────────────────────────────────────────
 
   async function handleExcluirEquipe(equipe: Equipe) {
+    // PERMISSÃO: líder só pode excluir equipes do seu próprio setor
+    if (!isAdmin && equipe.setor_id !== perfil?.setor_id) {
+      toast.error('Você só pode excluir equipes do seu próprio setor.');
+      return;
+    }
+
     const membros = operadoresDaEquipe(equipe.id);
     if (membros.length > 0) {
       toast.error('Remova todos os operadores antes de excluir a equipe.');
@@ -259,6 +316,23 @@ export default function AdminEquipes() {
     const operador = operadores.find(o => o.id === operadorId);
     if (!operador) return;
     if (operador.equipe_id === equipeId) return; // nada mudou
+
+    // PERMISSÃO: líder só pode mover operadores dentro do seu próprio setor
+    if (!isAdmin) {
+      // Verificar se a equipe destino pertence ao setor do líder
+      if (equipeId !== null) {
+        const equipeDestino = equipes.find(e => e.id === equipeId);
+        if (!equipeDestino || equipeDestino.setor_id !== perfil?.setor_id) {
+          toast.error('Você só pode mover operadores dentro do seu próprio setor.');
+          return;
+        }
+      }
+      // Verificar também se o operador arrastado pertence ao setor do líder
+      if (operador.setor_id !== perfil?.setor_id) {
+        toast.error('Você só pode mover operadores dentro do seu próprio setor.');
+        return;
+      }
+    }
 
     // Otimista: atualiza localmente
     setOperadores(prev =>
@@ -295,6 +369,12 @@ export default function AdminEquipes() {
   async function handleRemoverDaEquipe(operadorId: string) {
     const operador = operadores.find(o => o.id === operadorId);
     if (!operador) return;
+
+    // PERMISSÃO: líder só pode remover operadores do seu próprio setor
+    if (!isAdmin && operador.setor_id !== perfil?.setor_id) {
+      toast.error('Você só pode gerenciar operadores do seu próprio setor.');
+      return;
+    }
 
     setOperadores(prev =>
       prev.map(o => o.id === operadorId ? { ...o, equipe_id: null } : o)
@@ -342,7 +422,9 @@ export default function AdminEquipes() {
             Gestão de Equipes
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Organize operadores em equipes dentro de cada setor. Arraste para mover entre equipes.
+            {isAdmin
+              ? 'Organize operadores em equipes dentro de cada setor. Arraste para mover entre equipes.'
+              : 'Gerencie operadores dentro do seu setor. Arraste para mover entre equipes.'}
           </p>
         </div>
       </motion.div>
@@ -360,6 +442,8 @@ export default function AdminEquipes() {
           {setores.map((setor, idx) => {
             const eqs = equipesDoSetor(setor.id);
             const expanded = expandedSetores[setor.id] ?? true;
+            // O líder só pode criar equipe e gerenciar no próprio setor
+            const podeGerenciarSetor = isAdmin || setor.id === perfil?.setor_id;
 
             return (
               <motion.div
@@ -409,6 +493,7 @@ export default function AdminEquipes() {
                           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {eqs.map(equipe => {
                               const membros = operadoresDaEquipe(equipe.id);
+                              const podeGerenciarEquipe = isAdmin || equipe.setor_id === perfil?.setor_id;
                               return (
                                 <DropZone
                                   key={equipe.id}
@@ -426,14 +511,17 @@ export default function AdminEquipes() {
                                         <Badge variant="secondary" className="text-[10px] px-1.5">
                                           {membros.length}
                                         </Badge>
-                                        <button
-                                          type="button"
-                                          title="Excluir equipe (somente se vazia)"
-                                          onClick={() => handleExcluirEquipe(equipe)}
-                                          className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                        >
-                                          <Trash2 className="w-3.5 h-3.5" />
-                                        </button>
+                                        {/* Botão excluir apenas para quem tem permissão */}
+                                        {podeGerenciarEquipe && (
+                                          <button
+                                            type="button"
+                                            title="Excluir equipe (somente se vazia)"
+                                            onClick={() => handleExcluirEquipe(equipe)}
+                                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                          >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
 
@@ -449,7 +537,7 @@ export default function AdminEquipes() {
                                             <OperadorChip
                                               key={op.id}
                                               operador={op}
-                                              onRemove={handleRemoverDaEquipe}
+                                              onRemove={podeGerenciarEquipe ? handleRemoverDaEquipe : undefined}
                                               onDragStart={handleDragStart}
                                             />
                                           ))
@@ -462,68 +550,70 @@ export default function AdminEquipes() {
                             })}
                           </div>
 
-                          {/* Criar nova equipe */}
-                          <div className="pt-1">
-                            <AnimatePresence>
-                              {showInput[setor.id] ? (
-                                <motion.div
-                                  initial={{ opacity: 0, height: 0 }}
-                                  animate={{ opacity: 1, height: 'auto' }}
-                                  exit={{ opacity: 0, height: 0 }}
-                                  className="flex gap-2"
-                                >
-                                  <Input
-                                    autoFocus
-                                    placeholder="Nome da equipe..."
-                                    value={novaEquipe[setor.id] ?? ''}
-                                    onChange={e =>
-                                      setNovaEquipe(prev => ({ ...prev, [setor.id]: e.target.value }))
-                                    }
-                                    onKeyDown={e => {
-                                      if (e.key === 'Enter') handleCriarEquipe(setor.id);
-                                      if (e.key === 'Escape')
-                                        setShowInput(prev => ({ ...prev, [setor.id]: false }));
-                                    }}
-                                    className="h-8 text-sm"
-                                  />
-                                  <Button
-                                    size="sm"
-                                    onClick={() => handleCriarEquipe(setor.id)}
-                                    disabled={criandoEquipe[setor.id]}
-                                    className="h-8"
+                          {/* Criar nova equipe — apenas para quem tem permissão neste setor */}
+                          {podeGerenciarSetor && (
+                            <div className="pt-1">
+                              <AnimatePresence>
+                                {showInput[setor.id] ? (
+                                  <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    exit={{ opacity: 0, height: 0 }}
+                                    className="flex gap-2"
                                   >
-                                    {criandoEquipe[setor.id] ? (
-                                      <div className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                                    ) : (
-                                      'Criar'
-                                    )}
-                                  </Button>
+                                    <Input
+                                      autoFocus
+                                      placeholder="Nome da equipe..."
+                                      value={novaEquipe[setor.id] ?? ''}
+                                      onChange={e =>
+                                        setNovaEquipe(prev => ({ ...prev, [setor.id]: e.target.value }))
+                                      }
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') handleCriarEquipe(setor.id);
+                                        if (e.key === 'Escape')
+                                          setShowInput(prev => ({ ...prev, [setor.id]: false }));
+                                      }}
+                                      className="h-8 text-sm"
+                                    />
+                                    <Button
+                                      size="sm"
+                                      onClick={() => handleCriarEquipe(setor.id)}
+                                      disabled={criandoEquipe[setor.id]}
+                                      className="h-8"
+                                    >
+                                      {criandoEquipe[setor.id] ? (
+                                        <div className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                                      ) : (
+                                        'Criar'
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() =>
+                                        setShowInput(prev => ({ ...prev, [setor.id]: false }))
+                                      }
+                                      className="h-8"
+                                    >
+                                      <X className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </motion.div>
+                                ) : (
                                   <Button
-                                    size="sm"
                                     variant="ghost"
+                                    size="sm"
+                                    className="text-xs text-muted-foreground hover:text-foreground gap-1"
                                     onClick={() =>
-                                      setShowInput(prev => ({ ...prev, [setor.id]: false }))
+                                      setShowInput(prev => ({ ...prev, [setor.id]: true }))
                                     }
-                                    className="h-8"
                                   >
-                                    <X className="w-3.5 h-3.5" />
+                                    <Plus className="w-3.5 h-3.5" />
+                                    Nova Equipe
                                   </Button>
-                                </motion.div>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-xs text-muted-foreground hover:text-foreground gap-1"
-                                  onClick={() =>
-                                    setShowInput(prev => ({ ...prev, [setor.id]: true }))
-                                  }
-                                >
-                                  <Plus className="w-3.5 h-3.5" />
-                                  Nova Equipe
-                                </Button>
-                              )}
-                            </AnimatePresence>
-                          </div>
+                                )}
+                              </AnimatePresence>
+                            </div>
+                          )}
                         </CardContent>
                       </motion.div>
                     )}
