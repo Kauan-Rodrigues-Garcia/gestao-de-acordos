@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight, Bell,
-  Shield, BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target,
+BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target,
   Camera, Loader2, Trash2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -145,8 +145,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center flex-shrink-0">
-          <Shield className="w-4 h-4 text-primary-foreground" />
+        <div className="w-8 h-8 rounded-lg overflow-hidden flex-shrink-0 bg-background flex items-center justify-center">
+          <img src="/images/Logo_Clebs.png" alt="Logo" className="w-8 h-8 object-contain" />
         </div>
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
