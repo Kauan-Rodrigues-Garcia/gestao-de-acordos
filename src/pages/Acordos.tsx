@@ -593,7 +593,7 @@ export default function Acordos() {
                           animate={{ opacity: 1 }}
                           transition={{ delay: Math.min(i * 0.015, 0.3) }}
                           className={cn(
-                            'border-b border-border/50 hover:bg-accent/40 transition-colors',
+                            'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                             i % 2 === 0 && 'bg-muted/10',
                             atrasado  && 'bg-destructive/5',
                             venceHoje && a.status !== 'pago' && 'bg-warning/5',
@@ -601,6 +601,11 @@ export default function Acordos() {
                             isEditingThis && 'bg-primary/5',
                             isDetailThis && 'bg-accent/50'
                           )}
+                          onClick={(e) => {
+                            const target = e.target as HTMLElement;
+                            if (target.closest('button') || target.closest('a') || target.closest('input')) return;
+                            if (!isEditingThis) setDetalheInlineId(detalheInlineId === a.id ? null : a.id);
+                          }}
                         >
                           <td className="px-3 py-2.5">
                             <input
@@ -677,8 +682,8 @@ export default function Acordos() {
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineId(detalheInlineId === a.id ? null : a.id)}>
-                                <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
+                              <td className="px-3 py-2.5">
+                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
                                 {a.instituicao && (
                                   <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
                                 )}
