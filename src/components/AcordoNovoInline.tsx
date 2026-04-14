@@ -117,13 +117,13 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
       // ── Payload: APENAS 1 registro é criado aqui ────────────────────────
       // As demais parcelas (2..N) são criadas via "Reagendar" no AcordoDetalheInline
       const payload: Record<string, unknown> = {
-        nome_cliente:    nomeCliente.trim() || null,
-        nr_cliente:      nrCliente.trim() || null,
+        nome_cliente:    nomeCliente.trim() || '',   // NOT NULL no banco → '' em vez de null
+        nr_cliente:      nrCliente.trim()   || '',   // NOT NULL no banco → '' em vez de null
         vencimento,
         valor:           valorNum,
         tipo:            tipoParaSalvar,
         parcelas:        temParcelas ? parcelas : 1,
-        whatsapp:        whatsapp.trim() || null,
+        whatsapp:        whatsapp.trim()    || null,
         instituicao:     instituicao.trim() || null,
         status,
         observacoes:     obsFinal,
