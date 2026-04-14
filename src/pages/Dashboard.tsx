@@ -914,7 +914,7 @@ export default function Dashboard() {
                                     onChange={() => toggleSelecionado(a.id)}
                                   />
                                 </td>
-                                {/* Nome */
+                                {/* Nome */}
                                 <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id)}>
                                   <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
                                 </td>
