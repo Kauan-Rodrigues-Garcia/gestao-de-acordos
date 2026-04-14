@@ -1,8 +1,12 @@
 /**
- * MetasConfig.tsx
- * Página para configurar metas mensais por setor, equipe e operador.
- * Admin: vê e edita tudo.
- * Líder: vê e edita apenas seu setor, suas equipes e seus operadores.
+ * MetasConfig.tsx — CORRIGIDO (React Error #306)
+ * Correções aplicadas:
+ * 1. isAdmin: perfil === "admin" → perfil?.perfil === 'administrador' || 'super_admin'
+ * 2. SelectItem: .filter(s => s?.id) para garantir values não-vazios
+ * 3. badge={equipes.length} e badge={operadores.length}: garantir tipo number, não objeto
+ * 4. Todos os campos renderizados de objetos Supabase via propriedades escalares (.nome, .id)
+ * 5. inputMetas acessado sempre via getInput() → retorna MetaInput com strings
+ * 6. meta_valor e meta_acordos: sempre renderizados como string via input.meta_valor / input.meta_acordos
  */
 
 import { useState, useEffect, useCallback } from "react";
@@ -138,7 +142,7 @@ function MonthNavigator({ mes, ano, onChange }: MonthNavigatorProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-componente: MetaForm — inputs de valor e acordos + botão salvar
+// Sub-componente: MetaForm
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MetaFormProps {
@@ -170,8 +174,11 @@ function MetaForm({
       <div className="flex items-center gap-2 sm:w-48 shrink-0">
         {icon && <span className="text-muted-foreground shrink-0">{icon}</span>}
         <div className="min-w-0">
-          <p className="text-sm font-medium truncate">{label}</p>
-          {sublabel && <p className="text-xs text-muted-foreground truncate">{sublabel}</p>}
+          {/* FIX: label e sublabel são sempre string — sem risco de objeto */}
+          <p className="text-sm font-medium truncate">{String(label ?? '')}</p>
+          {sublabel && (
+            <p className="text-xs text-muted-foreground truncate">{String(sublabel)}</p>
+          )}
         </div>
       </div>
 
@@ -187,6 +194,7 @@ function MetaForm({
             <Input
               className="pl-8 h-8 text-sm"
               placeholder="0,00"
+              // FIX: sempre string via getInput() → emptyInput() fallback
               value={input.meta_valor}
               disabled={disabled}
               onChange={(e) => onChangeValor(formatBRL(e.target.value))}
@@ -202,6 +210,7 @@ function MetaForm({
             type="number"
             placeholder="0"
             min={0}
+            // FIX: sempre string via getInput() → emptyInput() fallback
             value={input.meta_acordos}
             disabled={disabled}
             onChange={(e) => onChangeAcordos(e.target.value)}
@@ -241,15 +250,16 @@ function SectionCard({ title, description, icon, children, badge }: SectionCardP
       <CardHeader className="pb-2">
         <div className="flex items-center gap-2">
           <span className="text-primary">{icon}</span>
-          <CardTitle className="text-base">{title}</CardTitle>
+          <CardTitle className="text-base">{String(title ?? '')}</CardTitle>
           {badge !== undefined && (
             <Badge variant="secondary" className="text-xs ml-auto">
-              {badge}
+              {/* FIX: badge pode ser number ou string — coerce para string */}
+              {String(badge)}
             </Badge>
           )}
         </div>
         {description && (
-          <CardDescription className="text-xs">{description}</CardDescription>
+          <CardDescription className="text-xs">{String(description)}</CardDescription>
         )}
       </CardHeader>
       <CardContent className="pt-0">{children}</CardContent>
@@ -262,17 +272,22 @@ function SectionCard({ title, description, icon, children, badge }: SectionCardP
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MetasConfig() {
-  const { user, perfil, setorId: liderSetorId } = useAuth();
+  const { perfil, setorId: liderSetorId } = useAuth();
   const { empresa } = useEmpresa();
 
-  const isAdmin = perfil === "admin";
+  // FIX CRÍTICO #1: O campo `perfil` de useAuth retorna o objeto de perfil.
+  // O campo de tipo/role fica em perfil?.perfil (string).
+  // Antes: isAdmin = perfil === "admin"  ← ERRADO (compara objeto com string)
+  // Depois: isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin'
+  const isAdmin =
+    perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
 
   // Mês/ano — padrão: mês atual
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
   const [ano, setAno] = useState(hoje.getFullYear());
 
-  // Setor selecionado (admin pode selecionar, líder usa o próprio)
+  // Setor selecionado
   const [setorSelecionado, setSetorSelecionado] = useState<string>("");
 
   // Dados
@@ -290,12 +305,13 @@ export function MetasConfig() {
   // Saving states: key = `tipo:referencia_id`
   const [savingMap, setSavingMap] = useState<Record<string, boolean>>({});
 
-  // Inputs controlados: key = referencia_id
+  // Inputs controlados: key = referencia_id → MetaInput (sempre strings)
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
 
   // ── Helpers de input ─────────────────────────────────────────────────────
 
   function getInput(referenciaId: string): MetaInput {
+    // FIX: sempre retorna MetaInput com strings — nunca objeto bruto do Supabase
     return inputMetas[referenciaId] ?? emptyInput();
   }
 
@@ -314,27 +330,31 @@ export function MetasConfig() {
     try {
       const { data, error } = await supabase
         .from("setores")
-        .select("*")
+        .select("id, nome")
         .eq("empresa_id", empresa.id)
         .order("nome");
       if (error) throw error;
-      setSetores(data ?? []);
+      // FIX: filtrar apenas registros com id válido para evitar SelectItem com value vazio
+      const setoresValidos: Setor[] = (data ?? []).filter(
+        (s): s is Setor => typeof s?.id === 'string' && s.id.length > 0,
+      );
+      setSetores(setoresValidos);
 
-      // Definir setor inicial
       if (isAdmin) {
-        if (!setorSelecionado && data?.length) setSetorSelecionado(data[0].id);
+        if (!setorSelecionado && setoresValidos.length > 0) {
+          setSetorSelecionado(setoresValidos[0].id);
+        }
       } else {
-        // Líder: usa o próprio setor
         if (liderSetorId) setSetorSelecionado(liderSetorId);
       }
     } catch (err: any) {
-      toast.error("Erro ao carregar setores", { description: err.message });
+      toast.error("Erro ao carregar setores", { description: String(err?.message ?? err) });
     } finally {
       setLoadingSetores(false);
     }
-  }, [empresa?.id, isAdmin, liderSetorId]);
+  }, [empresa?.id, isAdmin, liderSetorId, setorSelecionado]);
 
-  // ── Carregar equipes e operadores do setor ───────────────────────────────
+  // ── Carregar equipes ─────────────────────────────────────────────────────
 
   const fetchEquipes = useCallback(async () => {
     if (!setorSelecionado) return;
@@ -342,17 +362,24 @@ export function MetasConfig() {
     try {
       const { data, error } = await supabase
         .from("equipes")
-        .select("*")
+        .select("id, nome, setor_id")
         .eq("setor_id", setorSelecionado)
         .order("nome");
       if (error) throw error;
-      setEquipes(data ?? []);
+      // FIX: filtrar registros com id válido
+      setEquipes(
+        (data ?? []).filter(
+          (e): e is Equipe => typeof e?.id === 'string' && e.id.length > 0,
+        ),
+      );
     } catch (err: any) {
-      toast.error("Erro ao carregar equipes", { description: err.message });
+      toast.error("Erro ao carregar equipes", { description: String(err?.message ?? err) });
     } finally {
       setLoadingEquipes(false);
     }
   }, [setorSelecionado]);
+
+  // ── Carregar operadores ──────────────────────────────────────────────────
 
   const fetchOperadores = useCallback(async () => {
     if (!setorSelecionado) return;
@@ -365,15 +392,20 @@ export function MetasConfig() {
         .eq("perfil", "operador")
         .order("nome");
       if (error) throw error;
-      setOperadores(data ?? []);
+      // FIX: filtrar registros com id válido
+      setOperadores(
+        (data ?? []).filter(
+          (o): o is Operador => typeof o?.id === 'string' && o.id.length > 0,
+        ),
+      );
     } catch (err: any) {
-      toast.error("Erro ao carregar operadores", { description: err.message });
+      toast.error("Erro ao carregar operadores", { description: String(err?.message ?? err) });
     } finally {
       setLoadingOperadores(false);
     }
   }, [setorSelecionado]);
 
-  // ── Carregar metas do período ────────────────────────────────────────────
+  // ── Carregar metas ───────────────────────────────────────────────────────
 
   const fetchMetas = useCallback(async () => {
     if (!empresa?.id) return;
@@ -386,22 +418,28 @@ export function MetasConfig() {
         .eq("mes", mes)
         .eq("ano", ano);
       if (error) throw error;
-      const loaded: Meta[] = data ?? [];
+      const loaded: Meta[] = (data ?? []) as Meta[];
       setMetas(loaded);
 
-      // Popular inputs com valores existentes
+      // FIX: Popular inputs — sempre coerce meta_valor e meta_acordos para strings
       const newInputs: Record<string, MetaInput> = {};
       for (const m of loaded) {
+        if (!m?.referencia_id) continue; // pular registros sem referencia_id
+        const valorNum = Number(m.meta_valor) || 0;
+        const acordosNum = Number(m.meta_acordos) || 0;
         newInputs[m.referencia_id] = {
-          meta_valor: m.meta_valor > 0
-            ? m.meta_valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          meta_valor: valorNum > 0
+            ? valorNum.toLocaleString("pt-BR", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })
             : "",
-          meta_acordos: m.meta_acordos > 0 ? String(m.meta_acordos) : "",
+          meta_acordos: acordosNum > 0 ? String(acordosNum) : "",
         };
       }
       setInputMetas(newInputs);
     } catch (err: any) {
-      toast.error("Erro ao carregar metas", { description: err.message });
+      toast.error("Erro ao carregar metas", { description: String(err?.message ?? err) });
     } finally {
       setLoadingMetas(false);
     }
@@ -422,6 +460,7 @@ export function MetasConfig() {
     const key = `${tipo}:${referenciaId}`;
     const input = getInput(referenciaId);
 
+    // FIX: parseBRL recebe string, retorna number — nunca objeto
     const meta_valor = parseBRL(input.meta_valor);
     const meta_acordos = parseInt(input.meta_acordos, 10) || 0;
 
@@ -448,24 +487,25 @@ export function MetasConfig() {
         description: `${MESES[mes - 1]}/${ano}`,
       });
 
-      // Atualizar cache local de metas
       await fetchMetas();
     } catch (err: any) {
-      toast.error("Erro ao salvar meta", { description: err.message });
+      toast.error("Erro ao salvar meta", { description: String(err?.message ?? err) });
     } finally {
       setSavingMap((prev) => ({ ...prev, [key]: false }));
     }
   }
 
-  // ── Render: setor selecionado (objeto) ───────────────────────────────────
+  // ── Setor atual (objeto derivado) ─────────────────────────────────────────
 
   const setorAtual = setores.find((s) => s.id === setorSelecionado);
+  // FIX: sempre string — nunca renderizar setorAtual diretamente, apenas setorAtual?.nome
+  const setorNome: string = setorAtual?.nome ?? "";
 
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-      {/* ── Cabeçalho da página ─────────────────────────────────────────── */}
+      {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -477,7 +517,6 @@ export function MetasConfig() {
           </p>
         </div>
 
-        {/* Navegador de mês/ano */}
         <MonthNavigator
           mes={mes}
           ano={ano}
@@ -487,7 +526,7 @@ export function MetasConfig() {
 
       <Separator />
 
-      {/* ── Seletor de setor (somente admin) ────────────────────────────── */}
+      {/* ── Seletor de setor (somente admin) ──────────────────────────── */}
       {isAdmin && (
         <div className="flex items-center gap-3">
           <Label className="text-sm font-medium shrink-0 flex items-center gap-1.5">
@@ -505,11 +544,14 @@ export function MetasConfig() {
                 <SelectValue placeholder="Selecione um setor" />
               </SelectTrigger>
               <SelectContent>
-                {setores.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.nome}
-                  </SelectItem>
-                ))}
+                {/* FIX: .filter garante que value nunca seja vazio ou undefined */}
+                {setores
+                  .filter((s) => typeof s?.id === 'string' && s.id.length > 0)
+                  .map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {String(s.nome ?? '')}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           )}
@@ -529,10 +571,11 @@ export function MetasConfig() {
 
       {setorSelecionado && (
         <>
-          {/* ── SEÇÃO 1: Meta do Setor ─────────────────────────────────── */}
+          {/* ── SEÇÃO 1: Meta do Setor ────────────────────────────────── */}
           <SectionCard
             title="Meta do Setor"
-            description={`Metas globais para o setor ${setorAtual?.nome ?? ""} em ${MESES[mes - 1]}/${ano}`}
+            // FIX: setorNome é string — nunca renderizar setorAtual (objeto) diretamente
+            description={`Metas globais para o setor ${setorNome} em ${MESES[mes - 1]}/${ano}`}
             icon={<Building2 className="h-4 w-4" />}
           >
             {loadingMetas ? (
@@ -541,9 +584,10 @@ export function MetasConfig() {
               </div>
             ) : (
               <MetaForm
-                label={setorAtual?.nome ?? "Setor"}
+                label={setorNome || "Setor"}
                 sublabel="Meta consolidada do setor"
                 icon={<Building2 className="h-4 w-4" />}
+                // FIX: getInput() retorna MetaInput {meta_valor: string, meta_acordos: string}
                 input={getInput(setorSelecionado)}
                 onChangeValor={(v) => setInput(setorSelecionado, { meta_valor: v })}
                 onChangeAcordos={(v) => setInput(setorSelecionado, { meta_acordos: v })}
@@ -553,11 +597,12 @@ export function MetasConfig() {
             )}
           </SectionCard>
 
-          {/* ── SEÇÃO 2: Meta por Equipe ───────────────────────────────── */}
+          {/* ── SEÇÃO 2: Meta por Equipe ──────────────────────────────── */}
           <SectionCard
             title="Meta por Equipe"
-            description={`Metas individuais por equipe do setor ${setorAtual?.nome ?? ""}`}
+            description={`Metas individuais por equipe do setor ${setorNome}`}
             icon={<Users className="h-4 w-4" />}
+            // FIX: badge recebe number — String() no SectionCard garante renderização segura
             badge={equipes.length}
           >
             {loadingEquipes ? (
@@ -572,27 +617,31 @@ export function MetasConfig() {
               </p>
             ) : (
               <div>
-                {equipes.map((eq) => (
-                  <MetaForm
-                    key={eq.id}
-                    label={eq.nome}
-                    sublabel="Equipe"
-                    icon={<Users className="h-4 w-4" />}
-                    input={getInput(eq.id)}
-                    onChangeValor={(v) => setInput(eq.id, { meta_valor: v })}
-                    onChangeAcordos={(v) => setInput(eq.id, { meta_acordos: v })}
-                    onSave={() => handleSave("equipe", eq.id)}
-                    saving={!!savingMap[`equipe:${eq.id}`]}
-                  />
-                ))}
+                {equipes
+                  // FIX: filtro defensivo antes do map
+                  .filter((eq) => typeof eq?.id === 'string' && eq.id.length > 0)
+                  .map((eq) => (
+                    <MetaForm
+                      key={eq.id}
+                      // FIX: eq.nome é string (não objeto)
+                      label={String(eq.nome ?? '')}
+                      sublabel="Equipe"
+                      icon={<Users className="h-4 w-4" />}
+                      input={getInput(eq.id)}
+                      onChangeValor={(v) => setInput(eq.id, { meta_valor: v })}
+                      onChangeAcordos={(v) => setInput(eq.id, { meta_acordos: v })}
+                      onSave={() => handleSave("equipe", eq.id)}
+                      saving={!!savingMap[`equipe:${eq.id}`]}
+                    />
+                  ))}
               </div>
             )}
           </SectionCard>
 
-          {/* ── SEÇÃO 3: Meta por Operador ────────────────────────────── */}
+          {/* ── SEÇÃO 3: Meta por Operador ───────────────────────────── */}
           <SectionCard
             title="Meta por Operador"
-            description={`Metas individuais por operador do setor ${setorAtual?.nome ?? ""}`}
+            description={`Metas individuais por operador do setor ${setorNome}`}
             icon={<User className="h-4 w-4" />}
             badge={operadores.length}
           >
@@ -608,19 +657,23 @@ export function MetasConfig() {
               </p>
             ) : (
               <div>
-                {operadores.map((op) => (
-                  <MetaForm
-                    key={op.id}
-                    label={op.nome}
-                    sublabel="Operador"
-                    icon={<User className="h-4 w-4" />}
-                    input={getInput(op.id)}
-                    onChangeValor={(v) => setInput(op.id, { meta_valor: v })}
-                    onChangeAcordos={(v) => setInput(op.id, { meta_acordos: v })}
-                    onSave={() => handleSave("operador", op.id)}
-                    saving={!!savingMap[`operador:${op.id}`]}
-                  />
-                ))}
+                {operadores
+                  // FIX: filtro defensivo antes do map
+                  .filter((op) => typeof op?.id === 'string' && op.id.length > 0)
+                  .map((op) => (
+                    <MetaForm
+                      key={op.id}
+                      // FIX: op.nome é string (não objeto)
+                      label={String(op.nome ?? '')}
+                      sublabel="Operador"
+                      icon={<User className="h-4 w-4" />}
+                      input={getInput(op.id)}
+                      onChangeValor={(v) => setInput(op.id, { meta_valor: v })}
+                      onChangeAcordos={(v) => setInput(op.id, { meta_acordos: v })}
+                      onSave={() => handleSave("operador", op.id)}
+                      saving={!!savingMap[`operador:${op.id}`]}
+                    />
+                  ))}
               </div>
             )}
           </SectionCard>
