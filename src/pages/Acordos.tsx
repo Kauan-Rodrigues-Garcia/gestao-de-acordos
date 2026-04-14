@@ -27,6 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 
 function buildMensagem(a: Acordo): string {
@@ -87,6 +88,8 @@ export default function Acordos() {
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
   // Inline edit in the list, for both Bookplay and PaguePlay
   const [editandoInlineId, setEditandoInlineId] = useState<string | null>(null);
+  // Inline detail view
+  const [detalheInlineId, setDetalheInlineId] = useState<string | null>(null);
 
   // Filtro de mês — ativo para Bookplay
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
@@ -562,6 +565,7 @@ export default function Acordos() {
                       const venceHoje = a.vencimento === hoje;
                       const sel       = selecionados.includes(a.id);
                       const isEditingThis = editandoInlineId === a.id;
+                      const isDetailThis = detalheInlineId === a.id;
                       return (
                         <>
                         <motion.tr
@@ -575,7 +579,8 @@ export default function Acordos() {
                             atrasado  && 'bg-destructive/5',
                             venceHoje && a.status !== 'pago' && 'bg-warning/5',
                             sel && 'bg-primary/5 border-primary/20',
-                            isEditingThis && 'bg-primary/5'
+                            isEditingThis && 'bg-primary/5',
+                            isDetailThis && 'bg-accent/50'
                           )}
                         >
                           <td className="px-3 py-2.5">
@@ -653,8 +658,8 @@ export default function Acordos() {
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
                                 </span>
                               </td>
-                              <td className="px-3 py-2.5">
-                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                              <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineId(detalheInlineId === a.id ? null : a.id)}>
+                                <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
                                 {a.instituicao && (
                                   <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
                                 )}
@@ -745,6 +750,17 @@ export default function Acordos() {
                             isPaguePlay={isPP}
                             onSaved={() => { setEditandoInlineId(null); refetch(); }}
                             onCancel={() => setEditandoInlineId(null)}
+                          />
+                        )}
+                        {/* Inline detail row */}
+                        {isDetailThis && !isEditingThis && (
+                          <AcordoDetalheInline
+                            key={`detalhe-${a.id}`}
+                            acordo={a}
+                            isPaguePlay={isPP}
+                            colSpan={10}
+                            onClose={() => setDetalheInlineId(null)}
+                            onReagendar={() => refetch()}
                           />
                         )}
                         </>
