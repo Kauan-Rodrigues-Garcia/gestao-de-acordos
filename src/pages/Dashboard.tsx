@@ -137,6 +137,34 @@ export default function Dashboard() {
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
+  // ── hooks dependentes dos filtros (declarados ANTES dos useEffects para evitar TDZ) ─
+  const statusFiltroComputed =
+    filtroStatus && filtroStatus !== 'all' ? filtroStatus
+    : activeTab === 'pagos'     ? 'pago'
+    : activeTab === 'nao_pagos' ? 'nao_pago'
+    : filtroStatus || undefined;
+
+  const { acordos, totalCount, loading, refetch } = useAcordos(
+    isPP ? {
+      busca:       busca || undefined,
+      status:      statusFiltroComputed,
+      tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+      vencimento:  filtroData || undefined,
+      operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
+      page:        currentPage,
+      perPage:     PER_PAGE,
+    } : {},
+  );
+
+  // dados para gráficos (dashboard normal / Bookplay)
+  const { acordos: todosAcordos } = useAcordos();
+
+  // Acordos de hoje para a seção de destaque
+  const acordosDeHoje = useMemo(() =>
+    acordosHoje.filter(a => a.vencimento === hoje),
+    [acordosHoje, hoje],
+  );
+
   // Auto-refresh a cada 30 segundos
   useEffect(() => {
     const interval = setInterval(() => { refetch(); }, 30000);
@@ -175,27 +203,7 @@ export default function Dashboard() {
     return () => clearTimeout(timer);
   }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, currentPage, isPP]);
 
-  // tab → status filter
-  const statusFiltro =
-    filtroStatus && filtroStatus !== 'all' ? filtroStatus
-    : activeTab === 'pagos'     ? 'pago'
-    : activeTab === 'nao_pagos' ? 'nao_pago'
-    : filtroStatus || undefined;
 
-  const { acordos, totalCount, loading, refetch } = useAcordos(
-    isPP ? {
-      busca:       busca || undefined,
-      status:      statusFiltro,
-      tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-      vencimento:  filtroData || undefined,
-      operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
-      page:        currentPage,
-      perPage:     PER_PAGE,
-    } : {},
-  );
-
-  // dados para gráficos (dashboard normal / Bookplay)
-  const { acordos: todosAcordos } = useAcordos();
   const statusData = ['verificar_pendente', 'pago', 'nao_pago'].map(s => ({
     name:  statusLabels[s] || STATUS_LABELS[s],
     value: todosAcordos.filter(a => a.status === s).length,
@@ -367,11 +375,6 @@ export default function Dashboard() {
     refetch();
   }
 
-  // Acordos de hoje para a seção de destaque
-  const acordosDeHoje = useMemo(() =>
-    acordosHoje.filter(a => a.vencimento === hoje),
-    [acordosHoje, hoje],
-  );
 
   // ── RENDER ────────────────────────────────────────────────────────────────────
   return (
