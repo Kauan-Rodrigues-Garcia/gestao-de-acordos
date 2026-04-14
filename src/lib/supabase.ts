@@ -68,6 +68,13 @@ export interface Perfil {
   empresas?: Empresa;
 }
 
+/*
+ * SQL para adicionar colunas de parcelamento (executar no Supabase SQL editor):
+ *
+ * ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS acordo_grupo_id UUID DEFAULT NULL;
+ * ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS numero_parcela INTEGER DEFAULT 1;
+ * CREATE INDEX IF NOT EXISTS idx_acordos_grupo ON public.acordos(acordo_grupo_id) WHERE acordo_grupo_id IS NOT NULL;
+ */
 export interface Acordo {
   id: string;
   nome_cliente: string;
@@ -84,6 +91,10 @@ export interface Acordo {
   empresa_id?: string;
   observacoes: string | null;
   instituicao: string | null;
+  /** UUID que agrupa parcelas de um mesmo acordo parcelado */
+  acordo_grupo_id?: string | null;
+  /** Número desta parcela dentro do grupo (1-based) */
+  numero_parcela?: number | null;
   criado_em: string;
   atualizado_em: string;
   perfis?: Perfil;
