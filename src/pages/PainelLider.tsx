@@ -1,17 +1,13 @@
 /**
- * PainelLider.tsx — versão corrigida definitivamente.
+ * PainelLider.tsx — v2 (multi-tenant fix)
  *
- * Causa raiz do bug do analítico:
- * - statsOperadorSel era derivado via useMemo de statsLista.find()
- * - Se o perfil ainda não tinha carregado ou o id não batia, retornava null
- * - AnimatePresence + condição dupla (operadorSelecionado && statsOperadorSel) causava
- *   o componente nunca renderizar quando statsLista ainda estava vazia na primeira passagem
- *
- * CORREÇÃO:
- * - AnaliticoOperador recebe o id do operador e carrega seus próprios acordos
- *   diretamente do banco — completamente independente do estado da lista
- * - Isso elimina toda dependência de sincronização entre estados
- * - Estado local com loading/erro/vazio dentro do próprio analítico
+ * CORREÇÕES APLICADAS:
+ * 1. Guard !empresa?.id no início do componente — não executa queries sem empresa definida
+ * 2. Query de operadores garante .eq('empresa_id', empresa.id) SEMPRE
+ * 3. Para líder: filtra por setor_id do próprio perfil (.eq('setor_id', perfil.setor_id))
+ * 4. Para admin: mostra todos os operadores da empresa (sem filtro de setor)
+ * 5. Query de acordos garante .eq('empresa_id', empresa.id) como filtro obrigatório
+ * 6. Query de equipes já tinha empresa_id — mantida
  */
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { Link } from 'react-router-dom';
@@ -120,54 +116,34 @@ function CardOperador({
 
           <div className="grid grid-cols-3 gap-2 mb-3">
             {[
-              { val: resumo.pagos,   label: 'Pagos',    cls: 'bg-success/8 text-success' },
-              { val: resumo.abertos, label: 'Abertos',  cls: 'bg-warning/8 text-warning' },
-              { val: resumo.vencidos,label: 'Vencidos', cls: 'bg-destructive/8 text-destructive' },
+              { val: resumo.pagos,         label: 'Pagos',   cls: 'text-success' },
+              { val: resumo.abertos,        label: 'Abertos', cls: 'text-warning' },
+              { val: resumo.vencidos,       label: 'Vencidos',cls: 'text-destructive' },
             ].map(({ val, label, cls }) => (
-              <div key={label} className={cn('text-center p-1.5 rounded-lg', cls)}>
-                <p className="text-base font-bold">{val}</p>
+              <div key={label} className="text-center">
+                <p className={cn('text-base font-bold font-mono', cls)}>{val}</p>
                 <p className="text-[10px] text-muted-foreground">{label}</p>
               </div>
             ))}
           </div>
 
-          <div className="p-2.5 bg-primary/5 border border-primary/15 rounded-lg mb-2">
-            <p className="text-[10px] text-muted-foreground">Em aberto</p>
-            <p className="text-sm font-bold font-mono text-primary">{formatBRL(resumo.valorAberto)}</p>
-          </div>
-
-          <div>
-            <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-              <span>Recebido</span>
-              <span className="font-medium">{perc}% · {formatBRL(resumo.valorPago)}</span>
+          <div className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="text-muted-foreground">Em aberto</span>
+              <span className="font-mono font-semibold text-primary">{formatBRL(resumo.valorAberto)}</span>
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
-              <div className="h-full bg-success rounded-full transition-all duration-500" style={{ width: `${perc}%` }} />
+              <div className="h-full bg-success rounded-full transition-all" style={{ width: `${perc}%` }} />
             </div>
+            <p className="text-[10px] text-muted-foreground text-right">{perc}% pago</p>
           </div>
-
-          {(resumo.vencendoHoje > 0 || resumo.vencidos > 0) && (
-            <div className="flex gap-1.5 mt-2 flex-wrap">
-              {resumo.vencendoHoje > 0 && (
-                <Badge className="text-[10px] h-4 px-1.5 bg-warning/20 text-warning border-0">
-                  {resumo.vencendoHoje} vence hoje
-                </Badge>
-              )}
-              {resumo.vencidos > 0 && (
-                <Badge className="text-[10px] h-4 px-1.5 bg-destructive/20 text-destructive border-0">
-                  {resumo.vencidos} vencido(s)
-                </Badge>
-              )}
-            </div>
-          )}
         </CardContent>
       </Card>
     </motion.div>
   );
 }
 
-// ─── Analítico INDEPENDENTE do operador ───────────────────────────────────
-// Carrega seus próprios dados — não depende de estado externo
+// ─── Analítico do operador selecionado ───────────────────────────────────
 
 interface AnaliticoOperadorProps {
   operadorId:   string;
@@ -179,10 +155,11 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   const { tenantSlug } = useEmpresa();
   const statusLabels = getStatusLabels(tenantSlug);
   const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
+
   const [acordos,       setAcordos]       = useState<Acordo[]>([]);
   const [loadingLocal,  setLoadingLocal]  = useState(true);
   const [erroLocal,     setErroLocal]     = useState<string | null>(null);
-  const [filtroStatus,  setFiltroStatus]  = useState('');
+  const [filtroStatus,  setFiltroStatus]  = useState<string>('');
 
   const carregarAcordos = useCallback(async () => {
     setLoadingLocal(true);
@@ -190,12 +167,11 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
     try {
       const { data, error } = await supabase
         .from('acordos')
-        .select('*')
+        .select('id, nome_cliente, nr_cliente, vencimento, valor, status, tipo, operador_id, setor_id, parcelas, whatsapp, observacoes, data_cadastro, criado_em, atualizado_em')
         .eq('operador_id', operadorId)
         .order('vencimento', { ascending: true });
-
-      if (error) throw new Error(error.message);
-      setAcordos((data as Acordo[]) || []);
+      if (error) throw error;
+      setAcordos((data as Acordo[]) ?? []);
     } catch (e) {
       setErroLocal(e instanceof Error ? e.message : 'Erro ao carregar acordos');
     } finally {
@@ -291,19 +267,16 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                Acordos
-                <Badge variant="secondary">{acordosFiltrados.length}</Badge>
+                <Hash className="w-4 h-4 text-primary" />
+                Painel da Equipe
               </CardTitle>
-              <Select
-                value={filtroStatus || 'all'}
-                onValueChange={(v) => setFiltroStatus(v === 'all' ? '' : v)}
-              >
-                <SelectTrigger className="w-40 h-7 text-xs">
-                  <SelectValue placeholder="Todos os status" />
+              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                <SelectTrigger className="h-7 w-36 text-xs">
+                  <SelectValue placeholder="Todos status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                   {Object.entries(statusLabels).map(([k,v]) => (
+                  <SelectItem value="">Todos</SelectItem>
+                  {Object.entries(statusLabels).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>
@@ -312,60 +285,46 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
           </CardHeader>
           <CardContent className="p-0">
             {acordosFiltrados.length === 0 ? (
-              <div className="p-8 text-center text-muted-foreground">
-                <Clock className="w-8 h-8 opacity-30 mx-auto mb-2" />
-                <p className="text-sm">Nenhum acordo encontrado</p>
-              </div>
+              <p className="text-sm text-center text-muted-foreground py-8">Nenhum acordo encontrado</p>
             ) : (
-              <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <div className="overflow-x-auto">
                 <table className="w-full text-xs">
-                  <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm border-b border-border z-10">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{nrLabel}</th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CLIENTE</th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">VENCIMENTO</th>
-                      <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">STATUS</th>
-                      <th className="px-3 py-2 w-8" />
+                  <thead>
+                    <tr className="border-b border-border bg-muted/30">
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">{nrLabel}</th>
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">CLIENTE</th>
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">VENCIMENTO</th>
+                      <th className="text-right px-4 py-2 font-medium text-muted-foreground">VALOR</th>
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">STATUS</th>
+                      <th className="px-4 py-2" />
                     </tr>
                   </thead>
                   <tbody>
-                    {acordosFiltrados.map((a, i) => {
+                    {acordosFiltrados.map(a => {
+                      const venceHoje = a.vencimento === hoje;
                       const atrasado  = a.vencimento < hoje && !['pago','nao_pago'].includes(a.status);
-                      const venceHoje = a.vencimento === hoje && a.status !== 'pago';
                       return (
-                        <tr
-                          key={a.id}
-                          className={cn(
-                            'border-b border-border/50 hover:bg-accent/40 transition-colors',
-                            i % 2 === 0 && 'bg-muted/10',
-                            atrasado   && 'bg-destructive/5',
-                            venceHoje  && 'bg-warning/5',
-                          )}
-                        >
-                          <td className="px-3 py-2">
-                            <span className="font-mono font-bold text-primary text-[11px] bg-primary/8 px-1.5 py-0.5 rounded border border-primary/20">
-                              <Hash className="w-2.5 h-2.5 inline mr-0.5" />{a.nr_cliente}
-                            </span>
+                        <tr key={a.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                          <td className="px-4 py-2 font-mono text-muted-foreground">{a.nr_cliente}</td>
+                          <td className="px-4 py-2 font-medium text-foreground max-w-[160px] truncate">{a.nome_cliente}</td>
+                          <td className="px-4 py-2 text-muted-foreground">
+                            {formatDate(a.vencimento)}
+                            {venceHoje && <Badge className="ml-1 text-[10px] bg-warning/20 text-warning border-warning/30 h-4 px-1">Hoje</Badge>}
+                            {atrasado  && <Badge className="ml-1 text-[10px] bg-destructive/10 text-destructive border-destructive/20 h-4 px-1">Atrasado</Badge>}
                           </td>
-                          <td className="px-3 py-2 font-medium text-foreground max-w-[150px] truncate">{a.nome_cliente}</td>
-                          <td className="px-3 py-2">
-                            <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-bold', venceHoje && 'text-warning font-bold')}>
-                              {formatDate(a.vencimento)}
-                            </span>
-                            {venceHoje && <Badge className="ml-1 text-[9px] h-3.5 px-1 bg-warning/20 text-warning border-0">Hoje</Badge>}
-                            {atrasado  && <Badge className="ml-1 text-[9px] h-3.5 px-1 bg-destructive/20 text-destructive border-0">Atrasado</Badge>}
-                          </td>
-                          <td className="px-3 py-2 text-right font-mono font-semibold">{formatBRL(a.valor)}</td>
-                          <td className="px-3 py-2">
-                            <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status] ?? 'bg-muted text-muted-foreground border-border')}>
+                          <td className="px-4 py-2 text-right font-mono font-semibold text-foreground">{formatBRL(a.valor)}</td>
+                          <td className="px-4 py-2">
+                            <Badge
+                              className={cn('text-[10px] h-5 px-1.5', STATUS_COLORS[a.status as keyof typeof STATUS_COLORS])}
+                              variant="outline"
+                            >
                               {statusLabels[a.status] ?? STATUS_LABELS[a.status] ?? a.status}
-                            </span>
+                            </Badge>
                           </td>
-                          <td className="px-3 py-2">
-                            <Button asChild variant="ghost" size="icon" className="w-6 h-6">
-                              <Link to={`/acordos/${a.id}`}><ArrowRight className="w-3 h-3" /></Link>
-                            </Button>
+                          <td className="px-4 py-2">
+                            <Link to={`../acordo/${a.id}`} className="text-primary hover:underline text-[10px]">
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </Link>
                           </td>
                         </tr>
                       );
@@ -381,22 +340,26 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   );
 }
 
-// ─── Analítico consolidado do setor ──────────────────────────────────────
+// ─── Analítico do setor ────────────────────────────────────────────────────
 
-function AnaliticoSetor({ resumos }: { resumos: OperadorResumo[] }) {
+interface AnaliticoSetorProps { resumos: OperadorResumo[] }
+
+function AnaliticoSetor({ resumos }: AnaliticoSetorProps) {
+  const hoje   = getTodayISO();
+  const fimMes = getTodayISO().slice(0, 7) + '-' + new Date(
+    new Date().getFullYear(), new Date().getMonth() + 1, 0
+  ).getDate().toString().padStart(2, '0');
+
   const totalAberto   = sumSafe(resumos.map(r => r.valorAberto));
   const totalPago     = sumSafe(resumos.map(r => r.valorPago));
-  const totalVencidos = resumos.reduce((s, r) => s + r.vencidos, 0);
   const totalAbertos  = resumos.reduce((s, r) => s + r.abertos, 0);
+  const totalVencidos = resumos.reduce((s, r) => s + r.vencidos, 0);
   const vencendoHoje  = resumos.reduce((s, r) => s + r.vencendoHoje, 0);
-
-  const d = new Date();
-  const fimMes = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
 
   const chartData = resumos.map(r => ({
     name:        r.perfil.nome.split(' ')[0],
-    'Em aberto': safeNum(r.valorAberto),
-    'Recebido':  safeNum(r.valorPago),
+    'Em aberto': r.valorAberto,
+    'Recebido':  r.valorPago,
   }));
 
   return (
@@ -486,7 +449,7 @@ function AnaliticoSetor({ resumos }: { resumos: OperadorResumo[] }) {
   );
 }
 
-// ─── Página principal ─────────────────────────────────────────────────────
+// ─── Componente principal ─────────────────────────────────────────────────
 
 type Aba = 'equipe' | 'analitico';
 
@@ -507,32 +470,48 @@ export default function PainelLider() {
   const [equipes,             setEquipes]             = useState<EquipeInfo[]>([]);
   const [filtroEquipe,        setFiltroEquipe]        = useState<string>('todas');
 
+  // ── Derivar role ──────────────────────────────────────────────────────────
+  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+
   const carregarDados = useCallback(async () => {
-    if (!perfil) return;
+    // ── GUARD: não executar sem empresa ou perfil definidos ────────────────
+    if (!perfil || !empresa?.id) return;
+
     setLoading(true);
     setErro(null);
 
     try {
-      // 0. Buscar equipes do setor do líder
-      if (perfil.setor_id && empresa?.id) {
-        const { data: eqData } = await supabase
+      // 0. Buscar equipes do setor do líder (ou de toda a empresa para admin)
+      if (empresa.id) {
+        let eqQuery = supabase
           .from('equipes')
           .select('*, membros:perfis(count)')
-          .eq('setor_id', perfil.setor_id)
-          .eq('empresa_id', empresa.id);
+          .eq('empresa_id', empresa.id);   // ← sempre filtrar por empresa
+
+        // Líder vê apenas equipes do seu setor
+        if (!isAdmin && perfil.setor_id) {
+          eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
+        }
+
+        const { data: eqData } = await eqQuery;
         if (eqData) setEquipes(eqData as EquipeInfo[]);
       }
 
-      // 1. Buscar operadores (filtrado por setor se for líder)
+      // 1. Buscar operadores — SEMPRE com empresa_id obrigatório
+      //    Líder: apenas do seu próprio setor
+      //    Admin: todos os operadores da empresa
       let q = supabase
         .from('perfis')
         .select('*, setores(id, nome)')
+        .eq('empresa_id', empresa.id)      // ← FILTRO OBRIGATÓRIO — evita cross-tenant
         .eq('perfil', 'operador')
         .eq('ativo', true);
 
-      if (perfil.perfil === 'lider' && perfil.setor_id) {
+      if (!isAdmin && perfil.setor_id) {
+        // Líder: apenas operadores do seu próprio setor
         q = q.eq('setor_id', perfil.setor_id);
       }
+      // Admin: sem filtro adicional de setor — vê todos da empresa
 
       const { data: ops, error: opsErr } = await q.order('nome');
       if (opsErr) throw new Error(`Operadores: ${opsErr.message}`);
@@ -542,11 +521,13 @@ export default function PainelLider() {
 
       if (listaOps.length === 0) { setLoading(false); return; }
 
-      // 2. Buscar acordos de todos os operadores de uma vez
+      // 2. Buscar acordos de todos os operadores filtrados
+      //    empresa_id obrigatório para garantir isolamento multi-tenant
       const ids = listaOps.map(o => o.id);
       const { data: acData, error: acErr } = await supabase
         .from('acordos')
         .select('id, nome_cliente, nr_cliente, vencimento, valor, status, tipo, operador_id, setor_id, parcelas, whatsapp, observacoes, data_cadastro, criado_em, atualizado_em')
+        .eq('empresa_id', empresa.id)      // ← FILTRO OBRIGATÓRIO — isolamento cross-tenant
         .in('operador_id', ids)
         .order('vencimento', { ascending: true });
 
@@ -569,7 +550,7 @@ export default function PainelLider() {
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id]);
+  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin]);
 
   useEffect(() => {
     carregarDados();
@@ -598,6 +579,16 @@ export default function PainelLider() {
     } else {
       setOpSel({ id: op.id, nome: op.nome, perfil: op });
     }
+  }
+
+  // ── GUARD: empresa ainda não carregou ─────────────────────────────────
+  if (!empresa?.id) {
+    return (
+      <div className="p-6 flex flex-col items-center justify-center gap-3 text-muted-foreground min-h-[400px]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <p className="text-sm font-medium">Carregando empresa...</p>
+      </div>
+    );
   }
 
   if (loading) {
