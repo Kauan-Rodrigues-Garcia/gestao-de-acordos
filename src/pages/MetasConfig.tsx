@@ -10,7 +10,8 @@
  */
 
 import { useState, useEffect, useCallback } from "react";
-import { Target, Save, ChevronLeft, ChevronRight, Building2, Users, User } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
@@ -151,7 +152,6 @@ interface MetaFormProps {
   icon?: React.ReactNode;
   input: MetaInput;
   onChangeValor: (v: string) => void;
-  onChangeAcordos: (v: string) => void;
   onSave: () => void;
   saving: boolean;
   disabled?: boolean;
@@ -163,7 +163,6 @@ function MetaForm({
   icon,
   input,
   onChangeValor,
-  onChangeAcordos,
   onSave,
   saving,
   disabled,
@@ -200,21 +199,6 @@ function MetaForm({
               onChange={(e) => onChangeValor(formatBRL(e.target.value))}
             />
           </div>
-        </div>
-
-        {/* Meta em acordos */}
-        <div className="flex flex-col gap-1 min-w-[110px]">
-          <Label className="text-xs text-muted-foreground">Qtd. Acordos</Label>
-          <Input
-            className="h-8 text-sm"
-            type="number"
-            placeholder="0"
-            min={0}
-            // FIX: sempre string via getInput() → emptyInput() fallback
-            value={input.meta_acordos}
-            disabled={disabled}
-            onChange={(e) => onChangeAcordos(e.target.value)}
-          />
         </div>
 
         {/* Botão salvar */}
@@ -272,6 +256,7 @@ function SectionCard({ title, description, icon, children, badge }: SectionCardP
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MetasConfig() {
+  const navigate = useNavigate();
   const { perfil } = useAuth();
   const liderSetorId = perfil?.setor_id ?? null;
   const { empresa } = useEmpresa();
@@ -509,6 +494,15 @@ export default function MetasConfig() {
       {/* ── Cabeçalho ─────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mb-2 h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground -ml-1"
+            onClick={() => navigate(-1)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Voltar
+          </Button>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Target className="h-5 w-5 text-primary" />
             Configurar Metas
@@ -591,7 +585,6 @@ export default function MetasConfig() {
                 // FIX: getInput() retorna MetaInput {meta_valor: string, meta_acordos: string}
                 input={getInput(setorSelecionado)}
                 onChangeValor={(v) => setInput(setorSelecionado, { meta_valor: v })}
-                onChangeAcordos={(v) => setInput(setorSelecionado, { meta_acordos: v })}
                 onSave={() => handleSave("setor", setorSelecionado)}
                 saving={!!savingMap[`setor:${setorSelecionado}`]}
               />
@@ -630,7 +623,6 @@ export default function MetasConfig() {
                       icon={<Users className="h-4 w-4" />}
                       input={getInput(eq.id)}
                       onChangeValor={(v) => setInput(eq.id, { meta_valor: v })}
-                      onChangeAcordos={(v) => setInput(eq.id, { meta_acordos: v })}
                       onSave={() => handleSave("equipe", eq.id)}
                       saving={!!savingMap[`equipe:${eq.id}`]}
                     />
@@ -670,7 +662,6 @@ export default function MetasConfig() {
                       icon={<User className="h-4 w-4" />}
                       input={getInput(op.id)}
                       onChangeValor={(v) => setInput(op.id, { meta_valor: v })}
-                      onChangeAcordos={(v) => setInput(op.id, { meta_acordos: v })}
                       onSave={() => handleSave("operador", op.id)}
                       saving={!!savingMap[`operador:${op.id}`]}
                     />
