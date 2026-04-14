@@ -6,7 +6,7 @@
  *   Lógica de formas de pagamento adaptada por empresa (PaguePlay vs Bookplay)
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar, Target,
@@ -156,7 +156,11 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function AnalyticsPanel() {
+interface AnalyticsPanelProps {
+  setorFiltro?: string | null;
+}
+
+export function AnalyticsPanel({ setorFiltro: setorExterno }: AnalyticsPanelProps = {}) {
   const [open, setOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { perfil } = useAuth();
@@ -179,7 +183,15 @@ export function AnalyticsPanel() {
     acordosMes,
     loading,
     refetch,
+    setSetorFiltro,
   } = useAnalytics();
+
+  // Sincronizar com filtro externo do Dashboard
+  useEffect(() => {
+    if (setorExterno !== undefined) {
+      setSetorFiltro(setorExterno ?? null);
+    }
+  }, [setorExterno]);
 
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
   const isLider = perfil?.perfil === 'lider';
