@@ -69,10 +69,14 @@ export default function Acordos() {
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
+  const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
   const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos'
   );
+
+  // Mapa operadorId → nome
+  const [operadoresMap, setOperadoresMap] = useState<Record<string, string>>({});
 
   const [selecionados, setSelecionados] = useState<string[]>([]);
   const [atualizandoStatus, setAtualizandoStatus] = useState<string | null>(null);
@@ -92,12 +96,13 @@ export default function Acordos() {
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo) params.set('tipo', filtroTipo); else params.delete('tipo');
       if (filtroData) params.set('data', filtroData); else params.delete('data');
+      if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
@@ -113,14 +118,29 @@ export default function Acordos() {
     status:      statusFiltro,
     tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
     vencimento:  filtroData || undefined,
-    operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
+    operador_id: perfil?.perfil === 'operador'
+      ? perfil.id
+      : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     page:        currentPage,
     perPage:     PER_PAGE,
   });
 
+  // Buscar nomes dos operadores após carregar acordos
+  useEffect(() => {
+    const ids = [...new Set(acordos.map(a => a.operador_id).filter(Boolean))] as string[];
+    if (ids.length === 0) return;
+    supabase.from('perfis').select('id, nome').in('id', ids).then(({ data }) => {
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach(p => { map[p.id] = p.nome; });
+        setOperadoresMap(prev => ({ ...prev, ...map }));
+      }
+    });
+  }, [acordos]);
+
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
 
   // ── Mover acordos atrasados (verificar_pendente + vencimento passado) para nao_pago ──
   useEffect(() => {
@@ -152,7 +172,7 @@ export default function Acordos() {
   }, [acordos, loading]);
 
   function limparFiltros() {
-    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setCurrentPage(1);
+    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -406,6 +426,17 @@ export default function Acordos() {
                 onChange={e => { setFiltroData(e.target.value); setCurrentPage(1); }}
                 className="h-8 text-sm bg-background border border-input rounded-md px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
+              {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
+                  <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos Operadores</SelectItem>
+                    {Object.entries(operadoresMap).map(([id, nome]) => (
+                      <SelectItem key={id} value={id}>{nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               {temFiltros && (
                 <Button variant="ghost" size="sm" onClick={limparFiltros} className="h-8 text-xs gap-1">
                   <X className="w-3 h-3" /> Limpar
@@ -440,7 +471,8 @@ export default function Acordos() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs">STATUS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs">OPERADOR</th>
                         </>
                       ) : (
                         <>
@@ -551,6 +583,10 @@ export default function Acordos() {
                                 <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
                                   {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
                                 </span>
+                              </td>
+                              {/* Operador */}
+                              <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                {a.operador_id ? (operadoresMap[a.operador_id] || '...') : '—'}
                               </td>
                             </>
                           ) : (
