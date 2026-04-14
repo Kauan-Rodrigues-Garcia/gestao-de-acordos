@@ -516,7 +516,7 @@ export default function AdminEquipes() {
                                           <button
                                             type="button"
                                             title="Excluir equipe (somente se vazia)"
-                                            onClick={() => handleExcluirEquipe(equipe)}
+                                            onClick={(e) => { e.stopPropagation(); handleExcluirEquipe(equipe); }}
                                             className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                                           >
                                             <Trash2 className="w-3.5 h-3.5" />
