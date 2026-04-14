@@ -195,7 +195,7 @@ export default function AdminUsuarios() {
         const resolvedEmail = form.email.trim().toLowerCase().includes('@')
           ? form.email.trim().toLowerCase()
           : `${(form.usuario.trim() || form.email.trim()).toLowerCase()}@interno.sistema`;
-        const { error } = await supabase.auth.signUp({
+        const { data: signUpData, error } = await supabase.auth.signUp({
           email: resolvedEmail,
           password: form.senha,
           options: {
@@ -215,6 +215,15 @@ export default function AdminUsuarios() {
             throw new Error('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
           }
           throw error;
+        }
+        // FIX: Se o Supabase criou uma sessão automática (email confirmation desabilitado),
+        // fazer signOut imediatamente para não substituir a sessão do admin logado.
+        if (signUpData?.session) {
+          await supabase.auth.signOut();
+          toast.success('Usuário criado com sucesso!');
+          setDialogOpen(false);
+          fetchDados();
+          return;
         }
         toast.success('Usuário criado! Ele receberá um e-mail de confirmação.');
       }
