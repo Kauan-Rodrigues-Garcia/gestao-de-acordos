@@ -133,7 +133,7 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
             strokeWidth={0}
           >
             <Cell fill={clampedPerc >= 100 ? '#22c55e' : color} />
-            <Cell fill="hsl(var(--muted))" />
+            <Cell fill="hsl(var(--muted) / 0.6)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>
@@ -433,7 +433,7 @@ export function AnalyticsPanel() {
                   </Card>
 
                   {/* ── ANEL COM BREAKDOWN ── */}
-                  <Card className="border-border bg-card">
+                  <Card className="border-border bg-card/80 dark:bg-muted/20">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -521,7 +521,7 @@ export function AnalyticsPanel() {
                             {porTipo.length > 0 && (
                               <div className="flex flex-col items-center">
                                 <ResponsiveContainer width="100%" height={140}>
-                                  <PieChart>
+                                  <PieChart style={{ background: 'transparent' }}>
                                     <Pie
                                       data={porTipo}
                                       cx="50%"
