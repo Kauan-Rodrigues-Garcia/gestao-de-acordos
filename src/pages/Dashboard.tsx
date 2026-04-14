@@ -35,6 +35,7 @@ import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
+import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -143,6 +144,8 @@ export default function Dashboard() {
   const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
   const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
+  // Novo acordo inline (tabela completa)
+  const [novoInlineAbertoTabela,  setNovoInlineAbertoTabela]  = useState(false);
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
@@ -730,6 +733,14 @@ export default function Dashboard() {
                     )}
                   </>
                 )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => setNovoInlineAbertoTabela(v => !v)}
+                >
+                  <Plus className="w-4 h-4" /> Novo (inline)
+                </Button>
                 <Button variant="outline" size="icon" className="w-8 h-8" onClick={refetch}>
                   <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
                 </Button>
@@ -873,6 +884,14 @@ export default function Dashboard() {
                         </tr>
                       </thead>
                       <tbody>
+                        {novoInlineAbertoTabela && (
+                          <AcordoNovoInline
+                            isPaguePlay={isPP}
+                            colSpan={10}
+                            onSaved={() => { setNovoInlineAbertoTabela(false); refetch(); }}
+                            onCancel={() => setNovoInlineAbertoTabela(false)}
+                          />
+                        )}
                         {acordos.length === 0 ? (
                           <tr>
                             <td colSpan={10} className="px-4 py-12 text-center">
@@ -1007,17 +1026,15 @@ export default function Dashboard() {
                                     >
                                       <Edit className="w-3 h-3" />
                                     </Button>
-                                    {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                      <Button
-                                        variant="ghost" size="icon"
-                                        className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                                        title="Excluir acordo"
-                                        disabled={excluindoId === a.id}
-                                        onClick={() => setConfirmandoExclusao(a)}
-                                      >
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    )}
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                      title="Excluir acordo"
+                                      disabled={excluindoId === a.id}
+                                      onClick={() => setConfirmandoExclusao(a)}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
                                   </div>
                                 </td>
                               </motion.tr>
