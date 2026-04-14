@@ -1,16 +1,12 @@
 /**
  * AcordoDetalheInline.tsx
- * Painel de detalhe expansível (somente leitura).
+ * Painel expansível somente-leitura.
  *
- * Lógica de reagendamento (PaguePay):
- *  - Ao salvar um acordo parcelado, as parcelas ficam com status pendente.
- *  - Ao clicar "Pago" em uma parcela, ela é marcada como paga e a coluna Ação fica vazia.
- *  - Quem precisar reagendar clica no botão "Reagendar" que aparece na linha do ACORDO PAGO
- *    na tabela principal (não dentro do detalhe inline).
- *  - Dentro do detalhe, a coluna Ação mostra:
- *      • Parcela pendente → botão "Pago"
- *      • Parcela paga sem reagendamento → vazio
- *      • Parcela reagendada → badge "Agendado" (verde)
+ * LÓGICA DE PARCELAS:
+ *  - São lidas do banco via acordo_grupo_id (visuais, sem criação).
+ *  - "Pago" → apenas UPDATE status na parcela. Não cria novos registros.
+ *  - onReagendar() é chamado após marcar pago para o pai exibir "Reagendar".
+ *  - Ação: pendente → "Pago" | pago + próxima parcela existe → "Agendado" | pago sem próxima → "—"
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
@@ -29,8 +25,7 @@ import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo,
-  isAtrasado,
+  extractEstado, extractLinkAcordo, isAtrasado,
 } from '@/lib/index';
 
 const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente'];
@@ -45,6 +40,7 @@ export interface AcordoDetalheInlineProps {
   isPaguePlay: boolean;
   colSpan: number;
   onClose: () => void;
+  /** Chamado após marcar uma parcela como paga, para o pai exibir o botão Reagendar */
   onReagendar?: () => void;
 }
 
@@ -74,7 +70,7 @@ function Campo({
   );
 }
 
-// ─── Modal de Reagendamento ─────────────────────────────────────────────────
+// ─── Modal de Reagendamento (exportado para uso no pai) ──────────────────────
 export function ModalReagendar({
   parcela, open, onClose, onConfirm,
 }: {
@@ -83,9 +79,9 @@ export function ModalReagendar({
   onClose: () => void;
   onConfirm: (data: string, valor: number) => Promise<void>;
 }) {
-  const [novaData, setNovaData]   = useState('');
-  const [novoValor, setNovoValor] = useState('');
-  const [salvando, setSalvando]   = useState(false);
+  const [novaData,    setNovaData]    = useState('');
+  const [novoValor,   setNovoValor]   = useState('');
+  const [salvando,    setSalvando]    = useState(false);
 
   useEffect(() => {
     if (!parcela) return;
@@ -94,7 +90,7 @@ export function ModalReagendar({
     const na = m + 1 > 12 ? y + 1 : y;
     setNovaData(`${na}-${String(nm).padStart(2, '0')}-${String(d).padStart(2, '0')}`);
     setNovoValor(String(parcela.valor));
-  }, [parcela]);
+  }, [parcela?.id]);
 
   async function handleConfirm() {
     if (!novaData) { toast.error('Data obrigatória'); return; }
@@ -143,9 +139,11 @@ export function ModalReagendar({
           </div>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={onClose} disabled={salvando}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={salvando}>
+            Cancelar
+          </Button>
           <Button
-            className="bg-success hover:bg-success/90 text-white gap-2"
+            className="bg-success hover:bg-success/90 text-white border border-success gap-2"
             onClick={handleConfirm}
             disabled={salvando}
           >
@@ -165,24 +163,26 @@ export function AcordoDetalheInline({
   const statusLabels = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels   = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
   const atrasado     = isAtrasado(acordo.vencimento, acordo.status);
-  // Exibir parcelas quando: tipo parcelado E grupo existe
-  const temGrupo     = isTipoParcelado(acordo.tipo, isPaguePlay)
+
+  // Exibir sub-tabela de parcelas se: tipo parcelado + grupo definido + >1 parcela
+  const temGrupo = isTipoParcelado(acordo.tipo, isPaguePlay)
     && (acordo.parcelas ?? 1) > 1
     && !!acordo.acordo_grupo_id;
 
-  const [parcelas, setParcelas]         = useState<Acordo[]>([]);
-  const [loadingParcelas, setLoading]   = useState(false);
-  const [marcandoPago, setMarcandoPago] = useState<string | null>(null);
+  // Parcelas carregadas do banco (apenas leitura — nenhuma inserção aqui)
+  const [parcelas,      setParcelas]      = useState<Acordo[]>([]);
+  const [loadingParc,   setLoadingParc]   = useState(false);
+  const [marcandoPago,  setMarcandoPago]  = useState<string | null>(null);
 
-  const link      = extractLinkAcordo(acordo.observacoes);
-  const estado    = extractEstado(acordo.observacoes);
-  const nomeOp    = (acordo.perfis as { nome?: string } | undefined)?.nome ?? '—';
-  // nome_cliente é o nome do profissional (se preenchido)
+  const link           = extractLinkAcordo(acordo.observacoes);
+  const estado         = extractEstado(acordo.observacoes);
+  const nomeOp         = (acordo.perfis as { nome?: string } | undefined)?.nome ?? '—';
   const nomeProfissional = acordo.nome_cliente;
 
+  // Carregar parcelas do grupo (visuais — sem criar nada)
   useEffect(() => {
     if (!temGrupo) return;
-    setLoading(true);
+    setLoadingParc(true);
     supabase
       .from('acordos')
       .select('*')
@@ -191,19 +191,28 @@ export function AcordoDetalheInline({
       .then(({ data, error }) => {
         if (error) toast.error('Erro ao buscar parcelas');
         else setParcelas((data ?? []) as Acordo[]);
-        setLoading(false);
+        setLoadingParc(false);
       });
   }, [temGrupo, acordo.acordo_grupo_id]);
 
-  // Marcar parcela como paga — NÃO cria reagendamento automático
+  /**
+   * Marcar parcela como paga.
+   * Faz apenas UPDATE status='pago' na parcela — NÃO cria nenhum novo registro.
+   * Chama onReagendar() para o pai exibir o botão "Reagendar" na linha da tabela.
+   */
   async function marcarPago(p: Acordo) {
     setMarcandoPago(p.id);
-    const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id);
-    if (error) { toast.error(`Erro: ${error.message}`); }
-    else {
+    const { error } = await supabase
+      .from('acordos')
+      .update({ status: 'pago' })
+      .eq('id', p.id);
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+    } else {
       toast.success('Parcela marcada como paga!');
+      // Atualizar lista local
       setParcelas(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
-      // Notifica o pai para que o botão "Reagendar" apareça na linha da tabela
+      // Avisar o pai (para mostrar botão Reagendar na tabela)
       onReagendar?.();
     }
     setMarcandoPago(null);
@@ -224,9 +233,10 @@ export function AcordoDetalheInline({
             {/* ─── Header ─── */}
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Mostra inscrição como título principal no PaguePay */}
                 <h3 className="text-base font-bold text-foreground">
-                  {isPaguePlay ? (acordo.instituicao || acordo.nr_cliente || '—') : acordo.nome_cliente}
+                  {isPaguePlay
+                    ? (acordo.instituicao || acordo.nr_cliente || '—')
+                    : acordo.nome_cliente}
                 </h3>
                 <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
                   {statusLabels[acordo.status] ?? acordo.status}
@@ -287,7 +297,7 @@ export function AcordoDetalheInline({
                 </span>
               </Campo>
 
-              {/* Parcelas */}
+              {/* Parcelas totais */}
               {isTipoParcelado(acordo.tipo, isPaguePlay) && (acordo.parcelas ?? 1) > 1 && (
                 <Campo icon={Layers} label="Parcelas" value={`${acordo.numero_parcela ?? 1} de ${acordo.parcelas}`} mono />
               )}
@@ -340,7 +350,7 @@ export function AcordoDetalheInline({
               </>
             )}
 
-            {/* ─── Parcelas do Grupo ─── */}
+            {/* ─── Sub-tabela de Parcelas (visual, sem ações de criar) ─── */}
             {temGrupo && (
               <>
                 <Separator className="my-4" />
@@ -349,7 +359,7 @@ export function AcordoDetalheInline({
                     <Layers className="w-4 h-4 text-primary" />
                     <span className="text-sm font-semibold">Parcelas do Grupo</span>
                   </div>
-                  {loadingParcelas ? (
+                  {loadingParc ? (
                     <p className="text-xs text-muted-foreground">Carregando parcelas...</p>
                   ) : (
                     <div className="overflow-x-auto rounded-lg border border-border">
@@ -365,10 +375,15 @@ export function AcordoDetalheInline({
                         </thead>
                         <tbody>
                           {parcelas.map(p => {
-                            // Uma parcela foi "reagendada" se há outra parcela com numero_parcela = p.numero_parcela + 1
-                            const foiReagendada = p.status === 'pago' && parcelas.some(
-                              x => x.numero_parcela === (p.numero_parcela ?? 1) + 1
-                            );
+                            const numP = p.numero_parcela ?? 1;
+                            /**
+                             * "Agendado" = esta parcela está PAGA E existe uma parcela
+                             * com numero_parcela = numP + 1 no mesmo grupo.
+                             * Isso significa que o reagendamento foi confirmado.
+                             */
+                            const proximaExiste = parcelas.some(x => (x.numero_parcela ?? 1) === numP + 1);
+                            const foiAgendada   = p.status === 'pago' && proximaExiste;
+
                             return (
                               <tr
                                 key={p.id}
@@ -378,7 +393,7 @@ export function AcordoDetalheInline({
                                 )}
                               >
                                 <td className="px-3 py-2 font-mono font-bold text-primary">
-                                  {p.numero_parcela ?? '—'}
+                                  {numP}
                                 </td>
                                 <td className="px-3 py-2 font-mono">{formatDate(p.vencimento)}</td>
                                 <td className="px-3 py-2 text-right font-mono font-semibold">
@@ -391,7 +406,7 @@ export function AcordoDetalheInline({
                                 </td>
                                 <td className="px-3 py-2 text-center">
                                   {p.status !== 'pago' ? (
-                                    /* Pendente: botão Pago */
+                                    /* Pendente → botão Pago (apenas para a 1ª parcela não paga) */
                                     <Button
                                       variant="ghost" size="sm"
                                       className="h-6 text-[10px] px-2 text-success hover:bg-success/10"
@@ -401,13 +416,13 @@ export function AcordoDetalheInline({
                                       <CheckCircle2 className="w-3 h-3 mr-1" />
                                       {marcandoPago === p.id ? '...' : 'Pago'}
                                     </Button>
-                                  ) : foiReagendada ? (
-                                    /* Pago e já reagendado: badge Agendado */
+                                  ) : foiAgendada ? (
+                                    /* Pago + próxima parcela existe → Agendado */
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success border border-success/30">
                                       <CheckCircle2 className="w-2.5 h-2.5" /> Agendado
                                     </span>
                                   ) : (
-                                    /* Pago e não reagendado: vazio — o botão Reagendar fica na linha da tabela */
+                                    /* Pago sem próxima → vazio (aguardando Reagendar via tabela) */
                                     <span className="text-muted-foreground/40 text-[10px]">—</span>
                                   )}
                                 </td>
