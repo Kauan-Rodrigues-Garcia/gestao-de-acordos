@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ArrowRight, Calendar,
-  BarChart3, ChevronRight, RefreshCw, X, Trophy, Target,
+  BarChart3, BarChart2, ChevronRight, RefreshCw, X, Trophy, Target,
   TrendingUp, Loader2, DollarSign, Hash, Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,10 +28,6 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
 import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay } from '@/lib/index';
 import { calcularMetricasMes } from '@/services/acordos.service';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer,
-} from 'recharts';
 import { cn } from '@/lib/utils';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -340,118 +336,10 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   );
 }
 
-// ─── Analítico do setor ────────────────────────────────────────────────────
-
-interface AnaliticoSetorProps { resumos: OperadorResumo[] }
-
-function AnaliticoSetor({ resumos }: AnaliticoSetorProps) {
-  const hoje   = getTodayISO();
-  const fimMes = getTodayISO().slice(0, 7) + '-' + new Date(
-    new Date().getFullYear(), new Date().getMonth() + 1, 0
-  ).getDate().toString().padStart(2, '0');
-
-  const totalAberto   = sumSafe(resumos.map(r => r.valorAberto));
-  const totalPago     = sumSafe(resumos.map(r => r.valorPago));
-  const totalAbertos  = resumos.reduce((s, r) => s + r.abertos, 0);
-  const totalVencidos = resumos.reduce((s, r) => s + r.vencidos, 0);
-  const vencendoHoje  = resumos.reduce((s, r) => s + r.vencendoHoje, 0);
-
-  const chartData = resumos.map(r => ({
-    name:        r.perfil.nome.split(' ')[0],
-    'Em aberto': r.valorAberto,
-    'Recebido':  r.valorPago,
-  }));
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {[
-          { label: 'Em aberto/carteira', value: formatBRL(totalAberto),  icon: DollarSign,    cls: 'bg-primary/10 text-primary',         big: true },
-          { label: 'Total recebido',     value: formatBRL(totalPago),    icon: CheckCircle2,  cls: 'bg-success/10 text-success',         big: true },
-          { label: 'Qtd em aberto',      value: String(totalAbertos),    icon: Clock,         cls: 'bg-warning/10 text-warning',         big: false },
-          { label: 'Vencidos',           value: String(totalVencidos),   icon: AlertTriangle, cls: 'bg-destructive/10 text-destructive', big: false },
-          { label: 'Vencem hoje',        value: String(vencendoHoje),    icon: Calendar,      cls: 'bg-warning/10 text-warning',         big: false },
-        ].map(({ label, value, icon: Icon, cls, big }) => (
-          <Card key={label} className="border-border">
-            <CardContent className="p-3">
-              <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center mb-2', cls)}>
-                <Icon className="w-3.5 h-3.5" />
-              </div>
-              <p className={cn('font-bold font-mono text-foreground', big ? 'text-sm' : 'text-xl')}>{value}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">{label}</p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {chartData.length > 0 && (
-        <Card className="border-border">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-primary" />
-              Em aberto vs Recebido por operador
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={chartData} barSize={22}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
-                <Tooltip formatter={(v: number) => formatBRL(v)} />
-                <Bar dataKey="Recebido"   fill="hsl(var(--chart-2))" radius={[3,3,0,0]} />
-                <Bar dataKey="Em aberto"  fill="hsl(var(--chart-4))" radius={[3,3,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="border-border">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <Trophy className="w-4 h-4 text-warning" />
-            Ranking — até {formatDate(fimMes)}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {resumos.length === 0 ? (
-            <p className="text-sm text-center text-muted-foreground py-4">Nenhum operador</p>
-          ) : (
-            [...resumos]
-              .sort((a, b) => b.valorAberto - a.valorAberto)
-              .map((r, i) => {
-                const total = r.valorPago + r.valorAberto;
-                const perc  = pct(r.valorPago, total);
-                return (
-                  <div key={r.perfil.id} className="flex items-center gap-3">
-                    <span className={cn(
-                      'w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0',
-                      i === 0 ? 'bg-warning text-white' : 'bg-muted text-muted-foreground'
-                    )}>{i+1}</span>
-                    <p className="text-xs font-medium text-foreground w-28 truncate flex-shrink-0">
-                      {r.perfil.nome.split(' ')[0]}
-                    </p>
-                    <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
-                      <div className="h-full bg-success rounded-full" style={{ width: `${perc}%` }} />
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-xs font-mono font-bold text-primary">{formatBRL(r.valorAberto)}</p>
-                      <p className="text-[10px] text-muted-foreground">{perc}% pago</p>
-                    </div>
-                  </div>
-                );
-              })
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
 
 // ─── Componente principal ─────────────────────────────────────────────────
 
-type Aba = 'equipe' | 'analitico';
+type Aba = 'equipe';
 
 interface OperadorInfo { id: string; nome: string; perfil: Perfil; }
 
@@ -466,7 +354,6 @@ export default function PainelLider() {
   const [loading,             setLoading]             = useState(true);
   const [erro,                setErro]                = useState<string | null>(null);
   const [opSel,               setOpSel]               = useState<OperadorInfo | null>(null);
-  const [aba,                 setAba]                 = useState<Aba>('equipe');
   const [equipes,             setEquipes]             = useState<EquipeInfo[]>([]);
   const [filtroEquipe,        setFiltroEquipe]        = useState<string>('todas');
 
@@ -643,6 +530,12 @@ export default function PainelLider() {
         </Button>
       </div>
 
+      {/* Aviso analítico */}
+      <p className="text-xs text-muted-foreground mb-4 flex items-center gap-1">
+        <BarChart2 className="w-3.5 h-3.5" />
+        Os dados analíticos do setor estão disponíveis no Dashboard → "Exibir Dados Analíticos"
+      </p>
+
       {/* Seção: Minhas Equipes */}
       {equipes.length > 0 && (
         <div className="mb-5">
@@ -697,29 +590,10 @@ export default function PainelLider() {
         </div>
       )}
 
-      {/* Abas */}
-      <div className="flex gap-1 p-1 bg-muted/40 rounded-xl mb-5 w-fit">
-        {([
-          { key: 'equipe',    label: 'Minha Equipe',     icon: Users },
-          { key: 'analitico', label: 'Analítico do Setor', icon: BarChart3 },
-        ] as { key: Aba; label: string; icon: React.ElementType }[]).map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            onClick={() => { setAba(key); if (key === 'analitico') setOpSel(null); }}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all',
-              aba === key
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <Icon className="w-4 h-4" /> {label}
-          </button>
-        ))}
-      </div>
 
-      {/* Aba: Equipe */}
-      {aba === 'equipe' && (
+
+      {/* Equipe */}
+      {(
         operadores.length === 0 ? (
           <Card className="border-border">
             <CardContent className="p-10 text-center text-muted-foreground">
@@ -762,20 +636,6 @@ export default function PainelLider() {
         )
       )}
 
-      {/* Aba: Analítico do setor */}
-      {aba === 'analitico' && (
-        resumosFiltrados.length === 0 ? (
-          <Card className="border-border">
-            <CardContent className="p-10 text-center text-muted-foreground">
-              <TrendingUp className="w-10 h-10 opacity-30 mx-auto mb-3" />
-              <p className="font-medium">Sem dados para exibir</p>
-              <p className="text-xs mt-1">Adicione operadores ao setor para visualizar o analítico.</p>
-            </CardContent>
-          </Card>
-        ) : (
-          <AnaliticoSetor resumos={resumosFiltrados} />
-        )
-      )}
     </div>
   );
 }
