@@ -36,6 +36,7 @@ import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
+import { useAnalytics } from '@/hooks/useAnalytics';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -99,6 +100,10 @@ export default function Dashboard() {
   const isPP = isPaguePlay(tenantSlug);
   const statusLabels = getStatusLabels(tenantSlug);
   const tipoLabels   = getTipoLabels(tenantSlug);
+
+  // ── filtro de setor para admin (via useAnalytics) ───────────────────────────
+  const { setores: setoresList, setorFiltro, setSetorFiltro } = useAnalytics();
+  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
 
   // ── acordos de hoje ──────────────────────────────────────────────────────────
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
@@ -409,8 +414,41 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Painel analítico colapsível — funciona para todas as empresas */}
-      <div className="mb-6">
+      {/* Painel analítico — filtro de setor para admin + Analytics */}
+      <div className="mb-6 space-y-2">
+        {isAdmin && setoresList.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
+            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setSetorFiltro(null)}
+                className={cn(
+                  'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                  !setorFiltro
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                )}
+              >
+                Todos
+              </button>
+              {setoresList.map(s => (
+                <button
+                  key={s.id}
+                  onClick={() => setSetorFiltro(setorFiltro === s.id ? null : s.id)}
+                  className={cn(
+                    'px-3 py-1 rounded-full text-xs font-medium border transition-colors',
+                    setorFiltro === s.id
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/50'
+                  )}
+                >
+                  {s.nome}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <AnalyticsPanel />
       </div>
 
