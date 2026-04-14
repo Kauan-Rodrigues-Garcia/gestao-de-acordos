@@ -22,6 +22,7 @@ const AdminEquipes      = lazy(() => import('@/pages/AdminEquipes'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
 const AdminLogs         = lazy(() => import('@/pages/AdminLogs'));
 const AdminIA           = lazy(() => import('@/pages/AdminIA'));
+const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
@@ -144,6 +145,9 @@ export default function App() {
                     <AdminLogs />
                   </ProtectedRoute>
                 </LayoutWrapper>
+              } />
+              <Route path="/admin/metas" element={
+                <ProtectedRoute allowedProfiles={['administrador','lider']}><MetasConfig /></ProtectedRoute>
               } />
               <Route path={ROUTE_PATHS.ADMIN_IA} element={
                 <LayoutWrapper>
