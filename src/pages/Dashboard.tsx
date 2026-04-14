@@ -131,9 +131,10 @@ export default function Dashboard() {
   const [excluindoId,             setExcluindoId]             = useState<string | null>(null);
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
+  // Inline edit — mesmo estado único controla ambas as tabelas (hoje + completa)
   const [editandoInlineId,        setEditandoInlineId]        = useState<string | null>(null);
 
-  // Auto-refresh das métricas a cada 30 segundos
+  // Auto-refresh a cada 30 segundos
   useEffect(() => {
     const interval = setInterval(() => { refetch(); }, 30000);
     return () => clearInterval(interval);
@@ -144,10 +145,10 @@ export default function Dashboard() {
     if (!isPP) return;
     const timer = setTimeout(() => {
       const params = new URLSearchParams(searchParams);
-      if (busca)       params.set('busca',  busca);  else params.delete('busca');
+      if (busca)        params.set('busca',  busca);        else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
-      if (filtroTipo)  params.set('tipo',   filtroTipo);  else params.delete('tipo');
-      if (filtroData)  params.set('data',   filtroData);  else params.delete('data');
+      if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
+      if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       params.set('page', currentPage.toString());
       setSearchParams(params);
@@ -164,17 +165,17 @@ export default function Dashboard() {
 
   const { acordos, totalCount, loading, refetch } = useAcordos(
     isPP ? {
-      busca:        busca || undefined,
-      status:       statusFiltro,
-      tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-      vencimento:   filtroData || undefined,
-      operador_id:  perfil?.perfil === 'operador' ? perfil.id : undefined,
-      page:         currentPage,
-      perPage:      PER_PAGE,
+      busca:       busca || undefined,
+      status:      statusFiltro,
+      tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+      vencimento:  filtroData || undefined,
+      operador_id: perfil?.perfil === 'operador' ? perfil.id : undefined,
+      page:        currentPage,
+      perPage:     PER_PAGE,
     } : {},
   );
 
-  // dados para gráficos (dashboard normal)
+  // dados para gráficos (dashboard normal / Bookplay)
   const { acordos: todosAcordos } = useAcordos();
   const statusData = ['verificar_pendente', 'pago', 'nao_pago'].map(s => ({
     name:  statusLabels[s] || STATUS_LABELS[s],
@@ -190,9 +191,9 @@ export default function Dashboard() {
     valor:   todosAcordos.filter(a => a.tipo === t).reduce((s, a) => s + Number(a.valor), 0),
   }));
 
-  const totalPages   = Math.ceil(totalCount / PER_PAGE);
-  const temFiltros   = !!(busca || filtroStatus || filtroTipo || filtroData);
-  const nome         = perfil?.nome?.split(' ')[0] || 'Usuário';
+  const totalPages = Math.ceil(totalCount / PER_PAGE);
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
+  const nome       = perfil?.nome?.split(' ')[0] || 'Usuário';
 
   // ── mover atrasados → nao_pago ────────────────────────────────────────────
   useEffect(() => {
@@ -249,14 +250,14 @@ export default function Dashboard() {
     if (comWhats.length === 0) { toast.warning('Nenhum acordo selecionado possui WhatsApp cadastrado'); return; }
     if (semWhats.length > 0) toast.info(`${semWhats.length} acordo(s) sem WhatsApp serão ignorados`);
     const fila: ItemFila[] = comWhats.map(a => ({
-      id: a.id,
+      id:           a.id,
       nome_cliente: a.nome_cliente,
       nr_cliente:   a.nr_cliente,
       whatsapp:     a.whatsapp!,
       valor:        a.valor,
       vencimento:   a.vencimento,
       mensagem:     buildMensagem(a),
-      link:         `https://wa.me/55${a.whatsapp!.replace(/\D/g,'')}?text=${encodeURIComponent(buildMensagem(a))}`,
+      link:         `https://wa.me/55${a.whatsapp!.replace(/\D/g, '')}?text=${encodeURIComponent(buildMensagem(a))}`,
       enviado:      false,
     }));
     setFilaWhatsApp(fila);
@@ -264,7 +265,7 @@ export default function Dashboard() {
   }
 
   function enviarLembretesHoje() {
-    const lista = acordosHoje.filter(a => a.vencimento === hoje);
+    const lista = acordosDeHoje.filter(a => a.vencimento === hoje);
     if (lista.length === 0) { toast.info('Nenhum acordo vence hoje'); return; }
     prepararFila(lista);
   }
@@ -272,7 +273,7 @@ export default function Dashboard() {
   function enviarUmWhatsapp(a: Acordo) {
     if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
     const mensagem = buildMensagem(a);
-    window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g,'')}?text=${encodeURIComponent(mensagem)}`, '_blank');
+    window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`, '_blank');
     if (perfil?.id) {
       supabase.from('logs_sistema').insert({
         usuario_id:  perfil.id,
@@ -280,7 +281,7 @@ export default function Dashboard() {
         tabela:      'acordos',
         registro_id: a.id,
         empresa_id:  empresa?.id ?? null,
-        detalhes:    { acordo_id: a.id, nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, modo: 'individual' },
+        detalhes: { acordo_id: a.id, nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, modo: 'individual' },
       }).then(({ error }) => { if (error) console.warn('[enviarUmWhatsapp] log error:', error.message); });
     }
   }
@@ -297,7 +298,12 @@ export default function Dashboard() {
         tabela:      'acordos',
         registro_id: a.id,
         empresa_id:  empresa?.id ?? null,
-        detalhes:    { nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: new Date().toISOString() },
+        detalhes: {
+          nome_cliente: a.nome_cliente,
+          nr_cliente:   a.nr_cliente,
+          excluido_por: perfil?.nome ?? perfil?.email ?? null,
+          excluido_em:  new Date().toISOString(),
+        },
       }).then(({ error: logError }) => { if (logError) console.warn('[excluirAcordo] log error:', logError.message); });
       toast.success(`Acordo #${a.nr_cliente} excluído!`);
       refetch();
@@ -314,14 +320,23 @@ export default function Dashboard() {
       const { error } = await supabase.from('acordos').delete().eq('id', id);
       if (error) {
         failedCount++;
+        console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
       } else {
         deletedCount++;
         if (acordo) {
           supabase.from('logs_sistema').insert({
-            usuario_id: perfil?.id ?? null, acao: 'exclusao_acordo', tabela: 'acordos',
-            registro_id: id, empresa_id: empresa?.id ?? null,
-            detalhes: { nome_cliente: acordo.nome_cliente, nr_cliente: acordo.nr_cliente,
-              excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: new Date().toISOString(), modo: 'lote' },
+            usuario_id:  perfil?.id ?? null,
+            acao:        'exclusao_acordo',
+            tabela:      'acordos',
+            registro_id: id,
+            empresa_id:  empresa?.id ?? null,
+            detalhes: {
+              nome_cliente: acordo.nome_cliente,
+              nr_cliente:   acordo.nr_cliente,
+              excluido_por: perfil?.nome ?? perfil?.email ?? null,
+              excluido_em:  new Date().toISOString(),
+              modo:         'lote',
+            },
           }).then(({ error: logError }) => { if (logError) console.warn('[excluirSelecionados] log error:', logError.message); });
         }
       }
@@ -333,7 +348,6 @@ export default function Dashboard() {
     refetch();
   }
 
-  // ── render helpers ────────────────────────────────────────────────────────────
   // Acordos de hoje para a seção de destaque
   const acordosDeHoje = useMemo(() =>
     acordosHoje.filter(a => a.vencimento === hoje),
@@ -385,18 +399,18 @@ export default function Dashboard() {
         variants={stagger} initial="hidden" animate="visible"
         className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"
       >
-        <StatCard title="Acordos Hoje"    value={metricas.acordos_hoje}
+        <StatCard title="Acordos Hoje"  value={metricas.acordos_hoje}
           icon={CalendarDays} color="bg-primary/10 text-primary" trend="neutral" loading={loadingMetricas} />
-        <StatCard title="Pagos Hoje"      value={metricas.pagos_hoje}
+        <StatCard title="Pagos Hoje"    value={metricas.pagos_hoje}
           icon={CheckCircle2} color="bg-success/10 text-success" trend="up"      loading={loadingMetricas} />
-        <StatCard title="Previsto Hoje"   value={formatCurrency(metricas.valor_previsto_hoje)}
-          icon={DollarSign}   color="bg-info/10 text-info"        loading={loadingMetricas} />
-        <StatCard title="Recebido Hoje"   value={formatCurrency(metricas.valor_recebido_hoje)}
-          icon={TrendingUp}   color="bg-success/10 text-success"  trend="up"      loading={loadingMetricas} />
+        <StatCard title="Previsto Hoje" value={formatCurrency(metricas.valor_previsto_hoje)}
+          icon={DollarSign}   color="bg-info/10 text-info"                        loading={loadingMetricas} />
+        <StatCard title="Recebido Hoje" value={formatCurrency(metricas.valor_recebido_hoje)}
+          icon={TrendingUp}   color="bg-success/10 text-success" trend="up"       loading={loadingMetricas} />
       </motion.div>
 
       {/* ════════════════════════════════════════════════════════════════════
-          SEÇÃO EXCLUSIVA PAGUEPLAY — Acordos de Hoje em destaque + Tabela completa
+          SEÇÃO EXCLUSIVA PAGUEPLAY
           ════════════════════════════════════════════════════════════════════ */}
       {isPP && (
         <div className="space-y-6">
@@ -467,6 +481,7 @@ export default function Dashboard() {
                                 'border-b border-border/50 hover:bg-accent/50 transition-colors',
                                 i % 2 === 0 && 'bg-warning/3',
                                 a.status === 'pago' && 'opacity-60',
+                                isEditingThis && 'bg-primary/5',
                               )}
                             >
                               <td className="px-4 py-2.5">
@@ -529,7 +544,10 @@ export default function Dashboard() {
                                   )}
                                   <Button
                                     variant="ghost" size="icon"
-                                    className={cn('w-6 h-6 hidden', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
+                                    className={cn(
+                                      'w-6 h-6 hidden',
+                                      a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
+                                    )}
                                     title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
                                     onClick={() => enviarUmWhatsapp(a)}
                                   >
@@ -546,13 +564,26 @@ export default function Dashboard() {
                                   >
                                     <Edit className="w-3 h-3" />
                                   </Button>
+                                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                                    <Button
+                                      variant="ghost" size="icon"
+                                      className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                      title="Excluir acordo"
+                                      disabled={excluindoId === a.id}
+                                      onClick={() => setConfirmandoExclusao(a)}
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </Button>
+                                  )}
                                 </div>
                               </td>
                             </tr>
+                            {/* Inline edit row — passa isPaguePlay para garantir campos corretos */}
                             {isEditingThis && (
                               <AcordoEditInline
                                 key={`inline-hoje-${a.id}`}
                                 acordo={a}
+                                isPaguePlay={isPP}
                                 onSaved={() => { setEditandoInlineId(null); refetch(); }}
                                 onCancel={() => setEditandoInlineId(null)}
                               />
@@ -648,14 +679,14 @@ export default function Dashboard() {
                     <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos Status</SelectItem>
-                      {Object.entries(statusLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                      {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Select value={filtroTipo} onValueChange={v => { setFiltroTipo(v); setCurrentPage(1); }}>
                     <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos Tipos</SelectItem>
-                      {Object.entries(tipoLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                      {Object.entries(tipoLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <input
@@ -692,7 +723,7 @@ export default function Dashboard() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NOME</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CPF</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">WHATSAPP</th>
+                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
@@ -712,9 +743,9 @@ export default function Dashboard() {
                             </td>
                           </tr>
                         ) : acordos.map((a, i) => {
-                          const atrasado   = isAtrasado(a.vencimento, a.status);
-                          const venceHoje  = a.vencimento === hoje;
-                          const sel        = selecionados.includes(a.id);
+                          const atrasado  = isAtrasado(a.vencimento, a.status);
+                          const venceHoje = a.vencimento === hoje;
+                          const sel       = selecionados.includes(a.id);
                           const isEditingThis = editandoInlineId === a.id;
                           return (
                             <>
@@ -754,9 +785,9 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
                                   {a.instituicao || '—'}
                                 </td>
-                                {/* WhatsApp */}
-                                <td className="px-3 py-2.5 font-mono text-muted-foreground text-[11px]">
-                                  {a.whatsapp || '—'}
+                                {/* Valor */}
+                                <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
+                                  {formatCurrency(a.valor)}
                                 </td>
                                 {/* Estado */}
                                 <td className="px-3 py-2.5">
@@ -807,9 +838,13 @@ export default function Dashboard() {
                                         <CheckCircle className="w-3 h-3" />
                                       </Button>
                                     )}
+                                    {/* WhatsApp — oculto para PaguePay */}
                                     <Button
                                       variant="ghost" size="icon"
-                                      className={cn('w-6 h-6 hidden', a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30')}
+                                      className={cn(
+                                        'w-6 h-6 hidden',
+                                        a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
+                                      )}
                                       title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
                                       onClick={() => enviarUmWhatsapp(a)}
                                     >
@@ -840,11 +875,12 @@ export default function Dashboard() {
                                   </div>
                                 </td>
                               </motion.tr>
-                              {/* Inline edit row */}
+                              {/* Inline edit row — passa isPaguePlay para garantir campos corretos */}
                               {isEditingThis && (
                                 <AcordoEditInline
                                   key={`inline-${a.id}`}
                                   acordo={a}
+                                  isPaguePlay={isPP}
                                   onSaved={() => { setEditandoInlineId(null); refetch(); }}
                                   onCancel={() => setEditandoInlineId(null)}
                                 />
@@ -879,7 +915,10 @@ export default function Dashboard() {
           {filaAberta && (
             <ModalFilaWhatsApp
               fila={filaWhatsApp}
-              onClose={() => setFilaAberta(false)}
+              usuarioId={perfil?.id}
+              empresaId={empresa?.id}
+              modo="lote"
+              onClose={() => { setFilaAberta(false); setSelecionados([]); }}
             />
           )}
 
@@ -943,12 +982,50 @@ export default function Dashboard() {
                 <div className="flex gap-2 justify-end mt-4">
                   <Button variant="outline" size="sm" onClick={() => setConfirmandoExclusaoLote(false)}>Cancelar</Button>
                   <Button variant="destructive" size="sm" className="gap-1.5" onClick={excluirSelecionados}>
-                    <Trash2 className="w-3.5 h-3.5" /> Excluir todos
+                    <Trash2 className="w-3.5 h-3.5" /> Excluir Tudo
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
           )}
+
+          {/* Floating Action Bar (seleção múltipla) */}
+          <AnimatePresence>
+            {selecionados.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 80 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 80 }}
+                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50"
+              >
+                <div className="flex items-center gap-3 px-5 py-3 rounded-2xl shadow-2xl border border-white/10 bg-gray-900/95 backdrop-blur-md text-white">
+                  <span className="text-sm font-semibold tabular-nums whitespace-nowrap">
+                    {selecionados.length} selecionado(s)
+                  </span>
+                  <div className="w-px h-5 bg-white/20" />
+                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
+                      onClick={() => setConfirmandoExclusaoLote(true)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir Selecionados
+                    </Button>
+                  )}
+                  <Button
+                    size="sm" variant="ghost"
+                    className="gap-1 text-white/60 hover:text-white hover:bg-white/10 text-xs h-8 px-2"
+                    onClick={() => setSelecionados([])}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    Limpar
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       )}
 
@@ -975,7 +1052,7 @@ export default function Dashboard() {
                         acordosHoje.forEach(a => {
                           if (a.whatsapp) {
                             const msg = `Olá, ${a.nome_cliente}, passando para lembrar do seu acordo NR ${a.nr_cliente}, no valor de ${formatCurrency(a.valor)}, com vencimento em ${formatDate(a.vencimento)}. Qualquer dúvida, estamos à disposição.`;
-                            window.open(`https://wa.me/55${a.whatsapp!.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
+                            window.open(`https://wa.me/55${a.whatsapp!.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
                           }
                         });
                       }}
@@ -1047,7 +1124,7 @@ export default function Dashboard() {
                                     variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
                                     onClick={() => {
                                       const msg = `Olá, ${a.nome_cliente}, passando para lembrar do seu acordo NR ${a.nr_cliente}, no valor de ${formatCurrency(a.valor)}, com vencimento em ${formatDate(a.vencimento)}. Qualquer dúvida, estamos à disposição.`;
-                                      window.open(`https://wa.me/55${a.whatsapp!.replace(/\D/g,'')}?text=${encodeURIComponent(msg)}`, '_blank');
+                                      window.open(`https://wa.me/55${a.whatsapp!.replace(/\D/g, '')}?text=${encodeURIComponent(msg)}`, '_blank');
                                     }}
                                   >
                                     <MessageSquare className="w-3 h-3" />
@@ -1114,7 +1191,7 @@ export default function Dashboard() {
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
                     <Tooltip />
-                    <Bar dataKey="acordos" fill="hsl(var(--primary))" radius={[4,4,0,0]} />
+                    <Bar dataKey="acordos" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
