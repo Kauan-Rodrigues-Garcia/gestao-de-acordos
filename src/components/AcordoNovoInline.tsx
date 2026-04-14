@@ -120,9 +120,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
       // Gerar grupo se parcelado E parcelas > 1
       const grupoId = (temParcelas && parcelas > 1) ? crypto.randomUUID() : null;
 
-      const setorId = (perfil as { setor_id?: string | null }).setor_id;
-
-      // ── Base de cada parcela ────────────────────────────────────────────
+      // ── Base de cada parcela (somente colunas que existem no schema) ──────
       const base: Record<string, unknown> = {
         nome_cliente:    isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
         nr_cliente:      nrCliente.trim() || null,
@@ -138,25 +136,29 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         data_cadastro:   new Date().toISOString().split('T')[0],
         acordo_grupo_id: grupoId,
       };
-      if (setorId) base.setor_id = setorId;
 
       // ── Criar parcela 1 ─────────────────────────────────────────────────
       const parcela1 = { ...base, vencimento, numero_parcela: 1 };
 
       const { error: e1 } = await supabase.from('acordos').insert(parcela1);
       if (e1) {
-        // Fallback: tentar sem colunas extras se schema antigo
-        if (e1.code === '42703' || e1.message?.includes('column')) {
-          const { acordo_grupo_id: _g, numero_parcela: _n, setor_id: _s, instituicao: _i, ...min } = parcela1;
-          const { error: e2 } = await supabase.from('acordos').insert({ ...min, vencimento });
-          if (e2) { toast.error(`Erro: ${e2.message}`); return; }
+        // 400 = coluna desconhecida → fallback sem colunas extras
+        const isColErr = e1.code === '42703'
+          || String(e1.code) === '400'
+          || e1.message?.toLowerCase().includes('column')
+          || e1.message?.toLowerCase().includes('unknown');
+        if (isColErr) {
+          // Tentar sem acordo_grupo_id e numero_parcela (schema antigo)
+          const { acordo_grupo_id: _g, numero_parcela: _n, ...min1 } = parcela1;
+          const { error: e2 } = await supabase.from('acordos').insert(min1);
+          if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
         } else {
-          toast.error(`Erro: ${e1.message}`);
+          toast.error(`Erro ao salvar: ${e1.message}`);
           return;
         }
       }
 
-      // ── Criar parcelas 2..N (se parcelado) ─────────────────────────────
+      // ── Criar parcelas 2..N ─────────────────────────────────────────────
       if (grupoId && parcelas > 1) {
         const extras = Array.from({ length: parcelas - 1 }, (_, i) => ({
           ...base,
@@ -166,8 +168,15 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         }));
         const { error: eExtras } = await supabase.from('acordos').insert(extras);
         if (eExtras) {
-          // Não bloquear — parcela 1 foi criada, extras são bonus
-          toast.warning(`Parcelas extras com erro: ${eExtras.message}`);
+          // Fallback sem colunas extras para o lote
+          const { acordo_grupo_id: _g, numero_parcela: _n, ...baseMin } = base as { acordo_grupo_id?: unknown; numero_parcela?: unknown; [k: string]: unknown };
+          const extrasMin = Array.from({ length: parcelas - 1 }, (_, i) => ({
+            ...baseMin,
+            vencimento: addMonths(vencimento, i + 1),
+            status:     'verificar_pendente' as const,
+          }));
+          const { error: eExtras2 } = await supabase.from('acordos').insert(extrasMin);
+          if (eExtras2) toast.warning(`Parcelas extras: ${eExtras2.message}`);
         }
       }
 
