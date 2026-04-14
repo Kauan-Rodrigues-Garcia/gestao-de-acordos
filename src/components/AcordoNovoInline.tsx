@@ -1,8 +1,8 @@
 /**
  * AcordoNovoInline.tsx
- * Formulário inline de criação de novo acordo na tabela.
- * PaguePay: Inscrição/Valor/Vencimento/Estado → Tipo/Parcelas/Status → Profissional → Link
- * Bookplay: NR/Vencimento/Valor → Cliente/Instituição → Tipo/Parcelas/Status → Obs
+ * Formulário inline de criação de acordo na tabela.
+ * PaguePay: Inscrição/Valor/Vencimento/Estado → Pagamento+Parcelas+Status → Profissional → Link
+ * Bookplay:  NR/Vencimento/Valor → Cliente → Tipo+Parcelas+Status → Obs
  */
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -21,30 +21,30 @@ import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 
-const TIPOS_BOOKPLAY = [
-  { value: 'boleto',            label: 'Boleto' },
-  { value: 'pix_automatico',    label: 'PIX Automático' },
-  { value: 'cartao_recorrente', label: 'Cartão Recorrente' },
-  { value: 'cartao',            label: 'Cartão de Crédito' },
-  { value: 'pix',               label: 'PIX' },
-];
+// ─── PaguePay: 3 tipos. Apenas Boleto e PIX habilitam parcelamento ─────────
 const TIPOS_PAGUEPLAY = [
-  { value: 'boleto', label: 'Boleto' },
-  { value: 'pix',   label: 'PIX' },
+  { value: 'boleto',  label: 'Boleto',             parcelado: true  },
+  { value: 'pix',    label: 'PIX',                 parcelado: true  },
+  { value: 'cartao', label: 'Cartão de Crédito',   parcelado: false },
 ];
-const STATUS_OPTIONS = [
-  { value: 'verificar_pendente', label: 'Pendente' },
-  { value: 'pago',               label: 'Pago' },
-  { value: 'nao_pago',           label: 'Não Pago' },
-];
-const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente'];
-const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
-// Parcelas limitadas a 12 para PaguePay
-const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
 
-function isTipoParcelado(tipo: string, isPP: boolean): boolean {
-  return isPP ? TIPOS_PARCELADOS_PAGUEPLAY.includes(tipo) : TIPOS_PARCELADOS_BOOKPLAY.includes(tipo);
-}
+// ─── Bookplay ──────────────────────────────────────────────────────────────
+const TIPOS_BOOKPLAY = [
+  { value: 'boleto',            label: 'Boleto',            parcelado: true  },
+  { value: 'pix_automatico',    label: 'PIX Automático',    parcelado: true  },
+  { value: 'cartao_recorrente', label: 'Cartão Recorrente', parcelado: true  },
+  { value: 'cartao',            label: 'Cartão de Crédito', parcelado: false },
+  { value: 'pix',               label: 'PIX',               parcelado: false },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'verificar_pendente', label: 'Pendente'  },
+  { value: 'pago',               label: 'Pago'       },
+  { value: 'nao_pago',           label: 'Não Pago'   },
+];
+
+// 12 opções de parcelas para PaguePay
+const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
 
 export interface AcordoNovoInlineProps {
   isPaguePlay: boolean;
@@ -72,8 +72,16 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [salvando,     setSalvando]     = useState(false);
 
   const tipos = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
-  const temParcelas = isTipoParcelado(tipo, isPaguePlay);
+  // Habilita parcelamento somente se o tipo selecionado permite
+  const tipoAtual = tipos.find(t => t.value === tipo);
+  const temParcelas = !!tipoAtual?.parcelado;
   const parcelas = parseInt(parcelasStr) || 1;
+
+  function handleChangeTipo(t: string) {
+    setTipo(t);
+    const tp = tipos.find(x => x.value === t);
+    if (!tp?.parcelado) setParcelasStr('1');
+  }
 
   function validar(): string | null {
     if (!vencimento) return 'Data de vencimento obrigatória';
@@ -93,40 +101,45 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     setSalvando(true);
     try {
       const valorNum = parseCurrencyInput(valorStr);
-      // PaguePay: sem grupo — parcelas são apenas um número informativo no registro
-      const grupoId = null;
 
-      let obsFinal: string | null;
-      if (isPaguePlay) {
-        obsFinal = buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null;
-      } else {
-        obsFinal = observacoes.trim() || null;
-      }
+      const obsFinal = isPaguePlay
+        ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
+        : (observacoes.trim() || null);
 
-      const base: Record<string, unknown> = {
-        nome_cliente:    isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
-        nr_cliente:      nrCliente.trim() || null,
+      // Payload com apenas colunas que existem na tabela base
+      const payload: Record<string, unknown> = {
+        nome_cliente:  isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
+        nr_cliente:    nrCliente.trim() || null,
         vencimento,
-        valor:           valorNum,
+        valor:         valorNum,
         tipo,
-        parcelas:        temParcelas ? parcelas : 1,
-        whatsapp:        whatsapp.trim() || null,
-        instituicao:     instituicao.trim() || null,
+        parcelas:      temParcelas ? parcelas : 1,
+        whatsapp:      whatsapp.trim() || null,
+        instituicao:   instituicao.trim() || null,
         status,
-        observacoes:     obsFinal,
-        operador_id:     perfil.id,
-        setor_id:        (perfil as { setor_id?: string }).setor_id ?? null,
-        empresa_id:      empresa.id,
-        acordo_grupo_id: grupoId,
-        numero_parcela:  1,
-        data_cadastro:   new Date().toISOString().split('T')[0],
+        observacoes:   obsFinal,
+        operador_id:   perfil.id,
+        empresa_id:    empresa.id,
+        data_cadastro: new Date().toISOString().split('T')[0],
       };
 
-      const { error } = await supabase.from('acordos').insert(base);
-      if (error) { toast.error(`Erro: ${error.message}`); return; }
-      // PaguePay: NÃO cria registros extras por parcela.
-      // O campo "parcelas" no registro já indica quantas parcelas existem.
-      // Cada parcela é reagendada individualmente pelo operador ao marcar como paga.
+      // setor_id — incluir somente se existir no perfil (campo opcional)
+      const setorId = (perfil as { setor_id?: string | null }).setor_id;
+      if (setorId) payload.setor_id = setorId;
+
+      // Tentar salvar; se erro de coluna desconhecida, tentar payload mínimo
+      const { error } = await supabase.from('acordos').insert(payload);
+      if (error) {
+        if (error.code === '42703' || error.message?.includes('column')) {
+          // Fallback: payload mínimo sem colunas extras
+          const { setor_id: _s, instituicao: _i, ...minPayload } = payload;
+          const { error: e2 } = await supabase.from('acordos').insert(minPayload);
+          if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
+        } else {
+          toast.error(`Erro: ${error.message}`);
+          return;
+        }
+      }
 
       toast.success('Acordo criado com sucesso!');
       onSaved();
@@ -158,7 +171,6 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 <DollarSign className="w-3 h-3" /> Dados Principais
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Inscrição */}
                 <div className="space-y-1">
                   <Label className="text-xs">Inscrição *</Label>
                   <Input
@@ -168,7 +180,6 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     className="h-8 text-xs"
                   />
                 </div>
-                {/* Valor */}
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>
                   <Input
@@ -178,7 +189,6 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     className="h-8 text-xs font-mono"
                   />
                 </div>
-                {/* Vencimento */}
                 <div className="space-y-1">
                   <Label className="text-xs">Vencimento *</Label>
                   <input
@@ -188,7 +198,6 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
                   />
                 </div>
-                {/* Estado */}
                 <div className="space-y-1">
                   <Label className="text-xs">Estado</Label>
                   <Select value={estadoSel} onValueChange={setEstadoSel}>
@@ -196,7 +205,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                       <SelectValue placeholder="UF" />
                     </SelectTrigger>
                     <SelectContent>
-                      {(ESTADOS_BRASIL as string[]).map((uf) => (
+                      {(ESTADOS_BRASIL as string[]).map(uf => (
                         <SelectItem key={uf} value={uf}>{uf}</SelectItem>
                       ))}
                     </SelectContent>
@@ -211,10 +220,9 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 <FileText className="w-3 h-3" /> Tipo e Status
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {/* Forma de pagamento */}
                 <div className="space-y-1">
                   <Label className="text-xs">Forma de Pagamento *</Label>
-                  <Select value={tipo} onValueChange={t => { setTipo(t); if (!isTipoParcelado(t, true)) setParcelasStr('1'); }}>
+                  <Select value={tipo} onValueChange={handleChangeTipo}>
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
@@ -225,21 +233,28 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Parcelas 1–12 */}
+                {/* Parcelas (1–12): visível sempre, mas desabilitado para Cartão */}
                 <div className="space-y-1">
-                  <Label className="text-xs">Parcelas (1–12)</Label>
-                  <Select value={parcelasStr} onValueChange={setParcelasStr}>
+                  <Label className="text-xs">
+                    Parcelas {!temParcelas && <span className="text-muted-foreground/50">(não se aplica)</span>}
+                  </Label>
+                  <Select
+                    value={parcelasStr}
+                    onValueChange={setParcelasStr}
+                    disabled={!temParcelas}
+                  >
                     <SelectTrigger className="h-8 text-xs">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
                       {PARCELAS_PP.map(n => (
-                        <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>
+                        <SelectItem key={n} value={String(n)}>
+                          {n === 1 ? '1 (à vista)' : `${n}x`}
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                {/* Status */}
                 <div className="space-y-1">
                   <Label className="text-xs">Status *</Label>
                   <Select value={status} onValueChange={setStatus}>
@@ -259,7 +274,8 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             {/* ── Seção 3: Dados do Profissional (Opcional) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <User className="w-3 h-3" /> Dados do Profissional <span className="font-normal normal-case text-muted-foreground/60">(opcional)</span>
+                <User className="w-3 h-3" /> Dados do Profissional
+                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="space-y-1 sm:col-span-2">
@@ -286,7 +302,8 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             {/* ── Seção 4: Link do Acordo (Opcional) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <Link2 className="w-3 h-3" /> Link do Acordo <span className="font-normal normal-case text-muted-foreground/60">(opcional)</span>
+                <Link2 className="w-3 h-3" /> Link do Acordo
+                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
               </p>
               <Textarea
                 value={link}
@@ -299,11 +316,18 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
 
             {/* Botões */}
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" className="gap-2" onClick={salvar} disabled={salvando}>
+              <Button
+                size="sm"
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={salvar}
+                disabled={salvando}
+              >
                 <Save className="w-3.5 h-3.5" />
                 {salvando ? 'Salvando...' : 'Salvar Acordo'}
               </Button>
-              <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
+              <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>
+                Cancelar
+              </Button>
             </div>
 
           </div>
@@ -385,7 +409,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Forma de Pagamento *</Label>
-                <Select value={tipo} onValueChange={t => { setTipo(t); if (!isTipoParcelado(t, false)) setParcelasStr('1'); }}>
+                <Select value={tipo} onValueChange={handleChangeTipo}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TIPOS_BOOKPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
@@ -419,7 +443,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
           </div>
 
           <div className="flex items-center gap-2 pt-1">
-            <Button size="sm" className="gap-2" onClick={salvar} disabled={salvando}>
+            <Button
+              size="sm"
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={salvar}
+              disabled={salvando}
+            >
               <Save className="w-3.5 h-3.5" />
               {salvando ? 'Salvando...' : 'Salvar Acordo'}
             </Button>
