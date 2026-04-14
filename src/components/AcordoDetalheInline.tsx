@@ -370,7 +370,7 @@ export function AcordoDetalheInline({
                             <th className="px-3 py-2 text-left font-medium text-muted-foreground">Vencimento</th>
                             <th className="px-3 py-2 text-right font-medium text-muted-foreground">Valor</th>
                             <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Ação</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Verificação</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -405,25 +405,14 @@ export function AcordoDetalheInline({
                                   </span>
                                 </td>
                                 <td className="px-3 py-2 text-center">
-                                  {p.status !== 'pago' ? (
-                                    /* Pendente → botão Pago (apenas para a 1ª parcela não paga) */
-                                    <Button
-                                      variant="ghost" size="sm"
-                                      className="h-6 text-[10px] px-2 text-success hover:bg-success/10"
-                                      disabled={marcandoPago === p.id}
-                                      onClick={() => marcarPago(p)}
-                                    >
-                                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                                      {marcandoPago === p.id ? '...' : 'Pago'}
-                                    </Button>
-                                  ) : foiAgendada ? (
-                                    /* Pago + próxima parcela existe → Agendado */
+                                  {foiAgendada ? (
+                                    /* Pago + próxima parcela existe → reagendamento confirmado */
                                     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success border border-success/30">
                                       <CheckCircle2 className="w-2.5 h-2.5" /> Agendado
                                     </span>
                                   ) : (
-                                    /* Pago sem próxima → vazio (aguardando Reagendar via tabela) */
-                                    <span className="text-muted-foreground/40 text-[10px]">—</span>
+                                    /* Pendente ou pago sem reagendamento → vazio */
+                                    <span className="text-muted-foreground/30 text-[10px]">—</span>
                                   )}
                                 </td>
                               </tr>
