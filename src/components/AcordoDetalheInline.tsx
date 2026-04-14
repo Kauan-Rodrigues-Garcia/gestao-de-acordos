@@ -24,7 +24,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { supabase, Acordo } from '@/lib/supabase';
-import { toast } from 'sonner';
+import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import {
   formatCurrency, formatDate,
@@ -166,9 +166,11 @@ export function AcordoDetalheInline({
     isTipoParcelado(acordo.tipo, isPaguePlay) && totalParcelas > 1;
 
   // Registros reais buscados do banco (mesmo grupo)
-  const [registrosReais, setRegistrosReais] = useState<Acordo[]>([]);
-  const [loadingParc,    setLoadingParc]    = useState(false);
-  const [marcandoPago,   setMarcandoPago]   = useState<string | null>(null);
+  const [registrosReais,   setRegistrosReais]   = useState<Acordo[]>([]);
+  const [loadingParc,      setLoadingParc]       = useState(false);
+  const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
+  // IDs de parcelas já reagendadas (para esconder botão imediatamente após confirmar)
+  const [reagendados,      setReagendados]       = useState<Set<string>>(new Set());
 
   // Modal
   const [parcelaModal, setParcelaModal] = useState<Acordo | null>(null);
@@ -231,9 +233,17 @@ export function AcordoDetalheInline({
     };
     const { error } = await supabase.from('acordos').insert(novaParcela);
     if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
+
+    // 1. Marcar parcela como reagendada IMEDIATAMENTE → botão some antes de qualquer re-render
+    setReagendados(prev => new Set([...prev, p.id]));
+
+    // 2. Fechar modal e limpar estado
+    setModalAberto(false);
+    setParcelaModal(null);
+
     toast.success('Reagendamento confirmado!', { description: 'Próximo pagamento agendado na nova data.' });
 
-    // 1. Recarregar parcelas → proximaReal passa a existir → botão Reagendar some
+    // 3. Recarregar parcelas do grupo em segundo plano
     const grupoId = acordo.acordo_grupo_id ?? p.acordo_grupo_id;
     if (grupoId) {
       const { data: novaLista } = await supabase
@@ -243,11 +253,7 @@ export function AcordoDetalheInline({
       setRegistrosReais((novaLista ?? []) as Acordo[]);
     }
 
-    // 2. Fechar modal
-    setModalAberto(false);
-    setParcelaModal(null);
-
-    // 3. Pai faz refetch → nova parcela aparece na lista na nova data
+    // 4. Pai faz refetch → nova parcela aparece na lista na nova data
     onReagendar?.();
   }
 
@@ -405,11 +411,12 @@ export function AcordoDetalheInline({
                             {linhas.map(({ index, real, dataCalc }) => {
                               // Verificar se a próxima parcela já tem registro real
                               const proximaReal = linhas.find(l => l.index === index + 1)?.real;
-                              const foiAgendada = real?.status === 'pago' && !!proximaReal;
-                              // Reagendar: última paga, sem próxima real E não é a última parcela
+                              const foiAgendada = real?.status === 'pago' && (!!proximaReal || (real && reagendados.has(real.id)));
+                              // Reagendar: última paga, sem próxima real, não reagendada ainda, não é a última parcela
                               const podeReagendar =
                                 real?.status === 'pago' &&
                                 !proximaReal &&
+                                !(real && reagendados.has(real.id)) &&
                                 index === ultimaRealPagaIdx &&
                                 index < totalParcelas;
 
