@@ -262,7 +262,77 @@ export default function AcordoForm() {
         return;
       }
 
-      toast.success(isEdit ? 'Acordo atualizado!' : 'Acordo cadastrado com sucesso!');
+      // ── Auto-criar parcelas ao salvar novo acordo ───────────────────────
+      const TIPOS_PARCELADOS_BOOKPLAY = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+      const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
+      const tiposParcelados = isPP ? TIPOS_PARCELADOS_PAGUEPLAY : TIPOS_PARCELADOS_BOOKPLAY;
+      const parcelasNum = parseInt(payload.parcelas as string, 10) || 1;
+      const deveCriarParcelas =
+        !isEdit &&
+        tiposParcelados.includes(payload.tipo as string) &&
+        parcelasNum > 1;
+
+      if (deveCriarParcelas) {
+        const grupoId = crypto.randomUUID();
+        // Atualizar o acordo recém-criado com grupo_id e numero_parcela = 1
+        // (buscar pelo nr_cliente + empresa_id + vencimento para encontrar o id)
+        const { data: acordoCriado } = await supabase
+          .from('acordos')
+          .select('id')
+          .eq('nr_cliente', payload.nr_cliente as string)
+          .eq('empresa_id', empresa.id)
+          .eq('vencimento', payload.vencimento as string)
+          .order('criado_em', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (acordoCriado?.id) {
+          await supabase
+            .from('acordos')
+            .update({ acordo_grupo_id: grupoId, numero_parcela: 1 })
+            .eq('id', acordoCriado.id);
+        }
+
+        // Criar parcelas 2..N
+        const baseVencimento = payload.vencimento as string;
+        const [baseYear, baseMonth, baseDay] = baseVencimento.split('-').map(Number);
+        const parcelasParaCriar = [];
+
+        for (let n = 2; n <= parcelasNum; n++) {
+          const totalMeses = baseMonth - 1 + (n - 1);
+          const anoVenc = baseYear + Math.floor(totalMeses / 12);
+          const mesVenc = (totalMeses % 12) + 1;
+          const vencimentoN = `${anoVenc}-${String(mesVenc).padStart(2, '0')}-${String(baseDay).padStart(2, '0')}`;
+          parcelasParaCriar.push({
+            nome_cliente:    payload.nome_cliente,
+            nr_cliente:      payload.nr_cliente,
+            data_cadastro:   new Date().toISOString().split('T')[0],
+            vencimento:      vencimentoN,
+            valor:           payload.valor,
+            tipo:            payload.tipo,
+            parcelas:        parcelasNum,
+            whatsapp:        payload.whatsapp ?? null,
+            status:          'verificar_pendente',
+            observacoes:     payload.observacoes ?? null,
+            instituicao:     payload.instituicao ?? null,
+            operador_id:     uid,
+            setor_id:        payload.setor_id ?? null,
+            empresa_id:      empresa.id,
+            acordo_grupo_id: grupoId,
+            numero_parcela:  n,
+          });
+        }
+
+        const { error: errParcelas } = await supabase.from('acordos').insert(parcelasParaCriar);
+        if (errParcelas) {
+          console.warn('[AcordoForm] erro ao criar parcelas adicionais:', errParcelas.message);
+          toast.warning(`Acordo salvo, mas houve erro ao criar ${parcelasNum - 1} parcelas: ${errParcelas.message}`);
+        } else {
+          toast.success(`Acordo cadastrado com ${parcelasNum} parcelas criadas automaticamente!`);
+        }
+      } else {
+        toast.success(isEdit ? 'Acordo atualizado!' : 'Acordo cadastrado com sucesso!');
+      }
       if (!isEdit && p?.lider_id) {
         criarNotificacao({
           usuario_id: p.lider_id,
