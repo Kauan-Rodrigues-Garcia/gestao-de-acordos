@@ -410,7 +410,9 @@ export default function Dashboard() {
       </div>
 
       {/* Painel analítico colapsível — funciona para todas as empresas */}
-      <AnalyticsPanel />
+      <div className="mb-6">
+        <AnalyticsPanel />
+      </div>
 
       {/* ════════════════════════════════════════════════════════════════════
           SEÇÃO EXCLUSIVA PAGUEPLAY
