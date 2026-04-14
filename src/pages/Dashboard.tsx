@@ -477,7 +477,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        <AnalyticsPanel />
+        <AnalyticsPanel setorFiltro={setorFiltro} />
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════
