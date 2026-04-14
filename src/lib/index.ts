@@ -117,7 +117,8 @@ export function isAtrasado(vencimento: string, status: string): boolean {
 // PaguePlay-specific constants and helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const TIPO_OPTIONS_PAGUEPLAY = ['pix', 'boleto', 'cartao'] as const;
+// PaguePlay salva 'boleto' no banco para Boleto/PIX; 'cartao' para Cartão de Crédito
+export const TIPO_OPTIONS_PAGUEPLAY = ['boleto', 'cartao'] as const;
 export const PARCELAS_MAX_PAGUEPLAY = 12;
 export const ESTADOS_BRASIL = [
   'AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG',
@@ -131,9 +132,10 @@ export const STATUS_LABELS_PAGUEPLAY: Record<string, string> = {
 };
 
 export const TIPO_LABELS_PAGUEPLAY: Record<string, string> = {
-  boleto: 'Boleto',
+  boleto: 'Boleto / PIX',
   cartao: 'Cartão de Crédito',
-  pix: 'Pix',
+  // Manter pix para compatibilidade com registros legados
+  pix: 'Boleto / PIX',
 };
 
 export function isPaguePlay(slug: string): boolean {

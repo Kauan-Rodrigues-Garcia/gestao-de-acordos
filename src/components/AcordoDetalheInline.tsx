@@ -274,8 +274,10 @@ export function AcordoDetalheInline({
 
     toast.success('Reagendamento confirmado!', { description: 'Próximo pagamento agendado na nova data.' });
 
-    // 3. Pai faz refetch → nova parcela aparece na lista na nova data
-    onReagendar?.();
+    // 3. Pai faz refetch com delay para não desmontar o componente antes do usuário ver
+    //    o botão sumir. O estado local já foi atualizado acima; o refetch só sincroniza
+    //    a lista do pai depois que o usuário teve tempo de confirmar visualmente.
+    setTimeout(() => { onReagendar?.(); }, 1500);
   }
 
   // ── Montar lista mista: real ou virtual para cada índice 1..N ────────────

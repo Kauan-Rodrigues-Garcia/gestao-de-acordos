@@ -191,6 +191,17 @@ export default function Dashboard() {
     [acordosHoje, hoje],
   );
 
+  // PaguePlay: reordenar acordos com vencimento hoje primeiro (destaque na tabela)
+  const acordosOrdenados = useMemo(() => {
+    if (!isPP) return acordos;
+    const hoje_ = hoje;
+    return [...acordos].sort((a, b) => {
+      const aHoje = a.vencimento === hoje_ && a.status !== 'pago' ? 0 : 1;
+      const bHoje = b.vencimento === hoje_ && b.status !== 'pago' ? 0 : 1;
+      return aHoje - bHoje;
+    });
+  }, [acordos, hoje, isPP]);
+
   // Realtime: escuta mudanças na tabela acordos em tempo real
   useEffect(() => {
     const empresaId = empresa?.id;
@@ -516,213 +527,7 @@ export default function Dashboard() {
       {isPP && (
         <div className="space-y-6">
 
-          {/* ── Seção 1: Acordos com vencimento HOJE ── */}
-          <Card className="border-border border-warning/40">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  className="flex items-center gap-2 group flex-1 text-left"
-                  onClick={() => setHojeMinimizado(v => !v)}
-                  title={hojeMinimizado ? 'Expandir' : 'Minimizar'}
-                >
-                  <CardTitle className="text-base font-semibold flex items-center gap-2 group-hover:text-primary transition-colors">
-                    <CalendarDays className="w-4 h-4 text-warning" />
-                    Acordos com Vencimento Hoje
-                    <Badge variant="secondary" className="text-xs bg-warning/15 text-warning border-warning/30">
-                      {acordosDeHoje.length}
-                    </Badge>
-                  </CardTitle>
-                  <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform ml-auto', hojeMinimizado && '-rotate-90')} />
-                </button>
-                {acordosDeHoje.length > 0 && (
-                  <Button
-                    variant="outline" size="sm"
-                    className="hidden text-xs h-7 gap-1.5 text-success border-success/30 hover:bg-success/10"
-                    onClick={() => prepararFila(acordosDeHoje)}
-                  >
-                    <MessageSquare className="w-3 h-3" />
-                    Enviar Lembretes
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            {!hojeMinimizado && <CardContent className="p-0">
-              {loadingHoje ? (
-                <div className="p-4 space-y-3">
-                  {[...Array(3)].map((_, i) => (
-                    <div key={i} className="flex items-center gap-4">
-                      <Skeleton className="h-4 flex-1" />
-                      <Skeleton className="h-4 w-20" />
-                      <Skeleton className="h-4 w-16" />
-                      <Skeleton className="h-6 w-6 rounded-full" />
-                    </div>
-                  ))}
-                </div>
-              ) : acordosDeHoje.length === 0 ? (
-                <div className="p-8 text-center">
-                  <CheckCircle2 className="w-10 h-10 text-muted-foreground/30 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Nenhum acordo vence hoje</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-border bg-warning/5">
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Nome</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">CPF / Inscrição</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">WhatsApp</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Estado</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Link</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Pagamento</th>
-                        <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
-                        {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                          <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Operador</th>
-                        )}
-                        <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {acordosDeHoje.map((a, i) => {
-                        const isEditingThis = editandoInlineIdHoje === a.id;
-                        return (
-                          <>
-                            <tr
-                              key={a.id}
-                              className={cn(
-                                'border-b border-border/50 hover:bg-accent/50 transition-colors',
-                                i % 2 === 0 && 'bg-warning/3',
-                                a.status === 'pago' && 'opacity-60',
-                                isEditingThis && 'bg-primary/5',
-                              )}
-                            >
-                              <td className="px-4 py-2.5">
-                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold">
-                                  <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </span>
-                                {a.instituicao && (
-                                  <p className="text-muted-foreground/70 mt-0.5 text-[11px]">{a.instituicao}</p>
-                                )}
-                              </td>
-                              <td className="px-4 py-2.5 font-mono text-muted-foreground text-[11px]">
-                                {a.whatsapp || '—'}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                {extractEstado(a.observacoes) ? (
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                                    <MapPin className="w-2.5 h-2.5" />{extractEstado(a.observacoes)}
-                                  </span>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-2.5 max-w-[120px]">
-                                {extractLinkAcordo(a.observacoes) ? (
-                                  <a
-                                    href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"
-                                    title={extractLinkAcordo(a.observacoes)!}
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <Link2 className="w-2.5 h-2.5 flex-shrink-0" />
-                                    <span className="truncate">ver link</span>
-                                  </a>
-                                ) : '—'}
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                                  {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5">
-                                <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[a.status])}>
-                                  {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
-                                </span>
-                              </td>
-                              {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                  {a.operador_id ? (operadoresMap[a.operador_id] ?? '...') : '—'}
-                                </td>
-                              )}
-                              <td className="px-4 py-2.5 text-right">
-                                <div className="flex items-center justify-end gap-1.5">
-                                  {/* Checkbox seleção lote — admin/lider PaguePay */}
-                                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                    <input
-                                      type="checkbox"
-                                      className="rounded border-border w-3.5 h-3.5 mr-1"
-                                      checked={selecionados.includes(a.id)}
-                                      onChange={() => toggleSelecionado(a.id)}
-                                      onClick={e => e.stopPropagation()}
-                                    />
-                                  )}
-                                  {a.status !== 'pago' && a.status !== 'nao_pago' && (
-                                    <Button
-                                      variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
-                                      title="Marcar como Pago"
-                                      disabled={atualizandoStatus === a.id}
-                                      onClick={() => marcarComoPago(a.id)}
-                                    >
-                                      <CheckCircle className="w-3 h-3" />
-                                    </Button>
-                                  )}
-                                  <Button
-                                    variant="ghost" size="icon"
-                                    className={cn(
-                                      'w-6 h-6 hidden',
-                                      a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
-                                    )}
-                                    title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
-                                    onClick={() => enviarUmWhatsapp(a)}
-                                  >
-                                    <MessageSquare className="w-3 h-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost" size="icon"
-                                    className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
-                                    title={isEditingThis ? 'Fechar editor' : 'Editar'}
-                                    onClick={() => setEditandoInlineIdHoje(isEditingThis ? null : a.id)}
-                                  >
-                                    <Edit className="w-3 h-3" />
-                                  </Button>
-                                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                    <Button
-                                      variant="ghost" size="icon"
-                                      className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                                      title="Excluir acordo"
-                                      disabled={excluindoId === a.id}
-                                      onClick={() => setConfirmandoExclusao(a)}
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                            {/* Inline edit row — seção Hoje */}
-                            {isEditingThis && (
-                              <AcordoEditInline
-                                key={`inline-hoje-${a.id}`}
-                                acordo={a}
-                                isPaguePlay={isPP}
-                                onSaved={() => { setEditandoInlineIdHoje(null); refetch(); }}
-                                onCancel={() => setEditandoInlineIdHoje(null)}
-                              />
-                            )}
-                          </>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>}
-          </Card>
-
-          {/* ── Seção 2: Tabela completa de Acordos ── */}
+          {/* ── Tabela completa de Acordos ── */}
           <div>
               {/* Cabeçalho da seção */}
             <div className="flex items-center justify-between mb-4">
@@ -856,10 +661,16 @@ export default function Dashboard() {
                     </SelectContent>
                   </Select>
                   <Select value={filtroTipo} onValueChange={v => { setFiltroTipo(v); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                    <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos Tipos</SelectItem>
-                      {Object.entries(tipoLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                      {isPP
+                        ? [
+                            <SelectItem key="boleto" value="boleto">Boleto / PIX</SelectItem>,
+                            <SelectItem key="cartao" value="cartao">Cartão de Crédito</SelectItem>,
+                          ]
+                        : Object.entries(tipoLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)
+                      }
                     </SelectContent>
                   </Select>
                   <input
@@ -925,7 +736,7 @@ export default function Dashboard() {
                               </div>
                             </td>
                           </tr>
-                        ) : acordos.map((a, i) => {
+                        ) : acordosOrdenados.map((a, i) => {
                           const atrasado  = isAtrasado(a.vencimento, a.status);
                           const venceHoje = a.vencimento === hoje;
                           const sel       = selecionados.includes(a.id);
@@ -942,7 +753,7 @@ export default function Dashboard() {
                                   'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                                   i % 2 === 0 && 'bg-muted/10',
                                   atrasado  && 'bg-destructive/5',
-                                  venceHoje && a.status !== 'pago' && 'bg-warning/5',
+                                  venceHoje && a.status !== 'pago' && 'bg-warning/10 border-l-2 border-l-warning',
                                   sel && 'bg-primary/5 border-primary/20',
                                   isEditingThis && 'bg-primary/5',
                                   isDetailThis && 'bg-accent/50',

@@ -14,10 +14,14 @@
  *   Parcelas 2..N são criadas uma a uma via botão "Reagendar" no AcordoDetalheInline.
  */
 import { useState } from 'react';
+import { format, parseISO } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -25,10 +29,66 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
-import { X, Save, User, Hash, DollarSign, FileText, Link2 } from 'lucide-react';
+import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon } from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
+import { cn } from '@/lib/utils';
+
+// Data mínima permitida para PaguePlay: 01/01/2026
+const DATA_MINIMA_PP = new Date(2026, 0, 1); // Jan 1, 2026
+
+/** DatePicker compacto para PaguePlay — abre calendário ao clicar */
+function DatePickerField({
+  value, onChange, label, required,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  label: string;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = value ? parseISO(value) : undefined;
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-xs">{label}{required && ' *'}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className={cn(
+              'w-full h-8 text-xs justify-start gap-2 font-mono px-2',
+              !value && 'text-muted-foreground',
+            )}
+          >
+            <CalendarIcon className="w-3 h-3 shrink-0 text-muted-foreground" />
+            {selected
+              ? format(selected, 'dd/MM/yyyy')
+              : 'Selecionar data'
+            }
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-auto p-0" align="start">
+          <Calendar
+            mode="single"
+            selected={selected}
+            onSelect={(day) => {
+              if (day) {
+                onChange(format(day, 'yyyy-MM-dd'));
+                setOpen(false);
+              }
+            }}
+            disabled={(date) => date < DATA_MINIMA_PP}
+            fromDate={DATA_MINIMA_PP}
+            locale={ptBR}
+            initialFocus
+          />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
 
 const TIPOS_PAGUEPLAY = [
   { value: 'boleto_pix', label: 'Boleto / PIX',      parcelado: true  },
@@ -66,7 +126,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [nrCliente,    setNrCliente]    = useState('');
   const [vencimento,   setVencimento]   = useState('');
   const [valorStr,     setValorStr]     = useState('');
-  const [tipo,         setTipo]         = useState('boleto');
+  const [tipo,         setTipo]         = useState(isPaguePlay ? 'boleto_pix' : 'boleto');
   const [parcelasStr,  setParcelasStr]  = useState('1');
   const [whatsapp,     setWhatsapp]     = useState('');
   const [instituicao,  setInstituicao]  = useState('');
@@ -89,6 +149,8 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   // ── Validação: obrigatório apenas Dados Principais ─────────────────────
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
+    // PaguePlay: bloquear datas anteriores a 01/01/2026
+    if (isPaguePlay && vencimento < '2026-01-01') return 'A data não pode ser anterior a 01/01/2026';
     const v = parseCurrencyInput(valorStr);
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Inscrição é obrigatória';
@@ -196,11 +258,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                   <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
                     placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Vencimento *</Label>
-                  <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)}
-                    className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-                </div>
+                <DatePickerField
+                  label="Vencimento"
+                  required
+                  value={vencimento}
+                  onChange={setVencimento}
+                />
                 <div className="space-y-1">
                   <Label className="text-xs">Estado</Label>
                   <Select value={estadoSel} onValueChange={setEstadoSel}>

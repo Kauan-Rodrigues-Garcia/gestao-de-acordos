@@ -50,7 +50,8 @@ const schemaBase = z.object({
 const schemaPP = z.object({
   nome_cliente: z.string().max(100, 'Nome muito longo').optional().or(z.literal('')),
   nr_cliente:   z.string().optional().or(z.literal('')),
-  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
+  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória')
+    .refine(v => v >= '2026-01-01', 'A data não pode ser anterior a 01/01/2026'),
   valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);
     return !isNaN(n) && n > 0;
@@ -618,6 +619,7 @@ export default function AcordoForm() {
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
                       <input
                         type="date"
+                        min="2026-01-01"
                         {...register('vencimento')}
                         className={cn(
                           'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
@@ -842,6 +844,7 @@ export default function AcordoForm() {
                       <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
                       <input
                         type="date"
+                        min="2026-01-01"
                         {...register('vencimento')}
                         className={cn(
                           'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
