@@ -28,7 +28,11 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   let query = supabase
     .from('acordos')
     .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
-    .order('vencimento', { ascending: true });
+    .order('vencimento', { ascending: true })
+    // Mostrar apenas a 1ª parcela de cada grupo na listagem principal.
+    // Parcelas 2..N (reagendamentos) são visíveis somente no detalhe expandido.
+    // .or permite registros antigos (sem numero_parcela) aparecerem normalmente.
+    .or('numero_parcela.eq.1,numero_parcela.is.null');
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
   if (filtros?.status)      query = query.eq('status', filtros.status);
