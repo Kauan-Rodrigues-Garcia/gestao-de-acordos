@@ -9,7 +9,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useNotificacoes } from '@/hooks/useNotificacoes';
-import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
+import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPaguePlay } from '@/lib/index';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -23,16 +23,18 @@ interface NavItem {
   icon: React.ElementType;
   to: string;
   roles?: string[];
+  /** Se true, o item fica oculto quando o tenant for PaguePay */
+  hiddenForPaguePay?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',     icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador'] },
-  { label: 'Acordos',       icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador'] },
+  { label: 'Acordos',       icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',   icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador'] },
   { label: 'Painel Líder',  icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador'] },
   { label: 'Usuários',      icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador'] },
   { label: 'Setores',       icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
-  { label: 'Equipes',       icon: Users2,           to: '/admin/equipes',                 roles: ['administrador','lider'] },
+  { label: 'Equipes',       icon: Users2,          to: '/admin/equipes',                roles: ['administrador','lider'] },
   { label: 'Configurações', icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
   { label: 'IA',            icon: Bot,             to: ROUTE_PATHS.ADMIN_IA,            roles: ['administrador'] },
   { label: 'Logs',          icon: ClipboardList,   to: ROUTE_PATHS.ADMIN_LOGS,          roles: ['administrador'] },
@@ -40,16 +42,22 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
-  const { empresa, branding } = useEmpresa();
+  const { empresa, branding, tenantSlug } = useEmpresa();
   const { naoLidas, notificacoes, marcarLida, marcarTodasLidas, limparTodas } = useNotificacoes();
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  const isPP = isPaguePlay(tenantSlug);
   const userRole = perfil?.perfil ?? 'operador';
-  const navItems = NAV_ITEMS.filter(item =>
-    !item.roles || item.roles.includes(userRole) || userRole === 'super_admin'
-  );
+
+  // Filtra por role E por visibilidade PaguePay
+  const navItems = NAV_ITEMS.filter(item => {
+    if (item.roles && !item.roles.includes(userRole) && userRole !== 'super_admin') return false;
+    if (item.hiddenForPaguePay && isPP) return false;
+    return true;
+  });
+
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
