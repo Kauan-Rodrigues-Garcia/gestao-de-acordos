@@ -25,14 +25,13 @@ export interface FiltrosAcordo {
 
 /** Busca acordos com filtros opcionais e suporte a paginação */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
+  // Buscamos TODOS os registros e depois deduplicamos client-side.
+  // Motivo: precisamos mostrar a parcela MAIS RECENTE de cada grupo
+  // (ex: após Reagendar criar parcela 2, ela substitui parcela 1 na lista).
   let query = supabase
     .from('acordos')
     .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
-    .order('vencimento', { ascending: true })
-    // Mostrar apenas a 1ª parcela de cada grupo na listagem principal.
-    // Parcelas 2..N (reagendamentos) são visíveis somente no detalhe expandido.
-    // .or permite registros antigos (sem numero_parcela) aparecerem normalmente.
-    .or('numero_parcela.eq.1,numero_parcela.is.null');
+    .order('vencimento', { ascending: true });
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
   if (filtros?.status)      query = query.eq('status', filtros.status);
@@ -58,9 +57,32 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
 
   const { data, error, count } = await query;
   if (error) throw error;
+
+  // ── Deduplicar: por acordo_grupo_id manter apenas o de maior numero_parcela ──
+  // Isso garante que reagendamentos (parcela 2, 3…) apareçam na lista
+  // substituindo a parcela anterior, e não criem linhas duplicadas.
+  const todos = (data as Acordo[]) || [];
+  const deduped: Acordo[] = [];
+  const grupos = new Map<string, Acordo>();
+  for (const a of todos) {
+    if (!a.acordo_grupo_id) {
+      // Sem grupo → sempre exibir
+      deduped.push(a);
+    } else {
+      const existente = grupos.get(a.acordo_grupo_id);
+      if (!existente || (a.numero_parcela ?? 1) > (existente.numero_parcela ?? 1)) {
+        grupos.set(a.acordo_grupo_id, a);
+      }
+    }
+  }
+  // Adicionar a parcela mais recente de cada grupo
+  grupos.forEach(a => deduped.push(a));
+  // Re-ordenar por vencimento (a deduplicação bagunça a ordem)
+  deduped.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
   return {
-    data: (data as Acordo[]) || [],
-    count: count || 0
+    data: deduped,
+    count: deduped.length,
   };
 }
 
