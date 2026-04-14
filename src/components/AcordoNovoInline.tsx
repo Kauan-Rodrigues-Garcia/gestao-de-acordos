@@ -93,7 +93,8 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     setSalvando(true);
     try {
       const valorNum = parseCurrencyInput(valorStr);
-      const grupoId  = (temParcelas && parcelas > 1) ? crypto.randomUUID() : null;
+      // PaguePay: sem grupo — parcelas são apenas um número informativo no registro
+      const grupoId = null;
 
       let obsFinal: string | null;
       if (isPaguePlay) {
@@ -121,24 +122,11 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         data_cadastro:   new Date().toISOString().split('T')[0],
       };
 
-      const { data: inserted, error } = await supabase.from('acordos').insert(base).select().single();
+      const { error } = await supabase.from('acordos').insert(base);
       if (error) { toast.error(`Erro: ${error.message}`); return; }
-
-      if (grupoId && parcelas > 1 && inserted) {
-        const extras: Record<string, unknown>[] = [];
-        let dataBase = vencimento;
-        for (let i = 2; i <= parcelas; i++) {
-          const [y, m, d] = dataBase.split('-').map(Number);
-          const nm = m + 1 > 12 ? 1 : m + 1;
-          const na = m + 1 > 12 ? y + 1 : y;
-          dataBase = `${na}-${String(nm).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-          extras.push({ ...base, vencimento: dataBase, numero_parcela: i, acordo_grupo_id: grupoId });
-        }
-        if (extras.length > 0) {
-          const { error: e2 } = await supabase.from('acordos').insert(extras);
-          if (e2) toast.warning(`Parcelas extras: ${e2.message}`);
-        }
-      }
+      // PaguePay: NÃO cria registros extras por parcela.
+      // O campo "parcelas" no registro já indica quantas parcelas existem.
+      // Cada parcela é reagendada individualmente pelo operador ao marcar como paga.
 
       toast.success('Acordo criado com sucesso!');
       onSaved();
