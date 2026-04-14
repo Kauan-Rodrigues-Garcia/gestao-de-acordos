@@ -168,7 +168,7 @@ export default function Dashboard() {
       })()
     : undefined;
 
-  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo } = useAcordos(
+  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
       busca:        busca || undefined,
       status:       statusFiltroComputed,
@@ -573,8 +573,18 @@ export default function Dashboard() {
                 >
                   <Plus className="w-4 h-4" /> Novo Acordo
                 </Button>
-                <Button variant="outline" size="icon" className="w-8 h-8" onClick={refetch}>
+                <Button variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
+                  title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
+                >
                   <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+                  {/* Indicador de status Realtime */}
+                  <span className={cn(
+                    'absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full',
+                    realtimeStatus === 'connected'  && 'bg-green-500',
+                    realtimeStatus === 'connecting' && 'bg-yellow-400 animate-pulse',
+                    realtimeStatus === 'error'      && 'bg-red-500',
+                    realtimeStatus === 'off'        && 'bg-muted-foreground/40',
+                  )} />
                 </Button>
               </div>
             </div>

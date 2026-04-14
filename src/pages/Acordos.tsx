@@ -136,7 +136,7 @@ export default function Acordos() {
       })()
     : undefined;
 
-  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo } = useAcordos({
+  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos({
     busca:        busca || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -460,8 +460,17 @@ export default function Acordos() {
                 Lembretes do dia ({acordosHoje.length})
               </Button>
             )}
-            <Button variant="outline" size="icon" className="w-8 h-8" onClick={refetch}>
+            <Button variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
+              title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
+            >
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+              <span className={cn(
+                'absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full',
+                realtimeStatus === 'connected'  && 'bg-green-500',
+                realtimeStatus === 'connecting' && 'bg-yellow-400 animate-pulse',
+                realtimeStatus === 'error'      && 'bg-red-500',
+                realtimeStatus === 'off'        && 'bg-muted-foreground/40',
+              )} />
             </Button>
             <Button
               variant="outline"
