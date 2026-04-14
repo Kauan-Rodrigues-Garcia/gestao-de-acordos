@@ -34,6 +34,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
@@ -141,6 +142,7 @@ export default function Dashboard() {
   // Inline edit — estados separados por seção para evitar abertura dupla
   const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
+  const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
@@ -886,6 +888,7 @@ export default function Dashboard() {
                           const venceHoje = a.vencimento === hoje;
                           const sel       = selecionados.includes(a.id);
                           const isEditingThis = editandoInlineIdTabela === a.id;
+                          const isDetailThis = detalheInlineIdTabela === a.id;
                           return (
                             <>
                               <motion.tr
@@ -900,6 +903,7 @@ export default function Dashboard() {
                                   venceHoje && a.status !== 'pago' && 'bg-warning/5',
                                   sel && 'bg-primary/5 border-primary/20',
                                   isEditingThis && 'bg-primary/5',
+                                  isDetailThis && 'bg-accent/50',
                                 )}
                               >
                                 <td className="px-3 py-2.5">
@@ -910,9 +914,9 @@ export default function Dashboard() {
                                     onChange={() => toggleSelecionado(a.id)}
                                   />
                                 </td>
-                                {/* Nome */}
-                                <td className="px-3 py-2.5">
-                                  <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                {/* Nome */
+                                <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id)}>
+                                  <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
                                 </td>
                                 {/* CPF / NR */}
                                 <td className="px-3 py-2.5">
@@ -1025,6 +1029,17 @@ export default function Dashboard() {
                                   isPaguePlay={isPP}
                                   onSaved={() => { setEditandoInlineIdTabela(null); refetch(); }}
                                   onCancel={() => setEditandoInlineIdTabela(null)}
+                                />
+                              )}
+                              {/* Inline detail row — seção Tabela */}
+                              {isDetailThis && !isEditingThis && (
+                                <AcordoDetalheInline
+                                  key={`detalhe-${a.id}`}
+                                  acordo={a}
+                                  isPaguePlay={isPP}
+                                  colSpan={10}
+                                  onClose={() => setDetalheInlineIdTabela(null)}
+                                  onReagendar={() => refetch()}
                                 />
                               )}
                             </>
