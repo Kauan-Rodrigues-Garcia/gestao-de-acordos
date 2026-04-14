@@ -12,7 +12,7 @@
  * Valida login único (e-mail) antes de tentar criar.
  */
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Shield, Eye, EyeOff, Lock, Mail, User, AlertCircle, CheckCircle2, ArrowLeft } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -26,7 +26,6 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 export default function Registro() {
-  const navigate = useNavigate();
   const { empresa, branding, loading: tenantLoading, error: tenantError, tenantSlug } = useEmpresa();
 
   const [nome,     setNome]     = useState('');
@@ -113,9 +112,8 @@ export default function Registro() {
         return;
       }
 
-      if (data.session) {
-        await supabase.auth.signOut();
-      }
+      // Garantir logout mesmo se o Supabase criar sessão automaticamente
+      try { await supabase.auth.signOut(); } catch (_) {}
 
       setSucesso(true);
     } catch (e) {
@@ -150,10 +148,10 @@ export default function Registro() {
                 Bem-vindo(a), <strong className="text-foreground">{nome.trim().split(' ')[0]}</strong>!
               </p>
               <p className="text-sm text-muted-foreground mb-6">
-                 Sua conta foi criada com sucesso e já está vinculada a <strong className="text-foreground">{empresa?.nome ?? branding.shortName}</strong>.
-               </p>
-              <Button className="w-full" onClick={() => navigate(ROUTE_PATHS.LOGIN)}>
-                Ir para o Login
+                Conta criada com sucesso! Faça login para acessar o sistema.
+              </p>
+              <Button className="w-full" asChild>
+                <Link to={ROUTE_PATHS.LOGIN}>Fazer Login</Link>
               </Button>
             </CardContent>
           </Card>
