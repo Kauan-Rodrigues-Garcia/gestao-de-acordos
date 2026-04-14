@@ -1,13 +1,17 @@
 /**
  * AcordoNovoInline.tsx
  *
- * LÓGICA DE PARCELAMENTO:
- *  - Se tipo parcelado e parcelas > 1:
- *      1. Gera acordo_grupo_id = UUID
- *      2. Cria a 1ª parcela (numero_parcela = 1)
- *      3. Cria as parcelas 2..N com datas mensais sequenciais
- *  - Assim, AcordoDetalheInline pode ler todos os registros do grupo e exibir
- *    a tabela completa de parcelas com status individual.
+ * CAMPOS OBRIGATÓRIOS:
+ *   PaguePay → "Dados Principais": Inscrição, Valor, Vencimento
+ *   Bookplay  → "Dados Principais": Valor, Vencimento
+ *   "Tipo e Status": tem defaults, sempre válido
+ *   Todos os outros campos são OPCIONAIS.
+ *
+ * PARCELAMENTO:
+ *   Salva APENAS 1 registro no banco.
+ *   O campo `parcelas` guarda o total como metadado.
+ *   O campo `acordo_grupo_id` é gerado para permitir vincular reagendamentos futuros.
+ *   Parcelas 2..N são criadas uma a uma via botão "Reagendar" no AcordoDetalheInline.
  */
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -47,15 +51,6 @@ const STATUS_OPTIONS = [
 
 const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
 
-/** Calcular data somando N meses à data base (string YYYY-MM-DD) */
-function addMonths(dateStr: string, months: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const totalMeses = m - 1 + months;
-  const novoAno    = y + Math.floor(totalMeses / 12);
-  const novoMes    = (totalMeses % 12) + 1;
-  return `${novoAno}-${String(novoMes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-}
-
 export interface AcordoNovoInlineProps {
   isPaguePlay: boolean;
   colSpan: number;
@@ -81,23 +76,22 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [link,         setLink]         = useState('');
   const [salvando,     setSalvando]     = useState(false);
 
-  const tipos = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
-  const tipoAtual   = tipos.find(t => t.value === tipo);
+  const tipos      = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
+  const tipoAtual  = tipos.find(t => t.value === tipo);
   const temParcelas = !!tipoAtual?.parcelado;
   const parcelas    = Math.max(1, parseInt(parcelasStr) || 1);
 
   function handleChangeTipo(t: string) {
     setTipo(t);
-    const tp = tipos.find(x => x.value === t);
-    if (!tp?.parcelado) setParcelasStr('1');
+    if (!tipos.find(x => x.value === t)?.parcelado) setParcelasStr('1');
   }
 
+  // ── Validação: obrigatório apenas Dados Principais ─────────────────────
   function validar(): string | null {
-    if (!vencimento) return 'Data de vencimento obrigatória';
+    if (!vencimento)                        return 'Data de vencimento obrigatória';
     const v = parseCurrencyInput(valorStr);
-    if (isNaN(v) || v <= 0) return 'Valor deve ser maior que zero';
+    if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Inscrição é obrigatória';
-    if (!isPaguePlay && nomeCliente.trim().length < 3) return 'Nome deve ter pelo menos 3 caracteres';
     return null;
   }
 
@@ -114,16 +108,18 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
         : (observacoes.trim() || null);
 
-      // tipo real no banco
+      // tipo real salvo no banco
       const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
 
-      // Gerar grupo se parcelado E parcelas > 1
-      const grupoId = (temParcelas && parcelas > 1) ? crypto.randomUUID() : null;
+      // Sempre gerar acordo_grupo_id (necessário para vincular reagendamentos futuros)
+      const grupoId = crypto.randomUUID();
 
-      // ── Base de cada parcela (somente colunas que existem no schema) ──────
-      const base: Record<string, unknown> = {
-        nome_cliente:    isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
+      // ── Payload: APENAS 1 registro é criado aqui ────────────────────────
+      // As demais parcelas (2..N) são criadas via "Reagendar" no AcordoDetalheInline
+      const payload: Record<string, unknown> = {
+        nome_cliente:    nomeCliente.trim() || null,
         nr_cliente:      nrCliente.trim() || null,
+        vencimento,
         valor:           valorNum,
         tipo:            tipoParaSalvar,
         parcelas:        temParcelas ? parcelas : 1,
@@ -135,54 +131,31 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         empresa_id:      empresa.id,
         data_cadastro:   new Date().toISOString().split('T')[0],
         acordo_grupo_id: grupoId,
+        numero_parcela:  1,
       };
 
-      // ── Criar parcela 1 ─────────────────────────────────────────────────
-      const parcela1 = { ...base, vencimento, numero_parcela: 1 };
-
-      const { error: e1 } = await supabase.from('acordos').insert(parcela1);
-      if (e1) {
-        // 400 = coluna desconhecida → fallback sem colunas extras
-        const isColErr = e1.code === '42703'
-          || String(e1.code) === '400'
-          || e1.message?.toLowerCase().includes('column')
-          || e1.message?.toLowerCase().includes('unknown');
+      const { error } = await supabase.from('acordos').insert(payload);
+      if (error) {
+        // Fallback: se banco não tem as colunas novas ainda
+        const isColErr =
+          String(error.code) === '42703' ||
+          String(error.code) === '400'   ||
+          error.message?.toLowerCase().includes('column') ||
+          error.message?.toLowerCase().includes('unknown');
         if (isColErr) {
-          // Tentar sem acordo_grupo_id e numero_parcela (schema antigo)
-          const { acordo_grupo_id: _g, numero_parcela: _n, ...min1 } = parcela1;
-          const { error: e2 } = await supabase.from('acordos').insert(min1);
+          const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
+          const { error: e2 } = await supabase.from('acordos').insert(payloadMin);
           if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
         } else {
-          toast.error(`Erro ao salvar: ${e1.message}`);
+          toast.error(`Erro ao salvar: ${error.message}`);
           return;
         }
       }
 
-      // ── Criar parcelas 2..N ─────────────────────────────────────────────
-      if (grupoId && parcelas > 1) {
-        const extras = Array.from({ length: parcelas - 1 }, (_, i) => ({
-          ...base,
-          vencimento:     addMonths(vencimento, i + 1),
-          numero_parcela: i + 2,
-          status:         'verificar_pendente' as const,
-        }));
-        const { error: eExtras } = await supabase.from('acordos').insert(extras);
-        if (eExtras) {
-          // Fallback sem colunas extras para o lote
-          const { acordo_grupo_id: _g, numero_parcela: _n, ...baseMin } = base as { acordo_grupo_id?: unknown; numero_parcela?: unknown; [k: string]: unknown };
-          const extrasMin = Array.from({ length: parcelas - 1 }, (_, i) => ({
-            ...baseMin,
-            vencimento: addMonths(vencimento, i + 1),
-            status:     'verificar_pendente' as const,
-          }));
-          const { error: eExtras2 } = await supabase.from('acordos').insert(extrasMin);
-          if (eExtras2) toast.warning(`Parcelas extras: ${eExtras2.message}`);
-        }
-      }
-
-      toast.success(parcelas > 1
-        ? `Acordo criado com ${parcelas} parcelas!`
-        : 'Acordo criado com sucesso!'
+      toast.success(
+        parcelas > 1
+          ? `Acordo criado! ${parcelas} parcelas serão gerenciadas pelo Reagendar.`
+          : 'Acordo criado com sucesso!'
       );
       onSaved();
     } finally {
@@ -196,6 +169,8 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
       <tr className="bg-primary/5 border-b-2 border-primary/30">
         <td colSpan={colSpan} className="px-4 py-4">
           <div className="space-y-4">
+
+            {/* Título */}
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Save className="w-4 h-4 text-primary" /> Novo Acordo
@@ -205,7 +180,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </Button>
             </div>
 
-            {/* Dados Principais */}
+            {/* ── Dados Principais (obrigatórios: Inscrição, Valor, Vencimento) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                 <DollarSign className="w-3 h-3" /> Dados Principais
@@ -213,11 +188,13 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Inscrição *</Label>
-                  <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} placeholder="Número de inscrição" className="h-8 text-xs" />
+                  <Input value={instituicao} onChange={e => setInstituicao(e.target.value)}
+                    placeholder="Número de inscrição" className="h-8 text-xs" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>
-                  <Input value={valorStr} onChange={e => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
+                  <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
+                    placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Vencimento *</Label>
@@ -238,14 +215,14 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </div>
             </div>
 
-            {/* Tipo e Status */}
+            {/* ── Tipo e Status (tem defaults, sempre válido) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                 <FileText className="w-3 h-3" /> Tipo e Status
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Forma de Pagamento *</Label>
+                  <Label className="text-xs">Forma de Pagamento</Label>
                   <Select value={tipo} onValueChange={handleChangeTipo}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -257,7 +234,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">
-                    Parcelas {!temParcelas && <span className="text-muted-foreground/50">(não se aplica)</span>}
+                    Parcelas {!temParcelas && <span className="text-muted-foreground/50 font-normal">(não se aplica)</span>}
                   </Label>
                   <Select value={parcelasStr} onValueChange={setParcelasStr} disabled={!temParcelas}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -269,7 +246,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                   </Select>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Status *</Label>
+                  <Label className="text-xs">Status</Label>
                   <Select value={status} onValueChange={setStatus}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -282,7 +259,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </div>
             </div>
 
-            {/* Profissional */}
+            {/* ── Dados do Profissional (opcional) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                 <User className="w-3 h-3" /> Dados do Profissional
@@ -291,31 +268,37 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div className="space-y-1 sm:col-span-2">
                   <Label className="text-xs">Nome Completo</Label>
-                  <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} placeholder="Nome do profissional" className="h-8 text-xs" />
+                  <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
+                    placeholder="Nome do profissional" className="h-8 text-xs" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">CPF</Label>
-                  <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} placeholder="000.000.000-00" className="h-8 text-xs font-mono" />
+                  <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
+                    placeholder="000.000.000-00" className="h-8 text-xs font-mono" />
                 </div>
               </div>
             </div>
 
-            {/* Link */}
+            {/* ── Link (opcional) ── */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                 <Link2 className="w-3 h-3" /> Link do Acordo
                 <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
               </p>
-              <Textarea value={link} onChange={e => setLink(e.target.value)} placeholder="Cole aqui o link do acordo..." className="text-xs resize-none" rows={2} />
+              <Textarea value={link} onChange={e => setLink(e.target.value)}
+                placeholder="Cole aqui o link do acordo..." className="text-xs resize-none" rows={2} />
             </div>
 
+            {/* Botões */}
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={salvar} disabled={salvando}>
+              <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={salvar} disabled={salvando}>
                 <Save className="w-3.5 h-3.5" />
                 {salvando ? 'Salvando...' : 'Salvar Acordo'}
               </Button>
               <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
             </div>
+
           </div>
         </td>
       </tr>
@@ -327,6 +310,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     <tr className="bg-primary/5 border-b-2 border-primary/30">
       <td colSpan={colSpan} className="px-4 py-4">
         <div className="space-y-4">
+
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Save className="w-4 h-4 text-primary" /> Novo Acordo
@@ -336,15 +320,16 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             </Button>
           </div>
 
-          {/* Dados Principais */}
+          {/* ── Dados Principais (obrigatórios: Valor, Vencimento) ── */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
               <Hash className="w-3 h-3" /> Dados Principais
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">NR *</Label>
-                <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} placeholder="Número NR" className="h-8 text-xs font-mono" />
+                <Label className="text-xs">NR</Label>
+                <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
+                  placeholder="Número NR" className="h-8 text-xs font-mono" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Vencimento *</Label>
@@ -353,24 +338,28 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Valor *</Label>
-                <Input value={valorStr} onChange={e => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
+                <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
+                  placeholder="0,00" className="h-8 text-xs font-mono" />
               </div>
             </div>
           </div>
 
-          {/* Dados do Cliente */}
+          {/* ── Dados do Cliente (opcional) ── */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
               <User className="w-3 h-3" /> Dados do Cliente
+              <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="space-y-1 col-span-2">
-                <Label className="text-xs">Nome do Cliente *</Label>
-                <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} placeholder="Nome completo" className="h-8 text-xs" />
+                <Label className="text-xs">Nome do Cliente</Label>
+                <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
+                  placeholder="Nome completo" className="h-8 text-xs" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">WhatsApp</Label>
-                <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
+                <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+                  placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Instituição</Label>
@@ -386,14 +375,14 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             </div>
           </div>
 
-          {/* Tipo e Status */}
+          {/* ── Tipo e Status ── */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
               <FileText className="w-3 h-3" /> Tipo e Status
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Forma de Pagamento *</Label>
+                <Label className="text-xs">Forma de Pagamento</Label>
                 <Select value={tipo} onValueChange={handleChangeTipo}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -404,11 +393,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               {temParcelas && (
                 <div className="space-y-1">
                   <Label className="text-xs">Parcelas</Label>
-                  <Input type="number" min={1} max={60} value={parcelasStr} onChange={e => setParcelasStr(e.target.value)} className="h-8 text-xs font-mono" />
+                  <Input type="number" min={1} max={60} value={parcelasStr}
+                    onChange={e => setParcelasStr(e.target.value)} className="h-8 text-xs font-mono" />
                 </div>
               )}
               <div className="space-y-1">
-                <Label className="text-xs">Status *</Label>
+                <Label className="text-xs">Status</Label>
                 <Select value={status} onValueChange={setStatus}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -419,21 +409,25 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
             </div>
           </div>
 
-          {/* Observações */}
+          {/* ── Observações (opcional) ── */}
           <div>
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
               <FileText className="w-3 h-3" /> Observações
+              <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
             </p>
-            <Textarea value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Observações opcionais..." className="text-xs resize-none" rows={2} />
+            <Textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
+              placeholder="Observações opcionais..." className="text-xs resize-none" rows={2} />
           </div>
 
           <div className="flex items-center gap-2 pt-1">
-            <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={salvar} disabled={salvando}>
+            <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={salvar} disabled={salvando}>
               <Save className="w-3.5 h-3.5" />
               {salvando ? 'Salvando...' : 'Salvar Acordo'}
             </Button>
             <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
           </div>
+
         </div>
       </td>
     </tr>
