@@ -59,7 +59,12 @@ export const PERFIL_COLORS: Record<string, string> = {
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 
 export function getTodayISO(): string {
-  return new Date().toISOString().split('T')[0];
+  // Usa timezone do Brasil (America/Sao_Paulo) para evitar diferença de data UTC vs local
+  const now = new Date();
+  const brtOffset = -3 * 60; // BRT = UTC-3
+  const localOffset = now.getTimezoneOffset(); // minutos atrás de UTC
+  const brtTime = new Date(now.getTime() + (localOffset + brtOffset) * 60 * 1000);
+  return brtTime.toISOString().split('T')[0];
 }
 
 export function formatCurrency(value: unknown): string {
