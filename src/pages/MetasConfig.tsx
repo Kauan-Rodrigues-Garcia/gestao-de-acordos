@@ -271,8 +271,9 @@ function SectionCard({ title, description, icon, children, badge }: SectionCardP
 // Página principal
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function MetasConfig() {
-  const { perfil, setorId: liderSetorId } = useAuth();
+export default function MetasConfig() {
+  const { perfil } = useAuth();
+  const liderSetorId = perfil?.setor_id ?? null;
   const { empresa } = useEmpresa();
 
   // FIX CRÍTICO #1: O campo `perfil` de useAuth retorna o objeto de perfil.
