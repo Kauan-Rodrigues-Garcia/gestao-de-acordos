@@ -131,14 +131,33 @@ export default function Dashboard() {
   const [excluindoId,             setExcluindoId]             = useState<string | null>(null);
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
-  // Inline edit — mesmo estado único controla ambas as tabelas (hoje + completa)
-  const [editandoInlineId,        setEditandoInlineId]        = useState<string | null>(null);
+  // Inline edit — estados separados por seção para evitar abertura dupla
+  const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
+  const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
+  // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
+  const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
   // Auto-refresh a cada 30 segundos
   useEffect(() => {
     const interval = setInterval(() => { refetch(); }, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Carrega nomes dos operadores (PaguePay + admin/lider)
+  useEffect(() => {
+    if (!isPP) return;
+    const perfilAtual = perfil?.perfil;
+    if (perfilAtual !== 'administrador' && perfilAtual !== 'lider' && perfilAtual !== 'super_admin') return;
+    const ids = [...new Set([...acordosDeHoje, ...acordos].map(a => a.operador_id).filter(Boolean))];
+    if (ids.length === 0) return;
+    supabase.from('perfis').select('id, nome').in('id', ids as string[]).then(({ data }) => {
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach(p => { map[p.id] = p.nome; });
+        setOperadoresMap(prev => ({ ...prev, ...map }));
+      }
+    });
+  }, [acordosDeHoje, acordos, isPP, perfil?.perfil]);
 
   // sync URL (apenas PaguePay)
   useEffect(() => {
@@ -467,12 +486,15 @@ export default function Dashboard() {
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Link</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Pagamento</th>
                         <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Status</th>
+                        {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                          <th className="text-left px-4 py-2.5 font-medium text-muted-foreground">Operador</th>
+                        )}
                         <th className="text-right px-4 py-2.5 font-medium text-muted-foreground">Ações</th>
                       </tr>
                     </thead>
                     <tbody>
                       {acordosDeHoje.map((a, i) => {
-                        const isEditingThis = editandoInlineId === a.id;
+                        const isEditingThis = editandoInlineIdHoje === a.id;
                         return (
                           <>
                             <tr
@@ -530,6 +552,11 @@ export default function Dashboard() {
                                   {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
                                 </span>
                               </td>
+                              {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                                <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                                  {a.operador_id ? (operadoresMap[a.operador_id] ?? '...') : '—'}
+                                </td>
+                              )}
                               <td className="px-4 py-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   {a.status !== 'pago' && a.status !== 'nao_pago' && (
@@ -560,7 +587,7 @@ export default function Dashboard() {
                                     variant="ghost" size="icon"
                                     className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
                                     title={isEditingThis ? 'Fechar editor' : 'Editar'}
-                                    onClick={() => setEditandoInlineId(isEditingThis ? null : a.id)}
+                                    onClick={() => setEditandoInlineIdHoje(isEditingThis ? null : a.id)}
                                   >
                                     <Edit className="w-3 h-3" />
                                   </Button>
@@ -578,14 +605,14 @@ export default function Dashboard() {
                                 </div>
                               </td>
                             </tr>
-                            {/* Inline edit row — passa isPaguePlay para garantir campos corretos */}
+                            {/* Inline edit row — seção Hoje */}
                             {isEditingThis && (
                               <AcordoEditInline
                                 key={`inline-hoje-${a.id}`}
                                 acordo={a}
                                 isPaguePlay={isPP}
-                                onSaved={() => { setEditandoInlineId(null); refetch(); }}
-                                onCancel={() => setEditandoInlineId(null)}
+                                onSaved={() => { setEditandoInlineIdHoje(null); refetch(); }}
+                                onCancel={() => setEditandoInlineIdHoje(null)}
                               />
                             )}
                           </>
@@ -728,6 +755,9 @@ export default function Dashboard() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                            <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
+                          )}
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
                         </tr>
                       </thead>
@@ -746,7 +776,7 @@ export default function Dashboard() {
                           const atrasado  = isAtrasado(a.vencimento, a.status);
                           const venceHoje = a.vencimento === hoje;
                           const sel       = selecionados.includes(a.id);
-                          const isEditingThis = editandoInlineId === a.id;
+                          const isEditingThis = editandoInlineIdTabela === a.id;
                           return (
                             <>
                               <motion.tr
@@ -825,6 +855,12 @@ export default function Dashboard() {
                                     {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
                                   </span>
                                 </td>
+                                {/* Operador — apenas PaguePay admin/lider */}
+                                {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                    {a.operador_id ? (operadoresMap[a.operador_id] ?? '...') : '—'}
+                                  </td>
+                                )}
                                 {/* Ações */}
                                 <td className="px-3 py-2.5">
                                   <div className="flex items-center justify-end gap-0.5">
@@ -857,7 +893,7 @@ export default function Dashboard() {
                                       variant="ghost" size="icon"
                                       className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
                                       title={isEditingThis ? 'Fechar editor' : 'Editar'}
-                                      onClick={() => setEditandoInlineId(isEditingThis ? null : a.id)}
+                                      onClick={() => setEditandoInlineIdTabela(isEditingThis ? null : a.id)}
                                     >
                                       <Edit className="w-3 h-3" />
                                     </Button>
@@ -875,14 +911,14 @@ export default function Dashboard() {
                                   </div>
                                 </td>
                               </motion.tr>
-                              {/* Inline edit row — passa isPaguePlay para garantir campos corretos */}
+                              {/* Inline edit row — seção Tabela */}
                               {isEditingThis && (
                                 <AcordoEditInline
                                   key={`inline-${a.id}`}
                                   acordo={a}
                                   isPaguePlay={isPP}
-                                  onSaved={() => { setEditandoInlineId(null); refetch(); }}
-                                  onCancel={() => setEditandoInlineId(null)}
+                                  onSaved={() => { setEditandoInlineIdTabela(null); refetch(); }}
+                                  onCancel={() => setEditandoInlineIdTabela(null)}
                                 />
                               )}
                             </>
