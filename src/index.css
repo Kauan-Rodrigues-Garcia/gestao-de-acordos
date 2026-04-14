@@ -151,6 +151,116 @@
   --chart-1: oklch(0.65 0.20 155);
 }
 
+
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMA 3: Cinza Escuro (Material Dark)
+   Ativado via <html class="dark-grey"> ou data-theme="dark-grey"
+   Fundo cinza material (#212121 equiv.), menos cansativo que preto puro.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.dark-grey {
+  --background:         oklch(0.18 0.005 220);   /* #2a2a2e — cinza material */
+  --foreground:         oklch(0.92 0.008 220);
+  --card:               oklch(0.21 0.007 220);   /* ligeiramente mais claro */
+  --card-foreground:    oklch(0.92 0.008 220);
+  --popover:            oklch(0.20 0.006 220);
+  --popover-foreground: oklch(0.92 0.008 220);
+  --primary:            oklch(0.62 0.18 220);
+  --primary-foreground: oklch(0.18 0.005 220);
+  --secondary:          oklch(0.28 0.010 220);
+  --secondary-foreground: oklch(0.88 0.010 220);
+  --muted:              oklch(0.26 0.008 220);
+  --muted-foreground:   oklch(0.62 0.025 220);
+  --accent:             oklch(0.30 0.012 220);
+  --accent-foreground:  oklch(0.90 0.010 220);
+  --destructive:        oklch(0.60 0.24 10);
+  --destructive-foreground: oklch(0.95 0.008 10);
+  --border:             oklch(0.32 0.012 220);
+  --input:              oklch(0.32 0.012 220);
+  --ring:               oklch(0.62 0.18 220);
+
+  --chart-1: oklch(0.65 0.20 220);
+  --chart-2: oklch(0.68 0.22 145);
+  --chart-3: oklch(0.72 0.20 45);
+  --chart-4: oklch(0.65 0.18 280);
+  --chart-5: oklch(0.68 0.20 10);
+
+  --sidebar:             oklch(0.15 0.006 220);
+  --sidebar-foreground:  oklch(0.85 0.012 220);
+  --sidebar-primary:     oklch(0.62 0.18 220);
+  --sidebar-primary-foreground: oklch(0.15 0.006 220);
+  --sidebar-accent:      oklch(0.24 0.010 220);
+  --sidebar-accent-foreground: oklch(0.88 0.010 220);
+  --sidebar-border:      oklch(0.28 0.010 220);
+  --sidebar-ring:        oklch(0.62 0.18 220);
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMA 4: Azul Profundo (Deep Blue)
+   Ativado via <html class="deep-blue"> ou data-theme="deep-blue"
+   Tons de azul escuro profundo como fundo — evoca profundidade e tecnologia.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.deep-blue {
+  --background:         oklch(0.14 0.035 240);   /* azul-noite profundo */
+  --foreground:         oklch(0.93 0.012 220);
+  --card:               oklch(0.17 0.040 240);
+  --card-foreground:    oklch(0.93 0.012 220);
+  --popover:            oklch(0.16 0.038 240);
+  --popover-foreground: oklch(0.93 0.012 220);
+  --primary:            oklch(0.65 0.20 220);    /* azul elétrico */
+  --primary-foreground: oklch(0.14 0.035 240);
+  --secondary:          oklch(0.24 0.050 240);
+  --secondary-foreground: oklch(0.88 0.015 220);
+  --muted:              oklch(0.22 0.045 240);
+  --muted-foreground:   oklch(0.62 0.030 220);
+  --accent:             oklch(0.26 0.055 240);
+  --accent-foreground:  oklch(0.92 0.012 220);
+  --destructive:        oklch(0.60 0.24 10);
+  --destructive-foreground: oklch(0.95 0.008 10);
+  --border:             oklch(0.28 0.055 240);
+  --input:              oklch(0.28 0.055 240);
+  --ring:               oklch(0.65 0.20 220);
+
+  --chart-1: oklch(0.68 0.22 220);
+  --chart-2: oklch(0.68 0.22 145);
+  --chart-3: oklch(0.72 0.20 45);
+  --chart-4: oklch(0.65 0.18 280);
+  --chart-5: oklch(0.68 0.20 10);
+
+  --sidebar:             oklch(0.11 0.028 240);
+  --sidebar-foreground:  oklch(0.88 0.015 220);
+  --sidebar-primary:     oklch(0.65 0.20 220);
+  --sidebar-primary-foreground: oklch(0.11 0.028 240);
+  --sidebar-accent:      oklch(0.20 0.042 240);
+  --sidebar-accent-foreground: oklch(0.88 0.015 220);
+  --sidebar-border:      oklch(0.24 0.050 240);
+  --sidebar-ring:        oklch(0.65 0.20 220);
+}
+
+/* Suporte a PaguePay nos novos temas */
+.dark-grey[data-tenant="pagueplay"],
+.dark-grey [data-tenant="pagueplay"] {
+  --primary: oklch(0.60 0.18 155);
+  --primary-foreground: oklch(0.15 0.006 155);
+  --ring: oklch(0.60 0.18 155);
+  --sidebar-primary: oklch(0.60 0.18 155);
+  --sidebar-primary-foreground: oklch(0.13 0.006 155);
+  --sidebar-ring: oklch(0.60 0.18 155);
+  --chart-1: oklch(0.63 0.20 155);
+}
+
+.deep-blue[data-tenant="pagueplay"],
+.deep-blue [data-tenant="pagueplay"] {
+  --primary: oklch(0.62 0.18 155);
+  --primary-foreground: oklch(0.13 0.030 155);
+  --ring: oklch(0.62 0.18 155);
+  --sidebar-primary: oklch(0.62 0.18 155);
+  --sidebar-primary-foreground: oklch(0.10 0.025 155);
+  --sidebar-ring: oklch(0.62 0.18 155);
+  --chart-1: oklch(0.65 0.20 155);
+}
+
 @theme inline {
   /* Shadcn Core Mapping */
   --color-background: var(--background);
