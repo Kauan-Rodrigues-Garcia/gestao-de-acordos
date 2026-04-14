@@ -1,11 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight, Bell,
   Shield, BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target,
-  Camera, Loader2
+  Camera, Loader2, Trash2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -53,8 +53,32 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as any)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [deletandoFoto, setDeletandoFoto] = useState(false);
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  // ── Realtime: escuta mudanças de foto_url na tabela perfis ──────────────
+  // Garante que a foto atualiza em tempo real para TODOS os usuários conectados
+  useEffect(() => {
+    if (!perfil?.id) return;
+    // Sincronizar foto inicial do banco
+    supabase.from('perfis').select('foto_url').eq('id', perfil.id).single().then(({ data }) => {
+      if (data?.foto_url) setFotoUrl(data.foto_url as string);
+    });
+    // Subscription para mudanças em tempo real
+    const channel = supabase
+      .channel(`perfil-foto-${perfil.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'perfis', filter: `id=eq.${perfil.id}` },
+        (payload) => {
+          const newFoto = (payload.new as any)?.foto_url ?? null;
+          setFotoUrl(newFoto ? newFoto + '?t=' + Date.now() : null);
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [perfil?.id]);
 
   async function handleFotoUpload(file: File) {
     if (!perfil?.id) return;
@@ -70,12 +94,32 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       const urlFinal = publicUrl + '?t=' + Date.now();
       const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal }).eq('id', perfil.id);
       if (dbErr) throw dbErr;
-      setFotoUrl(urlFinal);
+      // O realtime subscription vai atualizar fotoUrl automaticamente
       toast.success('Foto de perfil atualizada!');
     } catch (err: any) {
       toast.error('Erro ao enviar foto: ' + (err?.message ?? err));
     } finally {
       setUploadingFoto(false);
+    }
+  }
+
+  async function handleDeletarFoto() {
+    if (!perfil?.id || !fotoUrl) return;
+    setDeletandoFoto(true);
+    try {
+      // Remover do banco
+      const { error: dbErr } = await supabase.from('perfis').update({ foto_url: null }).eq('id', perfil.id);
+      if (dbErr) throw dbErr;
+      // Tentar remover do storage (best-effort)
+      const ext = fotoUrl.split('?')[0].split('.').pop() ?? 'jpg';
+      await supabase.storage.from('perfis').remove([`avatars/${perfil.id}.${ext}`]);
+      setFotoUrl(null);
+      toast.success('Foto removida!');
+      setPerfilPopoverOpen(false);
+    } catch (err: any) {
+      toast.error('Erro ao remover foto: ' + (err?.message ?? err));
+    } finally {
+      setDeletandoFoto(false);
     }
   }
 
@@ -361,6 +405,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       <><Camera className="w-3.5 h-3.5" /> {fotoUrl ? 'Alterar foto' : 'Adicionar foto'}</>
                     )}
                   </Button>
+                  {fotoUrl && (
+                    <Button
+                      variant="outline"
+                      className="w-full gap-2 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                      size="sm"
+                      disabled={deletandoFoto}
+                      onClick={handleDeletarFoto}
+                    >
+                      {deletandoFoto ? (
+                        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Removendo...</>
+                      ) : (
+                        <><Trash2 className="w-3.5 h-3.5" /> Excluir foto</>
+                      )}
+                    </Button>
+                  )}
                   <p className="text-[11px] text-muted-foreground text-center">
                     JPG, PNG ou GIF · Máx. 3 MB
                   </p>
