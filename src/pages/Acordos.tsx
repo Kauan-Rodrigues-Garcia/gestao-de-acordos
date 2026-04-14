@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit,
@@ -27,7 +27,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
-import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
+import { AcordoDetalheInline, ModalReagendar } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 
@@ -91,6 +91,8 @@ export default function Acordos() {
   const [editandoInlineId, setEditandoInlineId] = useState<string | null>(null);
   // Inline detail view
   const [detalheInlineId, setDetalheInlineId] = useState<string | null>(null);
+  // Reagendar acordo pago
+  const [reagendarAcordo, setReagendarAcordo] = useState<Acordo | null>(null);
   // Novo acordo inline
   const [novoInlineAberto, setNovoInlineAberto] = useState(false);
 
@@ -326,6 +328,34 @@ export default function Acordos() {
     refetch();
   }
 
+  async function confirmarReagendamento(data: string, valor: number) {
+    if (!reagendarAcordo) return;
+    const p = reagendarAcordo;
+    const nova = {
+      nome_cliente:    p.nome_cliente,
+      nr_cliente:      p.nr_cliente,
+      vencimento:      data,
+      valor,
+      tipo:            p.tipo,
+      parcelas:        p.parcelas,
+      whatsapp:        p.whatsapp,
+      status:          'verificar_pendente' as const,
+      observacoes:     p.observacoes,
+      instituicao:     p.instituicao,
+      operador_id:     p.operador_id,
+      setor_id:        p.setor_id,
+      empresa_id:      p.empresa_id,
+      acordo_grupo_id: p.acordo_grupo_id,
+      numero_parcela:  (p.numero_parcela ?? 1) + 1,
+      data_cadastro:   new Date().toISOString().split('T')[0],
+    };
+    const { error } = await supabase.from('acordos').insert(nova);
+    if (error) { toast.error(`Erro: ${error.message}`); return; }
+    toast.success('Próximo pagamento agendado!');
+    setReagendarAcordo(null);
+    refetch();
+  }
+
   function enviarUmWhatsapp(a: Acordo) {
     if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
     const mensagem = buildMensagem(a);
@@ -432,12 +462,7 @@ export default function Acordos() {
               onClick={() => setNovoInlineAberto(v => !v)}
               className="gap-1.5"
             >
-              <Plus className="w-4 h-4" /> Novo (inline)
-            </Button>
-            <Button asChild size="sm">
-              <Link to={ROUTE_PATHS.ACORDO_NOVO}>
-                <Plus className="w-4 h-4 mr-1.5" /> Novo Acordo
-              </Link>
+              <Plus className="w-4 h-4" /> Novo Acordo
             </Button>
           </div>
         </div>
@@ -729,6 +754,17 @@ export default function Acordos() {
                                   <CheckCircle className="w-3 h-3" />
                                 </Button>
                               )}
+                              {/* Botão Reagendar — apenas PaguePay, acordo pago com grupo */}
+                              {isPP && a.status === 'pago' && !!a.acordo_grupo_id && (
+                                <Button
+                                  variant="ghost" size="sm"
+                                  className="h-6 text-[10px] px-2 text-success border border-success/40 hover:bg-success/10 gap-1"
+                                  title="Reagendar próximo pagamento"
+                                  onClick={() => setReagendarAcordo(a)}
+                                >
+                                  Reagendar
+                                </Button>
+                              )}
                               {/* Botão WhatsApp individual — oculto para PaguePay */}
                               <Button
                                 variant="ghost" size="icon"
@@ -880,6 +916,14 @@ export default function Acordos() {
       )}
 
       {/* ── Modal fila WhatsApp ── */}
+      {/* ── Modal Reagendar ── */}
+      <ModalReagendar
+        parcela={reagendarAcordo}
+        open={!!reagendarAcordo}
+        onClose={() => setReagendarAcordo(null)}
+        onConfirm={confirmarReagendamento}
+      />
+
       {filaAberta && (
         <ModalFilaWhatsApp
           fila={filaWhatsApp}
