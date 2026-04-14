@@ -227,7 +227,7 @@ export function AcordoDetalheInline({
                 <span className="text-sm font-semibold text-foreground">
                   Detalhe do Acordo
                 </span>
-                {accord_numero_parcela(acordo) && (
+                {!!(acordo.acordo_grupo_id && acordo.numero_parcela && acordo.parcelas && acordo.parcelas > 1) && (
                   <span className="text-[10px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
                     Parcela {acordo.numero_parcela ?? 1}/{acordo.parcelas}
                   </span>
@@ -381,6 +381,20 @@ export function AcordoDetalheInline({
                                 >
                                   {editandoId === p.id ? 'Cancelar' : 'Editar'}
                                 </Button>
+                                {p.status !== 'pago' && (
+                                  <Button
+                                    variant="ghost" size="sm"
+                                    className="h-6 text-[10px] px-2 text-success hover:bg-success/10"
+                                    onClick={async () => {
+                                      const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id);
+                                      if (error) { toast.error(`Erro: ${error.message}`); return; }
+                                      toast.success('Parcela marcada como paga!');
+                                      setParcelas(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
+                                    }}
+                                  >
+                                    Pago
+                                  </Button>
+                                )}
                                 {p.status === 'pago' && (
                                   <Button
                                     variant="ghost" size="sm"
