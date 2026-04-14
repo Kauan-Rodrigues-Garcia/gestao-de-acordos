@@ -88,6 +88,12 @@ export default function Acordos() {
   // Inline edit in the list, for both Bookplay and PaguePlay
   const [editandoInlineId, setEditandoInlineId] = useState<string | null>(null);
 
+  // Filtro de mês — ativo para Bookplay
+  const [mesFiltro, setMesFiltro] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   // Debounce para busca
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -113,16 +119,27 @@ export default function Acordos() {
     ? 'nao_pago'
     : filtroStatus || undefined;
 
+  // Mês filtrado: início/fim para Bookplay
+  const bpMesInicio = (!isPP && mesFiltro) ? `${mesFiltro}-01` : undefined;
+  const bpMesFim = (!isPP && mesFiltro)
+    ? (() => {
+        const [y, m] = mesFiltro.split('-').map(Number);
+        return `${mesFiltro}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+      })()
+    : undefined;
+
   const { acordos, totalCount, loading, refetch } = useAcordos({
-    busca:       busca || undefined,
-    status:      statusFiltro,
-    tipo:        filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-    vencimento:  filtroData || undefined,
-    operador_id: perfil?.perfil === 'operador'
+    busca:        busca || undefined,
+    status:       statusFiltro,
+    tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+    vencimento:   filtroData || undefined,
+    data_inicio:  filtroData ? undefined : bpMesInicio,
+    data_fim:     filtroData ? undefined : bpMesFim,
+    operador_id:  perfil?.perfil === 'operador'
       ? perfil.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
-    page:        currentPage,
-    perPage:     PER_PAGE,
+    page:         currentPage,
+    perPage:      PER_PAGE,
   });
 
   // Buscar nomes dos operadores após carregar acordos
@@ -337,6 +354,46 @@ export default function Acordos() {
         <div className="flex items-center justify-between mb-5">
           <div>
             <h1 className="text-xl font-bold text-foreground">Acordos</h1>
+            {/* Seletor de mês — Bookplay only */}
+            {!isPP && (
+              <div className="flex items-center gap-1 mt-2">
+                <Button
+                  variant="outline" size="icon" className="h-6 w-6"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const prev = new Date(y, m - 2, 1);
+                    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronLeft className="w-3 h-3" />
+                </Button>
+                <span className="text-xs font-semibold min-w-[100px] text-center text-muted-foreground">
+                  {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </span>
+                <Button
+                  variant="outline" size="icon" className="h-6 w-6"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const next = new Date(y, m, 1);
+                    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronRight className="w-3 h-3" />
+                </Button>
+                <Button
+                  variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground px-2"
+                  onClick={() => {
+                    const d = new Date();
+                    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  Mês atual
+                </Button>
+              </div>
+            )}
             <p className="text-sm text-muted-foreground mt-0.5">
               {loading ? 'Carregando...' : `${totalCount} acordo(s) no total`}
               {selecionados.length > 0 && (
