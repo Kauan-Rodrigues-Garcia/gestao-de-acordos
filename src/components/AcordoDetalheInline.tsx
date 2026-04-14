@@ -1,18 +1,22 @@
 /**
  * AcordoDetalheInline.tsx
- * Linha expansível somente-leitura com design baseado em AcordoDetalhe.
- * A linha inteira da tabela é clicável (via prop rowClickable nos pais).
- * Botão "Reagendar" aparece quando parcela está paga — abre modal central.
+ * Painel de detalhe expansível (somente leitura).
  *
- * SQL:
- *   ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS acordo_grupo_id UUID DEFAULT NULL;
- *   ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS numero_parcela INTEGER DEFAULT 1;
+ * Lógica de reagendamento (PaguePay):
+ *  - Ao salvar um acordo parcelado, as parcelas ficam com status pendente.
+ *  - Ao clicar "Pago" em uma parcela, ela é marcada como paga e a coluna Ação fica vazia.
+ *  - Quem precisar reagendar clica no botão "Reagendar" que aparece na linha do ACORDO PAGO
+ *    na tabela principal (não dentro do detalhe inline).
+ *  - Dentro do detalhe, a coluna Ação mostra:
+ *      • Parcela pendente → botão "Pago"
+ *      • Parcela paga sem reagendamento → vazio
+ *      • Parcela reagendada → badge "Agendado" (verde)
  */
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
-  FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw,
+  FileText, User, Layers, MapPin, Link2, CheckCircle2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -44,7 +48,7 @@ export interface AcordoDetalheInlineProps {
   onReagendar?: () => void;
 }
 
-// ─── Campo somente-leitura ───────────────────────────────────────────────────
+// ─── Campo somente-leitura ────────────────────────────────────────────────
 function Campo({
   icon: Icon, label, value, mono = false, full = false, children,
 }: {
@@ -70,8 +74,8 @@ function Campo({
   );
 }
 
-// ─── Modal de Reagendamento ──────────────────────────────────────────────────
-function ModalReagendar({
+// ─── Modal de Reagendamento ─────────────────────────────────────────────────
+export function ModalReagendar({
   parcela, open, onClose, onConfirm,
 }: {
   parcela: Acordo | null;
@@ -104,15 +108,17 @@ function ModalReagendar({
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
       <DialogContent className="max-w-sm">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <RefreshCw className="w-4 h-4 text-success" />
+          <DialogTitle className="flex items-center gap-2 text-success">
+            <CheckCircle2 className="w-4 h-4" />
             Reagendar Próximo Pagamento
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-2">
           <p className="text-sm text-muted-foreground">
             Confirme a data e o valor para o próximo pagamento de{' '}
-            <span className="font-semibold text-foreground">{parcela?.nome_cliente}</span>.
+            <span className="font-semibold text-foreground">
+              {parcela?.instituicao || parcela?.nome_cliente || parcela?.nr_cliente}
+            </span>.
           </p>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -159,16 +165,20 @@ export function AcordoDetalheInline({
   const statusLabels = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels   = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
   const atrasado     = isAtrasado(acordo.vencimento, acordo.status);
-  const temGrupo     = isTipoParcelado(acordo.tipo, isPaguePlay) && (acordo.parcelas ?? 1) > 1 && !!acordo.acordo_grupo_id;
+  // Exibir parcelas quando: tipo parcelado E grupo existe
+  const temGrupo     = isTipoParcelado(acordo.tipo, isPaguePlay)
+    && (acordo.parcelas ?? 1) > 1
+    && !!acordo.acordo_grupo_id;
 
   const [parcelas, setParcelas]         = useState<Acordo[]>([]);
   const [loadingParcelas, setLoading]   = useState(false);
-  const [parcelaReag, setParcelaReag]   = useState<Acordo | null>(null);
   const [marcandoPago, setMarcandoPago] = useState<string | null>(null);
 
-  const link = extractLinkAcordo(acordo.observacoes);
-  const estado = extractEstado(acordo.observacoes);
-  const nomeOperador = (acordo.perfis as { nome?: string } | undefined)?.nome ?? '—';
+  const link      = extractLinkAcordo(acordo.observacoes);
+  const estado    = extractEstado(acordo.observacoes);
+  const nomeOp    = (acordo.perfis as { nome?: string } | undefined)?.nome ?? '—';
+  // nome_cliente é o nome do profissional (se preenchido)
+  const nomeProfissional = acordo.nome_cliente;
 
   useEffect(() => {
     if (!temGrupo) return;
@@ -185,6 +195,7 @@ export function AcordoDetalheInline({
       });
   }, [temGrupo, acordo.acordo_grupo_id]);
 
+  // Marcar parcela como paga — NÃO cria reagendamento automático
   async function marcarPago(p: Acordo) {
     setMarcandoPago(p.id);
     const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id);
@@ -192,189 +203,173 @@ export function AcordoDetalheInline({
     else {
       toast.success('Parcela marcada como paga!');
       setParcelas(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
+      // Notifica o pai para que o botão "Reagendar" apareça na linha da tabela
+      onReagendar?.();
     }
     setMarcandoPago(null);
   }
 
-  async function confirmarReagendamento(data: string, valor: number) {
-    if (!parcelaReag) return;
-    const nova = {
-      nome_cliente:    parcelaReag.nome_cliente,
-      nr_cliente:      parcelaReag.nr_cliente,
-      vencimento:      data,
-      valor,
-      tipo:            parcelaReag.tipo,
-      parcelas:        parcelaReag.parcelas,
-      whatsapp:        parcelaReag.whatsapp,
-      status:          'verificar_pendente' as const,
-      observacoes:     parcelaReag.observacoes,
-      instituicao:     parcelaReag.instituicao,
-      operador_id:     parcelaReag.operador_id,
-      setor_id:        parcelaReag.setor_id,
-      empresa_id:      parcelaReag.empresa_id,
-      acordo_grupo_id: parcelaReag.acordo_grupo_id,
-      numero_parcela:  (parcelaReag.numero_parcela ?? 1) + 1,
-      data_cadastro:   new Date().toISOString().split('T')[0],
-    };
-    const { error } = await supabase.from('acordos').insert(nova);
-    if (error) { toast.error(`Erro: ${error.message}`); return; }
-    toast.success('Próximo pagamento agendado!');
-    setParcelaReag(null);
-    onReagendar?.();
-    // Recarregar parcelas
-    const { data: updated } = await supabase
-      .from('acordos').select('*')
-      .eq('acordo_grupo_id', parcelaReag.acordo_grupo_id!)
-      .order('numero_parcela', { ascending: true });
-    if (updated) setParcelas(updated as Acordo[]);
-  }
-
   return (
-    <>
-      <tr>
-        <td colSpan={colSpan} className="p-0">
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="overflow-hidden"
-          >
-            <div className="p-5 bg-accent/20 border-t border-b border-primary/15">
+    <tr>
+      <td colSpan={colSpan} className="p-0">
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="overflow-hidden"
+        >
+          <div className="p-5 bg-accent/20 border-t border-b border-primary/15">
 
-              {/* ─── Header ─── */}
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-bold text-foreground">{acordo.nome_cliente}</h3>
-                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
-                    {statusLabels[acordo.status] ?? acordo.status}
+            {/* ─── Header ─── */}
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Mostra inscrição como título principal no PaguePay */}
+                <h3 className="text-base font-bold text-foreground">
+                  {isPaguePlay ? (acordo.instituicao || acordo.nr_cliente || '—') : acordo.nome_cliente}
+                </h3>
+                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
+                  {statusLabels[acordo.status] ?? acordo.status}
+                </span>
+                {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
+                {!!(acordo.acordo_grupo_id && (acordo.parcelas ?? 1) > 1) && (
+                  <span className="text-[11px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
+                    Parcela {acordo.numero_parcela ?? 1}/{acordo.parcelas}
                   </span>
-                  {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
-                  {!!(acordo.acordo_grupo_id && (acordo.parcelas ?? 1) > 1) && (
-                    <span className="text-[11px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
-                      Parcela {acordo.numero_parcela ?? 1}/{acordo.parcelas}
-                    </span>
-                  )}
-                </div>
-                <Button variant="ghost" size="icon" className="w-7 h-7 flex-shrink-0" onClick={onClose}>
-                  <X className="w-4 h-4" />
-                </Button>
+                )}
               </div>
+              <Button variant="ghost" size="icon" className="w-7 h-7 flex-shrink-0" onClick={onClose}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
 
-              {/* ─── Grid de campos ─── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
+            {/* ─── Grid de campos ─── */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
 
-                {/* NR / CPF */}
+              {/* Inscrição (PaguePay) */}
+              {isPaguePlay && acordo.instituicao && (
+                <Campo icon={Building2} label="Inscrição" value={acordo.instituicao} />
+              )}
+
+              {/* CPF / NR */}
+              {acordo.nr_cliente && (
                 <Campo icon={Hash} label={isPaguePlay ? 'CPF' : 'NR'} value={acordo.nr_cliente} mono />
+              )}
 
-                {/* Vencimento */}
-                <Campo
-                  icon={Calendar}
-                  label="Vencimento"
-                  value={
-                    <span className={cn(atrasado && 'text-destructive font-semibold')}>
-                      {formatDate(acordo.vencimento)}
-                    </span>
-                  }
-                />
+              {/* Nome do Profissional (PaguePay — se preenchido) */}
+              {isPaguePlay && nomeProfissional && (
+                <Campo icon={User} label="Nome do Profissional" value={nomeProfissional} />
+              )}
 
-                {/* Valor */}
-                <Campo icon={DollarSign} label="Valor" value={formatCurrency(acordo.valor)} mono />
+              {/* Estado (PaguePay) */}
+              {isPaguePlay && estado && (
+                <Campo icon={MapPin} label="Estado" value={estado} />
+              )}
 
-                {/* Tipo */}
-                <Campo label="Forma de Pagamento">
-                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mt-0.5', TIPO_COLORS[acordo.tipo])}>
-                    {tipoLabels[acordo.tipo] ?? acordo.tipo}
+              {/* Vencimento */}
+              <Campo
+                icon={Calendar}
+                label="Vencimento"
+                value={
+                  <span className={cn(atrasado && 'text-destructive font-semibold')}>
+                    {formatDate(acordo.vencimento)}
                   </span>
+                }
+              />
+
+              {/* Valor */}
+              <Campo icon={DollarSign} label="Valor" value={formatCurrency(acordo.valor)} mono />
+
+              {/* Tipo */}
+              <Campo label="Forma de Pagamento">
+                <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mt-0.5', TIPO_COLORS[acordo.tipo])}>
+                  {tipoLabels[acordo.tipo] ?? acordo.tipo}
+                </span>
+              </Campo>
+
+              {/* Parcelas */}
+              {isTipoParcelado(acordo.tipo, isPaguePlay) && (acordo.parcelas ?? 1) > 1 && (
+                <Campo icon={Layers} label="Parcelas" value={`${acordo.numero_parcela ?? 1} de ${acordo.parcelas}`} mono />
+              )}
+
+              {/* WhatsApp (Bookplay) */}
+              {!isPaguePlay && acordo.whatsapp && (
+                <Campo icon={Smartphone} label="WhatsApp" value={acordo.whatsapp} mono />
+              )}
+
+              {/* Instituição (Bookplay) */}
+              {!isPaguePlay && acordo.instituicao && (
+                <Campo icon={Building2} label="Instituição" value={acordo.instituicao} />
+              )}
+
+              {/* Operador */}
+              <Campo icon={User} label="Operador" value={nomeOp} />
+
+            </div>
+
+            {/* ─── Observações (Bookplay) ─── */}
+            {!isPaguePlay && acordo.observacoes && (
+              <>
+                <Separator className="my-4" />
+                <Campo icon={FileText} label="Observações">
+                  <p className="text-sm text-foreground bg-muted/30 rounded-lg p-3 mt-0.5">
+                    {acordo.observacoes}
+                  </p>
                 </Campo>
+              </>
+            )}
 
-                {/* Parcelas (parcelados) */}
-                {isTipoParcelado(acordo.tipo, isPaguePlay) && (acordo.parcelas ?? 1) > 1 && (
-                  <Campo icon={Layers} label="Parcelas" value={`${acordo.numero_parcela ?? 1} de ${acordo.parcelas}`} mono />
-                )}
-
-                {/* WhatsApp */}
-                {acordo.whatsapp && (
-                  <Campo icon={Smartphone} label="WhatsApp" value={acordo.whatsapp} mono />
-                )}
-
-                {/* Inscrição / Instituição */}
-                {acordo.instituicao && (
-                  <Campo
-                    icon={Building2}
-                    label={isPaguePlay ? 'Inscrição' : 'Instituição'}
-                    value={acordo.instituicao}
-                  />
-                )}
-
-                {/* Estado (PaguePay) */}
-                {isPaguePlay && estado && (
-                  <Campo icon={MapPin} label="Estado" value={estado} />
-                )}
-
-                {/* Operador */}
-                <Campo icon={User} label="Operador" value={nomeOperador} />
-
-              </div>
-
-              {/* ─── Observações (Bookplay) ─── */}
-              {!isPaguePlay && acordo.observacoes && (
-                <>
-                  <Separator className="my-4" />
-                  <Campo icon={FileText} label="Observações">
-                    <p className="text-sm text-foreground bg-muted/30 rounded-lg p-3 mt-0.5">
-                      {acordo.observacoes}
-                    </p>
-                  </Campo>
-                </>
-              )}
-
-              {/* ─── Link do Acordo ─── */}
-              {link && (
-                <>
-                  <Separator className="my-4" />
-                  <div className="flex items-start gap-2">
-                    <Link2 className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Link do Acordo</p>
-                      <a
-                        href={link.startsWith('http') ? link : `https://${link}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-primary hover:underline break-all"
-                      >
-                        {link}
-                      </a>
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* ─── Parcelas do Grupo ─── */}
-              {temGrupo && (
-                <>
-                  <Separator className="my-4" />
+            {/* ─── Link do Acordo ─── */}
+            {link && (
+              <>
+                <Separator className="my-4" />
+                <div className="flex items-start gap-2">
+                  <Link2 className="w-4 h-4 text-muted-foreground mt-0.5 flex-shrink-0" />
                   <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Layers className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-semibold">Parcelas do Grupo</span>
-                    </div>
-                    {loadingParcelas ? (
-                      <p className="text-xs text-muted-foreground">Carregando parcelas...</p>
-                    ) : (
-                      <div className="overflow-x-auto rounded-lg border border-border">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-muted/40 border-b border-border">
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Vencimento</th>
-                              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Valor</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Ação</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {parcelas.map(p => (
+                    <p className="text-xs text-muted-foreground mb-1">Link do Acordo</p>
+                    <a
+                      href={link.startsWith('http') ? link : `https://${link}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline break-all"
+                    >
+                      {link}
+                    </a>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ─── Parcelas do Grupo ─── */}
+            {temGrupo && (
+              <>
+                <Separator className="my-4" />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold">Parcelas do Grupo</span>
+                  </div>
+                  {loadingParcelas ? (
+                    <p className="text-xs text-muted-foreground">Carregando parcelas...</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/40 border-b border-border">
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Vencimento</th>
+                            <th className="px-3 py-2 text-right font-medium text-muted-foreground">Valor</th>
+                            <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                            <th className="px-3 py-2 text-center font-medium text-muted-foreground">Ação</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {parcelas.map(p => {
+                            // Uma parcela foi "reagendada" se há outra parcela com numero_parcela = p.numero_parcela + 1
+                            const foiReagendada = p.status === 'pago' && parcelas.some(
+                              x => x.numero_parcela === (p.numero_parcela ?? 1) + 1
+                            );
+                            return (
                               <tr
                                 key={p.id}
                                 className={cn(
@@ -394,8 +389,9 @@ export function AcordoDetalheInline({
                                     {statusLabels[p.status] ?? p.status}
                                   </span>
                                 </td>
-                                <td className="px-3 py-2 text-right">
+                                <td className="px-3 py-2 text-center">
                                   {p.status !== 'pago' ? (
+                                    /* Pendente: botão Pago */
                                     <Button
                                       variant="ghost" size="sm"
                                       className="h-6 text-[10px] px-2 text-success hover:bg-success/10"
@@ -405,39 +401,30 @@ export function AcordoDetalheInline({
                                       <CheckCircle2 className="w-3 h-3 mr-1" />
                                       {marcandoPago === p.id ? '...' : 'Pago'}
                                     </Button>
+                                  ) : foiReagendada ? (
+                                    /* Pago e já reagendado: badge Agendado */
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success border border-success/30">
+                                      <CheckCircle2 className="w-2.5 h-2.5" /> Agendado
+                                    </span>
                                   ) : (
-                                    <Button
-                                      variant="outline" size="sm"
-                                      className="h-6 text-[10px] px-2 border-success text-success hover:bg-success/10"
-                                      onClick={() => setParcelaReag(p)}
-                                    >
-                                      <RefreshCw className="w-3 h-3 mr-1" />
-                                      Reagendar
-                                    </Button>
+                                    /* Pago e não reagendado: vazio — o botão Reagendar fica na linha da tabela */
+                                    <span className="text-muted-foreground/40 text-[10px]">—</span>
                                   )}
                                 </td>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
 
-            </div>
-          </motion.div>
-        </td>
-      </tr>
-
-      {/* ─── Modal Reagendar ─── */}
-      <ModalReagendar
-        parcela={parcelaReag}
-        open={!!parcelaReag}
-        onClose={() => setParcelaReag(null)}
-        onConfirm={confirmarReagendamento}
-      />
-    </>
+          </div>
+        </motion.div>
+      </td>
+    </tr>
   );
 }
