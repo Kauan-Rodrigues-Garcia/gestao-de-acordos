@@ -22,10 +22,10 @@ import {
 } from '@/lib/index';
 
 // ─── PaguePay: 3 tipos. Apenas Boleto e PIX habilitam parcelamento ─────────
+// PaguePay: "Boleto / PIX" é uma opção só (parcelado); "Cartão de Crédito" não parcela
 const TIPOS_PAGUEPLAY = [
-  { value: 'boleto',  label: 'Boleto',             parcelado: true  },
-  { value: 'pix',    label: 'PIX',                 parcelado: true  },
-  { value: 'cartao', label: 'Cartão de Crédito',   parcelado: false },
+  { value: 'boleto_pix', label: 'Boleto / PIX',      parcelado: true  },
+  { value: 'cartao',     label: 'Cartão de Crédito',  parcelado: false },
 ];
 
 // ─── Bookplay ──────────────────────────────────────────────────────────────
@@ -107,32 +107,37 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         : (observacoes.trim() || null);
 
       // Payload com apenas colunas que existem na tabela base
+      // tipo real no banco: boleto_pix → salvar como 'boleto' (valor compatível com schema)
+      const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
+
       const payload: Record<string, unknown> = {
-        nome_cliente:  isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
-        nr_cliente:    nrCliente.trim() || null,
+        nome_cliente:    isPaguePlay ? (nomeCliente.trim() || null) : nomeCliente.trim(),
+        nr_cliente:      nrCliente.trim() || null,
         vencimento,
-        valor:         valorNum,
-        tipo,
-        parcelas:      temParcelas ? parcelas : 1,
-        whatsapp:      whatsapp.trim() || null,
-        instituicao:   instituicao.trim() || null,
+        valor:           valorNum,
+        tipo:            tipoParaSalvar,
+        parcelas:        temParcelas ? parcelas : 1,
+        whatsapp:        whatsapp.trim() || null,
+        instituicao:     instituicao.trim() || null,
         status,
-        observacoes:   obsFinal,
-        operador_id:   perfil.id,
-        empresa_id:    empresa.id,
-        data_cadastro: new Date().toISOString().split('T')[0],
+        observacoes:     obsFinal,
+        operador_id:     perfil.id,
+        empresa_id:      empresa.id,
+        data_cadastro:   new Date().toISOString().split('T')[0],
+        acordo_grupo_id: null,
+        numero_parcela:  1,
       };
 
-      // setor_id — incluir somente se existir no perfil (campo opcional)
+      // setor_id — incluir somente se existir no perfil
       const setorId = (perfil as { setor_id?: string | null }).setor_id;
       if (setorId) payload.setor_id = setorId;
 
-      // Tentar salvar; se erro de coluna desconhecida, tentar payload mínimo
+      // Salvar com fallback progressivo em caso de colunas extras ausentes
       const { error } = await supabase.from('acordos').insert(payload);
       if (error) {
         if (error.code === '42703' || error.message?.includes('column')) {
-          // Fallback: payload mínimo sem colunas extras
-          const { setor_id: _s, instituicao: _i, ...minPayload } = payload;
+          // Tentar sem acordo_grupo_id / numero_parcela (colunas opcionais)
+          const { acordo_grupo_id: _g, numero_parcela: _n, setor_id: _s, instituicao: _i, ...minPayload } = payload;
           const { error: e2 } = await supabase.from('acordos').insert(minPayload);
           if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
         } else {
