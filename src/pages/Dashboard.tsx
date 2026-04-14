@@ -619,6 +619,16 @@ export default function Dashboard() {
                               )}
                               <td className="px-4 py-2.5 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
+                                  {/* Checkbox seleção lote — admin/lider PaguePay */}
+                                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-border w-3.5 h-3.5 mr-1"
+                                      checked={selecionados.includes(a.id)}
+                                      onChange={() => toggleSelecionado(a.id)}
+                                      onClick={e => e.stopPropagation()}
+                                    />
+                                  )}
                                   {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                     <Button
                                       variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
@@ -639,9 +649,6 @@ export default function Dashboard() {
                                     onClick={() => enviarUmWhatsapp(a)}
                                   >
                                     <MessageSquare className="w-3 h-3" />
-                                  </Button>
-                                  <Button asChild variant="ghost" size="icon" className="w-6 h-6">
-                                    <Link to={`/acordos/${a.id}`} title="Ver detalhe"><Eye className="w-3 h-3" /></Link>
                                   </Button>
                                   <Button
                                     variant="ghost" size="icon"
@@ -987,9 +994,6 @@ export default function Dashboard() {
                                       onClick={() => enviarUmWhatsapp(a)}
                                     >
                                       <MessageSquare className="w-3 h-3" />
-                                    </Button>
-                                    <Button asChild variant="ghost" size="icon" className="w-6 h-6">
-                                      <Link to={`/acordos/${a.id}`} title="Ver detalhe"><Eye className="w-3 h-3" /></Link>
                                     </Button>
                                     <Button
                                       variant="ghost" size="icon"
