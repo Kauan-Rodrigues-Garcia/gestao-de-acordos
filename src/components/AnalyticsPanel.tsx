@@ -1,16 +1,17 @@
 /**
- * AnalyticsPanel.tsx — REESCRITO COMPLETO
- * Painel analítico colapsível — cores neutras, layout expandido padronizado.
- * ROW 1: 6 cards métricas | ROW 2: progresso meta | ROW 3: gráficos
- * ROW 4: % por forma de pagamento | ROW 5: métricas adicionais | ROW 6: ranking operadores
+ * AnalyticsPanel.tsx — v3
+ * Substituição do PieChart de status pelo "Anel com Breakdown":
+ *   • Anel central: % da meta de valor atingida (ou % dos acordos pagos se sem meta)
+ *   • Ao expandir (clicar "Ver Breakdown"): mostra % por forma de pagamento
+ *   Lógica de formas de pagamento adaptada por empresa (PaguePlay vs Bookplay)
  */
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar, Target,
-  ChevronDown, ChevronUp, RefreshCw, CheckCircle2, XCircle,
-  Clock, Award, CreditCard, Percent,
+  ChevronDown, ChevronUp, RefreshCw, XCircle,
+  Clock, Award, CreditCard, Percent, ChevronRight,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -28,28 +29,21 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Constantes
-// ─────────────────────────────────────────────────────────────────────────────
-
 const MESES = [
   'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const PIE_COLORS = [
-  'hsl(var(--chart-1))',
-  'hsl(var(--chart-4))',
-  'hsl(var(--destructive))',
-  'hsl(var(--chart-3))',
-  'hsl(var(--chart-5))',
+// Cores para o breakdown de formas de pagamento
+const BREAKDOWN_COLORS = [
+  '#6366f1', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6',
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub: Tooltip customizado Recharts
+// Sub: Tooltip customizado
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CustomTooltip({ active, payload, label }: any) {
@@ -80,7 +74,7 @@ function SkeletonCard() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub: MetricCard — card neutro com valor e label
+// Sub: MetricCard
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface MetricCardProps {
@@ -104,11 +98,67 @@ function MetricCard({ label, value, icon, sub }: MetricCardProps) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Sub: DonutChart — anel central com label no meio
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DonutChartProps {
+  percent: number;       // 0–100 (ou mais)
+  label: string;         // label principal dentro do anel
+  sublabel?: string;     // sublabel secundário
+  color?: string;        // cor do arco preenchido
+  size?: number;         // tamanho em px
+}
+
+function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }: DonutChartProps) {
+  const clampedPerc = Math.min(percent, 100);
+  const data = [
+    { value: clampedPerc },
+    { value: Math.max(100 - clampedPerc, 0) },
+  ];
+
+  return (
+    <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <PieChart>
+          <Pie
+            data={data}
+            cx="50%"
+            cy="50%"
+            innerRadius={size * 0.32}
+            outerRadius={size * 0.46}
+            startAngle={90}
+            endAngle={-270}
+            paddingAngle={0}
+            dataKey="value"
+            strokeWidth={0}
+          >
+            <Cell fill={clampedPerc >= 100 ? '#22c55e' : color} />
+            <Cell fill="hsl(var(--muted))" />
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      {/* Texto central sobreposto */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <span className="text-xl font-bold leading-none">
+          {percent > 0 ? `${Math.min(percent, 999)}%` : '—'}
+        </span>
+        {sublabel && (
+          <span className="text-[11px] text-muted-foreground mt-0.5 text-center leading-tight max-w-[70px]">
+            {sublabel}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Componente principal
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AnalyticsPanel() {
   const [open, setOpen] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
@@ -124,8 +174,6 @@ export function AnalyticsPanel() {
     totalPendentes,
     meta,
     percMeta,
-    percMetaAcordos,
-    porStatus,
     porDia,
     porOperador,
     acordosMes,
@@ -151,7 +199,6 @@ export function AnalyticsPanel() {
       const tipo = (a as any).tipo as string;
       if (!tipo) continue;
 
-      // PaguePlay: boleto e pix → "Boleto/PIX"
       let key = tipo;
       let label: string;
       if (isPP && (tipo === 'boleto' || tipo === 'pix')) {
@@ -196,7 +243,6 @@ export function AnalyticsPanel() {
     ).length;
   }, [acordosMes, hoje]);
 
-  // Projeção: baseada no ritmo de pagamentos até hoje
   const projecaoMes = useMemo(() => {
     const diaAtual = new Date().getDate();
     const diasTotais = new Date(ano, mes, 0).getDate();
@@ -204,8 +250,27 @@ export function AnalyticsPanel() {
     return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
   }, [valorRecebidoMes, mes, ano]);
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ── Cor do anel central baseada no percentual ──────────────────────────────
+  const donutColor = percMeta >= 100
+    ? '#22c55e'          // verde: meta batida
+    : percMeta >= 70
+    ? '#6366f1'          // primário: bom progresso
+    : percMeta >= 40
+    ? '#f59e0b'          // amarelo: progresso médio
+    : '#ef4444';         // vermelho: abaixo de 40%
 
+  // percentual que aparece no anel:
+  // • Se há meta definida → % do valor recebido vs meta
+  // • Se não há meta → % de acordos pagos vs total
+  const donutPercent = meta
+    ? percMeta
+    : totalAcordosMes > 0
+    ? Math.round((totalPagosMes / totalAcordosMes) * 100)
+    : 0;
+
+  const donutSublabel = meta ? 'da meta' : 'pagos';
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="space-y-2">
       {/* ── Header compacto sempre visível ── */}
@@ -218,11 +283,10 @@ export function AnalyticsPanel() {
           </span>
         </div>
 
-        {/* 3 mini-valores inline (md+) */}
         {!loading && (
           <div className="hidden md:flex items-center gap-4 text-xs">
             <span>
-              Recebido:{' '}
+              Recebido:{'  '}
               <strong className="text-green-600 dark:text-green-400">
                 {formatCurrency(valorRecebidoMes)}
               </strong>
@@ -240,19 +304,13 @@ export function AnalyticsPanel() {
 
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={refetch}
-            disabled={loading}
-            title="Atualizar dados"
+            variant="ghost" size="icon" className="h-7 w-7"
+            onClick={refetch} disabled={loading} title="Atualizar dados"
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
           <Button
-            variant="outline"
-            size="sm"
-            className="h-7 text-xs gap-1"
+            variant="outline" size="sm" className="h-7 text-xs gap-1"
             onClick={() => setOpen(v => !v)}
           >
             {open ? (
@@ -334,43 +392,7 @@ export function AnalyticsPanel() {
                 )}
               </div>
 
-              {/* ── ROW 2 — Progresso da meta ── */}
-              {!loading && meta && (
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Target className="w-4 h-4 text-muted-foreground" />
-                      Progresso da Meta — {MESES[mes - 1]}/{ano}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-3">
-                    {/* Meta de valor */}
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <span>Valor recebido</span>
-                        <span>
-                          {formatCurrency(valorRecebidoMes)} / {formatCurrency(meta.meta_valor)} — {percMeta}%
-                        </span>
-                      </div>
-                      <Progress value={Math.min(percMeta, 100)} className="h-2" />
-                    </div>
-                    {/* Meta de acordos */}
-                    {meta.meta_acordos > 0 && (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          <span>Acordos pagos</span>
-                          <span>
-                            {totalPagosMes} / {meta.meta_acordos} — {percMetaAcordos}%
-                          </span>
-                        </div>
-                        <Progress value={Math.min(percMetaAcordos, 100)} className="h-2" />
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── ROW 3 — Gráficos (2 colunas em lg) ── */}
+              {/* ── ROW 2 — Gráficos (AreaChart + Anel com Breakdown) ── */}
               {!loading && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* AreaChart — Recebido vs Agendado por dia */}
@@ -398,110 +420,172 @@ export function AnalyticsPanel() {
                           <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
                           <Tooltip content={<CustomTooltip />} />
                           <Area
-                            type="monotone"
-                            dataKey="recebido"
-                            name="Recebido"
-                            stroke="#22c55e"
-                            fill="url(#colorRec)"
-                            strokeWidth={1.5}
+                            type="monotone" dataKey="recebido" name="Recebido"
+                            stroke="#22c55e" fill="url(#colorRec)" strokeWidth={1.5}
                           />
                           <Area
-                            type="monotone"
-                            dataKey="agendado"
-                            name="Agendado"
-                            stroke="hsl(var(--chart-1))"
-                            fill="url(#colorAge)"
-                            strokeWidth={1.5}
+                            type="monotone" dataKey="agendado" name="Agendado"
+                            stroke="hsl(var(--chart-1))" fill="url(#colorAge)" strokeWidth={1.5}
                           />
                         </AreaChart>
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
 
-                  {/* PieChart donut — por status */}
+                  {/* ── ANEL COM BREAKDOWN ── */}
                   <Card className="border-border bg-card">
                     <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold">
-                        Distribuição por Status
-                      </CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                          <Target className="w-4 h-4 text-muted-foreground" />
+                          {meta ? 'Meta — % Atingida' : 'Acordos Pagos — % do Mês'}
+                        </CardTitle>
+                        {porTipo.length > 0 && (
+                          <Button
+                            variant="ghost" size="sm"
+                            className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                            onClick={() => setBreakdownOpen(v => !v)}
+                          >
+                            {breakdownOpen ? 'Ocultar' : 'Ver Breakdown'}
+                            <ChevronRight className={cn('w-3 h-3 transition-transform', breakdownOpen && 'rotate-90')} />
+                          </Button>
+                        )}
+                      </div>
                     </CardHeader>
-                    <CardContent className="flex flex-col items-center pb-4">
-                      {porStatus.length > 0 ? (
-                        <>
-                          <ResponsiveContainer width="100%" height={160}>
-                            <PieChart>
-                              <Pie
-                                data={porStatus}
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={45}
-                                outerRadius={70}
-                                paddingAngle={3}
-                                dataKey="value"
-                              >
-                                {porStatus.map((entry, index) => (
-                                  <Cell
-                                    key={`cell-${index}`}
-                                    fill={PIE_COLORS[index % PIE_COLORS.length]}
-                                  />
-                                ))}
-                              </Pie>
-                              <Tooltip
-                                formatter={(value: number, name: string) => [String(value), name]}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                          <div className="flex flex-wrap justify-center gap-3 mt-1">
-                            {porStatus.map((entry, index) => (
-                              <div key={entry.name} className="flex items-center gap-1 text-xs">
-                                <span
-                                  className="w-2.5 h-2.5 rounded-full inline-block"
-                                  style={{ background: PIE_COLORS[index % PIE_COLORS.length] }}
-                                />
-                                <span>{entry.name}: {entry.value}</span>
+                    <CardContent className="pb-4">
+                      <AnimatePresence mode="wait">
+                        {!breakdownOpen ? (
+                          <motion.div
+                            key="donut-main"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="flex flex-col items-center gap-3"
+                          >
+                            {/* Anel central */}
+                            <DonutChart
+                              percent={donutPercent}
+                              label={`${donutPercent}%`}
+                              sublabel={donutSublabel}
+                              color={donutColor}
+                              size={160}
+                            />
+
+                            {/* Legenda sumário */}
+                            {meta && (
+                              <div className="text-center space-y-0.5">
+                                <p className="text-xs text-muted-foreground">
+                                  {formatCurrency(valorRecebidoMes)} recebido de {formatCurrency(meta.meta_valor)}
+                                </p>
+                                {percMeta >= 100 && (
+                                  <p className="text-xs font-semibold text-green-600 dark:text-green-400">
+                                    🎉 Meta atingida!
+                                  </p>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-xs text-muted-foreground py-8">
-                          Sem dados de status no mês
-                        </p>
-                      )}
+                            )}
+
+                            {/* Top 2 formas de pagamento em preview */}
+                            {porTipo.length > 0 && (
+                              <div className="w-full space-y-1.5 pt-1 border-t border-border">
+                                <p className="text-[11px] text-muted-foreground font-medium">Top formas de pagamento</p>
+                                {porTipo.slice(0, 2).map((t, i) => (
+                                  <div key={t.label} className="flex items-center gap-2">
+                                    <span
+                                      className="w-2 h-2 rounded-full shrink-0"
+                                      style={{ background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] }}
+                                    />
+                                    <span className="text-xs flex-1 truncate">{t.label}</span>
+                                    <span className="text-xs font-semibold tabular-nums">{t.perc}%</span>
+                                  </div>
+                                ))}
+                                {porTipo.length > 2 && (
+                                  <p className="text-[11px] text-muted-foreground">
+                                    +{porTipo.length - 2} mais → clique em "Ver Breakdown"
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </motion.div>
+                        ) : (
+                          <motion.div
+                            key="donut-breakdown"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="space-y-3"
+                          >
+                            {/* Mini-anel por forma de pagamento (Pie donut) */}
+                            {porTipo.length > 0 && (
+                              <div className="flex flex-col items-center">
+                                <ResponsiveContainer width="100%" height={140}>
+                                  <PieChart>
+                                    <Pie
+                                      data={porTipo}
+                                      cx="50%"
+                                      cy="50%"
+                                      innerRadius={40}
+                                      outerRadius={65}
+                                      paddingAngle={2}
+                                      dataKey="acordos"
+                                    >
+                                      {porTipo.map((_, i) => (
+                                        <Cell
+                                          key={i}
+                                          fill={BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}
+                                        />
+                                      ))}
+                                    </Pie>
+                                    <Tooltip
+                                      formatter={(val: number, name: string, props: any) => [
+                                        `${val} acordos (${props.payload?.perc ?? 0}%)`,
+                                        props.payload?.label ?? name,
+                                      ]}
+                                    />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+                            )}
+
+                            {/* Legenda detalhada por forma de pagamento */}
+                            <div className="space-y-2">
+                              {porTipo.map((tipo, i) => (
+                                <div key={tipo.label} className="space-y-0.5">
+                                  <div className="flex items-center justify-between text-xs">
+                                    <div className="flex items-center gap-1.5">
+                                      <span
+                                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                                        style={{ background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] }}
+                                      />
+                                      <span className="font-medium">{tipo.label}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2 text-muted-foreground">
+                                      <span>{tipo.acordos} ac.</span>
+                                      <span className="font-semibold text-foreground tabular-nums">{tipo.perc}%</span>
+                                    </div>
+                                  </div>
+                                  <Progress
+                                    value={tipo.perc}
+                                    className="h-1.5"
+                                    style={{ '--progress-color': BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] } as React.CSSProperties}
+                                  />
+                                  <p className="text-[11px] text-muted-foreground text-right">
+                                    {formatCurrency(tipo.valor)}
+                                  </p>
+                                </div>
+                              ))}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </CardContent>
                   </Card>
                 </div>
               )}
 
-              {/* ── ROW 4 — % por forma de pagamento ── */}
-              {!loading && porTipo.length > 0 && (
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <CreditCard className="w-4 h-4 text-muted-foreground" />
-                      Distribuição por Forma de Pagamento
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4 space-y-2.5">
-                    {porTipo.map((tipo, i) => (
-                      <div key={tipo.label} className="space-y-1">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-medium text-foreground">{tipo.label}</span>
-                          <span className="text-muted-foreground">
-                            {tipo.perc}% — {formatCurrency(tipo.valor)}
-                          </span>
-                        </div>
-                        <Progress
-                          value={tipo.perc}
-                          className="h-1.5"
-                        />
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* ── ROW 5 — Métricas adicionais ── */}
+              {/* ── ROW 3 — Métricas adicionais ── */}
               {!loading && (
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <MetricCard
@@ -531,7 +615,7 @@ export function AnalyticsPanel() {
                 </div>
               )}
 
-              {/* ── ROW 6 — Ranking operadores (admin/líder) ── */}
+              {/* ── ROW 4 — Ranking operadores (admin/líder) ── */}
               {!loading && (isAdmin || isLider) && porOperador && porOperador.length > 0 && (
                 <Card className="border-border bg-card">
                   <CardHeader className="pb-2 pt-4 px-4">
@@ -541,41 +625,31 @@ export function AnalyticsPanel() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="px-4 pb-4">
-                    {porOperador.length === 0 ? (
-                      <p className="text-xs text-muted-foreground">
-                        Nenhum operador com dados neste período.
-                      </p>
-                    ) : (
-                      <div className="space-y-2">
-                        {porOperador.slice(0, 10).map((op, i) => (
-                          <div
-                            key={op.id}
-                            className="flex items-center gap-3 py-1 border-b border-border last:border-0"
-                          >
-                            <span className="text-xs text-muted-foreground w-4 shrink-0">
-                              {i + 1}
-                            </span>
-                            <span className="text-xs font-medium flex-1 truncate">
-                              {op.nome}
-                            </span>
-                            <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
-                              {op.acordos} ac.
-                            </span>
-                            <span className="text-xs font-medium w-24 text-right shrink-0">
-                              {formatCurrency(op.valor)}
-                            </span>
-                            {op.meta > 0 && (
-                              <div className="w-20 shrink-0">
-                                <div className="flex justify-between text-xs text-muted-foreground mb-0.5">
-                                  <span>{op.perc}%</span>
-                                </div>
-                                <Progress value={Math.min(op.perc, 100)} className="h-1" />
+                    <div className="space-y-2">
+                      {porOperador.slice(0, 10).map((op, i) => (
+                        <div
+                          key={op.id}
+                          className="flex items-center gap-3 py-1 border-b border-border last:border-0"
+                        >
+                          <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
+                          <span className="text-xs font-medium flex-1 truncate">{op.nome}</span>
+                          <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
+                            {op.acordos} ac.
+                          </span>
+                          <span className="text-xs font-medium w-24 text-right shrink-0">
+                            {formatCurrency(op.valor)}
+                          </span>
+                          {op.meta > 0 && (
+                            <div className="w-20 shrink-0">
+                              <div className="flex justify-between text-xs text-muted-foreground mb-0.5">
+                                <span>{op.perc}%</span>
                               </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                              <Progress value={Math.min(op.perc, 100)} className="h-1" />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </CardContent>
                 </Card>
               )}
