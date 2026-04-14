@@ -111,6 +111,9 @@ export default function Dashboard() {
   const diaSemana    = new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
   const dataFormatada = new Date().toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
 
+  // ── minimizar seção acordos de hoje ───────────────────────────────────────────
+  const [hojeMinimizado, setHojeMinimizado] = useState(false);
+
   // ── filtro de mês (PaguePay — tabela completa e seção hoje) ────────────────────
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
@@ -181,11 +184,18 @@ export default function Dashboard() {
     [acordosHoje, hoje],
   );
 
-  // Auto-refresh a cada 30 segundos
+  // Realtime: escuta mudanças na tabela acordos em tempo real
   useEffect(() => {
-    const interval = setInterval(() => { refetch(); }, 30000);
-    return () => clearInterval(interval);
-  }, []);
+    const empresaId = empresa?.id;
+    if (!empresaId) return;
+    const channel = supabase
+      .channel('dashboard-acordos-rt')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'acordos', filter: `empresa_id=eq.${empresaId}` },
+        () => { refetch(); }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [empresa?.id, refetch]);
 
   // Carrega nomes dos operadores (PaguePay + admin/lider)
   useEffect(() => {
@@ -480,13 +490,21 @@ export default function Dashboard() {
           <Card className="border-border border-warning/40">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                  <CalendarDays className="w-4 h-4 text-warning" />
-                  Acordos com Vencimento Hoje
-                  <Badge variant="secondary" className="text-xs bg-warning/15 text-warning border-warning/30">
-                    {acordosDeHoje.length}
-                  </Badge>
-                </CardTitle>
+                <button
+                  type="button"
+                  className="flex items-center gap-2 group flex-1 text-left"
+                  onClick={() => setHojeMinimizado(v => !v)}
+                  title={hojeMinimizado ? 'Expandir' : 'Minimizar'}
+                >
+                  <CardTitle className="text-base font-semibold flex items-center gap-2 group-hover:text-primary transition-colors">
+                    <CalendarDays className="w-4 h-4 text-warning" />
+                    Acordos com Vencimento Hoje
+                    <Badge variant="secondary" className="text-xs bg-warning/15 text-warning border-warning/30">
+                      {acordosDeHoje.length}
+                    </Badge>
+                  </CardTitle>
+                  <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform ml-auto', hojeMinimizado && '-rotate-90')} />
+                </button>
                 {acordosDeHoje.length > 0 && (
                   <Button
                     variant="outline" size="sm"
@@ -499,7 +517,7 @@ export default function Dashboard() {
                 )}
               </div>
             </CardHeader>
-            <CardContent className="p-0">
+            {!hojeMinimizado && <CardContent className="p-0">
               {loadingHoje ? (
                 <div className="p-4 space-y-3">
                   {[...Array(3)].map((_, i) => (
@@ -664,54 +682,12 @@ export default function Dashboard() {
                   </table>
                 </div>
               )}
-            </CardContent>
+            </CardContent>}
           </Card>
 
           {/* ── Seção 2: Tabela completa de Acordos ── */}
           <div>
-            {/* Seletor de mês */}
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
-              <div className="flex items-center gap-1">
-                <Button
-                  variant="outline" size="icon" className="h-7 w-7"
-                  onClick={() => {
-                    const [y, m] = mesFiltro.split('-').map(Number);
-                    const prev = new Date(y, m - 2, 1);
-                    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <ChevronLeft className="w-3.5 h-3.5" />
-                </Button>
-                <span className="text-sm font-semibold min-w-[110px] text-center">
-                  {mesFiltro ? new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Todos'}
-                </span>
-                <Button
-                  variant="outline" size="icon" className="h-7 w-7"
-                  onClick={() => {
-                    const [y, m] = mesFiltro.split('-').map(Number);
-                    const next = new Date(y, m, 1);
-                    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
-                    setCurrentPage(1);
-                  }}
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </Button>
-                <Button
-                  variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
-                  onClick={() => {
-                    const d = new Date();
-                    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-                    setCurrentPage(1);
-                  }}
-                >
-                  Mês atual
-                </Button>
-              </div>
-            </div>
-
-            {/* Cabeçalho da seção */}
+              {/* Cabeçalho da seção */}
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-lg font-semibold text-foreground">Acordos</h2>
@@ -771,6 +747,48 @@ export default function Dashboard() {
                   {tab.label}
                 </button>
               ))}
+            </div>
+
+            {/* Seletor de mês */}
+            <div className="flex items-center gap-2 mb-4 px-1">
+              <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const prev = new Date(y, m - 2, 1);
+                    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </Button>
+                <span className="text-sm font-semibold min-w-[110px] text-center">
+                  {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </span>
+                <Button
+                  variant="outline" size="icon" className="h-7 w-7"
+                  onClick={() => {
+                    const [y, m] = mesFiltro.split('-').map(Number);
+                    const next = new Date(y, m, 1);
+                    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
+                  onClick={() => {
+                    const d = new Date();
+                    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+                    setCurrentPage(1);
+                  }}
+                >
+                  Mês atual
+                </Button>
+              </div>
             </div>
 
             {/* Filtros */}
