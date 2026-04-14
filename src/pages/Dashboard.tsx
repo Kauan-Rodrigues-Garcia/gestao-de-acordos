@@ -468,12 +468,7 @@ export default function Dashboard() {
               Lembretes do dia ({acordosDeHoje.length})
             </Button>
           )}
-          <Button asChild size="sm">
-            <Link to={ROUTE_PATHS.ACORDO_NOVO}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Acordo
-            </Link>
-          </Button>
+
         </div>
       </div>
 
@@ -764,9 +759,8 @@ export default function Dashboard() {
                   </>
                 )}
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="gap-1.5"
+                  className="gap-1.5 bg-success hover:bg-success/90 text-white"
                   onClick={() => setNovoInlineAbertoTabela(v => !v)}
                 >
                   <Plus className="w-4 h-4" /> Novo Acordo
@@ -945,7 +939,7 @@ export default function Dashboard() {
                                 animate={{ opacity: 1 }}
                                 transition={{ delay: Math.min(i * 0.015, 0.3) }}
                                 className={cn(
-                                  'border-b border-border/50 hover:bg-accent/40 transition-colors',
+                                  'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                                   i % 2 === 0 && 'bg-muted/10',
                                   atrasado  && 'bg-destructive/5',
                                   venceHoje && a.status !== 'pago' && 'bg-warning/5',
@@ -953,6 +947,11 @@ export default function Dashboard() {
                                   isEditingThis && 'bg-primary/5',
                                   isDetailThis && 'bg-accent/50',
                                 )}
+                                onClick={(e) => {
+                                  const t = e.target as HTMLElement;
+                                  if (t.closest('button') || t.closest('a') || t.closest('input')) return;
+                                  if (!isEditingThis) setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id);
+                                }}
                               >
                                 <td className="px-3 py-2.5">
                                   <input
@@ -962,8 +961,8 @@ export default function Dashboard() {
                                     onChange={() => toggleSelecionado(a.id)}
                                   />
                                 </td>
-                                {/* Inscrição — clicável para abrir detalhe */}
-                                <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id)}>
+                                {/* Inscrição */}
+                                <td className="px-3 py-2.5">
                                   <div>
                                     <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
                                     <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{a.nome_cliente}</p>
