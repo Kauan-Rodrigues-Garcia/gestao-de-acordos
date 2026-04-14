@@ -16,7 +16,7 @@ import { isPaguePlay } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const WHATSAPP_SEND_DELAY_MS = 2500;
+const WHATSAPP_SEND_DELAY_MS = 1500;
 
 export interface ItemFila {
   id: string;
@@ -178,10 +178,20 @@ export function ModalFilaWhatsApp({
                     Abrir próximo no WhatsApp
                     <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
                   </Button>
-                  <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3" title="Enviar todos automaticamente (2.5s entre cada)">
-                    <Send className="w-3.5 h-3.5" />
-                    Enviar todos
-                  </Button>
+                  {!isPP ? (
+                    // Bookplay: abre 1 por vez com clique manual (evita bloqueio de popup)
+                    <Button onClick={abrirProximo} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3"
+                      title="Abre um WhatsApp por vez — clique para cada envio">
+                      <Send className="w-3.5 h-3.5" />
+                      Próximo ({restantes})
+                    </Button>
+                  ) : (
+                    // PaguePay: envio automático com delay
+                    <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3" title="Enviar todos automaticamente (1.5s entre cada)">
+                      <Send className="w-3.5 h-3.5" />
+                      Enviar todos
+                    </Button>
+                  )}
                 </>
               )}
             </>
