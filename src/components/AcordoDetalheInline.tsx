@@ -231,17 +231,23 @@ export function AcordoDetalheInline({
     };
     const { error } = await supabase.from('acordos').insert(novaParcela);
     if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
-    toast.success('Próximo pagamento agendado!');
+    toast.success('Reagendamento confirmado!', { description: 'Próximo pagamento agendado na nova data.' });
+
+    // 1. Recarregar parcelas → proximaReal passa a existir → botão Reagendar some
+    const grupoId = acordo.acordo_grupo_id ?? p.acordo_grupo_id;
+    if (grupoId) {
+      const { data: novaLista } = await supabase
+        .from('acordos').select('*')
+        .eq('acordo_grupo_id', grupoId)
+        .order('numero_parcela', { ascending: true });
+      setRegistrosReais((novaLista ?? []) as Acordo[]);
+    }
+
+    // 2. Fechar modal
     setModalAberto(false);
     setParcelaModal(null);
-    // Recarregar
-    if (acordo.acordo_grupo_id) {
-      const { data } = await supabase
-        .from('acordos').select('*')
-        .eq('acordo_grupo_id', acordo.acordo_grupo_id)
-        .order('numero_parcela', { ascending: true });
-      setRegistrosReais((data ?? []) as Acordo[]);
-    }
+
+    // 3. Pai faz refetch → nova parcela aparece na lista na nova data
     onReagendar?.();
   }
 
