@@ -114,7 +114,8 @@ const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
 export interface AcordoNovoInlineProps {
   isPaguePlay: boolean;
   colSpan: number;
-  onSaved: () => void;
+  /** Recebe o acordo inserido para optimistic update no pai */
+  onSaved: (inserido: import('@/lib/supabase').Acordo) => void;
   onCancel: () => void;
 }
 
@@ -196,7 +197,11 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         numero_parcela:  1,
       };
 
-      const { error } = await supabase.from('acordos').insert(payload);
+      const { data: inserido, error } = await supabase
+        .from('acordos')
+        .insert(payload)
+        .select('*, perfis(id, nome, email, perfil, setor_id)')
+        .single();
       if (error) {
         // Fallback: se banco não tem as colunas novas ainda
         const isColErr =
@@ -206,8 +211,15 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
           error.message?.toLowerCase().includes('unknown');
         if (isColErr) {
           const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
-          const { error: e2 } = await supabase.from('acordos').insert(payloadMin);
+          const { data: inseridoMin, error: e2 } = await supabase
+            .from('acordos').insert(payloadMin)
+            .select('*, perfis(id, nome, email, perfil, setor_id)').single();
           if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
+          toast.success(parcelas > 1
+            ? `Acordo criado! ${parcelas} parcelas serão gerenciadas pelo Reagendar.`
+            : 'Acordo criado com sucesso!');
+          onSaved(inseridoMin as import('@/lib/supabase').Acordo);
+          return;
         } else {
           toast.error(`Erro ao salvar: ${error.message}`);
           return;
@@ -219,7 +231,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
           ? `Acordo criado! ${parcelas} parcelas serão gerenciadas pelo Reagendar.`
           : 'Acordo criado com sucesso!'
       );
-      onSaved();
+      onSaved(inserido as import('@/lib/supabase').Acordo);
     } finally {
       setSalvando(false);
     }

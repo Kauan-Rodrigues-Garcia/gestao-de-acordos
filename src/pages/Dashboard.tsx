@@ -168,7 +168,7 @@ export default function Dashboard() {
       })()
     : undefined;
 
-  const { acordos, totalCount, loading, refetch } = useAcordos(
+  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo } = useAcordos(
     isPP ? {
       busca:        busca || undefined,
       status:       statusFiltroComputed,
@@ -202,18 +202,7 @@ export default function Dashboard() {
     });
   }, [acordos, hoje, isPP]);
 
-  // Realtime: escuta mudanças na tabela acordos em tempo real
-  useEffect(() => {
-    const empresaId = empresa?.id;
-    if (!empresaId) return;
-    const channel = supabase
-      .channel('dashboard-acordos-rt')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'acordos', filter: `empresa_id=eq.${empresaId}` },
-        () => { refetch(); }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [empresa?.id, refetch]);
+  // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
   // Carrega nomes dos operadores (PaguePay + admin/lider)
   useEffect(() => {
@@ -289,7 +278,7 @@ export default function Dashboard() {
           });
         }
       });
-      refetch();
+      refetch(); // mover atrasados: recarrega pois é uma operação em lote
     }).catch(e => console.warn('[Dashboard] erro ao mover atrasados:', e));
   }, [acordos, loading, isPP]);
 
@@ -328,18 +317,30 @@ export default function Dashboard() {
       numero_parcela:  (p.numero_parcela ?? 1) + 1,
       data_cadastro:   new Date().toISOString().split('T')[0],
     };
-    const { error } = await supabase.from('acordos').insert(nova);
+    // Optimistic: substitui a linha atual (parcela anterior) pela nova na tabela
+    const { data: inserido, error } = await supabase
+      .from('acordos').insert(nova)
+      .select('*, perfis(id, nome, email, perfil, setor_id)').single();
     if (error) { toast.error(`Erro: ${error.message}`); return; }
+    // Remove a parcela anterior da lista e adiciona a nova no lugar
+    removeAcordo(p.id);
+    if (inserido) addAcordo(inserido as Acordo);
     toast.success('Próximo pagamento agendado!');
     setReagendarAcordoTabela(null);
-    refetch();
   }
 
   async function marcarComoPago(id: string) {
     setAtualizandoStatus(id);
+    // Optimistic: atualiza o status visualmente antes da resposta do banco
+    patchAcordo(id, { status: 'pago' });
     const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
-    if (error) toast.error('Erro ao atualizar status');
-    else { toast.success('Acordo marcado como Pago!'); refetch(); }
+    if (error) {
+      // Rollback: reverte o status se houve erro
+      patchAcordo(id, { status: acordos.find(a => a.id === id)?.status ?? 'verificar_pendente' });
+      toast.error('Erro ao atualizar status');
+    } else {
+      toast.success('Acordo marcado como Pago!');
+    }
     setAtualizandoStatus(null);
   }
 
@@ -404,8 +405,9 @@ export default function Dashboard() {
           excluido_em:  new Date().toISOString(),
         },
       }).then(({ error: logError }) => { if (logError) console.warn('[excluirAcordo] log error:', logError.message); });
+      // Optimistic: remove o acordo da lista local imediatamente
+      removeAcordo(a.id);
       toast.success(`Acordo #${a.nr_cliente} excluído!`);
-      refetch();
     }
     setExcluindoId(null);
   }
@@ -422,6 +424,7 @@ export default function Dashboard() {
         console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
       } else {
         deletedCount++;
+        removeAcordo(id); // Optimistic: remove da lista local imediatamente
         if (acordo) {
           supabase.from('logs_sistema').insert({
             usuario_id:  perfil?.id ?? null,
@@ -444,7 +447,7 @@ export default function Dashboard() {
     setSelecionados([]);
     if (deletedCount > 0) toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
     if (failedCount > 0) toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
-    refetch();
+    // Realtime / refetch desnecessário — removeAcordo já foi chamado por item acima
   }
 
 
@@ -722,7 +725,10 @@ export default function Dashboard() {
                           <AcordoNovoInline
                             isPaguePlay={isPP}
                             colSpan={10}
-                            onSaved={() => { setNovoInlineAbertoTabela(false); refetch(); }}
+                            onSaved={(inserido) => {
+                              setNovoInlineAbertoTabela(false);
+                              addAcordo(inserido); // Optimistic: adiciona sem refetch
+                            }}
                             onCancel={() => setNovoInlineAbertoTabela(false)}
                           />
                         )}
@@ -894,7 +900,10 @@ export default function Dashboard() {
                                   key={`inline-${a.id}`}
                                   acordo={a}
                                   isPaguePlay={isPP}
-                                  onSaved={() => { setEditandoInlineIdTabela(null); refetch(); }}
+                                  onSaved={(atualizado) => {
+                                    setEditandoInlineIdTabela(null);
+                                    patchAcordo(atualizado.id, atualizado); // Optimistic: atualiza sem refetch
+                                  }}
                                   onCancel={() => setEditandoInlineIdTabela(null)}
                                 />
                               )}
@@ -906,7 +915,7 @@ export default function Dashboard() {
                                   isPaguePlay={isPP}
                                   colSpan={10}
                                   onClose={() => setDetalheInlineIdTabela(null)}
-                                  onReagendar={() => refetch()}
+                                  onReagendar={() => setTimeout(() => refetch(), 300)}
                                 />
                               )}
                             </>

@@ -24,7 +24,8 @@ interface AcordoEditInlineProps {
   acordo: Acordo;
   isPaguePlay?: boolean;
   colSpan?: number;
-  onSaved: () => void;
+  /** Recebe o acordo atualizado para optimistic update no pai */
+  onSaved: (atualizado: Acordo) => void;
   onCancel: () => void;
 }
 
@@ -77,14 +78,19 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
       if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
 
-      const { error } = await supabase.from('acordos').update(payload).eq('id', acordo.id);
+      const { data: updated, error } = await supabase
+        .from('acordos')
+        .update(payload)
+        .eq('id', acordo.id)
+        .select('*, perfis(id, nome, email, perfil, setor_id)')
+        .single();
       if (error) {
         toast.error(`Erro ao salvar: ${error.message}`);
         return;
       }
 
       toast.success('Acordo atualizado!');
-      onSaved();
+      onSaved((updated ?? { ...acordo, ...payload }) as Acordo);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
     } finally {

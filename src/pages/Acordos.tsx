@@ -136,7 +136,7 @@ export default function Acordos() {
       })()
     : undefined;
 
-  const { acordos, totalCount, loading, refetch } = useAcordos({
+  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo } = useAcordos({
     busca:        busca || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
@@ -190,11 +190,11 @@ export default function Acordos() {
           });
         }
       });
-      refetch();
-    }).catch(e => {
-      console.warn('[Acordos] erro ao mover atrasados:', e);
-    });
-  }, [acordos, loading]);
+     refetch();
+   }).catch(e => {
+     console.warn('[Acordos] erro ao mover atrasados:', e);
+   });
+  }, [acordos, loading]); // refetch aqui é necessário: operação em lote
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
@@ -209,11 +209,16 @@ export default function Acordos() {
     else setSelecionados(acordos.map(a => a.id));
   }
 
-  async function marcarComoPago(id: string) {
-    setAtualizandoStatus(id);
+ async function marcarComoPago(id: string) {
+   setAtualizandoStatus(id);
+    patchAcordo(id, { status: 'pago' }); // Optimistic update
     const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
-    if (error) toast.error('Erro ao atualizar status');
-    else { toast.success('Acordo marcado como Pago!'); refetch(); }
+    if (error) {
+      patchAcordo(id, { status: acordos.find(a => a.id === id)?.status ?? 'verificar_pendente' }); // rollback
+      toast.error('Erro ao atualizar status');
+    } else {
+      toast.success('Acordo marcado como Pago!');
+    }
     setAtualizandoStatus(null);
   }
 
@@ -274,8 +279,8 @@ export default function Acordos() {
       }).then(({ error: logError }) => {
         if (logError) console.warn('[excluirAcordo] log error:', logError.message);
       });
-      toast.success(`Acordo #${a.nr_cliente} excluído!`);
-      refetch();
+     toast.success(`Acordo #${a.nr_cliente} excluído!`);
+      removeAcordo(a.id); // Optimistic: remove sem refetch
     }
     setExcluindoId(null);
   }
@@ -292,8 +297,9 @@ export default function Acordos() {
       if (error) {
         failedCount++;
         console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
-      } else {
-        deletedCount++;
+     } else {
+       deletedCount++;
+        removeAcordo(id); // Optimistic: remove sem refetch
         if (acordo) {
           supabase.from('logs_sistema').insert({
             usuario_id: perfil?.id ?? null,
@@ -321,11 +327,9 @@ export default function Acordos() {
     if (deletedCount > 0) {
       toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
     }
-    if (failedCount > 0) {
-      toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
-    }
-
-    refetch();
+   if (failedCount > 0) {
+     toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
+   }
   }
 
   async function confirmarReagendamento(data: string, valor: number) {
@@ -349,11 +353,14 @@ export default function Acordos() {
       numero_parcela:  (p.numero_parcela ?? 1) + 1,
       data_cadastro:   new Date().toISOString().split('T')[0],
     };
-    const { error } = await supabase.from('acordos').insert(nova);
+    const { data: inserido, error } = await supabase
+      .from('acordos').insert(nova)
+      .select('*, perfis(id, nome, email, perfil, setor_id)').single();
     if (error) { toast.error(`Erro: ${error.message}`); return; }
+    removeAcordo(p.id);          // remove parcela anterior da lista
+    if (inserido) addAcordo(inserido as Acordo); // adiciona a nova
     toast.success('Próximo pagamento agendado!');
     setReagendarAcordo(null);
-    refetch();
   }
 
   function enviarUmWhatsapp(a: Acordo) {
@@ -590,7 +597,7 @@ export default function Acordos() {
                       <AcordoNovoInline
                         isPaguePlay={isPP}
                         colSpan={isPP ? 10 : 10}
-                        onSaved={() => { setNovoInlineAberto(false); refetch(); }}
+                        onSaved={(inserido) => { setNovoInlineAberto(false); addAcordo(inserido); }}
                         onCancel={() => setNovoInlineAberto(false)}
                       />
                     )}
@@ -804,7 +811,10 @@ export default function Acordos() {
                             key={`inline-${a.id}`}
                             acordo={a}
                             isPaguePlay={isPP}
-                            onSaved={() => { setEditandoInlineId(null); refetch(); }}
+                            onSaved={(atualizado) => {
+                              setEditandoInlineId(null);
+                              patchAcordo(atualizado.id, atualizado); // Optimistic update
+                            }}
                             onCancel={() => setEditandoInlineId(null)}
                           />
                         )}
@@ -816,7 +826,7 @@ export default function Acordos() {
                             isPaguePlay={isPP}
                             colSpan={10}
                             onClose={() => setDetalheInlineId(null)}
-                            onReagendar={() => refetch()}
+                            onReagendar={() => setTimeout(() => refetch(), 300)}
                           />
                         )}
                         </>
