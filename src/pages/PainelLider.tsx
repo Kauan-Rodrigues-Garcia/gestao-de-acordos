@@ -159,7 +159,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   const [acordos,       setAcordos]       = useState<Acordo[]>([]);
   const [loadingLocal,  setLoadingLocal]  = useState(true);
   const [erroLocal,     setErroLocal]     = useState<string | null>(null);
-  const [filtroStatus,  setFiltroStatus]  = useState<string>('');
+  const [filtroStatus,  setFiltroStatus]  = useState<string>('all');
 
   const carregarAcordos = useCallback(async () => {
     setLoadingLocal(true);
@@ -191,7 +191,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   const vencidos = abertos.filter(a => a.vencimento < hoje);
 
   const acordosFiltrados = acordos
-    .filter(a => !filtroStatus || a.status === filtroStatus)
+    .filter(a => filtroStatus === 'all' || a.status === filtroStatus)
     .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
 
   const initials = operadorNome.split(' ').map(n => n[0]).slice(0,2).join('');
@@ -275,8 +275,8 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                   <SelectValue placeholder="Todos status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
-                  {Object.entries(statusLabels).map(([k, v]) => (
+                  <SelectItem value="all">Todos</SelectItem>
+                  {Object.entries(statusLabels).filter(([k]) => !!k).map(([k, v]) => (
                     <SelectItem key={k} value={k}>{v}</SelectItem>
                   ))}
                 </SelectContent>
