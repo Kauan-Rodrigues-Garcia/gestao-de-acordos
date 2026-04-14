@@ -759,8 +759,9 @@ export default function Dashboard() {
                   </>
                 )}
                 <Button
+                  variant="outline"
                   size="sm"
-                  className="gap-1.5 bg-success hover:bg-success/90 text-white"
+                  className="gap-1.5 border-success text-success hover:bg-success/10 hover:text-success"
                   onClick={() => setNovoInlineAbertoTabela(v => !v)}
                 >
                   <Plus className="w-4 h-4" /> Novo Acordo
