@@ -54,6 +54,11 @@ export interface AnalyticsData {
   // NOVO: acordos do mês atual (para calcular % por tipo no painel)
   acordosMes: Acordo[];
 
+  // Setores disponíveis para filtro (admin)
+  setores: { id: string; nome: string }[];
+  setorFiltro: string | null;
+  setSetorFiltro: (id: string | null) => void;
+
   loading: boolean;
   refetch: () => void;
 }
@@ -85,6 +90,8 @@ export function useAnalytics(): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const [acordos, setAcordos] = useState<Acordo[]>([]);
+  const [setorFiltro, setSetorFiltro] = useState<string | null>(null);
+  const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [meta, setMeta] = useState<MetaInfo | null>(null);
   const [metasEquipe, setMetasEquipe] = useState<MetaInfo[]>([]);
   const [metasOperador, setMetasOperador] = useState<MetaInfo[]>([]);
@@ -115,6 +122,19 @@ export function useAnalytics(): AnalyticsData {
         } else {
           q = q.eq('operador_id', perfil.id);
         }
+      } else if (setorFiltro) {
+        // Admin filtrou por setor específico
+        q = q.eq('setor_id', setorFiltro);
+      }
+
+      // Carregar setores para o filtro do admin
+      if (isAdmin) {
+        const { data: setoresData } = await supabase
+          .from('setores')
+          .select('id, nome')
+          .eq('empresa_id', empresa.id)
+          .order('nome');
+        setSetores((setoresData as { id: string; nome: string }[]) ?? []);
       }
 
       const { data: acordosData } = await q;
@@ -184,7 +204,7 @@ export function useAnalytics(): AnalyticsData {
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano]);
+  }, [perfil, empresa, mes, ano, setorFiltro]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -304,5 +324,8 @@ export function useAnalytics(): AnalyticsData {
     meta,
     loading,
     refetch: fetchAll,
+    setores,
+    setorFiltro,
+    setSetorFiltro,
   };
 }
