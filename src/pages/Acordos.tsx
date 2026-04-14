@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Plus, Search, MessageSquare, Edit, Eye,
+  Plus, Search, MessageSquare, Edit,
   Filter, RefreshCw, X,
   Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2
 } from 'lucide-react';
@@ -28,6 +28,7 @@ import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
+import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao } from '@/services/notificacoes.service';
 
 function buildMensagem(a: Acordo): string {
@@ -90,6 +91,8 @@ export default function Acordos() {
   const [editandoInlineId, setEditandoInlineId] = useState<string | null>(null);
   // Inline detail view
   const [detalheInlineId, setDetalheInlineId] = useState<string | null>(null);
+  // Novo acordo inline
+  const [novoInlineAberto, setNovoInlineAberto] = useState(false);
 
   // Filtro de mês — ativo para Bookplay
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
@@ -423,6 +426,14 @@ export default function Acordos() {
             <Button variant="outline" size="icon" className="w-8 h-8" onClick={refetch}>
               <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setNovoInlineAberto(v => !v)}
+              className="gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> Novo (inline)
+            </Button>
             <Button asChild size="sm">
               <Link to={ROUTE_PATHS.ACORDO_NOVO}>
                 <Plus className="w-4 h-4 mr-1.5" /> Novo Acordo
@@ -550,6 +561,14 @@ export default function Acordos() {
                     </tr>
                   </thead>
                   <tbody>
+                    {novoInlineAberto && (
+                      <AcordoNovoInline
+                        isPaguePlay={isPP}
+                        colSpan={isPP ? 10 : 10}
+                        onSaved={() => { setNovoInlineAberto(false); refetch(); }}
+                        onCancel={() => setNovoInlineAberto(false)}
+                      />
+                    )}
                     {acordos.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="px-4 py-12 text-center">
@@ -718,9 +737,7 @@ export default function Acordos() {
                               >
                                 <MessageSquare className="w-3 h-3" />
                               </Button>
-                              <Button asChild variant="ghost" size="icon" className="w-6 h-6">
-                                <Link to={`/acordos/${a.id}`} title="Ver detalhe"><Eye className="w-3 h-3" /></Link>
-                              </Button>
+
                               <Button
                                 variant="ghost" size="icon" className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
                                 title={isEditingThis ? 'Fechar editor' : 'Editar'}
@@ -728,17 +745,15 @@ export default function Acordos() {
                               >
                                 <Edit className="w-3 h-3" />
                               </Button>
-                              {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                <Button
-                                  variant="ghost" size="icon"
-                                  className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                                  title="Excluir acordo"
-                                  disabled={excluindoId === a.id}
-                                  onClick={() => setConfirmandoExclusao(a)}
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </Button>
-                              )}
+                              <Button
+                                variant="ghost" size="icon"
+                                className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                title="Excluir acordo"
+                                disabled={excluindoId === a.id}
+                                onClick={() => setConfirmandoExclusao(a)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
                             </div>
                           </td>
                         </motion.tr>
