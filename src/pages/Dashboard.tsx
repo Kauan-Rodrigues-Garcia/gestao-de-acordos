@@ -160,15 +160,15 @@ export default function Dashboard() {
 
   const { acordos, totalCount, loading, refetch } = useAcordos(
     isPP ? {
-      busca:           busca || undefined,
-      status:          statusFiltroComputed,
-      tipo:            filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-      vencimento:      filtroData || undefined,
-      vencimento_gte:  mesFiltroInicio,
-      vencimento_lte:  mesFiltroFim,
-      operador_id:     perfil?.perfil === 'operador' ? perfil.id : undefined,
-      page:            currentPage,
-      perPage:         PER_PAGE,
+      busca:        busca || undefined,
+      status:       statusFiltroComputed,
+      tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+      vencimento:   filtroData || undefined,
+      data_inicio:  filtroData ? undefined : mesFiltroInicio,
+      data_fim:     filtroData ? undefined : mesFiltroFim,
+      operador_id:  perfil?.perfil === 'operador' ? perfil.id : undefined,
+      page:         currentPage,
+      perPage:      PER_PAGE,
     } : {},
   );
 
