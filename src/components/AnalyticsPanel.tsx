@@ -1,126 +1,73 @@
 /**
- * AnalyticsPanel.tsx
- * Painel analítico colapsível — exibe métricas em tempo real por perfil.
- * Compacto por padrão, expande via botão "Exibir Dados Analíticos".
- * Perfis:
- *  - Operador: métricas individuais + % meta individual
- *  - Líder:    métricas do setor + equipe + ranking operadores
- *  - Admin:    todos os setores + equipes + operadores
+ * AnalyticsPanel.tsx — REESCRITO COMPLETO
+ * Painel analítico colapsível — cores neutras, layout expandido padronizado.
+ * ROW 1: 6 cards métricas | ROW 2: progresso meta | ROW 3: gráficos
+ * ROW 4: % por forma de pagamento | ROW 5: métricas adicionais | ROW 6: ranking operadores
  */
 
-import { useState, useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BarChart2,
-  TrendingUp,
-  TrendingDown,
-  Target,
-  ChevronDown,
-  ChevronUp,
-  DollarSign,
-  Calendar,
-  Users,
-  CheckCircle2,
-  XCircle,
-  Clock,
-  Award,
-  RefreshCw,
-} from "lucide-react";
+  BarChart2, TrendingUp, DollarSign, Calendar, Target,
+  ChevronDown, ChevronUp, RefreshCw, CheckCircle2, XCircle,
+  Clock, Award, CreditCard, Percent,
+} from 'lucide-react';
 import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  Legend,
-  RadialBarChart,
-  RadialBar,
-} from "recharts";
-import { useAnalytics, MetaInfo } from "@/hooks/useAnalytics";
-import { useAuth } from "@/hooks/useAuth";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Separator } from "@/components/ui/separator";
-import { formatCurrency, isPaguePlay } from "@/lib/index";
-import { useEmpresa } from "@/hooks/useEmpresa";
-import { cn } from "@/lib/utils";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tipos auxiliares
-// ─────────────────────────────────────────────────────────────────────────────
-
-interface MetaCardProps {
-  label: string;
-  value: string | number;
-  icon: React.ReactNode;
-  variant?: "default" | "success" | "warning" | "destructive" | "primary";
-  sub?: string;
-}
-
-interface OperadorRanking {
-  id: string;
-  nome: string;
-  acordos: number;
-  valor: number;
-  metaPercent: number;
-}
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, PieChart, Pie, Cell,
+} from 'recharts';
+import { useAnalytics } from '@/hooks/useAnalytics';
+import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import {
+  isPaguePlay, formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
+  getTodayISO,
+} from '@/lib/index';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { Separator } from '@/components/ui/separator';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constantes
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MESES = [
-  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
 ];
 
-const PIE_COLORS = {
-  Pago: "#22c55e",
-  Pendente: "#f59e0b",
-  "Não Pago": "#ef4444",
-};
-
-const VARIANT_STYLES: Record<string, string> = {
-  default:     "bg-muted/60 border-border text-foreground",
-  success:     "bg-green-500/10 border-green-500/30 text-green-700 dark:text-green-400",
-  warning:     "bg-amber-500/10 border-amber-500/30 text-amber-700 dark:text-amber-400",
-  destructive: "bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-400",
-  primary:     "bg-primary/10 border-primary/30 text-primary",
-};
+const PIE_COLORS = [
+  'hsl(var(--chart-1))',
+  'hsl(var(--chart-4))',
+  'hsl(var(--destructive))',
+  'hsl(var(--chart-3))',
+  'hsl(var(--chart-5))',
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-componente: MetaCard
+// Sub: Tooltip customizado Recharts
 // ─────────────────────────────────────────────────────────────────────────────
 
-function MetaCard({ label, value, icon, variant = "default", sub }: MetaCardProps) {
+function CustomTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null;
   return (
-    <div
-      className={cn(
-        "flex flex-col gap-1 rounded-xl border p-3 transition-all",
-        VARIANT_STYLES[variant],
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs font-medium opacity-75 truncate">{label}</span>
-        <span className="opacity-60 shrink-0">{icon}</span>
-      </div>
-      <span className="text-lg font-bold leading-tight">{value}</span>
-      {sub && <span className="text-xs opacity-60">{sub}</span>}
+    <div className="rounded-lg border border-border bg-popover p-2 shadow-md text-xs text-popover-foreground">
+      <p className="font-semibold mb-1">Dia {label}</p>
+      {payload.map((entry: any, i: number) => (
+        <p key={i} style={{ color: entry.color }}>
+          {entry.name}: {formatCurrency(entry.value)}
+        </p>
+      ))}
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub-componente: Skeleton loader
+// Sub: Skeleton card
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -132,31 +79,26 @@ function SkeletonCard() {
   );
 }
 
-function SkeletonRow() {
-  return (
-    <div className="flex items-center gap-3 py-2 animate-pulse">
-      <div className="h-4 w-32 rounded bg-muted" />
-      <div className="h-4 w-12 rounded bg-muted ml-auto" />
-      <div className="h-4 w-20 rounded bg-muted" />
-      <div className="h-3 w-24 rounded-full bg-muted" />
-    </div>
-  );
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub: MetricCard — card neutro com valor e label
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface MetricCardProps {
+  label: string;
+  value: React.ReactNode;
+  icon: React.ReactNode;
+  sub?: string;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-componente: Tooltip customizado para Recharts
-// ─────────────────────────────────────────────────────────────────────────────
-
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null;
+function MetricCard({ label, value, icon, sub }: MetricCardProps) {
   return (
-    <div className="rounded-lg border border-border bg-popover p-2 shadow-md text-xs text-popover-foreground">
-      <p className="font-semibold mb-1">Dia {label}</p>
-      {payload.map((entry: any) => (
-        <p key={entry.name} style={{ color: entry.color }}>
-          {entry.name}: {formatCurrency(entry.value)}
-        </p>
-      ))}
+    <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground truncate">{label}</span>
+        <span className="text-muted-foreground shrink-0">{icon}</span>
+      </div>
+      <div className="text-lg font-bold leading-tight">{value}</div>
+      {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
     </div>
   );
 }
@@ -166,491 +108,482 @@ function CustomTooltip({ active, payload, label }: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function AnalyticsPanel() {
-  const { user, perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const [open, setOpen] = useState(false);
+  const { perfil } = useAuth();
+  const { tenantSlug } = useEmpresa();
+  const isPP = isPaguePlay(tenantSlug);
+
   const {
-    data,
+    valorRecebidoMes,
+    valorAgendadoMes,
+    valorNaoPago,
+    valorAgendadoHoje,
+    totalAcordosMes,
+    totalPagosMes,
+    totalNaoPagos,
+    totalPendentes,
+    meta,
+    percMeta,
+    percMetaAcordos,
+    porStatus,
+    porDia,
+    porOperador,
+    acordosMes,
     loading,
     refetch,
-    mes,
-    ano,
-    metaInfo,
   } = useAnalytics();
 
-  const [expanded, setExpanded] = useState(false);
-  const [spinning, setSpinning] = useState(false);
+  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+  const isLider = perfil?.perfil === 'lider';
 
-  // Nível de acesso
-  const isAdmin = perfil === "admin";
-  const isLider = perfil === "lider";
-  const isOperador = perfil === "operador";
-  const podeVerEquipe = isAdmin || isLider;
+  const { mes, ano } = useMemo(() => {
+    const d = new Date();
+    return { mes: d.getMonth() + 1, ano: d.getFullYear() };
+  }, []);
 
-  // Label do mês/ano
-  const mesLabel = `${MESES[mes - 1]}/${ano}`;
+  // ── % por forma de pagamento ────────────────────────────────────────────────
+  const porTipo = useMemo(() => {
+    if (!acordosMes?.length) return [];
+    const tipoLabels = isPP ? TIPO_LABELS_PAGUEPLAY : TIPO_LABELS;
 
-  // ── Dados derivados ──────────────────────────────────────────────────────
+    const map: Record<string, { label: string; acordos: number; valor: number }> = {};
+    for (const a of acordosMes) {
+      const tipo = (a as any).tipo as string;
+      if (!tipo) continue;
 
-  const recebidoMes: number = data?.recebidoMes ?? 0;
-  const agendadoMes: number = data?.agendadoMes ?? 0;
-  const naoPagosMes: number = data?.naoPagosMes ?? 0;
-  const agendadoHoje: number = data?.agendadoHoje ?? 0;
-  const acordosMes: number = data?.acordosMes ?? 0;
-  const metaValor: number = metaInfo?.meta_valor ?? 0;
-  const metaPercent: number = metaValor > 0 ? Math.min((recebidoMes / metaValor) * 100, 100) : 0;
+      // PaguePlay: boleto e pix → "Boleto/PIX"
+      let key = tipo;
+      let label: string;
+      if (isPP && (tipo === 'boleto' || tipo === 'pix')) {
+        key = 'boleto_pix';
+        label = 'Boleto/PIX';
+      } else if (isPP && tipo === 'cartao') {
+        key = 'cartao';
+        label = 'Cartão de Crédito';
+      } else {
+        label = tipoLabels[tipo] ?? tipo;
+      }
 
-  const metaPercentLabel = metaValor > 0
-    ? `${metaPercent.toFixed(1)}%`
-    : "—";
+      if (!map[key]) map[key] = { label, acordos: 0, valor: 0 };
+      map[key].acordos++;
+      map[key].valor += Number((a as any).valor) || 0;
+    }
 
-  // Dados do gráfico de área (recebido vs agendado por dia)
-  const areaData = useMemo(
-    () => data?.porDia ?? [],
-    [data?.porDia],
-  );
+    const total = acordosMes.length || 1;
+    return Object.values(map)
+      .map(item => ({
+        label: item.label,
+        acordos: item.acordos,
+        valor: item.valor,
+        perc: Math.round((item.acordos / total) * 100),
+      }))
+      .sort((a, b) => b.acordos - a.acordos);
+  }, [acordosMes, isPP]);
 
-  // Dados do gráfico de pizza (por status)
-  const pieData = useMemo(() => {
-    if (!data?.porStatus) return [];
-    return [
-      { name: "Pago",       value: data.porStatus.pago ?? 0 },
-      { name: "Pendente",   value: data.porStatus.pendente ?? 0 },
-      { name: "Não Pago",   value: data.porStatus.naoPago ?? 0 },
-    ].filter((d) => d.value > 0);
-  }, [data?.porStatus]);
+  // ── Métricas adicionais ─────────────────────────────────────────────────────
+  const taxaConversao = totalAcordosMes > 0
+    ? Math.round((totalPagosMes / totalAcordosMes) * 100)
+    : 0;
 
-  // Ranking de operadores
-  const operadores: OperadorRanking[] = useMemo(
-    () => data?.operadores ?? [],
-    [data?.operadores],
-  );
+  const ticketMedio = totalPagosMes > 0
+    ? valorRecebidoMes / totalPagosMes
+    : 0;
 
-  // ── Handlers ─────────────────────────────────────────────────────────────
+  const hoje = getTodayISO();
+  const acordosAtrasados = useMemo(() => {
+    return (acordosMes ?? []).filter(
+      a => (a as any).status === 'verificar_pendente' && (a as any).vencimento < hoje,
+    ).length;
+  }, [acordosMes, hoje]);
 
-  async function handleRefetch() {
-    setSpinning(true);
-    await refetch();
-    setTimeout(() => setSpinning(false), 600);
-  }
+  // Projeção: baseada no ritmo de pagamentos até hoje
+  const projecaoMes = useMemo(() => {
+    const diaAtual = new Date().getDate();
+    const diasTotais = new Date(ano, mes, 0).getDate();
+    if (diaAtual === 0) return 0;
+    return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
+  }, [valorRecebidoMes, mes, ano]);
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <Card className="w-full border border-border shadow-sm overflow-hidden">
-      {/* ── Header (sempre visível) ───────────────────────────────────── */}
-      <CardHeader className="py-3 px-4">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          {/* Título */}
-          <div className="flex items-center gap-2">
-            <BarChart2 className="h-4 w-4 text-primary shrink-0" />
-            <CardTitle className="text-sm font-semibold">
-              Dados Analíticos —{" "}
-              <span className="text-muted-foreground font-normal">{mesLabel}</span>
-            </CardTitle>
-          </div>
-
-          {/* Ações */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={handleRefetch}
-              disabled={loading}
-              title="Atualizar dados"
-            >
-              <RefreshCw
-                className={cn("h-3.5 w-3.5 text-muted-foreground", spinning && "animate-spin")}
-              />
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={() => setExpanded((v) => !v)}
-            >
-              {expanded ? (
-                <>Ocultar <ChevronUp className="h-3 w-3" /></>
-              ) : (
-                <>Exibir <ChevronDown className="h-3 w-3" /></>
-              )}
-            </Button>
-          </div>
+    <div className="space-y-2">
+      {/* ── Header compacto sempre visível ── */}
+      <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-card">
+        <div className="flex items-center gap-2">
+          <BarChart2 className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-semibold">Dados Analíticos</span>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            — {MESES[mes - 1]}/{ano}
+          </span>
         </div>
 
-        {/* ── Mini cards colapsados ─────────────────────────────────── */}
-        {!expanded && (
-          <div className="grid grid-cols-3 gap-2 mt-3">
-            {loading ? (
-              Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)
-            ) : (
-              <>
-                <MetaCard
-                  label="Recebido/mês"
-                  value={formatCurrency(recebidoMes)}
-                  icon={<DollarSign className="h-3.5 w-3.5" />}
-                  variant="success"
-                />
-                <MetaCard
-                  label="Agendado/mês"
-                  value={formatCurrency(agendadoMes)}
-                  icon={<Calendar className="h-3.5 w-3.5" />}
-                  variant="primary"
-                />
-                <MetaCard
-                  label="Meta"
-                  value={metaPercentLabel}
-                  icon={<Target className="h-3.5 w-3.5" />}
-                  variant={
-                    metaPercent >= 100
-                      ? "success"
-                      : metaPercent >= 60
-                      ? "warning"
-                      : "destructive"
-                  }
-                />
-              </>
+        {/* 3 mini-valores inline (md+) */}
+        {!loading && (
+          <div className="hidden md:flex items-center gap-4 text-xs">
+            <span>
+              Recebido:{' '}
+              <strong className="text-green-600 dark:text-green-400">
+                {formatCurrency(valorRecebidoMes)}
+              </strong>
+            </span>
+            <span>
+              Agendado: <strong>{formatCurrency(valorAgendadoMes)}</strong>
+            </span>
+            {meta && (
+              <span>
+                Meta: <strong>{percMeta}%</strong>
+              </span>
             )}
           </div>
         )}
-      </CardHeader>
 
-      {/* ── Painel expandido ─────────────────────────────────────────────── */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            key="analytics-expanded"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.28, ease: "easeInOut" }}
-            style={{ overflow: "hidden" }}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            onClick={refetch}
+            disabled={loading}
+            title="Atualizar dados"
           >
-            <CardContent className="px-4 pb-5 pt-0 space-y-5">
-              <Separator />
+            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => setOpen(v => !v)}
+          >
+            {open ? (
+              <><ChevronUp className="w-3 h-3" /> Ocultar</>
+            ) : (
+              <><ChevronDown className="w-3 h-3" /> Exibir Analíticos</>
+            )}
+          </Button>
+        </div>
+      </div>
 
-              {/* ── ROW 1: 6 MetaCards ─────────────────────────────────── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+      {/* ── Painel expandido ── */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            key="analytics-body"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            className="overflow-hidden"
+          >
+            <div className="space-y-4 pt-1">
+
+              {/* ── ROW 1 — 6 cards métricas ── */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
                 ) : (
                   <>
-                    <MetaCard
-                      label="Recebido/mês"
-                      value={formatCurrency(recebidoMes)}
-                      icon={<DollarSign className="h-3.5 w-3.5" />}
-                      variant="success"
-                      sub="pagamentos confirmados"
-                    />
-                    <MetaCard
-                      label="Agendado/mês"
-                      value={formatCurrency(agendadoMes)}
-                      icon={<Calendar className="h-3.5 w-3.5" />}
-                      variant="primary"
-                      sub="promessas no mês"
-                    />
-                    <MetaCard
-                      label="Não Pagos"
-                      value={formatCurrency(naoPagosMes)}
-                      icon={<XCircle className="h-3.5 w-3.5" />}
-                      variant="destructive"
-                      sub="quebras de acordo"
-                    />
-                    <MetaCard
-                      label="Agendado/hoje"
-                      value={formatCurrency(agendadoHoje)}
-                      icon={<Clock className="h-3.5 w-3.5" />}
-                      variant="warning"
-                      sub="vencendo hoje"
-                    />
-                    <MetaCard
-                      label="Acordos/mês"
-                      value={acordosMes}
-                      icon={<CheckCircle2 className="h-3.5 w-3.5" />}
-                      variant="default"
-                      sub="total de acordos"
-                    />
-                    <MetaCard
-                      label="Meta %"
-                      value={metaPercentLabel}
-                      icon={<Target className="h-3.5 w-3.5" />}
-                      variant={
-                        metaPercent >= 100
-                          ? "success"
-                          : metaPercent >= 60
-                          ? "warning"
-                          : "destructive"
+                    <MetricCard
+                      label="💰 Recebido no mês"
+                      icon={<DollarSign className="w-4 h-4" />}
+                      value={
+                        <span className="text-green-600 dark:text-green-400">
+                          {formatCurrency(valorRecebidoMes)}
+                        </span>
                       }
+                      sub={`${totalPagosMes} acordos pagos`}
+                    />
+                    <MetricCard
+                      label="📅 Agendado no mês"
+                      icon={<Calendar className="w-4 h-4" />}
+                      value={formatCurrency(valorAgendadoMes)}
+                      sub={`${totalAcordosMes} acordos`}
+                    />
+                    <MetricCard
+                      label="❌ Não Pagos"
+                      icon={<XCircle className="w-4 h-4" />}
+                      value={
+                        <span className="text-red-500/80">
+                          {formatCurrency(valorNaoPago)}
+                        </span>
+                      }
+                      sub={`${totalNaoPagos} acordos`}
+                    />
+                    <MetricCard
+                      label="📆 Agendado hoje"
+                      icon={<Clock className="w-4 h-4" />}
+                      value={formatCurrency(valorAgendadoHoje)}
+                    />
+                    <MetricCard
+                      label="📋 Acordos no mês"
+                      icon={<BarChart2 className="w-4 h-4" />}
+                      value={String(totalAcordosMes)}
+                      sub={`${totalPendentes} pendentes`}
+                    />
+                    <MetricCard
+                      label="🎯 Meta"
+                      icon={<Target className="w-4 h-4" />}
+                      value={meta ? `${percMeta}% atingida` : '—'}
                       sub={
-                        metaValor > 0
-                          ? `${formatCurrency(recebidoMes)} / ${formatCurrency(metaValor)}`
-                          : "meta não definida"
+                        meta
+                          ? `${formatCurrency(valorRecebidoMes)} / ${formatCurrency(meta.meta_valor)}`
+                          : 'Sem meta definida'
                       }
                     />
                   </>
                 )}
               </div>
 
-              {/* ── ROW 2: Barra de progresso da meta ──────────────────── */}
-              {!loading && metaValor > 0 && (
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Target className="h-3 w-3" />
-                      Progresso da meta — {mesLabel}
-                    </span>
-                    <span
-                      className={cn(
-                        "font-semibold",
-                        metaPercent >= 100
-                          ? "text-green-600 dark:text-green-400"
-                          : metaPercent >= 60
-                          ? "text-amber-600 dark:text-amber-400"
-                          : "text-red-600 dark:text-red-400",
-                      )}
-                    >
-                      {metaPercent.toFixed(1)}% atingida
-                    </span>
-                  </div>
-                  <Progress
-                    value={metaPercent}
-                    className={cn(
-                      "h-3 rounded-full",
-                      metaPercent >= 100
-                        ? "[&>div]:bg-green-500"
-                        : metaPercent >= 60
-                        ? "[&>div]:bg-amber-500"
-                        : "[&>div]:bg-red-500",
+              {/* ── ROW 2 — Progresso da meta ── */}
+              {!loading && meta && (
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Target className="w-4 h-4 text-muted-foreground" />
+                      Progresso da Meta — {MESES[mes - 1]}/{ano}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 space-y-3">
+                    {/* Meta de valor */}
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span>Valor recebido</span>
+                        <span>
+                          {formatCurrency(valorRecebidoMes)} / {formatCurrency(meta.meta_valor)} — {percMeta}%
+                        </span>
+                      </div>
+                      <Progress value={Math.min(percMeta, 100)} className="h-2" />
+                    </div>
+                    {/* Meta de acordos */}
+                    {meta.meta_acordos > 0 && (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>Acordos pagos</span>
+                          <span>
+                            {totalPagosMes} / {meta.meta_acordos} — {percMetaAcordos}%
+                          </span>
+                        </div>
+                        <Progress value={Math.min(percMetaAcordos, 100)} className="h-2" />
+                      </div>
                     )}
-                  />
-                  <div className="flex justify-between text-[11px] text-muted-foreground">
-                    <span>{formatCurrency(recebidoMes)} recebidos</span>
-                    <span>Meta: {formatCurrency(metaValor)}</span>
-                  </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── ROW 3 — Gráficos (2 colunas em lg) ── */}
+              {!loading && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* AreaChart — Recebido vs Agendado por dia */}
+                  <Card className="border-border bg-card">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">
+                        Recebido vs Agendado — por dia
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-2 pb-4">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <AreaChart data={porDia} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="colorAge" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
+                              <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="dia" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip content={<CustomTooltip />} />
+                          <Area
+                            type="monotone"
+                            dataKey="recebido"
+                            name="Recebido"
+                            stroke="#22c55e"
+                            fill="url(#colorRec)"
+                            strokeWidth={1.5}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="agendado"
+                            name="Agendado"
+                            stroke="hsl(var(--chart-1))"
+                            fill="url(#colorAge)"
+                            strokeWidth={1.5}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  {/* PieChart donut — por status */}
+                  <Card className="border-border bg-card">
+                    <CardHeader className="pb-2 pt-4 px-4">
+                      <CardTitle className="text-sm font-semibold">
+                        Distribuição por Status
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center pb-4">
+                      {porStatus.length > 0 ? (
+                        <>
+                          <ResponsiveContainer width="100%" height={160}>
+                            <PieChart>
+                              <Pie
+                                data={porStatus}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={45}
+                                outerRadius={70}
+                                paddingAngle={3}
+                                dataKey="value"
+                              >
+                                {porStatus.map((entry, index) => (
+                                  <Cell
+                                    key={`cell-${index}`}
+                                    fill={PIE_COLORS[index % PIE_COLORS.length]}
+                                  />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: number, name: string) => [String(value), name]}
+                              />
+                            </PieChart>
+                          </ResponsiveContainer>
+                          <div className="flex flex-wrap justify-center gap-3 mt-1">
+                            {porStatus.map((entry, index) => (
+                              <div key={entry.name} className="flex items-center gap-1 text-xs">
+                                <span
+                                  className="w-2.5 h-2.5 rounded-full inline-block"
+                                  style={{ background: PIE_COLORS[index % PIE_COLORS.length] }}
+                                />
+                                <span>{entry.name}: {entry.value}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      ) : (
+                        <p className="text-xs text-muted-foreground py-8">
+                          Sem dados de status no mês
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
-              {/* ── ROW 3: Gráficos ────────────────────────────────────── */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Gráfico de área: Recebido vs Agendado por dia */}
-                <div className="rounded-xl border border-border p-3 bg-muted/20">
-                  <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1">
-                    <TrendingUp className="h-3.5 w-3.5" />
-                    Recebido vs Agendado — por dia
-                  </p>
-                  {loading ? (
-                    <div className="h-40 flex items-center justify-center">
-                      <div className="h-32 w-full rounded-lg bg-muted animate-pulse" />
-                    </div>
-                  ) : areaData.length === 0 ? (
-                    <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
-                      Sem dados disponíveis
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={150}>
-                      <AreaChart data={areaData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
-                        <defs>
-                          <linearGradient id="colorRecebido" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                          </linearGradient>
-                          <linearGradient id="colorAgendado" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                        <XAxis
-                          dataKey="dia"
-                          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                          tickLine={false}
-                          axisLine={false}
+              {/* ── ROW 4 — % por forma de pagamento ── */}
+              {!loading && porTipo.length > 0 && (
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <CreditCard className="w-4 h-4 text-muted-foreground" />
+                      Distribuição por Forma de Pagamento
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4 space-y-2.5">
+                    {porTipo.map((tipo, i) => (
+                      <div key={tipo.label} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-medium text-foreground">{tipo.label}</span>
+                          <span className="text-muted-foreground">
+                            {tipo.perc}% — {formatCurrency(tipo.valor)}
+                          </span>
+                        </div>
+                        <Progress
+                          value={tipo.perc}
+                          className="h-1.5"
                         />
-                        <YAxis
-                          tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-                        />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Area
-                          type="monotone"
-                          dataKey="recebido"
-                          name="Recebido"
-                          stroke="#22c55e"
-                          strokeWidth={2}
-                          fill="url(#colorRecebido)"
-                          dot={false}
-                        />
-                        <Area
-                          type="monotone"
-                          dataKey="agendado"
-                          name="Agendado"
-                          stroke="#3b82f6"
-                          strokeWidth={2}
-                          fill="url(#colorAgendado)"
-                          dot={false}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-
-                {/* Gráfico de pizza: por status */}
-                <div className="rounded-xl border border-border p-3 bg-muted/20">
-                  <p className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1">
-                    <Award className="h-3.5 w-3.5" />
-                    Distribuição por status
-                  </p>
-                  {loading ? (
-                    <div className="h-40 flex items-center justify-center">
-                      <div className="h-32 w-full rounded-lg bg-muted animate-pulse" />
-                    </div>
-                  ) : pieData.length === 0 ? (
-                    <div className="h-40 flex items-center justify-center text-xs text-muted-foreground">
-                      Sem dados disponíveis
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height={150}>
-                      <PieChart>
-                        <Pie
-                          data={pieData}
-                          cx="50%"
-                          cy="50%"
-                          innerRadius={35}
-                          outerRadius={60}
-                          paddingAngle={3}
-                          dataKey="value"
-                        >
-                          {pieData.map((entry) => (
-                            <Cell
-                              key={entry.name}
-                              fill={PIE_COLORS[entry.name as keyof typeof PIE_COLORS] ?? "#94a3b8"}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          formatter={(value: number) => [value, ""]}
-                          contentStyle={{
-                            fontSize: 11,
-                            borderRadius: 8,
-                            border: "1px solid hsl(var(--border))",
-                            background: "hsl(var(--popover))",
-                            color: "hsl(var(--popover-foreground))",
-                          }}
-                        />
-                        <Legend
-                          iconType="circle"
-                          iconSize={8}
-                          wrapperStyle={{ fontSize: 11 }}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-
-              {/* ── ROW 4: Ranking de operadores (admin/líder) ─────────── */}
-              {podeVerEquipe && (
-                <>
-                  <Separator />
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-                      <Users className="h-3.5 w-3.5" />
-                      Ranking de Operadores — {mesLabel}
-                    </p>
-
-                    {loading ? (
-                      <div className="space-y-2">
-                        {Array.from({ length: 4 }).map((_, i) => <SkeletonRow key={i} />)}
                       </div>
-                    ) : operadores.length === 0 ? (
-                      <p className="text-xs text-muted-foreground py-2">
+                    ))}
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* ── ROW 5 — Métricas adicionais ── */}
+              {!loading && (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <MetricCard
+                    label="Taxa de conversão"
+                    icon={<Percent className="w-4 h-4" />}
+                    value={`${taxaConversao}%`}
+                    sub={`${totalPagosMes} de ${totalAcordosMes} acordos pagos`}
+                  />
+                  <MetricCard
+                    label="Ticket médio"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                    value={formatCurrency(ticketMedio)}
+                    sub="por acordo pago"
+                  />
+                  <MetricCard
+                    label="Em atraso"
+                    icon={<Clock className="w-4 h-4" />}
+                    value={String(acordosAtrasados)}
+                    sub="acordos pendentes vencidos"
+                  />
+                  <MetricCard
+                    label="Projeção do mês"
+                    icon={<Target className="w-4 h-4" />}
+                    value={formatCurrency(projecaoMes)}
+                    sub="baseada no ritmo atual"
+                  />
+                </div>
+              )}
+
+              {/* ── ROW 6 — Ranking operadores (admin/líder) ── */}
+              {!loading && (isAdmin || isLider) && porOperador && porOperador.length > 0 && (
+                <Card className="border-border bg-card">
+                  <CardHeader className="pb-2 pt-4 px-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <Award className="w-4 h-4 text-muted-foreground" />
+                      Ranking de Operadores — {MESES[mes - 1]}/{ano}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-4">
+                    {porOperador.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
                         Nenhum operador com dados neste período.
                       </p>
                     ) : (
-                      <div className="rounded-xl border border-border overflow-hidden">
-                        {/* Cabeçalho */}
-                        <div className="grid grid-cols-[1.5fr_60px_1fr_1.2fr] gap-2 px-3 py-1.5 bg-muted/40 text-[11px] font-semibold text-muted-foreground">
-                          <span>Operador</span>
-                          <span className="text-right">Acordos</span>
-                          <span className="text-right">Recebido</span>
-                          <span className="text-right">Meta</span>
-                        </div>
-
-                        {/* Linhas */}
-                        {operadores.map((op, idx) => (
+                      <div className="space-y-2">
+                        {porOperador.slice(0, 10).map((op, i) => (
                           <div
                             key={op.id}
-                            className={cn(
-                              "grid grid-cols-[1.5fr_60px_1fr_1.2fr] gap-2 px-3 py-2 text-xs items-center",
-                              idx % 2 === 0 ? "bg-background" : "bg-muted/20",
-                            )}
+                            className="flex items-center gap-3 py-1 border-b border-border last:border-0"
                           >
-                            {/* Nome + posição */}
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span
-                                className={cn(
-                                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
-                                  idx === 0
-                                    ? "bg-yellow-400/20 text-yellow-600"
-                                    : idx === 1
-                                    ? "bg-slate-300/30 text-slate-500"
-                                    : idx === 2
-                                    ? "bg-orange-400/20 text-orange-600"
-                                    : "bg-muted text-muted-foreground",
-                                )}
-                              >
-                                {idx + 1}
-                              </span>
-                              <span className="truncate font-medium">{op.nome}</span>
-                            </div>
-
-                            {/* Acordos */}
-                            <span className="text-right font-mono">{op.acordos}</span>
-
-                            {/* Valor recebido */}
-                            <span className="text-right font-mono text-green-600 dark:text-green-400">
+                            <span className="text-xs text-muted-foreground w-4 shrink-0">
+                              {i + 1}
+                            </span>
+                            <span className="text-xs font-medium flex-1 truncate">
+                              {op.nome}
+                            </span>
+                            <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
+                              {op.acordos} ac.
+                            </span>
+                            <span className="text-xs font-medium w-24 text-right shrink-0">
                               {formatCurrency(op.valor)}
                             </span>
-
-                            {/* Barra de meta */}
-                            <div className="flex items-center gap-1.5">
-                              <Progress
-                                value={Math.min(op.metaPercent, 100)}
-                                className={cn(
-                                  "h-1.5 flex-1",
-                                  op.metaPercent >= 100
-                                    ? "[&>div]:bg-green-500"
-                                    : op.metaPercent >= 60
-                                    ? "[&>div]:bg-amber-500"
-                                    : "[&>div]:bg-red-500",
-                                )}
-                              />
-                              <span
-                                className={cn(
-                                  "text-[11px] font-semibold w-9 text-right shrink-0",
-                                  op.metaPercent >= 100
-                                    ? "text-green-600 dark:text-green-400"
-                                    : op.metaPercent >= 60
-                                    ? "text-amber-600 dark:text-amber-400"
-                                    : "text-red-500",
-                                )}
-                              >
-                                {op.metaPercent.toFixed(0)}%
-                              </span>
-                            </div>
+                            {op.meta > 0 && (
+                              <div className="w-20 shrink-0">
+                                <div className="flex justify-between text-xs text-muted-foreground mb-0.5">
+                                  <span>{op.perc}%</span>
+                                </div>
+                                <Progress value={Math.min(op.perc, 100)} className="h-1" />
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
                     )}
-                  </div>
-                </>
+                  </CardContent>
+                </Card>
               )}
-            </CardContent>
+
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
-    </Card>
+    </div>
   );
 }
