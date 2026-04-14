@@ -1,13 +1,9 @@
 /**
- * useAnalytics.ts
- * Hook centralizado para dados analíticos por perfil.
- * - Operador: dados próprios
- * - Líder: setor + equipe
- * - Admin: todos os setores + equipes + operadores
- * Atualiza em tempo real via Supabase Realtime.
+ * useAnalytics.ts — ATUALIZADO
+ * Adicionado: `acordosMes: Acordo[]` no retorno para o AnalyticsPanel calcular % por tipo.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, Acordo, Setor } from '@/lib/supabase';
+import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { getTodayISO } from '@/lib/index';
@@ -26,27 +22,27 @@ export interface MetaInfo {
 
 export interface AnalyticsData {
   // Valores monetários
-  valorRecebidoMes: number;       // R$ pagos no mês atual
-  valorAgendadoMes: number;       // R$ total agendado p/ o mês
-  valorNaoPago: number;           // R$ em não-pagos
-  valorAgendadoHoje: number;      // R$ agendado p/ hoje
+  valorRecebidoMes: number;
+  valorAgendadoMes: number;
+  valorNaoPago: number;
+  valorAgendadoHoje: number;
 
   // Quantidades
-  totalAcordosMes: number;        // qtd acordos no mês
-  totalAcordosHoje: number;       // qtd acordos hoje
-  totalPagosMes: number;          // qtd pagos no mês
-  totalNaoPagos: number;          // qtd não-pagos totais
-  totalPendentes: number;         // qtd pendentes (verificar)
+  totalAcordosMes: number;
+  totalAcordosHoje: number;
+  totalPagosMes: number;
+  totalNaoPagos: number;
+  totalPendentes: number;
 
   // Meta
   meta: MetaInfo | null;
-  percMeta: number;               // % da meta de valor atingida
-  percMetaAcordos: number;        // % da meta de qtd atingida
+  percMeta: number;
+  percMetaAcordos: number;
 
   // Por status (para gráfico)
   porStatus: { name: string; value: number; color: string }[];
 
-  // Por dia do mês (para gráfico de linha)
+  // Por dia do mês (para gráfico de área)
   porDia: { dia: string; recebido: number; agendado: number }[];
 
   // Por equipe (admin/líder)
@@ -55,11 +51,12 @@ export interface AnalyticsData {
   // Por operador (admin/líder)
   porOperador?: { id: string; nome: string; acordos: number; valor: number; meta: number; perc: number }[];
 
+  // NOVO: acordos do mês atual (para calcular % por tipo no painel)
+  acordosMes: Acordo[];
+
   loading: boolean;
   refetch: () => void;
 }
-
-const HOJE = getTodayISO();
 
 function getMesAtual() {
   const d = new Date();
@@ -106,7 +103,7 @@ export function useAnalytics(): AnalyticsData {
     const isLider = perfil.perfil === 'lider';
 
     try {
-      // ── Buscar acordos conforme perfil ──────────────────────────────────────
+      // ── Acordos conforme perfil ──────────────────────────────────────────────
       let q = supabase
         .from('acordos')
         .select('*')
@@ -123,7 +120,7 @@ export function useAnalytics(): AnalyticsData {
       const { data: acordosData } = await q;
       setAcordos((acordosData as Acordo[]) || []);
 
-      // ── Meta individual / setor / equipe ────────────────────────────────────
+      // ── Meta individual / setor ──────────────────────────────────────────────
       const tipoMeta = isAdmin ? null : isLider ? 'setor' : 'operador';
       const refId    = isLider ? perfil.setor_id : perfil.id;
 
@@ -140,113 +137,172 @@ export function useAnalytics(): AnalyticsData {
         setMeta(metaData as MetaInfo | null);
       }
 
-      // ── Metas por equipe e por operador (admin/líder) ───────────────────────
+      // ── Metas por equipe / operador (admin/líder) ────────────────────────────
       if (isAdmin || isLider) {
-        const [{ data: mEq }, { data: mOp }] = await Promise.all([
-          supabase.from('metas').select('*').eq('tipo', 'equipe').eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano),
-          supabase.from('metas').select('*').eq('tipo', 'operador').eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano),
+        const [{ data: meq }, { data: mop }] = await Promise.all([
+          supabase
+            .from('metas')
+            .select('*')
+            .eq('tipo', 'equipe')
+            .eq('empresa_id', empresa.id)
+            .eq('mes', mes)
+            .eq('ano', ano),
+          supabase
+            .from('metas')
+            .select('*')
+            .eq('tipo', 'operador')
+            .eq('empresa_id', empresa.id)
+            .eq('mes', mes)
+            .eq('ano', ano),
         ]);
-        setMetasEquipe((mEq as MetaInfo[]) || []);
-        setMetasOperador((mOp as MetaInfo[]) || []);
+        setMetasEquipe((meq as MetaInfo[]) || []);
+        setMetasOperador((mop as MetaInfo[]) || []);
 
-        // Nomes operadores
-        const { data: ops } = await supabase
-          .from('perfis').select('id, nome, equipe_id')
-          .eq('empresa_id', empresa.id)
-          .eq('perfil', 'operador');
-        const om: Record<string, string> = {};
-        const eq: Record<string, string> = {};
-        (ops || []).forEach((o: any) => { om[o.id] = o.nome; });
-        setOperadoresMap(om);
+        // Mapas de nomes
+        const [{ data: ops }, { data: eqs }] = await Promise.all([
+          supabase
+            .from('perfis')
+            .select('id, nome')
+            .eq('empresa_id', empresa.id)
+            .eq('perfil', 'operador'),
+          supabase
+            .from('equipes')
+            .select('id, nome')
+            .eq('empresa_id', empresa.id),
+        ]);
 
-        // Nomes equipes
-        const { data: eqs } = await supabase
-          .from('equipes').select('id, nome')
-          .eq('empresa_id', empresa.id);
-        (eqs || []).forEach((e: any) => { eq[e.id] = e.nome; });
-        setEquipesMap(eq);
+        const opMap: Record<string, string> = {};
+        ((ops as { id: string; nome: string }[]) || []).forEach(o => { opMap[o.id] = o.nome; });
+        setOperadoresMap(opMap);
+
+        const eqMap: Record<string, string> = {};
+        ((eqs as { id: string; nome: string }[]) || []).forEach(e => { eqMap[e.id] = e.nome; });
+        setEquipesMap(eqMap);
       }
+    } catch (err) {
+      console.error('[useAnalytics] erro:', err);
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, empresa?.id]);
+  }, [perfil, empresa, mes, ano]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // Realtime — recarregar ao mudar acordos ou metas
+  // ── Realtime ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!empresa?.id) return;
-    const ch1 = supabase.channel('analytics-acordos')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'acordos', filter: `empresa_id=eq.${empresa.id}` }, fetchAll)
+    const channel = supabase
+      .channel('analytics-acordos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'acordos', filter: `empresa_id=eq.${empresa.id}` }, () => { fetchAll(); })
       .subscribe();
-    const ch2 = supabase.channel('analytics-metas')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'metas', filter: `empresa_id=eq.${empresa.id}` }, fetchAll)
-      .subscribe();
-    return () => { supabase.removeChannel(ch1); supabase.removeChannel(ch2); };
+    return () => { supabase.removeChannel(channel); };
   }, [empresa?.id, fetchAll]);
 
-  // ── Computar métricas ──────────────────────────────────────────────────────
-  const metricas = useMemo(() => {
-    const acordosMes   = acordos.filter(a => a.vencimento >= inicio && a.vencimento <= fim);
-    const acordosHoje2 = acordos.filter(a => a.vencimento === hoje);
+  // ── Derivados computados ─────────────────────────────────────────────────────
+  const derived = useMemo(() => {
+    const acordosMes = acordos.filter(
+      a => a.vencimento >= inicio && a.vencimento <= fim,
+    );
+    const acordosHoje = acordosMes.filter(a => a.vencimento === hoje);
+    const pagos       = acordosMes.filter(a => a.status === 'pago');
+    const naoPagos    = acordosMes.filter(a => a.status === 'nao_pago');
+    const pendentes   = acordosMes.filter(a => a.status === 'verificar_pendente');
 
-    const valorRecebidoMes  = acordosMes.filter(a => a.status === 'pago').reduce((s, a) => s + Number(a.valor), 0);
-    const valorAgendadoMes  = acordosMes.reduce((s, a) => s + Number(a.valor), 0);
-    const valorNaoPago      = acordos.filter(a => a.status === 'nao_pago').reduce((s, a) => s + Number(a.valor), 0);
-    const valorAgendadoHoje = acordosHoje2.reduce((s, a) => s + Number(a.valor), 0);
+    const valorRecebidoMes   = pagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const valorAgendadoMes   = acordosMes.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const valorNaoPago       = naoPagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const valorAgendadoHoje  = acordosHoje.reduce((s, a) => s + (Number(a.valor) || 0), 0);
 
-    const totalAcordosMes  = acordosMes.length;
-    const totalAcordosHoje = acordosHoje2.length;
-    const totalPagosMes    = acordosMes.filter(a => a.status === 'pago').length;
-    const totalNaoPagos    = acordos.filter(a => a.status === 'nao_pago').length;
-    const totalPendentes   = acordos.filter(a => a.status === 'verificar_pendente').length;
+    const percMeta       = calcPerc(valorRecebidoMes, meta?.meta_valor ?? 0);
+    const percMetaAcordos = calcPerc(pagos.length, meta?.meta_acordos ?? 0);
 
-    const percMeta        = calcPerc(valorRecebidoMes,  meta?.meta_valor  || 0);
-    const percMetaAcordos = calcPerc(totalPagosMes,     meta?.meta_acordos || 0);
-
-    // Por status (gráfico pizza)
+    // Por status
     const porStatus = [
-      { name: 'Pago', value: acordos.filter(a => a.status === 'pago').length, color: 'hsl(var(--chart-2))' },
-      { name: 'Pendente', value: totalPendentes, color: 'hsl(var(--chart-4))' },
-      { name: 'Não Pago', value: totalNaoPagos, color: 'hsl(var(--chart-1))' },
-    ].filter(d => d.value > 0);
+      { name: 'Pago', value: pagos.length, color: 'hsl(var(--chart-2))' },
+      { name: 'Pendente', value: pendentes.length, color: 'hsl(var(--chart-4))' },
+      { name: 'Não Pago', value: naoPagos.length, color: 'hsl(var(--destructive))' },
+    ].filter(s => s.value > 0);
 
-    // Por dia do mês (gráfico linha — últimos 30 dias)
-    const diasMap: Record<string, { recebido: number; agendado: number }> = {};
-    acordosMes.forEach(a => {
-      const d = a.vencimento.slice(8, 10);
-      if (!diasMap[d]) diasMap[d] = { recebido: 0, agendado: 0 };
-      diasMap[d].agendado += Number(a.valor);
-      if (a.status === 'pago') diasMap[d].recebido += Number(a.valor);
+    // Por dia do mês
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    const porDia = Array.from({ length: diasNoMes }, (_, i) => {
+      const d = String(i + 1).padStart(2, '0');
+      const iso = `${ano}-${String(mes).padStart(2, '0')}-${d}`;
+      const doDia = acordosMes.filter(a => a.vencimento === iso);
+      return {
+        dia: String(i + 1),
+        recebido:  doDia.filter(a => a.status === 'pago').reduce((s, a) => s + (Number(a.valor) || 0), 0),
+        agendado:  doDia.reduce((s, a) => s + (Number(a.valor) || 0), 0),
+      };
     });
-    const porDia = Object.entries(diasMap)
-      .sort(([a], [b]) => a.localeCompare(b))
-      .map(([dia, v]) => ({ dia, ...v }));
-
-    // Por operador (admin/líder)
-    const porOperador = Object.entries(operadoresMap).map(([id, nome]) => {
-      const ops = acordosMes.filter(a => a.operador_id === id);
-      const valor = ops.filter(a => a.status === 'pago').reduce((s, a) => s + Number(a.valor), 0);
-      const metaOp = metasOperador.find(m => m.referencia_id === id);
-      return { id, nome, acordos: ops.length, valor, meta: metaOp?.meta_valor || 0, perc: calcPerc(valor, metaOp?.meta_valor || 0) };
-    }).sort((a, b) => b.valor - a.valor);
 
     // Por equipe
-    const porEquipe = Object.entries(equipesMap).map(([id, nome]) => {
-      const eqAcordos = acordosMes.filter(a => (a as any).equipe_id === id);
-      const valor = eqAcordos.filter(a => a.status === 'pago').reduce((s, a) => s + Number(a.valor), 0);
-      const metaEq = metasEquipe.find(m => m.referencia_id === id);
-      return { nome, acordos: eqAcordos.length, valor, meta: metaEq?.meta_valor || 0, perc: calcPerc(valor, metaEq?.meta_valor || 0) };
-    });
+    const porEquipe = Object.entries(
+      acordosMes.reduce<Record<string, { acordos: number; valor: number }>>(
+        (acc, a) => {
+          const eid = (a as any).equipe_id ?? 'sem_equipe';
+          if (!acc[eid]) acc[eid] = { acordos: 0, valor: 0 };
+          if (a.status === 'pago') { acc[eid].acordos++; acc[eid].valor += Number(a.valor) || 0; }
+          return acc;
+        }, {}
+      )
+    ).map(([eid, d]) => {
+      const metaEq = metasEquipe.find(m => m.referencia_id === eid);
+      return {
+        nome: equipesMap[eid] ?? 'Sem equipe',
+        acordos: d.acordos,
+        valor: d.valor,
+        meta: metaEq?.meta_valor ?? 0,
+        perc: calcPerc(d.valor, metaEq?.meta_valor ?? 0),
+      };
+    }).sort((a, b) => b.valor - a.valor);
+
+    // Por operador
+    const porOperador = Object.entries(
+      acordosMes.reduce<Record<string, { acordos: number; valor: number }>>(
+        (acc, a) => {
+          const oid = (a as any).operador_id ?? 'desconhecido';
+          if (!acc[oid]) acc[oid] = { acordos: 0, valor: 0 };
+          if (a.status === 'pago') { acc[oid].acordos++; acc[oid].valor += Number(a.valor) || 0; }
+          return acc;
+        }, {}
+      )
+    ).map(([oid, d]) => {
+      const metaOp = metasOperador.find(m => m.referencia_id === oid);
+      return {
+        id: oid,
+        nome: operadoresMap[oid] ?? 'Operador',
+        acordos: d.acordos,
+        valor: d.valor,
+        meta: metaOp?.meta_valor ?? 0,
+        perc: calcPerc(d.valor, metaOp?.meta_valor ?? 0),
+      };
+    }).sort((a, b) => b.valor - a.valor);
 
     return {
-      valorRecebidoMes, valorAgendadoMes, valorNaoPago, valorAgendadoHoje,
-      totalAcordosMes, totalAcordosHoje, totalPagosMes, totalNaoPagos, totalPendentes,
-      percMeta, percMetaAcordos, porStatus, porDia,
-      porOperador: porOperador.length > 0 ? porOperador : undefined,
-      porEquipe:   porEquipe.length   > 0 ? porEquipe   : undefined,
+      valorRecebidoMes,
+      valorAgendadoMes,
+      valorNaoPago,
+      valorAgendadoHoje,
+      totalAcordosMes: acordosMes.length,
+      totalAcordosHoje: acordosHoje.length,
+      totalPagosMes: pagos.length,
+      totalNaoPagos: naoPagos.length,
+      totalPendentes: pendentes.length,
+      percMeta,
+      percMetaAcordos,
+      porStatus,
+      porDia,
+      porEquipe,
+      porOperador,
+      acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, equipesMap, inicio, fim, hoje]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, equipesMap, inicio, fim, hoje, mes, ano]);
 
-  return { ...metricas, meta, loading, refetch: fetchAll };
+  return {
+    ...derived,
+    meta,
+    loading,
+    refetch: fetchAll,
+  };
 }
