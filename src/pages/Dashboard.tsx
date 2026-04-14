@@ -6,7 +6,7 @@ import {
   ArrowRight, MessageSquare, Plus, Building2,
   Search, Filter, RefreshCw, X,
   Edit, Eye, CheckCircle, Hash, MapPin, Link2,
-  ChevronLeft, ChevronRight, Trash2,
+  ChevronLeft, ChevronRight, ChevronDown, Trash2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
