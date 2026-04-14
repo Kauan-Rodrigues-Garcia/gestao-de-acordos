@@ -21,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
@@ -139,12 +139,30 @@ export function ModalReagendar({
             </div>
           </div>
         </div>
-        <DialogFooter className="gap-2">
+        <DialogDescription className="sr-only">Confirme os dados do próximo pagamento</DialogDescription>
+        <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={salvando}>Cancelar</Button>
-          <Button className="bg-success hover:bg-success/90 text-white gap-2"
-            onClick={handleConfirm} disabled={salvando}>
-            <CheckCircle2 className="w-4 h-4" />
-            {salvando ? 'Reagendando...' : 'Confirmar'}
+          <Button
+            variant="default"
+            className="gap-2 font-semibold"
+            style={{ backgroundColor: '#16a34a', color: '#ffffff', border: '1px solid #15803d' }}
+            onClick={handleConfirm}
+            disabled={salvando}
+          >
+            {salvando ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                Reagendando...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 className="w-4 h-4" />
+                Confirmar Reagendamento
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>
