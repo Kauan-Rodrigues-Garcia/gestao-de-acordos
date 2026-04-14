@@ -869,11 +869,10 @@ export default function Dashboard() {
                               onChange={selecionarTodos}
                             />
                           </th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NOME</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CPF</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
+                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
@@ -933,23 +932,12 @@ export default function Dashboard() {
                                     onChange={() => toggleSelecionado(a.id)}
                                   />
                                 </td>
-                                {/* Nome */}
+                                {/* Inscrição — clicável para abrir detalhe */}
                                 <td className="px-3 py-2.5 cursor-pointer" onClick={() => setDetalheInlineIdTabela(detalheInlineIdTabela === a.id ? null : a.id)}>
-                                  <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
-                                </td>
-                                {/* CPF / NR */}
-                                <td className="px-3 py-2.5">
-                                  <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold">
-                                    <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                  </span>
-                                </td>
-                                {/* Inscrição */}
-                                <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                                  {a.instituicao || '—'}
-                                </td>
-                                {/* Valor */}
-                                <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
-                                  {formatCurrency(a.valor)}
+                                  <div>
+                                    <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
+                                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{a.nome_cliente}</p>
+                                  </div>
                                 </td>
                                 {/* Estado */}
                                 <td className="px-3 py-2.5">
@@ -959,6 +947,17 @@ export default function Dashboard() {
                                     </span>
                                   ) : '—'}
                                 </td>
+                                {/* Vencimento */}
+                                <td className="px-3 py-2.5">
+                                  <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && a.status !== 'pago' && 'text-warning font-semibold')}>
+                                    {formatDate(a.vencimento)}
+                                  </span>
+                                </td>
+                                {/* Valor */}
+                                <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
+                                  {formatCurrency(a.valor)}
+                                </td>
+                                {/* Estado — removido (já exibido acima) */}
                                 {/* Forma de pagamento */}
                                 <td className="px-3 py-2.5">
                                   <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
