@@ -187,8 +187,6 @@ export function AcordoDetalheInline({
   const [registrosReais,   setRegistrosReais]   = useState<Acordo[]>([]);
   const [loadingParc,      setLoadingParc]       = useState(false);
   const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
-  // IDs de parcelas já reagendadas (para esconder botão imediatamente após confirmar)
-  const [reagendados,      setReagendados]       = useState<Set<string>>(new Set());
 
   // Modal
   const [parcelaModal, setParcelaModal] = useState<Acordo | null>(null);
@@ -249,11 +247,26 @@ export function AcordoDetalheInline({
       numero_parcela:  (p.numero_parcela ?? 1) + 1,
       data_cadastro:   new Date().toISOString().split('T')[0],
     };
-    const { error } = await supabase.from('acordos').insert(novaParcela);
+    const { data: inserido, error } = await supabase
+      .from('acordos')
+      .insert(novaParcela)
+      .select('*')
+      .single();
+
     if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
 
-    // 1. Marcar parcela como reagendada IMEDIATAMENTE → botão some antes de qualquer re-render
-    setReagendados(prev => new Set([...prev, p.id]));
+    // 1. Adicionar a nova parcela REAL ao estado local IMEDIATAMENTE
+    //    → proximaReal passa a existir → foiAgendada=true → botão Reagendar some na hora
+    if (inserido) {
+      setRegistrosReais(prev => {
+        // Substituir se já existir pelo numero_parcela, caso contrário adicionar
+        const existe = prev.some(x => x.numero_parcela === inserido.numero_parcela);
+        if (existe) {
+          return prev.map(x => x.numero_parcela === inserido.numero_parcela ? inserido as Acordo : x);
+        }
+        return [...prev, inserido as Acordo].sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1));
+      });
+    }
 
     // 2. Fechar modal e limpar estado
     setModalAberto(false);
@@ -261,17 +274,7 @@ export function AcordoDetalheInline({
 
     toast.success('Reagendamento confirmado!', { description: 'Próximo pagamento agendado na nova data.' });
 
-    // 3. Recarregar parcelas do grupo em segundo plano
-    const grupoId = acordo.acordo_grupo_id ?? p.acordo_grupo_id;
-    if (grupoId) {
-      const { data: novaLista } = await supabase
-        .from('acordos').select('*')
-        .eq('acordo_grupo_id', grupoId)
-        .order('numero_parcela', { ascending: true });
-      setRegistrosReais((novaLista ?? []) as Acordo[]);
-    }
-
-    // 4. Pai faz refetch → nova parcela aparece na lista na nova data
+    // 3. Pai faz refetch → nova parcela aparece na lista na nova data
     onReagendar?.();
   }
 
@@ -305,18 +308,18 @@ export function AcordoDetalheInline({
       <tr>
         <td colSpan={colSpan} className="p-0">
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 35, mass: 0.8 }}
             className="overflow-hidden"
           >
-            <div className="p-5 bg-accent/20 border-t border-b border-primary/15">
+            <div className="p-5 bg-accent/30 border-t-2 border-b border-primary/20 shadow-inner">
 
               {/* ─── Header ─── */}
-              <div className="flex items-start justify-between mb-4">
+              <div className="flex items-start justify-between mb-5">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base font-bold text-foreground">
+                  <h3 className="text-base font-bold text-foreground tracking-tight">
                     {isPaguePlay ? (acordo.instituicao || acordo.nr_cliente || '—') : acordo.nome_cliente}
                   </h3>
                   <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
@@ -408,33 +411,37 @@ export function AcordoDetalheInline({
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <Layers className="w-4 h-4 text-primary" />
-                      <span className="text-sm font-semibold">Parcelas ({totalParcelas}x)</span>
+                      <span className="text-sm font-semibold text-foreground">Parcelas</span>
+                      <span className="text-xs font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded-full border border-primary/20">{totalParcelas}x</span>
                     </div>
 
                     {loadingParc ? (
-                      <p className="text-xs text-muted-foreground animate-pulse">Carregando parcelas...</p>
+                      <div className="space-y-2">
+                        {[...Array(3)].map((_, i) => (
+                          <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+                        ))}
+                      </div>
                     ) : (
-                      <div className="overflow-x-auto rounded-lg border border-border">
+                      <div className="overflow-x-auto rounded-xl border border-border shadow-sm">
                         <table className="w-full text-xs">
                           <thead>
-                            <tr className="bg-muted/40 border-b border-border">
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">#</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Vencimento</th>
-                              <th className="px-3 py-2 text-right font-medium text-muted-foreground">Valor</th>
-                              <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
-                              <th className="px-3 py-2 text-center font-medium text-muted-foreground">Ação</th>
+                            <tr className="bg-muted/60 border-b border-border">
+                              <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">#</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Vencimento</th>
+                              <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Valor</th>
+                              <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Status</th>
+                              <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Ação</th>
                             </tr>
                           </thead>
                           <tbody>
                             {linhas.map(({ index, real, dataCalc }) => {
                               // Verificar se a próxima parcela já tem registro real
                               const proximaReal = linhas.find(l => l.index === index + 1)?.real;
-                              const foiAgendada = real?.status === 'pago' && (!!proximaReal || (real && reagendados.has(real.id)));
-                              // Reagendar: última paga, sem próxima real, não reagendada ainda, não é a última parcela
+                              const foiAgendada = real?.status === 'pago' && !!proximaReal;
+                              // Reagendar: última paga, sem próxima real, não é a última parcela
                               const podeReagendar =
                                 real?.status === 'pago' &&
                                 !proximaReal &&
-                                !(real && reagendados.has(real.id)) &&
                                 index === ultimaRealPagaIdx &&
                                 index < totalParcelas;
 
@@ -443,61 +450,65 @@ export function AcordoDetalheInline({
                               return (
                                 <tr key={index}
                                   className={cn(
-                                    'border-b border-border/50 hover:bg-accent/30 transition-colors',
-                                    isAtualAcordo && 'bg-primary/5'
+                                    'border-b border-border/40 hover:bg-primary/5 transition-colors duration-100',
+                                    isAtualAcordo && 'bg-primary/8'
                                   )}
                                 >
                                   {/* # */}
-                                  <td className="px-3 py-2 font-mono font-bold text-primary">{index}</td>
+                                  <td className="px-3 py-2.5 font-mono font-bold text-primary text-xs">{index}</td>
 
                                   {/* Vencimento */}
-                                  <td className="px-3 py-2 font-mono">
+                                  <td className="px-3 py-2.5 font-mono text-xs">
                                     {real ? formatDate(real.vencimento) : (
-                                      <span className="text-muted-foreground/60">{formatDate(dataCalc)}</span>
+                                      <span className="text-muted-foreground/50 italic">{formatDate(dataCalc)}</span>
                                     )}
                                   </td>
 
                                   {/* Valor */}
-                                  <td className="px-3 py-2 text-right font-mono font-semibold">
+                                  <td className="px-3 py-2.5 text-right font-mono font-semibold text-xs">
                                     {real ? formatCurrency(real.valor) : (
-                                      <span className="text-muted-foreground/60">{formatCurrency(acordo.valor)}</span>
+                                      <span className="text-muted-foreground/50">{formatCurrency(acordo.valor)}</span>
                                     )}
                                   </td>
 
                                   {/* Status */}
-                                  <td className="px-3 py-2">
+                                  <td className="px-3 py-2.5">
                                     {real ? (
-                                      <span className={cn('inline-flex px-1.5 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[real.status])}>
+                                      <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border shadow-sm', STATUS_COLORS[real.status])}>
                                         {statusLabels[real.status] ?? real.status}
                                       </span>
                                     ) : (
-                                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/60">
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50 bg-muted/40 px-2 py-0.5 rounded-full border border-dashed border-border">
                                         <Clock className="w-2.5 h-2.5" /> A vencer
                                       </span>
                                     )}
                                   </td>
 
                                   {/* Ação */}
-                                  <td className="px-3 py-2 text-center">
+                                  <td className="px-3 py-2.5 text-center">
                                     {foiAgendada ? (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-success/10 text-success border border-success/30">
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/15 text-success border border-success/30 shadow-sm">
                                         <CheckCircle2 className="w-2.5 h-2.5" /> Agendado
                                       </span>
                                     ) : podeReagendar ? (
                                       <Button size="sm"
-                                        className="h-6 text-[10px] px-2 bg-success hover:bg-success/90 text-white gap-1"
+                                        className="h-6 text-[10px] px-2.5 bg-success hover:bg-success/90 text-success-foreground gap-1 font-semibold shadow-sm"
                                         onClick={() => { setParcelaModal(real); setModalAberto(true); }}>
                                         <RefreshCw className="w-2.5 h-2.5" /> Reagendar
                                       </Button>
                                     ) : real && real.status !== 'pago' ? (
                                       <Button variant="ghost" size="sm"
-                                        className="h-6 text-[10px] px-2 text-success hover:bg-success/10 hover:text-success"
+                                        className="h-6 text-[10px] px-2.5 text-success hover:bg-success/15 hover:text-success border border-success/20 font-semibold"
                                         disabled={marcandoPago === real.id}
                                         onClick={() => marcarPago(real)}>
-                                        {marcandoPago === real.id ? '...' : 'Pago'}
+                                        {marcandoPago === real.id ? (
+                                          <span className="flex items-center gap-1"><RefreshCw className="w-2 h-2 animate-spin" /> Aguarde</span>
+                                        ) : (
+                                          <span className="flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Pago</span>
+                                        )}
                                       </Button>
                                     ) : (
-                                      <span className="text-muted-foreground/30 text-[10px]">—</span>
+                                      <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
                                     )}
                                   </td>
                                 </tr>

@@ -47,6 +47,14 @@
   /* Radius */
   --radius: 0.5rem;
 
+  /* Semantic Status Colors */
+  --success:             oklch(0.55 0.18 145);
+  --success-foreground:  oklch(0.98 0.005 145);
+  --warning:             oklch(0.62 0.18 75);
+  --warning-foreground:  oklch(0.15 0.02 75);
+  --info:                oklch(0.55 0.15 200);
+  --info-foreground:     oklch(0.98 0.005 200);
+
   /* Core UI Tokens */
   --background: oklch(0.99 0 0);
   --foreground: oklch(0.15 0.01 220);
@@ -87,6 +95,14 @@
 }
 
 .dark {
+  /* Semantic Status Colors - Dark Mode */
+  --success:             oklch(0.65 0.20 145);
+  --success-foreground:  oklch(0.12 0.015 145);
+  --warning:             oklch(0.72 0.18 75);
+  --warning-foreground:  oklch(0.12 0.02 75);
+  --info:                oklch(0.65 0.18 200);
+  --info-foreground:     oklch(0.12 0.015 200);
+
   --background: oklch(0.12 0.015 220);
   --foreground: oklch(0.92 0.01 220);
   --card: oklch(0.15 0.018 220);
@@ -159,6 +175,14 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 .dark-grey {
+  /* Semantic Status Colors */
+  --success:             oklch(0.62 0.19 145);
+  --success-foreground:  oklch(0.14 0.012 145);
+  --warning:             oklch(0.68 0.17 75);
+  --warning-foreground:  oklch(0.14 0.015 75);
+  --info:                oklch(0.62 0.17 200);
+  --info-foreground:     oklch(0.14 0.012 200);
+
   --background:         oklch(0.18 0.005 220);   /* #2a2a2e — cinza material */
   --foreground:         oklch(0.92 0.008 220);
   --card:               oklch(0.21 0.007 220);   /* ligeiramente mais claro */
@@ -202,6 +226,14 @@
    ────────────────────────────────────────────────────────────────────────── */
 
 .deep-blue {
+  /* Semantic Status Colors */
+  --success:             oklch(0.62 0.19 145);
+  --success-foreground:  oklch(0.12 0.010 145);
+  --warning:             oklch(0.68 0.17 75);
+  --warning-foreground:  oklch(0.12 0.012 75);
+  --info:                oklch(0.62 0.17 200);
+  --info-foreground:     oklch(0.12 0.010 200);
+
   --background:         oklch(0.14 0.035 240);   /* azul-noite profundo */
   --foreground:         oklch(0.93 0.012 220);
   --card:               oklch(0.17 0.040 240);
@@ -283,6 +315,14 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  /* Semantic Status Colors Mapping */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+
   /* Charts Mapping */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -346,5 +386,95 @@
   }
   ::-webkit-scrollbar-thumb {
     @apply bg-muted-foreground/20 rounded-full hover:bg-muted-foreground/40;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   POLIMENTO VISUAL — Micro-interações e refinamentos globais
+   ────────────────────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Transição global suave para elementos interativos */
+  button, a, [role="button"] {
+    @apply transition-all duration-150;
+  }
+
+  /* Badge de status com sombra sutil */
+  .status-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold border shadow-sm;
+  }
+
+  /* Card com efeito hover profissional */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-md hover:border-primary/20;
+  }
+
+  /* Linha de tabela — hover suave */
+  .table-row-hover {
+    @apply hover:bg-accent/40 transition-colors duration-100;
+  }
+
+  /* Input com foco elegante */
+  .input-focused {
+    @apply focus:ring-2 focus:ring-ring focus:ring-offset-1 focus:border-primary transition-all duration-150;
+  }
+
+  /* Skeleton com shimmer */
+  .shimmer {
+    @apply animate-pulse bg-muted rounded;
+  }
+
+  /* Toast com fundo sólido garantido */
+  [data-sonner-toast] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+  [data-sonner-toast][data-type="success"] {
+    background-color: var(--success) !important;
+    color: var(--success-foreground) !important;
+    border-color: color-mix(in oklch, var(--success) 60%, transparent) !important;
+  }
+  [data-sonner-toast][data-type="error"] {
+    background-color: var(--destructive) !important;
+    color: var(--destructive-foreground) !important;
+    border-color: color-mix(in oklch, var(--destructive) 60%, transparent) !important;
+  }
+  [data-sonner-toast][data-type="warning"] {
+    background-color: var(--warning) !important;
+    color: var(--warning-foreground) !important;
+    border-color: color-mix(in oklch, var(--warning) 60%, transparent) !important;
+  }
+  [data-sonner-toast][data-type="info"] {
+    background-color: var(--info) !important;
+    color: var(--info-foreground) !important;
+    border-color: color-mix(in oklch, var(--info) 60%, transparent) !important;
+  }
+  /* Toast default — fundo do popover (sólido) */
+  [data-sonner-toast]:not([data-type]) {
+    background-color: var(--popover) !important;
+    color: var(--popover-foreground) !important;
+    border-color: var(--border) !important;
+  }
+  [data-sonner-toast] [data-icon] {
+    color: inherit;
+  }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   ANIMAÇÕES SUAVES — Framer Motion helpers
+   ────────────────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+  /* Previne flash de conteúdo durante animações de height */
+  .overflow-clip-height {
+    overflow: clip;
+  }
+
+  /* Texto com gradiente de marca */
+  .text-gradient-brand {
+    background: linear-gradient(135deg, var(--primary), color-mix(in oklch, var(--primary) 60%, var(--chart-2)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
   }
 }
