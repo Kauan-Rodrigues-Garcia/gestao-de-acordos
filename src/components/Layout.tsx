@@ -1,19 +1,22 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight, Bell,
-  Shield, BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target
+  Shield, BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target,
+  Camera, Loader2
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useNotificacoes } from '@/hooks/useNotificacoes';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPaguePlay } from '@/lib/index';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -48,6 +51,33 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as any)?.foto_url ?? null);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
+  const inputFotoRef = useRef<HTMLInputElement>(null);
+
+  async function handleFotoUpload(file: File) {
+    if (!perfil?.id) return;
+    if (!file.type.startsWith('image/')) { toast.error('Arquivo inválido. Envie uma imagem.'); return; }
+    if (file.size > 3 * 1024 * 1024) { toast.error('Imagem muito grande. Máximo 3 MB.'); return; }
+    setUploadingFoto(true);
+    try {
+      const ext = file.name.split('.').pop() ?? 'jpg';
+      const path = `avatars/${perfil.id}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('perfis').upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('perfis').getPublicUrl(path);
+      const urlFinal = publicUrl + '?t=' + Date.now();
+      const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal }).eq('id', perfil.id);
+      if (dbErr) throw dbErr;
+      setFotoUrl(urlFinal);
+      toast.success('Foto de perfil atualizada!');
+    } catch (err: any) {
+      toast.error('Erro ao enviar foto: ' + (err?.message ?? err));
+    } finally {
+      setUploadingFoto(false);
+    }
+  }
 
   const isPP = isPaguePlay(tenantSlug);
   const userRole = perfil?.perfil ?? 'operador';
@@ -138,6 +168,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="p-3">
         <div className={cn('flex items-center gap-3 p-2 rounded-lg', (sidebarOpen || mobileOpen) ? 'bg-sidebar-accent' : 'justify-center')}>
           <Avatar className="w-8 h-8 flex-shrink-0">
+            {fotoUrl && <AvatarImage src={fotoUrl} alt={perfil?.nome ?? ''} className="object-cover" />}
             <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{initials}</AvatarFallback>
           </Avatar>
           <AnimatePresence>
@@ -263,21 +294,79 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </PopoverContent>
             </Popover>
 
-            {/* Perfil no header */}
-            <div className="flex items-center gap-2.5 pl-2 border-l border-border">
-              <Avatar className="w-7 h-7">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{initials}</AvatarFallback>
-              </Avatar>
-              <div className="hidden sm:block">
-                <p className="text-xs font-semibold leading-none text-foreground">{perfil?.nome ?? 'Carregando...'}</p>
-                <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                  <span className={cn('px-1.5 py-0 rounded text-[10px] font-medium border', PERFIL_COLORS[userRole])}>
-                    {PERFIL_LABELS[userRole]}
-                  </span>
-                  {nomeSetor && <span>· {nomeSetor}</span>}
-                </p>
-              </div>
-            </div>
+            {/* Perfil no header — clicável para upload de foto */}
+            <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
+              <PopoverTrigger asChild>
+                <button className="flex items-center gap-2.5 pl-2 border-l border-border hover:opacity-80 transition-opacity cursor-pointer" title="Clique para alterar foto de perfil">
+                  <div className="relative">
+                    <Avatar className="w-7 h-7">
+                      {fotoUrl && <AvatarImage src={fotoUrl} alt={perfil?.nome ?? ''} className="object-cover" />}
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-bold">{initials}</AvatarFallback>
+                    </Avatar>
+                    <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-background border border-border rounded-full flex items-center justify-center">
+                      <Camera className="w-2 h-2 text-muted-foreground" />
+                    </span>
+                  </div>
+                  <div className="hidden sm:block">
+                    <p className="text-xs font-semibold leading-none text-foreground">{perfil?.nome ?? 'Carregando...'}</p>
+                    <p className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <span className={cn('px-1.5 py-0 rounded text-[10px] font-medium border', PERFIL_COLORS[userRole])}>
+                        {PERFIL_LABELS[userRole]}
+                      </span>
+                      {nomeSetor && <span>· {nomeSetor}</span>}
+                    </p>
+                  </div>
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-4" align="end">
+                <div className="space-y-3">
+                  <p className="text-sm font-semibold">Foto de perfil</p>
+                  {/* Preview */}
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <Avatar className="w-14 h-14">
+                        {fotoUrl && <AvatarImage src={fotoUrl} alt={perfil?.nome ?? ''} className="object-cover" />}
+                        <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold">{initials}</AvatarFallback>
+                      </Avatar>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium">{perfil?.nome}</p>
+                      <p className="text-[11px] text-muted-foreground">{perfil?.email}</p>
+                    </div>
+                  </div>
+                  {/* Upload */}
+                  <input
+                    ref={inputFotoRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        await handleFotoUpload(file);
+                        setPerfilPopoverOpen(false);
+                      }
+                      e.target.value = '';
+                    }}
+                  />
+                  <Button
+                    className="w-full gap-2"
+                    size="sm"
+                    disabled={uploadingFoto}
+                    onClick={() => inputFotoRef.current?.click()}
+                  >
+                    {uploadingFoto ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Enviando...</>
+                    ) : (
+                      <><Camera className="w-3.5 h-3.5" /> {fotoUrl ? 'Alterar foto' : 'Adicionar foto'}</>
+                    )}
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    JPG, PNG ou GIF · Máx. 3 MB
+                  </p>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             <Button variant="ghost" size="icon" className="w-8 h-8 text-muted-foreground hover:text-destructive" onClick={handleSignOut}>
               <LogOut className="w-4 h-4" />
