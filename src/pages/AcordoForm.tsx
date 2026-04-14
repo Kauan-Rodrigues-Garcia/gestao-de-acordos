@@ -271,7 +271,8 @@ export default function AcordoForm() {
           empresa_id: empresa?.id,
         });
       }
-      navigate(ROUTE_PATHS.ACORDOS);
+      // FIX: PaguePay não tem rota /acordos — redirecionar para Dashboard
+      navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       console.error('[AcordoForm] unexpected:', e);
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
@@ -408,7 +409,8 @@ export default function AcordoForm() {
       toast.success('NR registrado com autorização do líder');
       setNrDuplicado(false);
       setPendingPayload(null);
-      navigate(ROUTE_PATHS.ACORDOS);
+      // FIX: PaguePay não tem rota /acordos — redirecionar para Dashboard
+      navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       console.error('[autorizarLider] unexpected:', e);
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
