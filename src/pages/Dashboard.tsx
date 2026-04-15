@@ -987,6 +987,7 @@ export default function Dashboard() {
                                   colSpan={10}
                                   onClose={() => setDetalheInlineIdTabela(null)}
                                   onReagendar={() => setTimeout(() => refetch(), 300)}
+                                  onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
                                 />
                               )}
                             </>

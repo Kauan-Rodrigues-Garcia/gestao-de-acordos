@@ -859,6 +859,9 @@ export default function Acordos() {
                             colSpan={10}
                             onClose={() => setDetalheInlineId(null)}
                             onReagendar={() => setTimeout(() => refetch(), 300)}
+                            onSaved={(atualizado) => {
+                              patchAcordo(atualizado.id, atualizado);
+                            }}
                           />
                         )}
                         </>

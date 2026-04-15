@@ -15,7 +15,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
-  FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock,
+  FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -23,11 +23,14 @@ import { Badge } from '@/components/ui/badge';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 import {
-  formatCurrency, formatDate,
+  formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isAtrasado,
@@ -55,6 +58,8 @@ export interface AcordoDetalheInlineProps {
   colSpan: number;
   onClose: () => void;
   onReagendar?: () => void;
+  /** Callback após edição bem-sucedida (recebe o acordo principal atualizado) */
+  onSaved?: (atualizado: Acordo) => void;
 }
 
 // ─── Campo somente-leitura ────────────────────────────────────────────────────
@@ -203,47 +208,283 @@ export function ModalReagendar({
   );
 }
 
+// ─── Modal de Edição de Acordo Parcelado ────────────────────────────────────
+/**
+ * Modal com duas abas:
+ *   "Geral"    → edita campos comuns a TODAS as parcelas (nome, nr, whatsapp, tipo, obs)
+ *   "Parcelas" → lista de parcelas reais com data e valor editáveis individualmente
+ */
+interface ModalEditarParceladoProps {
+  acordo: Acordo;
+  isPaguePlay: boolean;
+  registrosReais: Acordo[];
+  open: boolean;
+  onClose: () => void;
+  onSaved: (principal: Acordo, todasAtualizadas: Acordo[]) => void;
+}
+
+export function ModalEditarAcordoParcelado({
+  acordo, isPaguePlay, registrosReais, open, onClose, onSaved,
+}: ModalEditarParceladoProps) {
+  const [aba,          setAba]          = useState<'geral' | 'parcelas'>('geral');
+  const [saving,       setSaving]       = useState(false);
+
+  // ── Campos gerais (aplicados a TODAS as parcelas do grupo) ──────────────
+  const [nomeCliente, setNomeCliente] = useState(acordo.nome_cliente);
+  const [nrCliente,   setNrCliente]   = useState(acordo.nr_cliente);
+  const [whatsapp,    setWhatsapp]    = useState(acordo.whatsapp || '');
+  const [tipo,        setTipo]        = useState<Acordo['tipo']>(acordo.tipo);
+  const [observacoes, setObservacoes] = useState(acordo.observacoes || '');
+  const [instituicao, setInstituicao] = useState(acordo.instituicao || '');
+
+  // ── Campos individuais por parcela ──────────────────────────────────────
+  type ParcRow = { id: string; numero: number; vencimento: string; valor: string; };
+  const [parcRows, setParcRows] = useState<ParcRow[]>([]);
+
+  // Reset quando o modal abre
+  useEffect(() => {
+    if (!open) return;
+    setAba('geral');
+    setNomeCliente(acordo.nome_cliente);
+    setNrCliente(acordo.nr_cliente);
+    setWhatsapp(acordo.whatsapp || '');
+    setTipo(acordo.tipo);
+    setObservacoes(acordo.observacoes || '');
+    setInstituicao(acordo.instituicao || '');
+    setParcRows(
+      registrosReais.map(r => ({
+        id: r.id,
+        numero: r.numero_parcela ?? 1,
+        vencimento: r.vencimento,
+        valor: r.valor.toFixed(2).replace('.', ','),
+      })).sort((a, b) => a.numero - b.numero)
+    );
+  }, [open, acordo.id, registrosReais.length]);
+
+  function updateRow(id: string, field: 'vencimento' | 'valor', value: string) {
+    setParcRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
+  }
+
+  async function handleSave() {
+    if (!nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
+    setSaving(true);
+    try {
+      // 1. Atualizar campos gerais em TODAS as parcelas do grupo
+      const camposGerais: Record<string, unknown> = {
+        nome_cliente: nomeCliente.trim(),
+        nr_cliente:   nrCliente.trim(),
+        whatsapp:     whatsapp.trim() || null,
+        tipo,
+        observacoes:  observacoes.trim() || null,
+        instituicao:  instituicao.trim() || null,
+      };
+      const { error: errGeral } = await supabase
+        .from('acordos')
+        .update(camposGerais)
+        .eq('acordo_grupo_id', acordo.acordo_grupo_id!);
+      if (errGeral) { toast.error(`Erro geral: ${errGeral.message}`); return; }
+
+      // 2. Atualizar data/valor individual de cada parcela
+      for (const row of parcRows) {
+        const valorNum = parseCurrencyInput(row.valor);
+        if (isNaN(valorNum) || valorNum <= 0) { toast.error(`Valor inválido na parcela ${row.numero}`); return; }
+        const { error: errP } = await supabase
+          .from('acordos')
+          .update({ vencimento: row.vencimento, valor: valorNum })
+          .eq('id', row.id);
+        if (errP) { toast.error(`Erro parcela ${row.numero}: ${errP.message}`); return; }
+      }
+
+      // 3. Buscar o acordo principal atualizado para passar ao pai
+      const { data: principal } = await supabase
+        .from('acordos')
+        .select('*, perfis(id, nome, email, perfil, setor_id)')
+        .eq('id', acordo.id)
+        .single();
+
+      // 4. Montar lista atualizada para o estado local
+      const todasAtualizadas: Acordo[] = parcRows.map(row => {
+        const real = registrosReais.find(r => r.id === row.id)!;
+        const valorNum = parseCurrencyInput(row.valor);
+        return {
+          ...real,
+          ...camposGerais,
+          vencimento: row.vencimento,
+          valor: isNaN(valorNum) ? real.valor : valorNum,
+        } as Acordo;
+      });
+
+      toast.success('Acordo atualizado com sucesso!');
+      onSaved((principal ?? acordo) as Acordo, todasAtualizadas);
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const STATUS_LABELS_ALL = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
+  const TIPO_LABELS_ALL   = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
+
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Edit className="w-4 h-4 text-primary" />
+            Editar Acordo Parcelado
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* ── Abas ── */}
+        <div className="flex gap-1 bg-muted/40 rounded-lg p-1 mb-1">
+          {(['geral', 'parcelas'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setAba(tab)}
+              className={cn(
+                'flex-1 text-xs py-1.5 rounded-md font-medium transition-colors',
+                aba === tab
+                  ? 'bg-background text-foreground shadow-sm border border-border'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {tab === 'geral' ? '📋 Geral (todas as parcelas)' : `🗂️ Parcelas (${parcRows.length})`}
+            </button>
+          ))}
+        </div>
+
+        {/* ── Aba Geral ── */}
+        {aba === 'geral' && (
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'} *</Label>
+              <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{isPaguePlay ? 'CPF' : 'NR'}</Label>
+              <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} className="h-8 text-xs font-mono" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">WhatsApp</Label>
+              <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="h-8 text-xs font-mono" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{isPaguePlay ? 'Inscrição' : 'Instituição'}</Label>
+              <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} className="h-8 text-xs" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Forma de Pagamento</Label>
+              <Select value={tipo} onValueChange={v => setTipo(v as Acordo['tipo'])}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(TIPO_LABELS_ALL).map(([v, l]) => (
+                    <SelectItem key={v} value={v}>{l}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="col-span-2 space-y-1">
+              <Label className="text-xs">{isPaguePlay ? 'Link / Observações' : 'Observações'}</Label>
+              <Input value={observacoes} onChange={e => setObservacoes(e.target.value)} className="h-8 text-xs" />
+            </div>
+          </div>
+        )}
+
+        {/* ── Aba Parcelas ── */}
+        {aba === 'parcelas' && (
+          <div className="py-2 space-y-2 max-h-72 overflow-y-auto pr-1">
+            <p className="text-[11px] text-muted-foreground">Edite data e valor individualmente para cada parcela já criada no banco.</p>
+            {parcRows.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">Nenhuma parcela encontrada.</p>
+            )}
+            {parcRows.map(row => (
+              <div key={row.id} className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border/40">
+                <span className="text-xs font-mono font-bold text-primary w-6 text-center">{row.numero}</span>
+                <div className="flex-1 space-y-0.5">
+                  <Label className="text-[10px] text-muted-foreground">Vencimento</Label>
+                  <input
+                    type="date"
+                    value={row.vencimento}
+                    onChange={e => updateRow(row.id, 'vencimento', e.target.value)}
+                    className="w-full h-7 text-xs bg-background border border-input rounded px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                  />
+                </div>
+                <div className="w-28 space-y-0.5">
+                  <Label className="text-[10px] text-muted-foreground">Valor (R$)</Label>
+                  <Input
+                    value={row.valor}
+                    onChange={e => updateRow(row.id, 'valor', e.target.value)}
+                    className="h-7 text-xs font-mono"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <DialogDescription className="sr-only">Editar acordo parcelado</DialogDescription>
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={saving} size="sm">Cancelar</Button>
+          <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
+            <Save className="w-3.5 h-3.5" />
+            {saving ? 'Salvando...' : 'Salvar tudo'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function AcordoDetalheInline({
-  acordo, isPaguePlay, colSpan, onClose, onReagendar,
+  acordo, isPaguePlay, colSpan, onClose, onReagendar, onSaved,
 }: AcordoDetalheInlineProps) {
   const statusLabels  = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels    = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
-  const atrasado      = isAtrasado(acordo.vencimento, acordo.status);
-  const totalParcelas = acordo.parcelas ?? 1;
+  const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
+  const totalParcelas = acordoLocal.parcelas ?? 1;
 
   // Mostrar sub-tabela quando: tipo parcelado E parcelas > 1
   const deveExibirParcelas =
-    isTipoParcelado(acordo.tipo, isPaguePlay) && totalParcelas > 1;
+    isTipoParcelado(acordoLocal.tipo, isPaguePlay) && totalParcelas > 1;
+  // Acordo simples = não parcelado
+  const isAcordoSimples = !deveExibirParcelas;
 
   // Registros reais buscados do banco (mesmo grupo)
   const [registrosReais,   setRegistrosReais]   = useState<Acordo[]>([]);
   const [loadingParc,      setLoadingParc]       = useState(false);
   const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
 
-  // Modal
-  const [parcelaModal, setParcelaModal] = useState<Acordo | null>(null);
-  const [modalAberto,  setModalAberto]  = useState(false);
+  // Modal Reagendar (parcelas)
+  const [parcelaModal,    setParcelaModal]    = useState<Acordo | null>(null);
+  const [modalAberto,     setModalAberto]     = useState(false);
+  // Modal Reagendar acordos simples (não parcelados)
+  const [modalReagSimples, setModalReagSimples] = useState(false);
+  // Modal Editar Parcelado
+  const [modalEditParcOpen, setModalEditParcOpen] = useState(false);
+  // Acordo local (para reflectir edições sem fechar o detalhe)
+  const [acordoLocal, setAcordoLocal] = useState<Acordo>(acordo);
 
-  const link   = extractLinkAcordo(acordo.observacoes);
-  const estado = extractEstado(acordo.observacoes);
-  const nomeOp = (acordo.perfis as { nome?: string } | undefined)?.nome ?? '—';
+  const link   = extractLinkAcordo(acordoLocal.observacoes);
+  const estado = extractEstado(acordoLocal.observacoes);
+  const nomeOp = (acordoLocal.perfis as { nome?: string } | undefined)?.nome ?? '—';
 
   // ── Buscar registros reais do grupo ──────────────────────────────────────
   useEffect(() => {
-    if (!deveExibirParcelas || !acordo.acordo_grupo_id) return;
+    if (!deveExibirParcelas || !acordoLocal.acordo_grupo_id) return;
     setLoadingParc(true);
     supabase
       .from('acordos')
       .select('*')
-      .eq('acordo_grupo_id', acordo.acordo_grupo_id)
+      .eq('acordo_grupo_id', acordoLocal.acordo_grupo_id)
       .order('numero_parcela', { ascending: true })
       .then(({ data, error }) => {
         if (error) toast.error('Erro ao buscar parcelas');
         else setRegistrosReais((data ?? []) as Acordo[]);
         setLoadingParc(false);
       });
-  }, [deveExibirParcelas, acordo.acordo_grupo_id]);
+  }, [deveExibirParcelas, acordoLocal.acordo_grupo_id]);
 
   // ── Marcar como pago ──────────────────────────────────────────────────────
   async function marcarPago(p: Acordo) {
@@ -260,6 +501,31 @@ export function AcordoDetalheInline({
   }
 
   // ── Confirmar reagendamento: cria 1 novo registro ─────────────────────────
+  // ── Confirmar reagendamento simples (acordo não parcelado) ──────────────
+  async function confirmarReagendamentoSimples(novaData: string, novoValor: number) {
+    const p = acordoLocal;
+    const novoPedido = {
+      nome_cliente:  p.nome_cliente,
+      nr_cliente:    p.nr_cliente,
+      vencimento:    novaData,
+      valor:         novoValor,
+      tipo:          p.tipo,
+      parcelas:      1,
+      whatsapp:      p.whatsapp,
+      status:        'verificar_pendente' as const,
+      observacoes:   p.observacoes,
+      instituicao:   p.instituicao,
+      operador_id:   p.operador_id,
+      empresa_id:    p.empresa_id,
+      data_cadastro: new Date().toISOString().split('T')[0],
+    };
+    const { error } = await supabase.from('acordos').insert(novoPedido);
+    if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
+    toast.success('Reagendamento criado!');
+    setModalReagSimples(false);
+    setTimeout(() => onReagendar?.(), 800);
+  }
+
   async function confirmarReagendamento(novaData: string, novoValor: number) {
     if (!parcelaModal) return;
     const p = parcelaModal;
@@ -355,67 +621,93 @@ export function AcordoDetalheInline({
               <div className="flex items-start justify-between mb-5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-base font-bold text-foreground tracking-tight">
-                    {isPaguePlay ? (acordo.instituicao || acordo.nr_cliente || '—') : acordo.nome_cliente}
+                    {isPaguePlay ? (acordoLocal.instituicao || acordoLocal.nr_cliente || '—') : acordoLocal.nome_cliente}
                   </h3>
-                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordo.status])}>
-                    {statusLabels[acordo.status] ?? acordo.status}
+                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', STATUS_COLORS[acordoLocal.status])}>
+                    {statusLabels[acordoLocal.status] ?? acordoLocal.status}
                   </span>
                   {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
                   {deveExibirParcelas && (
                     <span className="text-[11px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
-                      Parcela {acordo.numero_parcela ?? 1}/{totalParcelas}
+                      Parcela {acordoLocal.numero_parcela ?? 1}/{totalParcelas}
                     </span>
                   )}
                 </div>
-                <Button variant="ghost" size="icon" className="w-7 h-7 flex-shrink-0" onClick={onClose}>
-                  <X className="w-4 h-4" />
-                </Button>
+                {/* Botões de ação no cabeçalho */}
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Botão Editar: parcelado → abre ModalEditarAcordoParcelado; simples → usa o inline edit do pai */}
+                  {deveExibirParcelas && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                      onClick={() => setModalEditParcOpen(true)}
+                    >
+                      <Edit className="w-3 h-3" />
+                      Editar
+                    </Button>
+                  )}
+                  {/* Botão Reagendar: acordos simples (pagos) ou parcelados sem próxima parcela */}
+                  {isAcordoSimples && acordoLocal.status === 'pago' && (
+                    <Button
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 bg-success hover:bg-success/90 text-white font-semibold"
+                      onClick={() => setModalReagSimples(true)}
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Reagendar
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
               </div>
 
               {/* ─── Grid de campos ─── */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
-                {isPaguePlay && acordo.instituicao && (
-                  <Campo icon={Building2} label="Inscrição" value={acordo.instituicao} />
+                {isPaguePlay && acordoLocal.instituicao && (
+                  <Campo icon={Building2} label="Inscrição" value={acordoLocal.instituicao} />
                 )}
-                {acordo.nr_cliente && (
-                  <Campo icon={Hash} label={isPaguePlay ? 'CPF' : 'NR'} value={acordo.nr_cliente} mono />
+                {acordoLocal.nr_cliente && (
+                  <Campo icon={Hash} label={isPaguePlay ? 'CPF' : 'NR'} value={acordoLocal.nr_cliente} mono />
                 )}
-                {isPaguePlay && acordo.nome_cliente && (
-                  <Campo icon={User} label="Nome do Profissional" value={acordo.nome_cliente} />
+                {isPaguePlay && acordoLocal.nome_cliente && (
+                  <Campo icon={User} label="Nome do Profissional" value={acordoLocal.nome_cliente} />
                 )}
                 {isPaguePlay && estado && (
                   <Campo icon={MapPin} label="Estado" value={estado} />
                 )}
                 <Campo icon={Calendar} label="Vencimento" value={
                   <span className={cn(atrasado && 'text-destructive font-semibold')}>
-                    {formatDate(acordo.vencimento)}
+                    {formatDate(acordoLocal.vencimento)}
                   </span>
                 } />
-                <Campo icon={DollarSign} label="Valor" value={formatCurrency(acordo.valor)} mono />
+                <Campo icon={DollarSign} label="Valor" value={formatCurrency(acordoLocal.valor)} mono />
                 <Campo label="Forma de Pagamento">
-                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mt-0.5', TIPO_COLORS[acordo.tipo])}>
-                    {tipoLabels[acordo.tipo] ?? acordo.tipo}
+                  <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border mt-0.5', TIPO_COLORS[acordoLocal.tipo])}>
+                    {tipoLabels[acordoLocal.tipo] ?? acordoLocal.tipo}
                   </span>
                 </Campo>
                 {deveExibirParcelas && (
                   <Campo icon={Layers} label="Total de Parcelas" value={String(totalParcelas)} mono />
                 )}
-                {!isPaguePlay && acordo.whatsapp && (
-                  <Campo icon={Smartphone} label="WhatsApp" value={acordo.whatsapp} mono />
+                {!isPaguePlay && acordoLocal.whatsapp && (
+                  <Campo icon={Smartphone} label="WhatsApp" value={acordoLocal.whatsapp} mono />
                 )}
-                {!isPaguePlay && acordo.instituicao && (
-                  <Campo icon={Building2} label="Instituição" value={acordo.instituicao} />
+                {!isPaguePlay && acordoLocal.instituicao && (
+                  <Campo icon={Building2} label="Instituição" value={acordoLocal.instituicao} />
                 )}
                 <Campo icon={User} label="Operador" value={nomeOp} />
               </div>
 
               {/* ─── Observações ─── */}
-              {!isPaguePlay && acordo.observacoes && (
+              {!isPaguePlay && acordoLocal.observacoes && (
                 <>
                   <Separator className="my-4" />
                   <Campo icon={FileText} label="Observações" full>
                     <p className="text-sm text-foreground bg-muted/30 rounded-lg p-3 mt-0.5">
-                      {acordo.observacoes}
+                      {acordoLocal.observacoes}
                     </p>
                   </Campo>
                 </>
@@ -562,12 +854,37 @@ export function AcordoDetalheInline({
         </td>
       </tr>
 
+      {/* Modal reagendar parcelas */}
       <ModalReagendar
         parcela={parcelaModal}
         open={modalAberto}
         onClose={() => { setModalAberto(false); setParcelaModal(null); }}
         onConfirm={confirmarReagendamento}
       />
+
+      {/* Modal reagendar acordo simples */}
+      <ModalReagendar
+        parcela={acordoLocal}
+        open={modalReagSimples}
+        onClose={() => setModalReagSimples(false)}
+        onConfirm={confirmarReagendamentoSimples}
+      />
+
+      {/* Modal editar parcelado */}
+      {deveExibirParcelas && (
+        <ModalEditarAcordoParcelado
+          acordo={acordoLocal}
+          isPaguePlay={isPaguePlay}
+          registrosReais={registrosReais}
+          open={modalEditParcOpen}
+          onClose={() => setModalEditParcOpen(false)}
+          onSaved={(principal, todasAtualizadas) => {
+            setAcordoLocal(principal);
+            setRegistrosReais(todasAtualizadas);
+            onSaved?.(principal);
+          }}
+        />
+      )}
     </>
   );
 }
