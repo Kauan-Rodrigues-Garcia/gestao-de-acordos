@@ -155,6 +155,30 @@ export interface Notificacao {
   criado_em: string;
 }
 
+export interface LixeiraAcordo {
+  id: string;
+  acordo_id: string;
+  empresa_id?: string;
+  operador_id?: string;
+  operador_nome?: string;
+  nome_cliente?: string;
+  nr_cliente?: string;
+  valor?: number;
+  vencimento?: string;
+  tipo?: string;
+  status?: string;
+  observacoes?: string;
+  instituicao?: string;
+  dados_completos?: Record<string, unknown>;
+  motivo: 'exclusao_manual' | 'transferencia_nr';
+  autorizado_por_id?: string;
+  autorizado_por_nome?: string;
+  transferido_para_id?: string;
+  transferido_para_nome?: string;
+  excluido_em: string;
+  expira_em?: string;
+}
+
 export interface AIConfig {
   id: string;
   enabled: boolean;

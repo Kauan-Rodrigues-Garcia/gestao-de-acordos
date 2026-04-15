@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import {
   Save, ArrowLeft, User, Hash, Calendar,
-  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, Shield, MapPin, Link2
+  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, MapPin, Link2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,6 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
@@ -26,6 +25,8 @@ import {
 } from '@/lib/index';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { verificarNrDuplicado } from '@/services/acordos.service';
+import { enviarParaLixeira } from '@/services/lixeira.service';
+import { ModalAutorizacaoNR } from '@/components/AcordoNovoInline';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -84,8 +85,13 @@ export default function AcordoForm() {
   const maxParcelas = getMaxParcelas(tenantSlug);
 
   // NR duplicate / leader auth state
-  const [nrDuplicado, setNrDuplicado]       = useState(false);
-  const [pendingPayload, setPendingPayload]   = useState<Record<string, unknown> | null>(null);
+  interface ConflitNRForm {
+    acordoId: string;
+    operadorId: string;
+    operadorNome: string;
+    payload: Record<string, unknown>;
+  }
+  const [conflito, setConflito]               = useState<ConflitNRForm | null>(null);
   const [liderEmail, setLiderEmail]           = useState('');
   const [liderSenha, setLiderSenha]           = useState('');
   const [autorizando, setAutorizando]         = useState(false);
@@ -219,37 +225,28 @@ export default function AcordoForm() {
 
       console.log('[AcordoForm] payload:', payload);
 
-      // Verificar NR duplicado dentro da mesma empresa (qualquer status)
+      // ── Verificar NR duplicado (ignora nao_pago) ──────────────────────
       const nrChanged = nrTrimmed && (!isEdit || nrTrimmed !== nrOriginalEdit);
       if (nrChanged) {
-        const { duplicado, statusExistente } = await verificarNrDuplicado(
+        const check = await verificarNrDuplicado(
           nrTrimmed,
           empresa.id,
           isEdit ? id : undefined
         );
-        if (duplicado) {
-          toast.error(`NR ${nrTrimmed} já existe nesta empresa (status: ${statusExistente ?? 'desconhecido'}). Não é possível criar duplicatas.`);
-          setLoading(false);
-          return;
-        }
-      }
-
-      // Verificar unicidade do NR: só bloquear se NR mudou (ou é novo cadastro)
-      if (nrChanged) {
-        let nrQuery = supabase
-          .from('acordos')
-          .select('id, operador_id, perfis(nome)')
-          .eq('nr_cliente', nrTrimmed)
-          .neq('operador_id', uid)
-          .limit(1);
-
-        // Na edição, excluir o próprio registro
-        if (isEdit && id) nrQuery = nrQuery.neq('id', id);
-
-        const { data: existente } = await nrQuery;
-        if (existente && existente.length > 0) {
-          setPendingPayload(payload);
-          setNrDuplicado(true);
+        if (check.duplicado) {
+          const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== uid;
+          if (!pertenceAOutro) {
+            toast.error(`NR ${nrTrimmed} já existe na sua lista de acordos.`);
+            setLoading(false);
+            return;
+          }
+          // Pertence a outro operador → solicitar autorização
+          setConflito({
+            acordoId:     check.acordoIdExistente!,
+            operadorId:   check.operadorIdExistente!,
+            operadorNome: check.operadorNomeExistente || 'Operador desconhecido',
+            payload,
+          });
           setLoading(false);
           return;
         }
@@ -353,137 +350,90 @@ export default function AcordoForm() {
   }
 
   // ── Autorização do líder para NR duplicado ────────────────────────────
-  async function autorizarLider() {
-    if (!pendingPayload) return;
+  async function autorizarTransferencia() {
+    if (!conflito) return;
     if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
     setAutorizando(true);
+    const uid = perfilLocal?.id ?? user?.id ?? '';
     try {
-      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-      if (!supabaseUrl || !supabaseAnon) {
-        toast.error('Configuração do Supabase ausente. Contate o suporte.');
-        return;
-      }
-
-      // Verificar credenciais do líder via fetch direto, sem criar uma segunda instância
-      // GoTrueClient (que causava "Multiple GoTrueClient instances" e corrupção de sessão)
       const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': supabaseAnon,
-        },
+        headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnon },
         body: JSON.stringify({ email: liderEmail, password: liderSenha }),
       });
-
       if (!authRes.ok) {
-        const errBody = await authRes.json().catch(() => ({}));
-        console.error('[autorizarLider] auth error:', authRes.status, errBody);
-        if (authRes.status === 400 || authRes.status === 401 || authRes.status === 422) {
-          toast.error('Credenciais do líder inválidas');
-        } else {
-          toast.error(`Erro ao autenticar líder (${authRes.status}). Tente novamente.`);
-        }
+        const s = authRes.status;
+        toast.error(s === 400 || s === 401 || s === 422 ? 'Credenciais do líder inválidas' : `Erro ao autenticar líder (${s})`);
         return;
       }
-
-      const authData = await authRes.json();
+      const authData   = await authRes.json();
       const liderUid   = authData.user?.id as string | undefined;
       const liderToken = authData.access_token as string | undefined;
+      if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
 
-      if (!liderUid || !liderToken) {
-        toast.error('Credenciais do líder inválidas');
-        return;
-      }
-
-      // Verificar perfil do líder usando o token do líder via REST direto
-      // A sessão do operador (supabase global) não é tocada
       const perfilRes = await fetch(
         `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
-        {
-          headers: {
-            'apikey': supabaseAnon,
-            'Authorization': `Bearer ${liderToken}`,
-          },
-        }
+        { headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${liderToken}` } }
       );
-
-      if (!perfilRes.ok) {
-        console.error('[autorizarLider] perfil fetch error:', perfilRes.status);
-        toast.error('Erro ao verificar perfil do líder');
-        return;
-      }
-
-      const perfilArr = await perfilRes.json();
+      if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
+      const perfilArr   = await perfilRes.json();
       const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
-
-      if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
-        toast.error('O usuário informado não tem permissão de líder');
+      if (!liderPerfil || !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)) {
+        toast.error('O usuário informado não tem permissão de líder ou administrador');
         return;
       }
 
-      const uid = perfilLocal?.id ?? user?.id ?? '';
-      const nrCliente = pendingPayload.nr_cliente as string;
+      const nrLabel = conflito.payload.nr_cliente as string;
 
-      // Registrar log de transferência com a sessão do operador (não alterada)
+      // 1. Buscar acordo anterior para lixeira
+      const { data: acordoAntData } = await supabase
+        .from('acordos').select('*, perfis(id, nome, email, perfil, setor_id)')
+        .eq('id', conflito.acordoId).single();
+
+      // 2. Salvar na lixeira
+      if (acordoAntData) {
+        await enviarParaLixeira({
+          acordo: acordoAntData as import('@/lib/supabase').Acordo,
+          motivo: 'transferencia_nr',
+          operadorNome: conflito.operadorNome,
+          autorizadoPorId: liderUid,
+          autorizadoPorNome: liderPerfil.nome,
+          transferidoParaId: uid,
+          transferidoParaNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
+        });
+      }
+
+      // 3. Excluir acordo anterior
+      await supabase.from('acordos').delete().eq('id', conflito.acordoId);
+
+      // 4. Registrar log
       await supabase.from('logs_sistema').insert({
-        usuario_id: uid,
-        acao: 'transferencia_nr',
-        tabela: 'acordos',
-        registro_id: null,
-        empresa_id: empresa?.id ?? null,
-        detalhes: {
-          nr: nrCliente,
-          aprovado_por: liderPerfil.nome,
-          aprovado_por_id: liderUid,
-          operador_novo: uid,
-          transferido_em: new Date().toISOString(),
-        },
+        usuario_id: uid, acao: 'transferencia_nr', tabela: 'acordos',
+        registro_id: conflito.acordoId, empresa_id: empresa?.id ?? null,
+        detalhes: { nr: nrLabel, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
+          operador_anterior: conflito.operadorId, operador_novo: uid },
       });
 
-      // Salvar o acordo com a sessão do operador (intacta, sem refreshSession)
-      const resultError = await salvarAcordo(pendingPayload, uid);
-      if (resultError) {
-        console.error('[autorizarLider] save error:', resultError);
-        toast.error(`Erro ao salvar: ${resultError.message}`);
-        return;
-      }
+      // 5. Salvar novo acordo
+      const resultError = await salvarAcordo(conflito.payload, uid);
+      if (resultError) { toast.error(`Erro ao salvar: ${resultError.message}`); return; }
 
-      // Notificar o operador sobre a autorização
-      supabase.from('notificacoes').insert({
-        usuario_id: uid,
-        titulo: 'NR Autorizado pelo Líder',
-        mensagem: `O líder ${liderPerfil.nome} autorizou a tabulação do NR ${nrCliente}.`,
-        empresa_id: empresa?.id ?? null,
-      }).then(({ error: notifError }) => {
-        if (notifError) console.warn('[autorizarLider] notificacao error:', notifError.message);
+      // 6. Notificar operador anterior
+      const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
+      await criarNotificacao({
+        usuario_id: conflito.operadorId,
+        titulo: '⚠️ NR transferido pelo líder',
+        mensagem: `O NR ${nrLabel} foi transferido para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira temporariamente. Detalhes: Valor R$ ${acordoAntData?.valor ?? '—'} | Vencimento ${acordoAntData?.vencimento ?? '—'}.`,
+        empresa_id: empresa?.id,
       });
 
-      // Registrar log detalhado da autorização
-      supabase.from('logs_sistema').insert({
-        usuario_id: uid,
-        acao: 'autorizacao_nr_lider',
-        tabela: 'acordos',
-        registro_id: null,
-        empresa_id: empresa?.id ?? null,
-        detalhes: {
-          nr_cliente: nrCliente,
-          lider_id: liderUid,
-          lider_nome: liderPerfil.nome,
-          tipo: 'nr_duplicado_autorizado',
-        },
-      }).then(({ error: logError }) => {
-        if (logError) console.warn('[autorizarLider] log error:', logError.message);
-      });
-
-      toast.success('NR registrado com autorização do líder');
-      setNrDuplicado(false);
-      setPendingPayload(null);
-      // FIX: PaguePay não tem rota /acordos — redirecionar para Dashboard
+      toast.success('Transferência autorizada! Acordo registrado com sucesso.');
+      setConflito(null); setLiderEmail(''); setLiderSenha('');
       navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
-      console.error('[autorizarLider] unexpected:', e);
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
     } finally {
       setAutorizando(false);
@@ -501,51 +451,16 @@ export default function AcordoForm() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
 
-      {/* Modal de autorização do líder */}
-      <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-warning" />
-              NR já vinculado
-            </DialogTitle>
-            <DialogDescription>
-              Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Email do Líder</Label>
-              <Input
-                type="email"
-                placeholder="lider@empresa.com"
-                value={liderEmail}
-                onChange={e => setLiderEmail(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Senha do Líder</Label>
-              <Input
-                type="password"
-                placeholder="••••••••"
-                value={liderSenha}
-                onChange={e => setLiderSenha(e.target.value)}
-                className="h-9 text-sm"
-              />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>
-                Cancelar
-              </Button>
-              <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
-                <Shield className="w-4 h-4" />
-                {autorizando ? 'Verificando...' : 'Autorizar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ModalAutorizacaoNR
+        conflito={conflito}
+        liderEmail={liderEmail}
+        liderSenha={liderSenha}
+        autorizando={autorizando}
+        onEmailChange={setLiderEmail}
+        onSenhaChange={setLiderSenha}
+        onAutorizar={autorizarTransferencia}
+        onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+      />
 
       {/* Cabeçalho */}
       <div className="flex items-center gap-3 mb-6">

@@ -5,6 +5,7 @@ import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { ThemeProvider } from 'next-themes';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
+import { ChatNotificacoes } from '@/components/ChatNotificacoes';
 import { ROUTE_PATHS } from '@/lib/index';
 import { lazy, Suspense, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,6 +46,7 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
       <Layout>{children}</Layout>
+      <ChatNotificacoes />
     </ProtectedRoute>
   );
 }

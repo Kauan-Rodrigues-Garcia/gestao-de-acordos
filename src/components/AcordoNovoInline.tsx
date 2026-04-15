@@ -1,17 +1,18 @@
 /**
- * AcordoNovoInline.tsx
+ * AcordoNovoInline.tsx — v2
  *
- * CAMPOS OBRIGATÓRIOS:
- *   PaguePay → "Dados Principais": Inscrição, Valor, Vencimento
- *   Bookplay  → "Dados Principais": Valor, Vencimento
- *   "Tipo e Status": tem defaults, sempre válido
- *   Todos os outros campos são OPCIONAIS.
- *
- * PARCELAMENTO:
- *   Salva APENAS 1 registro no banco.
- *   O campo `parcelas` guarda o total como metadado.
- *   O campo `acordo_grupo_id` é gerado para permitir vincular reagendamentos futuros.
- *   Parcelas 2..N são criadas uma a uma via botão "Reagendar" no AcordoDetalheInline.
+ * Lógica de NR único:
+ *  • Ao salvar, verifica se o NR (Inscrição no PaguePay) já existe na empresa
+ *    com status diferente de 'nao_pago'.
+ *  • Se pertencer ao próprio operador → bloqueio simples (já existe na sua lista).
+ *  • Se pertencer a outro operador → exibe modal de autorização com:
+ *      - Nome do operador que possui o NR
+ *      - Campo email + senha do líder/admin para autorizar
+ *  • Ao autorizar:
+ *      1. Exclui o acordo anterior da tabela acordos
+ *      2. Salva cópia na lixeira_acordos (transferência)
+ *      3. Cria o novo acordo para o operador atual
+ *      4. Envia notificação de chat ao operador anterior
  */
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
@@ -26,21 +27,19 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { supabase } from '@/lib/supabase';
+import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
-import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon, Shield } from 'lucide-react';
+import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon, Shield, AlertTriangle } from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { verificarNrDuplicado } from '@/services/acordos.service';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { enviarParaLixeira } from '@/services/lixeira.service';
 
-// Data mínima removida — PaguePlay pode selecionar qualquer data livremente
-
-/** DatePicker compacto — abre calendário ao clicar */
 function DatePickerField({
   value, onChange, label, required,
 }: {
@@ -59,31 +58,17 @@ function DatePickerField({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            className={cn(
-              'w-full h-8 text-xs justify-start gap-2 font-mono px-2',
-              !value && 'text-muted-foreground',
-            )}
+            className={cn('w-full h-8 text-xs justify-start gap-2 font-mono px-2', !value && 'text-muted-foreground')}
           >
             <CalendarIcon className="w-3 h-3 shrink-0 text-muted-foreground" />
-            {selected
-              ? format(selected, 'dd/MM/yyyy')
-              : 'Selecionar data'
-            }
+            {selected ? format(selected, 'dd/MM/yyyy') : 'Selecionar data'}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
-            mode="single"
-            selected={selected}
-            onSelect={(day) => {
-              if (day) {
-                onChange(format(day, 'yyyy-MM-dd'));
-                setOpen(false);
-              }
-            }}
-            disabled={undefined}
-            locale={ptBR}
-            initialFocus
+            mode="single" selected={selected}
+            onSelect={(day) => { if (day) { onChange(format(day, 'yyyy-MM-dd')); setOpen(false); } }}
+            disabled={undefined} locale={ptBR} initialFocus
           />
         </PopoverContent>
       </Popover>
@@ -115,9 +100,16 @@ const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
 export interface AcordoNovoInlineProps {
   isPaguePlay: boolean;
   colSpan: number;
-  /** Recebe o acordo inserido para optimistic update no pai */
-  onSaved: (inserido: import('@/lib/supabase').Acordo) => void;
+  onSaved: (inserido: Acordo) => void;
   onCancel: () => void;
+}
+
+// ─── Estado do conflito de NR ────────────────────────────────────────────────
+interface ConflitNR {
+  acordoId: string;
+  operadorId: string;
+  operadorNome: string;
+  payload: Record<string, unknown>;
 }
 
 export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: AcordoNovoInlineProps) {
@@ -137,12 +129,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [estadoSel,    setEstadoSel]    = useState('');
   const [link,         setLink]         = useState('');
   const [salvando,     setSalvando]     = useState(false);
-  // ── NR duplicado + autorização líder ─────────────────────────────────
-  const [nrDuplicado,   setNrDuplicado]   = useState(false);
-  const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
-  const [liderEmail,    setLiderEmail]    = useState('');
-  const [liderSenha,    setLiderSenha]    = useState('');
-  const [autorizando,   setAutorizando]   = useState(false);
+
+  // ── Conflito de NR ──────────────────────────────────────────────────────
+  const [conflito,     setConflito]     = useState<ConflitNR | null>(null);
+  const [liderEmail,   setLiderEmail]   = useState('');
+  const [liderSenha,   setLiderSenha]   = useState('');
+  const [autorizando,  setAutorizando]  = useState(false);
 
   const tipos      = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
   const tipoAtual  = tipos.find(t => t.value === tipo);
@@ -154,7 +146,6 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     if (!tipos.find(x => x.value === t)?.parcelado) setParcelasStr('1');
   }
 
-  // ── Validação: obrigatório apenas Dados Principais ─────────────────────
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
     const v = parseCurrencyInput(valorStr);
@@ -163,16 +154,17 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     return null;
   }
 
-  async function executarSalvar(payload: Record<string, unknown>) {
+  async function executarSalvar(payload: Record<string, unknown>): Promise<Acordo | null> {
     const { data: inserido, error } = await supabase
       .from('acordos')
       .insert(payload)
       .select('*, perfis(id, nome, email, perfil, setor_id)')
       .single();
+
     if (error) {
+      // Fallback sem colunas novas
       const isColErr =
-        String(error.code) === '42703' ||
-        String(error.code) === '400'   ||
+        String(error.code) === '42703' || String(error.code) === '400' ||
         error.message?.toLowerCase().includes('column') ||
         error.message?.toLowerCase().includes('unknown');
       if (isColErr) {
@@ -180,15 +172,13 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         const { data: inseridoMin, error: e2 } = await supabase
           .from('acordos').insert(payloadMin)
           .select('*, perfis(id, nome, email, perfil, setor_id)').single();
-        if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return false; }
-        onSaved(inseridoMin as import('@/lib/supabase').Acordo);
-        return true;
+        if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return null; }
+        return inseridoMin as Acordo;
       }
       toast.error(`Erro ao salvar: ${error.message}`);
-      return false;
+      return null;
     }
-    onSaved(inserido as import('@/lib/supabase').Acordo);
-    return true;
+    return inserido as Acordo;
   }
 
   async function salvar() {
@@ -199,13 +189,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
 
     setSalvando(true);
     try {
-      const valorNum = parseCurrencyInput(valorStr);
-      const obsFinal = isPaguePlay
+      const valorNum    = parseCurrencyInput(valorStr);
+      const obsFinal    = isPaguePlay
         ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
         : (observacoes.trim() || null);
-
       const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
-      const grupoId = crypto.randomUUID();
+      const grupoId     = crypto.randomUUID();
 
       const payload: Record<string, unknown> = {
         nome_cliente:    nomeCliente.trim() || '',
@@ -225,124 +214,300 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         numero_parcela:  1,
       };
 
-      // ── Verificar NR duplicado ─────────────────────────────────────
-      const nrTrimmed = nrCliente.trim();
-      if (nrTrimmed) {
-        const { duplicado } = await verificarNrDuplicado(nrTrimmed, empresa.id);
-        if (duplicado) {
-          // Verificar se é de outro operador (requer autorização do líder)
-          const { data: existente } = await supabase
-            .from('acordos')
-            .select('id, operador_id')
-            .eq('nr_cliente', nrTrimmed)
-            .eq('empresa_id', empresa.id)
-            .neq('operador_id', perfil.id)
-            .limit(1);
-          if (existente && existente.length > 0) {
-            // NR pertence a outro operador → pedir autorização do líder
-            setPendingPayload(payload);
-            setNrDuplicado(true);
-            setSalvando(false);
-            return;
-          } else {
-            toast.error(`NR ${nrTrimmed} já existe nesta empresa. Não é possível criar duplicatas.`);
-            setSalvando(false);
+      // ── Verificar NR duplicado (ignora nao_pago) ────────────────────────
+      // Para PaguePay, o NR é o campo "Inscrição" (instituicao)
+      const nrParaVerificar = isPaguePlay
+        ? instituicao.trim()
+        : nrCliente.trim();
+
+      if (nrParaVerificar) {
+        const check = await verificarNrDuplicado(nrParaVerificar, empresa.id);
+        if (check.duplicado) {
+          const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== perfil.id;
+
+          if (!pertenceAOutro) {
+            // Pertence ao próprio operador
+            toast.error(`NR ${nrParaVerificar} já existe na sua lista de acordos.`);
             return;
           }
+
+          // Pertence a outro operador → solicitar autorização do líder
+          setConflito({
+            acordoId:     check.acordoIdExistente!,
+            operadorId:   check.operadorIdExistente!,
+            operadorNome: check.operadorNomeExistente || 'Operador desconhecido',
+            payload,
+          });
+          return;
         }
       }
 
-      const ok = await executarSalvar(payload);
-      if (ok) {
-        toast.success(parcelas > 1 ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.` : 'Acordo criado com sucesso!');
+      const inserido = await executarSalvar(payload);
+      if (inserido) {
+        onSaved(inserido);
+        toast.success(parcelas > 1
+          ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.`
+          : 'Acordo criado com sucesso!');
       }
     } finally {
       setSalvando(false);
     }
   }
 
-  // ── Autorização do líder para NR duplicado ─────────────────────────────
-  async function autorizarLider() {
-    if (!pendingPayload) return;
-    if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
+  // ── Autorização do líder para transferência de NR ─────────────────────────
+  async function autorizarTransferencia() {
+    if (!conflito || !perfil?.id || !empresa?.id) return;
+    if (!liderEmail || !liderSenha) {
+      toast.error('Informe o email e senha do líder');
+      return;
+    }
     setAutorizando(true);
     try {
-      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-      if (!supabaseUrl || !supabaseAnon) { toast.error('Configuração do Supabase ausente.'); return; }
+      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+      // 1. Autenticar líder
       const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnon },
+        headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
         body: JSON.stringify({ email: liderEmail, password: liderSenha }),
       });
       if (!authRes.ok) {
-        const status = authRes.status;
-        if (status === 400 || status === 401 || status === 422) toast.error('Credenciais do líder inválidas');
-        else toast.error(`Erro ao autenticar líder (${status})`);
+        const s = authRes.status;
+        toast.error(s === 400 || s === 401 || s === 422
+          ? 'Credenciais do líder inválidas'
+          : `Erro ao autenticar líder (${s})`);
         return;
       }
-      const authData = await authRes.json();
-      const liderUid = authData.user?.id as string | undefined;
-      const liderToken = authData.access_token as string | undefined;
+      const authData     = await authRes.json();
+      const liderUid     = authData.user?.id as string | undefined;
+      const liderToken   = authData.access_token as string | undefined;
       if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
 
-      const perfilRes = await fetch(`${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`, {
-        headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${liderToken}` },
-      });
+      // 2. Verificar cargo (lider ou administrador)
+      const perfilRes = await fetch(
+        `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
+        { headers: { apikey: supabaseAnon, Authorization: `Bearer ${liderToken}` } }
+      );
       if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
-      const perfilArr = await perfilRes.json();
+      const perfilArr  = await perfilRes.json();
       const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
-      if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
-        toast.error('O usuário informado não tem permissão de líder');
+      if (!liderPerfil || !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)) {
+        toast.error('O usuário informado não tem permissão de líder ou administrador');
         return;
       }
 
-      const uid = perfil?.id ?? '';
-      const nrCliente = pendingPayload.nr_cliente as string;
+      // 3. Buscar dados completos do acordo anterior para a lixeira
+      const { data: acordoAntData } = await supabase
+        .from('acordos')
+        .select('*, perfis(id, nome, email, perfil, setor_id)')
+        .eq('id', conflito.acordoId)
+        .single();
 
-      // Log de transferência
+      // 4. Enviar acordo anterior para a lixeira
+      if (acordoAntData) {
+        await enviarParaLixeira({
+          acordo: acordoAntData as Acordo,
+          motivo: 'transferencia_nr',
+          operadorNome: conflito.operadorNome,
+          autorizadoPorId: liderUid,
+          autorizadoPorNome: liderPerfil.nome,
+          transferidoParaId: perfil.id,
+          transferidoParaNome: perfil.nome ?? 'Operador',
+        });
+      }
+
+      // 5. Excluir acordo anterior
+      await supabase.from('acordos').delete().eq('id', conflito.acordoId);
+
+      // 6. Registrar log
       await supabase.from('logs_sistema').insert({
-        usuario_id: uid,
-        acao: 'transferencia_nr',
-        tabela: 'acordos',
-        registro_id: null,
-        empresa_id: empresa?.id ?? null,
-        detalhes: { nr: nrCliente, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid, operador_novo: uid },
+        usuario_id:  perfil.id,
+        acao:        'transferencia_nr',
+        tabela:      'acordos',
+        registro_id: conflito.acordoId,
+        empresa_id:  empresa.id,
+        detalhes: {
+          nr:               conflito.payload.nr_cliente ?? conflito.payload.instituicao,
+          aprovado_por:     liderPerfil.nome,
+          aprovado_por_id:  liderUid,
+          operador_anterior: conflito.operadorId,
+          operador_novo:    perfil.id,
+        },
       });
 
-      const ok = await executarSalvar(pendingPayload);
-      if (!ok) return;
+      // 7. Criar novo acordo
+      const inserido = await executarSalvar(conflito.payload);
+      if (!inserido) return;
 
-      // Notificação para o operador
-      criarNotificacao({
-        usuario_id: uid,
-        titulo: 'NR Autorizado pelo Líder',
-        mensagem: `O líder ${liderPerfil.nome} autorizou a tabulação do NR ${nrCliente}.`,
-        empresa_id: empresa?.id ?? null,
+      // 8. Notificar operador anterior (notificação de chat)
+      const nrLabel = (conflito.payload.nr_cliente as string) || (conflito.payload.instituicao as string) || '—';
+      const nomeNovoOp = perfil.nome ?? 'Operador';
+      await criarNotificacao({
+        usuario_id: conflito.operadorId,
+        titulo: '⚠️ NR transferido pelo líder',
+        mensagem: `O NR ${nrLabel} foi transferido para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira temporariamente. Detalhes: Valor R$ ${acordoAntData?.valor ?? '—'} | Vencimento ${acordoAntData?.vencimento ?? '—'}.`,
+        empresa_id: empresa.id,
       });
 
-      toast.success('NR registrado com autorização do líder');
-      setNrDuplicado(false);
-      setPendingPayload(null);
+      onSaved(inserido);
+      toast.success('Transferência autorizada! Acordo registrado com sucesso.');
+      setConflito(null);
       setLiderEmail('');
       setLiderSenha('');
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado na autorização');
     } finally {
       setAutorizando(false);
     }
   }
 
-  /* ─── Render PaguePay ──────────────────────────────────────────────────── */
+  // ────────────────────────────────────────────────────────────────────────
+  /* Render PaguePay */
   if (isPaguePlay) {
     return (
       <>
+        <tr className="bg-primary/5 border-b-2 border-primary/30">
+          <td colSpan={colSpan} className="px-4 py-4">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Save className="w-4 h-4 text-primary" /> Novo Acordo
+                </p>
+                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onCancel} disabled={salvando}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Dados Principais */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <DollarSign className="w-3 h-3" /> Dados Principais
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Inscrição *</Label>
+                    <Input value={instituicao} onChange={e => setInstituicao(e.target.value)}
+                      placeholder="Número de inscrição" className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Valor *</Label>
+                    <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
+                      placeholder="0,00" className="h-8 text-xs font-mono" />
+                  </div>
+                  <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
+                  <div className="space-y-1">
+                    <Label className="text-xs">Estado</Label>
+                    <Select value={estadoSel} onValueChange={setEstadoSel}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="UF" /></SelectTrigger>
+                      <SelectContent>
+                        {(ESTADOS_BRASIL as string[]).map(uf => (
+                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tipo e Status */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <FileText className="w-3 h-3" /> Tipo e Status
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Forma de Pagamento</Label>
+                    <Select value={tipo} onValueChange={handleChangeTipo}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {TIPOS_PAGUEPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Parcelas {!temParcelas && <span className="text-muted-foreground/50 font-normal">(não se aplica)</span>}</Label>
+                    <Select value={parcelasStr} onValueChange={setParcelasStr} disabled={!temParcelas}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {PARCELAS_PP.map(n => <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Status</Label>
+                    <Select value={status} onValueChange={setStatus}>
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Dados do Profissional */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <User className="w-3 h-3" /> Dados do Profissional
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1 sm:col-span-2">
+                    <Label className="text-xs">Nome Completo</Label>
+                    <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
+                      placeholder="Nome do profissional" className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">CPF</Label>
+                    <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
+                      placeholder="000.000.000-00" className="h-8 text-xs font-mono" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Link */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" /> Link do Acordo
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <Textarea value={link} onChange={e => setLink(e.target.value)}
+                  placeholder="Cole aqui o link do acordo..." className="text-xs resize-none" rows={2} />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={salvar} disabled={salvando}>
+                  <Save className="w-3.5 h-3.5" />
+                  {salvando ? 'Salvando...' : 'Salvar Acordo'}
+                </Button>
+                <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
+              </div>
+            </div>
+          </td>
+        </tr>
+
+        <ModalAutorizacaoNR
+          conflito={conflito}
+          liderEmail={liderEmail}
+          liderSenha={liderSenha}
+          autorizando={autorizando}
+          onEmailChange={setLiderEmail}
+          onSenhaChange={setLiderSenha}
+          onAutorizar={autorizarTransferencia}
+          onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+        />
+      </>
+    );
+  }
+
+  /* Render Bookplay */
+  return (
+    <>
       <tr className="bg-primary/5 border-b-2 border-primary/30">
         <td colSpan={colSpan} className="px-4 py-4">
           <div className="space-y-4">
-
-            {/* Título */}
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Save className="w-4 h-4 text-primary" /> Novo Acordo
@@ -352,35 +517,54 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </Button>
             </div>
 
-            {/* ── Dados Principais (obrigatórios: Inscrição, Valor, Vencimento) ── */}
+            {/* Dados Principais */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <DollarSign className="w-3 h-3" /> Dados Principais
+                <Hash className="w-3 h-3" /> Dados Principais
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
-                  <Label className="text-xs">Inscrição *</Label>
-                  <Input value={instituicao} onChange={e => setInstituicao(e.target.value)}
-                    placeholder="Número de inscrição" className="h-8 text-xs" />
+                  <Label className="text-xs">NR</Label>
+                  <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
+                    placeholder="Número NR" className="h-8 text-xs font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Vencimento *</Label>
+                  <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)}
+                    className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>
                   <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
                     placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
-                <DatePickerField
-                  label="Vencimento"
-                  required
-                  value={vencimento}
-                  onChange={setVencimento}
-                />
+              </div>
+            </div>
+
+            {/* Dados do Cliente */}
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                <User className="w-3 h-3" /> Dados do Cliente
+                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Nome do Cliente</Label>
+                  <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
+                    placeholder="Nome completo" className="h-8 text-xs" />
+                </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Estado</Label>
-                  <Select value={estadoSel} onValueChange={setEstadoSel}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="UF" /></SelectTrigger>
+                  <Label className="text-xs">WhatsApp</Label>
+                  <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
+                    placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Instituição</Label>
+                  <Select value={instituicao} onValueChange={setInstituicao}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                     <SelectContent>
-                      {(ESTADOS_BRASIL as string[]).map(uf => (
-                        <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                      {(INSTITUICOES_OPTIONS as { value: string; label: string }[]).map(opt => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -388,81 +572,50 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </div>
             </div>
 
-            {/* ── Tipo e Status (tem defaults, sempre válido) ── */}
+            {/* Tipo e Status */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                 <FileText className="w-3 h-3" /> Tipo e Status
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Forma de Pagamento</Label>
                   <Select value={tipo} onValueChange={handleChangeTipo}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TIPOS_PAGUEPLAY.map(t => (
-                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                      ))}
+                      {TIPOS_BOOKPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">
-                    Parcelas {!temParcelas && <span className="text-muted-foreground/50 font-normal">(não se aplica)</span>}
-                  </Label>
-                  <Select value={parcelasStr} onValueChange={setParcelasStr} disabled={!temParcelas}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PARCELAS_PP.map(n => (
-                        <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                {temParcelas && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Parcelas</Label>
+                    <Input type="number" min={1} max={60} value={parcelasStr}
+                      onChange={e => setParcelasStr(e.target.value)} className="h-8 text-xs font-mono" />
+                  </div>
+                )}
                 <div className="space-y-1">
                   <Label className="text-xs">Status</Label>
                   <Select value={status} onValueChange={setStatus}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map(s => (
-                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                      ))}
+                      {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
 
-            {/* ── Dados do Profissional (opcional) ── */}
+            {/* Observações */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <User className="w-3 h-3" /> Dados do Profissional
+                <FileText className="w-3 h-3" /> Observações
                 <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
               </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-xs">Nome Completo</Label>
-                  <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
-                    placeholder="Nome do profissional" className="h-8 text-xs" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">CPF</Label>
-                  <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
-                    placeholder="000.000.000-00" className="h-8 text-xs font-mono" />
-                </div>
-              </div>
+              <Textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
+                placeholder="Observações opcionais..." className="text-xs resize-none" rows={2} />
             </div>
 
-            {/* ── Link (opcional) ── */}
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <Link2 className="w-3 h-3" /> Link do Acordo
-                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
-              </p>
-              <Textarea value={link} onChange={e => setLink(e.target.value)}
-                placeholder="Cole aqui o link do acordo..." className="text-xs resize-none" rows={2} />
-            </div>
-
-            {/* Botões */}
             <div className="flex items-center gap-2 pt-1">
               <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
                 onClick={salvar} disabled={salvando}>
@@ -471,210 +624,116 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               </Button>
               <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
             </div>
-
           </div>
         </td>
       </tr>
 
-      {/* Dialog autorização líder — PaguePay */}
-      <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5 text-warning" />
-              NR já vinculado
-            </DialogTitle>
-            <DialogDescription>
-              Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 pt-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Email do Líder</Label>
-              <Input type="email" placeholder="lider@empresa.com" value={liderEmail}
-                onChange={e => setLiderEmail(e.target.value)} className="h-9 text-sm" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Senha do Líder</Label>
-              <Input type="password" placeholder="••••••••" value={liderSenha}
-                onChange={e => setLiderSenha(e.target.value)} className="h-9 text-sm" />
-            </div>
-            <div className="flex gap-2 pt-1">
-              <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>Cancelar</Button>
-              <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
-                <Shield className="w-4 h-4" />{autorizando ? 'Verificando...' : 'Autorizar'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ModalAutorizacaoNR
+        conflito={conflito}
+        liderEmail={liderEmail}
+        liderSenha={liderSenha}
+        autorizando={autorizando}
+        onEmailChange={setLiderEmail}
+        onSenhaChange={setLiderSenha}
+        onAutorizar={autorizarTransferencia}
+        onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+      />
     </>
-    );
-  }
+  );
+}
 
-  /* ─── Render Bookplay ──────────────────────────────────────────────────── */
+// ─── Modal de Autorização (componente reutilizável) ──────────────────────────
+interface ModalAutorizacaoNRProps {
+  conflito: ConflitNR | null;
+  liderEmail: string;
+  liderSenha: string;
+  autorizando: boolean;
+  onEmailChange: (v: string) => void;
+  onSenhaChange: (v: string) => void;
+  onAutorizar: () => void;
+  onCancel: () => void;
+}
+
+export function ModalAutorizacaoNR({
+  conflito, liderEmail, liderSenha, autorizando,
+  onEmailChange, onSenhaChange, onAutorizar, onCancel,
+}: ModalAutorizacaoNRProps) {
+  const nrLabel = conflito
+    ? ((conflito.payload.nr_cliente as string) || (conflito.payload.instituicao as string) || '—')
+    : '—';
+
   return (
-    <>
-      <tr className="bg-primary/5 border-b-2 border-primary/30">
-      <td colSpan={colSpan} className="px-4 py-4">
-        <div className="space-y-4">
-
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Save className="w-4 h-4 text-primary" /> Novo Acordo
-            </p>
-            <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onCancel} disabled={salvando}>
-              <X className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* ── Dados Principais (obrigatórios: Valor, Vencimento) ── */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <Hash className="w-3 h-3" /> Dados Principais
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">NR</Label>
-                <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
-                  placeholder="Número NR" className="h-8 text-xs font-mono" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Vencimento *</Label>
-                <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)}
-                  className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Valor *</Label>
-                <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
-                  placeholder="0,00" className="h-8 text-xs font-mono" />
-              </div>
-            </div>
-          </div>
-
-          {/* ── Dados do Cliente (opcional) ── */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <User className="w-3 h-3" /> Dados do Cliente
-              <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <div className="space-y-1 col-span-2">
-                <Label className="text-xs">Nome do Cliente</Label>
-                <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
-                  placeholder="Nome completo" className="h-8 text-xs" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">WhatsApp</Label>
-                <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
-                  placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Instituição</Label>
-                <Select value={instituicao} onValueChange={setInstituicao}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                  <SelectContent>
-                    {(INSTITUICOES_OPTIONS as { value: string; label: string }[]).map(opt => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Tipo e Status ── */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <FileText className="w-3 h-3" /> Tipo e Status
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Forma de Pagamento</Label>
-                <Select value={tipo} onValueChange={handleChangeTipo}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_BOOKPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              {temParcelas && (
-                <div className="space-y-1">
-                  <Label className="text-xs">Parcelas</Label>
-                  <Input type="number" min={1} max={60} value={parcelasStr}
-                    onChange={e => setParcelasStr(e.target.value)} className="h-8 text-xs font-mono" />
-                </div>
-              )}
-              <div className="space-y-1">
-                <Label className="text-xs">Status</Label>
-                <Select value={status} onValueChange={setStatus}>
-                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Observações (opcional) ── */}
-          <div>
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-              <FileText className="w-3 h-3" /> Observações
-              <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
-            </p>
-            <Textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
-              placeholder="Observações opcionais..." className="text-xs resize-none" rows={2} />
-          </div>
-
-          <div className="flex items-center gap-2 pt-1">
-            <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={salvar} disabled={salvando}>
-              <Save className="w-3.5 h-3.5" />
-              {salvando ? 'Salvando...' : 'Salvar Acordo'}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
-          </div>
-
-        </div>
-      </td>
-    </tr>
-
-    {/* ── Dialog autorização líder (NR duplicado) ── */}
-    <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
-      <DialogContent className="max-w-sm">
+    <Dialog open={!!conflito} onOpenChange={open => { if (!open) onCancel(); }}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Shield className="w-5 h-5 text-warning" />
-            NR já vinculado
+          <DialogTitle className="flex items-center gap-2 text-warning">
+            <AlertTriangle className="w-5 h-5" />
+            NR já agendado por outro operador
           </DialogTitle>
-          <DialogDescription>
-            Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
+          <DialogDescription asChild>
+            <div className="space-y-2 pt-1">
+              <p className="text-sm text-foreground/80">
+                O NR <strong className="font-mono text-foreground">{nrLabel}</strong> já possui um agendamento
+                com o operador{' '}
+                <strong className="text-foreground">{conflito?.operadorNome ?? '—'}</strong>.
+              </p>
+              <p className="text-sm text-foreground/80">
+                Será possível registrar após autorização de um <strong>líder ou administrador</strong>.
+              </p>
+              <div className="rounded-lg bg-warning/10 border border-warning/30 p-3 text-xs text-warning-foreground/80 space-y-1">
+                <p className="font-semibold text-warning">⚠️ Atenção</p>
+                <p>O acordo anterior será <strong>excluído da lista</strong> do operador atual e movido para a <strong>lixeira temporária</strong>. O operador receberá uma notificação.</p>
+              </div>
+            </div>
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 pt-2">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Email do Líder</Label>
-            <Input type="email" placeholder="lider@empresa.com" value={liderEmail}
-              onChange={e => setLiderEmail(e.target.value)} className="h-9 text-sm" />
+
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center gap-2 border-t border-border pt-3">
+            <Shield className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-sm font-semibold">Autorizaçāo do Líder</p>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Senha do Líder</Label>
-            <Input type="password" placeholder="••••••••" value={liderSenha}
-              onChange={e => setLiderSenha(e.target.value)} className="h-9 text-sm" />
+            <Label className="text-xs font-medium">E-mail do Líder / Admin</Label>
+            <Input
+              type="email"
+              placeholder="lider@empresa.com"
+              value={liderEmail}
+              onChange={e => onEmailChange(e.target.value)}
+              className="h-9 text-sm"
+              disabled={autorizando}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Senha</Label>
+            <Input
+              type="password"
+              placeholder="••••••••"
+              value={liderSenha}
+              onChange={e => onSenhaChange(e.target.value)}
+              className="h-9 text-sm"
+              disabled={autorizando}
+              onKeyDown={e => { if (e.key === 'Enter') onAutorizar(); }}
+            />
           </div>
           <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>
+            <Button
+              variant="outline" className="flex-1"
+              onClick={onCancel} disabled={autorizando}
+            >
               Cancelar
             </Button>
-            <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
+            <Button
+              className="flex-1 gap-2"
+              onClick={onAutorizar}
+              disabled={autorizando || !liderEmail || !liderSenha}
+            >
               <Shield className="w-4 h-4" />
-              {autorizando ? 'Verificando...' : 'Autorizar'}
+              {autorizando ? 'Verificando...' : 'Autorizar Transferência'}
             </Button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
-  </>
   );
 }

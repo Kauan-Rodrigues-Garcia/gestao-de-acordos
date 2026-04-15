@@ -2,9 +2,11 @@
  * src/hooks/useNotificacoes.ts
  * ─────────────────────────────────────────────────────────────────────────
  * Hook para gerenciar notificações do usuário logado.
+ * Inclui polling (30s) + Supabase Realtime para atualização instantânea.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { Notificacao } from '@/lib/supabase';
+import { supabase } from '@/lib/supabase';
 import { fetchNotificacoes, marcarComoLida, marcarTodasLidas, limparTodasNotificacoes } from '@/services/notificacoes.service';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -36,11 +38,50 @@ export function useNotificacoes(): UseNotificacoesResult {
     }
   }, [user?.id]);
 
+  // Polling a cada 30s
   useEffect(() => {
     load();
     const interval = setInterval(load, 30_000);
     return () => clearInterval(interval);
   }, [load]);
+
+  // Realtime: escuta INSERT e UPDATE na tabela notificacoes
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`useNotificacoes-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notificacoes', filter: `usuario_id=eq.${user.id}` },
+        (payload) => {
+          const nova = payload.new as Notificacao;
+          setNotificacoes(prev => {
+            if (prev.find(n => n.id === nova.id)) return prev;
+            return [nova, ...prev];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'notificacoes', filter: `usuario_id=eq.${user.id}` },
+        (payload) => {
+          const atualizada = payload.new as Notificacao;
+          setNotificacoes(prev => prev.map(n => n.id === atualizada.id ? atualizada : n));
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'notificacoes', filter: `usuario_id=eq.${user.id}` },
+        (payload) => {
+          const removed = payload.old as { id?: string };
+          if (removed?.id) {
+            setNotificacoes(prev => prev.filter(n => n.id !== removed.id));
+          }
+        }
+      )
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user?.id]);
 
   async function marcarLida(id: string) {
     await marcarComoLida(id);

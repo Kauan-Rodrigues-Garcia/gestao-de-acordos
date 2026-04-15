@@ -167,24 +167,40 @@ export function calcularMetricasMes(acordos: Acordo[]): MetricasMes {
   };
 }
 
-/** Verifica se um NR já existe para a empresa */
+/** Verifica se um NR já existe para a empresa, ignorando acordos com status nao_pago */
 export async function verificarNrDuplicado(
   nrCliente: string,
   empresaId: string,
   acordoIdExcluir?: string
-): Promise<{ duplicado: boolean; statusExistente?: string; acordoIdExistente?: string }> {
+): Promise<{
+  duplicado: boolean;
+  statusExistente?: string;
+  acordoIdExistente?: string;
+  operadorIdExistente?: string;
+  operadorNomeExistente?: string;
+}> {
   let query = supabase
     .from('acordos')
-    .select('id, status')
+    .select('id, status, operador_id, perfis(nome)')
     .eq('nr_cliente', nrCliente)
     .eq('empresa_id', empresaId)
+    .neq('status', 'nao_pago')   // ← ignorar acordos não pagos
     .limit(1);
+
   if (acordoIdExcluir) {
     query = query.neq('id', acordoIdExcluir);
   }
+
   const { data } = await query;
   if (data && data.length > 0) {
-    return { duplicado: true, statusExistente: data[0].status, acordoIdExistente: data[0].id };
+    const item = data[0] as any;
+    return {
+      duplicado: true,
+      statusExistente: item.status,
+      acordoIdExistente: item.id,
+      operadorIdExistente: item.operador_id,
+      operadorNomeExistente: item.perfis?.nome ?? null,
+    };
   }
   return { duplicado: false };
 }
