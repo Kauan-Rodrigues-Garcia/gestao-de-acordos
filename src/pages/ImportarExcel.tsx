@@ -40,6 +40,7 @@ import { cn } from '@/lib/utils';
 import { fetchAIConfig } from '@/services/aiConfig.service';
 import { aiNormalizeImport } from '@/services/aiImport.service';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { verificarNrsDuplicadosEmLote } from '@/services/acordos.service';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
@@ -1412,6 +1413,32 @@ export default function ImportarExcel() {
     const BATCH = 50;
     let ok = 0;
     const errosMsgs: string[] = [];
+
+    // ── Validação de NR duplicado em lote (antes de inserir qualquer coisa) ──
+    if (empresa?.id) {
+      const todosNrs = aImportar.map(r => r.nr_cliente).filter(Boolean);
+      const duplicados = await verificarNrsDuplicadosEmLote(todosNrs, empresa.id);
+
+      if (duplicados.size > 0) {
+        const nrsList = [...duplicados.keys()].join(', ');
+        const qtd = duplicados.size;
+        toast.error(
+          `${qtd} NR(s) já existem na empresa e serão ignorados: ${nrsList.substring(0, 120)}${nrsList.length > 120 ? '…' : ''}`,
+          { duration: 8000 }
+        );
+        // Remover duplicados da lista a importar (ignorar silenciosamente)
+        const filtrados = aImportar.filter(r => !duplicados.has(r.nr_cliente?.trim() ?? ''));
+        if (filtrados.length === 0) {
+          toast.error('Todos os NRs já existem. Nenhum registro foi importado.');
+          setImportando(false);
+          return;
+        }
+        toast.info(`Importando ${filtrados.length} registro(s) sem conflito.`);
+        // Substituir lista para importar apenas os sem conflito
+        aImportar.length = 0;
+        aImportar.push(...filtrados);
+      }
+    }
 
     // Detectar se a coluna instituicao existe no banco (evita erro de schema cache)
     const temInstituicao = await detectarColunaInstituicao();

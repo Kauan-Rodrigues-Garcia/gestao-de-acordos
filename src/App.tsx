@@ -28,6 +28,7 @@ const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
+const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 
 function PageLoader() {
   return (
@@ -165,6 +166,11 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
+              <Route path="/admin/lixeira" element={
+                  <ProtectedRoute allowedProfiles={['administrador','lider']}>
+                    <Lixeira />
+                  </ProtectedRoute>
+              } />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

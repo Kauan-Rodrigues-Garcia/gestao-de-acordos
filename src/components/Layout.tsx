@@ -41,6 +41,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Metas',         icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider'] },
   { label: 'Configurações', icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
   { label: 'IA',            icon: Bot,             to: ROUTE_PATHS.ADMIN_IA,            roles: ['administrador'] },
+  { label: 'Lixeira',       icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider'] },
   { label: 'Logs',          icon: ClipboardList,   to: ROUTE_PATHS.ADMIN_LOGS,          roles: ['administrador'] },
 ];
 

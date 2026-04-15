@@ -223,24 +223,34 @@ export default function AcordoForm() {
       if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      console.log('[AcordoForm] payload:', payload);
+      // ── Verificar NR duplicado (ignora nao_pago) ──────────────────────────
+      // IMPORTANTE: PaguePay usa "Inscrição" (instituicao) como NR único
+      //             Bookplay usa "nr_cliente" como NR único
+      const nrParaVerificar = isPP
+        ? (data.instituicao ?? '').trim()   // PaguePay: Inscrição = NR
+        : nrTrimmed;                         // Bookplay: nr_cliente = NR
 
-      // ── Verificar NR duplicado (ignora nao_pago) ──────────────────────
-      const nrChanged = nrTrimmed && (!isEdit || nrTrimmed !== nrOriginalEdit);
-      if (nrChanged) {
+      const nrOriginal = isPP
+        ? null  // edição de PaguePay: não rastrear nr original (campo diferente)
+        : nrOriginalEdit;
+
+      const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
+
+      if (nrMudou) {
         const check = await verificarNrDuplicado(
-          nrTrimmed,
+          nrParaVerificar,
           empresa.id,
           isEdit ? id : undefined
         );
         if (check.duplicado) {
           const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== uid;
           if (!pertenceAOutro) {
-            toast.error(`NR ${nrTrimmed} já existe na sua lista de acordos.`);
+            // Próprio operador já tem esse NR
+            toast.error(`NR ${nrParaVerificar} já existe na sua lista de acordos.`);
             setLoading(false);
             return;
           }
-          // Pertence a outro operador → solicitar autorização
+          // Pertence a outro operador → solicitar autorização do líder
           setConflito({
             acordoId:     check.acordoIdExistente!,
             operadorId:   check.operadorIdExistente!,

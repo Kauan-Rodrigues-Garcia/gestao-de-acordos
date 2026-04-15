@@ -179,12 +179,14 @@ export async function verificarNrDuplicado(
   operadorIdExistente?: string;
   operadorNomeExistente?: string;
 }> {
+  if (!nrCliente?.trim()) return { duplicado: false };
+
   let query = supabase
     .from('acordos')
     .select('id, status, operador_id, perfis(nome)')
-    .eq('nr_cliente', nrCliente)
+    .eq('nr_cliente', nrCliente.trim())
     .eq('empresa_id', empresaId)
-    .neq('status', 'nao_pago')   // ← ignorar acordos não pagos
+    .neq('status', 'nao_pago')   // acordos não-pagos NÃO bloqueiam reutilização do NR
     .limit(1);
 
   if (acordoIdExcluir) {
@@ -199,10 +201,44 @@ export async function verificarNrDuplicado(
       statusExistente: item.status,
       acordoIdExistente: item.id,
       operadorIdExistente: item.operador_id,
-      operadorNomeExistente: item.perfis?.nome ?? null,
+      operadorNomeExistente: (item.perfis as any)?.nome ?? null,
     };
   }
   return { duplicado: false };
+}
+
+/**
+ * Verifica um lote de NRs em uma única query — usado na importação em massa.
+ * Retorna um Map: nr_cliente → { acordoId, operadorId, operadorNome }
+ * Apenas NRs com status diferente de 'nao_pago' são considerados duplicados.
+ */
+export async function verificarNrsDuplicadosEmLote(
+  nrs: string[],
+  empresaId: string
+): Promise<Map<string, { acordoId: string; operadorId: string; operadorNome: string }>> {
+  const resultado = new Map<string, { acordoId: string; operadorId: string; operadorNome: string }>();
+  const nrsTrimados = [...new Set(nrs.map(n => n.trim()).filter(Boolean))];
+  if (!nrsTrimados.length) return resultado;
+
+  const { data } = await supabase
+    .from('acordos')
+    .select('id, nr_cliente, operador_id, perfis(nome)')
+    .eq('empresa_id', empresaId)
+    .neq('status', 'nao_pago')
+    .in('nr_cliente', nrsTrimados);
+
+  if (data) {
+    for (const item of data as any[]) {
+      if (item.nr_cliente) {
+        resultado.set(item.nr_cliente.trim(), {
+          acordoId: item.id,
+          operadorId: item.operador_id,
+          operadorNome: item.perfis?.nome ?? 'Operador desconhecido',
+        });
+      }
+    }
+  }
+  return resultado;
 }
 
 /** Métricas do dashboard (hoje) */

@@ -1,19 +1,35 @@
 /**
- * AcordoNovoInline.tsx — v2
+ * AcordoNovoInline.tsx — v3
  *
- * Lógica de NR único:
- *  • Ao salvar, verifica se o NR (Inscrição no PaguePay) já existe na empresa
- *    com status diferente de 'nao_pago'.
- *  • Se pertencer ao próprio operador → bloqueio simples (já existe na sua lista).
- *  • Se pertencer a outro operador → exibe modal de autorização com:
- *      - Nome do operador que possui o NR
- *      - Campo email + senha do líder/admin para autorizar
- *  • Ao autorizar:
- *      1. Exclui o acordo anterior da tabela acordos
- *      2. Salva cópia na lixeira_acordos (transferência)
- *      3. Cria o novo acordo para o operador atual
- *      4. Envia notificação de chat ao operador anterior
+ * Lógica de NR único (CRÍTICA):
+ *  • PaguePay  → NR único = campo "Inscrição" (instituicao)
+ *  • Bookplay  → NR único = campo "NR"         (nr_cliente)
+ *
+ *  Ao salvar, ANTES de inserir:
+ *    1. verificarNrDuplicado(nr, empresa.id)
+ *    2. check.duplicado === false → salvar normalmente
+ *    3. check.duplicado === true  && operadorIdExistente === perfil.id
+ *         → toast.error "NR já existe na sua lista"
+ *    4. check.duplicado === true  && operadorIdExistente !== perfil.id
+ *         → setConflito({ acordoId, operadorId, operadorNome, payload }) → PARAR
+ *
+ *  Ao autorizar transferência:
+ *    1. Autenticar líder via fetch POST (Supabase Auth)
+ *    2. Verificar perfil: lider | administrador | super_admin
+ *    3. Buscar acordo anterior completo
+ *    4. enviarParaLixeira (motivo: transferencia_nr)
+ *    5. supabase.from('acordos').delete().eq('id', conflito.acordoId)
+ *    6. executarSalvar(conflito.payload)
+ *    7. Log em logs_sistema
+ *    8. criarNotificacao ao operador anterior (mensagem detalhada)
+ *
+ * Exports:
+ *   - default: AcordoNovoInline (export nomeado também)
+ *   - ModalAutorizacaoNR (reutilizável no AcordoForm)
+ *   - ConflitNR (interface)
+ *   - ModalAutorizacaoNRProps (interface)
  */
+
 import { useState } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,26 +42,85 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
 import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
-import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon, Shield, AlertTriangle } from 'lucide-react';
+import {
+  X, Save, User, Hash, DollarSign, FileText, Link2,
+  CalendarIcon, Shield, AlertTriangle,
+} from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { verificarNrDuplicado } from '@/services/acordos.service';
-import { criarNotificacao } from '@/services/notificacoes.service';
-import { enviarParaLixeira } from '@/services/lixeira.service';
+import { criarNotificacao }     from '@/services/notificacoes.service';
+import { enviarParaLixeira }    from '@/services/lixeira.service';
+
+// ─── Tipos exportados ────────────────────────────────────────────────────────
+
+export interface ConflitNR {
+  acordoId:     string;
+  operadorId:   string;
+  operadorNome: string;
+  payload:      Record<string, unknown>;
+}
+
+export interface ModalAutorizacaoNRProps {
+  conflito:       ConflitNR | null;
+  liderEmail:     string;
+  liderSenha:     string;
+  autorizando:    boolean;
+  onEmailChange:  (v: string) => void;
+  onSenhaChange:  (v: string) => void;
+  onAutorizar:    () => void;
+  onCancel:       () => void;
+}
+
+// ─── Constantes ──────────────────────────────────────────────────────────────
+
+const TIPOS_PAGUEPLAY = [
+  { value: 'boleto_pix', label: 'Boleto / PIX',       parcelado: true  },
+  { value: 'cartao',     label: 'Cartão de Crédito',   parcelado: false },
+];
+
+const TIPOS_BOOKPLAY = [
+  { value: 'boleto',            label: 'Boleto',            parcelado: true  },
+  { value: 'pix_automatico',    label: 'PIX Automático',    parcelado: true  },
+  { value: 'cartao_recorrente', label: 'Cartão Recorrente', parcelado: true  },
+  { value: 'cartao',            label: 'Cartão de Crédito', parcelado: false },
+  { value: 'pix',               label: 'PIX',               parcelado: false },
+];
+
+const STATUS_OPTIONS = [
+  { value: 'verificar_pendente', label: 'Pendente' },
+  { value: 'pago',               label: 'Pago'     },
+  { value: 'nao_pago',           label: 'Não Pago' },
+];
+
+const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
+
+// ─── Props do componente principal ───────────────────────────────────────────
+
+export interface AcordoNovoInlineProps {
+  isPaguePlay: boolean;
+  colSpan:     number;
+  onSaved:     (inserido: Acordo) => void;
+  onCancel:    () => void;
+}
+
+// ─── DatePickerField (interno) ────────────────────────────────────────────────
 
 function DatePickerField({
   value, onChange, label, required,
 }: {
-  value: string;
+  value:    string;
   onChange: (v: string) => void;
-  label: string;
+  label:    string;
   required?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -58,7 +133,10 @@ function DatePickerField({
         <PopoverTrigger asChild>
           <Button
             variant="outline"
-            className={cn('w-full h-8 text-xs justify-start gap-2 font-mono px-2', !value && 'text-muted-foreground')}
+            className={cn(
+              'w-full h-8 text-xs justify-start gap-2 font-mono px-2',
+              !value && 'text-muted-foreground',
+            )}
           >
             <CalendarIcon className="w-3 h-3 shrink-0 text-muted-foreground" />
             {selected ? format(selected, 'dd/MM/yyyy') : 'Selecionar data'}
@@ -66,9 +144,13 @@ function DatePickerField({
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
           <Calendar
-            mode="single" selected={selected}
-            onSelect={(day) => { if (day) { onChange(format(day, 'yyyy-MM-dd')); setOpen(false); } }}
-            disabled={undefined} locale={ptBR} initialFocus
+            mode="single"
+            selected={selected}
+            onSelect={(day) => {
+              if (day) { onChange(format(day, 'yyyy-MM-dd')); setOpen(false); }
+            }}
+            locale={ptBR}
+            initialFocus
           />
         </PopoverContent>
       </Popover>
@@ -76,46 +158,143 @@ function DatePickerField({
   );
 }
 
-const TIPOS_PAGUEPLAY = [
-  { value: 'boleto_pix', label: 'Boleto / PIX',      parcelado: true  },
-  { value: 'cartao',     label: 'Cartão de Crédito',  parcelado: false },
-];
+// ─── Modal de Autorização (exportado para reutilização) ──────────────────────
 
-const TIPOS_BOOKPLAY = [
-  { value: 'boleto',            label: 'Boleto',            parcelado: true  },
-  { value: 'pix_automatico',    label: 'PIX Automático',    parcelado: true  },
-  { value: 'cartao_recorrente', label: 'Cartão Recorrente', parcelado: true  },
-  { value: 'cartao',            label: 'Cartão de Crédito', parcelado: false },
-  { value: 'pix',               label: 'PIX',               parcelado: false },
-];
+export function ModalAutorizacaoNR({
+  conflito,
+  liderEmail,
+  liderSenha,
+  autorizando,
+  onEmailChange,
+  onSenhaChange,
+  onAutorizar,
+  onCancel,
+}: ModalAutorizacaoNRProps) {
+  // Determina qual campo é o NR exibido:
+  // PaguePay → instituicao; Bookplay → nr_cliente
+  const nrLabel: string = conflito
+    ? (
+        (conflito.payload.instituicao as string | undefined)?.trim() ||
+        (conflito.payload.nr_cliente  as string | undefined)?.trim() ||
+        '—'
+      )
+    : '—';
 
-const STATUS_OPTIONS = [
-  { value: 'verificar_pendente', label: 'Pendente'  },
-  { value: 'pago',               label: 'Pago'       },
-  { value: 'nao_pago',           label: 'Não Pago'   },
-];
+  const operadorNome = conflito?.operadorNome ?? '—';
 
-const PARCELAS_PP = Array.from({ length: 12 }, (_, i) => i + 1);
+  return (
+    <Dialog open={!!conflito} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-warning">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            NR já agendado por outro operador
+          </DialogTitle>
 
-export interface AcordoNovoInlineProps {
-  isPaguePlay: boolean;
-  colSpan: number;
-  onSaved: (inserido: Acordo) => void;
-  onCancel: () => void;
+          <DialogDescription asChild>
+            <div className="space-y-3 pt-1">
+              {/* Descrição principal */}
+              <p className="text-sm text-foreground/80">
+                O NR{' '}
+                <strong className="font-mono text-foreground">{nrLabel}</strong>{' '}
+                já possui um agendamento com o operador{' '}
+                <strong className="text-foreground">{operadorNome}</strong>.{' '}
+                Será possível registrar após autorização.
+              </p>
+
+              {/* Aviso vermelho/amarelo */}
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 space-y-1">
+                <p className="text-xs font-semibold text-destructive flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Atenção — ação irreversível
+                </p>
+                <p className="text-xs text-destructive/80">
+                  O acordo atual de{' '}
+                  <strong>{operadorNome}</strong>{' '}
+                  será <strong>removido da lista</strong> e movido para a{' '}
+                  <strong>lixeira temporária</strong>. O operador receberá uma
+                  notificação com todos os detalhes da transferência.
+                </p>
+              </div>
+
+              {/* Aviso amarelo secundário */}
+              <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3">
+                <p className="text-xs text-yellow-700 dark:text-yellow-400">
+                  Esta operação ficará registrada nos logs do sistema com o nome
+                  do líder autorizador.
+                </p>
+              </div>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Formulário de autorização */}
+        <div className="space-y-3 pt-1">
+          <div className="flex items-center gap-2 border-t border-border pt-3">
+            <Shield className="w-4 h-4 text-primary shrink-0" />
+            <p className="text-sm font-semibold">Autorização do Líder</p>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">E-mail do Líder / Admin</Label>
+            <Input
+              type="email"
+              placeholder="lider@empresa.com"
+              value={liderEmail}
+              onChange={(e) => onEmailChange(e.target.value)}
+              className="h-9 text-sm"
+              disabled={autorizando}
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Senha</Label>
+            <Input
+              type="password"
+              placeholder="••••••••"
+              value={liderSenha}
+              onChange={(e) => onSenhaChange(e.target.value)}
+              className="h-9 text-sm"
+              disabled={autorizando}
+              autoComplete="current-password"
+              onKeyDown={(e) => { if (e.key === 'Enter' && liderEmail && liderSenha) onAutorizar(); }}
+            />
+          </div>
+
+          <div className="flex gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={onCancel}
+              disabled={autorizando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={onAutorizar}
+              disabled={autorizando || !liderEmail.trim() || !liderSenha.trim()}
+            >
+              <Shield className="w-4 h-4" />
+              {autorizando ? 'Verificando...' : 'Autorizar Transferência'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-// ─── Estado do conflito de NR ────────────────────────────────────────────────
-interface ConflitNR {
-  acordoId: string;
-  operadorId: string;
-  operadorNome: string;
-  payload: Record<string, unknown>;
-}
+// ─── Componente principal ────────────────────────────────────────────────────
 
-export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: AcordoNovoInlineProps) {
-  const { perfil } = useAuth();
+export function AcordoNovoInline({
+  isPaguePlay, colSpan, onSaved, onCancel,
+}: AcordoNovoInlineProps) {
+  const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
 
+  // Campos do formulário
   const [nomeCliente,  setNomeCliente]  = useState('');
   const [nrCliente,    setNrCliente]    = useState('');
   const [vencimento,   setVencimento]   = useState('');
@@ -130,20 +309,20 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [link,         setLink]         = useState('');
   const [salvando,     setSalvando]     = useState(false);
 
-  // ── Conflito de NR ──────────────────────────────────────────────────────
-  const [conflito,     setConflito]     = useState<ConflitNR | null>(null);
-  const [liderEmail,   setLiderEmail]   = useState('');
-  const [liderSenha,   setLiderSenha]   = useState('');
-  const [autorizando,  setAutorizando]  = useState(false);
+  // Estado do conflito de NR
+  const [conflito,    setConflito]    = useState<ConflitNR | null>(null);
+  const [liderEmail,  setLiderEmail]  = useState('');
+  const [liderSenha,  setLiderSenha]  = useState('');
+  const [autorizando, setAutorizando] = useState(false);
 
   const tipos      = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
-  const tipoAtual  = tipos.find(t => t.value === tipo);
+  const tipoAtual  = tipos.find((t) => t.value === tipo);
   const temParcelas = !!tipoAtual?.parcelado;
   const parcelas    = Math.max(1, parseInt(parcelasStr) || 1);
 
   function handleChangeTipo(t: string) {
     setTipo(t);
-    if (!tipos.find(x => x.value === t)?.parcelado) setParcelasStr('1');
+    if (!tipos.find((x) => x.value === t)?.parcelado) setParcelasStr('1');
   }
 
   function validar(): string | null {
@@ -154,6 +333,7 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     return null;
   }
 
+  // ── Inserção efetiva no banco (com fallback para colunas novas) ────────────
   async function executarSalvar(payload: Record<string, unknown>): Promise<Acordo | null> {
     const { data: inserido, error } = await supabase
       .from('acordos')
@@ -162,25 +342,32 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
       .single();
 
     if (error) {
-      // Fallback sem colunas novas
       const isColErr =
-        String(error.code) === '42703' || String(error.code) === '400' ||
+        String(error.code) === '42703' ||
+        String(error.code) === '400'   ||
         error.message?.toLowerCase().includes('column') ||
         error.message?.toLowerCase().includes('unknown');
+
       if (isColErr) {
+        // Fallback: remover colunas novas que possam não existir ainda
         const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
         const { data: inseridoMin, error: e2 } = await supabase
-          .from('acordos').insert(payloadMin)
-          .select('*, perfis(id, nome, email, perfil, setor_id)').single();
+          .from('acordos')
+          .insert(payloadMin)
+          .select('*, perfis(id, nome, email, perfil, setor_id)')
+          .single();
         if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return null; }
         return inseridoMin as Acordo;
       }
+
       toast.error(`Erro ao salvar: ${error.message}`);
       return null;
     }
+
     return inserido as Acordo;
   }
 
+  // ── Construir payload e verificar NR antes de salvar ─────────────────────
   async function salvar() {
     const erro = validar();
     if (erro) { toast.error(erro); return; }
@@ -189,12 +376,13 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
 
     setSalvando(true);
     try {
-      const valorNum    = parseCurrencyInput(valorStr);
-      const obsFinal    = isPaguePlay
+      const valorNum       = parseCurrencyInput(valorStr);
+      const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
+      const grupoId        = crypto.randomUUID();
+
+      const obsFinal = isPaguePlay
         ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
         : (observacoes.trim() || null);
-      const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
-      const grupoId     = crypto.randomUUID();
 
       const payload: Record<string, unknown> = {
         nome_cliente:    nomeCliente.trim() || '',
@@ -214,142 +402,196 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         numero_parcela:  1,
       };
 
-      // ── Verificar NR duplicado (ignora nao_pago) ────────────────────────
-      // Para PaguePay, o NR é o campo "Inscrição" (instituicao)
+      // ── LÓGICA DE NR ÚNICO (CRÍTICA) ──────────────────────────────────────
+      //   PaguePay → NR único = "Inscrição" (instituicao)
+      //   Bookplay → NR único = "NR"         (nr_cliente)
       const nrParaVerificar = isPaguePlay
         ? instituicao.trim()
         : nrCliente.trim();
 
       if (nrParaVerificar) {
         const check = await verificarNrDuplicado(nrParaVerificar, empresa.id);
-        if (check.duplicado) {
-          const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== perfil.id;
 
-          if (!pertenceAOutro) {
-            // Pertence ao próprio operador
+        if (check.duplicado) {
+          if (
+            check.operadorIdExistente &&
+            check.operadorIdExistente === perfil.id
+          ) {
+            // Pertence ao próprio operador → bloquear
             toast.error(`NR ${nrParaVerificar} já existe na sua lista de acordos.`);
             return;
           }
 
-          // Pertence a outro operador → solicitar autorização do líder
-          setConflito({
-            acordoId:     check.acordoIdExistente!,
-            operadorId:   check.operadorIdExistente!,
-            operadorNome: check.operadorNomeExistente || 'Operador desconhecido',
-            payload,
-          });
-          return;
+          if (
+            check.operadorIdExistente &&
+            check.operadorIdExistente !== perfil.id
+          ) {
+            // Pertence a outro operador → exigir autorização do líder
+            setConflito({
+              acordoId:     check.acordoIdExistente!,
+              operadorId:   check.operadorIdExistente,
+              operadorNome: check.operadorNomeExistente ?? 'Operador desconhecido',
+              payload,
+            });
+            return; // NÃO salvar agora
+          }
         }
+        // check.duplicado === false → segue para salvar
       }
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
         onSaved(inserido);
-        toast.success(parcelas > 1
-          ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.`
-          : 'Acordo criado com sucesso!');
+        toast.success(
+          parcelas > 1
+            ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.`
+            : 'Acordo criado com sucesso!',
+        );
       }
     } finally {
       setSalvando(false);
     }
   }
 
-  // ── Autorização do líder para transferência de NR ─────────────────────────
+  // ── Autorizar transferência de NR (líder/admin) ───────────────────────────
   async function autorizarTransferencia() {
     if (!conflito || !perfil?.id || !empresa?.id) return;
-    if (!liderEmail || !liderSenha) {
-      toast.error('Informe o email e senha do líder');
+    if (!liderEmail.trim() || !liderSenha.trim()) {
+      toast.error('Informe o e-mail e a senha do líder');
       return;
     }
+
     setAutorizando(true);
     try {
-      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
       const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-      // 1. Autenticar líder
-      const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
-        body: JSON.stringify({ email: liderEmail, password: liderSenha }),
-      });
+      // 1. Autenticar líder via Supabase Auth REST
+      const authRes = await fetch(
+        `${supabaseUrl}/auth/v1/token?grant_type=password`,
+        {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
+          body:    JSON.stringify({ email: liderEmail.trim(), password: liderSenha }),
+        },
+      );
+
       if (!authRes.ok) {
         const s = authRes.status;
-        toast.error(s === 400 || s === 401 || s === 422
-          ? 'Credenciais do líder inválidas'
-          : `Erro ao autenticar líder (${s})`);
+        toast.error(
+          s === 400 || s === 401 || s === 422
+            ? 'Credenciais do líder inválidas'
+            : `Erro ao autenticar líder (${s})`,
+        );
         return;
       }
-      const authData     = await authRes.json();
-      const liderUid     = authData.user?.id as string | undefined;
-      const liderToken   = authData.access_token as string | undefined;
-      if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
 
-      // 2. Verificar cargo (lider ou administrador)
+      const authData   = await authRes.json() as { user?: { id: string }; access_token?: string };
+      const liderUid   = authData.user?.id;
+      const liderToken = authData.access_token;
+
+      if (!liderUid || !liderToken) {
+        toast.error('Credenciais do líder inválidas');
+        return;
+      }
+
+      // 2. Verificar perfil do líder: deve ser lider | administrador | super_admin
       const perfilRes = await fetch(
         `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
-        { headers: { apikey: supabaseAnon, Authorization: `Bearer ${liderToken}` } }
+        {
+          headers: {
+            apikey:        supabaseAnon,
+            Authorization: `Bearer ${liderToken}`,
+          },
+        },
       );
-      if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
-      const perfilArr  = await perfilRes.json();
-      const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
-      if (!liderPerfil || !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)) {
+
+      if (!perfilRes.ok) {
+        toast.error('Erro ao verificar perfil do líder');
+        return;
+      }
+
+      const perfilArr   = await perfilRes.json() as Array<{ perfil: string; nome: string }>;
+      const liderPerfil = Array.isArray(perfilArr) && perfilArr.length > 0 ? perfilArr[0] : null;
+
+      if (
+        !liderPerfil ||
+        !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)
+      ) {
         toast.error('O usuário informado não tem permissão de líder ou administrador');
         return;
       }
 
-      // 3. Buscar dados completos do acordo anterior para a lixeira
+      // 3. Buscar acordo anterior completo do banco
       const { data: acordoAntData } = await supabase
         .from('acordos')
         .select('*, perfis(id, nome, email, perfil, setor_id)')
         .eq('id', conflito.acordoId)
         .single();
 
-      // 4. Enviar acordo anterior para a lixeira
+      // 4. Salvar acordo anterior na lixeira
       if (acordoAntData) {
         await enviarParaLixeira({
-          acordo: acordoAntData as Acordo,
-          motivo: 'transferencia_nr',
-          operadorNome: conflito.operadorNome,
-          autorizadoPorId: liderUid,
-          autorizadoPorNome: liderPerfil.nome,
-          transferidoParaId: perfil.id,
+          acordo:              acordoAntData as Acordo,
+          motivo:              'transferencia_nr',
+          operadorNome:        conflito.operadorNome,
+          autorizadoPorId:     liderUid,
+          autorizadoPorNome:   liderPerfil.nome,
+          transferidoParaId:   perfil.id,
           transferidoParaNome: perfil.nome ?? 'Operador',
         });
       }
 
-      // 5. Excluir acordo anterior
-      await supabase.from('acordos').delete().eq('id', conflito.acordoId);
+      // 5. Deletar acordo anterior
+      await supabase
+        .from('acordos')
+        .delete()
+        .eq('id', conflito.acordoId);
 
-      // 6. Registrar log
+      // 6. Inserir novo acordo
+      const inserido = await executarSalvar(conflito.payload);
+      if (!inserido) return; // erro já notificado por executarSalvar
+
+      // 7. Log em logs_sistema
+      const nrLogLabel =
+        (conflito.payload.instituicao as string | undefined)?.trim() ||
+        (conflito.payload.nr_cliente  as string | undefined)?.trim() ||
+        '—';
+
       await supabase.from('logs_sistema').insert({
         usuario_id:  perfil.id,
-        acao:        'transferencia_nr',
-        tabela:      'acordos',
-        registro_id: conflito.acordoId,
-        empresa_id:  empresa.id,
+        acao:         'transferencia_nr',
+        tabela:       'acordos',
+        registro_id:  conflito.acordoId,
+        empresa_id:   empresa.id,
         detalhes: {
-          nr:               conflito.payload.nr_cliente ?? conflito.payload.instituicao,
-          aprovado_por:     liderPerfil.nome,
-          aprovado_por_id:  liderUid,
+          nr:                nrLogLabel,
+          aprovado_por:      liderPerfil.nome,
+          aprovado_por_id:   liderUid,
           operador_anterior: conflito.operadorId,
-          operador_novo:    perfil.id,
+          operador_novo:     perfil.id,
         },
       });
 
-      // 7. Criar novo acordo
-      const inserido = await executarSalvar(conflito.payload);
-      if (!inserido) return;
+      // 8. Notificar operador anterior com mensagem detalhada
+      const nomeNovoOp   = perfil.nome ?? 'Operador';
+      const valorFmt     = acordoAntData?.valor     ? `R$ ${Number(acordoAntData.valor).toFixed(2).replace('.', ',')}` : '—';
+      const vencimentoFmt = acordoAntData?.vencimento
+        ? format(parseISO(acordoAntData.vencimento), 'dd/MM/yyyy', { locale: ptBR })
+        : '—';
 
-      // 8. Notificar operador anterior (notificação de chat)
-      const nrLabel = (conflito.payload.nr_cliente as string) || (conflito.payload.instituicao as string) || '—';
-      const nomeNovoOp = perfil.nome ?? 'Operador';
       await criarNotificacao({
-        usuario_id: conflito.operadorId,
-        titulo: '⚠️ NR transferido pelo líder',
-        mensagem: `O NR ${nrLabel} foi transferido para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira temporariamente. Detalhes: Valor R$ ${acordoAntData?.valor ?? '—'} | Vencimento ${acordoAntData?.vencimento ?? '—'}.`,
-        empresa_id: empresa.id,
+        usuario_id:  conflito.operadorId,
+        titulo:      '⚠️ NR transferido pelo líder',
+        mensagem:
+          `O NR ${nrLogLabel} foi transferido para ${nomeNovoOp} ` +
+          `com autorização de ${liderPerfil.nome}. ` +
+          `Seu acordo foi movido para a lixeira temporariamente. ` +
+          `Detalhes: Valor ${valorFmt} | Vencimento ${vencimentoFmt}.`,
+        empresa_id:  empresa.id,
       });
 
+      // Finalizar
       onSaved(inserido);
       toast.success('Transferência autorizada! Acordo registrado com sucesso.');
       setConflito(null);
@@ -362,19 +604,32 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
     }
   }
 
-  // ────────────────────────────────────────────────────────────────────────
-  /* Render PaguePay */
+  // ── Helpers de reset do modal de conflito ─────────────────────────────────
+  function cancelarConflito() {
+    setConflito(null);
+    setLiderEmail('');
+    setLiderSenha('');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  //  RENDER — PaguePay
+  // ─────────────────────────────────────────────────────────────────────────
   if (isPaguePlay) {
     return (
       <>
         <tr className="bg-primary/5 border-b-2 border-primary/30">
           <td colSpan={colSpan} className="px-4 py-4">
             <div className="space-y-4">
+
+              {/* Cabeçalho */}
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Save className="w-4 h-4 text-primary" /> Novo Acordo
                 </p>
-                <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onCancel} disabled={salvando}>
+                <Button
+                  variant="ghost" size="icon" className="w-7 h-7"
+                  onClick={onCancel} disabled={salvando}
+                >
                   <X className="w-4 h-4" />
                 </Button>
               </div>
@@ -385,23 +640,37 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                   <DollarSign className="w-3 h-3" /> Dados Principais
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Inscrição = NR único para PaguePay */}
                   <div className="space-y-1">
                     <Label className="text-xs">Inscrição *</Label>
-                    <Input value={instituicao} onChange={e => setInstituicao(e.target.value)}
-                      placeholder="Número de inscrição" className="h-8 text-xs" />
+                    <Input
+                      value={instituicao}
+                      onChange={(e) => setInstituicao(e.target.value)}
+                      placeholder="Número de inscrição"
+                      className="h-8 text-xs"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Valor *</Label>
-                    <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
-                      placeholder="0,00" className="h-8 text-xs font-mono" />
+                    <Input
+                      value={valorStr}
+                      onChange={(e) => setValorStr(e.target.value)}
+                      placeholder="0,00"
+                      className="h-8 text-xs font-mono"
+                    />
                   </div>
-                  <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
+                  <DatePickerField
+                    label="Vencimento" required
+                    value={vencimento} onChange={setVencimento}
+                  />
                   <div className="space-y-1">
                     <Label className="text-xs">Estado</Label>
                     <Select value={estadoSel} onValueChange={setEstadoSel}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="UF" /></SelectTrigger>
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="UF" />
+                      </SelectTrigger>
                       <SelectContent>
-                        {(ESTADOS_BRASIL as string[]).map(uf => (
+                        {(ESTADOS_BRASIL as string[]).map((uf) => (
                           <SelectItem key={uf} value={uf}>{uf}</SelectItem>
                         ))}
                       </SelectContent>
@@ -421,16 +690,31 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     <Select value={tipo} onValueChange={handleChangeTipo}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {TIPOS_PAGUEPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                        {TIPOS_PAGUEPLAY.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Parcelas {!temParcelas && <span className="text-muted-foreground/50 font-normal">(não se aplica)</span>}</Label>
-                    <Select value={parcelasStr} onValueChange={setParcelasStr} disabled={!temParcelas}>
+                    <Label className="text-xs">
+                      Parcelas{' '}
+                      {!temParcelas && (
+                        <span className="text-muted-foreground/50 font-normal">(não se aplica)</span>
+                      )}
+                    </Label>
+                    <Select
+                      value={parcelasStr}
+                      onValueChange={setParcelasStr}
+                      disabled={!temParcelas}
+                    >
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {PARCELAS_PP.map(n => <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>)}
+                        {PARCELAS_PP.map((n) => (
+                          <SelectItem key={n} value={String(n)}>
+                            {n === 1 ? '1 (à vista)' : `${n}x`}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -439,7 +723,9 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                     <Select value={status} onValueChange={setStatus}>
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                        {STATUS_OPTIONS.map((s) => (
+                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -455,35 +741,59 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <div className="space-y-1 sm:col-span-2">
                     <Label className="text-xs">Nome Completo</Label>
-                    <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
-                      placeholder="Nome do profissional" className="h-8 text-xs" />
+                    <Input
+                      value={nomeCliente}
+                      onChange={(e) => setNomeCliente(e.target.value)}
+                      placeholder="Nome do profissional"
+                      className="h-8 text-xs"
+                    />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">CPF</Label>
-                    <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
-                      placeholder="000.000.000-00" className="h-8 text-xs font-mono" />
+                    <Input
+                      value={nrCliente}
+                      onChange={(e) => setNrCliente(e.target.value)}
+                      placeholder="000.000.000-00"
+                      className="h-8 text-xs font-mono"
+                    />
                   </div>
                 </div>
               </div>
 
-              {/* Link */}
+              {/* Link do Acordo */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
                   <Link2 className="w-3 h-3" /> Link do Acordo
                   <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
                 </p>
-                <Textarea value={link} onChange={e => setLink(e.target.value)}
-                  placeholder="Cole aqui o link do acordo..." className="text-xs resize-none" rows={2} />
+                <Textarea
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="Cole aqui o link do acordo..."
+                  className="text-xs resize-none"
+                  rows={2}
+                />
               </div>
 
+              {/* Ações */}
               <div className="flex items-center gap-2 pt-1">
-                <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                  onClick={salvar} disabled={salvando}>
+                <Button
+                  size="sm"
+                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={salvar}
+                  disabled={salvando}
+                >
                   <Save className="w-3.5 h-3.5" />
                   {salvando ? 'Salvando...' : 'Salvar Acordo'}
                 </Button>
-                <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
+                <Button
+                  variant="outline" size="sm"
+                  onClick={onCancel} disabled={salvando}
+                >
+                  Cancelar
+                </Button>
               </div>
+
             </div>
           </td>
         </tr>
@@ -496,23 +806,30 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
           onEmailChange={setLiderEmail}
           onSenhaChange={setLiderSenha}
           onAutorizar={autorizarTransferencia}
-          onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+          onCancel={cancelarConflito}
         />
       </>
     );
   }
 
-  /* Render Bookplay */
+  // ─────────────────────────────────────────────────────────────────────────
+  //  RENDER — Bookplay
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <>
       <tr className="bg-primary/5 border-b-2 border-primary/30">
         <td colSpan={colSpan} className="px-4 py-4">
           <div className="space-y-4">
+
+            {/* Cabeçalho */}
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Save className="w-4 h-4 text-primary" /> Novo Acordo
               </p>
-              <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onCancel} disabled={salvando}>
+              <Button
+                variant="ghost" size="icon" className="w-7 h-7"
+                onClick={onCancel} disabled={salvando}
+              >
                 <X className="w-4 h-4" />
               </Button>
             </div>
@@ -523,20 +840,33 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 <Hash className="w-3 h-3" /> Dados Principais
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {/* NR = NR único para Bookplay */}
                 <div className="space-y-1">
                   <Label className="text-xs">NR</Label>
-                  <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)}
-                    placeholder="Número NR" className="h-8 text-xs font-mono" />
+                  <Input
+                    value={nrCliente}
+                    onChange={(e) => setNrCliente(e.target.value)}
+                    placeholder="Número NR"
+                    className="h-8 text-xs font-mono"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Vencimento *</Label>
-                  <input type="date" value={vencimento} onChange={e => setVencimento(e.target.value)}
-                    className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+                  <input
+                    type="date"
+                    value={vencimento}
+                    onChange={(e) => setVencimento(e.target.value)}
+                    className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>
-                  <Input value={valorStr} onChange={e => setValorStr(e.target.value)}
-                    placeholder="0,00" className="h-8 text-xs font-mono" />
+                  <Input
+                    value={valorStr}
+                    onChange={(e) => setValorStr(e.target.value)}
+                    placeholder="0,00"
+                    className="h-8 text-xs font-mono"
+                  />
                 </div>
               </div>
             </div>
@@ -550,20 +880,30 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 <div className="space-y-1 col-span-2">
                   <Label className="text-xs">Nome do Cliente</Label>
-                  <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)}
-                    placeholder="Nome completo" className="h-8 text-xs" />
+                  <Input
+                    value={nomeCliente}
+                    onChange={(e) => setNomeCliente(e.target.value)}
+                    placeholder="Nome completo"
+                    className="h-8 text-xs"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">WhatsApp</Label>
-                  <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)}
-                    placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
+                  <Input
+                    value={whatsapp}
+                    onChange={(e) => setWhatsapp(e.target.value)}
+                    placeholder="(11) 99999-9999"
+                    className="h-8 text-xs font-mono"
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Instituição</Label>
                   <Select value={instituicao} onValueChange={setInstituicao}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
                     <SelectContent>
-                      {(INSTITUICOES_OPTIONS as { value: string; label: string }[]).map(opt => (
+                      {(INSTITUICOES_OPTIONS as { value: string; label: string }[]).map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -583,15 +923,21 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                   <Select value={tipo} onValueChange={handleChangeTipo}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {TIPOS_BOOKPLAY.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+                      {TIPOS_BOOKPLAY.map((t) => (
+                        <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
                 {temParcelas && (
                   <div className="space-y-1">
                     <Label className="text-xs">Parcelas</Label>
-                    <Input type="number" min={1} max={60} value={parcelasStr}
-                      onChange={e => setParcelasStr(e.target.value)} className="h-8 text-xs font-mono" />
+                    <Input
+                      type="number" min={1} max={60}
+                      value={parcelasStr}
+                      onChange={(e) => setParcelasStr(e.target.value)}
+                      className="h-8 text-xs font-mono"
+                    />
                   </div>
                 )}
                 <div className="space-y-1">
@@ -599,7 +945,9 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                   <Select value={status} onValueChange={setStatus}>
                     <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                      {STATUS_OPTIONS.map((s) => (
+                        <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -612,18 +960,34 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
                 <FileText className="w-3 h-3" /> Observações
                 <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
               </p>
-              <Textarea value={observacoes} onChange={e => setObservacoes(e.target.value)}
-                placeholder="Observações opcionais..." className="text-xs resize-none" rows={2} />
+              <Textarea
+                value={observacoes}
+                onChange={(e) => setObservacoes(e.target.value)}
+                placeholder="Observações opcionais..."
+                className="text-xs resize-none"
+                rows={2}
+              />
             </div>
 
+            {/* Ações */}
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={salvar} disabled={salvando}>
+              <Button
+                size="sm"
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={salvar}
+                disabled={salvando}
+              >
                 <Save className="w-3.5 h-3.5" />
                 {salvando ? 'Salvando...' : 'Salvar Acordo'}
               </Button>
-              <Button variant="outline" size="sm" onClick={onCancel} disabled={salvando}>Cancelar</Button>
+              <Button
+                variant="outline" size="sm"
+                onClick={onCancel} disabled={salvando}
+              >
+                Cancelar
+              </Button>
             </div>
+
           </div>
         </td>
       </tr>
@@ -636,104 +1000,10 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         onEmailChange={setLiderEmail}
         onSenhaChange={setLiderSenha}
         onAutorizar={autorizarTransferencia}
-        onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+        onCancel={cancelarConflito}
       />
     </>
   );
 }
 
-// ─── Modal de Autorização (componente reutilizável) ──────────────────────────
-interface ModalAutorizacaoNRProps {
-  conflito: ConflitNR | null;
-  liderEmail: string;
-  liderSenha: string;
-  autorizando: boolean;
-  onEmailChange: (v: string) => void;
-  onSenhaChange: (v: string) => void;
-  onAutorizar: () => void;
-  onCancel: () => void;
-}
-
-export function ModalAutorizacaoNR({
-  conflito, liderEmail, liderSenha, autorizando,
-  onEmailChange, onSenhaChange, onAutorizar, onCancel,
-}: ModalAutorizacaoNRProps) {
-  const nrLabel = conflito
-    ? ((conflito.payload.nr_cliente as string) || (conflito.payload.instituicao as string) || '—')
-    : '—';
-
-  return (
-    <Dialog open={!!conflito} onOpenChange={open => { if (!open) onCancel(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-warning">
-            <AlertTriangle className="w-5 h-5" />
-            NR já agendado por outro operador
-          </DialogTitle>
-          <DialogDescription asChild>
-            <div className="space-y-2 pt-1">
-              <p className="text-sm text-foreground/80">
-                O NR <strong className="font-mono text-foreground">{nrLabel}</strong> já possui um agendamento
-                com o operador{' '}
-                <strong className="text-foreground">{conflito?.operadorNome ?? '—'}</strong>.
-              </p>
-              <p className="text-sm text-foreground/80">
-                Será possível registrar após autorização de um <strong>líder ou administrador</strong>.
-              </p>
-              <div className="rounded-lg bg-warning/10 border border-warning/30 p-3 text-xs text-warning-foreground/80 space-y-1">
-                <p className="font-semibold text-warning">⚠️ Atenção</p>
-                <p>O acordo anterior será <strong>excluído da lista</strong> do operador atual e movido para a <strong>lixeira temporária</strong>. O operador receberá uma notificação.</p>
-              </div>
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center gap-2 border-t border-border pt-3">
-            <Shield className="w-4 h-4 text-primary shrink-0" />
-            <p className="text-sm font-semibold">Autorizaçāo do Líder</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">E-mail do Líder / Admin</Label>
-            <Input
-              type="email"
-              placeholder="lider@empresa.com"
-              value={liderEmail}
-              onChange={e => onEmailChange(e.target.value)}
-              className="h-9 text-sm"
-              disabled={autorizando}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Senha</Label>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              value={liderSenha}
-              onChange={e => onSenhaChange(e.target.value)}
-              className="h-9 text-sm"
-              disabled={autorizando}
-              onKeyDown={e => { if (e.key === 'Enter') onAutorizar(); }}
-            />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button
-              variant="outline" className="flex-1"
-              onClick={onCancel} disabled={autorizando}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1 gap-2"
-              onClick={onAutorizar}
-              disabled={autorizando || !liderEmail || !liderSenha}
-            >
-              <Shield className="w-4 h-4" />
-              {autorizando ? 'Verificando...' : 'Autorizar Transferência'}
-            </Button>
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
+export default AcordoNovoInline;
