@@ -25,15 +25,18 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
-import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon } from 'lucide-react';
+import { X, Save, User, Hash, DollarSign, FileText, Link2, CalendarIcon, Shield } from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { verificarNrDuplicado } from '@/services/acordos.service';
+import { criarNotificacao } from '@/services/notificacoes.service';
 
 // Data mínima removida — PaguePlay pode selecionar qualquer data livremente
 
@@ -134,6 +137,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   const [estadoSel,    setEstadoSel]    = useState('');
   const [link,         setLink]         = useState('');
   const [salvando,     setSalvando]     = useState(false);
+  // ── NR duplicado + autorização líder ─────────────────────────────────
+  const [nrDuplicado,   setNrDuplicado]   = useState(false);
+  const [pendingPayload, setPendingPayload] = useState<Record<string, unknown> | null>(null);
+  const [liderEmail,    setLiderEmail]    = useState('');
+  const [liderSenha,    setLiderSenha]    = useState('');
+  const [autorizando,   setAutorizando]   = useState(false);
 
   const tipos      = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
   const tipoAtual  = tipos.find(t => t.value === tipo);
@@ -148,12 +157,38 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
   // ── Validação: obrigatório apenas Dados Principais ─────────────────────
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
-    // PaguePlay: bloquear datas anteriores a 01/01/2026
-    if (isPaguePlay && vencimento < '2026-01-01') return 'A data não pode ser anterior a 01/01/2026';
     const v = parseCurrencyInput(valorStr);
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Inscrição é obrigatória';
     return null;
+  }
+
+  async function executarSalvar(payload: Record<string, unknown>) {
+    const { data: inserido, error } = await supabase
+      .from('acordos')
+      .insert(payload)
+      .select('*, perfis(id, nome, email, perfil, setor_id)')
+      .single();
+    if (error) {
+      const isColErr =
+        String(error.code) === '42703' ||
+        String(error.code) === '400'   ||
+        error.message?.toLowerCase().includes('column') ||
+        error.message?.toLowerCase().includes('unknown');
+      if (isColErr) {
+        const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
+        const { data: inseridoMin, error: e2 } = await supabase
+          .from('acordos').insert(payloadMin)
+          .select('*, perfis(id, nome, email, perfil, setor_id)').single();
+        if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return false; }
+        onSaved(inseridoMin as import('@/lib/supabase').Acordo);
+        return true;
+      }
+      toast.error(`Erro ao salvar: ${error.message}`);
+      return false;
+    }
+    onSaved(inserido as import('@/lib/supabase').Acordo);
+    return true;
   }
 
   async function salvar() {
@@ -169,17 +204,12 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
         : (observacoes.trim() || null);
 
-      // tipo real salvo no banco
       const tipoParaSalvar = tipo === 'boleto_pix' ? 'boleto' : tipo;
-
-      // Sempre gerar acordo_grupo_id (necessário para vincular reagendamentos futuros)
       const grupoId = crypto.randomUUID();
 
-      // ── Payload: APENAS 1 registro é criado aqui ────────────────────────
-      // As demais parcelas (2..N) são criadas via "Reagendar" no AcordoDetalheInline
       const payload: Record<string, unknown> = {
-        nome_cliente:    nomeCliente.trim() || '',   // NOT NULL no banco → '' em vez de null
-        nr_cliente:      nrCliente.trim()   || '',   // NOT NULL no banco → '' em vez de null
+        nome_cliente:    nomeCliente.trim() || '',
+        nr_cliente:      nrCliente.trim()   || '',
         vencimento,
         valor:           valorNum,
         tipo:            tipoParaSalvar,
@@ -195,49 +225,119 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         numero_parcela:  1,
       };
 
-      const { data: inserido, error } = await supabase
-        .from('acordos')
-        .insert(payload)
-        .select('*, perfis(id, nome, email, perfil, setor_id)')
-        .single();
-      if (error) {
-        // Fallback: se banco não tem as colunas novas ainda
-        const isColErr =
-          String(error.code) === '42703' ||
-          String(error.code) === '400'   ||
-          error.message?.toLowerCase().includes('column') ||
-          error.message?.toLowerCase().includes('unknown');
-        if (isColErr) {
-          const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
-          const { data: inseridoMin, error: e2 } = await supabase
-            .from('acordos').insert(payloadMin)
-            .select('*, perfis(id, nome, email, perfil, setor_id)').single();
-          if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return; }
-          toast.success(parcelas > 1
-            ? `Acordo criado! ${parcelas} parcelas serão gerenciadas pelo Reagendar.`
-            : 'Acordo criado com sucesso!');
-          onSaved(inseridoMin as import('@/lib/supabase').Acordo);
-          return;
-        } else {
-          toast.error(`Erro ao salvar: ${error.message}`);
-          return;
+      // ── Verificar NR duplicado ─────────────────────────────────────
+      const nrTrimmed = nrCliente.trim();
+      if (nrTrimmed) {
+        const { duplicado } = await verificarNrDuplicado(nrTrimmed, empresa.id);
+        if (duplicado) {
+          // Verificar se é de outro operador (requer autorização do líder)
+          const { data: existente } = await supabase
+            .from('acordos')
+            .select('id, operador_id')
+            .eq('nr_cliente', nrTrimmed)
+            .eq('empresa_id', empresa.id)
+            .neq('operador_id', perfil.id)
+            .limit(1);
+          if (existente && existente.length > 0) {
+            // NR pertence a outro operador → pedir autorização do líder
+            setPendingPayload(payload);
+            setNrDuplicado(true);
+            setSalvando(false);
+            return;
+          } else {
+            toast.error(`NR ${nrTrimmed} já existe nesta empresa. Não é possível criar duplicatas.`);
+            setSalvando(false);
+            return;
+          }
         }
       }
 
-      toast.success(
-        parcelas > 1
-          ? `Acordo criado! ${parcelas} parcelas serão gerenciadas pelo Reagendar.`
-          : 'Acordo criado com sucesso!'
-      );
-      onSaved(inserido as import('@/lib/supabase').Acordo);
+      const ok = await executarSalvar(payload);
+      if (ok) {
+        toast.success(parcelas > 1 ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.` : 'Acordo criado com sucesso!');
+      }
     } finally {
       setSalvando(false);
+    }
+  }
+
+  // ── Autorização do líder para NR duplicado ─────────────────────────────
+  async function autorizarLider() {
+    if (!pendingPayload) return;
+    if (!liderEmail || !liderSenha) { toast.error('Informe o email e senha do líder'); return; }
+    setAutorizando(true);
+    try {
+      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+      if (!supabaseUrl || !supabaseAnon) { toast.error('Configuração do Supabase ausente.'); return; }
+
+      const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnon },
+        body: JSON.stringify({ email: liderEmail, password: liderSenha }),
+      });
+      if (!authRes.ok) {
+        const status = authRes.status;
+        if (status === 400 || status === 401 || status === 422) toast.error('Credenciais do líder inválidas');
+        else toast.error(`Erro ao autenticar líder (${status})`);
+        return;
+      }
+      const authData = await authRes.json();
+      const liderUid = authData.user?.id as string | undefined;
+      const liderToken = authData.access_token as string | undefined;
+      if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
+
+      const perfilRes = await fetch(`${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`, {
+        headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${liderToken}` },
+      });
+      if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
+      const perfilArr = await perfilRes.json();
+      const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
+      if (!liderPerfil || !['lider', 'administrador'].includes(liderPerfil.perfil)) {
+        toast.error('O usuário informado não tem permissão de líder');
+        return;
+      }
+
+      const uid = perfil?.id ?? '';
+      const nrCliente = pendingPayload.nr_cliente as string;
+
+      // Log de transferência
+      await supabase.from('logs_sistema').insert({
+        usuario_id: uid,
+        acao: 'transferencia_nr',
+        tabela: 'acordos',
+        registro_id: null,
+        empresa_id: empresa?.id ?? null,
+        detalhes: { nr: nrCliente, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid, operador_novo: uid },
+      });
+
+      const ok = await executarSalvar(pendingPayload);
+      if (!ok) return;
+
+      // Notificação para o operador
+      criarNotificacao({
+        usuario_id: uid,
+        titulo: 'NR Autorizado pelo Líder',
+        mensagem: `O líder ${liderPerfil.nome} autorizou a tabulação do NR ${nrCliente}.`,
+        empresa_id: empresa?.id ?? null,
+      });
+
+      toast.success('NR registrado com autorização do líder');
+      setNrDuplicado(false);
+      setPendingPayload(null);
+      setLiderEmail('');
+      setLiderSenha('');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+    } finally {
+      setAutorizando(false);
     }
   }
 
   /* ─── Render PaguePay ──────────────────────────────────────────────────── */
   if (isPaguePlay) {
     return (
+      <>
       <tr className="bg-primary/5 border-b-2 border-primary/30">
         <td colSpan={colSpan} className="px-4 py-4">
           <div className="space-y-4">
@@ -375,12 +475,47 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
           </div>
         </td>
       </tr>
+
+      {/* Dialog autorização líder — PaguePay */}
+      <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-warning" />
+              NR já vinculado
+            </DialogTitle>
+            <DialogDescription>
+              Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Email do Líder</Label>
+              <Input type="email" placeholder="lider@empresa.com" value={liderEmail}
+                onChange={e => setLiderEmail(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Senha do Líder</Label>
+              <Input type="password" placeholder="••••••••" value={liderSenha}
+                onChange={e => setLiderSenha(e.target.value)} className="h-9 text-sm" />
+            </div>
+            <div className="flex gap-2 pt-1">
+              <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>Cancelar</Button>
+              <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
+                <Shield className="w-4 h-4" />{autorizando ? 'Verificando...' : 'Autorizar'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
     );
   }
 
   /* ─── Render Bookplay ──────────────────────────────────────────────────── */
   return (
-    <tr className="bg-primary/5 border-b-2 border-primary/30">
+    <>
+      <tr className="bg-primary/5 border-b-2 border-primary/30">
       <td colSpan={colSpan} className="px-4 py-4">
         <div className="space-y-4">
 
@@ -504,5 +639,42 @@ export function AcordoNovoInline({ isPaguePlay, colSpan, onSaved, onCancel }: Ac
         </div>
       </td>
     </tr>
+
+    {/* ── Dialog autorização líder (NR duplicado) ── */}
+    <Dialog open={nrDuplicado} onOpenChange={open => { if (!open) { setNrDuplicado(false); setPendingPayload(null); } }}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Shield className="w-5 h-5 text-warning" />
+            NR já vinculado
+          </DialogTitle>
+          <DialogDescription>
+            Este NR já está vinculado a outro operador. Para prosseguir, solicite autorização do líder.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Email do Líder</Label>
+            <Input type="email" placeholder="lider@empresa.com" value={liderEmail}
+              onChange={e => setLiderEmail(e.target.value)} className="h-9 text-sm" />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Senha do Líder</Label>
+            <Input type="password" placeholder="••••••••" value={liderSenha}
+              onChange={e => setLiderSenha(e.target.value)} className="h-9 text-sm" />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button variant="outline" className="flex-1" onClick={() => { setNrDuplicado(false); setPendingPayload(null); }}>
+              Cancelar
+            </Button>
+            <Button className="flex-1 gap-2" onClick={autorizarLider} disabled={autorizando}>
+              <Shield className="w-4 h-4" />
+              {autorizando ? 'Verificando...' : 'Autorizar'}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
   );
 }

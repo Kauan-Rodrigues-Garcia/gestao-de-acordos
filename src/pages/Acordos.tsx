@@ -73,8 +73,8 @@ export default function Acordos() {
   const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
-  const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos'>(
-    (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos'
+  const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
+    (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'analitico'
   );
 
   // Mapa operadorId → nome
@@ -119,8 +119,11 @@ export default function Acordos() {
   }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
+  // Analítico = apenas acordos ativos (excluindo pago e nao_pago)
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus
+    : activeTab === 'analitico'
+    ? undefined  // sem filtro de status fixo — o filtro extra é feito no front
     : activeTab === 'pagos'
     ? 'pago'
     : activeTab === 'nao_pagos'
@@ -389,6 +392,15 @@ export default function Acordos() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
+  // Analítico: apenas acordos que NÃO são pago nem nao_pago
+  const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
+  const acordosParaExibir = useMemo(() => {
+    if (activeTab === 'analitico') {
+      return acordos.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
+    }
+    return acordos;
+  }, [acordos, activeTab]);
+
   return (
     <div className="p-6">
       <div className="max-w-[1400px] mx-auto">
@@ -486,9 +498,10 @@ export default function Acordos() {
         {/* ── Tabs ── */}
         <div className="flex items-center gap-1 mb-4 border-b border-border">
           {([
-            { key: 'todos',    label: 'Todos' },
-            { key: 'pagos',    label: 'Pagos / Quitados' },
-            { key: 'nao_pagos', label: 'Não Pagos' },
+            { key: 'analitico',  label: '📊 Analítico' },
+            { key: 'todos',      label: 'Todos' },
+            { key: 'pagos',      label: 'Pagos / Quitados' },
+            { key: 'nao_pagos',  label: 'Não Pagos' },
           ] as const).map(tab => (
             <button
               key={tab.key}
@@ -610,7 +623,7 @@ export default function Acordos() {
                         onCancel={() => setNovoInlineAberto(false)}
                       />
                     )}
-                    {acordos.length === 0 ? (
+                    {acordosParaExibir.length === 0 ? (
                       <tr>
                         <td colSpan={10} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
@@ -620,7 +633,7 @@ export default function Acordos() {
                           </div>
                         </td>
                       </tr>
-                    ) : acordos.map((a, i) => {
+                    ) : acordosParaExibir.map((a, i) => {
                       const atrasado  = isAtrasado(a.vencimento, a.status);
                       const venceHoje = a.vencimento === hoje;
                       const sel       = selecionados.includes(a.id);

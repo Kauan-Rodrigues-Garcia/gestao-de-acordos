@@ -172,7 +172,15 @@ export function ModalFilaWhatsApp({
               </Button>
             ) : (
               <>
-                <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90 text-white">
+                <Button
+                  onClick={abrirProximo}
+                  className="flex-1 gap-2 text-white font-semibold shadow-md relative overflow-hidden"
+                  style={{
+                    background: 'linear-gradient(135deg, #16a34a 0%, #15803d 50%, #166534 100%)',
+                    boxShadow: '0 2px 12px rgba(22,163,74,0.35), inset 0 1px 0 rgba(255,255,255,0.15)',
+                    border: '1px solid rgba(22,163,74,0.6)',
+                  }}
+                >
                   <Send className="w-4 h-4" />
                   Abrir próximo
                   <Badge variant="secondary" className="ml-1 bg-white/20 text-white border-0">{restantes}</Badge>
