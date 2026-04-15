@@ -167,11 +167,20 @@ export function calcularMetricasMes(acordos: Acordo[]): MetricasMes {
   };
 }
 
-/** Verifica se um NR já existe para a empresa, ignorando acordos com status nao_pago */
+/**
+ * Verifica se um NR já existe para a empresa em acordos ATIVOS (pendente ou pago).
+ * Acordos com status `nao_pago` são considerados inativos e NÃO bloqueiam o NR.
+ *
+ * @param nr           - Valor do NR a verificar (nr_cliente para Bookplay, instituicao para PaguePay)
+ * @param empresaId    - ID da empresa
+ * @param campo        - Coluna a verificar: 'nr_cliente' (Bookplay) | 'instituicao' (PaguePay)
+ * @param acordoIdExcluir - ID do acordo atual a ignorar (útil na edição)
+ */
 export async function verificarNrDuplicado(
-  nrCliente: string,
+  nr: string,
   empresaId: string,
-  acordoIdExcluir?: string
+  acordoIdExcluirOuCampo?: string,
+  campoParam?: 'nr_cliente' | 'instituicao'
 ): Promise<{
   duplicado: boolean;
   statusExistente?: string;
@@ -179,12 +188,20 @@ export async function verificarNrDuplicado(
   operadorIdExistente?: string;
   operadorNomeExistente?: string;
 }> {
-  if (!nrCliente?.trim()) return { duplicado: false };
+  if (!nr?.trim()) return { duplicado: false };
+
+  // Compatibilidade retroativa: se o 3º argumento parecer um UUID, é o acordoIdExcluir
+  // Se não for UUID, é o campo (forma antiga da assinatura nunca usou campo como 3º arg,
+  // mas garantimos via campoParam explícito).
+  const acordoIdExcluir = acordoIdExcluirOuCampo ?? undefined;
+  const campo: 'nr_cliente' | 'instituicao' = campoParam ?? 'nr_cliente';
+
+  const colSelect = `id, status, operador_id, ${campo}, perfis(nome)`;
 
   let query = supabase
     .from('acordos')
-    .select('id, status, operador_id, perfis(nome)')
-    .eq('nr_cliente', nrCliente.trim())
+    .select(colSelect)
+    .eq(campo, nr.trim())
     .eq('empresa_id', empresaId)
     .neq('status', 'nao_pago')   // acordos não-pagos NÃO bloqueiam reutilização do NR
     .limit(1);
@@ -209,28 +226,36 @@ export async function verificarNrDuplicado(
 
 /**
  * Verifica um lote de NRs em uma única query — usado na importação em massa.
- * Retorna um Map: nr_cliente → { acordoId, operadorId, operadorNome }
- * Apenas NRs com status diferente de 'nao_pago' são considerados duplicados.
+ * Retorna um Map: nr → { acordoId, operadorId, operadorNome }
+ * Apenas acordos ativos (status ≠ nao_pago) são considerados duplicados.
+ *
+ * @param nrs      - Lista de NRs a verificar
+ * @param empresaId
+ * @param campo    - Coluna: 'nr_cliente' (Bookplay, padrão) | 'instituicao' (PaguePay)
  */
 export async function verificarNrsDuplicadosEmLote(
   nrs: string[],
-  empresaId: string
+  empresaId: string,
+  campo: 'nr_cliente' | 'instituicao' = 'nr_cliente'
 ): Promise<Map<string, { acordoId: string; operadorId: string; operadorNome: string }>> {
   const resultado = new Map<string, { acordoId: string; operadorId: string; operadorNome: string }>();
   const nrsTrimados = [...new Set(nrs.map(n => n.trim()).filter(Boolean))];
   if (!nrsTrimados.length) return resultado;
 
+  const colSelect = `id, ${campo}, operador_id, perfis(nome)`;
+
   const { data } = await supabase
     .from('acordos')
-    .select('id, nr_cliente, operador_id, perfis(nome)')
+    .select(colSelect)
     .eq('empresa_id', empresaId)
     .neq('status', 'nao_pago')
-    .in('nr_cliente', nrsTrimados);
+    .in(campo, nrsTrimados);
 
   if (data) {
     for (const item of data as any[]) {
-      if (item.nr_cliente) {
-        resultado.set(item.nr_cliente.trim(), {
+      const val = item[campo];
+      if (val) {
+        resultado.set(val.trim(), {
           acordoId: item.id,
           operadorId: item.operador_id,
           operadorNome: item.perfis?.nome ?? 'Operador desconhecido',

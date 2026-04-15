@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
-import { ROUTE_PATHS, formatDate, formatCurrency } from '@/lib/index';
+import { ROUTE_PATHS, formatDate, formatCurrency, isPaguePlay } from '@/lib/index';
 import { safeNum } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -1201,7 +1201,7 @@ interface ResultadoImportacao {
 
 export default function ImportarExcel() {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   const navigate   = useNavigate();
   const inputRef   = useRef<HTMLInputElement>(null);
   const rawRowsRef = useRef<unknown[][] | null>(null);
@@ -1415,26 +1415,36 @@ export default function ImportarExcel() {
     const errosMsgs: string[] = [];
 
     // ── Validação de NR duplicado em lote (antes de inserir qualquer coisa) ──
+    // PaguePay: NR único = campo "instituicao" | Bookplay: campo "nr_cliente"
     if (empresa?.id) {
-      const todosNrs = aImportar.map(r => r.nr_cliente).filter(Boolean);
-      const duplicados = await verificarNrsDuplicadosEmLote(todosNrs, empresa.id);
+      const ehPaguePay = isPaguePlay(tenantSlug);
+      const campoNr: 'nr_cliente' | 'instituicao' = ehPaguePay ? 'instituicao' : 'nr_cliente';
+      const labelNr = ehPaguePay ? 'Inscrição' : 'NR';
+
+      const todosNrs = aImportar
+        .map(r => (ehPaguePay ? r.instituicao : r.nr_cliente))
+        .filter(Boolean) as string[];
+
+      const duplicados = await verificarNrsDuplicadosEmLote(todosNrs, empresa.id, campoNr);
 
       if (duplicados.size > 0) {
         const nrsList = [...duplicados.keys()].join(', ');
         const qtd = duplicados.size;
         toast.error(
-          `${qtd} NR(s) já existem na empresa e serão ignorados: ${nrsList.substring(0, 120)}${nrsList.length > 120 ? '…' : ''}`,
+          `${qtd} ${labelNr}(s) já existem e serão ignorados: ${nrsList.substring(0, 120)}${nrsList.length > 120 ? '…' : ''}`,
           { duration: 8000 }
         );
-        // Remover duplicados da lista a importar (ignorar silenciosamente)
-        const filtrados = aImportar.filter(r => !duplicados.has(r.nr_cliente?.trim() ?? ''));
+        // Remover duplicados — comparar pelo campo correto
+        const filtrados = aImportar.filter(r => {
+          const val = (ehPaguePay ? r.instituicao : r.nr_cliente)?.trim() ?? '';
+          return !duplicados.has(val);
+        });
         if (filtrados.length === 0) {
-          toast.error('Todos os NRs já existem. Nenhum registro foi importado.');
+          toast.error(`Todos os ${labelNr}s já existem. Nenhum registro foi importado.`);
           setImportando(false);
           return;
         }
         toast.info(`Importando ${filtrados.length} registro(s) sem conflito.`);
-        // Substituir lista para importar apenas os sem conflito
         aImportar.length = 0;
         aImportar.push(...filtrados);
       }

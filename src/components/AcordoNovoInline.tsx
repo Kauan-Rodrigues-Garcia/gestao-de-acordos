@@ -403,22 +403,29 @@ export function AcordoNovoInline({
       };
 
       // ── LÓGICA DE NR ÚNICO (CRÍTICA) ──────────────────────────────────────
-      //   PaguePay → NR único = "Inscrição" (instituicao)
-      //   Bookplay → NR único = "NR"         (nr_cliente)
+      //   PaguePay → NR único = "Inscrição" (campo: instituicao)
+      //   Bookplay → NR único = "NR"         (campo: nr_cliente)
+      const campoCampo: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPaguePlay
         ? instituicao.trim()
         : nrCliente.trim();
 
       if (nrParaVerificar) {
-        const check = await verificarNrDuplicado(nrParaVerificar, empresa.id);
+        const check = await verificarNrDuplicado(
+          nrParaVerificar,
+          empresa.id,
+          undefined,        // acordoIdExcluir (novo = sem id)
+          campoCampo,       // campo correto para cada sistema
+        );
 
         if (check.duplicado) {
           if (
             check.operadorIdExistente &&
             check.operadorIdExistente === perfil.id
           ) {
-            // Pertence ao próprio operador → bloquear
-            toast.error(`NR ${nrParaVerificar} já existe na sua lista de acordos.`);
+            // Pertence ao próprio operador → bloquear com mensagem clara
+            const label = isPaguePlay ? 'Inscrição' : 'NR';
+            toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
           }
 
@@ -433,10 +440,10 @@ export function AcordoNovoInline({
               operadorNome: check.operadorNomeExistente ?? 'Operador desconhecido',
               payload,
             });
-            return; // NÃO salvar agora
+            return; // NÃO salvar agora — aguardar autorização do modal
           }
         }
-        // check.duplicado === false → segue para salvar
+        // check.duplicado === false → NR livre, segue para salvar
       }
 
       const inserido = await executarSalvar(payload);

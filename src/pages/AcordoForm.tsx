@@ -224,14 +224,16 @@ export default function AcordoForm() {
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
       // ── Verificar NR duplicado (ignora nao_pago) ──────────────────────────
-      // IMPORTANTE: PaguePay usa "Inscrição" (instituicao) como NR único
-      //             Bookplay usa "nr_cliente" como NR único
+      // PaguePay: NR único = campo "Inscrição" (instituicao)
+      // Bookplay:  NR único = campo "NR" (nr_cliente)
+      const campoCampo: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPP
-        ? (data.instituicao ?? '').trim()   // PaguePay: Inscrição = NR
-        : nrTrimmed;                         // Bookplay: nr_cliente = NR
+        ? (data.instituicao ?? '').trim()
+        : nrTrimmed;
 
+      // Para edição: rastrear o NR original do mesmo campo
       const nrOriginal = isPP
-        ? null  // edição de PaguePay: não rastrear nr original (campo diferente)
+        ? null  // PaguePay: campo diferente, sempre re-verifica
         : nrOriginalEdit;
 
       const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
@@ -240,13 +242,15 @@ export default function AcordoForm() {
         const check = await verificarNrDuplicado(
           nrParaVerificar,
           empresa.id,
-          isEdit ? id : undefined
+          isEdit ? id : undefined,  // ignorar o próprio acordo na edição
+          campoCampo,               // verificar no campo certo
         );
         if (check.duplicado) {
           const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== uid;
           if (!pertenceAOutro) {
-            // Próprio operador já tem esse NR
-            toast.error(`NR ${nrParaVerificar} já existe na sua lista de acordos.`);
+            // Próprio operador já tem esse NR ativo → bloquear
+            const label = isPP ? 'Inscrição' : 'NR';
+            toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             setLoading(false);
             return;
           }
