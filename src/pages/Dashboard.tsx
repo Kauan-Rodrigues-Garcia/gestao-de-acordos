@@ -129,6 +129,11 @@ export default function Dashboard() {
   const [filtroTipo,   setFiltroTipo]   = useState(searchParams.get('tipo')   || '');
   const [filtroData,   setFiltroData]   = useState(searchParams.get('data')   || '');
   const [currentPage,  setCurrentPage]  = useState(Number(searchParams.get('page')) || 1);
+  // Filtros de coluna (client-side, PaguePay)
+  const [colFiltroEstado,  setColFiltroEstado]  = useState('');
+  const [colFiltroVenc,    setColFiltroVenc]    = useState('');
+  const [colFiltroPag,     setColFiltroPag]     = useState('');
+  const [colFiltroStatus,  setColFiltroStatus]  = useState('');
   const [activeTab, setActiveTab]       = useState<'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
@@ -191,16 +196,22 @@ export default function Dashboard() {
     [acordosHoje, hoje],
   );
 
-  // PaguePlay: reordenar acordos com vencimento hoje primeiro (destaque na tabela)
+  // PaguePlay: reordenar e filtrar acordos com filtros de coluna
   const acordosOrdenados = useMemo(() => {
     if (!isPP) return acordos;
     const hoje_ = hoje;
-    return [...acordos].sort((a, b) => {
+    let lista = [...acordos].sort((a, b) => {
       const aHoje = a.vencimento === hoje_ && a.status !== 'pago' ? 0 : 1;
       const bHoje = b.vencimento === hoje_ && b.status !== 'pago' ? 0 : 1;
       return aHoje - bHoje;
     });
-  }, [acordos, hoje, isPP]);
+    // Filtros de coluna client-side
+    if (colFiltroEstado)  lista = lista.filter(a => (extractEstado(a.observacoes) || '').toLowerCase().includes(colFiltroEstado.toLowerCase()));
+    if (colFiltroVenc)    lista = lista.filter(a => a.vencimento.startsWith(colFiltroVenc.substring(0, 7))); // filtra por mês selecionado
+    if (colFiltroPag)     lista = lista.filter(a => a.tipo === colFiltroPag);
+    if (colFiltroStatus)  lista = lista.filter(a => a.status === colFiltroStatus);
+    return lista;
+  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroVenc, colFiltroPag, colFiltroStatus]);
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
@@ -296,7 +307,7 @@ export default function Dashboard() {
     else setSelecionados(acordos.map(a => a.id));
   }
 
-  async function confirmarReagendamentoDash(data: string, valor: number) {
+  async function confirmarReagendamentoDash(data: string, valor: number, modoTodas?: boolean) {
     const p = reagendarAcordoTabela;
     if (!p) return;
     const nova = {
@@ -718,12 +729,62 @@ export default function Dashboard() {
                             />
                           </th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
+                            <div className="flex flex-col gap-1">
+                              <span>ESTADO</span>
+                              <input
+                                type="text" value={colFiltroEstado}
+                                onChange={e => setColFiltroEstado(e.target.value)}
+                                placeholder="filtrar…"
+                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </div>
+                          </th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
+                            <div className="flex flex-col gap-1">
+                              <span>VENCIMENTO</span>
+                              <input
+                                type="month" value={colFiltroVenc}
+                                onChange={e => setColFiltroVenc(e.target.value)}
+                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                                onClick={e => e.stopPropagation()}
+                              />
+                            </div>
+                          </th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
+                            <div className="flex flex-col gap-1">
+                              <span>PAGAMENTO</span>
+                              <select
+                                value={colFiltroPag}
+                                onChange={e => setColFiltroPag(e.target.value)}
+                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <option value="">Todos</option>
+                                <option value="boleto">Boleto/PIX</option>
+                                <option value="cartao">Cartão</option>
+                              </select>
+                            </div>
+                          </th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
+                            <div className="flex flex-col gap-1">
+                              <span>STATUS</span>
+                              <select
+                                value={colFiltroStatus}
+                                onChange={e => setColFiltroStatus(e.target.value)}
+                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                                onClick={e => e.stopPropagation()}
+                              >
+                                <option value="">Todos</option>
+                                <option value="verificar_pendente">Pendente</option>
+                                <option value="pago">Pago</option>
+                                <option value="nao_pago">Não Pago</option>
+                              </select>
+                            </div>
+                          </th>
                           {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
                             <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                           )}

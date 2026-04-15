@@ -59,8 +59,12 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     load();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      load();
+    // Só recarrega em troca real de sessão (login/logout)
+    // TOKEN_REFRESHED (ao voltar para a aba) NÃO deve disparar reload
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        load();
+      }
     });
 
     return () => {

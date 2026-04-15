@@ -90,23 +90,29 @@ export function ModalReagendar({
   parcela: Acordo | null;
   open: boolean;
   onClose: () => void;
-  onConfirm: (data: string, valor: number) => Promise<void>;
+  onConfirm: (data: string, valor: number, modoTodas?: boolean) => Promise<void>;
 }) {
-  const [salvando, setSalvando] = useState(false);
+  const [salvando,  setSalvando]  = useState(false);
+  const [novaData,  setNovaData]  = useState('');
+  const [valorStr,  setValorStr]  = useState('');
+  const [modoTodas, setModoTodas] = useState(false);
 
-  // Calcula automaticamente: próximo mês, mesmo dia, mesmo valor
-  const novaData  = parcela ? addMonths(parcela.vencimento, 1) : '';
-  const novoValor = parcela?.valor ?? 0;
+  useEffect(() => {
+    if (!parcela) return;
+    setNovaData(addMonths(parcela.vencimento, 1));
+    setValorStr(parcela.valor.toFixed(2).replace('.', ','));
+    setModoTodas(false);
+  }, [parcela?.id]);
+
+  const temParcelas = (parcela?.parcelas ?? 1) > 1;
 
   async function handleConfirm() {
-    if (!novaData) return;
+    if (!novaData) { toast.error('Data obrigatória'); return; }
+    const v = parseFloat(valorStr.replace(',', '.'));
+    if (isNaN(v) || v <= 0) { toast.error('Valor inválido'); return; }
     setSalvando(true);
-    try { await onConfirm(novaData, novoValor); } finally { setSalvando(false); }
+    try { await onConfirm(novaData, v, temParcelas ? modoTodas : false); } finally { setSalvando(false); }
   }
-
-  // Formatar data para exibição
-  const [ano, mes, dia] = novaData ? novaData.split('-') : ['', '', ''];
-  const dataFormatada = novaData ? `${dia}/${mes}/${ano}` : '';
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -114,34 +120,61 @@ export function ModalReagendar({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-success">
             <CheckCircle2 className="w-4 h-4" />
-            Confirmar Reagendamento
+            Reagendar Próximo Pagamento
           </DialogTitle>
         </DialogHeader>
         <div className="py-3 space-y-3">
-          <p className="text-sm text-muted-foreground">
-            O próximo pagamento de{' '}
+          <p className="text-sm text-muted-foreground text-xs">
+            Próximo pagamento de{' '}
             <span className="font-semibold text-foreground">
               {parcela?.instituicao || parcela?.nome_cliente || parcela?.nr_cliente}
-            </span>{' '}
-            será agendado automaticamente para:
+            </span>
           </p>
-          <div className="flex items-center gap-4 bg-success/10 border border-success/30 rounded-lg px-4 py-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Nova data</p>
-              <p className="text-base font-bold font-mono text-success">{dataFormatada}</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nova data *</label>
+              <input type="date" value={novaData} onChange={e => setNovaData(e.target.value)}
+                className="w-full h-9 text-sm bg-background border border-input rounded-md px-3 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
-            <div className="border-l border-success/30 pl-4">
-              <p className="text-xs text-muted-foreground">Valor</p>
-              <p className="text-base font-bold font-mono text-foreground">
-                {novoValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Valor (R$) *</label>
+              <input type="text" value={valorStr} onChange={e => setValorStr(e.target.value)}
+                className="w-full h-9 text-sm bg-background border border-input rounded-md px-3 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
           </div>
+          {temParcelas && (
+            <div className="flex gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setModoTodas(false)}
+                className={cn(
+                  'flex-1 text-xs py-1.5 rounded-md border transition-colors',
+                  !modoTodas
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:bg-accent'
+                )}
+              >
+                Só esta parcela
+              </button>
+              <button
+                type="button"
+                onClick={() => setModoTodas(true)}
+                className={cn(
+                  'flex-1 text-xs py-1.5 rounded-md border transition-colors',
+                  modoTodas
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:bg-accent'
+                )}
+              >
+                Todas as parcelas
+              </button>
+            </div>
+          )}
           <p className="text-xs text-muted-foreground">
-            O acordo atual (pago) será mantido no histórico e o novo será criado como pendente.
+            O acordo atual (pago) é mantido no histórico. O novo será criado como pendente.
           </p>
         </div>
-        <DialogDescription className="sr-only">Confirme o reagendamento automático</DialogDescription>
+        <DialogDescription className="sr-only">Reagendar próximo pagamento</DialogDescription>
         <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={salvando}>Cancelar</Button>
           <Button
@@ -160,7 +193,7 @@ export function ModalReagendar({
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4" />
-                Confirmar Reagendamento
+                Confirmar
               </>
             )}
           </Button>
