@@ -36,6 +36,30 @@ import {
   extractEstado, extractLinkAcordo, isAtrasado,
 } from '@/lib/index';
 
+// ── Labels locais (evita TDZ em bundles concatenados) ────────────────────────
+const _TIPO_LABELS_PP: Record<string, string> = {
+  boleto: 'Boleto / PIX',
+  cartao: 'Cartão de Crédito',
+  pix: 'Boleto / PIX',
+};
+const _TIPO_LABELS_BK: Record<string, string> = {
+  boleto: 'Boleto',
+  cartao_recorrente: 'Cartão Recorrente',
+  pix_automatico: 'Pix automático',
+  cartao: 'Cartão',
+  pix: 'Pix',
+};
+const _STATUS_LABELS_PP: Record<string, string> = {
+  verificar_pendente: 'Pendente',
+  pago: 'Pago',
+  nao_pago: 'Não Pago',
+};
+const _STATUS_LABELS_BK: Record<string, string> = {
+  verificar_pendente: 'Verificar',
+  pago: 'Pago',
+  nao_pago: 'Não Pago',
+};
+
 const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente'];
 const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
 
@@ -322,8 +346,8 @@ export function ModalEditarAcordoParcelado({
     }
   }
 
-  const STATUS_LABELS_ALL = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
-  const TIPO_LABELS_ALL   = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
+  const STATUS_LABELS_ALL = isPaguePlay ? _STATUS_LABELS_PP : _STATUS_LABELS_BK;
+  const TIPO_LABELS_ALL   = isPaguePlay ? _TIPO_LABELS_PP   : _TIPO_LABELS_BK;
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
