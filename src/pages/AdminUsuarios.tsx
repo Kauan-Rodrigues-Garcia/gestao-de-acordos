@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter, Camera, X } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Card, CardContent } from '@/components/ui/card';
@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
@@ -56,6 +56,14 @@ export default function AdminUsuarios() {
   const [moverUsuario, setMoverUsuario]     = useState<Perfil | null>(null);
   const [moverSetorId, setMoverSetorId]     = useState('');
   const [moverSaving, setMoverSaving]       = useState(false);
+  // Online/Offline via Supabase Presence
+  const [onlineIds,       setOnlineIds]       = useState<Set<string>>(new Set());
+  // Foto expandida
+  const [fotoExpandida,   setFotoExpandida]   = useState<{ url: string; nome: string } | null>(null);
+  // Upload de foto pelo líder/admin para outro operador
+  const [uploadTarget,    setUploadTarget]    = useState<Perfil | null>(null);
+  const [uploadando,      setUploadando]      = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (empresaAtual?.id) {
@@ -73,7 +81,7 @@ export default function AdminUsuarios() {
     try {
       let usersQuery = supabase
         .from('perfis')
-        .select('*, setores(id,nome), empresas(id,nome)')
+        .select('*, setores(id,nome), empresas(id,nome), foto_url')
         .order('nome');
       if (!isSuperAdmin && empresaAtual?.id) {
         usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);
@@ -85,7 +93,7 @@ export default function AdminUsuarios() {
         console.warn('[AdminUsuarios] fetchDados join error, tentando sem join de empresas:', eJoin.message);
         let fallbackQuery = supabase
           .from('perfis')
-          .select('*, setores(id,nome)')
+          .select('*, setores(id,nome), foto_url')
           .order('nome');
         if (!isSuperAdmin && empresaAtual?.id) {
           fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);
@@ -266,6 +274,23 @@ export default function AdminUsuarios() {
     }
   }
 
+  async function fazerUploadFotoParaUsuario(targetId: string, file: File) {
+    setUploadando(true);
+    try {
+      const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `avatars/${targetId}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('perfis').upload(path, file, { upsert: true });
+      if (upErr) { toast.error(`Erro no upload: ${upErr.message}`); return; }
+      const { data: { publicUrl } } = supabase.storage.from('perfis').getPublicUrl(path);
+      const urlFinal = `${publicUrl}?t=${Date.now()}`;
+      const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal } as any).eq('id', targetId);
+      if (dbErr) { toast.error(`Erro ao salvar foto: ${dbErr.message}`); return; }
+      toast.success('Foto atualizada com sucesso!');
+      setUploadTarget(null);
+      fetchDados();
+    } finally { setUploadando(false); }
+  }
+
   async function toggleAtivo(u: Perfil) {
     const { error } = await supabase.from('perfis').update({ ativo: !u.ativo }).eq('id', u.id);
     if (!error) { toast.success(u.ativo ? 'Usuário desativado' : 'Usuário ativado'); fetchDados(); }
@@ -332,14 +357,43 @@ export default function AdminUsuarios() {
                     className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-2">
-                        <Avatar className="w-7 h-7 flex-shrink-0">
-                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                            {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
-                          </AvatarFallback>
-                        </Avatar>
+                        {/* Avatar com foto real */}
+                        <div className="relative flex-shrink-0">
+                          <button
+                            type="button"
+                            className="relative"
+                            onClick={() => {
+                              const fotoUrl = u.foto_url;
+                              if (fotoUrl) setFotoExpandida({ url: fotoUrl, nome: u.nome });
+                            }}
+                            title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
+                          >
+                            <Avatar className="w-8 h-8">
+                              {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
+                              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                                {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
+                              </AvatarFallback>
+                            </Avatar>
+                          </button>
+                          {/* Indicador Online/Offline */}
+                          <span className={cn(
+                            'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background',
+                            onlineIds.has(u.id) ? 'bg-success' : 'bg-muted-foreground/40'
+                          )} title={onlineIds.has(u.id) ? 'Online' : 'Offline'} />
+                        </div>
                         <div className="min-w-0">
-                          <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
-                          {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
+                          <div className="flex items-center gap-1">
+                            <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
+                            {u.id === perfil?.id && (
+                              <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
+                            <span className={cn('text-[9px] font-medium', onlineIds.has(u.id) ? 'text-success' : 'text-muted-foreground/50')}>
+                              {onlineIds.has(u.id) ? '● Online' : '○ Offline'}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -369,6 +423,16 @@ export default function AdminUsuarios() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
+                        {/* Upload foto pelo líder/admin */}
+                        {(isAdmin || isSuperAdmin || perfil?.perfil === 'lider') && u.id !== perfil?.id && (
+                          <Button
+                            variant="ghost" size="icon" className="w-7 h-7"
+                            title="Alterar foto de perfil"
+                            onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         <Button
                           variant="ghost" size="icon" className="w-7 h-7"
                           title="Mover para outro setor"
@@ -535,6 +599,43 @@ export default function AdminUsuarios() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Input file oculto para upload de foto */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          if (!file || !uploadTarget) return;
+          await fazerUploadFotoParaUsuario(uploadTarget.id, file);
+          e.target.value = '';
+        }}
+      />
+
+      {/* Modal foto expandida */}
+      {fotoExpandida && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          onClick={() => setFotoExpandida(null)}
+        >
+          <div className="relative max-w-sm w-full mx-4" onClick={e => e.stopPropagation()}>
+            <img
+              src={fotoExpandida.url}
+              alt={fotoExpandida.nome}
+              className="w-full rounded-2xl shadow-2xl object-cover"
+            />
+            <p className="text-white text-center mt-3 font-medium text-sm">{fotoExpandida.nome}</p>
+            <button
+              onClick={() => setFotoExpandida(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-background border border-border flex items-center justify-center shadow-lg hover:bg-accent"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

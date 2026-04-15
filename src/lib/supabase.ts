@@ -62,6 +62,7 @@ export interface Perfil {
   setor_id: string | null;
   empresa_id?: string;
   usuario?: string;
+  foto_url?: string | null;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;
