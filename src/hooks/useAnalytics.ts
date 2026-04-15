@@ -3,7 +3,7 @@
  * Adicionado: `acordosMes: Acordo[]` no retorno para o AnalyticsPanel calcular % por tipo.
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Acordo } from '@/lib/supabase';
+import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
