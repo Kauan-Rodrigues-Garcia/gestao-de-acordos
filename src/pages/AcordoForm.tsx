@@ -25,7 +25,7 @@ import {
 } from '@/lib/index';
 import { criarNotificacao }  from '@/services/notificacoes.service';
 import { enviarParaLixeira }  from '@/services/lixeira.service';
-import { registrarNr, transferirNr } from '@/services/nr_registros.service';
+// nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }     from '@/hooks/useNrRegistros';
 import { ModalAutorizacaoNR } from '@/components/AcordoNovoInline';
 import { toast } from 'sonner';
@@ -268,27 +268,8 @@ export default function AcordoForm() {
         return;
       }
 
-      // ── Registrar / atualizar NR na tabela nr_registros ────────────────
-      if (nrParaVerificar && empresa?.id) {
-        let acordoIdParaNr = isEdit ? id! : '';
-        if (!isEdit) {
-          const { data: ac } = await supabase
-            .from('acordos').select('id')
-            .eq(campoCampo, nrParaVerificar).eq('empresa_id', empresa.id)
-            .order('criado_em', { ascending: false }).limit(1).maybeSingle();
-          acordoIdParaNr = ac?.id ?? '';
-        }
-        if (acordoIdParaNr) {
-          await registrarNr({
-            empresaId:    empresa.id,
-            nrValue:      nrParaVerificar,
-            campo:        campoCampo,
-            operadorId:   uid,
-            operadorNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
-            acordoId:     acordoIdParaNr,
-          });
-        }
-      }
+      // ⚠ O trigger trg_sync_nr_registros (v2) registra/atualiza o NR em nr_registros
+      // automaticamente via INSERT/UPDATE — não precisamos chamar registrarNr() aqui.
 
       // ── Auto-criar parcelas ao salvar novo acordo ───────────────────────
       const TIPOS_PARCELADOS_BOOKPLAY = ['boleto', 'cartao_recorrente', 'pix_automatico'];
@@ -416,14 +397,32 @@ export default function AcordoForm() {
         return;
       }
 
-      const nrLabel = conflito.payload.nr_cliente as string;
+      // ── Campo NR correto por empresa ──────────────────────────────────────
+      // PaguePay → NR único = instituicao | Bookplay → NR único = nr_cliente
+      const campoNr: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
+      const nrLabel =
+        ((isPP
+          ? conflito.payload.instituicao
+          : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
 
-      // 1. Buscar acordo anterior para lixeira
+      const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
+
+      // 1. Buscar acordo anterior completo ANTES de qualquer delete
       const { data: acordoAntData } = await supabase
         .from('acordos').select('*, perfis(id, nome, email, perfil, setor_id)')
         .eq('id', conflito.acordoId).single();
 
-      // 2. Salvar na lixeira
+      // Guardar dados para notificação mesmo após o delete
+      const nomeClienteAnt = acordoAntData?.nome_cliente ?? '—';
+      const valorFmt = acordoAntData?.valor != null
+        ? `R$ ${Number(acordoAntData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+        : '—';
+      const vencimentoFmt = acordoAntData?.vencimento
+        ? new Date(acordoAntData.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')
+        : '—';
+      const statusAnt = acordoAntData?.status ?? '—';
+
+      // 2. Salvar acordo anterior na lixeira
       if (acordoAntData) {
         await enviarParaLixeira({
           acordo: acordoAntData as import('@/lib/supabase').Acordo,
@@ -432,56 +431,54 @@ export default function AcordoForm() {
           autorizadoPorId: liderUid,
           autorizadoPorNome: liderPerfil.nome,
           transferidoParaId: uid,
-          transferidoParaNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
+          transferidoParaNome: nomeNovoOp,
         });
       }
 
-      // 3. Excluir acordo anterior
-      await supabase.from('acordos').delete().eq('id', conflito.acordoId);
+      // 3. Excluir acordo anterior do banco
+      //    ⚠ O trigger trg_sync_nr_registros remove nr_registros automaticamente
+      //    NÃO chamar transferirNr() depois — evita duplicidade no nr_registros
+      const { error: errDelete } = await supabase
+        .from('acordos').delete().eq('id', conflito.acordoId);
+      if (errDelete) { toast.error(`Erro ao remover acordo anterior: ${errDelete.message}`); return; }
 
       // 4. Registrar log
       await supabase.from('logs_sistema').insert({
         usuario_id: uid, acao: 'transferencia_nr', tabela: 'acordos',
         registro_id: conflito.acordoId, empresa_id: empresa?.id ?? null,
-        detalhes: { nr: nrLabel, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
-          operador_anterior: conflito.operadorId, operador_novo: uid },
+        detalhes: {
+          nr: nrLabel, nome_cliente: nomeClienteAnt,
+          valor: valorFmt, vencimento: vencimentoFmt, status_anterior: statusAnt,
+          aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
+          operador_anterior: conflito.operadorId, operador_anterior_nome: conflito.operadorNome,
+          operador_novo: uid, operador_novo_nome: nomeNovoOp,
+          empresa_id: empresa?.id ?? null,
+        },
       });
 
       // 5. Salvar novo acordo
+      //    ⚠ O trigger trg_sync_nr_registros fará INSERT em nr_registros automaticamente
       const resultError = await salvarAcordo(conflito.payload, uid);
       if (resultError) { toast.error(`Erro ao salvar: ${resultError.message}`); return; }
 
-      // 5.1. Transferir NR na tabela nr_registros (propagação realtime para todos)
-      const campoCampoTr: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
-      const nrTransf = (conflito.payload[campoCampoTr] as string | undefined)?.trim() ?? '';
-      if (nrTransf && empresa?.id) {
-        const { data: novoAc } = await supabase
-          .from('acordos').select('id')
-          .eq(campoCampoTr, nrTransf).eq('empresa_id', empresa.id)
-          .order('criado_em', { ascending: false }).limit(1).maybeSingle();
-        if (novoAc?.id) {
-          await transferirNr({
-            empresaId:        empresa.id,
-            nrValue:          nrTransf,
-            campo:            campoCampoTr,
-            novoOperadorId:   uid,
-            novoOperadorNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
-            novoAcordoId:     novoAc.id,
-          });
-        }
-      }
-
-      // 6. Notificar operador anterior
-      const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
+      // 6. Notificar operador anterior com TODOS os detalhes do acordo removido
       await criarNotificacao({
         usuario_id: conflito.operadorId,
-        titulo: '⚠️ NR transferido pelo líder',
-        mensagem: `O NR ${nrLabel} foi transferido para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira temporariamente. Detalhes: Valor R$ ${acordoAntData?.valor ?? '—'} | Vencimento ${acordoAntData?.vencimento ?? '—'}.`,
+        titulo: '⚠️ Seu acordo foi transferido pelo líder',
+        mensagem:
+          `O ${isPP ? 'Inscrição' : 'NR'} "${nrLabel}" ` +
+          `(${nomeClienteAnt}) foi transferido para ${nomeNovoOp} ` +
+          `com autorização de ${liderPerfil.nome}. ` +
+          `Seu acordo foi movido para a lixeira. ` +
+          `Detalhes do acordo removido: ` +
+          `Valor ${valorFmt} | Vencimento ${vencimentoFmt} | Status: ${statusAnt}.`,
         empresa_id: empresa?.id,
       });
 
       toast.success('Transferência autorizada! Acordo registrado com sucesso.');
       setConflito(null); setLiderEmail(''); setLiderSenha('');
+      // Suprimir aviso lint
+      void campoNr;
       navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
