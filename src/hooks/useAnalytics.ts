@@ -2,8 +2,9 @@
  * useAnalytics.ts — ATUALIZADO
  * Adicionado: `acordosMes: Acordo[]` no retorno para o AnalyticsPanel calcular % por tipo.
  */
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { supabase, Acordo } from '@/lib/supabase';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { Acordo } from '@/lib/supabase';
+import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { getTodayISO } from '@/lib/index';
@@ -89,6 +90,9 @@ function calcPerc(realizado: number, meta: number): number {
 export function useAnalytics(): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { subscribe, unsubscribe } = useRealtimeAcordos();
+  // ID estável por instância
+  const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const [setorFiltro, setSetorFiltro] = useState<string | null>(null);
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
@@ -208,15 +212,12 @@ export function useAnalytics(): AnalyticsData {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Realtime ────────────────────────────────────────────────────────────────
+  // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
+  // Qualquer evento de acordos dispara um refetch completo das métricas analíticas
   useEffect(() => {
-    if (!empresa?.id) return;
-    const channel = supabase
-      .channel('analytics-acordos')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'acordos', filter: `empresa_id=eq.${empresa.id}` }, () => { fetchAll(); })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [empresa?.id, fetchAll]);
+    subscribe(instanceId, () => { fetchAll(); });
+    return () => unsubscribe(instanceId);
+  }, [subscribe, unsubscribe, instanceId, fetchAll]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {

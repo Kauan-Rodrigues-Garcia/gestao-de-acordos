@@ -9,6 +9,7 @@ import { ROUTE_PATHS } from '@/lib/index';
 import { lazy, Suspense, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -64,6 +65,7 @@ export default function App() {
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
+          <RealtimeAcordosProvider>
         <TenantThemeApplier />
         <Router>
           <Suspense fallback={<PageLoader />}>
@@ -162,6 +164,7 @@ export default function App() {
           </Suspense>
           <Toaster richColors position="top-right" />
         </Router>
+          </RealtimeAcordosProvider>
         </EmpresaProvider>
       </AuthProvider>
     </ThemeProvider>
