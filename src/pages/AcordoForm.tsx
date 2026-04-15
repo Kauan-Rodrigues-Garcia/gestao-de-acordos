@@ -26,7 +26,8 @@ import {
 import { criarNotificacao }  from '@/services/notificacoes.service';
 import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
-import { useNrRegistros }     from '@/hooks/useNrRegistros';
+import { useNrRegistros }           from '@/hooks/useNrRegistros';
+import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { ModalAutorizacaoNR } from '@/components/AcordoNovoInline';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -97,7 +98,7 @@ export default function AcordoForm() {
   const [liderSenha, setLiderSenha]           = useState('');
   const [autorizando, setAutorizando]         = useState(false);
   const [nrOriginalEdit, setNrOriginalEdit]   = useState<string | null>(null);
-  const { verificarConflito } = useNrRegistros();
+  const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(isPP ? schemaPP : schemaBase),
     defaultValues: {
@@ -224,41 +225,50 @@ export default function AcordoForm() {
       if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      // ── Verificar NR único v4 — cache realtime (nr_registros) ────────────
-      // PaguePay: NR único = campo "Inscrição" (instituicao)
-      // Bookplay:  NR único = campo "NR" (nr_cliente)
+      // ── VERIFICAÇÃO DE NR ÚNICO ────────────────────────────────────────────
+      // PaguePay: NR único = "Inscrição" (instituicao) | Bookplay: NR único = "NR" (nr_cliente)
+      // FONTE DE VERDADE: sempre query direta ao banco (nr_registros).
+      // O cache local (Realtime) complementa como fallback extra.
       const campoCampo: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPP
         ? (data.instituicao ?? '').trim()
         : nrTrimmed;
+      const labelNr = isPP ? 'Inscrição' : 'NR';
 
       const nrOriginal = isPP ? null : nrOriginalEdit;
       const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
 
-      if (nrMudou) {
-        // Verificação instantânea via cache local — sem query ao banco
-        const conflitoCache = verificarConflito(
+      if (nrMudou && empresa?.id) {
+        // 1. Query direta ao banco (fonte de verdade garantida)
+        const conflitoDb = await verificarNrRegistro(
           nrParaVerificar,
+          empresa.id,
           campoCampo,
           isEdit ? id : undefined,
         );
-        if (conflitoCache) {
-          if (conflitoCache.operadorId === uid) {
-            const label = isPP ? 'Inscrição' : 'NR';
-            toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
+
+        // 2. Fallback: se banco não encontrou, checar cache local (lag do trigger)
+        const conflitoFinal = conflitoDb ??
+          verificarConflito(nrParaVerificar, campoCampo, isEdit ? id : undefined);
+
+        if (conflitoFinal) {
+          if (conflitoFinal.operadorId === uid) {
+            toast.error(`${labelNr} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             setLoading(false);
             return;
           }
           setConflito({
-            acordoId:     conflitoCache.acordoId,
-            operadorId:   conflitoCache.operadorId,
-            operadorNome: conflitoCache.operadorNome,
+            acordoId:     conflitoFinal.acordoId,
+            operadorId:   conflitoFinal.operadorId,
+            operadorNome: conflitoFinal.operadorNome,
             payload,
           });
           setLoading(false);
           return;
         }
       }
+      // Suprimir lint: nrLoading/nrRefetch mantidos para refetch futuro
+      void nrLoading; void nrRefetch;
 
       const resultError = await salvarAcordo(payload, uid);
 

@@ -59,7 +59,8 @@ import { cn } from '@/lib/utils';
 import { criarNotificacao }     from '@/services/notificacoes.service';
 import { enviarParaLixeira }    from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
-import { useNrRegistros } from '@/hooks/useNrRegistros';
+import { useNrRegistros }           from '@/hooks/useNrRegistros';
+import { verificarNrRegistro }      from '@/services/nr_registros.service';
 
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 
@@ -293,7 +294,7 @@ export function AcordoNovoInline({
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
-  const { verificarConflito } = useNrRegistros();
+  const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
 
   // Campos do formulário
   const [nomeCliente,  setNomeCliente]  = useState('');
@@ -403,34 +404,44 @@ export function AcordoNovoInline({
         numero_parcela:  1,
       };
 
-      // ── LÓGICA DE NR ÚNICO v4 — usa cache realtime (nr_registros) ────────
-      //   PaguePay → NR único = "Inscrição" (campo: instituicao)
-      //   Bookplay → NR único = "NR"         (campo: nr_cliente)
+      // ── VERIFICAÇÃO DE NR ÚNICO ────────────────────────────────────────────
+      // PaguePay → campo "Inscrição" (instituicao) | Bookplay → campo "NR" (nr_cliente)
+      // FONTE DE VERDADE: sempre query direta ao banco (nr_registros).
+      // O cache local (Realtime) é usado apenas para feedback visual enquanto digita.
       const campoCampo: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+      const label           = isPaguePlay ? 'Inscrição' : 'NR';
 
-      if (nrParaVerificar) {
-        // Verificação instantânea via cache local (sem query ao banco)
-        const conflitoCached = verificarConflito(nrParaVerificar, campoCampo);
+      if (nrParaVerificar && empresa?.id) {
+        // 1. Verificar no banco (fonte de verdade garantida)
+        const conflitoDb = await verificarNrRegistro(
+          nrParaVerificar,
+          empresa.id,
+          campoCampo,
+        );
 
-        if (conflitoCached) {
-          if (conflitoCached.operadorId === perfil.id) {
-            // Pertence ao próprio operador
-            const label = isPaguePlay ? 'Inscrição' : 'NR';
+        // 2. Se não achou no banco mas cache tem → usar cache (pode haver lag no trigger)
+        const conflitoFinal = conflitoDb ?? verificarConflito(nrParaVerificar, campoCampo);
+
+        if (conflitoFinal) {
+          if (conflitoFinal.operadorId === perfil.id) {
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
           }
           // Pertence a outro operador → exigir autorização do líder
           setConflito({
-            acordoId:     conflitoCached.acordoId,
-            operadorId:   conflitoCached.operadorId,
-            operadorNome: conflitoCached.operadorNome,
+            acordoId:     conflitoFinal.acordoId,
+            operadorId:   conflitoFinal.operadorId,
+            operadorNome: conflitoFinal.operadorNome,
             payload,
           });
-          return; // aguardar modal
+          return; // aguarda modal de autorização
         }
       }
+      // Suprimir aviso lint para variáveis usadas indiretamente
+      void nrLoading; void nrRefetch;
 
+      // NR livre — salvar normalmente
       // ⚠ O trigger trg_sync_nr_registros (v2) registra o NR em nr_registros
       // automaticamente via INSERT — não precisamos chamar registrarNr() aqui.
       const inserido = await executarSalvar(payload);
