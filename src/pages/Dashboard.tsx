@@ -27,7 +27,7 @@ import {
   STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, TIPO_COLORS,
   getTodayISO, isPaguePlay, getTipoLabels, getStatusLabels,
   TIPO_OPTIONS_PAGUEPLAY, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, isAtrasado,
+  extractEstado, extractLinkAcordo, isAtrasado, ESTADOS_BRASIL,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { supabase, Acordo } from '@/lib/supabase';
@@ -131,9 +131,8 @@ export default function Dashboard() {
   const [currentPage,  setCurrentPage]  = useState(Number(searchParams.get('page')) || 1);
   // Filtros de coluna (client-side, PaguePay)
   const [colFiltroEstado,  setColFiltroEstado]  = useState('');
-  const [colFiltroVenc,    setColFiltroVenc]    = useState('');
-  const [colFiltroPag,     setColFiltroPag]     = useState('');
-  const [colFiltroStatus,  setColFiltroStatus]  = useState('');
+  const [colFiltroDia,     setColFiltroDia]     = useState(''); // dia dentro do mesFiltro
+  const [estadoDropdown,   setEstadoDropdown]   = useState(false);
   const [activeTab, setActiveTab]       = useState<'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
@@ -206,12 +205,10 @@ export default function Dashboard() {
       return aHoje - bHoje;
     });
     // Filtros de coluna client-side
-    if (colFiltroEstado)  lista = lista.filter(a => (extractEstado(a.observacoes) || '').toLowerCase().includes(colFiltroEstado.toLowerCase()));
-    if (colFiltroVenc)    lista = lista.filter(a => a.vencimento.startsWith(colFiltroVenc.substring(0, 7))); // filtra por mês selecionado
-    if (colFiltroPag)     lista = lista.filter(a => a.tipo === colFiltroPag);
-    if (colFiltroStatus)  lista = lista.filter(a => a.status === colFiltroStatus);
+    if (colFiltroEstado)  lista = lista.filter(a => extractEstado(a.observacoes) === colFiltroEstado);
+    if (colFiltroDia)     lista = lista.filter(a => a.vencimento === `${mesFiltro}-${colFiltroDia.padStart(2,'0')}`);
     return lista;
-  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroVenc, colFiltroPag, colFiltroStatus]);
+  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroDia, mesFiltro]);
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
@@ -729,62 +726,75 @@ export default function Dashboard() {
                             />
                           </th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
+                          {/* ── ESTADO: dropdown de siglas ── */}
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                             <div className="flex flex-col gap-1">
                               <span>ESTADO</span>
-                              <input
-                                type="text" value={colFiltroEstado}
-                                onChange={e => setColFiltroEstado(e.target.value)}
-                                placeholder="filtrar…"
-                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring"
-                                onClick={e => e.stopPropagation()}
-                              />
+                              <div className="relative" onClick={e => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => setEstadoDropdown(v => !v)}
+                                  className={cn(
+                                    'w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal text-left flex items-center justify-between gap-1',
+                                    colFiltroEstado ? 'border-primary/50 bg-primary/10 text-primary' : 'text-muted-foreground/70'
+                                  )}
+                                >
+                                  <span>{colFiltroEstado || 'UF…'}</span>
+                                  {colFiltroEstado && (
+                                    <span
+                                      className="text-[9px] text-muted-foreground hover:text-destructive cursor-pointer"
+                                      onClick={e => { e.stopPropagation(); setColFiltroEstado(''); setEstadoDropdown(false); }}
+                                    >✕</span>
+                                  )}
+                                </button>
+                                {estadoDropdown && (
+                                  <div className="absolute top-7 left-0 z-50 bg-background border border-border rounded-lg shadow-xl p-1.5 grid grid-cols-4 gap-0.5 min-w-[140px]">
+                                    {(ESTADOS_BRASIL as readonly string[]).map(uf => (
+                                      <button
+                                        key={uf} type="button"
+                                        onClick={() => { setColFiltroEstado(uf); setEstadoDropdown(false); }}
+                                        className={cn(
+                                          'text-[10px] font-mono px-1 py-0.5 rounded hover:bg-primary/10 hover:text-primary transition-colors',
+                                          colFiltroEstado === uf && 'bg-primary/15 text-primary font-semibold'
+                                        )}
+                                      >
+                                        {uf}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </th>
+                          {/* ── VENCIMENTO: calendário de dia dentro do mês selecionado ── */}
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                             <div className="flex flex-col gap-1">
                               <span>VENCIMENTO</span>
-                              <input
-                                type="month" value={colFiltroVenc}
-                                onChange={e => setColFiltroVenc(e.target.value)}
-                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                onClick={e => e.stopPropagation()}
-                              />
+                              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="number"
+                                  min={1} max={31}
+                                  value={colFiltroDia}
+                                  onChange={e => setColFiltroDia(e.target.value)}
+                                  placeholder="dia"
+                                  className={cn(
+                                    'w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
+                                    colFiltroDia ? 'border-primary/50 bg-primary/10' : ''
+                                  )}
+                                />
+                                {colFiltroDia && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setColFiltroDia('')}
+                                    className="text-[9px] text-muted-foreground hover:text-destructive flex-shrink-0"
+                                    title="Limpar filtro de dia"
+                                  >✕</button>
+                                )}
+                              </div>
                             </div>
                           </th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                            <div className="flex flex-col gap-1">
-                              <span>PAGAMENTO</span>
-                              <select
-                                value={colFiltroPag}
-                                onChange={e => setColFiltroPag(e.target.value)}
-                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                onClick={e => e.stopPropagation()}
-                              >
-                                <option value="">Todos</option>
-                                <option value="boleto">Boleto/PIX</option>
-                                <option value="cartao">Cartão</option>
-                              </select>
-                            </div>
-                          </th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                            <div className="flex flex-col gap-1">
-                              <span>STATUS</span>
-                              <select
-                                value={colFiltroStatus}
-                                onChange={e => setColFiltroStatus(e.target.value)}
-                                className="w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                                onClick={e => e.stopPropagation()}
-                              >
-                                <option value="">Todos</option>
-                                <option value="verificar_pendente">Pendente</option>
-                                <option value="pago">Pago</option>
-                                <option value="nao_pago">Não Pago</option>
-                              </select>
-                            </div>
-                          </th>
                           {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
                             <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                           )}

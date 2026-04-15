@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter, Camera, X } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter, Camera, X, Trash2, KeyRound } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { Card, CardContent } from '@/components/ui/card';
@@ -64,6 +64,10 @@ export default function AdminUsuarios() {
   const [uploadTarget,    setUploadTarget]    = useState<Perfil | null>(null);
   const [uploadando,      setUploadando]      = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Alterar senha de operador
+  const [senhaTarget,     setSenhaTarget]     = useState<Perfil | null>(null);
+  const [novaSenha,       setNovaSenha]       = useState('');
+  const [salvandoSenha,   setSalvandoSenha]   = useState(false);
 
   useEffect(() => {
     if (empresaAtual?.id) {
@@ -310,6 +314,35 @@ export default function AdminUsuarios() {
     } finally { setUploadando(false); }
   }
 
+  async function excluirFotoDeUsuario(u: Perfil) {
+    if (!u.foto_url) return;
+    // Tentar remover do storage (path convencional)
+    const urlPath = u.foto_url.split('/object/public/perfis/')[1]?.split('?')[0];
+    if (urlPath) {
+      await supabase.storage.from('perfis').remove([urlPath]);
+    }
+    const { error } = await supabase.from('perfis').update({ foto_url: null } as any).eq('id', u.id);
+    if (error) { toast.error(`Erro ao excluir foto: ${error.message}`); return; }
+    toast.success('Foto removida com sucesso!');
+    fetchDados();
+  }
+
+  async function alterarSenhaOperador() {
+    if (!senhaTarget || !novaSenha.trim()) { toast.error('Preencha a nova senha'); return; }
+    if (novaSenha.length < 6) { toast.error('A senha deve ter pelo menos 6 caracteres'); return; }
+    setSalvandoSenha(true);
+    try {
+      const { error } = await supabase.rpc('admin_change_user_password', {
+        p_user_id: senhaTarget.id,
+        p_new_password: novaSenha.trim(),
+      } as any);
+      if (error) { toast.error(`Erro: ${error.message}`); return; }
+      toast.success(`Senha de ${senhaTarget.nome} alterada com sucesso!`);
+      setSenhaTarget(null);
+      setNovaSenha('');
+    } finally { setSalvandoSenha(false); }
+  }
+
   async function toggleAtivo(u: Perfil) {
     const { error } = await supabase.from('perfis').update({ ativo: !u.ativo }).eq('id', u.id);
     if (!error) { toast.success(u.ativo ? 'Usuário desativado' : 'Usuário ativado'); fetchDados(); }
@@ -442,15 +475,37 @@ export default function AdminUsuarios() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
-                        {/* Upload foto pelo líder/admin */}
+                        {/* Ações de foto e senha — lider/admin sobre outros usuários */}
                         {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
-                          <Button
-                            variant="ghost" size="icon" className="w-7 h-7"
-                            title="Alterar foto de perfil"
-                            onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                          </Button>
+                          <>
+                            {/* Upload foto */}
+                            <Button
+                              variant="ghost" size="icon" className="w-7 h-7"
+                              title="Alterar foto de perfil"
+                              onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}
+                            >
+                              <Camera className="w-3.5 h-3.5" />
+                            </Button>
+                            {/* Excluir foto (só aparece se tiver foto) */}
+                            {u.foto_url && (
+                              <Button
+                                variant="ghost" size="icon"
+                                className="w-7 h-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                title="Remover foto de perfil"
+                                onClick={() => excluirFotoDeUsuario(u)}
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </Button>
+                            )}
+                            {/* Alterar senha */}
+                            <Button
+                              variant="ghost" size="icon" className="w-7 h-7"
+                              title="Alterar senha do usuário"
+                              onClick={() => { setSenhaTarget(u); setNovaSenha(''); }}
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
                         )}
                         <Button
                           variant="ghost" size="icon" className="w-7 h-7"
@@ -632,6 +687,46 @@ export default function AdminUsuarios() {
           e.target.value = '';
         }}
       />
+
+      {/* Modal alterar senha de operador */}
+      <Dialog open={!!senhaTarget} onOpenChange={v => !v && setSenhaTarget(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <KeyRound className="w-4 h-4 text-primary" />
+              Alterar Senha
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-3 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Definir nova senha para <span className="font-semibold text-foreground">{senhaTarget?.nome}</span>
+            </p>
+            <div className="space-y-1">
+              <Label className="text-xs font-medium">Nova senha *</Label>
+              <Input
+                type="password"
+                value={novaSenha}
+                onChange={e => setNovaSenha(e.target.value)}
+                placeholder="Mínimo 6 caracteres"
+                className="h-9 text-sm"
+                onKeyDown={e => e.key === 'Enter' && alterarSenhaOperador()}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              O usuário precisará usar esta senha no próximo login.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => setSenhaTarget(null)} disabled={salvandoSenha}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={alterarSenhaOperador} disabled={salvandoSenha || novaSenha.length < 6} className="gap-1.5">
+              <KeyRound className="w-3.5 h-3.5" />
+              {salvandoSenha ? 'Salvando...' : 'Salvar senha'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal foto expandida */}
       {fotoExpandida && (

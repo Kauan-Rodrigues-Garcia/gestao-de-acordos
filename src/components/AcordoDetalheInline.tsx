@@ -466,20 +466,12 @@ export function AcordoDetalheInline({
 }: AcordoDetalheInlineProps) {
   const statusLabels  = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels    = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
-  const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
-  const totalParcelas = acordoLocal.parcelas ?? 1;
 
-  // Mostrar sub-tabela quando: tipo parcelado E parcelas > 1
-  const deveExibirParcelas =
-    isTipoParcelado(acordoLocal.tipo, isPaguePlay) && totalParcelas > 1;
-  // Acordo simples = não parcelado
-  const isAcordoSimples = !deveExibirParcelas;
-
+  // ── ESTADO LOCAL (deve vir ANTES de qualquer cálculo derivado) ────────────
   // Registros reais buscados do banco (mesmo grupo)
   const [registrosReais,   setRegistrosReais]   = useState<Acordo[]>([]);
   const [loadingParc,      setLoadingParc]       = useState(false);
   const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
-
   // Modal Reagendar (parcelas)
   const [parcelaModal,    setParcelaModal]    = useState<Acordo | null>(null);
   const [modalAberto,     setModalAberto]     = useState(false);
@@ -489,6 +481,15 @@ export function AcordoDetalheInline({
   const [modalEditParcOpen, setModalEditParcOpen] = useState(false);
   // Acordo local (para reflectir edições sem fechar o detalhe)
   const [acordoLocal, setAcordoLocal] = useState<Acordo>(acordo);
+
+  // ── Derivados (usam acordoLocal — sempre após o useState acima) ──────────
+  const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
+  const totalParcelas = acordoLocal.parcelas ?? 1;
+  // Mostrar sub-tabela quando: tipo parcelado E parcelas > 1
+  const deveExibirParcelas =
+    isTipoParcelado(acordoLocal.tipo, isPaguePlay) && totalParcelas > 1;
+  // Acordo simples = não parcelado
+  const isAcordoSimples = !deveExibirParcelas;
 
   const link   = extractLinkAcordo(acordoLocal.observacoes);
   const estado = extractEstado(acordoLocal.observacoes);
