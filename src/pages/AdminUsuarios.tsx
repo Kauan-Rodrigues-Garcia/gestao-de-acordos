@@ -311,60 +311,63 @@ export default function AdminUsuarios() {
 
       <Card className="border-border">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="w-full">
+            <table className="w-full text-sm table-fixed">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">USUÁRIO</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">LOGIN</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">E-MAIL</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">PERFIL</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">SETOR</th>
-                  <th className="text-left px-4 py-3 font-semibold text-muted-foreground text-xs">EMPRESA</th>
-                  <th className="text-center px-4 py-3 font-semibold text-muted-foreground text-xs">ATIVO</th>
-                  <th className="text-right px-4 py-3 font-semibold text-muted-foreground text-xs">AÇÕES</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[22%]">USUÁRIO</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[20%]">E-MAIL</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[14%]">PERFIL</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[16%]">SETOR</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[14%]">EMPRESA</th>
+                  <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-xs w-[8%]">ATIVO</th>
+                  <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs w-[6%]">AÇÕES</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
                 ) : usuariosFiltrados.map((u, i) => (
                   <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
                     className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar className="w-7 h-7">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-7 h-7 flex-shrink-0">
                           <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                            {u.nome.split(' ').map(n => n[0]).slice(0,2).join('')}
+                            {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="font-medium text-foreground">{u.nome}</span>
+                        <div className="min-w-0">
+                          <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
+                          {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{u.usuario ?? '—'}</td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs font-mono">{u.email}</td>
-                    <td className="px-4 py-3">
-                      <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border', PERFIL_BADGE[u.perfil])}>
-                        <Shield className="w-3 h-3" /> {PERFIL_LABELS[u.perfil]}
+                    <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono truncate max-w-0">
+                      <span className="block truncate" title={u.email}>{u.email}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border', PERFIL_BADGE[u.perfil])}>
+                        <Shield className="w-2.5 h-2.5" /> {PERFIL_LABELS[u.perfil]}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3 h-3" /> {nomeSetor(u)}
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1 truncate">
+                        <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeSetor(u)}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3 h-3" /> {nomeEmpresa(u)}
+                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1 truncate">
+                        <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeEmpresa(u)}</span>
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-3 py-2.5 text-center">
                       {(isAdmin || isSuperAdmin)
                         ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
                         : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
                       }
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
                         <Button
                           variant="ghost" size="icon" className="w-7 h-7"

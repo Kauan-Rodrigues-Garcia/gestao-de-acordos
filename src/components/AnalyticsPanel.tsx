@@ -428,8 +428,17 @@ export function AnalyticsPanel({ setorFiltro: setorExterno }: AnalyticsPanelProp
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="dia" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <XAxis
+                            dataKey="dia"
+                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                            stroke="hsl(var(--border))"
+                            tickLine={false}
+                          />
+                          <YAxis
+                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                            stroke="hsl(var(--border))"
+                            tickLine={false}
+                          />
                           <Tooltip content={<CustomTooltip />} />
                           <Area
                             type="monotone" dataKey="recebido" name="Recebido"

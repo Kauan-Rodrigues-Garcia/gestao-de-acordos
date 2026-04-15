@@ -35,10 +35,9 @@ import {
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 
-// Data mínima permitida para PaguePlay: 01/01/2026
-const DATA_MINIMA_PP = new Date(2026, 0, 1); // Jan 1, 2026
+// Data mínima removida — PaguePlay pode selecionar qualquer data livremente
 
-/** DatePicker compacto para PaguePlay — abre calendário ao clicar */
+/** DatePicker compacto — abre calendário ao clicar */
 function DatePickerField({
   value, onChange, label, required,
 }: {
@@ -79,8 +78,7 @@ function DatePickerField({
                 setOpen(false);
               }
             }}
-            disabled={(date) => date < DATA_MINIMA_PP}
-            fromDate={DATA_MINIMA_PP}
+            disabled={undefined}
             locale={ptBR}
             initialFocus
           />

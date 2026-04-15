@@ -662,11 +662,16 @@ export default function Acordos() {
                               <td className="px-3 py-2.5">
                                 <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
                               </td>
-                              {/* CPF */}
+                              {/* CPF — clica APENAS copia, não abre detalhe */}
                               <td className="px-3 py-2.5">
-                                <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold">
+                                <button
+                                  type="button"
+                                  title="Clique para copiar o CPF"
+                                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`CPF ${a.nr_cliente} copiado!`); }}
+                                  className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
+                                >
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </span>
+                                </button>
                               </td>
                               {/* Inscrição */}
                               <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
@@ -719,9 +724,14 @@ export default function Acordos() {
                           ) : (
                             <>
                               <td className="px-3 py-2.5">
-                                <span className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded">
+                                <button
+                                  type="button"
+                                  title="Clique para copiar o NR"
+                                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`NR ${a.nr_cliente} copiado!`); }}
+                                  className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
+                                >
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </span>
+                                </button>
                               </td>
                               <td className="px-3 py-2.5">
                                 <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>

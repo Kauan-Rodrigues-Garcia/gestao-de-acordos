@@ -159,49 +159,39 @@ export function ModalFilaWhatsApp({
         </div>
 
         {/* Botões de ação */}
-        <div className="flex gap-2 items-stretch">
+        <div className="flex gap-2">
           {restantes > 0 ? (
-            <>
-              {enviandoAuto ? (
-                <Button
-                  onClick={() => { cancelarAutoRef.current = true; }}
-                  className="flex-1 gap-2"
-                  variant="outline"
-                >
-                  <X className="w-4 h-4 text-destructive" />
-                  Cancelar envio automático
+            enviandoAuto ? (
+              <Button
+                onClick={() => { cancelarAutoRef.current = true; }}
+                className="flex-1 gap-2"
+                variant="outline"
+              >
+                <X className="w-4 h-4 text-destructive" />
+                Cancelar envio automático
+              </Button>
+            ) : (
+              <>
+                <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90 text-white">
+                  <Send className="w-4 h-4" />
+                  Abrir próximo
+                  <Badge variant="secondary" className="ml-1 bg-white/20 text-white border-0">{restantes}</Badge>
                 </Button>
-              ) : (
-                <>
-                  <Button onClick={abrirProximo} className="flex-1 gap-2 bg-success hover:bg-success/90">
-                    <Send className="w-4 h-4" />
-                    Abrir próximo no WhatsApp
-                    <Badge variant="secondary" className="ml-1">{restantes} restante(s)</Badge>
+                {isPP ? (
+                  <Button onClick={enviarTodosAuto} variant="outline" size="sm" className="gap-1.5 text-xs px-3 border-success/40 text-success hover:bg-success/10" title="Enviar todos automaticamente">
+                    <Send className="w-3.5 h-3.5" />
+                    Enviar todos
                   </Button>
-                  {!isPP ? (
-                    // Bookplay: abre 1 por vez com clique manual (evita bloqueio de popup)
-                    <Button onClick={abrirProximo} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3"
-                      title="Abre um WhatsApp por vez — clique para cada envio">
-                      <Send className="w-3.5 h-3.5" />
-                      Próximo ({restantes})
-                    </Button>
-                  ) : (
-                    // PaguePay: envio automático com delay
-                    <Button onClick={enviarTodosAuto} variant="outline" className="gap-1.5 text-xs whitespace-nowrap px-3" title="Enviar todos automaticamente (1.5s entre cada)">
-                      <Send className="w-3.5 h-3.5" />
-                      Enviar todos
-                    </Button>
-                  )}
-                </>
-              )}
-            </>
+                ) : null}
+              </>
+            )
           ) : (
             <Button onClick={onClose} className="flex-1 gap-2" variant="outline">
               <CheckCircle2 className="w-4 h-4 text-success" />
               Todos enviados! Fechar
             </Button>
           )}
-          <Button variant="outline" size="icon" className="flex-shrink-0" onClick={copiarTodasMensagens} title="Copiar todas as mensagens">
+          <Button variant="outline" size="icon" className="w-9 h-9 flex-shrink-0 border-border" onClick={copiarTodasMensagens} title="Copiar todas as mensagens">
             <Copy className="w-4 h-4" />
           </Button>
         </div>
