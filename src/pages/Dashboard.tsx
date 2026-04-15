@@ -36,7 +36,8 @@ import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline, ModalReagendar } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
-import { criarNotificacao } from '@/services/notificacoes.service';
+import { criarNotificacao }         from '@/services/notificacoes.service';
+import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
@@ -400,6 +401,7 @@ export default function Dashboard() {
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) toast.error('Erro ao excluir acordo: ' + error.message);
     else {
+      liberarNrPorAcordoId(a.id); // Liberar NR (best-effort)
       supabase.from('logs_sistema').insert({
         usuario_id:  perfil?.id ?? null,
         acao:        'exclusao_acordo',
@@ -432,6 +434,7 @@ export default function Dashboard() {
         console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
       } else {
         deletedCount++;
+        liberarNrPorAcordoId(id); // Liberar NR (best-effort)
         removeAcordo(id); // Optimistic: remove da lista local imediatamente
         if (acordo) {
           supabase.from('logs_sistema').insert({

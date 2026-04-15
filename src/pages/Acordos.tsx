@@ -29,7 +29,8 @@ import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline, ModalReagendar } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
-import { criarNotificacao } from '@/services/notificacoes.service';
+import { criarNotificacao }         from '@/services/notificacoes.service';
+import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 
 function buildMensagem(a: Acordo): string {
   if (a.status === 'nao_pago') {
@@ -266,6 +267,8 @@ export default function Acordos() {
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) toast.error('Erro ao excluir acordo: ' + error.message);
     else {
+      // Liberar NR na tabela nr_registros (best-effort)
+      liberarNrPorAcordoId(a.id);
       // Registrar log de exclusão (best-effort — não bloqueia em caso de falha)
       supabase.from('logs_sistema').insert({
         usuario_id: perfil?.id ?? null,
@@ -300,8 +303,9 @@ export default function Acordos() {
       if (error) {
         failedCount++;
         console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
-     } else {
-       deletedCount++;
+      } else {
+        deletedCount++;
+        liberarNrPorAcordoId(id); // Liberar NR (best-effort)
         removeAcordo(id); // Optimistic: remove sem refetch
         if (acordo) {
           supabase.from('logs_sistema').insert({

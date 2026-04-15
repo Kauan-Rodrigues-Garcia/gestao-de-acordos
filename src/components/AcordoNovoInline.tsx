@@ -1,30 +1,29 @@
 /**
- * AcordoNovoInline.tsx — v3
+ * AcordoNovoInline.tsx — v4 (nr_registros realtime)
  *
- * Lógica de NR único (CRÍTICA):
+ * Lógica de NR único — fonte da verdade: tabela `nr_registros`
  *  • PaguePay  → NR único = campo "Inscrição" (instituicao)
  *  • Bookplay  → NR único = campo "NR"         (nr_cliente)
  *
- *  Ao salvar, ANTES de inserir:
- *    1. verificarNrDuplicado(nr, empresa.id)
- *    2. check.duplicado === false → salvar normalmente
- *    3. check.duplicado === true  && operadorIdExistente === perfil.id
+ *  Verificação ao salvar (usa cache local do useNrRegistros — zero latência):
+ *    1. verificarConflito(nr, campo) — lê cache local em tempo real
+ *    2. conflito === null            → inserir acordo + registrarNr na tabela
+ *    3. conflito.operadorId === perfil.id
  *         → toast.error "NR já existe na sua lista"
- *    4. check.duplicado === true  && operadorIdExistente !== perfil.id
- *         → setConflito({ acordoId, operadorId, operadorNome, payload }) → PARAR
+ *    4. conflito.operadorId !== perfil.id
+ *         → setConflito → modal de autorização
  *
  *  Ao autorizar transferência:
  *    1. Autenticar líder via fetch POST (Supabase Auth)
  *    2. Verificar perfil: lider | administrador | super_admin
  *    3. Buscar acordo anterior completo
  *    4. enviarParaLixeira (motivo: transferencia_nr)
- *    5. supabase.from('acordos').delete().eq('id', conflito.acordoId)
- *    6. executarSalvar(conflito.payload)
- *    7. Log em logs_sistema
- *    8. criarNotificacao ao operador anterior (mensagem detalhada)
+ *    5. supabase.from('acordos').delete()
+ *    6. executarSalvar + transferirNr (atualiza nr_registros)
+ *    7. Log em logs_sistema + criarNotificacao ao operador anterior
  *
  * Exports:
- *   - default: AcordoNovoInline (export nomeado também)
+ *   - AcordoNovoInline (nomeado + default)
  *   - ModalAutorizacaoNR (reutilizável no AcordoForm)
  *   - ConflitNR (interface)
  *   - ModalAutorizacaoNRProps (interface)
@@ -57,9 +56,13 @@ import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
-import { verificarNrDuplicado } from '@/services/acordos.service';
 import { criarNotificacao }     from '@/services/notificacoes.service';
 import { enviarParaLixeira }    from '@/services/lixeira.service';
+import {
+  registrarNr,
+  transferirNr,
+} from '@/services/nr_registros.service';
+import { useNrRegistros } from '@/hooks/useNrRegistros';
 
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 
@@ -293,6 +296,7 @@ export function AcordoNovoInline({
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { verificarConflito } = useNrRegistros();
 
   // Campos do formulário
   const [nomeCliente,  setNomeCliente]  = useState('');
@@ -402,52 +406,47 @@ export function AcordoNovoInline({
         numero_parcela:  1,
       };
 
-      // ── LÓGICA DE NR ÚNICO (CRÍTICA) ──────────────────────────────────────
+      // ── LÓGICA DE NR ÚNICO v4 — usa cache realtime (nr_registros) ────────
       //   PaguePay → NR único = "Inscrição" (campo: instituicao)
       //   Bookplay → NR único = "NR"         (campo: nr_cliente)
       const campoCampo: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-      const nrParaVerificar = isPaguePlay
-        ? instituicao.trim()
-        : nrCliente.trim();
+      const nrParaVerificar = isPaguePlay ? instituicao.trim() : nrCliente.trim();
 
       if (nrParaVerificar) {
-        const check = await verificarNrDuplicado(
-          nrParaVerificar,
-          empresa.id,
-          undefined,        // acordoIdExcluir (novo = sem id)
-          campoCampo,       // campo correto para cada sistema
-        );
+        // Verificação instantânea via cache local (sem query ao banco)
+        const conflitoCached = verificarConflito(nrParaVerificar, campoCampo);
 
-        if (check.duplicado) {
-          if (
-            check.operadorIdExistente &&
-            check.operadorIdExistente === perfil.id
-          ) {
-            // Pertence ao próprio operador → bloquear com mensagem clara
+        if (conflitoCached) {
+          if (conflitoCached.operadorId === perfil.id) {
+            // Pertence ao próprio operador
             const label = isPaguePlay ? 'Inscrição' : 'NR';
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
           }
-
-          if (
-            check.operadorIdExistente &&
-            check.operadorIdExistente !== perfil.id
-          ) {
-            // Pertence a outro operador → exigir autorização do líder
-            setConflito({
-              acordoId:     check.acordoIdExistente!,
-              operadorId:   check.operadorIdExistente,
-              operadorNome: check.operadorNomeExistente ?? 'Operador desconhecido',
-              payload,
-            });
-            return; // NÃO salvar agora — aguardar autorização do modal
-          }
+          // Pertence a outro operador → exigir autorização do líder
+          setConflito({
+            acordoId:     conflitoCached.acordoId,
+            operadorId:   conflitoCached.operadorId,
+            operadorNome: conflitoCached.operadorNome,
+            payload,
+          });
+          return; // aguardar modal
         }
-        // check.duplicado === false → NR livre, segue para salvar
       }
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        // Registrar NR na tabela nr_registros
+        if (nrParaVerificar) {
+          await registrarNr({
+            empresaId:    empresa.id,
+            nrValue:      nrParaVerificar,
+            campo:        campoCampo,
+            operadorId:   perfil.id,
+            operadorNome: perfil.nome ?? 'Operador',
+            acordoId:     inserido.id,
+          });
+        }
         onSaved(inserido);
         toast.success(
           parcelas > 1
@@ -558,6 +557,23 @@ export function AcordoNovoInline({
       // 6. Inserir novo acordo
       const inserido = await executarSalvar(conflito.payload);
       if (!inserido) return; // erro já notificado por executarSalvar
+
+      // 6.1. Transferir NR na tabela nr_registros (atualiza em tempo real para todos)
+      const campoCampoTransf: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
+      const nrTransf = isPaguePlay
+        ? (conflito.payload.instituicao as string | undefined)?.trim() ?? ''
+        : (conflito.payload.nr_cliente  as string | undefined)?.trim() ?? '';
+
+      if (nrTransf) {
+        await transferirNr({
+          empresaId:        empresa.id,
+          nrValue:          nrTransf,
+          campo:            campoCampoTransf,
+          novoOperadorId:   perfil.id,
+          novoOperadorNome: perfil.nome ?? 'Operador',
+          novoAcordoId:     inserido.id,
+        });
+      }
 
       // 7. Log em logs_sistema
       const nrLogLabel =

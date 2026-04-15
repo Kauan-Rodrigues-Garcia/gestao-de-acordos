@@ -23,9 +23,10 @@ import {
   getMaxParcelas, extractEstado, extractLinkAcordo, buildObservacoesComEstado,
   INSTITUICOES_OPTIONS,
 } from '@/lib/index';
-import { criarNotificacao } from '@/services/notificacoes.service';
-import { verificarNrDuplicado } from '@/services/acordos.service';
-import { enviarParaLixeira } from '@/services/lixeira.service';
+import { criarNotificacao }  from '@/services/notificacoes.service';
+import { enviarParaLixeira }  from '@/services/lixeira.service';
+import { registrarNr, transferirNr } from '@/services/nr_registros.service';
+import { useNrRegistros }     from '@/hooks/useNrRegistros';
 import { ModalAutorizacaoNR } from '@/components/AcordoNovoInline';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -96,7 +97,7 @@ export default function AcordoForm() {
   const [liderSenha, setLiderSenha]           = useState('');
   const [autorizando, setAutorizando]         = useState(false);
   const [nrOriginalEdit, setNrOriginalEdit]   = useState<string | null>(null);
-
+  const { verificarConflito } = useNrRegistros();
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(isPP ? schemaPP : schemaBase),
     defaultValues: {
@@ -223,7 +224,7 @@ export default function AcordoForm() {
       if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      // ── Verificar NR duplicado (ignora nao_pago) ──────────────────────────
+      // ── Verificar NR único v4 — cache realtime (nr_registros) ────────────
       // PaguePay: NR único = campo "Inscrição" (instituicao)
       // Bookplay:  NR único = campo "NR" (nr_cliente)
       const campoCampo: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
@@ -231,34 +232,27 @@ export default function AcordoForm() {
         ? (data.instituicao ?? '').trim()
         : nrTrimmed;
 
-      // Para edição: rastrear o NR original do mesmo campo
-      const nrOriginal = isPP
-        ? null  // PaguePay: campo diferente, sempre re-verifica
-        : nrOriginalEdit;
-
+      const nrOriginal = isPP ? null : nrOriginalEdit;
       const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
 
       if (nrMudou) {
-        const check = await verificarNrDuplicado(
+        // Verificação instantânea via cache local — sem query ao banco
+        const conflitoCache = verificarConflito(
           nrParaVerificar,
-          empresa.id,
-          isEdit ? id : undefined,  // ignorar o próprio acordo na edição
-          campoCampo,               // verificar no campo certo
+          campoCampo,
+          isEdit ? id : undefined,
         );
-        if (check.duplicado) {
-          const pertenceAOutro = check.operadorIdExistente && check.operadorIdExistente !== uid;
-          if (!pertenceAOutro) {
-            // Próprio operador já tem esse NR ativo → bloquear
+        if (conflitoCache) {
+          if (conflitoCache.operadorId === uid) {
             const label = isPP ? 'Inscrição' : 'NR';
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             setLoading(false);
             return;
           }
-          // Pertence a outro operador → solicitar autorização do líder
           setConflito({
-            acordoId:     check.acordoIdExistente!,
-            operadorId:   check.operadorIdExistente!,
-            operadorNome: check.operadorNomeExistente || 'Operador desconhecido',
+            acordoId:     conflitoCache.acordoId,
+            operadorId:   conflitoCache.operadorId,
+            operadorNome: conflitoCache.operadorNome,
             payload,
           });
           setLoading(false);
@@ -272,6 +266,28 @@ export default function AcordoForm() {
         console.error('[AcordoForm] error:', resultError);
         toast.error(`Erro ao salvar: ${resultError.message}`);
         return;
+      }
+
+      // ── Registrar / atualizar NR na tabela nr_registros ────────────────
+      if (nrParaVerificar && empresa?.id) {
+        let acordoIdParaNr = isEdit ? id! : '';
+        if (!isEdit) {
+          const { data: ac } = await supabase
+            .from('acordos').select('id')
+            .eq(campoCampo, nrParaVerificar).eq('empresa_id', empresa.id)
+            .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+          acordoIdParaNr = ac?.id ?? '';
+        }
+        if (acordoIdParaNr) {
+          await registrarNr({
+            empresaId:    empresa.id,
+            nrValue:      nrParaVerificar,
+            campo:        campoCampo,
+            operadorId:   uid,
+            operadorNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
+            acordoId:     acordoIdParaNr,
+          });
+        }
       }
 
       // ── Auto-criar parcelas ao salvar novo acordo ───────────────────────
@@ -434,6 +450,26 @@ export default function AcordoForm() {
       // 5. Salvar novo acordo
       const resultError = await salvarAcordo(conflito.payload, uid);
       if (resultError) { toast.error(`Erro ao salvar: ${resultError.message}`); return; }
+
+      // 5.1. Transferir NR na tabela nr_registros (propagação realtime para todos)
+      const campoCampoTr: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
+      const nrTransf = (conflito.payload[campoCampoTr] as string | undefined)?.trim() ?? '';
+      if (nrTransf && empresa?.id) {
+        const { data: novoAc } = await supabase
+          .from('acordos').select('id')
+          .eq(campoCampoTr, nrTransf).eq('empresa_id', empresa.id)
+          .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+        if (novoAc?.id) {
+          await transferirNr({
+            empresaId:        empresa.id,
+            nrValue:          nrTransf,
+            campo:            campoCampoTr,
+            novoOperadorId:   uid,
+            novoOperadorNome: (perfilLocal ?? perfil)?.nome ?? 'Operador',
+            novoAcordoId:     novoAc.id,
+          });
+        }
+      }
 
       // 6. Notificar operador anterior
       const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
