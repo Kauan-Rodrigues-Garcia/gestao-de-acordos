@@ -5,7 +5,7 @@
  */
 import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MessageSquare, Send, Copy, X, CheckCircle2, ChevronDown, ChevronUp, Phone } from 'lucide-react';
+import { MessageSquare, Send, Copy, X, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -227,29 +227,17 @@ export function ModalFilaWhatsApp({
                   {item.enviado ? '✓' : idx + 1}
                 </div>
 
-               {/* Info do cliente */}
-               <div className="flex-1 min-w-0">
-                 <div className="flex items-center gap-1.5">
-                   <span className="text-xs font-mono font-bold text-primary">{nrLabel} {item.nr_cliente}</span>
-                   <span className="text-xs text-muted-foreground">·</span>
-                   <span className="text-xs font-medium text-foreground truncate">{item.nome_cliente}</span>
-                 </div>
-                 <p className="text-xs text-muted-foreground font-mono">
-                   {formatCurrency(item.valor)} · Vence {formatDate(item.vencimento)}
-                 </p>
-               </div>
-                {/* Telefone */}
-                <a
-                  href={item.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono text-success hover:underline flex-shrink-0 px-2 border-r border-border/50"
-                  onClick={(e) => { e.stopPropagation(); marcarEnviadoManual(item.id); }}
-                  title="Abrir WhatsApp"
-                >
-                  <Phone className="w-2.5 h-2.5" />
-                  {item.whatsapp}
-                </a>
+                {/* Info do cliente */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono font-bold text-primary">{nrLabel} {item.nr_cliente}</span>
+                    <span className="text-xs text-muted-foreground">·</span>
+                    <span className="text-xs font-medium text-foreground truncate">{item.nome_cliente}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono">
+                    {formatCurrency(item.valor)} · Vence {formatDate(item.vencimento)}
+                  </p>
+                </div>
 
                 {/* Ações */}
                 <div className="flex items-center gap-1.5 flex-shrink-0 pl-2 border-l border-border/50">
