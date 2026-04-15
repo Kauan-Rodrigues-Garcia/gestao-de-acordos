@@ -145,6 +145,25 @@ export default function AdminUsuarios() {
 
   useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
 
+  // ── Supabase Presence: Online/Offline ────────────────────────────────────
+  useEffect(() => {
+    if (!perfilAtual?.id || !empresaAtual?.id) return;
+    const channelName = `presence-usuarios-${empresaAtual.id}`;
+    const channel = supabase.channel(channelName, { config: { presence: { key: perfilAtual.id } } });
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState<{ user_id: string }>();
+        const ids = new Set<string>(Object.values(state).flatMap(arr => arr.map((p: any) => p.user_id)));
+        setOnlineIds(ids);
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: perfilAtual.id });
+        }
+      });
+    return () => { supabase.removeChannel(channel); };
+  }, [perfilAtual?.id, empresaAtual?.id]);
+
   function abrirCriar() {
     setEditando(null);
     setForm({
@@ -384,7 +403,7 @@ export default function AdminUsuarios() {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1">
                             <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
-                            {u.id === perfil?.id && (
+                            {u.id === perfilAtual?.id && (
                               <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
                             )}
                           </div>
@@ -424,7 +443,7 @@ export default function AdminUsuarios() {
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-0.5">
                         {/* Upload foto pelo líder/admin */}
-                        {(isAdmin || isSuperAdmin || perfil?.perfil === 'lider') && u.id !== perfil?.id && (
+                        {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
                           <Button
                             variant="ghost" size="icon" className="w-7 h-7"
                             title="Alterar foto de perfil"
