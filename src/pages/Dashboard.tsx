@@ -475,7 +475,7 @@ export default function Dashboard() {
           {isPP && acordosDeHoje.length > 0 && (
             <Button
               variant="outline" size="sm"
-              className="hidden text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10"
+              className="text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10"
               onClick={enviarLembretesHoje}
             >
               <MessageSquare className="w-3.5 h-3.5" />
@@ -793,6 +793,15 @@ export default function Dashboard() {
                                   <div>
                                     <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
                                     <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{a.nome_cliente}</p>
+                                    {/* NR clicável para copiar */}
+                                    <button
+                                      type="button"
+                                      title="Clique para copiar o NR"
+                                      onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`NR ${a.nr_cliente} copiado!`); }}
+                                      className="inline-flex items-center gap-0.5 font-mono text-[9px] bg-primary/8 border border-primary/20 px-1 py-0 rounded text-primary font-bold hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer mt-0.5"
+                                    >
+                                      <Hash className="w-2 h-2" />{a.nr_cliente}
+                                    </button>
                                   </div>
                                 </td>
                                 {/* Estado */}
@@ -805,9 +814,21 @@ export default function Dashboard() {
                                 </td>
                                 {/* Vencimento */}
                                 <td className="px-3 py-2.5">
-                                  <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && a.status !== 'pago' && 'text-warning font-semibold')}>
-                                    {formatDate(a.vencimento)}
-                                  </span>
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && a.status !== 'pago' && 'text-warning font-semibold')}>
+                                      {formatDate(a.vencimento)}
+                                    </span>
+                                    {venceHoje && a.status !== 'pago' && (
+                                      <span className="inline-flex items-center px-1.5 py-0 rounded text-[8px] font-bold bg-warning/20 text-warning border border-warning/30 w-fit">
+                                        HOJE
+                                      </span>
+                                    )}
+                                    {atrasado && (
+                                      <span className="inline-flex items-center px-1.5 py-0 rounded text-[8px] font-bold bg-destructive/15 text-destructive border border-destructive/25 w-fit">
+                                        ATRASADO
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 {/* Valor */}
                                 <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">

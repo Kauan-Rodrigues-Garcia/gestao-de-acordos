@@ -450,10 +450,9 @@ export default function Acordos() {
               <Button
                 variant="outline"
                 size="sm"
-                className={cn(
+                  className={cn(
                   'gap-1.5 border-success/40 text-success hover:bg-success/10',
-                  isPP && 'hidden'
-                )}
+                  )}
                 onClick={enviarLembretesHoje}
               >
                 <MessageSquare className="w-3.5 h-3.5" />
@@ -637,7 +636,7 @@ export default function Acordos() {
                             'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                             i % 2 === 0 && 'bg-muted/10',
                             atrasado  && 'bg-destructive/5',
-                            venceHoje && a.status !== 'pago' && 'bg-warning/5',
+                            venceHoje && a.status !== 'pago' && 'bg-warning/10 border-l-2 border-l-warning',
                             sel && 'bg-primary/5 border-primary/20',
                             isEditingThis && 'bg-primary/5',
                             isDetailThis && 'bg-accent/50'
@@ -662,11 +661,16 @@ export default function Acordos() {
                               <td className="px-3 py-2.5">
                                 <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
                               </td>
-                              {/* CPF */}
+                              {/* CPF — clique copia */}
                               <td className="px-3 py-2.5">
-                                <span className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold">
+                                <button
+                                  type="button"
+                                  title="Clique para copiar o CPF"
+                                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`CPF ${a.nr_cliente} copiado!`); }}
+                                  className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
+                                >
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </span>
+                                </button>
                               </td>
                               {/* Inscrição */}
                               <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
@@ -717,14 +721,20 @@ export default function Acordos() {
                               </td>
                             </>
                           ) : (
-                            <>
-                              <td className="px-3 py-2.5">
-                                <span className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded">
-                                  <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </span>
-                              </td>
-                              <td className="px-3 py-2.5">
-                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                          <>
+                             <td className="px-3 py-2.5">
+                               <button
+                                 type="button"
+                                 title="Clique para copiar o NR"
+                                 onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`NR ${a.nr_cliente} copiado!`); }}
+                                 className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
+                               >
+                                 <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
+                               </button>
+                             </td>
+++ b//data/workspace/a0ff9963-539c-4ec8-a4eb-7ea009025518/gestao-de-acordos/src/pages/Acordos.tsx
+                              <td className="px-3 py-2.5 cursor-pointer" title="Clique para abrir detalhes">
+                                <p className="font-medium text-foreground leading-none hover:text-primary transition-colors">{a.nome_cliente}</p>
                                 {a.instituicao && (
                                   <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
                                 )}
@@ -733,9 +743,21 @@ export default function Acordos() {
                                 )}
                               </td>
                               <td className="px-3 py-2.5">
-                                <span className={cn('font-mono', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
-                                  {formatDate(a.vencimento)}
-                                </span>
+                                <div className="flex flex-col gap-0.5">
+                                  <span className={cn('font-mono text-[11px]', atrasado && 'text-destructive font-semibold', venceHoje && 'text-warning font-semibold')}>
+                                    {formatDate(a.vencimento)}
+                                  </span>
+                                  {venceHoje && a.status !== 'pago' && (
+                                    <span className="inline-flex items-center px-1.5 py-0 rounded text-[8px] font-bold bg-warning/20 text-warning border border-warning/30 w-fit">
+                                      HOJE
+                                    </span>
+                                  )}
+                                  {atrasado && (
+                                    <span className="inline-flex items-center px-1.5 py-0 rounded text-[8px] font-bold bg-destructive/15 text-destructive border border-destructive/25 w-fit">
+                                      ATRASADO
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
                                 {formatCurrency(a.valor)}
