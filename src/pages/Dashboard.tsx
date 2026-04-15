@@ -794,6 +794,7 @@ export default function Dashboard() {
                             </div>
                           </th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
                           {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
@@ -806,7 +807,7 @@ export default function Dashboard() {
                         {novoInlineAbertoTabela && (
                           <AcordoNovoInline
                             isPaguePlay={isPP}
-                            colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 10 : 9}
+                            colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10}
                             onSaved={(inserido) => {
                               setNovoInlineAbertoTabela(false);
                               addAcordo(inserido); // Optimistic: adiciona sem refetch
@@ -816,7 +817,7 @@ export default function Dashboard() {
                         )}
                         {acordos.length === 0 ? (
                           <tr>
-                            <td colSpan={10} className="px-4 py-12 text-center">
+                            <td colSpan={11} className="px-4 py-12 text-center">
                               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Filter className="w-8 h-8 opacity-30" />
                                 <p className="font-medium">Nenhum acordo encontrado</p>
@@ -995,7 +996,7 @@ export default function Dashboard() {
                                   key={`detalhe-${a.id}`}
                                   acordo={a}
                                   isPaguePlay={isPP}
-                                  colSpan={10}
+                                  colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10}
                                   onClose={() => setDetalheInlineIdTabela(null)}
                                   onReagendar={() => setTimeout(() => refetch(), 300)}
                                   onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}

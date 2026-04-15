@@ -149,7 +149,11 @@ export default function App() {
                 </LayoutWrapper>
               } />
               <Route path="/admin/metas" element={
-                <ProtectedRoute allowedProfiles={['administrador','lider']}><MetasConfig /></ProtectedRoute>
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['administrador','lider']}>
+                    <MetasConfig />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_IA} element={
                 <LayoutWrapper>
