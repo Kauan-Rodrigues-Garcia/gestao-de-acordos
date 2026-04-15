@@ -536,11 +536,16 @@ export function AcordoNovoInline({
           : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
 
       // 3. Buscar acordo anterior completo ANTES de qualquer delete
-      const { data: acordoAntData } = await supabase
+      // Usar maybeSingle() para não lançar erro se não encontrar (RLS ou já deletado)
+      const { data: acordoAntData, error: errBusca } = await supabase
         .from('acordos')
-        .select('*, perfis(id, nome, email, perfil, setor_id)')
+        .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
         .eq('id', conflito.acordoId)
-        .single();
+        .maybeSingle();
+
+      if (errBusca) {
+        console.warn('[transferência] erro ao buscar acordo anterior:', errBusca.message);
+      }
 
       // Guardar dados para notificação mesmo se o delete ocorrer
       const nomeClienteAnt  = acordoAntData?.nome_cliente ?? '—';

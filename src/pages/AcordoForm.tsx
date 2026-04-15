@@ -418,9 +418,16 @@ export default function AcordoForm() {
       const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
 
       // 1. Buscar acordo anterior completo ANTES de qualquer delete
-      const { data: acordoAntData } = await supabase
-        .from('acordos').select('*, perfis(id, nome, email, perfil, setor_id)')
-        .eq('id', conflito.acordoId).single();
+      // Usar maybeSingle() para não lançar erro se não encontrar (RLS ou já deletado)
+      const { data: acordoAntData, error: errBusca } = await supabase
+        .from('acordos')
+        .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
+        .eq('id', conflito.acordoId)
+        .maybeSingle();
+
+      if (errBusca) {
+        console.warn('[transferência] erro ao buscar acordo anterior:', errBusca.message);
+      }
 
       // Guardar dados para notificação mesmo após o delete
       const nomeClienteAnt = acordoAntData?.nome_cliente ?? '—';
