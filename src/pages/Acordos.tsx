@@ -596,8 +596,8 @@ export default function Acordos() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs">STATUS</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs">OPERADOR</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                         </>
                       ) : (
                         <>
@@ -606,7 +606,7 @@ export default function Acordos() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
+                          <th className="text-center px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                         </>
@@ -618,14 +618,14 @@ export default function Acordos() {
                     {novoInlineAberto && (
                       <AcordoNovoInline
                         isPaguePlay={isPP}
-                        colSpan={isPP ? 10 : 10}
+                        colSpan={isPP ? 11 : 10}
                         onSaved={(inserido) => { setNovoInlineAberto(false); addAcordo(inserido); }}
                         onCancel={() => setNovoInlineAberto(false)}
                       />
                     )}
                     {acordosParaExibir.length === 0 ? (
                       <tr>
-                        <td colSpan={10} className="px-4 py-12 text-center">
+                        <td colSpan={isPP ? 11 : 10} className="px-4 py-12 text-center">
                           <div className="flex flex-col items-center gap-2 text-muted-foreground">
                             <Filter className="w-8 h-8 opacity-30" />
                             <p className="font-medium">Nenhum acordo encontrado</p>
@@ -782,7 +782,7 @@ export default function Acordos() {
                             </>
                           )}
                           <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-0.5">
+                            <div className="flex items-center justify-end gap-1">
                               {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                 <Button
                                   variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
@@ -856,7 +856,7 @@ export default function Acordos() {
                             key={`detalhe-${a.id}`}
                             acordo={a}
                             isPaguePlay={isPP}
-                            colSpan={10}
+                            colSpan={isPP ? 11 : 10}
                             onClose={() => setDetalheInlineId(null)}
                             onReagendar={() => setTimeout(() => refetch(), 300)}
                             onSaved={(atualizado) => {

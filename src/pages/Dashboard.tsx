@@ -795,6 +795,7 @@ export default function Dashboard() {
                           </th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
                           {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
                             <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                           )}
@@ -805,7 +806,7 @@ export default function Dashboard() {
                         {novoInlineAbertoTabela && (
                           <AcordoNovoInline
                             isPaguePlay={isPP}
-                            colSpan={10}
+                            colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 10 : 9}
                             onSaved={(inserido) => {
                               setNovoInlineAbertoTabela(false);
                               addAcordo(inserido); // Optimistic: adiciona sem refetch
@@ -915,13 +916,13 @@ export default function Dashboard() {
                                 </td>
                                 {/* Operador — apenas PaguePay admin/lider */}
                                 {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[100px]">
                                     {a.operador_id ? (operadoresMap[a.operador_id] ?? '...') : '—'}
                                   </td>
                                 )}
                                 {/* Ações */}
                                 <td className="px-3 py-2.5">
-                                  <div className="flex items-center justify-end gap-0.5">
+                                  <div className="flex items-center justify-end gap-1">
                                     {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                       <Button
                                         variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"

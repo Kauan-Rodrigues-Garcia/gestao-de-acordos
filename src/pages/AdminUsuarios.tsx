@@ -356,7 +356,7 @@ export default function AdminUsuarios() {
     : usuarios;
 
   return (
-    <div className="p-6 max-w-5xl mx-auto">
+    <div className="p-6 max-w-6xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
@@ -388,17 +388,17 @@ export default function AdminUsuarios() {
 
       <Card className="border-border">
         <CardContent className="p-0">
-          <div className="w-full">
-            <table className="w-full text-sm table-fixed">
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-sm table-fixed min-w-[800px]">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[22%]">USUÁRIO</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[20%]">E-MAIL</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[14%]">PERFIL</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[16%]">SETOR</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[14%]">EMPRESA</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[12%]">PERFIL</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[13%]">SETOR</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[13%]">EMPRESA</th>
                   <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-xs w-[8%]">ATIVO</th>
-                  <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs w-[6%]">AÇÕES</th>
+                  <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs w-[12%]">AÇÕES</th>
                 </tr>
               </thead>
               <tbody>
@@ -473,8 +473,8 @@ export default function AdminUsuarios() {
                         : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
                       }
                     </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-0.5">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center justify-end gap-1">
                         {/* Ações de foto e senha — lider/admin sobre outros usuários */}
                         {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
                           <>
