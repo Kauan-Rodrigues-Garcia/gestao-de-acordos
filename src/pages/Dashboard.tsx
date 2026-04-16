@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -1053,11 +1053,12 @@ export default function Dashboard() {
           {/* Modal confirmar exclusão individual */}
           {confirmandoExclusao && (
             <Dialog open onOpenChange={() => setConfirmandoExclusao(null)}>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-md" aria-describedby="dash-dlg-excl-desc">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-destructive">
                     <Trash2 className="w-5 h-5" /> Confirmar exclusão
                   </DialogTitle>
+                  <DialogDescription id="dash-dlg-excl-desc" className="sr-only">Confirmar exclusão do acordo selecionado</DialogDescription>
                 </DialogHeader>
                 <div className="py-2 space-y-4">
                   <div className="text-sm text-foreground">
@@ -1096,11 +1097,12 @@ export default function Dashboard() {
           {/* Modal confirmar exclusão lote */}
           {confirmandoExclusaoLote && (
             <Dialog open onOpenChange={() => setConfirmandoExclusaoLote(false)}>
-              <DialogContent className="max-w-sm">
+              <DialogContent className="max-w-sm" aria-describedby="dash-dlg-excl-lote-desc">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-destructive">
                     <Trash2 className="w-4 h-4" /> Excluir {selecionados.length} acordos
                   </DialogTitle>
+                  <DialogDescription id="dash-dlg-excl-lote-desc" className="sr-only">Confirmar exclusão em lote dos acordos selecionados</DialogDescription>
                 </DialogHeader>
                 <div className="py-2 space-y-2">
                   <p className="text-sm text-foreground">

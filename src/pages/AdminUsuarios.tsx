@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
@@ -531,9 +531,12 @@ export default function AdminUsuarios() {
 
       {/* ── Dialog editar/criar usuário ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby="modal-usuario-desc">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
+            <DialogDescription id="modal-usuario-desc" className="sr-only">
+              {editando ? 'Editar dados do usuário' : 'Criar novo usuário'}
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -601,12 +604,15 @@ export default function AdminUsuarios() {
 
       {/* ── Dialog mover usuário de setor ── */}
       <Dialog open={moverDialog} onOpenChange={v => { if (!v) { setMoverDialog(false); setMoverUsuario(null); } }}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby="modal-mover-desc">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-primary" />
               Mover para outro setor
             </DialogTitle>
+            <DialogDescription id="modal-mover-desc" className="sr-only">
+              Selecionar novo setor para o usuário
+            </DialogDescription>
           </DialogHeader>
           {moverUsuario && (
             <div className="space-y-4 py-2">
@@ -690,12 +696,15 @@ export default function AdminUsuarios() {
 
       {/* Modal alterar senha de operador */}
       <Dialog open={!!senhaTarget} onOpenChange={v => !v && setSenhaTarget(null)}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm" aria-describedby="modal-senha-desc">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <KeyRound className="w-4 h-4 text-primary" />
               Alterar Senha
             </DialogTitle>
+            <DialogDescription id="modal-senha-desc" className="sr-only">
+              Definir nova senha para o usuário selecionado
+            </DialogDescription>
           </DialogHeader>
           <div className="py-3 space-y-3">
             <p className="text-sm text-muted-foreground">

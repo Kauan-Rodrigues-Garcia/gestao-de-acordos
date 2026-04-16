@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -250,9 +250,10 @@ export default function AdminConfiguracoes() {
       </Card>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby="cfg-modelo-desc">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Modelo' : 'Novo Modelo de Mensagem'}</DialogTitle>
+            <DialogDescription id="cfg-modelo-desc" className="sr-only">{editando ? 'Editar modelo de mensagem' : 'Criar novo modelo de mensagem WhatsApp'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">

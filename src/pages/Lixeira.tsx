@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
@@ -244,12 +244,13 @@ export default function Lixeira() {
 
       {/* Modal de detalhes */}
       <Dialog open={!!detalhe} onOpenChange={open => { if (!open) setDetalhe(null); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby="lixeira-dlg-desc">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-foreground">
               <Trash2 className="w-5 h-5 text-destructive" />
               Detalhes do Acordo Excluído
             </DialogTitle>
+            <DialogDescription id="lixeira-dlg-desc" className="sr-only">Detalhes completos do acordo excluído</DialogDescription>
           </DialogHeader>
           {detalhe && (
             <ScrollArea className="max-h-[500px]">

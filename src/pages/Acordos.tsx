@@ -10,7 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
@@ -894,11 +894,12 @@ export default function Acordos() {
       {/* ── Modal confirmação exclusão ── */}
       {confirmandoExclusao && (
         <Dialog open onOpenChange={() => setConfirmandoExclusao(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-md" aria-describedby="dlg-excl-desc">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
                 <Trash2 className="w-5 h-5" /> Confirmar exclusão
               </DialogTitle>
+              <DialogDescription id="dlg-excl-desc" className="sr-only">Confirmar exclusão do acordo selecionado</DialogDescription>
             </DialogHeader>
             <div className="py-2 space-y-4">
               <div className="text-sm text-foreground">
@@ -940,11 +941,12 @@ export default function Acordos() {
       {/* ── Modal confirmação exclusão lote ── */}
       {confirmandoExclusaoLote && (
         <Dialog open onOpenChange={() => setConfirmandoExclusaoLote(false)}>
-          <DialogContent className="max-w-sm">
+          <DialogContent className="max-w-sm" aria-describedby="dlg-excl-lote-desc">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-destructive">
                 <Trash2 className="w-4 h-4" /> Excluir {selecionados.length} acordos
               </DialogTitle>
+              <DialogDescription id="dlg-excl-lote-desc" className="sr-only">Confirmar exclusão em lote dos acordos selecionados</DialogDescription>
             </DialogHeader>
             <div className="py-2 space-y-2">
               <p className="text-sm text-foreground">

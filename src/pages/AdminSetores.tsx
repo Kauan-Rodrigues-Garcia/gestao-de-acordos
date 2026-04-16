@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase, Setor } from '@/lib/supabase';
 import SeedSetores from '@/components/SeedSetores';
 import { toast } from 'sonner';
@@ -222,9 +222,10 @@ export default function AdminSetores() {
 
       {/* Dialog criar/editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby="dlg-setor-desc">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Setor' : 'Novo Setor'}</DialogTitle>
+            <DialogDescription id="dlg-setor-desc" className="sr-only">{editando ? 'Editar dados do setor' : 'Criar novo setor'}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -259,12 +260,13 @@ export default function AdminSetores() {
       <AnimatePresence>
         {confirmandoExclusao && (
           <Dialog open onOpenChange={() => setConfirmandoExclusao(null)}>
-            <DialogContent className="max-w-sm">
+            <DialogContent className="max-w-sm" aria-describedby="dlg-excl-setor-desc">
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-destructive">
                   <AlertTriangle className="w-5 h-5" />
                   Excluir setor
                 </DialogTitle>
+                <DialogDescription id="dlg-excl-setor-desc" className="sr-only">Confirmar exclusão do setor</DialogDescription>
               </DialogHeader>
               <div className="py-2 space-y-3">
                 <p className="text-sm text-muted-foreground">

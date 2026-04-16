@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { MessageSquare, Send, Copy, X, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -133,12 +133,15 @@ export function ModalFilaWhatsApp({
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col" aria-describedby="modal-fila-wp-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <MessageSquare className="w-4 h-4 text-success" />
             Fila de Lembretes WhatsApp
           </DialogTitle>
+          <DialogDescription id="modal-fila-wp-desc" className="sr-only">
+            Lista de acordos para envio de lembrete via WhatsApp
+          </DialogDescription>
         </DialogHeader>
 
         {/* Progresso */}

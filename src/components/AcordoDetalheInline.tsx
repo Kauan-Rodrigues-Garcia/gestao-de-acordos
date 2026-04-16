@@ -145,12 +145,15 @@ export function ModalReagendar({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm" aria-describedby="modal-reagendar-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-success">
             <CheckCircle2 className="w-4 h-4" />
             Reagendar Próximo Pagamento
           </DialogTitle>
+          <DialogDescription id="modal-reagendar-desc" className="sr-only">
+            Definir nova data e valor para a próxima parcela do acordo
+          </DialogDescription>
         </DialogHeader>
         <div className="py-3 space-y-3">
           <p className="text-sm text-muted-foreground text-xs">
@@ -203,7 +206,6 @@ export function ModalReagendar({
             O acordo atual (pago) é mantido no histórico. O novo será criado como pendente.
           </p>
         </div>
-        <DialogDescription className="sr-only">Reagendar próximo pagamento</DialogDescription>
         <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={salvando}>Cancelar</Button>
           <Button
@@ -351,12 +353,15 @@ export function ModalEditarAcordoParcelado({
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-lg" aria-describedby="modal-edit-parc-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
             <Edit className="w-4 h-4 text-primary" />
             Editar Acordo Parcelado
           </DialogTitle>
+          <DialogDescription id="modal-edit-parc-desc" className="sr-only">
+            Editar campos gerais ou parcelas individuais do acordo parcelado
+          </DialogDescription>
         </DialogHeader>
 
         {/* ── Abas ── */}
@@ -447,7 +452,6 @@ export function ModalEditarAcordoParcelado({
           </div>
         )}
 
-        <DialogDescription className="sr-only">Editar acordo parcelado</DialogDescription>
         <DialogFooter className="gap-2 pt-2">
           <Button variant="outline" onClick={onClose} disabled={saving} size="sm">Cancelar</Button>
           <Button onClick={handleSave} disabled={saving} size="sm" className="gap-1.5">
@@ -672,8 +676,11 @@ export function AcordoDetalheInline({
                       Editar
                     </Button>
                   )}
-                  {/* Botão Reagendar: acordos simples (pagos) ou parcelados sem próxima parcela */}
-                  {isAcordoSimples && acordoLocal.status === 'pago' && (
+                  {/* Botão Reagendar: apenas acordos PARCELADOS com parcelas em aberto
+                     (isAcordoSimples = tipo não parcelado → não mostra nunca no cabeçalho)
+                     Para parcelados, o botão fica DENTRO da sub-tabela, linha a linha.
+                     Para acordos simples pagos: NÃO mostrar — só existe para parcelamentos. */}
+                  {false && isAcordoSimples && acordoLocal.status === 'pago' && (
                     <Button
                       size="sm"
                       className="h-7 text-xs gap-1.5 bg-success hover:bg-success/90 text-white font-semibold"
