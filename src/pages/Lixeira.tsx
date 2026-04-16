@@ -59,10 +59,11 @@ export default function Lixeira() {
   const [busca, setBusca]         = useState('');
   const [detalhe, setDetalhe]     = useState<LixeiraAcordo | null>(null);
 
-  const isAdminOuLider =
+  const podeAcessar =
     perfil?.perfil === 'administrador' ||
     perfil?.perfil === 'super_admin' ||
-    perfil?.perfil === 'lider';
+    perfil?.perfil === 'lider' ||
+    perfil?.perfil === 'operador';
 
   async function carregar() {
     if (!empresa?.id) return;
@@ -88,10 +89,10 @@ export default function Lixeira() {
     );
   });
 
-  if (!isAdminOuLider) {
+  if (!podeAcessar) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[300px]">
-        <p className="text-muted-foreground text-sm">Acesso restrito a líderes e administradores.</p>
+        <p className="text-muted-foreground text-sm">Acesso restrito.</p>
       </div>
     );
   }

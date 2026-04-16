@@ -168,7 +168,7 @@ export default function App() {
 
               <Route path="/admin/lixeira" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider']}>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','operador']}>
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>

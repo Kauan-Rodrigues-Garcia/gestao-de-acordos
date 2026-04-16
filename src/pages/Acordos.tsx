@@ -625,6 +625,7 @@ export default function Acordos() {
                         colSpan={isPP ? 11 : 10}
                         onSaved={(inserido) => { setNovoInlineAberto(false); addAcordo(inserido); }}
                         onCancel={() => setNovoInlineAberto(false)}
+                        onAcordoRemovido={(id) => removeAcordo(id)}
                       />
                     )}
                     {acordosParaExibir.length === 0 ? (

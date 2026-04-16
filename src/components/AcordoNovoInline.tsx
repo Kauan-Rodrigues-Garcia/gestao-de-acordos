@@ -112,6 +112,8 @@ export interface AcordoNovoInlineProps {
   colSpan:     number;
   onSaved:     (inserido: Acordo) => void;
   onCancel:    () => void;
+  /** Chamado com o id do acordo deletado quando uma transferência de NR é autorizada */
+  onAcordoRemovido?: (id: string) => void;
 }
 
 // ─── DatePickerField (interno) ────────────────────────────────────────────────
@@ -290,7 +292,7 @@ export function ModalAutorizacaoNR({
 // ─── Componente principal ────────────────────────────────────────────────────
 
 export function AcordoNovoInline({
-  isPaguePlay, colSpan, onSaved, onCancel,
+  isPaguePlay, colSpan, onSaved, onCancel, onAcordoRemovido,
 }: AcordoNovoInlineProps) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
@@ -583,6 +585,10 @@ export function AcordoNovoInline({
         toast.error(`Erro ao remover acordo anterior: ${errDelete.message}`);
         return;
       }
+
+      // ── Remoção imediata/optimista da lista local do operador atual ─────────
+      // Garante que o acordo desapareça da lista mesmo se o Realtime atrasar.
+      onAcordoRemovido?.(conflito.acordoId);
 
       // 6. Inserir novo acordo
       //    ⚠ O trigger trg_sync_nr_registros fará o INSERT em nr_registros
