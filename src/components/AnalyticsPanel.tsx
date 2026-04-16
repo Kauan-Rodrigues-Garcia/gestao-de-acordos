@@ -158,9 +158,11 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
 
 interface AnalyticsPanelProps {
   setorFiltro?: string | null;
+  /** Elite: quando false = visão individual (só os próprios acordos) */
+  eliteVisaoGeral?: boolean;
 }
 
-export function AnalyticsPanel({ setorFiltro: setorExterno }: AnalyticsPanelProps = {}) {
+export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: AnalyticsPanelProps = {}) {
   const [open, setOpen] = useState(false);
   const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { perfil } = useAuth();
@@ -184,14 +186,25 @@ export function AnalyticsPanel({ setorFiltro: setorExterno }: AnalyticsPanelProp
     loading,
     refetch,
     setSetorFiltro,
+    setOperadorFiltro,
   } = useAnalytics();
 
-  // Sincronizar com filtro externo do Dashboard
+  // Sincronizar filtro de setor externo
   useEffect(() => {
     if (setorExterno !== undefined) {
       setSetorFiltro(setorExterno ?? null);
     }
   }, [setorExterno]);
+
+  // Sincronizar visão Elite: individual = filtra por perfil.id, geral = sem filtro
+  useEffect(() => {
+    if (perfil?.perfil !== 'elite' && perfil?.perfil !== 'gerencia') return;
+    if (eliteVisaoGeral === false) {
+      setOperadorFiltro(perfil?.id ?? null);
+    } else {
+      setOperadorFiltro(null);
+    }
+  }, [eliteVisaoGeral, perfil?.perfil, perfil?.id]);
 
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
   const isLider = perfil?.perfil === 'lider';

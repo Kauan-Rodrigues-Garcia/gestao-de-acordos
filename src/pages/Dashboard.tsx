@@ -523,7 +523,7 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        <AnalyticsPanel setorFiltro={setorFiltro} />
+        <AnalyticsPanel setorFiltro={setorFiltro} eliteVisaoGeral={eliteVisaoGeral} />
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════

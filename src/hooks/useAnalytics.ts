@@ -60,6 +60,10 @@ export interface AnalyticsData {
   setorFiltro: string | null;
   setSetorFiltro: (id: string | null) => void;
 
+  // Filtro por operador (Elite em visão individual)
+  operadorFiltro: string | null;
+  setOperadorFiltro: (id: string | null) => void;
+
   loading: boolean;
   refetch: () => void;
 }
@@ -95,6 +99,7 @@ export function useAnalytics(): AnalyticsData {
   const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const [setorFiltro, setSetorFiltro] = useState<string | null>(null);
+  const [operadorFiltro, setOperadorFiltro] = useState<string | null>(null);
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   const [meta, setMeta] = useState<MetaInfo | null>(null);
   const [metasEquipe, setMetasEquipe] = useState<MetaInfo[]>([]);
@@ -123,7 +128,12 @@ export function useAnalytics(): AnalyticsData {
 
       if (!isAdmin && !isDiretoria) {
         if (isLider && perfil.setor_id) {
-          q = q.eq('setor_id', perfil.setor_id);
+          // Elite em visão individual: filtra pelo próprio operador_id
+          if (operadorFiltro) {
+            q = q.eq('operador_id', operadorFiltro);
+          } else {
+            q = q.eq('setor_id', perfil.setor_id);
+          }
         } else {
           q = q.eq('operador_id', perfil.id);
         }
@@ -209,7 +219,7 @@ export function useAnalytics(): AnalyticsData {
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro]);
+  }, [perfil, empresa, mes, ano, setorFiltro, operadorFiltro]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -329,5 +339,7 @@ export function useAnalytics(): AnalyticsData {
     setores,
     setorFiltro,
     setSetorFiltro,
+    operadorFiltro,
+    setOperadorFiltro,
   };
 }
