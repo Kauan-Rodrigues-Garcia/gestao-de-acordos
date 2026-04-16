@@ -332,11 +332,10 @@ export default function AdminUsuarios() {
     if (novaSenha.length < 6) { toast.error('A senha deve ter pelo menos 6 caracteres'); return; }
     setSalvandoSenha(true);
     try {
-      const { error } = await supabase.rpc('admin_change_user_password', {
-        p_user_id: senhaTarget.id,
-        p_new_password: novaSenha.trim(),
-      } as any);
-      if (error) { toast.error(`Erro: ${error.message}`); return; }
+      const { data, error } = await supabase.functions.invoke('admin-change-password', {
+        body: { p_user_id: senhaTarget.id, p_new_password: novaSenha.trim() },
+      });
+      if (error || data?.error) { toast.error(`Erro: ${error?.message ?? data?.error}`); return; }
       toast.success(`Senha de ${senhaTarget.nome} alterada com sucesso!`);
       setSenhaTarget(null);
       setNovaSenha('');

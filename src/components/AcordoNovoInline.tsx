@@ -187,14 +187,14 @@ export function ModalAutorizacaoNR({
 
   return (
     <Dialog open={!!conflito} onOpenChange={(open) => { if (!open) onCancel(); }}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md" aria-describedby="dlg-conflito-nr-desc">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-warning">
             <AlertTriangle className="w-5 h-5 shrink-0" />
             NR já agendado por outro operador
           </DialogTitle>
 
-          <DialogDescription asChild>
+          <DialogDescription id="dlg-conflito-nr-desc" asChild>
             <div className="space-y-3 pt-1">
               {/* Descrição principal */}
               <p className="text-sm text-foreground/80">

@@ -798,8 +798,8 @@ export default function Acordos() {
                                   <CheckCircle className="w-3 h-3" />
                                 </Button>
                               )}
-                              {/* Botão Reagendar — apenas PaguePay, acordo pago com grupo */}
-                              {isPP && a.status === 'pago' && !!a.acordo_grupo_id && (
+                              {/* Botão Reagendar — PaguePay, tipo parcelado (boleto/pix), com grupo e parcelas > 1 */}
+                              {isPP && a.status === 'pago' && !!a.acordo_grupo_id && (a.tipo === 'boleto' || a.tipo === 'pix') && (a.parcelas ?? 1) > 1 && (
                                 <Button
                                   variant="ghost" size="sm"
                                   className="h-6 text-[10px] px-2 text-success border border-success/40 hover:bg-success/10 gap-1"
