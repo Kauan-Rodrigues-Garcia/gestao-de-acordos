@@ -24,6 +24,9 @@ const PERFIL_BADGE: Record<string, string> = {
   lider:         'bg-warning/10 text-warning border-warning/30',
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
   super_admin:   'bg-chart-1/10 text-chart-1 border-chart-1/30',
+  elite:         'bg-chart-2/10 text-chart-2 border-chart-2/30',
+  gerencia:      'bg-chart-3/10 text-chart-3 border-chart-3/30',
+  diretoria:     'bg-chart-5/10 text-chart-5 border-chart-5/30',
 };
 
 interface UserForm {
@@ -564,6 +567,9 @@ export default function AdminUsuarios() {
                  <SelectContent>
                    <SelectItem value="operador">Operador</SelectItem>
                    <SelectItem value="lider">Líder</SelectItem>
+                   <SelectItem value="elite">Elite</SelectItem>
+                   <SelectItem value="gerencia">Gerência</SelectItem>
+                   <SelectItem value="diretoria">Diretoria</SelectItem>
                    <SelectItem value="administrador">Administrador</SelectItem>
                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                  </SelectContent>

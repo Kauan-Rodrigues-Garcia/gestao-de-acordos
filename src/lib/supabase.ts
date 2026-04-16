@@ -28,7 +28,7 @@ function getSupabase(): SupabaseClient {
 
 export const supabase = getSupabase();
 
-export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin';
+export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin' | 'elite' | 'gerencia' | 'diretoria';
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
 export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 

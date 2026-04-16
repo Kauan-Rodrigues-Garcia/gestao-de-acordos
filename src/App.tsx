@@ -29,6 +29,8 @@ const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
+const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
+const AdminCargos       = lazy(() => import('@/pages/AdminCargos'));
 
 function PageLoader() {
   return (
@@ -104,21 +106,21 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['lider','administrador']}>
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']}>
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['lider','administrador']}>
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']}>
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['lider', 'administrador']}>
+                  <ProtectedRoute allowedProfiles={['lider', 'administrador', 'elite', 'gerencia']}>
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -132,7 +134,7 @@ export default function App() {
               } />
               <Route path="/admin/equipes" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador', 'lider']}>
+                  <ProtectedRoute allowedProfiles={['administrador', 'lider', 'elite', 'gerencia']}>
                     <AdminEquipes />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -153,7 +155,7 @@ export default function App() {
               } />
               <Route path="/admin/metas" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider']}>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']}>
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -168,11 +170,30 @@ export default function App() {
 
               <Route path="/admin/lixeira" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','operador']}>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']}>
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
+
+              {/* Painel Diretoria */}
+              <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}>
+                    <PainelDiretoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Admin Cargos — apenas administradores */}
+              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['administrador','super_admin']}>
+                    <AdminCargos />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

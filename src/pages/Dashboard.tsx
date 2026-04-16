@@ -7,6 +7,7 @@ import {
   Search, Filter, RefreshCw, X,
   Edit, Eye, CheckCircle, CheckCircle2, Hash, MapPin, Link2,
   ChevronLeft, ChevronRight, ChevronDown, Trash2,
+  ToggleLeft, ToggleRight,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -28,6 +29,7 @@ import {
   getTodayISO, isPaguePlay, getTipoLabels, getStatusLabels,
   TIPO_OPTIONS_PAGUEPLAY, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isAtrasado, ESTADOS_BRASIL,
+  isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { supabase, Acordo } from '@/lib/supabase';
@@ -106,7 +108,13 @@ export default function Dashboard() {
 
   // ── filtro de setor para admin (via useAnalytics) ───────────────────────────
   const { setores: setoresList, setorFiltro, setSetorFiltro } = useAnalytics();
-  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
+  const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
+  // Toggle Elite: alterna visão geral (líder) ↔ individual (operador)
+  const [eliteVisaoGeral, setEliteVisaoGeral] = useState(
+    perfil?.perfil === 'elite' || perfil?.perfil === 'gerencia',
+  );
+  const isElite = perfil?.perfil === 'elite';
 
   // ── acordos de hoje ──────────────────────────────────────────────────────────
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
@@ -179,7 +187,7 @@ export default function Dashboard() {
       vencimento:   filtroData || undefined,
       data_inicio:  filtroData ? undefined : mesFiltroInicio,
       data_fim:     filtroData ? undefined : mesFiltroFim,
-      operador_id:  perfil?.perfil === 'operador' ? perfil.id : undefined,
+      operador_id:  (perfil?.perfil === 'operador' || (isElite && !eliteVisaoGeral)) ? perfil?.id : undefined,
       page:         currentPage,
       perPage:      PER_PAGE,
     } : {},
@@ -447,7 +455,25 @@ export default function Dashboard() {
             </p>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap items-center">
+          {/* Toggle Elite: alterna visão geral / individual */}
+          {isElite && (
+            <button
+              onClick={() => setEliteVisaoGeral(v => !v)}
+              className={cn(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
+                eliteVisaoGeral
+                  ? 'bg-chart-2/15 text-chart-2 border-chart-2/30 hover:bg-chart-2/25'
+                  : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20',
+              )}
+              title={eliteVisaoGeral ? 'Visão geral (todos os acordos do setor)' : 'Visão individual (apenas seus acordos)'}
+            >
+              {eliteVisaoGeral
+                ? <><ToggleRight className="w-3.5 h-3.5" /> Visão Geral</>
+                : <><ToggleLeft className="w-3.5 h-3.5" /> Visão Individual</>
+              }
+            </button>
+          )}
           {isPP && acordosDeHoje.length > 0 && (
             <Button
               variant="outline" size="sm"

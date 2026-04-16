@@ -7,7 +7,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
-import { getTodayISO } from '@/lib/index';
+import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria } from '@/lib/index';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -110,8 +110,9 @@ export function useAnalytics(): AnalyticsData {
   const fetchAll = useCallback(async () => {
     if (!perfil || !empresa?.id) return;
     setLoading(true);
-    const isAdmin = perfil.perfil === 'administrador' || perfil.perfil === 'super_admin';
-    const isLider = perfil.perfil === 'lider';
+    const isAdmin = isPerfilAdmin(perfil.perfil);
+    const isLider = isPerfilLider(perfil.perfil);
+    const isDiretoria = isPerfilDiretoria(perfil.perfil);
 
     try {
       // ── Acordos conforme perfil ──────────────────────────────────────────────
@@ -120,19 +121,19 @@ export function useAnalytics(): AnalyticsData {
         .select('*')
         .eq('empresa_id', empresa.id);
 
-      if (!isAdmin) {
+      if (!isAdmin && !isDiretoria) {
         if (isLider && perfil.setor_id) {
           q = q.eq('setor_id', perfil.setor_id);
         } else {
           q = q.eq('operador_id', perfil.id);
         }
       } else if (setorFiltro) {
-        // Admin filtrou por setor específico
+        // Admin/Diretoria filtrou por setor específico
         q = q.eq('setor_id', setorFiltro);
       }
 
-      // Carregar setores para o filtro do admin
-      if (isAdmin) {
+      // Carregar setores para o filtro do admin/diretoria
+      if (isAdmin || isDiretoria) {
         const { data: setoresData } = await supabase
           .from('setores')
           .select('id, nome')
@@ -161,8 +162,8 @@ export function useAnalytics(): AnalyticsData {
         setMeta(metaData as MetaInfo | null);
       }
 
-      // ── Metas por equipe / operador (admin/líder) ────────────────────────────
-      if (isAdmin || isLider) {
+      // ── Metas por equipe / operador (admin/líder/diretoria) ─────────────────
+      if (isAdmin || isLider || isDiretoria) {
         const [{ data: meq }, { data: mop }] = await Promise.all([
           supabase
             .from('metas')
@@ -188,7 +189,7 @@ export function useAnalytics(): AnalyticsData {
             .from('perfis')
             .select('id, nome')
             .eq('empresa_id', empresa.id)
-            .eq('perfil', 'operador'),
+            .in('perfil', ['operador', 'elite', 'gerencia']),
           supabase
             .from('equipes')
             .select('id, nome')

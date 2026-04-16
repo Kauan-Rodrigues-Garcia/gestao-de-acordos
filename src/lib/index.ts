@@ -12,6 +12,8 @@ export const ROUTE_PATHS = {
   ADMIN_CONFIGURACOES: '/admin/configuracoes',
   ADMIN_LOGS: '/admin/logs',
   ADMIN_IA: '/admin/ia',
+  ADMIN_CARGOS: '/admin/cargos',
+  PAINEL_DIRETORIA: '/diretoria',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -47,6 +49,9 @@ export const PERFIL_LABELS: Record<string, string> = {
   lider: 'Líder',
   administrador: 'Administrador',
   super_admin: 'Super Admin',
+  elite: 'Elite',
+  gerencia: 'Gerência',
+  diretoria: 'Diretoria',
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
@@ -54,7 +59,30 @@ export const PERFIL_COLORS: Record<string, string> = {
   lider: 'bg-warning/10 text-warning border-warning/30',
   administrador: 'bg-destructive/10 text-destructive border-destructive/30',
   super_admin: 'bg-chart-1/10 text-chart-1 border-chart-1/30',
+  elite: 'bg-chart-2/10 text-chart-2 border-chart-2/30',
+  gerencia: 'bg-chart-3/10 text-chart-3 border-chart-3/30',
+  diretoria: 'bg-chart-5/10 text-chart-5 border-chart-5/30',
 };
+
+// Perfis com acesso de líder (visão de setor + equipe)
+export const PERFIS_LIDER = ['lider', 'elite', 'gerencia'] as const;
+// Perfis com acesso de admin (visão global)
+export const PERFIS_ADMIN = ['administrador', 'super_admin'] as const;
+// Perfis com acesso de diretoria (analíticos globais sem edição)
+export const PERFIS_DIRETORIA = ['diretoria'] as const;
+
+export function isPerfilLider(perfil: string): boolean {
+  return PERFIS_LIDER.includes(perfil as typeof PERFIS_LIDER[number]);
+}
+export function isPerfilAdmin(perfil: string): boolean {
+  return PERFIS_ADMIN.includes(perfil as typeof PERFIS_ADMIN[number]);
+}
+export function isPerfilDiretoria(perfil: string): boolean {
+  return PERFIS_DIRETORIA.includes(perfil as typeof PERFIS_DIRETORIA[number]);
+}
+export function isPerfilAdminOuLider(perfil: string): boolean {
+  return isPerfilAdmin(perfil) || isPerfilLider(perfil);
+}
 
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 

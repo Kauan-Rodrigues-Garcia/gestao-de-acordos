@@ -26,7 +26,7 @@ import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay, isPerfilAdmin, isPerfilLider } from '@/lib/index';
 import { calcularMetricasMes } from '@/services/acordos.service';
 import { cn } from '@/lib/utils';
 
@@ -358,7 +358,10 @@ export default function PainelLider() {
   const [filtroEquipe,        setFiltroEquipe]        = useState<string>('todas');
 
   // ── Derivar role ──────────────────────────────────────────────────────────
-  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+  // Admin e Diretoria vêem todos os operadores da empresa sem filtro de setor
+  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
+  // Elite e Gerência têm as mesmas permissões de líder (filtra por setor)
+  const isLiderOuSimilar = isPerfilLider(perfil?.perfil ?? '') && !isAdmin;
 
   const carregarDados = useCallback(async () => {
     // ── GUARD: não executar sem empresa ou perfil definidos ────────────────
@@ -375,8 +378,8 @@ export default function PainelLider() {
           .select('*, membros:perfis(count)')
           .eq('empresa_id', empresa.id);   // ← sempre filtrar por empresa
 
-        // Líder vê apenas equipes do seu setor
-        if (!isAdmin && perfil.setor_id) {
+        // Líder, Elite e Gerência vêem apenas equipes do seu setor
+        if (!isAdmin && isLiderOuSimilar && perfil.setor_id) {
           eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
         }
 
@@ -394,8 +397,8 @@ export default function PainelLider() {
         .eq('perfil', 'operador')
         .eq('ativo', true);
 
-      if (!isAdmin && perfil.setor_id) {
-        // Líder: apenas operadores do seu próprio setor
+      if (!isAdmin && isLiderOuSimilar && perfil.setor_id) {
+        // Líder/Elite/Gerência: apenas operadores do seu próprio setor
         q = q.eq('setor_id', perfil.setor_id);
       }
       // Admin: sem filtro adicional de setor — vê todos da empresa
