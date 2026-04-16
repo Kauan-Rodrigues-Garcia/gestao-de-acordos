@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Filter, Camera, X, Trash2, KeyRound } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { usePresence } from '@/hooks/usePresence';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -59,8 +60,19 @@ export default function AdminUsuarios() {
   const [moverUsuario, setMoverUsuario]     = useState<Perfil | null>(null);
   const [moverSetorId, setMoverSetorId]     = useState('');
   const [moverSaving, setMoverSaving]       = useState(false);
-  // Online/Offline via Supabase Presence
-  const [onlineIds,       setOnlineIds]       = useState<Set<string>>(new Set());
+  // Online/Offline via Supabase Presence (hook centralizado)
+  const { onlineIds } = usePresence({
+    empresaId:   empresaAtual?.id,
+    userId:      perfilAtual?.id,
+    meta: {
+      nome:        perfilAtual?.nome,
+      perfil_tipo: perfilAtual?.perfil,
+    },
+    // Aqui apenas observamos — o track real já acontece no Layout
+    // mas passamos observerOnly=false para garantir que esta instância
+    // também se registre caso o Layout ainda não tenha montado.
+    observerOnly: false,
+  });
   // Foto expandida
   const [fotoExpandida,   setFotoExpandida]   = useState<{ url: string; nome: string } | null>(null);
   // Upload de foto pelo líder/admin para outro operador
@@ -151,25 +163,6 @@ export default function AdminUsuarios() {
   }
 
   useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
-
-  // ── Supabase Presence: Online/Offline ────────────────────────────────────
-  useEffect(() => {
-    if (!perfilAtual?.id || !empresaAtual?.id) return;
-    const channelName = `presence-usuarios-${empresaAtual.id}`;
-    const channel = supabase.channel(channelName, { config: { presence: { key: perfilAtual.id } } });
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<{ user_id: string }>();
-        const ids = new Set<string>(Object.values(state).flatMap(arr => arr.map((p: any) => p.user_id)));
-        setOnlineIds(ids);
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: perfilAtual.id });
-        }
-      });
-    return () => { supabase.removeChannel(channel); };
-  }, [perfilAtual?.id, empresaAtual?.id]);
 
   function abrirCriar() {
     setEditando(null);
