@@ -16,35 +16,37 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Cliente com service role (para alterar senha)
+    // Cliente admin (service role) — para alterar senha e buscar perfil
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Cliente com JWT do chamador (para verificar permissão)
+    // Verificar JWT do chamador
     const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: 'Não autorizado' }), {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return new Response(JSON.stringify({ error: 'Token de autorização ausente' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
+    const token = authHeader.replace('Bearer ', '');
+
+    // Usar admin client para verificar o token (getUser com JWT)
     const callerClient = createClient(supabaseUrl, anonKey, {
-      global: { headers: { Authorization: authHeader } },
+      global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Verificar identidade do chamador
     const { data: { user: caller }, error: authErr } = await callerClient.auth.getUser();
     if (authErr || !caller) {
-      return new Response(JSON.stringify({ error: 'Token inválido' }), {
+      return new Response(JSON.stringify({ error: 'Token inválido ou expirado' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Verificar se o chamador é administrador, lider ou super_admin
+    // Verificar perfil do chamador via admin client
     const { data: perfil, error: perfilErr } = await adminClient
       .from('perfis')
       .select('perfil')
@@ -77,7 +79,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (p_new_password.length < 6) {
+    if ((p_new_password as string).length < 6) {
       return new Response(JSON.stringify({ error: 'A senha deve ter pelo menos 6 caracteres' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
