@@ -60,19 +60,8 @@ export default function AdminUsuarios() {
   const [moverUsuario, setMoverUsuario]     = useState<Perfil | null>(null);
   const [moverSetorId, setMoverSetorId]     = useState('');
   const [moverSaving, setMoverSaving]       = useState(false);
-  // Online/Offline via Supabase Presence (hook centralizado)
-  const { onlineIds } = usePresence({
-    empresaId:   empresaAtual?.id,
-    userId:      perfilAtual?.id,
-    meta: {
-      nome:        perfilAtual?.nome,
-      perfil_tipo: perfilAtual?.perfil,
-    },
-    // Aqui apenas observamos — o track real já acontece no Layout
-    // mas passamos observerOnly=false para garantir que esta instância
-    // também se registre caso o Layout ainda não tenha montado.
-    observerOnly: false,
-  });
+  // Online/Offline — lê do PresenceProvider (canal singleton global)
+  const { onlineIds } = usePresence();
   // Foto expandida
   const [fotoExpandida,   setFotoExpandida]   = useState<{ url: string; nome: string } | null>(null);
   // Upload de foto pelo líder/admin para outro operador

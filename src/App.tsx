@@ -11,6 +11,7 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
+import { PresenceProvider } from '@/providers/PresenceProvider';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -71,6 +72,7 @@ export default function App() {
       <AuthProvider>
         <EmpresaProvider>
           <RealtimeAcordosProvider>
+          <PresenceProvider>
         <TenantThemeApplier />
         <Router>
           <Suspense fallback={<PageLoader />}>
@@ -199,6 +201,7 @@ export default function App() {
           </Suspense>
           <Toaster richColors position="top-right" />
         </Router>
+          </PresenceProvider>
           </RealtimeAcordosProvider>
         </EmpresaProvider>
       </AuthProvider>

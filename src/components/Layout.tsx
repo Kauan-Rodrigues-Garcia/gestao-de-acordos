@@ -10,7 +10,6 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useNotificacoes } from '@/hooks/useNotificacoes';
-import { usePresence } from '@/hooks/usePresence';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPaguePlay, isPerfilLider, isPerfilAdmin } from '@/lib/index';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -53,19 +52,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { empresa, branding, tenantSlug } = useEmpresa();
   const { naoLidas, notificacoes, marcarLida, marcarTodasLidas, limparTodas } = useNotificacoes();
   const navigate = useNavigate();
-
-  // ── Presença global: track do usuário logado em todas as páginas ──────────
-  // Roda aqui no Layout (componente persistente) para que qualquer usuário
-  // autenticado apareça como "online" na tela de Usuários, independente de
-  // qual página está visitando no momento.
-  usePresence({
-    empresaId:   empresa?.id,
-    userId:      perfil?.id,
-    meta: {
-      nome:        perfil?.nome,
-      perfil_tipo: perfil?.perfil,
-    },
-  });
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
