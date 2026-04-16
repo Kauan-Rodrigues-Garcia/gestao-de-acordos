@@ -1,0 +1,41 @@
+-- ============================================================
+-- Migration 18: Suporte completo para novos cargos
+--               elite, gerencia e diretoria
+-- ============================================================
+-- Problemas corrigidos:
+--
+--   1. ENUM perfil_usuario não tinha os 3 novos valores
+--      → ALTER TYPE ADD VALUE (idempotente via pg_enum check)
+--
+--   2. Trigger fn_criar_perfil_novo_usuario (migration 17)
+--      só aceitava operador/lider/administrador/super_admin.
+--      Qualquer outro valor era silenciosamente rebaixado para
+--      'operador', causando criação de usuário com cargo errado.
+--      → Lista expandida para incluir elite/gerencia/diretoria
+--
+--   3. CHECK constraint perfis_perfil_check não incluía os novos valores
+--      → UPDATE recusado com "violates check constraint"
+--
+--   4. RLS policy "perfis_lider_update" (migration 11) tinha:
+--        USING  (perfil = 'operador' AND ...)
+--        WITH CHECK (perfil = 'operador' AND ...)
+--      → UPDATE de cargo para elite/gerencia/diretoria retornava HTTP 400
+--      → Corrigido removendo restrição de perfil no WITH CHECK
+--
+--   5. RLS policy "perfis_select" não incluía elite/gerencia/diretoria
+--      → Usuários com esses cargos não enxergavam outros perfis do setor
+--
+--   6. Backfill automático de usuários criados com cargo errado
+--      (perfil='operador' no banco mas metadata='elite'/'gerencia'/'diretoria')
+--
+-- NOTA: Este arquivo é o histórico consolidado das migrations
+--       step1, step2 e step3_v3 aplicadas em 2026-04-16.
+--       Elas já foram executadas diretamente no banco via Supabase.
+-- ============================================================
+
+-- STEP 1 — ENUMs (já executado)
+-- STEP 2 — Trigger (já executado)
+-- STEP 3 — CHECK constraint + RLS + backfill (já executado)
+-- Ver arquivos: step1_enum_novos_cargos_2026_04_16.sql
+--               step2_trigger_novos_cargos_2026_04_16.sql
+--               step3_rls_novos_cargos_v3_2026_04_16.sql
