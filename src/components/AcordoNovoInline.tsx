@@ -451,7 +451,7 @@ export function AcordoNovoInline({
         onSaved(inserido);
         toast.success(
           parcelas > 1
-            ? `Acordo criado! ${parcelas} parcelas gerenciadas pelo Reagendar.`
+            ? `Acordo criado! ${parcelas} parcelas negociadas.`
             : 'Acordo criado com sucesso!',
         );
       }

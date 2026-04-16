@@ -7,15 +7,12 @@
  *      · Linhas com registro real no banco → dados e status reais
  *      · Linhas sem registro (futuras) → data calculada, status "A vencer"
  *  - Botão "Pago": aparece em linhas reais com status != 'pago'. Faz UPDATE no banco.
- *  - Botão "Reagendar": aparece na última linha real que está paga e NÃO é a última parcela.
- *    Ao confirmar no modal, cria o próximo registro no banco (numero_parcela + 1).
- *  - Badge "Agendado": linha paga com próxima linha real já existindo no banco.
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
-  FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
+  FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock, Edit, Save,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -81,7 +78,6 @@ export interface AcordoDetalheInlineProps {
   isPaguePlay: boolean;
   colSpan: number;
   onClose: () => void;
-  onReagendar?: () => void;
   /** Callback após edição bem-sucedida (recebe o acordo principal atualizado) */
   onSaved?: (atualizado: Acordo) => void;
 }
@@ -109,128 +105,6 @@ function Campo({
         )}
       </div>
     </div>
-  );
-}
-
-// ─── Modal de Reagendamento (exportado) ──────────────────────────────────────
-export function ModalReagendar({
-  parcela, open, onClose, onConfirm,
-}: {
-  parcela: Acordo | null;
-  open: boolean;
-  onClose: () => void;
-  onConfirm: (data: string, valor: number, modoTodas?: boolean) => Promise<void>;
-}) {
-  const [salvando,  setSalvando]  = useState(false);
-  const [novaData,  setNovaData]  = useState('');
-  const [valorStr,  setValorStr]  = useState('');
-  const [modoTodas, setModoTodas] = useState(false);
-
-  useEffect(() => {
-    if (!parcela) return;
-    setNovaData(addMonths(parcela.vencimento, 1));
-    setValorStr(parcela.valor.toFixed(2).replace('.', ','));
-    setModoTodas(false);
-  }, [parcela?.id]);
-
-  const temParcelas = (parcela?.parcelas ?? 1) > 1;
-
-  async function handleConfirm() {
-    if (!novaData) { toast.error('Data obrigatória'); return; }
-    const v = parseFloat(valorStr.replace(',', '.'));
-    if (isNaN(v) || v <= 0) { toast.error('Valor inválido'); return; }
-    setSalvando(true);
-    try { await onConfirm(novaData, v, temParcelas ? modoTodas : false); } finally { setSalvando(false); }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-sm" aria-describedby="modal-reagendar-desc">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-success">
-            <CheckCircle2 className="w-4 h-4" />
-            Reagendar Próximo Pagamento
-          </DialogTitle>
-          <DialogDescription id="modal-reagendar-desc" className="sr-only">
-            Definir nova data e valor para a próxima parcela do acordo
-          </DialogDescription>
-        </DialogHeader>
-        <div className="py-3 space-y-3">
-          <p className="text-sm text-muted-foreground text-xs">
-            Próximo pagamento de{' '}
-            <span className="font-semibold text-foreground">
-              {parcela?.instituicao || parcela?.nome_cliente || parcela?.nr_cliente}
-            </span>
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Nova data *</label>
-              <input type="date" value={novaData} onChange={e => setNovaData(e.target.value)}
-                className="w-full h-9 text-sm bg-background border border-input rounded-md px-3 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Valor (R$) *</label>
-              <input type="text" value={valorStr} onChange={e => setValorStr(e.target.value)}
-                className="w-full h-9 text-sm bg-background border border-input rounded-md px-3 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
-          </div>
-          {temParcelas && (
-            <div className="flex gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => setModoTodas(false)}
-                className={cn(
-                  'flex-1 text-xs py-1.5 rounded-md border transition-colors',
-                  !modoTodas
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-muted-foreground border-border hover:bg-accent'
-                )}
-              >
-                Só esta parcela
-              </button>
-              <button
-                type="button"
-                onClick={() => setModoTodas(true)}
-                className={cn(
-                  'flex-1 text-xs py-1.5 rounded-md border transition-colors',
-                  modoTodas
-                    ? 'bg-primary text-primary-foreground border-primary'
-                    : 'bg-background text-muted-foreground border-border hover:bg-accent'
-                )}
-              >
-                Todas as parcelas
-              </button>
-            </div>
-          )}
-          <p className="text-xs text-muted-foreground">
-            O acordo atual (pago) é mantido no histórico. O novo será criado como pendente.
-          </p>
-        </div>
-        <DialogFooter className="gap-2 pt-2">
-          <Button variant="outline" onClick={onClose} disabled={salvando}>Cancelar</Button>
-          <Button
-            className="gap-2 font-semibold bg-success hover:bg-success/90 text-white"
-            onClick={handleConfirm}
-            disabled={salvando}
-          >
-            {salvando ? (
-              <>
-                <svg className="animate-spin w-3.5 h-3.5" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                </svg>
-                Reagendando...
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4" />
-                Confirmar
-              </>
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -466,7 +340,7 @@ export function ModalEditarAcordoParcelado({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function AcordoDetalheInline({
-  acordo, isPaguePlay, colSpan, onClose, onReagendar, onSaved,
+  acordo, isPaguePlay, colSpan, onClose, onSaved,
 }: AcordoDetalheInlineProps) {
   const statusLabels  = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels    = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
@@ -476,11 +350,6 @@ export function AcordoDetalheInline({
   const [registrosReais,   setRegistrosReais]   = useState<Acordo[]>([]);
   const [loadingParc,      setLoadingParc]       = useState(false);
   const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
-  // Modal Reagendar (parcelas)
-  const [parcelaModal,    setParcelaModal]    = useState<Acordo | null>(null);
-  const [modalAberto,     setModalAberto]     = useState(false);
-  // Modal Reagendar acordos simples (não parcelados)
-  const [modalReagSimples, setModalReagSimples] = useState(false);
   // Modal Editar Parcelado
   const [modalEditParcOpen, setModalEditParcOpen] = useState(false);
   // Acordo local (para reflectir edições sem fechar o detalhe)
@@ -524,90 +393,9 @@ export function AcordoDetalheInline({
     } else {
       toast.success('Parcela marcada como paga!');
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
-      onReagendar?.();
     }
     setMarcandoPago(null);
   }
-
-  // ── Confirmar reagendamento: cria 1 novo registro ─────────────────────────
-  // ── Confirmar reagendamento simples (acordo não parcelado) ──────────────
-  async function confirmarReagendamentoSimples(novaData: string, novoValor: number) {
-    const p = acordoLocal;
-    const novoPedido = {
-      nome_cliente:  p.nome_cliente,
-      nr_cliente:    p.nr_cliente,
-      vencimento:    novaData,
-      valor:         novoValor,
-      tipo:          p.tipo,
-      parcelas:      1,
-      whatsapp:      p.whatsapp,
-      status:        'verificar_pendente' as const,
-      observacoes:   p.observacoes,
-      instituicao:   p.instituicao,
-      operador_id:   p.operador_id,
-      empresa_id:    p.empresa_id,
-      data_cadastro: new Date().toISOString().split('T')[0],
-    };
-    const { error } = await supabase.from('acordos').insert(novoPedido);
-    if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
-    toast.success('Reagendamento criado!');
-    setModalReagSimples(false);
-    setTimeout(() => onReagendar?.(), 800);
-  }
-
-  async function confirmarReagendamento(novaData: string, novoValor: number) {
-    if (!parcelaModal) return;
-    const p = parcelaModal;
-    const novaParcela = {
-      nome_cliente:    p.nome_cliente,
-      nr_cliente:      p.nr_cliente,
-      vencimento:      novaData,
-      valor:           novoValor,
-      tipo:            p.tipo,
-      parcelas:        p.parcelas,
-      whatsapp:        p.whatsapp,
-      status:          'verificar_pendente' as const,
-      observacoes:     p.observacoes,
-      instituicao:     p.instituicao,
-      operador_id:     p.operador_id,
-      empresa_id:      p.empresa_id,
-      acordo_grupo_id: p.acordo_grupo_id,
-      numero_parcela:  (p.numero_parcela ?? 1) + 1,
-      data_cadastro:   new Date().toISOString().split('T')[0],
-    };
-    const { data: inserido, error } = await supabase
-      .from('acordos')
-      .insert(novaParcela)
-      .select('*')
-      .single();
-
-    if (error) { toast.error(`Erro ao reagendar: ${error.message}`); return; }
-
-    // 1. Adicionar a nova parcela REAL ao estado local IMEDIATAMENTE
-    //    → proximaReal passa a existir → foiAgendada=true → botão Reagendar some na hora
-    if (inserido) {
-      setRegistrosReais(prev => {
-        // Substituir se já existir pelo numero_parcela, caso contrário adicionar
-        const existe = prev.some(x => x.numero_parcela === inserido.numero_parcela);
-        if (existe) {
-          return prev.map(x => x.numero_parcela === inserido.numero_parcela ? inserido as Acordo : x);
-        }
-        return [...prev, inserido as Acordo].sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1));
-      });
-    }
-
-    // 2. Fechar modal e limpar estado
-    setModalAberto(false);
-    setParcelaModal(null);
-
-    toast.success('Reagendamento confirmado!', { description: 'Próximo pagamento agendado na nova data.' });
-
-    // 3. Pai faz refetch com delay para não desmontar o componente antes do usuário ver
-    //    o botão sumir. O estado local já foi atualizado acima; o refetch só sincroniza
-    //    a lista do pai depois que o usuário teve tempo de confirmar visualmente.
-    setTimeout(() => { onReagendar?.(); }, 1500);
-  }
-
   // ── Montar lista mista: real ou virtual para cada índice 1..N ────────────
   type LinhaTabela = {
     index: number;           // 1-based
@@ -625,13 +413,6 @@ export function AcordoDetalheInline({
     );
     return { index, real, dataCalc };
   });
-
-  // Última linha real paga (candidata ao botão Reagendar)
-  const ultimaRealPagaIdx = (() => {
-    let last = -1;
-    linhas.forEach(l => { if (l.real && l.real.status === 'pago') last = l.index; });
-    return last;
-  })();
 
   return (
     <>
@@ -674,20 +455,6 @@ export function AcordoDetalheInline({
                     >
                       <Edit className="w-3 h-3" />
                       Editar
-                    </Button>
-                  )}
-                  {/* Botão Reagendar: apenas acordos PARCELADOS com parcelas em aberto
-                     (isAcordoSimples = tipo não parcelado → não mostra nunca no cabeçalho)
-                     Para parcelados, o botão fica DENTRO da sub-tabela, linha a linha.
-                     Para acordos simples pagos: NÃO mostrar — só existe para parcelamentos. */}
-                  {false && isAcordoSimples && acordoLocal.status === 'pago' && (
-                    <Button
-                      size="sm"
-                      className="h-7 text-xs gap-1.5 bg-success hover:bg-success/90 text-white font-semibold"
-                      onClick={() => setModalReagSimples(true)}
-                    >
-                      <RefreshCw className="w-3 h-3" />
-                      Reagendar
                     </Button>
                   )}
                   <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
@@ -794,16 +561,6 @@ export function AcordoDetalheInline({
                           </thead>
                           <tbody>
                             {linhas.map(({ index, real, dataCalc }) => {
-                              // Verificar se a próxima parcela já tem registro real
-                              const proximaReal = linhas.find(l => l.index === index + 1)?.real;
-                              const foiAgendada = real?.status === 'pago' && !!proximaReal;
-                              // Reagendar: última paga, sem próxima real, não é a última parcela
-                              const podeReagendar =
-                                real?.status === 'pago' &&
-                                !proximaReal &&
-                                index === ultimaRealPagaIdx &&
-                                index < totalParcelas;
-
                               const isAtualAcordo = real?.id === acordo.id;
 
                               return (
@@ -845,17 +602,7 @@ export function AcordoDetalheInline({
 
                                   {/* Ação */}
                                   <td className="px-3 py-2.5 text-center">
-                                    {foiAgendada ? (
-                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-success/15 text-success border border-success/30 shadow-sm">
-                                        <CheckCircle2 className="w-2.5 h-2.5" /> Agendado
-                                      </span>
-                                    ) : podeReagendar ? (
-                                      <Button size="sm"
-                                        className="h-6 text-[10px] px-2.5 bg-success hover:bg-success/90 text-success-foreground gap-1 font-semibold shadow-sm"
-                                        onClick={() => { setParcelaModal(real); setModalAberto(true); }}>
-                                        <RefreshCw className="w-2.5 h-2.5" /> Reagendar
-                                      </Button>
-                                    ) : real && real.status !== 'pago' ? (
+                                    {real && real.status !== 'pago' ? (
                                       <Button variant="ghost" size="sm"
                                         className="h-6 text-[10px] px-2.5 text-success hover:bg-success/15 hover:text-success border border-success/20 font-semibold"
                                         disabled={marcandoPago === real.id}
@@ -885,22 +632,6 @@ export function AcordoDetalheInline({
           </motion.div>
         </td>
       </tr>
-
-      {/* Modal reagendar parcelas */}
-      <ModalReagendar
-        parcela={parcelaModal}
-        open={modalAberto}
-        onClose={() => { setModalAberto(false); setParcelaModal(null); }}
-        onConfirm={confirmarReagendamento}
-      />
-
-      {/* Modal reagendar acordo simples */}
-      <ModalReagendar
-        parcela={acordoLocal}
-        open={modalReagSimples}
-        onClose={() => setModalReagSimples(false)}
-        onConfirm={confirmarReagendamentoSimples}
-      />
 
       {/* Modal editar parcelado */}
       {deveExibirParcelas && (

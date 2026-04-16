@@ -34,7 +34,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
-import { AcordoDetalheInline, ModalReagendar } from '@/components/AcordoDetalheInline';
+import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
@@ -151,8 +151,6 @@ export default function Dashboard() {
   const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
   // Novo acordo inline (tabela completa)
   const [novoInlineAbertoTabela,  setNovoInlineAbertoTabela]  = useState(false);
-  // Reagendar acordo pago (PaguePay)
-  const [reagendarAcordoTabela, setReagendarAcordoTabela] = useState<Acordo | null>(null);
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
@@ -303,39 +301,6 @@ export default function Dashboard() {
   function selecionarTodos() {
     if (selecionados.length === acordos.length) setSelecionados([]);
     else setSelecionados(acordos.map(a => a.id));
-  }
-
-  async function confirmarReagendamentoDash(data: string, valor: number, modoTodas?: boolean) {
-    const p = reagendarAcordoTabela;
-    if (!p) return;
-    const nova = {
-      nome_cliente:    p.nome_cliente,
-      nr_cliente:      p.nr_cliente,
-      vencimento:      data,
-      valor,
-      tipo:            p.tipo,
-      parcelas:        p.parcelas,
-      whatsapp:        p.whatsapp,
-      status:          'verificar_pendente' as const,
-      observacoes:     p.observacoes,
-      instituicao:     p.instituicao,
-      operador_id:     p.operador_id,
-      setor_id:        p.setor_id,
-      empresa_id:      p.empresa_id,
-      acordo_grupo_id: p.acordo_grupo_id,
-      numero_parcela:  (p.numero_parcela ?? 1) + 1,
-      data_cadastro:   new Date().toISOString().split('T')[0],
-    };
-    // Optimistic: substitui a linha atual (parcela anterior) pela nova na tabela
-    const { data: inserido, error } = await supabase
-      .from('acordos').insert(nova)
-      .select('*, perfis(id, nome, email, perfil, setor_id)').single();
-    if (error) { toast.error(`Erro: ${error.message}`); return; }
-    // Remove a parcela anterior da lista e adiciona a nova no lugar
-    removeAcordo(p.id);
-    if (inserido) addAcordo(inserido as Acordo);
-    toast.success('Próximo pagamento agendado!');
-    setReagendarAcordoTabela(null);
   }
 
   async function marcarComoPago(id: string) {
@@ -937,17 +902,6 @@ export default function Dashboard() {
                                         <CheckCircle className="w-3 h-3" />
                                       </Button>
                                     )}
-                                    {/* Botão Reagendar — PaguePay, boleto/pix parcelado, apenas se ainda há parcelas por vencer */}
-                                    {isPP && a.status === 'pago' && !!a.acordo_grupo_id && (a.tipo === 'boleto' || a.tipo === 'pix') && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && (
-                                      <Button
-                                        variant="ghost" size="sm"
-                                        className="h-6 text-[10px] px-2 text-success border border-success/40 hover:bg-success/10 gap-1"
-                                        title="Reagendar próximo pagamento"
-                                        onClick={(e) => { e.stopPropagation(); setReagendarAcordoTabela(a); }}
-                                      >
-                                        Reagendar
-                                      </Button>
-                                    )}
                                     {/* WhatsApp — oculto para PaguePay */}
                                     <Button
                                       variant="ghost" size="icon"
@@ -1001,7 +955,6 @@ export default function Dashboard() {
                                   isPaguePlay={isPP}
                                   colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10}
                                   onClose={() => setDetalheInlineIdTabela(null)}
-                                  onReagendar={() => setTimeout(() => refetch(), 300)}
                                   onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
                                 />
                               )}
@@ -1041,14 +994,6 @@ export default function Dashboard() {
               onClose={() => { setFilaAberta(false); setSelecionados([]); }}
             />
           )}
-
-          {/* ── Modal Reagendar (PaguePay) ── */}
-          <ModalReagendar
-            parcela={reagendarAcordoTabela}
-            open={!!reagendarAcordoTabela}
-            onClose={() => setReagendarAcordoTabela(null)}
-            onConfirm={confirmarReagendamentoDash}
-          />
 
           {/* Modal confirmar exclusão individual */}
           {confirmandoExclusao && (
