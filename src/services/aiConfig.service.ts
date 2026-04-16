@@ -23,7 +23,7 @@ export type AIConfigInput = Pick<
 >;
 
 export async function saveAIConfig(input: AIConfigInput): Promise<void> {
-  const current = await fetchAIConfig(input.empresa_id).catch(() => null);
+  const current = await fetchAIConfig(input.empresa_id).catch((): null => null);
 
   if (current?.id) {
     const { error } = await supabase

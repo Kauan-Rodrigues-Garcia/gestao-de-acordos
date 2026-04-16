@@ -52,7 +52,7 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
-function TenantThemeApplier() {
+function TenantThemeApplier(): null {
   const { tenantSlug } = useEmpresa();
   useEffect(() => {
     document.documentElement.setAttribute('data-tenant', tenantSlug);

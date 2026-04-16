@@ -39,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfil(null);
     setEmpresa(null);
     await supabase.auth.signOut();
-    return { tenantMismatch: message, missingProfile: null };
+    return { tenantMismatch: message, missingProfile: null as string | null };
   }
 
   async function fetchPerfil(userId: string): Promise<{ tenantMismatch: string | null; missingProfile: string | null }> {

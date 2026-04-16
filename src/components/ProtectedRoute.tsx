@@ -6,9 +6,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 interface ProtectedRouteProps {
   children: React.ReactNode;
   roles?: string[];
+  allowedProfiles?: string[];
 }
 
-export function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
+export function ProtectedRoute({ children, roles, allowedProfiles }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
 
   if (loading) {
@@ -25,11 +26,13 @@ export function ProtectedRoute({ children, roles }: ProtectedRouteProps) {
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
-  if (roles && perfil && perfil.perfil !== 'super_admin' && !roles.includes(perfil.perfil)) {
+  // Suporte a ambos: roles e allowedProfiles (sinônimos)
+  const perfilRequerido = roles ?? allowedProfiles;
+  if (perfilRequerido && perfil && perfil.perfil !== 'super_admin' && !perfilRequerido.includes(perfil.perfil)) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
   }
 
-  return <>{children}</>;
+  return <>{children}</> as React.ReactElement;
 }
 
 export function PublicRoute({ children }: { children: React.ReactNode }) {

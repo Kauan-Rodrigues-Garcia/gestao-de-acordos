@@ -36,7 +36,7 @@ export async function fetchEmpresaAtual(): Promise<Empresa | null> {
     return null;
   }
 
-  return (data?.empresas as Empresa | null) ?? null;
+  return (data?.empresas as unknown as Empresa | null) ?? null;
 }
 
 /** Busca empresa por slug */

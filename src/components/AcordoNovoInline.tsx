@@ -709,7 +709,7 @@ export function AcordoNovoInline({
                         <SelectValue placeholder="UF" />
                       </SelectTrigger>
                       <SelectContent>
-                        {(ESTADOS_BRASIL as string[]).map((uf) => (
+                        {([...ESTADOS_BRASIL] as string[]).map((uf) => (
                           <SelectItem key={uf} value={uf}>{uf}</SelectItem>
                         ))}
                       </SelectContent>
@@ -942,7 +942,7 @@ export function AcordoNovoInline({
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(INSTITUICOES_OPTIONS as { value: string; label: string }[]).map((opt) => (
+                      {(INSTITUICOES_OPTIONS as unknown as { value: string; label: string }[]).map((opt) => (
                         <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                       ))}
                     </SelectContent>
