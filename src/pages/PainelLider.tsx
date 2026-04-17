@@ -318,7 +318,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                             </Badge>
                           </td>
                           <td className="px-4 py-2">
-                            <Link to={`../acordo/${a.id}`} className="text-primary hover:underline text-[10px]">
+                            <Link to={`/acordos/${a.id}`} className="text-primary hover:underline text-[10px]">
                               <ArrowRight className="w-3.5 h-3.5" />
                             </Link>
                           </td>
