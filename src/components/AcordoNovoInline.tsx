@@ -944,8 +944,8 @@ export function AcordoNovoInline({
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {(INSTITUICOES_OPTIONS as unknown as { value: string; label: string }[]).map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      {INSTITUICOES_OPTIONS.map((inst) => (
+                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
