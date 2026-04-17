@@ -7,7 +7,7 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Trash2, RefreshCw, Search, Clock, ArrowRightLeft,
-  User, Building2, Calendar, DollarSign, Info, X,
+  AlertTriangle, X, Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,13 +15,14 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { fetchLixeira, LixeiraAcordo } from '@/services/lixeira.service';
+import { fetchLixeira, esvaziarLixeira, LixeiraAcordo } from '@/services/lixeira.service';
 import { formatCurrency, formatDate } from '@/lib/index';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
 function tempoRestante(expiraEm?: string): string {
@@ -54,10 +55,12 @@ export default function Lixeira() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [itens, setItens]         = useState<LixeiraAcordo[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [busca, setBusca]         = useState('');
-  const [detalhe, setDetalhe]     = useState<LixeiraAcordo | null>(null);
+  const [itens, setItens]               = useState<LixeiraAcordo[]>([]);
+  const [loading, setLoading]           = useState(true);
+  const [busca, setBusca]               = useState('');
+  const [detalhe, setDetalhe]           = useState<LixeiraAcordo | null>(null);
+  const [confirmEsvaziar, setConfirmEsvaziar] = useState(false);
+  const [esvaziando, setEsvaziando]     = useState(false);
 
   const podeAcessar =
     perfil?.perfil === 'administrador' ||
@@ -65,14 +68,32 @@ export default function Lixeira() {
     perfil?.perfil === 'lider' ||
     perfil?.perfil === 'operador';
 
+  const podeEsvaziar =
+    perfil?.perfil === 'administrador' ||
+    perfil?.perfil === 'super_admin';
+
   async function carregar() {
     if (!empresa?.id) return;
     setLoading(true);
     try {
-      const data = await fetchLixeira(empresa.id, 200);
+      const data = await fetchLixeira(empresa.id);
       setItens(data);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleEsvaziar() {
+    if (!empresa?.id) return;
+    setEsvaziando(true);
+    const { ok, error } = await esvaziarLixeira(empresa.id);
+    setEsvaziando(false);
+    setConfirmEsvaziar(false);
+    if (ok) {
+      setItens([]);
+      toast.success('Lixeira esvaziada com sucesso!');
+    } else {
+      toast.error('Erro ao esvaziar lixeira: ' + error);
     }
   }
 
@@ -106,13 +127,25 @@ export default function Lixeira() {
             <Trash2 className="w-5 h-5 text-destructive" /> Lixeira de Acordos
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Acordos excluídos manualmente ou transferidos. Retidos por 30 dias.
+            Acordos excluídos manualmente ou transferidos. Retidos por 3 dias.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={carregar} disabled={loading} className="gap-1.5">
-          <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          {podeEsvaziar && itens.length > 0 && (
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setConfirmEsvaziar(true)}
+              className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              Esvaziar Lixeira
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={carregar} disabled={loading} className="gap-1.5">
+            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       {/* Busca */}
@@ -158,7 +191,7 @@ export default function Lixeira() {
             <div className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
               <Trash2 className="w-10 h-10 opacity-20" />
               <p className="font-medium">Lixeira vazia</p>
-              <p className="text-xs">Nenhum acordo excluído nos últimos 30 dias</p>
+              <p className="text-xs">Nenhum acordo excluído nos últimos 3 dias</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -309,6 +342,40 @@ export default function Lixeira() {
               </div>
             </ScrollArea>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal confirmação esvaziar lixeira ── */}
+      <Dialog open={confirmEsvaziar} onOpenChange={setConfirmEsvaziar}>
+        <DialogContent className="max-w-sm" aria-describedby="dlg-esvaziar-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="w-5 h-5" /> Esvaziar Lixeira
+            </DialogTitle>
+            <DialogDescription id="dlg-esvaziar-desc">
+              Esta ação é permanente e não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2 text-sm text-foreground">
+            <p>Você está prestes a excluir permanentemente <strong>{itens.length} acordo(s)</strong> da lixeira.</p>
+            <p className="text-muted-foreground">Após a exclusão, não será possível recuperar esses registros.</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setConfirmEsvaziar(false)} disabled={esvaziando}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleEsvaziar}
+              disabled={esvaziando}
+              className="gap-1.5"
+            >
+              {esvaziando
+                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                : <Trash2 className="w-3.5 h-3.5" />}
+              {esvaziando ? 'Esvaziando...' : 'Esvaziar Definitivamente'}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

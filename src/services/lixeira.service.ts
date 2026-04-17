@@ -2,7 +2,7 @@
  * src/services/lixeira.service.ts
  * ─────────────────────────────────────────────────────────────────────────
  * Serviço de Lixeira — armazena acordos excluídos (manual ou por transferência de NR)
- * na tabela `lixeira_acordos` por um período de retenção (padrão 30 dias).
+ * na tabela `lixeira_acordos` por um período de retenção (padrão 3 dias).
  *
  * SQL para criar a tabela no Supabase (executar uma vez):
  * ───────────────────────────────────────────────────────
@@ -27,7 +27,7 @@
  *   transferido_para_id   UUID,     -- novo operador (se transferência)
  *   transferido_para_nome TEXT,     -- nome do novo operador
  *   excluido_em     TIMESTAMPTZ DEFAULT NOW(),
- *   expira_em       TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days')
+ *   expira_em       TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '3 days')
  * );
  * CREATE INDEX IF NOT EXISTS idx_lixeira_empresa ON public.lixeira_acordos(empresa_id);
  * CREATE INDEX IF NOT EXISTS idx_lixeira_operador ON public.lixeira_acordos(operador_id);
@@ -111,7 +111,7 @@ export async function enviarParaLixeira(params: EnviarParaLixeiraParams): Promis
 }
 
 /** Busca itens da lixeira de uma empresa (para admin/líder) */
-export async function fetchLixeira(empresaId: string, limit = 50): Promise<LixeiraAcordo[]> {
+export async function fetchLixeira(empresaId: string, limit = 200): Promise<LixeiraAcordo[]> {
   const { data, error } = await supabase
     .from('lixeira_acordos')
     .select('*')
@@ -124,6 +124,34 @@ export async function fetchLixeira(empresaId: string, limit = 50): Promise<Lixei
     return [];
   }
   return (data as LixeiraAcordo[]) || [];
+}
+
+/** Esvazia toda a lixeira de uma empresa (exclusão permanente) */
+export async function esvaziarLixeira(empresaId: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('lixeira_acordos')
+    .delete()
+    .eq('empresa_id', empresaId);
+
+  if (error) {
+    console.warn('[lixeira.service] esvaziarLixeira error:', error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+/** Remove um item específico da lixeira (exclusão permanente) */
+export async function deletarItemLixeira(id: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('lixeira_acordos')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    console.warn('[lixeira.service] deletarItemLixeira error:', error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
 }
 
 // Alias para compatibilidade
