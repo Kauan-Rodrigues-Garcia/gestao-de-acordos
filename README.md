@@ -10,7 +10,7 @@ Plataforma web para gerenciamento de acordos financeiros com controle de acesso 
 |---|---|
 | **UI** | React 18, TypeScript, Vite 5 (SWC) |
 | **Estilização** | Tailwind CSS 4, shadcn/ui (Radix UI) |
-| **Roteamento** | React Router DOM 6 (**BrowserRouter**) |
+| **Roteamento** | React Router DOM 6 (**HashRouter**) |
 | **Formulários** | React Hook Form + Zod |
 | **Estado servidor** | TanStack React Query |
 | **Estado local** | Zustand |
@@ -143,12 +143,12 @@ Para detalhes técnicos sobre a estrutura de componentes, camada de serviços, b
 
 ## 🚀 Deploy em Produção
 
-O projeto usa **BrowserRouter** (React Router DOM). Para que o roteamento funcione corretamente em produção, o servidor precisa redirecionar todas as rotas para `index.html`:
+O projeto usa **HashRouter** (React Router DOM), que armazena a rota no fragmento da URL (ex: `/#/login`). Isso significa que **o servidor nunca recebe a rota** — ele sempre serve `index.html` e o React cuida do roteamento no cliente. Compatível com qualquer hospedagem de arquivos estáticos sem configuração adicional.
 
-- **Vercel**: o arquivo `vercel.json` na raiz já configura isso automaticamente.
-- **Netlify**: o arquivo `public/_redirects` já configura isso automaticamente.
-- **Nginx**: adicione `try_files $uri $uri/ /index.html;` no bloco `location /`.
-- **Apache**: adicione `FallbackResource /index.html` no `.htaccess`.
+> ⚠️ **Por que não BrowserRouter?**  
+> O deploy está no **Render** como *Static Site*, que não suporta SPA fallback nativo.  
+> Com BrowserRouter, ao recarregar `/login` o Render retorna `404 Not Found` porque não existe o arquivo físico `/login/index.html`.  
+> O HashRouter resolve isso definitivamente, sem precisar configurar redirects no servidor.
 
 ---
 
@@ -159,9 +159,9 @@ As seguintes melhorias foram implementadas com base na análise técnica do proj
 | Melhoria | Descrição |
 |---|---|
 | **Race condition** | `fetchPerfil` agora usa **7 tentativas** com **backoff exponencial** (500 ms → 8 s), tolerando banco sob alta carga |
-| **BrowserRouter** | Migrado de `HashRouter` para `BrowserRouter` para URLs limpas e compartilháveis |
+| **HashRouter mantido** | BrowserRouter testado e revertido — o Render (Static Site) não tem SPA fallback; HashRouter garante zero 404 ao recarregar |
 | **`.env.example`** | Arquivo de exemplo criado com documentação completa de todas as variáveis |
 | **Error Boundaries** | `ErrorBoundary` adicionado: envolve toda a app (crash global) e cada página individualmente |
 | **Paginação backend** | `fetchAcordos` corrigido: paginação usa lote ampliado para compensar deduplicação client-side |
 | **JSDoc** | Documentação JSDoc adicionada em: `useAuth`, `ProtectedRoute`, `Layout`, `StatCard`, `ErrorBoundary` |
-| **Deploy config** | `vercel.json` e `public/_redirects` criados para suporte ao BrowserRouter em produção |
+| **Índices DB** | Migration `19_pagination_indexes.sql` com índices compostos e parciais para performance em alto volume |

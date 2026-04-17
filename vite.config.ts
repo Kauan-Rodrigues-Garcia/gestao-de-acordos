@@ -211,8 +211,6 @@ export default defineConfig(({ mode }) => {
     server: {
       host: "::",
       port: 8080,
-      // Necessário para BrowserRouter: serve index.html para qualquer rota
-      historyApiFallback: true,
     },
     plugins: [
       tailwindcss(),
