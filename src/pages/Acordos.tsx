@@ -456,12 +456,17 @@ export default function Acordos() {
               )} />
             </Button>
             <Button
-              variant="outline"
               size="sm"
               onClick={() => setNovoInlineAberto(v => !v)}
-              className="gap-1.5"
+              className={cn(
+                'gap-1.5 shadow-sm transition-all',
+                novoInlineAberto
+                  ? 'bg-muted text-foreground border border-border hover:bg-muted/80'
+                  : 'bg-primary text-primary-foreground hover:bg-primary/90'
+              )}
             >
-              <Plus className="w-4 h-4" /> Novo Acordo
+              <Plus className={cn('w-4 h-4 transition-transform', novoInlineAberto && 'rotate-45')} />
+              {novoInlineAberto ? 'Fechar' : 'Novo Acordo'}
             </Button>
           </div>
         </div>

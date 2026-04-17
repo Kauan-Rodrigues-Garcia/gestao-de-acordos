@@ -1,5 +1,5 @@
 /**
- * PainelLider.tsx — v2 (multi-tenant fix)
+ * PainelLider.tsx — v3 (multi-tenant fix + exclusão em lote de NRs)
  *
  * CORREÇÕES APLICADAS:
  * 1. Guard !empresa?.id no início do componente — não executa queries sem empresa definida
@@ -15,19 +15,22 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ArrowRight, Calendar,
   BarChart3, BarChart2, ChevronRight, RefreshCw, X, Trophy, Target,
-  TrendingUp, Loader2, DollarSign, Hash, Building2
+  TrendingUp, Loader2, DollarSign, Hash, Building2, Trash2, CheckSquare, Square
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { toast } from 'sonner';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
 import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay, isPerfilAdmin, isPerfilLider } from '@/lib/index';
 import { calcularMetricasMes } from '@/services/acordos.service';
+import { enviarParaLixeira } from '@/services/lixeira.service';
 import { cn } from '@/lib/utils';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -145,17 +148,24 @@ interface AnaliticoOperadorProps {
   operadorId:   string;
   operadorNome: string;
   onFechar:     () => void;
+  /** Perfil do líder/admin logado (para liberar exclusão em lote) */
+  perfilLogado?: string;
 }
 
-function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOperadorProps) {
-  const { tenantSlug } = useEmpresa();
+function AnaliticoOperador({ operadorId, operadorNome, onFechar, perfilLogado }: AnaliticoOperadorProps) {
+  const { tenantSlug, empresa } = useEmpresa();
   const statusLabels = getStatusLabels(tenantSlug);
   const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
+  const podeDeletarLote = perfilLogado === 'administrador' || perfilLogado === 'lider' || perfilLogado === 'super_admin';
 
-  const [acordos,       setAcordos]       = useState<Acordo[]>([]);
-  const [loadingLocal,  setLoadingLocal]  = useState(true);
-  const [erroLocal,     setErroLocal]     = useState<string | null>(null);
-  const [filtroStatus,  setFiltroStatus]  = useState<string>('all');
+  const [acordos,              setAcordos]              = useState<Acordo[]>([]);
+  const [loadingLocal,         setLoadingLocal]         = useState(true);
+  const [erroLocal,            setErroLocal]            = useState<string | null>(null);
+  const [filtroStatus,         setFiltroStatus]         = useState<string>('all');
+  const [selecionados,         setSelecionados]         = useState<string[]>([]);
+  const [modoSelecao,          setModoSelecao]          = useState(false);
+  const [confirmandoExclLote,  setConfirmandoExclLote]  = useState(false);
+  const [excluindoLote,        setExcluindoLote]        = useState(false);
 
   const carregarAcordos = useCallback(async () => {
     setLoadingLocal(true);
@@ -192,6 +202,53 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
 
   const initials = operadorNome.split(' ').map(n => n[0]).slice(0,2).join('');
 
+  // ── Selecionar / desselecionar todos visíveis ─────────────────────────────
+  function toggleTodos() {
+    if (selecionados.length === acordosFiltrados.length) {
+      setSelecionados([]);
+    } else {
+      setSelecionados(acordosFiltrados.map(a => a.id));
+    }
+  }
+
+  function toggleItem(id: string) {
+    setSelecionados(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  }
+
+  // ── Exclusão em lote ──────────────────────────────────────────────────────
+  async function excluirLote() {
+    if (!selecionados.length || !empresa?.id) return;
+    setExcluindoLote(true);
+    try {
+      const alvos = acordos.filter(a => selecionados.includes(a.id));
+      await Promise.all(
+        alvos.map(ac =>
+          enviarParaLixeira({
+            acordo:       ac,
+            motivo:       'exclusao_manual',
+            operadorNome: operadorNome,
+          }),
+        ),
+      );
+      const { error } = await supabase
+        .from('acordos')
+        .delete()
+        .in('id', selecionados);
+      if (error) throw error;
+      setAcordos(prev => prev.filter(a => !selecionados.includes(a.id)));
+      toast.success(`${selecionados.length} NR(s) excluído(s) e enviado(s) para a lixeira.`);
+      setSelecionados([]);
+      setModoSelecao(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao excluir NRs');
+    } finally {
+      setExcluindoLote(false);
+      setConfirmandoExclLote(false);
+    }
+  }
+
   return (
     <motion.div
       key={operadorId}
@@ -217,6 +274,21 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
               </p>
             </div>
             <div className="flex items-center gap-1">
+              {podeDeletarLote && (
+                <Button
+                  variant={modoSelecao ? 'default' : 'ghost'}
+                  size="sm"
+                  className={cn(
+                    'h-7 text-xs gap-1 px-2',
+                    modoSelecao && 'bg-primary text-primary-foreground'
+                  )}
+                  onClick={() => { setModoSelecao(v => !v); setSelecionados([]); }}
+                  title={modoSelecao ? 'Cancelar seleção' : 'Selecionar NRs para excluir'}
+                >
+                  <CheckSquare className="w-3.5 h-3.5" />
+                  {modoSelecao ? 'Cancelar' : 'Selecionar'}
+                </Button>
+              )}
               <Button variant="ghost" size="icon" className="w-7 h-7" onClick={carregarAcordos} title="Recarregar">
                 <RefreshCw className="w-3.5 h-3.5" />
               </Button>
@@ -266,17 +338,31 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 <Hash className="w-4 h-4 text-primary" />
                 Painel da Equipe
               </CardTitle>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="h-7 w-36 text-xs">
-                  <SelectValue placeholder="Todos status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(statusLabels).filter(([k]) => !!k).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2">
+                {modoSelecao && selecionados.length > 0 && (
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-7 text-xs gap-1 px-2"
+                    onClick={() => setConfirmandoExclLote(true)}
+                    disabled={excluindoLote}
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    Excluir {selecionados.length} NR(s)
+                  </Button>
+                )}
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                  <SelectTrigger className="h-7 w-36 text-xs">
+                    <SelectValue placeholder="Todos status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {Object.entries(statusLabels).filter(([k]) => !!k).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -287,6 +373,19 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
+                      {modoSelecao && (
+                        <th className="px-3 py-2 w-8">
+                          <button
+                            onClick={toggleTodos}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title={selecionados.length === acordosFiltrados.length ? 'Desselecionar todos' : 'Selecionar todos'}
+                          >
+                            {selecionados.length === acordosFiltrados.length && acordosFiltrados.length > 0
+                              ? <CheckSquare className="w-3.5 h-3.5 text-primary" />
+                              : <Square className="w-3.5 h-3.5" />}
+                          </button>
+                        </th>
+                      )}
                       <th className="text-left px-4 py-2 font-medium text-muted-foreground">{nrLabel}</th>
                       <th className="text-left px-4 py-2 font-medium text-muted-foreground">CLIENTE</th>
                       <th className="text-left px-4 py-2 font-medium text-muted-foreground">VENCIMENTO</th>
@@ -299,8 +398,27 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                     {acordosFiltrados.map(a => {
                       const venceHoje = a.vencimento === hoje;
                       const atrasado  = a.vencimento < hoje && !['pago','nao_pago'].includes(a.status);
+                      const isSel     = selecionados.includes(a.id);
                       return (
-                        <tr key={a.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors">
+                        <tr
+                          key={a.id}
+                          className={cn(
+                            'border-b border-border/50 hover:bg-muted/20 transition-colors',
+                            isSel && 'bg-destructive/5',
+                          )}
+                        >
+                          {modoSelecao && (
+                            <td className="px-3 py-2">
+                              <button
+                                onClick={() => toggleItem(a.id)}
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                              >
+                                {isSel
+                                  ? <CheckSquare className="w-3.5 h-3.5 text-destructive" />
+                                  : <Square className="w-3.5 h-3.5" />}
+                              </button>
+                            </td>
+                          )}
                           <td className="px-4 py-2 font-mono text-muted-foreground">{a.nr_cliente}</td>
                           <td className="px-4 py-2 font-medium text-foreground max-w-[160px] truncate">{a.nome_cliente}</td>
                           <td className="px-4 py-2 text-muted-foreground">
@@ -318,9 +436,11 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                             </Badge>
                           </td>
                           <td className="px-4 py-2">
-                            <Link to={`/acordos/${a.id}`} className="text-primary hover:underline text-[10px]">
-                              <ArrowRight className="w-3.5 h-3.5" />
-                            </Link>
+                            {!modoSelecao && (
+                              <Link to={`/acordos/${a.id}`} className="text-primary hover:underline text-[10px]">
+                                <ArrowRight className="w-3.5 h-3.5" />
+                              </Link>
+                            )}
                           </td>
                         </tr>
                       );
@@ -332,6 +452,47 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
           </CardContent>
         </Card>
       )}
+
+      {/* ── Modal de confirmação de exclusão em lote ── */}
+      <Dialog open={confirmandoExclLote} onOpenChange={setConfirmandoExclLote}>
+        <DialogContent className="max-w-sm" aria-describedby="dlg-excl-lote-painel-desc">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-4 h-4" /> Excluir {selecionados.length} NR(s)
+            </DialogTitle>
+            <DialogDescription id="dlg-excl-lote-painel-desc">
+              Os acordos serão movidos para a lixeira temporária. O administrador pode restaurá-los.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <p className="text-sm text-foreground">
+              Tem certeza que deseja excluir os{' '}
+              <strong>{selecionados.length}</strong> NR(s) selecionado(s) do operador{' '}
+              <strong>{operadorNome}</strong>?
+            </p>
+          </div>
+          <div className="flex gap-2 justify-end mt-2">
+            <Button
+              variant="outline" size="sm"
+              onClick={() => setConfirmandoExclLote(false)}
+              disabled={excluindoLote}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive" size="sm"
+              className="gap-1.5"
+              onClick={excluirLote}
+              disabled={excluindoLote}
+            >
+              {excluindoLote
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Trash2 className="w-3.5 h-3.5" />}
+              {excluindoLote ? 'Excluindo...' : 'Confirmar Exclusão'}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </motion.div>
   );
 }
@@ -632,6 +793,7 @@ export default function PainelLider() {
                   operadorId={opSel.id}
                   operadorNome={opSel.nome}
                   onFechar={() => setOpSel(null)}
+                  perfilLogado={perfil?.perfil}
                 />
               )}
             </AnimatePresence>

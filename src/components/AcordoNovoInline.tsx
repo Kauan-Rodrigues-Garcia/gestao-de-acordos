@@ -668,11 +668,11 @@ export function AcordoNovoInline({
 
               {/* Cabeçalho */}
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Save className="w-4 h-4 text-primary" /> Novo Acordo
+                <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                  <Save className="w-4 h-4" /> Novo Acordo — PaguePay
                 </p>
                 <Button
-                  variant="ghost" size="icon" className="w-7 h-7"
+                  variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
                   onClick={onCancel} disabled={salvando}
                 >
                   <X className="w-4 h-4" />
@@ -821,10 +821,10 @@ export function AcordoNovoInline({
               </div>
 
               {/* Ações */}
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex items-center gap-3 pt-2 border-t border-primary/20">
                 <Button
                   size="sm"
-                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="gap-2 bg-primary text-primary-foreground hover:bg-primary/80 shadow-sm"
                   onClick={salvar}
                   disabled={salvando}
                 >
@@ -833,9 +833,10 @@ export function AcordoNovoInline({
                 </Button>
                 <Button
                   variant="outline" size="sm"
+                  className="gap-1.5 border-border hover:bg-muted"
                   onClick={onCancel} disabled={salvando}
                 >
-                  Cancelar
+                  <X className="w-3.5 h-3.5" /> Cancelar
                 </Button>
               </div>
 
@@ -868,11 +869,11 @@ export function AcordoNovoInline({
 
             {/* Cabeçalho */}
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Save className="w-4 h-4 text-primary" /> Novo Acordo
+              <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                <Save className="w-4 h-4" /> Novo Acordo — Bookplay
               </p>
               <Button
-                variant="ghost" size="icon" className="w-7 h-7"
+                variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
                 onClick={onCancel} disabled={salvando}
               >
                 <X className="w-4 h-4" />
@@ -895,15 +896,10 @@ export function AcordoNovoInline({
                     className="h-8 text-xs font-mono"
                   />
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Vencimento *</Label>
-                  <input
-                    type="date"
-                    value={vencimento}
-                    onChange={(e) => setVencimento(e.target.value)}
-                    className="w-full h-8 text-xs bg-background border border-input rounded-md px-2 font-mono text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                <DatePickerField
+                    label="Vencimento" required
+                    value={vencimento} onChange={setVencimento}
                   />
-                </div>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>
                   <Input
@@ -1015,10 +1011,10 @@ export function AcordoNovoInline({
             </div>
 
             {/* Ações */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-3 pt-2 border-t border-primary/20">
               <Button
                 size="sm"
-                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/80 shadow-sm"
                 onClick={salvar}
                 disabled={salvando}
               >
@@ -1027,9 +1023,10 @@ export function AcordoNovoInline({
               </Button>
               <Button
                 variant="outline" size="sm"
+                className="gap-1.5 border-border hover:bg-muted"
                 onClick={onCancel} disabled={salvando}
               >
-                Cancelar
+                <X className="w-3.5 h-3.5" /> Cancelar
               </Button>
             </div>
 
