@@ -1,4 +1,4 @@
-# AcordosPRO — Sistema de Gestão de Acordos Financeiros
+# Sistema de Gestão de Acordos Financeiros
 
 Plataforma web para gerenciamento de acordos financeiros com controle de acesso por perfis (RBAC), dashboard analítico, importação via planilha Excel e integração com IA (OpenAI) para normalização de dados.
 
