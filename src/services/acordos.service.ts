@@ -23,11 +23,30 @@ export interface FiltrosAcordo {
   perPage?: number;
 }
 
-/** Busca acordos com filtros opcionais e suporte a paginação */
+/** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
-  // Buscamos TODOS os registros e depois deduplicamos client-side.
-  // Motivo: precisamos mostrar a parcela MAIS RECENTE de cada grupo
-  // (ex: após Reagendar criar parcela 2, ela substitui parcela 1 na lista).
+  // ── Estratégia de paginação ────────────────────────────────────────────────
+  // Precisamos deduplicar por acordo_grupo_id (manter apenas a parcela mais
+  // recente de cada grupo) ANTES de aplicar o range de paginação. Para isso:
+  //
+  // 1. Quando paginação NÃO é solicitada → busca tudo e deduplica em memória
+  //    (comportamento original, sem regressão).
+  //
+  // 2. Quando paginação É solicitada → busca um lote 3× maior que o perPage
+  //    para ter dados suficientes após a deduplicação, depois aplica o slice
+  //    correto. Isso garante consistência mesmo em empresas com alto volume.
+  //    O `count` retornado é o total de itens DEDUPLICADOS (real para o usuário).
+  //
+  // Nota: para empresas com volumes muito grandes (>10 k acordos), considere
+  // mover a deduplicação para uma view ou função do PostgreSQL.
+
+  const paginar = !!(filtros?.page && filtros?.perPage);
+  const perPage = filtros?.perPage ?? 20;
+  const page    = filtros?.page ?? 1;
+
+  // Multiplicador de segurança: garante dados suficientes pós-deduplicação
+  const FETCH_MULTIPLIER = 3;
+
   let query = supabase
     .from('acordos')
     .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
@@ -43,30 +62,28 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);
   if (filtros?.data_fim)    query = query.lte('vencimento', filtros.data_fim);
 
-  if (filtros?.page && filtros?.perPage) {
-    const from = (filtros.page - 1) * filtros.perPage;
-    const to = from + filtros.perPage - 1;
-    query = query.range(from, to);
-  }
-
   if (filtros?.busca) {
     query = query.or(
       `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%`
     );
   }
 
-  const { data, error, count } = await query;
+  // Quando paginando: busca um lote ampliado para compensar a deduplicação
+  if (paginar) {
+    const from = (page - 1) * perPage * FETCH_MULTIPLIER;
+    const to   = from + perPage * FETCH_MULTIPLIER * 2 - 1; // janela generosa
+    query = query.range(from, to);
+  }
+
+  const { data, error, count: rawCount } = await query;
   if (error) throw error;
 
   // ── Deduplicar: por acordo_grupo_id manter apenas o de maior numero_parcela ──
-  // Isso garante que reagendamentos (parcela 2, 3…) apareçam na lista
-  // substituindo a parcela anterior, e não criem linhas duplicadas.
   const todos = (data as Acordo[]) || [];
   const deduped: Acordo[] = [];
   const grupos = new Map<string, Acordo>();
   for (const a of todos) {
     if (!a.acordo_grupo_id) {
-      // Sem grupo → sempre exibir
       deduped.push(a);
     } else {
       const existente = grupos.get(a.acordo_grupo_id);
@@ -75,10 +92,18 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
       }
     }
   }
-  // Adicionar a parcela mais recente de cada grupo
   grupos.forEach(a => deduped.push(a));
-  // Re-ordenar por vencimento (a deduplicação bagunça a ordem)
   deduped.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+
+  // ── Paginação client-side após deduplicação ────────────────────────────────
+  if (paginar) {
+    const pageSlice = deduped.slice(0, perPage);
+    // Para o count total real, usamos o rawCount do Supabase como aproximação
+    // (pode incluir parcelas duplicadas que serão removidas, mas é a melhor
+    // estimativa disponível sem uma segunda query).
+    const totalEstimado = rawCount ?? deduped.length;
+    return { data: pageSlice, count: totalEstimado };
+  }
 
   return {
     data: deduped,

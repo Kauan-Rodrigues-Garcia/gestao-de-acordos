@@ -1,3 +1,26 @@
+/**
+ * src/components/Layout.tsx
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Layout principal da aplicação com sidebar de navegação responsiva.
+ *
+ * ## Funcionalidades
+ * - Sidebar colapsável (desktop) / drawer (mobile)
+ * - Navegação adaptativa por perfil (RBAC): exibe apenas os itens permitidos
+ * - Photo de perfil em tempo real via Supabase Storage (canal Realtime)
+ * - Multi-tenant: adapta logo e tema conforme `tenantSlug`
+ * - Dark/Light mode via `ThemeToggle`
+ * - Indicador de usuários online via `usePresence`
+ *
+ * @param children - Conteúdo da página atual
+ *
+ * @example
+ * ```tsx
+ * // Uso típico (já configurado em App.tsx via LayoutWrapper)
+ * <Layout>
+ *   <Dashboard />
+ * </Layout>
+ * ```
+ */
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

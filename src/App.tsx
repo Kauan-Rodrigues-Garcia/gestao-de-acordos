@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -49,7 +50,12 @@ function PageLoader() {
 function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <Layout>{children}</Layout>
+      <Layout>
+        {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
+        <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
+          {children}
+        </ErrorBoundary>
+      </Layout>
       <ChatNotificacoes />
     </ProtectedRoute>
   );
@@ -68,6 +74,7 @@ function TenantThemeApplier(): null {
 
 export default function App() {
   return (
+    <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
@@ -206,5 +213,6 @@ export default function App() {
         </EmpresaProvider>
       </AuthProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }

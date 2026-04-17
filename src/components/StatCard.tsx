@@ -1,6 +1,29 @@
 /**
  * src/components/StatCard.tsx
- * Componente reutilizável de card de estatística para o Dashboard.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Card de estatística reutilizável para dashboards.
+ *
+ * Exibe: título, valor principal, ícone, badge de tendência opcional e
+ * indicador de loading com skeleton.
+ *
+ * @param title      - Título da métrica (ex: "Acordos Hoje")
+ * @param value      - Valor a exibir (string ou número)
+ * @param icon       - Componente de ícone Lucide
+ * @param trend      - Variação percentual (positivo = alta, negativo = queda)
+ * @param loading    - Exibe skeleton enquanto true
+ * @param className  - Classes Tailwind adicionais
+ * @param onClick    - Callback ao clicar no card
+ *
+ * @example
+ * ```tsx
+ * <StatCard
+ *   title="Acordos Hoje"
+ *   value={42}
+ *   icon={FileText}
+ *   trend={+5.2}
+ *   loading={isLoading}
+ * />
+ * ```
  */
 import { motion } from 'framer-motion';
 import { TrendingUp, TrendingDown } from 'lucide-react';

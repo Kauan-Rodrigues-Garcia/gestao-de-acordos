@@ -10,7 +10,7 @@ Plataforma web para gerenciamento de acordos financeiros com controle de acesso 
 |---|---|
 | **UI** | React 18, TypeScript, Vite 5 (SWC) |
 | **Estilização** | Tailwind CSS 4, shadcn/ui (Radix UI) |
-| **Roteamento** | React Router DOM 6 (HashRouter) |
+| **Roteamento** | React Router DOM 6 (**BrowserRouter**) |
 | **Formulários** | React Hook Form + Zod |
 | **Estado servidor** | TanStack React Query |
 | **Estado local** | Zustand |
@@ -39,8 +39,9 @@ cd gestao-de-acordos
 # 2. Instale as dependências
 npm install
 
-# 3. Configure as variáveis de ambiente (veja a seção abaixo)
-cp .env.example .env.local   # ou crie o arquivo manualmente
+# 3. Configure as variáveis de ambiente
+cp .env.example .env.local
+# Edite .env.local com a URL e a anon key do seu projeto Supabase
 
 # 4. Inicie o servidor de desenvolvimento
 npm run dev
@@ -138,3 +139,29 @@ A chave da OpenAI é armazenada nos Secrets do Supabase e nunca é exposta no fr
 ## 📖 Documentação de Arquitetura
 
 Para detalhes técnicos sobre a estrutura de componentes, camada de serviços, banco de dados e decisões de arquitetura, consulte o arquivo [ARQUITETURA.md](./ARQUITETURA.md).
+---
+
+## 🚀 Deploy em Produção
+
+O projeto usa **BrowserRouter** (React Router DOM). Para que o roteamento funcione corretamente em produção, o servidor precisa redirecionar todas as rotas para `index.html`:
+
+- **Vercel**: o arquivo `vercel.json` na raiz já configura isso automaticamente.
+- **Netlify**: o arquivo `public/_redirects` já configura isso automaticamente.
+- **Nginx**: adicione `try_files $uri $uri/ /index.html;` no bloco `location /`.
+- **Apache**: adicione `FallbackResource /index.html` no `.htaccess`.
+
+---
+
+## 🛡️ Melhorias de Qualidade (v2.0)
+
+As seguintes melhorias foram implementadas com base na análise técnica do projeto:
+
+| Melhoria | Descrição |
+|---|---|
+| **Race condition** | `fetchPerfil` agora usa **7 tentativas** com **backoff exponencial** (500 ms → 8 s), tolerando banco sob alta carga |
+| **BrowserRouter** | Migrado de `HashRouter` para `BrowserRouter` para URLs limpas e compartilháveis |
+| **`.env.example`** | Arquivo de exemplo criado com documentação completa de todas as variáveis |
+| **Error Boundaries** | `ErrorBoundary` adicionado: envolve toda a app (crash global) e cada página individualmente |
+| **Paginação backend** | `fetchAcordos` corrigido: paginação usa lote ampliado para compensar deduplicação client-side |
+| **JSDoc** | Documentação JSDoc adicionada em: `useAuth`, `ProtectedRoute`, `Layout`, `StatCard`, `ErrorBoundary` |
+| **Deploy config** | `vercel.json` e `public/_redirects` criados para suporte ao BrowserRouter em produção |
