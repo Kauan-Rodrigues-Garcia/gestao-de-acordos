@@ -26,29 +26,23 @@ export interface FiltrosAcordo {
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // ── Estratégia de paginação ────────────────────────────────────────────────
-  // Precisamos deduplicar por acordo_grupo_id (manter apenas a parcela mais
-  // recente de cada grupo) ANTES de aplicar o range de paginação. Para isso:
+  // A deduplicação por acordo_grupo_id (manter apenas a parcela mais recente
+  // de cada grupo) é feita diretamente no banco via a view `acordos_deduplicados`.
   //
-  // 1. Quando paginação NÃO é solicitada → busca tudo e deduplica em memória
-  //    (comportamento original, sem regressão).
+  // Isso garante que:
+  //   - O `count` retornado é EXATO (sem parcelas duplicadas)
+  //   - A paginação server-side é correta em qualquer volume
+  //   - Não há overhead de busca de lotes ampliados no cliente
   //
-  // 2. Quando paginação É solicitada → busca um lote 3× maior que o perPage
-  //    para ter dados suficientes após a deduplicação, depois aplica o slice
-  //    correto. Isso garante consistência mesmo em empresas com alto volume.
-  //    O `count` retornado é o total de itens DEDUPLICADOS (real para o usuário).
-  //
-  // Nota: para empresas com volumes muito grandes (>10 k acordos), considere
-  // mover a deduplicação para uma view ou função do PostgreSQL.
+  // A view usa DISTINCT ON (acordo_grupo_id) ORDER BY numero_parcela DESC,
+  // mantendo sempre a parcela mais recente. Acordos sem grupo passam intactos.
 
   const paginar = !!(filtros?.page && filtros?.perPage);
   const perPage = filtros?.perPage ?? 20;
   const page    = filtros?.page ?? 1;
 
-  // Multiplicador de segurança: garante dados suficientes pós-deduplicação
-  const FETCH_MULTIPLIER = 3;
-
   let query = supabase
-    .from('acordos')
+    .from('acordos_deduplicados')
     .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
     .order('vencimento', { ascending: true });
 
@@ -68,46 +62,19 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     );
   }
 
-  // Quando paginando: busca um lote ampliado para compensar a deduplicação
+  // Paginação server-side: agora precisa e diretamente sobre a view deduplicada
   if (paginar) {
-    const from = (page - 1) * perPage * FETCH_MULTIPLIER;
-    const to   = from + perPage * FETCH_MULTIPLIER * 2 - 1; // janela generosa
+    const from = (page - 1) * perPage;
+    const to   = from + perPage - 1;
     query = query.range(from, to);
   }
 
-  const { data, error, count: rawCount } = await query;
+  const { data, error, count } = await query;
   if (error) throw error;
 
-  // ── Deduplicar: por acordo_grupo_id manter apenas o de maior numero_parcela ──
-  const todos = (data as Acordo[]) || [];
-  const deduped: Acordo[] = [];
-  const grupos = new Map<string, Acordo>();
-  for (const a of todos) {
-    if (!a.acordo_grupo_id) {
-      deduped.push(a);
-    } else {
-      const existente = grupos.get(a.acordo_grupo_id);
-      if (!existente || (a.numero_parcela ?? 1) > (existente.numero_parcela ?? 1)) {
-        grupos.set(a.acordo_grupo_id, a);
-      }
-    }
-  }
-  grupos.forEach(a => deduped.push(a));
-  deduped.sort((a, b) => a.vencimento.localeCompare(b.vencimento));
-
-  // ── Paginação client-side após deduplicação ────────────────────────────────
-  if (paginar) {
-    const pageSlice = deduped.slice(0, perPage);
-    // Para o count total real, usamos o rawCount do Supabase como aproximação
-    // (pode incluir parcelas duplicadas que serão removidas, mas é a melhor
-    // estimativa disponível sem uma segunda query).
-    const totalEstimado = rawCount ?? deduped.length;
-    return { data: pageSlice, count: totalEstimado };
-  }
-
   return {
-    data: deduped,
-    count: deduped.length,
+    data: (data as Acordo[]) || [],
+    count: count ?? 0,
   };
 }
 

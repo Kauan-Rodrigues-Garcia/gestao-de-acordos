@@ -137,14 +137,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await new Promise(resolve => setTimeout(resolve, delay));
         }
       }
+
+      // Todas as tentativas esgotadas sem encontrar perfil
+      const missingProfile = 'Login encontrado, mas o perfil do usuário ainda não foi criado no banco. Tente novamente em alguns instantes ou entre em contato com o administrador.';
+      console.error('[useAuth] fetchPerfil: perfil não encontrado após', MAX_ATTEMPTS, 'tentativas.');
+      setAuthError(missingProfile);
+      return { tenantMismatch: null, missingProfile };
     } catch (e) {
       console.error('[useAuth] fetchPerfil inesperado:', e);
       return { tenantMismatch: null, missingProfile: null };
     } finally {
       setPerfilLoading(false);
     }
-
-    const missingProfile = 'Login encontrado, mas o perfil do usuário ainda não foi criado no banco. Tente novamente em alguns instantes ou entre em contato com o administrador.';
   }
 
   async function refreshPerfil() {

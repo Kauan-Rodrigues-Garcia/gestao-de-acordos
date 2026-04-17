@@ -64,9 +64,8 @@ export class ErrorBoundary extends Component<Props, State> {
 
   handleGoHome = () => {
     this.handleReset();
-    // Navega para a raiz sem recarregar (compatível com BrowserRouter)
-    window.history.pushState(null, '', '/');
-    window.dispatchEvent(new PopStateEvent('popstate'));
+    // Navega para a raiz sem recarregar (compatível com HashRouter)
+    window.location.hash = '/';
   };
 
   render() {
