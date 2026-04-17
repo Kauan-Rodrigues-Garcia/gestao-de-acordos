@@ -40,6 +40,7 @@ import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
+import { enviarParaLixeira }        from '@/services/lixeira.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
@@ -371,6 +372,12 @@ export default function Dashboard() {
   async function excluirAcordo(a: Acordo) {
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
+    // Salvar na lixeira antes de excluir
+    await enviarParaLixeira({
+      acordo: a,
+      motivo: 'exclusao_manual',
+      operadorNome: perfil?.nome ?? perfil?.email ?? undefined,
+    });
     const { error } = await supabase.from('acordos').delete().eq('id', a.id);
     if (error) toast.error('Erro ao excluir acordo: ' + error.message);
     else {
@@ -401,6 +408,14 @@ export default function Dashboard() {
     for (const id of selecionados) {
       setExcluindoId(id);
       const acordo = acordos.find(a => a.id === id);
+      // Salvar na lixeira antes de excluir
+      if (acordo) {
+        await enviarParaLixeira({
+          acordo,
+          motivo: 'exclusao_manual',
+          operadorNome: perfil?.nome ?? perfil?.email ?? undefined,
+        });
+      }
       const { error } = await supabase.from('acordos').delete().eq('id', id);
       if (error) {
         failedCount++;

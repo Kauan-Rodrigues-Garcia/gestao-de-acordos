@@ -68,9 +68,7 @@ export default function Lixeira() {
     perfil?.perfil === 'lider' ||
     perfil?.perfil === 'operador';
 
-  const podeEsvaziar =
-    perfil?.perfil === 'administrador' ||
-    perfil?.perfil === 'super_admin';
+  const podeEsvaziar = podeAcessar;
 
   async function carregar() {
     if (!empresa?.id) return;
