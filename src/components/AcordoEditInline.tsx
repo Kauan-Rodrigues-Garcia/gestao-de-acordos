@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, Hash, Calendar, DollarSign, Smartphone, MapPin, Link2, Building2 } from 'lucide-react';
+import { Save, X, Hash, DollarSign, Smartphone, MapPin, Link2, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -19,6 +19,7 @@ import {
   extractEstado, extractLinkAcordo, buildObservacoesComEstado,
 } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
+import { DatePickerField } from '@/components/DatePickerField';
 
 interface AcordoEditInlineProps {
   acordo: Acordo;
@@ -137,18 +138,13 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 </div>
 
                 {/* Vencimento */}
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">Vencimento *</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                    <input
-                      type="date"
-                      value={vencimento}
-                      onChange={e => setVencimento(e.target.value)}
-                      className="w-full h-8 text-xs bg-background border border-input rounded-md pl-6 pr-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring font-mono"
-                    />
-                  </div>
-                </div>
+                <DatePickerField
+                  value={vencimento}
+                  onChange={setVencimento}
+                  label="Vencimento"
+                  required
+                  size="sm"
+                />
 
                 {/* Valor */}
                 <div className="space-y-1">

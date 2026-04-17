@@ -965,17 +965,15 @@ export default function Acordos() {
                 <MessageSquare className="w-3.5 h-3.5" />
                 Enviar Lembretes
               </Button>
-              {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
-                  onClick={() => setConfirmandoExclusaoLote(true)}
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Excluir Selecionados
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
+                onClick={() => setConfirmandoExclusaoLote(true)}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Excluir Selecionados
+              </Button>
               <Button
                 size="sm"
                 variant="ghost"

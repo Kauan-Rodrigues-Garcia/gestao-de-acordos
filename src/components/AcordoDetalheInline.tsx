@@ -14,6 +14,7 @@ import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
 } from 'lucide-react';
+import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -305,12 +306,11 @@ export function ModalEditarAcordoParcelado({
               <div key={row.id} className="flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border border-border/40">
                 <span className="text-xs font-mono font-bold text-primary w-6 text-center">{row.numero}</span>
                 <div className="flex-1 space-y-0.5">
-                  <Label className="text-[10px] text-muted-foreground">Vencimento</Label>
-                  <input
-                    type="date"
+                  <DatePickerField
                     value={row.vencimento}
-                    onChange={e => updateRow(row.id, 'vencimento', e.target.value)}
-                    className="w-full h-7 text-xs bg-background border border-input rounded px-2 font-mono text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    onChange={(v) => updateRow(row.id, 'vencimento', v)}
+                    label="Vencimento"
+                    size="sm"
                   />
                 </div>
                 <div className="w-28 space-y-0.5">

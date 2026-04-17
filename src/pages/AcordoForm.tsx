@@ -8,6 +8,7 @@ import {
   Save, ArrowLeft, User, Hash, Calendar,
   DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, MapPin, Link2
 } from 'lucide-react';
+import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -818,20 +819,19 @@ export default function AcordoForm() {
 
                   {/* Vencimento — campo prioritário */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Vencimento *</Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                      <input
-                        type="date"
-                        min="2026-01-01"
-                        {...register('vencimento')}
-                        className={cn(
-                          'w-full h-10 text-sm bg-background border border-primary/40 rounded-md pl-9 pr-3',
-                          'text-foreground focus:outline-none focus:ring-2 focus:ring-primary font-mono',
-                          errors.vencimento && 'border-destructive'
-                        )}
-                      />
-                    </div>
+                    <DatePickerField
+                      value={watch('vencimento') || ''}
+                      onChange={(v) => setValue('vencimento', v, { shouldValidate: true })}
+                      label="Vencimento"
+                      required
+                      size="md"
+                      minDate="2026-01-01"
+                      triggerClassName={cn(
+                        'border-primary/40',
+                        errors.vencimento && 'border-destructive',
+                      )}
+                      labelClassName="font-semibold text-primary"
+                    />
                     {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
                   </div>
 
