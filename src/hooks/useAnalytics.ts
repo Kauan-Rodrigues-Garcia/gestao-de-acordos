@@ -41,7 +41,7 @@ export interface AnalyticsData {
   percMetaAcordos: number;
 
   // Por status (para gráfico)
-  porStatus: { name: string; value: number; color: string }[];
+  porStatus: { name: string; value: number; color: string; icon: string }[];
 
   // Por dia do mês (para gráfico de área)
   porDia: { dia: string; recebido: number; agendado: number }[];
@@ -298,9 +298,9 @@ export function useAnalytics(): AnalyticsData {
 
     // Por status
     const porStatus = [
-      { name: 'Pago', value: pagos.length, color: 'hsl(var(--chart-2))' },
-      { name: 'Pendente', value: pendentes.length, color: 'hsl(var(--chart-4))' },
-      { name: 'Não Pago', value: naoPagos.length, color: 'hsl(var(--destructive))' },
+      { name: 'Pago',     value: pagos.length,     color: '#22c55e', icon: 'check' },
+      { name: 'Pendente', value: pendentes.length,  color: '#f59e0b', icon: 'clock' },
+      { name: 'Não Pago', value: naoPagos.length,   color: '#ef4444', icon: 'x'    },
     ].filter(s => s.value > 0);
 
     // Por dia do mês

@@ -12,6 +12,7 @@
  * • Layout de painel profissional com seções colapsáveis e destaque visual
  */
 import { useState, useMemo } from 'react';
+import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
   TrendingUp, DollarSign, Users, BarChart3,
@@ -310,6 +311,7 @@ function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; index: num
 // ─── Componente principal ──────────────────────────────────────────────────────
 
 export default function PainelDiretoria() {
+  const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
@@ -860,17 +862,17 @@ export default function PainelDiretoria() {
                     <stop offset="95%" stopColor={EVOL_AGENDADO} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                 <XAxis
                   dataKey="dia"
-                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  stroke="rgba(148,163,184,0.2)"
+                  tick={{ fontSize: 10, fill: tickColor }}
+                  stroke="transparent"
                   tickLine={false}
                 />
                 <YAxis
                   tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  stroke="rgba(148,163,184,0.2)"
+                  tick={{ fontSize: 10, fill: tickColor }}
+                  stroke="transparent"
                   tickLine={false}
                   width={52}
                 />
@@ -1057,26 +1059,100 @@ export default function PainelDiretoria() {
       {/* ── Status breakdown ──────────────────────────────────────────────────── */}
       {!loading && porStatus.length > 0 && (
         <Card className="border-border/50">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold flex items-center gap-2">
-              <BarChart3 className="w-4 h-4" />
-              Distribuição por status — acordos do mês
-            </CardTitle>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <BarChart3 className="w-4 h-4" />
+                Distribuição por status — acordos do mês
+              </CardTitle>
+              <span className="text-xs text-muted-foreground">
+                {porStatus.reduce((s, e) => s + e.value, 0)} acordos totais
+              </span>
+            </div>
           </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={160}>
-              <BarChart data={porStatus} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="transparent" tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="transparent" tickLine={false} />
-                <Tooltip formatter={(v: number) => [v, 'acordos']} />
-                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
-                  {porStatus.map((entry, i) => (
-                    <Cell key={i} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+          <CardContent className="space-y-4">
+            {/* Barras de progresso interativas */}
+            {(() => {
+              const total = porStatus.reduce((s, e) => s + e.value, 0);
+              return porStatus.map((entry) => {
+                const pct = total > 0 ? Math.round((entry.value / total) * 100) : 0;
+                const StatusIcon =
+                  entry.icon === 'check' ? CheckCircle2 :
+                  entry.icon === 'clock' ? Clock :
+                  AlertCircle;
+                return (
+                  <div key={entry.name} className="group space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <StatusIcon className="w-4 h-4" style={{ color: entry.color }} />
+                        <span className="text-sm font-medium text-foreground">{entry.name}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs text-muted-foreground">{entry.value} acordos</span>
+                        <span
+                          className="text-sm font-bold tabular-nums w-12 text-right"
+                          style={{ color: entry.color }}
+                        >
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+                    {/* Barra de progresso */}
+                    <div className="h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                      <motion.div
+                        className="h-full rounded-full"
+                        style={{ background: entry.color }}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.6, ease: 'easeOut', delay: 0.1 }}
+                      />
+                    </div>
+                    {/* Detalhe do valor monetário se disponível */}
+                  </div>
+                );
+              });
+            })()}
+
+            {/* Mini-gráfico de barras verticais */}
+            <div className="pt-2 border-t border-border/50">
+              <ResponsiveContainer width="100%" height={100}>
+                <BarChart
+                  data={porStatus}
+                  margin={{ top: 4, right: 8, left: -20, bottom: 0 }}
+                  barCategoryGap="30%"
+                >
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fontSize: 11, fill: tickColor, fontWeight: 500 }}
+                    stroke="transparent"
+                    tickLine={false}
+                  />
+                  <YAxis hide />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(148,163,184,0.08)' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      const total = porStatus.reduce((s, e) => s + e.value, 0);
+                      const pct = total > 0 ? Math.round((d.value / total) * 100) : 0;
+                      return (
+                        <div className="rounded-lg border border-border bg-popover p-2.5 shadow-lg text-xs">
+                          <p className="font-semibold text-popover-foreground mb-1" style={{ color: d.color }}>
+                            {d.name}
+                          </p>
+                          <p className="text-popover-foreground">{d.value} acordos <span className="text-muted-foreground">({pct}%)</span></p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={60}>
+                    {porStatus.map((entry, i) => (
+                      <Cell key={i} fill={entry.color} fillOpacity={0.9} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       )}

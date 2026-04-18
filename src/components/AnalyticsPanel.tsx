@@ -7,6 +7,7 @@
  */
 
 import { useState, useMemo, useEffect } from 'react';
+import { useAxisColors } from '@/hooks/useChartColors';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar, Target,
@@ -169,6 +170,7 @@ interface AnalyticsPanelProps {
 }
 
 export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno, operadorFiltroExterno }: AnalyticsPanelProps = {}) {
+  const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
@@ -468,16 +470,16 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                               <stop offset="95%" stopColor={CHART_AGENDADO} stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                           <XAxis
                             dataKey="dia"
-                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            stroke="rgba(148,163,184,0.2)"
+                            tick={{ fontSize: 10, fill: tickColor }}
+                            stroke="transparent"
                             tickLine={false}
                           />
                           <YAxis
-                            tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            stroke="rgba(148,163,184,0.2)"
+                            tick={{ fontSize: 10, fill: tickColor }}
+                            stroke="transparent"
                             tickLine={false}
                           />
                           <Tooltip content={<CustomTooltip />} />
