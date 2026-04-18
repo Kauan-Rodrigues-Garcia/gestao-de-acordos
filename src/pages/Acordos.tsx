@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit,
   Filter, RefreshCw, X,
-  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2
+  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2,
+  Layers, Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ import {
   formatCurrency, formatDate, getTodayISO, isAtrasado,
   isPaguePlay, getStatusLabels, getTipoLabels,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo,
+  extractEstado, extractLinkAcordo, isPerfilLider,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
@@ -60,6 +61,8 @@ function TableSkeleton() {
 
 const PER_PAGE = 20;
 
+type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
+
 export default function Acordos() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
@@ -75,6 +78,31 @@ export default function Acordos() {
   const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
+
+  // ── Filtro de visão Líder/Elite (equipe) ─────────────────────────────────
+  const isLider = isPerfilLider(perfil?.perfil ?? '');
+  const isElite = perfil?.perfil === 'elite';
+  const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
+  const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
+
+  // Carregar equipes do setor para Líder/Elite
+  useEffect(() => {
+    if (!(isLider || isElite) || !perfil?.setor_id || !empresa?.id) return;
+    supabase
+      .from('equipes')
+      .select('id, nome')
+      .eq('empresa_id', empresa.id)
+      .eq('setor_id', perfil.setor_id)
+      .order('nome')
+      .then(({ data }) => {
+        setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
+      });
+  }, [isLider, isElite, perfil?.setor_id, empresa?.id]);
+
+  const equipeFiltroAtivo = visaoFiltroAcordos.startsWith('equipe:')
+    ? visaoFiltroAcordos.replace('equipe:', '')
+    : null;
+  const isVisaoIndividual = visaoFiltroAcordos === 'individual';
   const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'analitico'
   );
@@ -146,9 +174,11 @@ export default function Acordos() {
     vencimento:   filtroData || undefined,
     data_inicio:  filtroData ? undefined : bpMesInicio,
     data_fim:     filtroData ? undefined : bpMesFim,
-    operador_id:  perfil?.perfil === 'operador'
-      ? perfil.id
+    // Líder/Elite: filtro individual, ou por equipe, ou setor geral (padrão do RLS)
+    operador_id:  (perfil?.perfil === 'operador' || isVisaoIndividual)
+      ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
+    equipe_id:    equipeFiltroAtivo ?? undefined,
     page:         currentPage,
     perPage:      PER_PAGE,
   });
@@ -508,6 +538,53 @@ export default function Acordos() {
             </button>
           ))}
         </div>
+
+        {/* ── Seletor de visão Líder/Elite ── */}
+        {(isLider || isElite) && equipesDoSetor.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
+            <span className="text-xs font-medium text-muted-foreground shrink-0">Visualizar acordos de:</span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setVisaoFiltroAcordos('setor')}
+                className={cn(
+                  'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                  visaoFiltroAcordos === 'setor'
+                    ? 'bg-primary text-primary-foreground border-primary'
+                    : 'bg-background text-muted-foreground border-border hover:border-primary/40',
+                )}
+              >
+                <Building2 className="w-3 h-3" /> Setor geral
+              </button>
+              {equipesDoSetor.map(eq => (
+                <button
+                  key={eq.id}
+                  onClick={() => setVisaoFiltroAcordos(`equipe:${eq.id}` as VisaoFiltroAcordos)}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                    visaoFiltroAcordos === `equipe:${eq.id}`
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/40',
+                  )}
+                >
+                  <Layers className="w-3 h-3" /> {eq.nome}
+                </button>
+              ))}
+              {isElite && (
+                <button
+                  onClick={() => setVisaoFiltroAcordos('individual')}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                    visaoFiltroAcordos === 'individual'
+                      ? 'bg-role-elite text-white border-role-elite'
+                      : 'bg-background text-muted-foreground border-border hover:border-role-elite/40',
+                  )}
+                >
+                  Individual
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Filtros ── */}
         <Card className="border-border mb-4">

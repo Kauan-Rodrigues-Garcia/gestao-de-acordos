@@ -13,6 +13,7 @@ export interface FiltrosAcordo {
   tipo?: string;
   operador_id?: string;
   setor_id?: string;
+  equipe_id?: string;
   empresa_id?: string;
   data_inicio?: string;
   data_fim?: string;
@@ -51,6 +52,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   if (filtros?.tipo)        query = query.eq('tipo', filtros.tipo);
   if (filtros?.operador_id) query = query.eq('operador_id', filtros.operador_id);
   if (filtros?.setor_id)    query = query.eq('setor_id', filtros.setor_id);
+  if (filtros?.equipe_id)   query = query.eq('equipe_id', filtros.equipe_id);
   if (filtros?.empresa_id)  query = query.eq('empresa_id', filtros.empresa_id);
   if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
   if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);

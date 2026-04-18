@@ -60,6 +60,12 @@ export interface AnalyticsData {
   setorFiltro: string | null;
   setSetorFiltro: (id: string | null) => void;
 
+  // Filtro por equipe (Líder/Elite: visão de equipe específica)
+  equipeFiltro: string | null;
+  setEquipeFiltro: (id: string | null) => void;
+  // Equipes do setor do lider/elite (carregadas dinamicamente)
+  equipesDoSetor: { id: string; nome: string }[];
+
   // Filtro por operador (Elite em visão individual)
   operadorFiltro: string | null;
   setOperadorFiltro: (id: string | null) => void;
@@ -99,8 +105,10 @@ export function useAnalytics(): AnalyticsData {
   const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
   const [acordos, setAcordos] = useState<Acordo[]>([]);
   const [setorFiltro, setSetorFiltro] = useState<string | null>(null);
+  const [equipeFiltro, setEquipeFiltro] = useState<string | null>(null);
   const [operadorFiltro, setOperadorFiltro] = useState<string | null>(null);
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
+  const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
   const [meta, setMeta] = useState<MetaInfo | null>(null);
   const [metasEquipe, setMetasEquipe] = useState<MetaInfo[]>([]);
   const [metasOperador, setMetasOperador] = useState<MetaInfo[]>([]);
@@ -128,9 +136,14 @@ export function useAnalytics(): AnalyticsData {
 
       if (!isAdmin && !isDiretoria) {
         if (isLider && perfil.setor_id) {
-          // Elite em visão individual: filtra pelo próprio operador_id
+          // Líder/Elite: hierarquia de filtros
+          // 1. visão individual (operadorFiltro = próprio id)
+          // 2. visão de equipe específica (equipeFiltro)
+          // 3. visão geral do setor (padrão)
           if (operadorFiltro) {
             q = q.eq('operador_id', operadorFiltro);
+          } else if (equipeFiltro) {
+            q = q.eq('equipe_id', equipeFiltro);
           } else {
             q = q.eq('setor_id', perfil.setor_id);
           }
@@ -150,6 +163,17 @@ export function useAnalytics(): AnalyticsData {
           .eq('empresa_id', empresa.id)
           .order('nome');
         setSetores((setoresData as { id: string; nome: string }[]) ?? []);
+      }
+
+      // Carregar equipes do setor para o Líder/Elite
+      if (isLider && perfil.setor_id) {
+        const { data: eqData } = await supabase
+          .from('equipes')
+          .select('id, nome')
+          .eq('empresa_id', empresa.id)
+          .eq('setor_id', perfil.setor_id)
+          .order('nome');
+        setEquipesDoSetor((eqData as { id: string; nome: string }[]) ?? []);
       }
 
       const { data: acordosData } = await q;
@@ -219,7 +243,7 @@ export function useAnalytics(): AnalyticsData {
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, operadorFiltro]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -339,6 +363,9 @@ export function useAnalytics(): AnalyticsData {
     setores,
     setorFiltro,
     setSetorFiltro,
+    equipeFiltro,
+    setEquipeFiltro,
+    equipesDoSetor,
     operadorFiltro,
     setOperadorFiltro,
   };

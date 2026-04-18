@@ -158,11 +158,13 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
 
 interface AnalyticsPanelProps {
   setorFiltro?: string | null;
-  /** Elite: quando false = visão individual (só os próprios acordos) */
-  eliteVisaoGeral?: boolean;
+  /** Equipe específica para Líder/Elite filtrarem por equipe */
+  equipeFiltroExterno?: string | null;
+  /** Operador individual para Elite em visão individual */
+  operadorFiltroExterno?: string | null;
 }
 
-export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: AnalyticsPanelProps = {}) {
+export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno, operadorFiltroExterno }: AnalyticsPanelProps = {}) {
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
@@ -188,6 +190,7 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: A
     loading,
     refetch,
     setSetorFiltro,
+    setEquipeFiltro,
     setOperadorFiltro,
   } = useAnalytics();
 
@@ -198,15 +201,19 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: A
     }
   }, [setorExterno]);
 
-  // Sincronizar visão Elite: individual = filtra por perfil.id, geral = sem filtro
+  // Sincronizar filtro de equipe externo (Líder/Elite)
   useEffect(() => {
-    if (perfil?.perfil !== 'elite' && perfil?.perfil !== 'gerencia') return;
-    if (eliteVisaoGeral === false) {
-      setOperadorFiltro(perfil?.id ?? null);
-    } else {
-      setOperadorFiltro(null);
+    if (equipeFiltroExterno !== undefined) {
+      setEquipeFiltro(equipeFiltroExterno ?? null);
     }
-  }, [eliteVisaoGeral, perfil?.perfil, perfil?.id]);
+  }, [equipeFiltroExterno]);
+
+  // Sincronizar filtro de operador externo (Elite individual)
+  useEffect(() => {
+    if (operadorFiltroExterno !== undefined) {
+      setOperadorFiltro(operadorFiltroExterno ?? null);
+    }
+  }, [operadorFiltroExterno]);
 
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
   const isLider = perfil?.perfil === 'lider';

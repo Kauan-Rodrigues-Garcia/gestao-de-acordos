@@ -7,7 +7,7 @@ import {
   Search, Filter, RefreshCw, X,
   Edit, Eye, CheckCircle, CheckCircle2, Hash, MapPin, Link2,
   ChevronLeft, ChevronRight, ChevronDown, Trash2,
-  ToggleLeft, ToggleRight,
+  ToggleLeft, ToggleRight, Layers, Users,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -98,6 +98,9 @@ function TableSkeleton() {
   );
 }
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+type VisaoFiltro = 'setor' | `equipe:${string}` | 'individual';
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function Dashboard() {
@@ -108,14 +111,26 @@ export default function Dashboard() {
   const tipoLabels   = getTipoLabels(tenantSlug);
 
   // ── filtro de setor para admin (via useAnalytics) ───────────────────────────
-  const { setores: setoresList, setorFiltro, setSetorFiltro } = useAnalytics();
+  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useAnalytics();
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
   const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
-  // Toggle Elite: alterna visão geral (líder) ↔ individual (operador)
-  const [eliteVisaoGeral, setEliteVisaoGeral] = useState(
-    perfil?.perfil === 'elite' || perfil?.perfil === 'gerencia',
-  );
   const isElite = perfil?.perfil === 'elite';
+  const isLider = perfil?.perfil === 'lider';
+
+  // ── Filtro de visão Líder/Elite ─────────────────────────────────────────────
+  // 'setor'    = visão geral do setor (padrão para Líder e Elite)
+  // 'equipe:<id>' = visão de equipe específica
+  // 'individual'  = visão individual (só Elite)
+  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
+
+  // Derivar equipeFiltro e operadorFiltro a partir do visaoFiltro
+  const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:')
+    ? visaoFiltro.replace('equipe:', '')
+    : null;
+  const operadorFiltroAtivo = visaoFiltro === 'individual' ? (perfil?.id ?? null) : null;
+
+  // Legado — mantido para compatibilidade com código existente que usa eliteVisaoGeral
+  const eliteVisaoGeral = visaoFiltro !== 'individual';
 
   // ── acordos de hoje ──────────────────────────────────────────────────────────
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
@@ -188,7 +203,12 @@ export default function Dashboard() {
       vencimento:   filtroData || undefined,
       data_inicio:  filtroData ? undefined : mesFiltroInicio,
       data_fim:     filtroData ? undefined : mesFiltroFim,
-      operador_id:  (perfil?.perfil === 'operador' || (isElite && !eliteVisaoGeral)) ? perfil?.id : undefined,
+      // Filtro de operador: operador normal OU Elite em modo individual
+      operador_id:  (perfil?.perfil === 'operador' || visaoFiltro === 'individual')
+        ? perfil?.id
+        : undefined,
+      // Filtro de equipe: Líder/Elite em modo equipe
+      equipe_id:    equipeFiltroAtivo ?? undefined,
       page:         currentPage,
       perPage:      PER_PAGE,
     } : {},
@@ -471,24 +491,74 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {/* Toggle Elite: alterna visão geral / individual */}
-          {isElite && (
-            <button
-              onClick={() => setEliteVisaoGeral(v => !v)}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all',
-                eliteVisaoGeral
-                  ? 'bg-chart-2/15 text-chart-2 border-chart-2/30 hover:bg-chart-2/25'
-                  : 'bg-primary/10 text-primary border-primary/30 hover:bg-primary/20',
-              )}
-              title={eliteVisaoGeral ? 'Visão geral (todos os acordos do setor)' : 'Visão individual (apenas seus acordos)'}
-            >
-              {eliteVisaoGeral
-                ? <><ToggleRight className="w-3.5 h-3.5" /> Visão Geral</>
-                : <><ToggleLeft className="w-3.5 h-3.5" /> Visão Individual</>
-              }
-            </button>
+
+          {/* ── Seletor de visão: Líder e Elite ──────────────────────────────── */}
+          {(isLider || isElite) && equipesDoSetor.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
+              <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
+              <div className="flex flex-wrap gap-1">
+
+                {/* Botão: Todo o setor */}
+                <button
+                  onClick={() => setVisaoFiltro('setor')}
+                  className={cn(
+                    'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                    visaoFiltro === 'setor'
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
+                  )}
+                  title="Ver dados e acordos de todo o setor"
+                >
+                  <Building2 className="w-3 h-3" />
+                  Setor geral
+                </button>
+
+                {/* Botões: por equipe */}
+                {equipesDoSetor.map(eq => (
+                  <button
+                    key={eq.id}
+                    onClick={() => setVisaoFiltro(`equipe:${eq.id}` as VisaoFiltro)}
+                    className={cn(
+                      'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                      visaoFiltro === `equipe:${eq.id}`
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
+                    )}
+                    title={`Ver dados e acordos da equipe ${eq.nome}`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    {eq.nome}
+                  </button>
+                ))}
+
+                {/* Botão: individual — apenas Elite */}
+                {isElite && (
+                  <button
+                    onClick={() => setVisaoFiltro('individual')}
+                    className={cn(
+                      'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                      visaoFiltro === 'individual'
+                        ? 'bg-role-elite text-white border-role-elite'
+                        : 'bg-background text-muted-foreground border-border hover:border-role-elite/40 hover:text-foreground',
+                    )}
+                    title="Ver apenas seus próprios acordos"
+                  >
+                    <Users className="w-3 h-3" />
+                    Individual
+                  </button>
+                )}
+
+              </div>
+            </div>
           )}
+
+          {/* Fallback: Líder/Elite sem equipes no setor — mostra indicador simples */}
+          {(isLider || isElite) && equipesDoSetor.length === 0 && (
+            <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5" /> Setor geral
+            </span>
+          )}
+
           {isPP && acordosDeHoje.length > 0 && (
             <Button
               variant="outline" size="sm"
@@ -538,7 +608,11 @@ export default function Dashboard() {
             </div>
           </div>
         )}
-        <AnalyticsPanel setorFiltro={setorFiltro} eliteVisaoGeral={eliteVisaoGeral} />
+        <AnalyticsPanel
+          setorFiltro={setorFiltro}
+          equipeFiltroExterno={equipeFiltroAtivo}
+          operadorFiltroExterno={operadorFiltroAtivo}
+        />
       </div>
 
       {/* ════════════════════════════════════════════════════════════════════

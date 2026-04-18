@@ -124,18 +124,18 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   const filtrosEstavel = useMemo(() => {
     if (!filtros) return '';
     const {
-      status, tipo, operador_id, setor_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime,
     } = filtros;
     return JSON.stringify({
-      status, tipo, operador_id, setor_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime,
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
-    filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio, filtros?.data_fim,
+    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio, filtros?.data_fim,
     filtros?.busca, filtros?.apenas_hoje, filtros?.page, filtros?.perPage,
     filtros?.enableRealtime,
   ]);
