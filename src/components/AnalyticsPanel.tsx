@@ -23,7 +23,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   isPaguePlay, formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  getTodayISO,
+  getTodayISO, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL,
 } from '@/lib/index';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -184,6 +184,8 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     valorAgendadoMes,
     valorNaoPago,
     valorAgendadoHoje,
+    valorHOMes,
+    valorHOAgendado,
     totalAcordosMes,
     totalPagosMes,
     totalNaoPagos,
@@ -199,6 +201,17 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     setEquipeFiltro,
     setOperadorFiltro,
   } = useAnalytics();
+
+  // Para PaguePlay: exibir H.O. como valor principal
+  const valorPrincipal  = isPP ? valorHOMes     : valorRecebidoMes;
+  const valorAgendadoPP = isPP ? valorHOAgendado : valorAgendadoMes;
+  const labelRecebido   = isPP ? '🟠 H.O. recebido no mês' : '💰 Recebido no mês';
+  const labelAgendado   = isPP ? '📅 H.O. agendado no mês' : '📅 Agendado no mês';
+  const labelMeta       = isPP ? '🎯 Meta H.O.' : '🎯 Meta';
+  // Gráfico de área: PaguePlay usa H.O. como linha "recebido"
+  const porDiaChart = isPP
+    ? porDia.map(d => ({ ...d, recebido: d.ho }))
+    : porDia;
 
   // Sincronizar filtro de setor externo
   useEffect(() => {
@@ -326,14 +339,21 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
         {!loading && (
           <div className="hidden md:flex items-center gap-4 text-xs">
             <span>
-              Recebido:{'  '}
+              {isPP ? 'H.O.:' : 'Recebido:'}{'  '}
               <strong className="text-green-600 dark:text-green-400">
-                {formatCurrency(valorRecebidoMes)}
+                {formatCurrency(valorPrincipal)}
               </strong>
             </span>
-            <span>
-              Agendado: <strong>{formatCurrency(valorAgendadoMes)}</strong>
-            </span>
+            {isPP && (
+              <span className="text-muted-foreground">
+                Bruto: <strong>{formatCurrency(valorRecebidoMes)}</strong>
+              </span>
+            )}
+            {!isPP && (
+              <span>
+                Agendado: <strong>{formatCurrency(valorAgendadoMes)}</strong>
+              </span>
+            )}
             {meta && (
               <span>
                 Meta: <strong>{percMeta}%</strong>
@@ -384,22 +404,33 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                   Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
                 ) : (
                   <>
+                    {/* Card 1: H.O. (PaguePlay) ou Recebido (Bookplay) */}
                     <MetricCard
-                      label="💰 Recebido no mês"
+                      label={labelRecebido}
                       icon={<DollarSign className="w-4 h-4" />}
                       value={
                         <span className="text-green-600 dark:text-green-400">
-                          {formatCurrency(valorRecebidoMes)}
+                          {formatCurrency(valorPrincipal)}
                         </span>
                       }
-                      sub={`${totalPagosMes} acordos pagos`}
+                      sub={
+                        isPP
+                          ? `Bruto: ${formatCurrency(valorRecebidoMes)} · ${totalPagosMes} pagos`
+                          : `${totalPagosMes} acordos pagos`
+                      }
                     />
+                    {/* Card 2 */}
                     <MetricCard
-                      label="📅 Agendado no mês"
+                      label={labelAgendado}
                       icon={<Calendar className="w-4 h-4" />}
-                      value={formatCurrency(valorAgendadoMes)}
-                      sub={`${totalAcordosMes} acordos`}
+                      value={formatCurrency(valorAgendadoPP)}
+                      sub={
+                        isPP
+                          ? `Bruto: ${formatCurrency(valorAgendadoMes)} · ${totalAcordosMes} acordos`
+                          : `${totalAcordosMes} acordos`
+                      }
                     />
+                    {/* Card 3 */}
                     <MetricCard
                       label="❌ Não Pagos"
                       icon={<XCircle className="w-4 h-4" />}
@@ -410,27 +441,55 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                       }
                       sub={`${totalNaoPagos} acordos`}
                     />
+                    {/* Card 4 */}
                     <MetricCard
                       label="📆 Agendado hoje"
                       icon={<Clock className="w-4 h-4" />}
                       value={formatCurrency(valorAgendadoHoje)}
                     />
+                    {/* Card 5 */}
                     <MetricCard
                       label="📋 Acordos no mês"
                       icon={<BarChart2 className="w-4 h-4" />}
                       value={String(totalAcordosMes)}
                       sub={`${totalPendentes} pendentes`}
                     />
+                    {/* Card 6: Meta */}
                     <MetricCard
-                      label="🎯 Meta"
+                      label={labelMeta}
                       icon={<Target className="w-4 h-4" />}
                       value={meta ? `${percMeta}% atingida` : '—'}
                       sub={
                         meta
-                          ? `${formatCurrency(valorRecebidoMes)} / ${formatCurrency(meta.meta_valor)}`
+                          ? `${formatCurrency(valorPrincipal)} / ${formatCurrency(meta.meta_valor)}`
                           : 'Sem meta definida'
                       }
                     />
+                    {/* Cards extras PaguePlay: Coren + Cofen */}
+                    {isPP && valorRecebidoMes > 0 && (
+                      <>
+                        <MetricCard
+                          label="🏛️ Repasse Coren"
+                          icon={<Percent className="w-4 h-4" />}
+                          value={
+                            <span className="text-blue-500">
+                              {formatCurrency(valorRecebidoMes * PP_COREN_PERCENTUAL)}
+                            </span>
+                          }
+                          sub={`56,28% do bruto recebido`}
+                        />
+                        <MetricCard
+                          label="🏢 Repasse Cofen"
+                          icon={<Percent className="w-4 h-4" />}
+                          value={
+                            <span className="text-violet-500">
+                              {formatCurrency(valorRecebidoMes * PP_COFEN_PERCENTUAL)}
+                            </span>
+                          }
+                          sub={`18,76% do bruto recebido`}
+                        />
+                      </>
+                    )}
                   </>
                 )}
               </div>
@@ -443,12 +502,12 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     <CardHeader className="pb-2 pt-4 px-4">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-sm font-semibold">
-                          Recebido vs Agendado — por dia
+                          {isPP ? 'H.O. vs Agendado — por dia' : 'Recebido vs Agendado — por dia'}
                         </CardTitle>
                         <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_RECEBIDO }} />
-                            Recebido
+                            {isPP ? 'H.O.' : 'Recebido'}
                           </span>
                           <span className="flex items-center gap-1">
                             <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_AGENDADO }} />
@@ -459,7 +518,7 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     </CardHeader>
                     <CardContent className="px-2 pb-4">
                       <ResponsiveContainer width="100%" height={200}>
-                        <AreaChart data={porDia} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                        <AreaChart data={porDiaChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
                               <stop offset="5%" stopColor={CHART_RECEBIDO} stopOpacity={0.35} />

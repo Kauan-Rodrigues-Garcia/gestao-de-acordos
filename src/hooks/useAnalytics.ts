@@ -7,7 +7,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
-import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria } from '@/lib/index';
+import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL, isPaguePlay } from '@/lib/index';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -28,6 +28,12 @@ export interface AnalyticsData {
   valorNaoPago: number;
   valorAgendadoHoje: number;
 
+  // H.O. — Honorários Operacionais PaguePlay (24,96% do bruto recebido)
+  // Disponível para todos, mas só relevante para PaguePlay
+  valorHOMes: number;        // H.O. do total recebido no mês
+  valorHOAgendado: number;   // H.O. do total agendado no mês
+  valorHONaoPago: number;    // H.O. do total não pago
+
   // Quantidades
   totalAcordosMes: number;
   totalAcordosHoje: number;
@@ -44,7 +50,7 @@ export interface AnalyticsData {
   porStatus: { name: string; value: number; color: string; icon: string }[];
 
   // Por dia do mês (para gráfico de área)
-  porDia: { dia: string; recebido: number; agendado: number }[];
+  porDia: { dia: string; recebido: number; agendado: number; ho: number }[];
 
   // Por equipe (admin/líder)
   porEquipe?: { nome: string; acordos: number; valor: number; meta: number; perc: number }[];
@@ -99,7 +105,8 @@ function calcPerc(realizado: number, meta: number): number {
 
 export function useAnalytics(): AnalyticsData {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
+  const isPP = isPaguePlay(tenantSlug ?? '');
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   // ID estável por instância
   const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
@@ -313,7 +320,15 @@ export function useAnalytics(): AnalyticsData {
     const valorNaoPago       = naoPagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorAgendadoHoje  = acordosHoje.reduce((s, a) => s + (Number(a.valor) || 0), 0);
 
-    const percMeta       = calcPerc(valorRecebidoMes, meta?.meta_valor ?? 0);
+    // H.O. — Honorários Operacionais (24,96% do bruto)
+    const valorHOMes      = valorRecebidoMes * PP_HO_PERCENTUAL;
+    const valorHOAgendado = valorAgendadoMes * PP_HO_PERCENTUAL;
+    const valorHONaoPago  = valorNaoPago * PP_HO_PERCENTUAL;
+
+    // Para PaguePlay: meta é baseada em H.O. (24,96% do bruto)
+    // Para Bookplay:  meta é baseada no valor bruto recebido
+    const basePercMeta   = isPP ? valorHOMes : valorRecebidoMes;
+    const percMeta       = calcPerc(basePercMeta, meta?.meta_valor ?? 0);
     const percMetaAcordos = calcPerc(pagos.length, meta?.meta_acordos ?? 0);
 
     // Por status
@@ -329,10 +344,12 @@ export function useAnalytics(): AnalyticsData {
       const d = String(i + 1).padStart(2, '0');
       const iso = `${ano}-${String(mes).padStart(2, '0')}-${d}`;
       const doDia = acordosMes.filter(a => a.vencimento === iso);
+      const recDia = doDia.filter(a => a.status === 'pago').reduce((s, a) => s + (Number(a.valor) || 0), 0);
       return {
         dia: String(i + 1),
-        recebido:  doDia.filter(a => a.status === 'pago').reduce((s, a) => s + (Number(a.valor) || 0), 0),
-        agendado:  doDia.reduce((s, a) => s + (Number(a.valor) || 0), 0),
+        recebido: recDia,
+        agendado: doDia.reduce((s, a) => s + (Number(a.valor) || 0), 0),
+        ho:       recDia * PP_HO_PERCENTUAL,
       };
     });
 
@@ -384,6 +401,9 @@ export function useAnalytics(): AnalyticsData {
       valorAgendadoMes,
       valorNaoPago,
       valorAgendadoHoje,
+      valorHOMes,
+      valorHOAgendado,
+      valorHONaoPago,
       totalAcordosMes: acordosMes.length,
       totalAcordosHoje: acordosHoje.length,
       totalPagosMes: pagos.length,
@@ -397,7 +417,7 @@ export function useAnalytics(): AnalyticsData {
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, equipesMap, inicio, fim, hoje, mes, ano]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, equipesMap, inicio, fim, hoje, mes, ano, isPP]);
 
   return {
     ...derived,

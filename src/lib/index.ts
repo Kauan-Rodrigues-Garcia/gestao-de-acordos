@@ -186,6 +186,35 @@ export function isPaguePlay(slug: string): boolean {
   return slug === 'pagueplay';
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PaguePlay — Distribuição de receita (Cofen/Coren/H.O.)
+// A empresa Pagueplay retém apenas 24,96% do valor total recebido.
+// Os outros 75,04% são repassados: 56,28% para o Coren e 18,76% para o Cofen.
+// O H.O. (Honorários Operacionais) é a base para cálculo de metas.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Percentual retido pela PaguePlay (Honorários Operacionais) */
+export const PP_HO_PERCENTUAL = 0.2496;
+/** Percentual repassado ao Coren */
+export const PP_COREN_PERCENTUAL = 0.5628;
+/** Percentual repassado ao Cofen */
+export const PP_COFEN_PERCENTUAL = 0.1876;
+
+/** Calcula o valor de H.O. a partir do valor bruto de um acordo */
+export function calcHO(valorBruto: number): number {
+  return valorBruto * PP_HO_PERCENTUAL;
+}
+
+/** Calcula o valor do repasse ao Coren a partir do valor bruto */
+export function calcCoren(valorBruto: number): number {
+  return valorBruto * PP_COREN_PERCENTUAL;
+}
+
+/** Calcula o valor do repasse ao Cofen a partir do valor bruto */
+export function calcCofen(valorBruto: number): number {
+  return valorBruto * PP_COFEN_PERCENTUAL;
+}
+
 export function getStatusLabels(slug: string): Record<string, string> {
   return isPaguePlay(slug) ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
 }

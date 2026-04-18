@@ -15,12 +15,12 @@ import { useState, useMemo } from 'react';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { motion } from 'framer-motion';
 import {
-  TrendingUp, DollarSign, Users, BarChart3,
+  TrendingUp, DollarSign, BarChart3,
   Filter, Building2, Users2, User, RefreshCw,
   CreditCard, Landmark, QrCode, Calendar,
   TrendingDown, Target, Activity, PieChart,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
-  ArrowUpRight, ArrowDownRight, Clock,
+  ArrowUpRight, ArrowDownRight, Clock, Percent, Banknote, PiggyBank,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -30,7 +30,7 @@ import {
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { formatCurrency, isPaguePlay } from '@/lib/index';
+import { isPaguePlay, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
 import { formatBRL, safeNum, sumSafe } from '@/lib/money';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -320,6 +320,9 @@ export default function PainelDiretoria() {
     valorRecebidoMes,
     valorAgendadoMes,
     valorNaoPago,
+    valorHOMes,
+    valorHOAgendado,
+    valorHONaoPago,
     totalAcordosMes,
     totalPagosMes,
     totalNaoPagos,
@@ -337,6 +340,12 @@ export default function PainelDiretoria() {
     loading,
     refetch,
   } = useAnalytics();
+
+  // KPIs H.O. (PaguePlay)
+  const valorCorenMes  = valorRecebidoMes * PP_COREN_PERCENTUAL;
+  const valorCofenMes  = valorRecebidoMes * PP_COFEN_PERCENTUAL;
+  const valorCorenAge  = valorAgendadoMes * PP_COREN_PERCENTUAL;
+  const valorCofenAge  = valorAgendadoMes * PP_COFEN_PERCENTUAL;
 
   // ── Dados por setor ─────────────────────────────────────────────────────────
   const [setoresDetalhes, setSetoresDetalhes] = useState<
@@ -512,7 +521,12 @@ export default function PainelDiretoria() {
   const hoje = new Date();
   const diasPassados = hoje.getDate();
   const diasNoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate();
-  const projecaoMes = diasPassados > 0 && valorRecebidoMes > 0
+  // Projeção baseada em H.O. para PaguePlay
+  const valorBaseProjecao = isPP ? valorHOMes : valorRecebidoMes;
+  const projecaoMes = diasPassados > 0 && valorBaseProjecao > 0
+    ? Math.round((valorBaseProjecao / diasPassados) * diasNoMes)
+    : 0;
+  const projecaoBruta = diasPassados > 0 && valorRecebidoMes > 0
     ? Math.round((valorRecebidoMes / diasPassados) * diasNoMes)
     : 0;
 
@@ -573,9 +587,13 @@ export default function PainelDiretoria() {
         ) : (
           <>
             <KpiCard
-              label="Recebido no mês"
-              value={formatBRL(valorRecebidoMes)}
-              sub={`${totalPagosMes} acordos pagos`}
+              label={isPP ? '💰 H.O. recebido no mês' : 'Recebido no mês'}
+              value={isPP ? formatBRL(valorHOMes) : formatBRL(valorRecebidoMes)}
+              sub={
+                isPP
+                  ? `Bruto: ${formatBRL(valorRecebidoMes)} · ${totalPagosMes} pagos`
+                  : `${totalPagosMes} acordos pagos`
+              }
               icon={DollarSign}
               color="text-success"
               bg="bg-success/10"
@@ -586,9 +604,13 @@ export default function PainelDiretoria() {
               delay={0}
             />
             <KpiCard
-              label="Total agendado"
-              value={formatBRL(valorAgendadoMes)}
-              sub={`${totalAcordosMes} acordos no mês`}
+              label={isPP ? '📅 H.O. agendado' : 'Total agendado'}
+              value={isPP ? formatBRL(valorHOAgendado) : formatBRL(valorAgendadoMes)}
+              sub={
+                isPP
+                  ? `Bruto: ${formatBRL(valorAgendadoMes)} · ${totalAcordosMes} acordos`
+                  : `${totalAcordosMes} acordos no mês`
+              }
               icon={TrendingUp}
               color="text-primary"
               bg="bg-primary/10"
@@ -601,7 +623,7 @@ export default function PainelDiretoria() {
             <KpiCard
               label="Não pagos"
               value={formatBRL(valorNaoPago)}
-              sub={`${totalNaoPagos} acordos`}
+              sub={isPP ? `H.O. não pago: ${formatBRL(valorHONaoPago)}` : `${totalNaoPagos} acordos`}
               icon={AlertCircle}
               color="text-destructive"
               bg="bg-destructive/10"
@@ -619,6 +641,127 @@ export default function PainelDiretoria() {
           </>
         )}
       </div>
+
+      {/* ── KPIs PaguePlay: distribuição H.O./Coren/Cofen ─────────────────────── */}
+      {isPP && !loading && valorRecebidoMes > 0 && (
+        <Card className="border-border/50 bg-gradient-to-br from-orange-500/5 via-transparent to-violet-500/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Percent className="w-4 h-4 text-orange-500" />
+              Distribuição de Receita — PaguePlay
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Quebra do valor bruto recebido entre H.O. (PaguePlay), Coren e Cofen.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {/* H.O. */}
+              <div className="p-4 rounded-xl border border-orange-500/30 bg-orange-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-orange-500/15">
+                    <Banknote className="w-4 h-4 text-orange-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-orange-600 dark:text-orange-400">H.O. PaguePlay</p>
+                    <p className="text-[10px] text-muted-foreground">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  </div>
+                </div>
+                <p className="text-2xl font-bold font-mono text-orange-500">{formatBRL(valorHOMes)}</p>
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>Agendado H.O.</span>
+                    <span className="font-mono">{formatBRL(valorHOAgendado)}</span>
+                  </div>
+                  <Progress value={valorHOAgendado > 0 ? Math.min(Math.round((valorHOMes / valorHOAgendado) * 100), 100) : 0} className="h-1.5" />
+                </div>
+                {meta && (
+                  <div className="mt-2 text-[11px]">
+                    <span className="text-muted-foreground">Meta H.O.: </span>
+                    <span className="font-semibold text-foreground">{formatBRL(meta.meta_valor)}</span>
+                    <span className={cn('ml-2 font-bold', percMeta >= 100 ? 'text-success' : percMeta >= 70 ? 'text-warning' : 'text-destructive')}>
+                      ({percMeta}%)
+                    </span>
+                  </div>
+                )}
+              </div>
+              {/* Coren */}
+              <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-blue-500/15">
+                    <PiggyBank className="w-4 h-4 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-blue-600 dark:text-blue-400">Repasse Coren</p>
+                    <p className="text-[10px] text-muted-foreground">{(PP_COREN_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  </div>
+                </div>
+                <p className="text-2xl font-bold font-mono text-blue-500">{formatBRL(valorCorenMes)}</p>
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>Coren agendado</span>
+                    <span className="font-mono">{formatBRL(valorCorenAge)}</span>
+                  </div>
+                  <Progress value={valorCorenAge > 0 ? Math.min(Math.round((valorCorenMes / valorCorenAge) * 100), 100) : 0} className="h-1.5" />
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Não pago (Coren): <span className="font-mono text-destructive">{formatBRL(valorNaoPago * PP_COREN_PERCENTUAL)}</span>
+                </p>
+              </div>
+              {/* Cofen */}
+              <div className="p-4 rounded-xl border border-violet-500/30 bg-violet-500/5">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="p-1.5 rounded-lg bg-violet-500/15">
+                    <PiggyBank className="w-4 h-4 text-violet-500" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-violet-600 dark:text-violet-400">Repasse Cofen</p>
+                    <p className="text-[10px] text-muted-foreground">{(PP_COFEN_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                  </div>
+                </div>
+                <p className="text-2xl font-bold font-mono text-violet-500">{formatBRL(valorCofenMes)}</p>
+                <div className="mt-2">
+                  <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
+                    <span>Cofen agendado</span>
+                    <span className="font-mono">{formatBRL(valorCofenAge)}</span>
+                  </div>
+                  <Progress value={valorCofenAge > 0 ? Math.min(Math.round((valorCofenMes / valorCofenAge) * 100), 100) : 0} className="h-1.5" />
+                </div>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  Não pago (Cofen): <span className="font-mono text-destructive">{formatBRL(valorNaoPago * PP_COFEN_PERCENTUAL)}</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Barra visual de distribuição */}
+            <div className="mt-4">
+              <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide mb-2">Distribuição percentual do bruto recebido</p>
+              <div className="flex h-6 rounded-full overflow-hidden">
+                <div className="bg-orange-500" style={{ width: `${(PP_HO_PERCENTUAL * 100).toFixed(1)}%` }}
+                  title={`H.O. ${(PP_HO_PERCENTUAL * 100).toFixed(2)}%`} />
+                <div className="bg-blue-500" style={{ width: `${(PP_COREN_PERCENTUAL * 100).toFixed(1)}%` }}
+                  title={`Coren ${(PP_COREN_PERCENTUAL * 100).toFixed(2)}%`} />
+                <div className="bg-violet-500" style={{ width: `${(PP_COFEN_PERCENTUAL * 100).toFixed(1)}%` }}
+                  title={`Cofen ${(PP_COFEN_PERCENTUAL * 100).toFixed(2)}%`} />
+              </div>
+              <div className="flex gap-4 mt-2 text-[10px]">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />
+                  H.O. {(PP_HO_PERCENTUAL * 100).toFixed(2)}%
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-blue-500 inline-block" />
+                  Coren {(PP_COREN_PERCENTUAL * 100).toFixed(2)}%
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-violet-500 inline-block" />
+                  Cofen {(PP_COFEN_PERCENTUAL * 100).toFixed(2)}%
+                </span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* ── KPIs secundários ─────────────────────────────────────────────────── */}
       {!loading && (
@@ -642,9 +785,13 @@ export default function PainelDiretoria() {
             delay={0.26}
           />
           <KpiCard
-            label="Projeção do mês"
+            label={isPP ? 'Projeção H.O./mês' : 'Projeção do mês'}
             value={projecaoMes > 0 ? formatBRL(projecaoMes) : '—'}
-            sub={`Base: ${diasPassados} de ${diasNoMes} dias`}
+            sub={
+              isPP && projecaoBruta > 0
+                ? `Bruto: ${formatBRL(projecaoBruta)} · ${diasPassados}/${diasNoMes} dias`
+                : `Base: ${diasPassados} de ${diasNoMes} dias`
+            }
             icon={Target}
             color="text-chart-5"
             bg="bg-chart-5/10"
@@ -669,7 +816,7 @@ export default function PainelDiretoria() {
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-semibold flex items-center gap-2">
                 <Target className="w-4 h-4 text-chart-5" />
-                Meta do mês
+                {isPP ? 'Meta H.O. do mês' : 'Meta do mês'}
               </p>
               <Badge
                 variant="outline"
@@ -684,17 +831,24 @@ export default function PainelDiretoria() {
             </div>
             <Progress value={percMeta} className="h-2.5" />
             <div className="flex justify-between text-xs text-muted-foreground mt-2">
-              <span className="text-success font-medium">{formatBRL(valorRecebidoMes)} recebido</span>
+              <span className="text-success font-medium">
+                {isPP ? `H.O. recebido: ${formatBRL(valorHOMes)}` : `${formatBRL(valorRecebidoMes)} recebido`}
+              </span>
               <span>Meta: <span className="font-semibold text-foreground">{formatBRL(meta.meta_valor)}</span></span>
             </div>
+            {isPP && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Bruto recebido: {formatBRL(valorRecebidoMes)} · Coren: {formatBRL(valorCorenMes)} · Cofen: {formatBRL(valorCofenMes)}
+              </p>
+            )}
             {projecaoMes > 0 && (
               <p className={cn(
                 'text-xs mt-1.5 font-medium',
                 projecaoMes >= meta.meta_valor ? 'text-success' : 'text-warning'
               )}>
                 {projecaoMes >= meta.meta_valor
-                  ? '✓ Projeção indica atingimento da meta'
-                  : `⚠ Projeção: ${formatBRL(projecaoMes)} (${Math.round((projecaoMes / meta.meta_valor) * 100)}% da meta)`
+                  ? `✓ Projeção${isPP ? ' H.O.' : ''} indica atingimento da meta`
+                  : `⚠ Projeção${isPP ? ' H.O.' : ''}: ${formatBRL(projecaoMes)} (${Math.round((projecaoMes / meta.meta_valor) * 100)}% da meta)`
                 }
               </p>
             )}
@@ -987,26 +1141,30 @@ export default function PainelDiretoria() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 {
-                  label: 'Agendado atual',
-                  value: formatBRL(valorAgendadoMes),
-                  sub: `${totalAcordosMes} acordos`,
+                  label: isPP ? 'H.O. agendado atual' : 'Agendado atual',
+                  value: isPP ? formatBRL(valorHOAgendado) : formatBRL(valorAgendadoMes),
+                  sub: `${totalAcordosMes} acordos${isPP ? ` · bruto ${formatBRL(valorAgendadoMes)}` : ''}`,
                   color: 'text-primary',
                 },
                 {
-                  label: 'Agendado anterior',
-                  value: formatBRL(mesAnterior.valorAgendado),
+                  label: isPP ? 'H.O. agendado anterior' : 'Agendado anterior',
+                  value: isPP
+                    ? formatBRL(mesAnterior.valorAgendado * PP_HO_PERCENTUAL)
+                    : formatBRL(mesAnterior.valorAgendado),
                   sub: `${mesAnterior.totalAcordos} acordos`,
                   color: 'text-muted-foreground',
                 },
                 {
-                  label: 'Recebido atual',
-                  value: formatBRL(valorRecebidoMes),
-                  sub: `${totalPagosMes} pagos`,
+                  label: isPP ? 'H.O. recebido atual' : 'Recebido atual',
+                  value: isPP ? formatBRL(valorHOMes) : formatBRL(valorRecebidoMes),
+                  sub: `${totalPagosMes} pagos${isPP ? ` · bruto ${formatBRL(valorRecebidoMes)}` : ''}`,
                   color: 'text-success',
                 },
                 {
-                  label: 'Recebido anterior',
-                  value: formatBRL(mesAnterior.valorRecebido),
+                  label: isPP ? 'H.O. recebido anterior' : 'Recebido anterior',
+                  value: isPP
+                    ? formatBRL(mesAnterior.valorRecebido * PP_HO_PERCENTUAL)
+                    : formatBRL(mesAnterior.valorRecebido),
                   sub: 'mês passado',
                   color: 'text-muted-foreground',
                 },
