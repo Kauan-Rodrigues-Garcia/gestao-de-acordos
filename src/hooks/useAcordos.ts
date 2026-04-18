@@ -19,7 +19,7 @@
  *  removeAcordo(id)          – remove item localmente (optimistic)
  *  addAcordo(acordo)         – insere item localmente (optimistic)
  */
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
 import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth }    from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -118,6 +118,28 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // ── Estabiliza filtros com useMemo ────────────────────────────────────────────
+  // Serializa cada campo individualmente. Isso evita recriar useCallback
+  // quando a referencia do objeto filtros muda sem mudar os valores.
+  const filtrosEstavel = useMemo(() => {
+    if (!filtros) return '';
+    const {
+      status, tipo, operador_id, setor_id, empresa_id,
+      vencimento, data_inicio, data_fim, busca,
+      apenas_hoje, page, perPage, enableRealtime,
+    } = filtros;
+    return JSON.stringify({
+      status, tipo, operador_id, setor_id, empresa_id,
+      vencimento, data_inicio, data_fim, busca,
+      apenas_hoje, page, perPage, enableRealtime,
+    });
+  }, [
+    filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
+    filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio, filtros?.data_fim,
+    filtros?.busca, filtros?.apenas_hoje, filtros?.page, filtros?.perPage,
+    filtros?.enableRealtime,
+  ]);
+
   // ── fetch completo (montagem ou refresh manual) ───────────────────────────
   const fetchAcordos = useCallback(async () => {
     const empresaId = empresa?.id ?? perfil?.empresa_id;
@@ -140,7 +162,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       if (mountedRef.current) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfil, empresa?.id, perfil?.empresa_id, JSON.stringify(filtros)]);
+  }, [perfil, empresa?.id, perfil?.empresa_id, filtrosEstavel]);
 
   useEffect(() => { fetchAcordos(); }, [fetchAcordos]);
 
