@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -162,6 +162,8 @@ export default function Dashboard() {
   );
 
   const [selecionados,            setSelecionados]            = useState<string[]>([]);
+  // Limpar seleção quando filtros ou página mudam
+  useEffect(() => { setSelecionados([]); }, [currentPage, filtroStatus, filtroTipo, activeTab]);
   const [atualizandoStatus,       setAtualizandoStatus]       = useState<string | null>(null);
   const [filaAberta,              setFilaAberta]              = useState(false);
   const [filaWhatsApp,            setFilaWhatsApp]            = useState<ItemFila[]>([]);
@@ -290,13 +292,20 @@ export default function Dashboard() {
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
   const nome       = perfil?.nome?.split(' ')[0] || 'Usuário';
 
-  // ── mover atrasados → nao_pago ────────────────────────────────────────────
+  // ── mover atrasados → nao_pago ─────────────────────────────────────────────
+  // Guard: evita loop infinito (useEffect depende de `acordos`, que muda após refetch).
+  // Só executa quando `acordos` muda; o guard de IDs garante que cada lote só roda 1×.
+  const atrasadosProcessadosRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!isPP || loading || acordos.length === 0) return;
     const atrasados = acordos.filter(a =>
-      a.status === 'verificar_pendente' && a.vencimento < hoje,
+      a.status === 'verificar_pendente' &&
+      a.vencimento < hoje &&
+      !atrasadosProcessadosRef.current.has(a.id),
     );
     if (atrasados.length === 0) return;
+    // Marcar como processados ANTES do async para evitar re-entrada
+    atrasados.forEach(a => atrasadosProcessadosRef.current.add(a.id));
     Promise.all(
       atrasados.map(a =>
         supabase.from('acordos').update({ status: 'nao_pago' }).eq('id', a.id),
@@ -312,9 +321,12 @@ export default function Dashboard() {
             empresa_id: empresa?.id,
           });
         }
+        // Optimistic: atualiza localmente sem refetch
+        patchAcordo(a.id, { status: 'nao_pago' });
       });
-      refetch(); // mover atrasados: recarrega pois é uma operação em lote
+      // NÃO chama refetch() aqui — patchAcordo já atualizou os itens
     }).catch(e => console.warn('[Dashboard] erro ao mover atrasados:', e));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acordos, loading, isPP]);
 
   // ── handlers ─────────────────────────────────────────────────────────────────
@@ -899,7 +911,7 @@ export default function Dashboard() {
                         )}
                         {acordos.length === 0 ? (
                           <tr>
-                            <td colSpan={11} className="px-4 py-12 text-center">
+                            <td colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10} className="px-4 py-12 text-center">
                               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Filter className="w-8 h-8 opacity-30" />
                                 <p className="font-medium">Nenhum acordo encontrado</p>

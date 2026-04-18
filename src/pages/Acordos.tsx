@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit,
@@ -63,10 +63,20 @@ const PER_PAGE = 20;
 
 type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
 
+/** Garante URL absoluta com esquema http/https */
+function ensureAbsoluteUrl(url: string): string {
+  if (!url) return '#';
+  if (url.startsWith('http://') || url.startsWith('https://')) return url;
+  return 'https://' + url;
+}
+
 export default function Acordos() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
+
+  // PaguePlay usa o Dashboard como tela principal de acordos — redirecionar
+  if (isPP) return <Navigate to="/" replace />;
   const statusLabels = getStatusLabels(tenantSlug);
   const tipoLabels   = getTipoLabels(tenantSlug);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -200,13 +210,19 @@ export default function Acordos() {
   const hoje = getTodayISO();
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
 
-  // ── Mover acordos atrasados (verificar_pendente + vencimento passado) para nao_pago ──
+  // ── Mover acordos atrasados → nao_pago ──────────────────────────────────────
+  // Guard via ref: evita loop (useEffect depende de `acordos`, patchAcordo previne refetch).
+  const atrasadosProcessadosRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (loading || acordos.length === 0) return;
     const atrasados = acordos.filter(a =>
-      a.status === 'verificar_pendente' && a.vencimento < hoje
+      a.status === 'verificar_pendente' &&
+      a.vencimento < hoje &&
+      !atrasadosProcessadosRef.current.has(a.id)
     );
     if (atrasados.length === 0) return;
+    // Marcar antes do async para evitar re-entrada
+    atrasados.forEach(a => atrasadosProcessadosRef.current.add(a.id));
     Promise.all(
       atrasados.map(a =>
         supabase.from('acordos').update({ status: 'nao_pago' }).eq('id', a.id)
@@ -222,12 +238,14 @@ export default function Acordos() {
             empresa_id: empresa?.id,
           });
         }
+        // Optimistic: sem refetch
+        patchAcordo(a.id, { status: 'nao_pago' });
       });
-     refetch();
-   }).catch(e => {
-     console.warn('[Acordos] erro ao mover atrasados:', e);
-   });
-  }, [acordos, loading]); // refetch aqui é necessário: operação em lote
+    }).catch(e => {
+      console.warn('[Acordos] erro ao mover atrasados:', e);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acordos, loading]);
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
@@ -777,11 +795,11 @@ export default function Acordos() {
                                   {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
                                 </span>
                               </td>
-                              {/* Link do acordo — clicável em nova aba */}
+              {/* Link do acordo — clicável em nova aba */}
                               <td className="px-3 py-2.5 max-w-[120px]">
                                 {extractLinkAcordo(a.observacoes) ? (
                                   <a
-                                    href={extractLinkAcordo(a.observacoes)!}
+                                    href={ensureAbsoluteUrl(extractLinkAcordo(a.observacoes)!)}
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline truncate max-w-[100px]"

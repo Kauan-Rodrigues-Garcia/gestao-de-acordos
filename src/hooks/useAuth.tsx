@@ -111,8 +111,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             console.error('[useAuth] fetchPerfil falhou mesmo sem join:', error2.message);
             // Não retorna — deixa o backoff retentar
           } else if (data2) {
+            // ── Validar tenant no fallback também (sem join, empresa_id está no perfil)
+            const tenantSlug = getConfiguredTenantSlug();
+            const isSuperAdmin = (data2 as Perfil).perfil === 'super_admin';
+            if (!isSuperAdmin && tenantSlug && (data2 as Perfil).empresa_id) {
+              // Buscar slug da empresa do usuário
+              const { data: empData } = await supabase
+                .from('empresas')
+                .select('id, nome, slug, ativo, config, criado_em, atualizado_em')
+                .eq('id', (data2 as Perfil).empresa_id)
+                .maybeSingle();
+              if (empData && (empData as Empresa).slug !== tenantSlug) {
+                return rejectTenantMismatch(empData as Empresa);
+              }
+              setEmpresa((empData as Empresa) ?? null);
+            } else {
+              setEmpresa(null);
+            }
             setPerfil(data2 as Perfil);
-            setEmpresa(null);
             return { tenantMismatch: null, missingProfile: null };
           }
         } else if (data) {
