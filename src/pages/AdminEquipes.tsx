@@ -1,15 +1,11 @@
 /**
- * AdminEquipes.tsx — v2 (permissões de líder + isolamento multi-tenant)
+ * AdminEquipes.tsx — v3 (filtro de setor + UX redesenhada)
  *
- * CORREÇÕES APLICADAS:
- * 1. isAdmin derivado de perfil?.perfil (administrador | super_admin)
- * 2. Guard !empresa?.id no início — não executa queries sem empresa definida
- * 3. Todas as queries de 'perfis' têm .eq('empresa_id', empresaId) obrigatório
- * 4. loadData: se !isAdmin, query de setores filtra por perfil.setor_id
- * 5. handleDrop: se !isAdmin e equipe destino não pertencer ao setor do líder → toast.error + cancelar
- * 6. handleCriarEquipe: se !isAdmin e setorId !== perfil.setor_id → toast.error + cancelar
- * 7. Botão "Nova Equipe": renderizado apenas se isAdmin || setor.id === perfil.setor_id
- * 8. Botão excluir equipe: renderizado apenas se isAdmin || equipe.setor_id === perfil.setor_id
+ * NOVO FLUXO:
+ * 1. Usuário seleciona o setor desejado via selector no topo
+ * 2. Ao selecionar, aparecem os membros disponíveis (sem equipe) e as equipes existentes
+ * 3. Drag & drop para mover membros entre equipes
+ * 4. Visual redesenhado: sidebar de membros disponíveis + grid de equipes
  */
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -20,14 +16,23 @@ import {
   X,
   GripVertical,
   Building2,
-  ChevronDown,
-  ChevronUp,
   Trash2,
+  ChevronDown,
+  UserCheck,
+  Layers,
+  Search,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -60,15 +65,16 @@ interface Operador {
 // ─── Drag state (module-level ref, avoids stale closure issues) ───────────────
 let draggedOperadorId: string | null = null;
 
-// ─── Chip de Operador ─────────────────────────────────────────────────────────
+// ─── Chip de Membro ───────────────────────────────────────────────────────────
 
 interface OperadorChipProps {
   operador: Operador;
   onRemove?: (operadorId: string) => void;
   onDragStart: (operadorId: string) => void;
+  compact?: boolean;
 }
 
-function OperadorChip({ operador, onRemove, onDragStart }: OperadorChipProps) {
+function OperadorChip({ operador, onRemove, onDragStart, compact = false }: OperadorChipProps) {
   const cargoLabel = PERFIL_LABELS[operador.perfil] ?? operador.perfil;
   const cargoCss = PERFIL_COLORS[operador.perfil] ?? 'bg-muted/10 text-muted-foreground border-border';
   return (
@@ -79,13 +85,13 @@ function OperadorChip({ operador, onRemove, onDragStart }: OperadorChipProps) {
       exit={{ opacity: 0, scale: 0.85 }}
       draggable
       onDragStart={() => onDragStart(operador.id)}
-      className="flex items-center gap-1.5 bg-muted/60 border border-border rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing select-none group hover:bg-muted transition-colors"
+      className={`flex items-center gap-1.5 bg-muted/60 border border-border rounded-lg cursor-grab active:cursor-grabbing select-none group hover:bg-muted hover:border-primary/30 transition-all ${compact ? 'px-2 py-1' : 'px-2.5 py-1.5'}`}
     >
-      <GripVertical className="w-3.5 h-3.5 text-muted-foreground/50 flex-shrink-0" />
-      <span className="text-sm font-medium text-foreground truncate max-w-[120px]">
+      <GripVertical className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+      <span className={`font-medium text-foreground truncate ${compact ? 'text-xs max-w-[90px]' : 'text-sm max-w-[110px]'}`}>
         {operador.nome}
       </span>
-      <span className={`inline-flex items-center text-[10px] px-1.5 py-0 h-4 rounded-full border font-medium flex-shrink-0 ${cargoCss}`}>
+      <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'} ${cargoCss}`}>
         {cargoLabel}
       </span>
       {onRemove && (
@@ -95,7 +101,7 @@ function OperadorChip({ operador, onRemove, onDragStart }: OperadorChipProps) {
           className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
           title="Remover da equipe"
         >
-          <X className="w-3.5 h-3.5" />
+          <X className="w-3 h-3" />
         </button>
       )}
     </motion.div>
@@ -123,8 +129,8 @@ function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps)
         setIsOver(false);
         onDrop(equipeId);
       }}
-      className={`transition-all rounded-lg ${
-        isOver ? 'ring-2 ring-primary/50 bg-primary/5' : ''
+      className={`transition-all rounded-xl ${
+        isOver ? 'ring-2 ring-primary/60 bg-primary/5 scale-[1.01]' : ''
       } ${className}`}
     >
       {children}
@@ -135,10 +141,9 @@ function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps)
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export default function AdminEquipes() {
-  const { user, perfil } = useAuth();
+  const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  // ── Derivar role ────────────────────────────────────────────────────────────
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
 
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -146,26 +151,25 @@ export default function AdminEquipes() {
   const [operadores, setOperadores] = useState<Operador[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Controla quais setores estão expandidos
-  const [expandedSetores, setExpandedSetores] = useState<Record<string, boolean>>({});
+  // ── Setor selecionado no filtro ─────────────────────────────────────────────
+  const [setorSelecionado, setSetorSelecionado] = useState<string>('');
 
-  // Estado para criação de nova equipe por setor
-  const [novaEquipe, setNovaEquipe] = useState<Record<string, string>>({}); // setor_id -> nome
-  const [criandoEquipe, setCriandoEquipe] = useState<Record<string, boolean>>({}); // setor_id -> loading
-  const [showInput, setShowInput] = useState<Record<string, boolean>>({}); // setor_id -> show
+  // ── Busca de membros disponíveis ────────────────────────────────────────────
+  const [buscaMembro, setBuscaMembro] = useState('');
+
+  // Estado para criação de nova equipe
+  const [novaEquipeNome, setNovaEquipeNome] = useState('');
+  const [showNovaEquipe, setShowNovaEquipe] = useState(false);
+  const [criandoEquipe, setCriandoEquipe] = useState(false);
 
   const empresaId = empresa?.id;
 
   // ─── Load ──────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async () => {
-    // GUARD: não executar sem empresa definida
     if (!empresaId) return;
     setLoading(true);
     try {
-      // Query de setores:
-      // Admin → todos os setores da empresa
-      // Líder → apenas o seu próprio setor
       let setoresQuery = supabase
         .from('setores')
         .select('id, nome')
@@ -176,9 +180,6 @@ export default function AdminEquipes() {
         setoresQuery = setoresQuery.eq('id', perfil.setor_id) as typeof setoresQuery;
       }
 
-      // Query de equipes:
-      // Admin → todas da empresa
-      // Líder → apenas do seu setor
       let equipesQuery = supabase
         .from('equipes')
         .select('id, nome, setor_id, empresa_id')
@@ -189,14 +190,10 @@ export default function AdminEquipes() {
         equipesQuery = equipesQuery.eq('setor_id', perfil.setor_id) as typeof equipesQuery;
       }
 
-      // Query de operadores:
-      // SEMPRE filtrar por empresa_id (isolamento multi-tenant obrigatório)
-      // Admin → todos os operadores da empresa
-      // Líder → apenas operadores do seu setor
       let operadoresQuery = supabase
         .from('perfis')
         .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id')
-        .eq('empresa_id', empresaId)       // ← OBRIGATÓRIO — evita cross-tenant
+        .eq('empresa_id', empresaId)
         .in('perfil', ['operador', 'lider', 'elite'])
         .order('nome');
 
@@ -214,16 +211,17 @@ export default function AdminEquipes() {
       if (equipesRes.error) throw equipesRes.error;
       if (operadoresRes.error) throw operadoresRes.error;
 
-      setSetores(setoresRes.data ?? []);
+      const setoresList = setoresRes.data ?? [];
+      setSetores(setoresList);
       setEquipes(equipesRes.data ?? []);
       setOperadores(operadoresRes.data ?? []);
 
-      // Expand todos os setores por padrão
-      const expanded: Record<string, boolean> = {};
-      (setoresRes.data ?? []).forEach((s: Setor) => { expanded[s.id] = true; });
-      setExpandedSetores(prev =>
-        Object.keys(prev).length === 0 ? expanded : prev
-      );
+      // Auto-selecionar: líder vai para seu setor, admin para o primeiro da lista
+      setSetorSelecionado(prev => {
+        if (prev) return prev; // mantém seleção existente
+        if (!isAdmin && perfil?.setor_id) return perfil.setor_id;
+        return setoresList[0]?.id ?? '';
+      });
     } catch (err: any) {
       toast.error('Erro ao carregar dados: ' + (err?.message ?? 'Erro desconhecido'));
     } finally {
@@ -233,55 +231,61 @@ export default function AdminEquipes() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ─── Helpers ───────────────────────────────────────────────────────────────
+  // ─── Derivados do setor selecionado ────────────────────────────────────────
 
-  const toggleSetor = (setorId: string) =>
-    setExpandedSetores(prev => ({ ...prev, [setorId]: !prev[setorId] }));
+  const setorAtual = setores.find(s => s.id === setorSelecionado);
+  const equipesDoSetor = equipes.filter(e => e.setor_id === setorSelecionado);
 
-  const equipesDoSetor = (setorId: string) =>
-    equipes.filter(e => e.setor_id === setorId);
+  // Membros do setor selecionado
+  const membrosDoSetor = operadores.filter(o => o.setor_id === setorSelecionado);
+  // Membros sem equipe (disponíveis para alocar), com filtro de busca
+  const membrosSemEquipe = membrosDoSetor.filter(o => !o.equipe_id).filter(o =>
+    !buscaMembro || o.nome.toLowerCase().includes(buscaMembro.toLowerCase())
+  );
 
   const operadoresDaEquipe = (equipeId: string) =>
     operadores.filter(o => o.equipe_id === equipeId);
 
-  const operadoresSemEquipe = operadores.filter(o => !o.equipe_id);
+  const podeGerenciarSetorSelecionado = isAdmin || setorSelecionado === perfil?.setor_id;
+
+  // Stats do setor selecionado
+  const totalMembros = membrosDoSetor.length;
+  const totalAlocados = membrosDoSetor.filter(o => o.equipe_id).length;
 
   // ─── Criar equipe ──────────────────────────────────────────────────────────
 
-  async function handleCriarEquipe(setorId: string) {
-    const nome = (novaEquipe[setorId] ?? '').trim();
+  async function handleCriarEquipe() {
+    const nome = novaEquipeNome.trim();
     if (!nome) { toast.error('Informe o nome da equipe.'); return; }
-    if (!empresaId) return;
+    if (!empresaId || !setorSelecionado) return;
 
-    // PERMISSÃO: líder só pode criar equipe no seu próprio setor
-    if (!isAdmin && setorId !== perfil?.setor_id) {
+    if (!isAdmin && setorSelecionado !== perfil?.setor_id) {
       toast.error('Você só pode criar equipes no seu próprio setor.');
       return;
     }
 
-    setCriandoEquipe(prev => ({ ...prev, [setorId]: true }));
+    setCriandoEquipe(true);
     try {
       const { error } = await supabase.from('equipes').insert({
         nome,
-        setor_id: setorId,
+        setor_id: setorSelecionado,
         empresa_id: empresaId,
       });
       if (error) throw error;
       toast.success(`Equipe "${nome}" criada com sucesso!`);
-      setNovaEquipe(prev => ({ ...prev, [setorId]: '' }));
-      setShowInput(prev => ({ ...prev, [setorId]: false }));
+      setNovaEquipeNome('');
+      setShowNovaEquipe(false);
       await loadData();
     } catch (err: any) {
       toast.error('Erro ao criar equipe: ' + (err?.message ?? 'Erro desconhecido'));
     } finally {
-      setCriandoEquipe(prev => ({ ...prev, [setorId]: false }));
+      setCriandoEquipe(false);
     }
   }
 
   // ─── Excluir equipe ────────────────────────────────────────────────────────
 
   async function handleExcluirEquipe(equipe: Equipe) {
-    // PERMISSÃO: líder só pode excluir equipes do seu próprio setor
     if (!isAdmin && equipe.setor_id !== perfil?.setor_id) {
       toast.error('Você só pode excluir equipes do seu próprio setor.');
       return;
@@ -289,7 +293,7 @@ export default function AdminEquipes() {
 
     const membros = operadoresDaEquipe(equipe.id);
     if (membros.length > 0) {
-      toast.error('Remova todos os operadores antes de excluir a equipe.');
+      toast.error('Remova todos os membros antes de excluir a equipe.');
       return;
     }
     try {
@@ -315,26 +319,23 @@ export default function AdminEquipes() {
 
     const operador = operadores.find(o => o.id === operadorId);
     if (!operador) return;
-    if (operador.equipe_id === equipeId) return; // nada mudou
+    if (operador.equipe_id === equipeId) return;
 
-    // PERMISSÃO: líder só pode mover operadores dentro do seu próprio setor
     if (!isAdmin) {
-      // Verificar se a equipe destino pertence ao setor do líder
       if (equipeId !== null) {
         const equipeDestino = equipes.find(e => e.id === equipeId);
         if (!equipeDestino || equipeDestino.setor_id !== perfil?.setor_id) {
-          toast.error('Você só pode mover operadores dentro do seu próprio setor.');
+          toast.error('Você só pode mover membros dentro do seu próprio setor.');
           return;
         }
       }
-      // Verificar também se o operador arrastado pertence ao setor do líder
       if (operador.setor_id !== perfil?.setor_id) {
-        toast.error('Você só pode mover operadores dentro do seu próprio setor.');
+        toast.error('Você só pode mover membros dentro do seu próprio setor.');
         return;
       }
     }
 
-    // Otimista: atualiza localmente
+    // Atualização otimista
     setOperadores(prev =>
       prev.map(o => o.id === operadorId ? { ...o, equipe_id: equipeId } : o)
     );
@@ -352,27 +353,23 @@ export default function AdminEquipes() {
 
       toast.success(
         equipeNome
-          ? `${operador.nome} movido para "${equipeNome}".`
-          : `${operador.nome} removido de equipe.`
+          ? `${operador.nome} → "${equipeNome}"`
+          : `${operador.nome} removido de equipe`
       );
     } catch (err: any) {
-      toast.error('Erro ao mover operador: ' + (err?.message ?? 'Erro desconhecido'));
-      // Reverte
+      toast.error('Erro ao mover membro: ' + (err?.message ?? 'Erro desconhecido'));
       setOperadores(prev =>
         prev.map(o => o.id === operadorId ? { ...o, equipe_id: operador.equipe_id } : o)
       );
     }
   }
 
-  // ─── Remover operador da equipe ────────────────────────────────────────────
-
   async function handleRemoverDaEquipe(operadorId: string) {
     const operador = operadores.find(o => o.id === operadorId);
     if (!operador) return;
 
-    // PERMISSÃO: líder só pode remover operadores do seu próprio setor
     if (!isAdmin && operador.setor_id !== perfil?.setor_id) {
-      toast.error('Você só pode gerenciar operadores do seu próprio setor.');
+      toast.error('Você só pode gerenciar membros do seu próprio setor.');
       return;
     }
 
@@ -388,7 +385,7 @@ export default function AdminEquipes() {
       if (error) throw error;
       toast.success(`${operador.nome} removido da equipe.`);
     } catch (err: any) {
-      toast.error('Erro ao remover operador: ' + (err?.message ?? 'Erro desconhecido'));
+      toast.error('Erro ao remover membro: ' + (err?.message ?? 'Erro desconhecido'));
       setOperadores(prev =>
         prev.map(o => o.id === operadorId ? { ...o, equipe_id: operador.equipe_id } : o)
       );
@@ -409,12 +406,13 @@ export default function AdminEquipes() {
   }
 
   return (
-    <div className="space-y-6 p-6 max-w-5xl mx-auto">
-      {/* Header */}
+    <div className="space-y-5 p-6 max-w-6xl mx-auto">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <motion.div
         initial={{ opacity: 0, y: -12 }}
         animate={{ opacity: 1, y: 0 }}
-        className="flex items-start justify-between"
+        className="flex items-start justify-between gap-4 flex-wrap"
       >
         <div>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -423,248 +421,292 @@ export default function AdminEquipes() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {isAdmin
-              ? 'Organize operadores em equipes dentro de cada setor. Arraste para mover entre equipes.'
-              : 'Gerencie operadores dentro do seu setor. Arraste para mover entre equipes.'}
+              ? 'Selecione um setor para visualizar e organizar as equipes.'
+              : 'Gerencie os membros e equipes do seu setor.'}
           </p>
         </div>
       </motion.div>
 
-      {/* Setores */}
-      {setores.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-16 gap-3 text-muted-foreground">
-            <Building2 className="w-10 h-10 opacity-30" />
-            <p className="text-sm">Nenhum setor encontrado.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {setores.map((setor, idx) => {
-            const eqs = equipesDoSetor(setor.id);
-            const expanded = expandedSetores[setor.id] ?? true;
-            // O líder só pode criar equipe e gerenciar no próprio setor
-            const podeGerenciarSetor = isAdmin || setor.id === perfil?.setor_id;
-
-            return (
-              <motion.div
-                key={setor.id}
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-              >
-                <Card className="overflow-hidden">
-                  {/* Cabeçalho do setor */}
-                  <button
-                    type="button"
-                    className="w-full text-left"
-                    onClick={() => toggleSetor(setor.id)}
-                  >
-                    <CardHeader className="py-3 px-4 flex flex-row items-center justify-between bg-muted/30 hover:bg-muted/50 transition-colors cursor-pointer">
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Building2 className="w-4 h-4 text-primary" />
-                        {setor.nome}
-                        <Badge variant="outline" className="text-xs font-normal">
-                          {eqs.length} equipe{eqs.length !== 1 ? 's' : ''}
-                        </Badge>
-                      </CardTitle>
-                      {expanded
-                        ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                        : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-                    </CardHeader>
-                  </button>
-
-                  <AnimatePresence>
-                    {expanded && (
-                      <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                        style={{ overflow: 'hidden' }}
-                      >
-                        <CardContent className="p-4 space-y-3">
-                          {/* Equipes do setor */}
-                          {eqs.length === 0 && (
-                            <p className="text-xs text-muted-foreground text-center py-3">
-                              Nenhuma equipe neste setor.
-                            </p>
-                          )}
-
-                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                            {eqs.map(equipe => {
-                              const membros = operadoresDaEquipe(equipe.id);
-                              const podeGerenciarEquipe = isAdmin || equipe.setor_id === perfil?.setor_id;
-                              return (
-                                <DropZone
-                                  key={equipe.id}
-                                  equipeId={equipe.id}
-                                  onDrop={handleDrop}
-                                  className="h-full"
-                                >
-                                  <div className="border border-border rounded-xl p-3 bg-background h-full flex flex-col gap-2">
-                                    {/* Header da equipe */}
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm font-semibold text-foreground truncate">
-                                        {equipe.nome}
-                                      </span>
-                                      <div className="flex items-center gap-1 flex-shrink-0">
-                                        <Badge variant="secondary" className="text-[10px] px-1.5">
-                                          {membros.length}
-                                        </Badge>
-                                        {/* Botão excluir apenas para quem tem permissão */}
-                                        {podeGerenciarEquipe && (
-                                          <button
-                                            type="button"
-                                            title="Excluir equipe (somente se vazia)"
-                                            onClick={(e) => { e.stopPropagation(); handleExcluirEquipe(equipe); }}
-                                            className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                                          >
-                                            <Trash2 className="w-3.5 h-3.5" />
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-
-                                    {/* Membros */}
-                                    <div className="flex flex-wrap gap-1.5 min-h-[40px]">
-                                      <AnimatePresence>
-                                        {membros.length === 0 ? (
-                                          <p className="text-[11px] text-muted-foreground/60 italic w-full text-center py-2">
-                                            Arraste operadores aqui
-                                          </p>
-                                        ) : (
-                                          membros.map(op => (
-                                            <OperadorChip
-                                              key={op.id}
-                                              operador={op}
-                                              onRemove={podeGerenciarEquipe ? handleRemoverDaEquipe : undefined}
-                                              onDragStart={handleDragStart}
-                                            />
-                                          ))
-                                        )}
-                                      </AnimatePresence>
-                                    </div>
-                                  </div>
-                                </DropZone>
-                              );
-                            })}
-                          </div>
-
-                          {/* Criar nova equipe — apenas para quem tem permissão neste setor */}
-                          {podeGerenciarSetor && (
-                            <div className="pt-1">
-                              <AnimatePresence>
-                                {showInput[setor.id] ? (
-                                  <motion.div
-                                    initial={{ opacity: 0, height: 0 }}
-                                    animate={{ opacity: 1, height: 'auto' }}
-                                    exit={{ opacity: 0, height: 0 }}
-                                    className="flex gap-2"
-                                  >
-                                    <Input
-                                      autoFocus
-                                      placeholder="Nome da equipe..."
-                                      value={novaEquipe[setor.id] ?? ''}
-                                      onChange={e =>
-                                        setNovaEquipe(prev => ({ ...prev, [setor.id]: e.target.value }))
-                                      }
-                                      onKeyDown={e => {
-                                        if (e.key === 'Enter') handleCriarEquipe(setor.id);
-                                        if (e.key === 'Escape')
-                                          setShowInput(prev => ({ ...prev, [setor.id]: false }));
-                                      }}
-                                      className="h-8 text-sm"
-                                    />
-                                    <Button
-                                      size="sm"
-                                      onClick={() => handleCriarEquipe(setor.id)}
-                                      disabled={criandoEquipe[setor.id]}
-                                      className="h-8"
-                                    >
-                                      {criandoEquipe[setor.id] ? (
-                                        <div className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
-                                      ) : (
-                                        'Criar'
-                                      )}
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() =>
-                                        setShowInput(prev => ({ ...prev, [setor.id]: false }))
-                                      }
-                                      className="h-8"
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </motion.div>
-                                ) : (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-xs text-muted-foreground hover:text-foreground gap-1"
-                                    onClick={() =>
-                                      setShowInput(prev => ({ ...prev, [setor.id]: true }))
-                                    }
-                                  >
-                                    <Plus className="w-3.5 h-3.5" />
-                                    Nova Equipe
-                                  </Button>
-                                )}
-                              </AnimatePresence>
-                            </div>
-                          )}
-                        </CardContent>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </Card>
-              </motion.div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Operadores sem equipe */}
+      {/* ── Seletor de Setor ──────────────────────────────────────────────── */}
       <motion.div
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: setores.length * 0.05 + 0.1 }}
+        transition={{ delay: 0.05 }}
+        className="flex items-center gap-3 p-4 rounded-2xl border border-border bg-card"
       >
-        <DropZone equipeId={null} onDrop={handleDrop}>
-          <Card className="border-dashed border-muted-foreground/30">
-            <CardHeader className="py-3 px-4">
-              <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
-                <Users className="w-4 h-4" />
-                Membros sem equipe
-                <Badge variant="outline" className="text-xs font-normal">
-                  {operadoresSemEquipe.length}
-                </Badge>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              {operadoresSemEquipe.length === 0 ? (
-                <p className="text-xs text-muted-foreground/60 italic text-center py-4">
-                  Todos os membros estão alocados em equipes.
-                </p>
+        <div className="flex items-center gap-2 text-muted-foreground shrink-0">
+          <Building2 className="w-4 h-4" />
+          <span className="text-sm font-medium">Setor:</span>
+        </div>
+
+        {setores.length === 0 ? (
+          <p className="text-sm text-muted-foreground italic">Nenhum setor cadastrado.</p>
+        ) : (
+          <div className="flex-1 max-w-xs">
+            <Select value={setorSelecionado || 'none'} onValueChange={v => {
+              setSetorSelecionado(v === 'none' ? '' : v);
+              setBuscaMembro('');
+              setShowNovaEquipe(false);
+            }}>
+              <SelectTrigger className="h-9 text-sm">
+                <SelectValue placeholder="Selecione um setor..." />
+              </SelectTrigger>
+              <SelectContent>
+                {setores.map(s => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+
+        {/* Stats do setor selecionado */}
+        {setorAtual && (
+          <div className="flex items-center gap-3 ml-auto text-xs text-muted-foreground">
+            <span className="flex items-center gap-1">
+              <Users className="w-3.5 h-3.5" />
+              <strong className="text-foreground">{totalMembros}</strong> membros
+            </span>
+            <span className="flex items-center gap-1">
+              <UserCheck className="w-3.5 h-3.5" />
+              <strong className="text-foreground">{totalAlocados}</strong> alocados
+            </span>
+            <span className="flex items-center gap-1">
+              <Layers className="w-3.5 h-3.5" />
+              <strong className="text-foreground">{equipesDoSetor.length}</strong> equipes
+            </span>
+          </div>
+        )}
+      </motion.div>
+
+      {/* ── Conteúdo principal — só exibe quando setor está selecionado ───── */}
+      <AnimatePresence mode="wait">
+        {!setorSelecionado ? (
+          <motion.div
+            key="empty-state"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <Card className="border-dashed">
+              <CardContent className="flex flex-col items-center justify-center py-20 gap-3 text-muted-foreground">
+                <Building2 className="w-12 h-12 opacity-20" />
+                <p className="text-sm font-medium">Selecione um setor para começar</p>
+                <p className="text-xs opacity-70">As equipes e membros aparecerão aqui</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        ) : (
+          <motion.div
+            key={setorSelecionado}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.2 }}
+            className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5"
+          >
+            {/* ── Coluna esquerda: Membros disponíveis ──────────────────── */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Users className="w-4 h-4 text-muted-foreground" />
+                  Membros disponíveis
+                  <Badge variant="secondary" className="text-[10px] px-1.5">
+                    {membrosSemEquipe.length}
+                  </Badge>
+                </h2>
+              </div>
+
+              {/* Busca */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar membro..."
+                  value={buscaMembro}
+                  onChange={e => setBuscaMembro(e.target.value)}
+                  className="pl-8 h-8 text-xs"
+                />
+              </div>
+
+              {/* Lista de membros sem equipe */}
+              <DropZone equipeId={null} onDrop={handleDrop} className="min-h-[120px]">
+                <div className="rounded-xl border border-dashed border-muted-foreground/30 bg-muted/20 p-3 min-h-[120px]">
+                  {membrosSemEquipe.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-24 text-muted-foreground/50 gap-2">
+                      <UserCheck className="w-6 h-6" />
+                      <p className="text-xs text-center">
+                        {buscaMembro
+                          ? 'Nenhum membro encontrado'
+                          : 'Todos os membros estão em equipes'}
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      <AnimatePresence>
+                        {membrosSemEquipe.map(op => (
+                          <OperadorChip
+                            key={op.id}
+                            operador={op}
+                            onDragStart={handleDragStart}
+                            compact
+                          />
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </div>
+              </DropZone>
+
+              <p className="text-[11px] text-muted-foreground/60 text-center">
+                Arraste membros para uma equipe →
+              </p>
+            </div>
+
+            {/* ── Coluna direita: Equipes ───────────────────────────────── */}
+            <div className="space-y-3">
+              {/* Header equipes + botão criar */}
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-muted-foreground" />
+                  Equipes
+                  <Badge variant="secondary" className="text-[10px] px-1.5">
+                    {equipesDoSetor.length}
+                  </Badge>
+                </h2>
+                {podeGerenciarSetorSelecionado && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1.5"
+                    onClick={() => { setShowNovaEquipe(v => !v); setNovaEquipeNome(''); }}
+                  >
+                    {showNovaEquipe ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                    {showNovaEquipe ? 'Cancelar' : 'Nova Equipe'}
+                  </Button>
+                )}
+              </div>
+
+              {/* Input criar nova equipe */}
+              <AnimatePresence>
+                {showNovaEquipe && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="flex gap-2 overflow-hidden"
+                  >
+                    <Input
+                      autoFocus
+                      placeholder="Nome da equipe..."
+                      value={novaEquipeNome}
+                      onChange={e => setNovaEquipeNome(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') handleCriarEquipe();
+                        if (e.key === 'Escape') { setShowNovaEquipe(false); setNovaEquipeNome(''); }
+                      }}
+                      className="h-8 text-sm flex-1"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={handleCriarEquipe}
+                      disabled={criandoEquipe}
+                      className="h-8 px-4"
+                    >
+                      {criandoEquipe ? (
+                        <div className="w-3.5 h-3.5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin" />
+                      ) : 'Criar'}
+                    </Button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Grid de equipes */}
+              {equipesDoSetor.length === 0 ? (
+                <Card className="border-dashed">
+                  <CardContent className="flex flex-col items-center justify-center py-12 gap-3 text-muted-foreground">
+                    <Layers className="w-8 h-8 opacity-20" />
+                    <p className="text-sm">Nenhuma equipe neste setor.</p>
+                    {podeGerenciarSetorSelecionado && (
+                      <Button
+                        variant="outline" size="sm" className="text-xs gap-1"
+                        onClick={() => setShowNovaEquipe(true)}
+                      >
+                        <Plus className="w-3.5 h-3.5" /> Criar primeira equipe
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  <AnimatePresence>
-                    {operadoresSemEquipe.map(op => (
-                      <OperadorChip
-                        key={op.id}
-                        operador={op}
-                        onDragStart={handleDragStart}
-                        // Sem botão de remover pois já está sem equipe
-                      />
-                    ))}
-                  </AnimatePresence>
+                <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                  {equipesDoSetor.map((equipe, idx) => {
+                    const membros = operadoresDaEquipe(equipe.id);
+                    const podeGerenciarEquipe = isAdmin || equipe.setor_id === perfil?.setor_id;
+                    return (
+                      <motion.div
+                        key={equipe.id}
+                        initial={{ opacity: 0, scale: 0.97 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        transition={{ delay: idx * 0.04 }}
+                      >
+                        <DropZone equipeId={equipe.id} onDrop={handleDrop} className="h-full">
+                          <div className="border border-border rounded-xl bg-card h-full flex flex-col overflow-hidden hover:border-primary/30 transition-colors">
+                            {/* Header da equipe */}
+                            <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-b border-border">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className="text-sm font-semibold text-foreground truncate">
+                                  {equipe.nome}
+                                </span>
+                                <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
+                                  {membros.length}
+                                </Badge>
+                              </div>
+                              {podeGerenciarEquipe && (
+                                <button
+                                  type="button"
+                                  title="Excluir equipe (somente se vazia)"
+                                  onClick={() => handleExcluirEquipe(equipe)}
+                                  className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Membros da equipe */}
+                            <div className="p-2.5 flex-1 min-h-[80px]">
+                              <div className="flex flex-col gap-1.5 min-h-[60px]">
+                                <AnimatePresence>
+                                  {membros.length === 0 ? (
+                                    <div className="flex items-center justify-center h-12 text-muted-foreground/40 text-[11px] italic">
+                                      Arraste membros aqui
+                                    </div>
+                                  ) : (
+                                    membros.map(op => (
+                                      <OperadorChip
+                                        key={op.id}
+                                        operador={op}
+                                        onRemove={podeGerenciarEquipe ? handleRemoverDaEquipe : undefined}
+                                        onDragStart={handleDragStart}
+                                        compact
+                                      />
+                                    ))
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                          </div>
+                        </DropZone>
+                      </motion.div>
+                    );
+                  })}
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </DropZone>
-      </motion.div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -163,11 +163,13 @@ interface AnalyticsPanelProps {
 }
 
 export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: AnalyticsPanelProps = {}) {
-  const [open, setOpen] = useState(false);
-  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
+  // Bookplay (não-PaguePay): analytics sempre expandido, sem botão de ocultar
+  const alwaysOpen = !isPP;
+  const [open, setOpen] = useState(() => !isPP);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
 
   const {
     valorRecebidoMes,
@@ -334,22 +336,25 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, eliteVisaoGeral }: A
           >
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
-          <Button
-            variant="outline" size="sm" className="h-7 text-xs gap-1"
-            onClick={() => setOpen(v => !v)}
-          >
-            {open ? (
-              <><ChevronUp className="w-3 h-3" /> Ocultar</>
-            ) : (
-              <><ChevronDown className="w-3 h-3" /> Exibir Analíticos</>
-            )}
-          </Button>
+          {/* Botão visível apenas na PaguePay — Bookplay fica sempre expandido */}
+          {!alwaysOpen && (
+            <Button
+              variant="outline" size="sm" className="h-7 text-xs gap-1"
+              onClick={() => setOpen(v => !v)}
+            >
+              {open ? (
+                <><ChevronUp className="w-3 h-3" /> Ocultar</>
+              ) : (
+                <><ChevronDown className="w-3 h-3" /> Exibir Analíticos</>
+              )}
+            </Button>
+          )}
         </div>
       </div>
 
       {/* ── Painel expandido ── */}
       <AnimatePresence>
-        {open && (
+        {(open || alwaysOpen) && (
           <motion.div
             key="analytics-body"
             initial={{ opacity: 0, height: 0 }}
