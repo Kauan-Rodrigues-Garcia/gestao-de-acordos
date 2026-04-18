@@ -1,5 +1,5 @@
 /**
- * AnalyticsPanel.tsx — v3
+ * AnalyticsPanel.tsx — v4 (Premium Redesign)
  * Substituição do PieChart de status pelo "Anel com Breakdown":
  *   • Anel central: % da meta de valor atingida (ou % dos acordos pagos se sem meta)
  *   • Ao expandir (clicar "Ver Breakdown"): mostra % por forma de pagamento
@@ -12,7 +12,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar, Target,
   ChevronDown, ChevronUp, RefreshCw, XCircle,
-  Clock, Award, CreditCard, Percent, ChevronRight,
+  Clock, Award, Percent, ChevronRight,
+  ArrowUpRight, ArrowDownRight, Minus,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -28,8 +29,6 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -47,6 +46,27 @@ const BREAKDOWN_COLORS = [
 const CHART_RECEBIDO = '#22c55e'; // verde — sempre visível
 const CHART_AGENDADO = '#6366f1'; // indigo — contraste universal
 
+// Medalhas para o ranking
+const MEDAL_STYLES = [
+  { bg: 'bg-amber-400/20', text: 'text-amber-500', border: 'border-amber-400/40', label: '1' },
+  { bg: 'bg-slate-300/20', text: 'text-slate-400', border: 'border-slate-300/40', label: '2' },
+  { bg: 'bg-orange-400/20', text: 'text-orange-500', border: 'border-orange-400/40', label: '3' },
+];
+
+// Variantes de animação
+const containerVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.06, delayChildren: 0.05 },
+  },
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.3, ease: 'easeOut' } },
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub: Tooltip customizado
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,51 +74,118 @@ const CHART_AGENDADO = '#6366f1'; // indigo — contraste universal
 function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="rounded-lg border border-border bg-popover p-2 shadow-md text-xs text-popover-foreground">
-      <p className="font-semibold mb-1">Dia {label}</p>
-      {payload.map((entry: any, i: number) => (
-        <p key={i} style={{ color: entry.color }}>
-          {entry.name}: {formatCurrency(entry.value)}
-        </p>
-      ))}
+    <div className="rounded-xl border border-border/80 bg-popover/95 backdrop-blur-sm px-3 py-2.5 shadow-xl text-xs text-popover-foreground">
+      <p className="font-semibold mb-1.5 text-foreground">Dia {label}</p>
+      <div className="space-y-1">
+        {payload.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center gap-2">
+            <span
+              className="inline-block w-2 h-2 rounded-full shrink-0"
+              style={{ background: entry.color }}
+            />
+            <span className="text-muted-foreground">{entry.name}:</span>
+            <span className="font-semibold tabular-nums font-mono" style={{ color: entry.color }}>
+              {formatCurrency(entry.value)}
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub: Skeleton card
+// Sub: Skeleton cards
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SkeletonCard() {
   return (
-    <div className="rounded-xl border border-border bg-muted/40 p-3 animate-pulse">
-      <div className="h-3 w-20 rounded bg-muted mb-2" />
-      <div className="h-6 w-28 rounded bg-muted" />
+    <div className="rounded-xl border border-border bg-muted/20 p-4 animate-pulse overflow-hidden relative">
+      <div className="absolute left-0 top-0 bottom-0 w-1 rounded-l-xl bg-muted/60" />
+      <div className="h-3 w-20 rounded-md bg-muted mb-3" />
+      <div className="h-7 w-28 rounded-md bg-muted mb-2" />
+      <div className="h-2.5 w-16 rounded-md bg-muted/60" />
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Sub: MetricCard
+// Sub: MetricCard — Premium with colored border accent
 // ─────────────────────────────────────────────────────────────────────────────
+
+type TrendDirection = 'up' | 'down' | 'neutral';
 
 interface MetricCardProps {
   label: string;
   value: React.ReactNode;
   icon: React.ReactNode;
   sub?: string;
+  accentColor?: string;
+  trend?: TrendDirection;
+  gradientFrom?: string;
 }
 
-function MetricCard({ label, value, icon, sub }: MetricCardProps) {
+function MetricCard({
+  label,
+  value,
+  icon,
+  sub,
+  accentColor = '#6366f1',
+  trend,
+  gradientFrom,
+}: MetricCardProps) {
+  const TrendIcon =
+    trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
+  const trendColor =
+    trend === 'up'
+      ? 'text-emerald-500'
+      : trend === 'down'
+      ? 'text-red-400'
+      : 'text-muted-foreground/60';
+
   return (
-    <div className="flex flex-col gap-1 rounded-xl border border-border bg-card p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-xs text-muted-foreground truncate">{label}</span>
-        <span className="text-muted-foreground shrink-0">{icon}</span>
+    <motion.div
+      variants={itemVariants}
+      whileHover={{ y: -2, transition: { duration: 0.18 } }}
+      className="group relative flex flex-col gap-1.5 rounded-xl border border-border/70 bg-card overflow-hidden p-4 shadow-sm hover:shadow-md transition-shadow duration-200"
+    >
+      {/* Colored left accent bar */}
+      <div
+        className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+        style={{ background: accentColor }}
+      />
+      {/* Subtle gradient background tint */}
+      {gradientFrom && (
+        <div
+          className="absolute inset-0 opacity-[0.035] pointer-events-none"
+          style={{
+            background: `radial-gradient(ellipse at top left, ${gradientFrom} 0%, transparent 70%)`,
+          }}
+        />
+      )}
+      <div className="flex items-center justify-between gap-2 pl-1">
+        <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide truncate">
+          {label}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          {trend && (
+            <TrendIcon className={cn('w-3.5 h-3.5', trendColor)} />
+          )}
+          <span
+            className="text-muted-foreground/60 group-hover:text-muted-foreground transition-colors"
+            style={{ color: accentColor + 'aa' }}
+          >
+            {icon}
+          </span>
+        </div>
       </div>
-      <div className="text-lg font-bold leading-tight">{value}</div>
-      {sub && <span className="text-xs text-muted-foreground">{sub}</span>}
-    </div>
+      <div className="text-xl font-bold leading-tight tracking-tight pl-1 font-mono tabular-nums">
+        {value}
+      </div>
+      {sub && (
+        <span className="text-[11px] text-muted-foreground pl-1 leading-snug">{sub}</span>
+      )}
+    </motion.div>
   );
 }
 
@@ -107,14 +194,14 @@ function MetricCard({ label, value, icon, sub }: MetricCardProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface DonutChartProps {
-  percent: number;       // 0–100 (ou mais)
-  label: string;         // label principal dentro do anel
-  sublabel?: string;     // sublabel secundário
-  color?: string;        // cor do arco preenchido
-  size?: number;         // tamanho em px
+  percent: number;
+  label: string;
+  sublabel?: string;
+  color?: string;
+  size?: number;
 }
 
-function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }: DonutChartProps) {
+function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 180 }: DonutChartProps) {
   const clampedPerc = Math.min(percent, 100);
   const data = [
     { value: clampedPerc },
@@ -129,30 +216,67 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
             data={data}
             cx="50%"
             cy="50%"
-            innerRadius={size * 0.32}
+            innerRadius={size * 0.33}
             outerRadius={size * 0.46}
             startAngle={90}
             endAngle={-270}
             paddingAngle={0}
             dataKey="value"
             strokeWidth={0}
+            isAnimationActive={true}
+            animationBegin={80}
+            animationDuration={900}
+            animationEasing="ease-out"
           >
             <Cell fill={clampedPerc >= 100 ? '#22c55e' : color} />
-            <Cell fill="rgba(148,163,184,0.22)" />
+            <Cell fill="rgba(148,163,184,0.15)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>
-      {/* Texto central sobreposto */}
+      {/* Inner glow ring */}
+      <div
+        className="absolute rounded-full"
+        style={{
+          width: size * 0.64,
+          height: size * 0.64,
+          boxShadow: `0 0 0 2px ${color}22 inset`,
+        }}
+      />
+      {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-        <span className="text-xl font-bold leading-none">
+        <span className="text-2xl font-extrabold leading-none tabular-nums tracking-tight">
           {percent > 0 ? `${Math.min(percent, 999)}%` : '—'}
         </span>
         {sublabel && (
-          <span className="text-[11px] text-muted-foreground mt-0.5 text-center leading-tight max-w-[70px]">
+          <span className="text-[11px] text-muted-foreground mt-1 text-center leading-tight max-w-[80px]">
             {sublabel}
           </span>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub: Mini sparkline bar (header)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MiniSparkline({ data, color }: { data: Array<{ value: number }>; color: string }) {
+  if (!data?.length) return null;
+  const max = Math.max(...data.map(d => d.value), 1);
+  return (
+    <div className="flex items-end gap-0.5 h-5">
+      {data.slice(-12).map((d, i) => (
+        <div
+          key={i}
+          className="w-1 rounded-sm transition-all duration-300"
+          style={{
+            height: `${Math.max((d.value / max) * 100, 8)}%`,
+            background: color,
+            opacity: 0.4 + (i / 12) * 0.6,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -323,67 +447,121 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
 
   const donutSublabel = meta ? 'da meta' : 'pagos';
 
+  // ── Formatação compacta de moeda para eixo Y ───────────────────────────────
+  function formatYAxis(value: number) {
+    if (value >= 1_000_000) return `R$${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `R$${(value / 1_000).toFixed(0)}k`;
+    return `R$${value}`;
+  }
+
+  // ── Sparkline data for header ──────────────────────────────────────────────
+  const sparklineData = porDiaChart.map(d => ({ value: d.recebido ?? 0 }));
+
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       {/* ── Header compacto sempre visível ── */}
-      <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-card">
-        <div className="flex items-center gap-2">
-          <BarChart2 className="w-4 h-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Dados Analíticos</span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            — {MESES[mes - 1]}/{ano}
-          </span>
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex items-center justify-between px-4 py-3 rounded-xl border border-border/70 bg-card shadow-sm"
+      >
+        {/* Left: title + period */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-primary/10 shrink-0">
+              <BarChart2 className="w-3.5 h-3.5 text-primary" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
+              <p className="text-[11px] text-muted-foreground leading-none mt-0.5">
+                {MESES[mes - 1]} {ano}
+              </p>
+            </div>
+          </div>
+
+          {/* Mini sparkline — desktop only */}
+          {!loading && sparklineData.length > 0 && (
+            <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
+              <MiniSparkline data={sparklineData} color={CHART_RECEBIDO} />
+              <span className="text-[11px] text-muted-foreground">ritmo</span>
+            </div>
+          )}
         </div>
 
+        {/* Center: live summary — desktop */}
         {!loading && (
-          <div className="hidden md:flex items-center gap-4 text-xs">
-            <span>
-              {isPP ? 'H.O.:' : 'Recebido:'}{'  '}
-              <strong className="text-green-600 dark:text-green-400">
-                {formatCurrency(valorPrincipal)}
-              </strong>
-            </span>
-            {isPP && (
-              <span className="text-muted-foreground">
-                Bruto: <strong>{formatCurrency(valorRecebidoMes)}</strong>
+          <div className="hidden md:flex items-center gap-5 text-xs">
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
+                {isPP ? 'H.O.' : 'Recebido'}
               </span>
+              <span className="font-bold text-emerald-500 tabular-nums font-mono">
+                {formatCurrency(valorPrincipal)}
+              </span>
+            </div>
+            {isPP && (
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
+                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorRecebidoMes)}</span>
+              </div>
             )}
             {!isPP && (
-              <span>
-                Agendado: <strong>{formatCurrency(valorAgendadoMes)}</strong>
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Agendado</span>
+                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorAgendadoMes)}</span>
+              </div>
             )}
             {meta && (
-              <span>
-                Meta: <strong>{percMeta}%</strong>
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
+                <span
+                  className="font-bold tabular-nums font-mono"
+                  style={{ color: donutColor }}
+                >
+                  {percMeta}%
+                </span>
+              </div>
             )}
           </div>
         )}
 
+        {/* Right: actions */}
         <div className="flex items-center gap-2">
           <Button
-            variant="ghost" size="icon" className="h-7 w-7"
-            onClick={refetch} disabled={loading} title="Atualizar dados"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 rounded-lg"
+            onClick={refetch}
+            disabled={loading}
+            title="Atualizar dados"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+            <RefreshCw className={cn('w-3.5 h-3.5 text-muted-foreground', loading && 'animate-spin')} />
           </Button>
           {/* Botão visível apenas na PaguePay — Bookplay fica sempre expandido */}
           {!alwaysOpen && (
             <Button
-              variant="outline" size="sm" className="h-7 text-xs gap-1"
+              variant="outline"
+              size="sm"
+              className="h-7 text-xs gap-1.5 rounded-lg border-border/70"
               onClick={() => setOpen(v => !v)}
             >
               {open ? (
-                <><ChevronUp className="w-3 h-3" /> Ocultar</>
+                <>
+                  <ChevronUp className="w-3 h-3" />
+                  Ocultar
+                </>
               ) : (
-                <><ChevronDown className="w-3 h-3" /> Exibir Analíticos</>
+                <>
+                  <ChevronDown className="w-3 h-3" />
+                  Ver Analíticos
+                </>
               )}
             </Button>
           )}
         </div>
-      </div>
+      </motion.div>
 
       {/* ── Painel expandido ── */}
       <AnimatePresence>
@@ -393,12 +571,17 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: 'easeInOut' }}
+            transition={{ duration: 0.28, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="space-y-4 pt-1">
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="visible"
+              className="space-y-4 pt-1"
+            >
 
-              {/* ── ROW 1 — 6 cards métricas ── */}
+              {/* ── ROW 1 — 6 cards métricas principais ── */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {loading ? (
                   Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
@@ -408,8 +591,11 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     <MetricCard
                       label={labelRecebido}
                       icon={<DollarSign className="w-4 h-4" />}
+                      accentColor="#22c55e"
+                      gradientFrom="#22c55e"
+                      trend="up"
                       value={
-                        <span className="text-green-600 dark:text-green-400">
+                        <span className="text-emerald-500">
                           {formatCurrency(valorPrincipal)}
                         </span>
                       }
@@ -423,6 +609,9 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     <MetricCard
                       label={labelAgendado}
                       icon={<Calendar className="w-4 h-4" />}
+                      accentColor="#6366f1"
+                      gradientFrom="#6366f1"
+                      trend="neutral"
                       value={formatCurrency(valorAgendadoPP)}
                       sub={
                         isPP
@@ -432,10 +621,13 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     />
                     {/* Card 3 */}
                     <MetricCard
-                      label="❌ Não Pagos"
+                      label="Não Pagos"
                       icon={<XCircle className="w-4 h-4" />}
+                      accentColor="#ef4444"
+                      gradientFrom="#ef4444"
+                      trend={valorNaoPago > 0 ? 'down' : 'neutral'}
                       value={
-                        <span className="text-red-500/80">
+                        <span className="text-red-500">
                           {formatCurrency(valorNaoPago)}
                         </span>
                       }
@@ -443,14 +635,18 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     />
                     {/* Card 4 */}
                     <MetricCard
-                      label="📆 Agendado hoje"
+                      label="Agendado hoje"
                       icon={<Clock className="w-4 h-4" />}
+                      accentColor="#f59e0b"
+                      gradientFrom="#f59e0b"
                       value={formatCurrency(valorAgendadoHoje)}
                     />
                     {/* Card 5 */}
                     <MetricCard
-                      label="📋 Acordos no mês"
+                      label="Acordos no mês"
                       icon={<BarChart2 className="w-4 h-4" />}
+                      accentColor="#3b82f6"
+                      gradientFrom="#3b82f6"
                       value={String(totalAcordosMes)}
                       sub={`${totalPendentes} pendentes`}
                     />
@@ -458,35 +654,49 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     <MetricCard
                       label={labelMeta}
                       icon={<Target className="w-4 h-4" />}
-                      value={meta ? `${percMeta}% atingida` : '—'}
+                      accentColor={donutColor}
+                      gradientFrom={donutColor}
+                      trend={meta ? (percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down') : undefined}
+                      value={
+                        meta ? (
+                          <span style={{ color: donutColor }}>{percMeta}% atingida</span>
+                        ) : (
+                          <span className="text-muted-foreground text-base">—</span>
+                        )
+                      }
                       sub={
                         meta
                           ? `${formatCurrency(valorPrincipal)} / ${formatCurrency(meta.meta_valor)}`
                           : 'Sem meta definida'
                       }
                     />
+
                     {/* Cards extras PaguePlay: Coren + Cofen */}
                     {isPP && valorRecebidoMes > 0 && (
                       <>
                         <MetricCard
-                          label="🏛️ Repasse Coren"
+                          label="Repasse Coren"
                           icon={<Percent className="w-4 h-4" />}
+                          accentColor="#3b82f6"
+                          gradientFrom="#3b82f6"
                           value={
                             <span className="text-blue-500">
                               {formatCurrency(valorRecebidoMes * PP_COREN_PERCENTUAL)}
                             </span>
                           }
-                          sub={`56,28% do bruto recebido`}
+                          sub="56,28% do bruto recebido"
                         />
                         <MetricCard
-                          label="🏢 Repasse Cofen"
+                          label="Repasse Cofen"
                           icon={<Percent className="w-4 h-4" />}
+                          accentColor="#8b5cf6"
+                          gradientFrom="#8b5cf6"
                           value={
                             <span className="text-violet-500">
                               {formatCurrency(valorRecebidoMes * PP_COFEN_PERCENTUAL)}
                             </span>
                           }
-                          sub={`18,76% do bruto recebido`}
+                          sub="18,76% do bruto recebido"
                         />
                       </>
                     )}
@@ -496,59 +706,81 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
 
               {/* ── ROW 2 — Gráficos (AreaChart + Anel com Breakdown) ── */}
               {!loading && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   {/* AreaChart — Recebido vs Agendado por dia */}
-                  <Card className="border-border bg-card">
+                  <Card className="border-border/70 bg-card shadow-sm">
                     <CardHeader className="pb-2 pt-4 px-4">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-sm font-semibold">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <CardTitle className="text-sm font-semibold text-foreground">
                           {isPP ? 'H.O. vs Agendado — por dia' : 'Recebido vs Agendado — por dia'}
                         </CardTitle>
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_RECEBIDO }} />
+                        <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block w-3 h-[3px] rounded-full"
+                              style={{ background: CHART_RECEBIDO }}
+                            />
                             {isPP ? 'H.O.' : 'Recebido'}
                           </span>
-                          <span className="flex items-center gap-1">
-                            <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_AGENDADO }} />
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className="inline-block w-3 h-[3px] rounded-full"
+                              style={{ background: CHART_AGENDADO }}
+                            />
                             Agendado
                           </span>
                         </div>
                       </div>
                     </CardHeader>
                     <CardContent className="px-2 pb-4">
-                      <ResponsiveContainer width="100%" height={200}>
-                        <AreaChart data={porDiaChart} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <AreaChart data={porDiaChart} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={CHART_RECEBIDO} stopOpacity={0.35} />
-                              <stop offset="95%" stopColor={CHART_RECEBIDO} stopOpacity={0.02} />
+                              <stop offset="0%" stopColor={CHART_RECEBIDO} stopOpacity={0.45} />
+                              <stop offset="100%" stopColor={CHART_RECEBIDO} stopOpacity={0.02} />
                             </linearGradient>
                             <linearGradient id="colorAge" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={CHART_AGENDADO} stopOpacity={0.28} />
-                              <stop offset="95%" stopColor={CHART_AGENDADO} stopOpacity={0.02} />
+                              <stop offset="0%" stopColor={CHART_AGENDADO} stopOpacity={0.35} />
+                              <stop offset="100%" stopColor={CHART_AGENDADO} stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                          <CartesianGrid strokeDasharray="3 3" stroke={gridColor} vertical={false} />
                           <XAxis
                             dataKey="dia"
                             tick={{ fontSize: 10, fill: tickColor }}
                             stroke="transparent"
                             tickLine={false}
+                            axisLine={false}
                           />
                           <YAxis
                             tick={{ fontSize: 10, fill: tickColor }}
                             stroke="transparent"
                             tickLine={false}
+                            axisLine={false}
+                            tickFormatter={formatYAxis}
+                            width={52}
                           />
-                          <Tooltip content={<CustomTooltip />} />
+                          <Tooltip content={<CustomTooltip />} cursor={{ stroke: tickColor, strokeWidth: 1, strokeDasharray: '4 2' }} />
                           <Area
-                            type="monotone" dataKey="agendado" name="Agendado"
-                            stroke={CHART_AGENDADO} fill="url(#colorAge)" strokeWidth={2}
+                            type="monotone"
+                            dataKey="agendado"
+                            name="Agendado"
+                            stroke={CHART_AGENDADO}
+                            fill="url(#colorAge)"
+                            strokeWidth={2}
+                            dot={false}
+                            activeDot={{ r: 4, fill: CHART_AGENDADO, strokeWidth: 0 }}
                           />
                           <Area
-                            type="monotone" dataKey="recebido" name="Recebido"
-                            stroke={CHART_RECEBIDO} fill="url(#colorRec)" strokeWidth={2.5}
+                            type="monotone"
+                            dataKey="recebido"
+                            name="Recebido"
+                            stroke={CHART_RECEBIDO}
+                            fill="url(#colorRec)"
+                            strokeWidth={2.5}
+                            dot={false}
+                            activeDot={{ r: 5, fill: CHART_RECEBIDO, strokeWidth: 0 }}
                           />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -556,35 +788,43 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                   </Card>
 
                   {/* ── ANEL COM BREAKDOWN ── */}
-                  <Card className="border-border bg-card/80 dark:bg-muted/20">
+                  <Card className="border-border/70 bg-card shadow-sm">
                     <CardHeader className="pb-2 pt-4 px-4">
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                          <Target className="w-4 h-4 text-muted-foreground" />
+                          <div
+                            className="flex items-center justify-center w-6 h-6 rounded-md shrink-0"
+                            style={{ background: donutColor + '22' }}
+                          >
+                            <Target className="w-3.5 h-3.5" style={{ color: donutColor }} />
+                          </div>
                           {meta ? 'Meta — % Atingida' : 'Acordos Pagos — % do Mês'}
                         </CardTitle>
                         {porTipo.length > 0 && (
                           <Button
-                            variant="ghost" size="sm"
-                            className="h-6 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 text-[11px] gap-1 text-muted-foreground hover:text-foreground px-2"
                             onClick={() => setBreakdownOpen(v => !v)}
                           >
-                            {breakdownOpen ? 'Ocultar' : 'Ver Breakdown'}
-                            <ChevronRight className={cn('w-3 h-3 transition-transform', breakdownOpen && 'rotate-90')} />
+                            {breakdownOpen ? 'Resumo' : 'Ver Breakdown'}
+                            <ChevronRight
+                              className={cn('w-3 h-3 transition-transform duration-200', breakdownOpen && 'rotate-90')}
+                            />
                           </Button>
                         )}
                       </div>
                     </CardHeader>
-                    <CardContent className="pb-4">
+                    <CardContent className="pb-5">
                       <AnimatePresence mode="wait">
                         {!breakdownOpen ? (
                           <motion.div
                             key="donut-main"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="flex flex-col items-center gap-3"
+                            initial={{ opacity: 0, scale: 0.97 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.97 }}
+                            transition={{ duration: 0.22 }}
+                            className="flex flex-col items-center gap-4"
                           >
                             {/* Anel central */}
                             <DonutChart
@@ -592,40 +832,63 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                               label={`${donutPercent}%`}
                               sublabel={donutSublabel}
                               color={donutColor}
-                              size={160}
+                              size={180}
                             />
 
                             {/* Legenda sumário */}
                             {meta && (
-                              <div className="text-center space-y-0.5">
+                              <div className="text-center space-y-1">
                                 <p className="text-xs text-muted-foreground">
-                                  {formatCurrency(valorRecebidoMes)} recebido de {formatCurrency(meta.meta_valor)}
+                                  <span className="font-mono tabular-nums font-semibold text-foreground">
+                                    {formatCurrency(valorRecebidoMes)}
+                                  </span>
+                                  {' '}de{' '}
+                                  <span className="font-mono tabular-nums">
+                                    {formatCurrency(meta.meta_valor)}
+                                  </span>
                                 </p>
                                 {percMeta >= 100 && (
-                                  <p className="text-xs font-semibold text-green-600 dark:text-green-400">
-                                    🎉 Meta atingida!
+                                  <p className="text-xs font-semibold text-emerald-500 flex items-center justify-center gap-1">
+                                    <ArrowUpRight className="w-3.5 h-3.5" />
+                                    Meta atingida!
                                   </p>
                                 )}
                               </div>
                             )}
 
-                            {/* Top 2 formas de pagamento em preview */}
+                            {/* Top formas de pagamento em preview */}
                             {porTipo.length > 0 && (
-                              <div className="w-full space-y-1.5 pt-1 border-t border-border">
-                                <p className="text-[11px] text-muted-foreground font-medium">Top formas de pagamento</p>
+                              <div className="w-full space-y-2 pt-3 border-t border-border/60">
+                                <p className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">
+                                  Top formas de pagamento
+                                </p>
                                 {porTipo.slice(0, 2).map((t, i) => (
-                                  <div key={t.label} className="flex items-center gap-2">
+                                  <div key={t.label} className="flex items-center gap-2.5">
                                     <span
-                                      className="w-2 h-2 rounded-full shrink-0"
-                                      style={{ background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] }}
+                                      className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-offset-1 ring-offset-card"
+                                      style={{
+                                        background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length],
+                                        ringColor: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] + '55',
+                                      }}
                                     />
-                                    <span className="text-xs flex-1 truncate">{t.label}</span>
-                                    <span className="text-xs font-semibold tabular-nums">{t.perc}%</span>
+                                    <span className="text-xs flex-1 truncate font-medium">{t.label}</span>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] text-muted-foreground">{t.acordos} ac.</span>
+                                      <span
+                                        className="text-xs font-bold tabular-nums font-mono px-1.5 py-0.5 rounded"
+                                        style={{
+                                          background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] + '18',
+                                          color: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length],
+                                        }}
+                                      >
+                                        {t.perc}%
+                                      </span>
+                                    </div>
                                   </div>
                                 ))}
                                 {porTipo.length > 2 && (
-                                  <p className="text-[11px] text-muted-foreground">
-                                    +{porTipo.length - 2} mais → clique em "Ver Breakdown"
+                                  <p className="text-[11px] text-muted-foreground pl-0.5">
+                                    +{porTipo.length - 2} mais — clique em "Ver Breakdown"
                                   </p>
                                 )}
                               </div>
@@ -634,34 +897,46 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                         ) : (
                           <motion.div
                             key="donut-breakdown"
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            transition={{ duration: 0.2 }}
-                            className="space-y-3"
+                            initial={{ opacity: 0, scale: 0.97 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.97 }}
+                            transition={{ duration: 0.22 }}
+                            className="space-y-4"
                           >
-                            {/* Mini-anel por forma de pagamento (Pie donut) */}
+                            {/* Mini-anel por forma de pagamento */}
                             {porTipo.length > 0 && (
                               <div className="flex flex-col items-center">
-                                <ResponsiveContainer width="100%" height={140}>
-                                  <PieChart style={{ background: 'transparent' }}>
+                                <ResponsiveContainer width="100%" height={150}>
+                                  <PieChart>
                                     <Pie
                                       data={porTipo}
                                       cx="50%"
                                       cy="50%"
-                                      innerRadius={40}
-                                      outerRadius={65}
-                                      paddingAngle={2}
+                                      innerRadius={44}
+                                      outerRadius={68}
+                                      paddingAngle={3}
                                       dataKey="acordos"
+                                      isAnimationActive={true}
+                                      animationBegin={60}
+                                      animationDuration={700}
                                     >
                                       {porTipo.map((_, i) => (
                                         <Cell
                                           key={i}
                                           fill={BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length]}
+                                          stroke="transparent"
                                         />
                                       ))}
                                     </Pie>
                                     <Tooltip
+                                      contentStyle={{
+                                        borderRadius: '10px',
+                                        border: '1px solid rgba(148,163,184,0.2)',
+                                        background: 'var(--popover)',
+                                        color: 'var(--popover-foreground)',
+                                        fontSize: '11px',
+                                        padding: '6px 10px',
+                                      }}
                                       formatter={(val: number, name: string, props: any) => [
                                         `${val} acordos (${props.payload?.perc ?? 0}%)`,
                                         props.payload?.label ?? name,
@@ -672,112 +947,293 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                               </div>
                             )}
 
-                            {/* Legenda detalhada por forma de pagamento */}
-                            <div className="space-y-2">
-                              {porTipo.map((tipo, i) => (
-                                <div key={tipo.label} className="space-y-0.5">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <div className="flex items-center gap-1.5">
-                                      <span
-                                        className="w-2.5 h-2.5 rounded-full shrink-0"
-                                        style={{ background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] }}
+                            {/* Legenda detalhada — horizontal progress bars */}
+                            <div className="space-y-3">
+                              {porTipo.map((tipo, i) => {
+                                const color = BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length];
+                                return (
+                                  <div key={tipo.label} className="space-y-1.5">
+                                    <div className="flex items-center justify-between text-xs">
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                                          style={{ background: color }}
+                                        />
+                                        <span className="font-medium">{tipo.label}</span>
+                                      </div>
+                                      <div className="flex items-center gap-3 text-muted-foreground">
+                                        <span className="tabular-nums">{tipo.acordos} ac.</span>
+                                        <span
+                                          className="font-bold tabular-nums font-mono"
+                                          style={{ color }}
+                                        >
+                                          {tipo.perc}%
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {/* Progress bar with colored fill */}
+                                    <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                                      <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${tipo.perc}%` }}
+                                        transition={{ duration: 0.6, ease: 'easeOut', delay: i * 0.08 }}
+                                        className="h-full rounded-full"
+                                        style={{ background: `linear-gradient(90deg, ${color}bb, ${color})` }}
                                       />
-                                      <span className="font-medium">{tipo.label}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 text-muted-foreground">
-                                      <span>{tipo.acordos} ac.</span>
-                                      <span className="font-semibold text-foreground tabular-nums">{tipo.perc}%</span>
-                                    </div>
+                                    <p className="text-[11px] text-muted-foreground text-right tabular-nums font-mono">
+                                      {formatCurrency(tipo.valor)}
+                                    </p>
                                   </div>
-                                  <Progress
-                                    value={tipo.perc}
-                                    className="h-1.5"
-                                    style={{ '--progress-color': BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] } as React.CSSProperties}
-                                  />
-                                  <p className="text-[11px] text-muted-foreground text-right">
-                                    {formatCurrency(tipo.valor)}
-                                  </p>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </motion.div>
                         )}
                       </AnimatePresence>
                     </CardContent>
                   </Card>
-                </div>
+                </motion.div>
               )}
 
               {/* ── ROW 3 — Métricas adicionais ── */}
               {!loading && (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <MetricCard
-                    label="Taxa de conversão"
-                    icon={<Percent className="w-4 h-4" />}
-                    value={`${taxaConversao}%`}
-                    sub={`${totalPagosMes} de ${totalAcordosMes} acordos pagos`}
-                  />
-                  <MetricCard
-                    label="Ticket médio"
-                    icon={<TrendingUp className="w-4 h-4" />}
-                    value={formatCurrency(ticketMedio)}
-                    sub="por acordo pago"
-                  />
-                  <MetricCard
-                    label="Em atraso"
-                    icon={<Clock className="w-4 h-4" />}
-                    value={String(acordosAtrasados)}
-                    sub="acordos pendentes vencidos"
-                  />
-                  <MetricCard
-                    label="Projeção do mês"
-                    icon={<Target className="w-4 h-4" />}
-                    value={formatCurrency(projecaoMes)}
-                    sub="baseada no ritmo atual"
-                  />
-                </div>
+                <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {/* Taxa de conversão */}
+                  <motion.div
+                    variants={itemVariants}
+                    whileHover={{ y: -2 }}
+                    className={cn(
+                      'relative flex flex-col gap-2 rounded-xl border p-4 overflow-hidden shadow-sm',
+                      taxaConversao >= 70
+                        ? 'border-emerald-500/30 bg-emerald-500/5'
+                        : taxaConversao >= 40
+                        ? 'border-amber-500/30 bg-amber-500/5'
+                        : 'border-red-500/30 bg-red-500/5',
+                    )}
+                  >
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+                      style={{
+                        background:
+                          taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                      }}
+                    />
+                    <div className="flex items-center justify-between pl-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Taxa de conversão
+                      </span>
+                      <Percent
+                        className="w-3.5 h-3.5"
+                        style={{
+                          color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="text-2xl font-extrabold tabular-nums font-mono pl-1"
+                      style={{
+                        color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444',
+                      }}
+                    >
+                      {taxaConversao}%
+                    </span>
+                    <span className="text-[11px] text-muted-foreground pl-1">
+                      {totalPagosMes} de {totalAcordosMes} pagos
+                    </span>
+                  </motion.div>
+
+                  {/* Ticket médio */}
+                  <motion.div
+                    variants={itemVariants}
+                    whileHover={{ y: -2 }}
+                    className="relative flex flex-col gap-2 rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4 overflow-hidden shadow-sm"
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-indigo-500" />
+                    <div className="flex items-center justify-between pl-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Ticket médio
+                      </span>
+                      <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
+                    </div>
+                    <span className="text-xl font-bold tabular-nums font-mono text-indigo-500 pl-1 leading-tight">
+                      {formatCurrency(ticketMedio)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground pl-1">por acordo pago</span>
+                  </motion.div>
+
+                  {/* Em atraso */}
+                  <motion.div
+                    variants={itemVariants}
+                    whileHover={{ y: -2 }}
+                    className={cn(
+                      'relative flex flex-col gap-2 rounded-xl border p-4 overflow-hidden shadow-sm',
+                      acordosAtrasados > 0
+                        ? 'border-red-500/30 bg-red-500/5'
+                        : 'border-border/70 bg-card',
+                    )}
+                  >
+                    <div
+                      className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
+                      style={{ background: acordosAtrasados > 0 ? '#ef4444' : '#6366f1' }}
+                    />
+                    <div className="flex items-center justify-between pl-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Em atraso
+                      </span>
+                      <Clock
+                        className={cn(
+                          'w-3.5 h-3.5',
+                          acordosAtrasados > 0 ? 'text-red-500' : 'text-muted-foreground',
+                        )}
+                      />
+                    </div>
+                    <span
+                      className={cn(
+                        'text-2xl font-extrabold tabular-nums font-mono pl-1',
+                        acordosAtrasados > 0 ? 'text-red-500' : 'text-foreground',
+                      )}
+                    >
+                      {acordosAtrasados}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground pl-1">acordos vencidos</span>
+                    {/* Pulse animation on concerning metrics */}
+                    {acordosAtrasados > 5 && (
+                      <span className="absolute top-3 right-3 flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
+                      </span>
+                    )}
+                  </motion.div>
+
+                  {/* Projeção do mês */}
+                  <motion.div
+                    variants={itemVariants}
+                    whileHover={{ y: -2 }}
+                    className="relative flex flex-col gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 overflow-hidden shadow-sm"
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl bg-amber-500" />
+                    <div className="flex items-center justify-between pl-1">
+                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+                        Projeção do mês
+                      </span>
+                      <Target className="w-3.5 h-3.5 text-amber-500" />
+                    </div>
+                    <span className="text-xl font-bold tabular-nums font-mono text-amber-500 pl-1 leading-tight">
+                      {formatCurrency(projecaoMes)}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>
+                  </motion.div>
+                </motion.div>
               )}
 
               {/* ── ROW 4 — Ranking operadores (admin/líder) ── */}
               {!loading && (isAdmin || isLider) && porOperador && porOperador.length > 0 && (
-                <Card className="border-border bg-card">
-                  <CardHeader className="pb-2 pt-4 px-4">
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                      <Award className="w-4 h-4 text-muted-foreground" />
-                      Ranking de Operadores — {MESES[mes - 1]}/{ano}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-4">
-                    <div className="space-y-2">
-                      {porOperador.slice(0, 10).map((op, i) => (
-                        <div
-                          key={op.id}
-                          className="flex items-center gap-3 py-1 border-b border-border last:border-0"
-                        >
-                          <span className="text-xs text-muted-foreground w-4 shrink-0">{i + 1}</span>
-                          <span className="text-xs font-medium flex-1 truncate">{op.nome}</span>
-                          <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
-                            {op.acordos} ac.
-                          </span>
-                          <span className="text-xs font-medium w-24 text-right shrink-0">
-                            {formatCurrency(op.valor)}
-                          </span>
-                          {op.meta > 0 && (
-                            <div className="w-20 shrink-0">
-                              <div className="flex justify-between text-xs text-muted-foreground mb-0.5">
-                                <span>{op.perc}%</span>
-                              </div>
-                              <Progress value={Math.min(op.perc, 100)} className="h-1" />
-                            </div>
-                          )}
+                <motion.div variants={itemVariants}>
+                  <Card className="border-border/70 bg-card shadow-sm overflow-hidden">
+                    <CardHeader className="pb-3 pt-4 px-5">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-400/15 shrink-0">
+                          <Award className="w-3.5 h-3.5 text-amber-500" />
                         </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
+                        Ranking de Operadores
+                        <span className="text-muted-foreground font-normal text-xs ml-1">
+                          — {MESES[mes - 1]}/{ano}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="px-5 pb-5">
+                      {/* Compute max for bar scaling */}
+                      {(() => {
+                        const slice = porOperador.slice(0, 10);
+                        const maxValor = Math.max(...slice.map(o => o.valor), 1);
+                        return (
+                          <div className="space-y-1.5">
+                            {slice.map((op, i) => {
+                              const medal = MEDAL_STYLES[i];
+                              const barWidth = Math.max((op.valor / maxValor) * 100, 2);
+                              const barColor =
+                                i === 0
+                                  ? '#f59e0b'
+                                  : i === 1
+                                  ? '#94a3b8'
+                                  : i === 2
+                                  ? '#f97316'
+                                  : '#6366f1';
+
+                              return (
+                                <motion.div
+                                  key={op.id}
+                                  initial={{ opacity: 0, x: -10 }}
+                                  animate={{ opacity: 1, x: 0 }}
+                                  transition={{ delay: i * 0.05, duration: 0.28 }}
+                                  className="group flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-muted/40 transition-colors duration-150"
+                                >
+                                  {/* Rank badge */}
+                                  <div
+                                    className={cn(
+                                      'flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border shrink-0',
+                                      i < 3
+                                        ? `${medal.bg} ${medal.text} ${medal.border}`
+                                        : 'bg-muted/40 text-muted-foreground border-border/50',
+                                    )}
+                                  >
+                                    {i + 1}
+                                  </div>
+
+                                  {/* Name + bar */}
+                                  <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-semibold truncate">{op.nome}</span>
+                                      <div className="flex items-center gap-3 shrink-0">
+                                        <span className="text-[11px] text-muted-foreground tabular-nums">
+                                          {op.acordos} ac.
+                                        </span>
+                                        <span className="text-xs font-bold tabular-nums font-mono" style={{ color: barColor }}>
+                                          {formatCurrency(op.valor)}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    {/* Bar race track */}
+                                    <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
+                                      <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${barWidth}%` }}
+                                        transition={{ duration: 0.7, ease: 'easeOut', delay: i * 0.07 }}
+                                        className="h-full rounded-full"
+                                        style={{
+                                          background: `linear-gradient(90deg, ${barColor}99, ${barColor})`,
+                                        }}
+                                      />
+                                    </div>
+                                    {/* Meta progress (if applicable) */}
+                                    {op.meta > 0 && (
+                                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                                        <span className="text-[10px] text-muted-foreground">Meta:</span>
+                                        <div className="flex-1 h-1 rounded-full bg-muted/40 overflow-hidden">
+                                          <div
+                                            className="h-full rounded-full bg-emerald-500/70"
+                                            style={{ width: `${Math.min(op.perc, 100)}%` }}
+                                          />
+                                        </div>
+                                        <span className="text-[10px] font-semibold text-emerald-500 tabular-nums">
+                                          {op.perc}%
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </motion.div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </CardContent>
+                  </Card>
+                </motion.div>
               )}
 
-            </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
