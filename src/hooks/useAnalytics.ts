@@ -128,34 +128,7 @@ export function useAnalytics(): AnalyticsData {
     const isDiretoria = isPerfilDiretoria(perfil.perfil);
 
     try {
-      // ── Acordos conforme perfil ──────────────────────────────────────────────
-      let q = supabase
-        .from('acordos')
-        .select('*')
-        .eq('empresa_id', empresa.id);
-
-      if (!isAdmin && !isDiretoria) {
-        if (isLider && perfil.setor_id) {
-          // Líder/Elite: hierarquia de filtros
-          // 1. visão individual (operadorFiltro = próprio id)
-          // 2. visão de equipe específica (equipeFiltro)
-          // 3. visão geral do setor (padrão)
-          if (operadorFiltro) {
-            q = q.eq('operador_id', operadorFiltro);
-          } else if (equipeFiltro) {
-            q = q.eq('equipe_id', equipeFiltro);
-          } else {
-            q = q.eq('setor_id', perfil.setor_id);
-          }
-        } else {
-          q = q.eq('operador_id', perfil.id);
-        }
-      } else if (setorFiltro) {
-        // Admin/Diretoria filtrou por setor específico
-        q = q.eq('setor_id', setorFiltro);
-      }
-
-      // Carregar setores para o filtro do admin/diretoria
+      // ── Carregar setores para o filtro do admin/diretoria ────────────────────
       if (isAdmin || isDiretoria) {
         const { data: setoresData } = await supabase
           .from('setores')
@@ -165,7 +138,8 @@ export function useAnalytics(): AnalyticsData {
         setSetores((setoresData as { id: string; nome: string }[]) ?? []);
       }
 
-      // Carregar equipes do setor para o Líder/Elite
+      // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
+      let equipesDoSetorAtual: { id: string; nome: string }[] = [];
       if (isLider && perfil.setor_id) {
         const { data: eqData } = await supabase
           .from('equipes')
@@ -173,7 +147,53 @@ export function useAnalytics(): AnalyticsData {
           .eq('empresa_id', empresa.id)
           .eq('setor_id', perfil.setor_id)
           .order('nome');
-        setEquipesDoSetor((eqData as { id: string; nome: string }[]) ?? []);
+        equipesDoSetorAtual = (eqData as { id: string; nome: string }[]) ?? [];
+        setEquipesDoSetor(equipesDoSetorAtual);
+      }
+
+      // ── Resolver operadores da equipe selecionada (se equipeFiltro ativo) ───
+      // O campo equipe_id existe em perfis (não em acordos), então precisamos
+      // buscar os operador_id dos membros da equipe e filtrar acordos por IN.
+      let operadoresDaEquipe: string[] | null = null;
+      if (isLider && equipeFiltro && !operadorFiltro) {
+        const { data: membros } = await supabase
+          .from('perfis')
+          .select('id')
+          .eq('empresa_id', empresa.id)
+          .eq('equipe_id', equipeFiltro);
+        operadoresDaEquipe = ((membros as { id: string }[]) ?? []).map(m => m.id);
+      }
+
+      // ── Acordos conforme perfil ──────────────────────────────────────────────
+      let q = supabase
+        .from('acordos')
+        .select('*')
+        .eq('empresa_id', empresa.id);
+
+      if (!isAdmin && !isDiretoria) {
+        if (isLider && perfil.setor_id) {
+          // Líder/Elite: hierarquia de filtros
+          // 1. visão individual → filtra pelo próprio operador_id
+          // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
+          // 3. visão geral      → filtra pelo setor_id
+          if (operadorFiltro) {
+            q = q.eq('operador_id', operadorFiltro);
+          } else if (operadoresDaEquipe !== null) {
+            if (operadoresDaEquipe.length === 0) {
+              // Equipe sem membros — força retorno vazio
+              q = q.eq('operador_id', 'sem-membros-na-equipe');
+            } else {
+              q = q.in('operador_id', operadoresDaEquipe);
+            }
+          } else {
+            q = q.eq('setor_id', perfil.setor_id);
+          }
+        } else {
+          q = q.eq('operador_id', perfil.id);
+        }
+      } else if (setorFiltro) {
+        // Admin/Diretoria filtrou por setor específico
+        q = q.eq('setor_id', setorFiltro);
       }
 
       const { data: acordosData } = await q;

@@ -24,6 +24,20 @@ export interface FiltrosAcordo {
   perPage?: number;
 }
 
+/**
+ * Resolve a lista de operador_id pertencentes a uma equipe.
+ * Usado para filtrar acordos por equipe (equipe_id está em perfis, não em acordos).
+ */
+async function resolverOperadoresDaEquipe(
+  equipe_id: string,
+  empresa_id?: string,
+): Promise<string[]> {
+  let q = supabase.from('perfis').select('id').eq('equipe_id', equipe_id);
+  if (empresa_id) q = q.eq('empresa_id', empresa_id);
+  const { data } = await q;
+  return ((data as { id: string }[]) ?? []).map(m => m.id);
+}
+
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // ── Estratégia de paginação ────────────────────────────────────────────────
@@ -52,7 +66,15 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   if (filtros?.tipo)        query = query.eq('tipo', filtros.tipo);
   if (filtros?.operador_id) query = query.eq('operador_id', filtros.operador_id);
   if (filtros?.setor_id)    query = query.eq('setor_id', filtros.setor_id);
-  if (filtros?.equipe_id)   query = query.eq('equipe_id', filtros.equipe_id);
+  // equipe_id existe em perfis, não em acordos — resolve operadores da equipe e filtra por IN
+  if (filtros?.equipe_id) {
+    const membros = await resolverOperadoresDaEquipe(filtros.equipe_id, filtros.empresa_id);
+    if (membros.length === 0) {
+      // Equipe sem membros — retorna vazio imediatamente
+      return { data: [], count: 0 };
+    }
+    query = query.in('operador_id', membros);
+  }
   if (filtros?.empresa_id)  query = query.eq('empresa_id', filtros.empresa_id);
   if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
   if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);

@@ -46,6 +46,11 @@ interface UseAcordosOptions extends FiltrosAcordo {
    * Padrão: true (habilitado).
    */
   enableRealtime?: boolean;
+  /**
+   * Lista de operador_id resolvidos para filtrar por equipe no realtime.
+   * Preenchido internamente quando equipe_id é fornecido.
+   */
+  _operadoresEquipeIds?: string[];
 }
 
 export interface UseAcordosResult {
@@ -74,6 +79,10 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
   if (filtros.operador_id && acordo.operador_id !== filtros.operador_id) return false;
   if (filtros.setor_id    && acordo.setor_id    !== filtros.setor_id)    return false;
   if (filtros.empresa_id  && acordo.empresa_id  !== filtros.empresa_id)  return false;
+  // equipe_id: filtra por lista de operadores resolvidos (equipe_id está em perfis, não em acordos)
+  if (filtros._operadoresEquipeIds) {
+    if (!filtros._operadoresEquipeIds.includes(acordo.operador_id)) return false;
+  }
 
   const venc = acordo.vencimento ?? '';
   if (filtros.apenas_hoje && venc !== getTodayISO())     return false;
@@ -102,13 +111,34 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   const [loading,    setLoading]    = useState(true);
   const [error,      setError]      = useState<string | null>(null);
 
+  // Resolver operadores da equipe quando equipe_id mudar
+  // Armazena internamente para uso no matchesFiltros (realtime)
+  const [operadoresEquipeIds, setOperadoresEquipeIds] = useState<string[] | null>(null);
+  useEffect(() => {
+    if (!filtros?.equipe_id) {
+      setOperadoresEquipeIds(null);
+      return;
+    }
+    const eId = filtros.equipe_id;
+    const eEmpresaId = filtros.empresa_id ?? empresa?.id ?? perfil?.empresa_id;
+    let q = supabase.from('perfis').select('id').eq('equipe_id', eId);
+    if (eEmpresaId) q = q.eq('empresa_id', eEmpresaId);
+    q.then(({ data }) => {
+      setOperadoresEquipeIds(((data as { id: string }[]) ?? []).map(m => m.id));
+    });
+  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Canal centralizado
   const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
 
   // Refs para guards e acesso estável a filtros dentro de callbacks
   const mountedRef  = useRef(true);
-  const filtrosRef  = useRef(filtros);
-  filtrosRef.current = filtros;
+  // Inclui _operadoresEquipeIds para que o matchesFiltros do realtime use os membros resolvidos
+  const filtrosComEquipe = filtros
+    ? { ...filtros, ...(operadoresEquipeIds !== null ? { _operadoresEquipeIds: operadoresEquipeIds } : {}) }
+    : filtros;
+  const filtrosRef  = useRef(filtrosComEquipe);
+  filtrosRef.current = filtrosComEquipe;
 
   // ID único e estável por instância do hook
   const instanceId = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
