@@ -19,7 +19,7 @@ import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_NIVEL, PERFIL_COLORS } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -335,21 +335,25 @@ export default function AdminUsuarios() {
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
 
   // ── Filtro de acesso por cargo ──────────────────────────────────────────────
-  // Abaixo de Gerência (operador, líder, elite): vê apenas usuários do próprio setor
-  // Gerência/Diretoria: vê todos da empresa, mas apenas com cargo igual ou superior
-  // Admin/SuperAdmin: vê todos sem restrição
-  const nivelAtual = PERFIL_NIVEL[perfilAtual?.perfil ?? ''] ?? 0;
+  // Regras:
+  //   • Admin / Super Admin → vê todos sem restrição
+  //   • Qualquer cargo abaixo de Admin → NUNCA vê administradores ou super_admins
+  //   • Operador / Líder / Elite → vê apenas usuários do próprio setor
+  //   • Gerência / Diretoria → vê todos da empresa, exceto admins
+  const PERFIS_ADMIN = ['administrador', 'super_admin'];
 
   const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
     if (isSuperAdmin || isAdmin) return lista;
+    // Para qualquer cargo não-admin: ocultar administradores e super_admins
+    const semAdmins = lista.filter(u => !PERFIS_ADMIN.includes(u.perfil));
     const p = perfilAtual?.perfil ?? '';
     if (['operador', 'lider', 'elite'].includes(p)) {
-      return lista.filter(u => u.setor_id === perfilAtual?.setor_id);
+      return semAdmins.filter(u => u.setor_id === perfilAtual?.setor_id);
     }
     if (['gerencia', 'diretoria'].includes(p)) {
-      return lista.filter(u => (PERFIL_NIVEL[u.perfil] ?? 0) >= nivelAtual);
+      return semAdmins;
     }
-    return lista;
+    return semAdmins;
   };
 
   const usuariosFiltrados = aplicarFiltroAcesso(

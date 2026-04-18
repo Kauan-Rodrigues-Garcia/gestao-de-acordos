@@ -179,9 +179,31 @@ export function useAnalytics(): AnalyticsData {
       const { data: acordosData } = await q;
       setAcordos((acordosData as Acordo[]) || []);
 
-      // ── Meta individual / setor ──────────────────────────────────────────────
-      const tipoMeta = isAdmin ? null : isLider ? 'setor' : 'operador';
-      const refId    = isLider ? perfil.setor_id : perfil.id;
+      // ── Meta: hierarquia dependente do filtro ativo ──────────────────────────
+      // Prioridade:
+      //   1. Filtro individual (operadorFiltro) → meta do operador
+      //   2. Filtro de equipe (equipeFiltro)     → meta da equipe selecionada
+      //   3. Padrão Líder/Elite                  → meta do setor
+      //   4. Operador comum                      → meta do próprio operador
+      //   5. Admin                               → sem meta principal
+      let tipoMeta: 'setor' | 'equipe' | 'operador' | null = null;
+      let refId: string | null = null;
+
+      if (!isAdmin) {
+        if (operadorFiltro) {
+          tipoMeta = 'operador';
+          refId    = operadorFiltro;
+        } else if (equipeFiltro && isLider) {
+          tipoMeta = 'equipe';
+          refId    = equipeFiltro;
+        } else if (isLider && perfil.setor_id) {
+          tipoMeta = 'setor';
+          refId    = perfil.setor_id;
+        } else if (!isLider) {
+          tipoMeta = 'operador';
+          refId    = perfil.id;
+        }
+      }
 
       if (tipoMeta && refId) {
         const { data: metaData } = await supabase
@@ -194,6 +216,8 @@ export function useAnalytics(): AnalyticsData {
           .eq('ano', ano)
           .maybeSingle();
         setMeta(metaData as MetaInfo | null);
+      } else if (isAdmin) {
+        setMeta(null);
       }
 
       // ── Metas por equipe / operador (admin/líder/diretoria) ─────────────────
