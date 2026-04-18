@@ -72,12 +72,16 @@ const TIPO_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 };
 
 const TIPO_CORES: Record<string, string> = {
-  boleto:            'hsl(var(--chart-1))',
-  pix:               'hsl(var(--chart-2))',
-  pix_automatico:    'hsl(var(--chart-2))',
-  cartao:            'hsl(var(--chart-3))',
-  cartao_recorrente: 'hsl(var(--chart-3))',
+  boleto:            '#6366f1',  // indigo
+  pix:               '#22c55e',  // verde
+  pix_automatico:    '#10b981',  // esmeralda
+  cartao:            '#f59e0b',  // âmbar
+  cartao_recorrente: '#f97316',  // laranja
 };
+
+// Cores fixas para o gráfico de área — visíveis em todos os temas
+const EVOL_AGENDADO = '#6366f1';
+const EVOL_RECEBIDO = '#22c55e';
 
 const TIPO_LABELS_DISPLAY: Record<string, string> = {
   boleto:            'Boleto / PIX',
@@ -88,8 +92,7 @@ const TIPO_LABELS_DISPLAY: Record<string, string> = {
 };
 
 const PIE_COLORS = [
-  'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))', 'hsl(var(--chart-5))',
+  '#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6',
 ];
 
 // ─── Tooltip customizado ────────────────────────────────────────────────────────
@@ -498,7 +501,7 @@ export default function PainelDiretoria() {
         value: d.agendado,
         recebido: d.recebido,
         qtd: d.qtd,
-        fill: TIPO_CORES[tipo] ?? 'hsl(var(--muted-foreground))',
+        fill: TIPO_CORES[tipo] ?? '#94a3b8',
       }))
       .sort((a, b) => b.value - a.value);
   }, [acordosMes]);
@@ -824,37 +827,56 @@ export default function PainelDiretoria() {
       {/* ── Gráfico de evolução diária ─────────────────────────────────────────── */}
       <Card className="border-border/50">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base font-semibold flex items-center gap-2">
-            <Activity className="w-4 h-4 text-chart-1" />
-            Evolução diária — {mesNome}
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              <Activity className="w-4 h-4" style={{ color: EVOL_AGENDADO }} />
+              Evolução diária — {mesNome}
+            </CardTitle>
+            <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-0.5 rounded" style={{ background: EVOL_RECEBIDO }} />
+                Recebido
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="inline-block w-3 h-0.5 rounded" style={{ background: EVOL_AGENDADO }} />
+                Agendado
+              </span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           {loading ? (
             <Skeleton className="h-52 w-full" />
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
-              <AreaChart data={porDia} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={porDia} margin={{ top: 8, right: 8, left: 4, bottom: 0 }}>
                 <defs>
                   <linearGradient id="colorRecDiretor" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--chart-2))" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(var(--chart-2))" stopOpacity={0} />
+                    <stop offset="5%" stopColor={EVOL_RECEBIDO} stopOpacity={0.38} />
+                    <stop offset="95%" stopColor={EVOL_RECEBIDO} stopOpacity={0.02} />
                   </linearGradient>
                   <linearGradient id="colorAgeDiretor" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                    <stop offset="5%" stopColor={EVOL_AGENDADO} stopOpacity={0.28} />
+                    <stop offset="95%" stopColor={EVOL_AGENDADO} stopOpacity={0.02} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                <XAxis dataKey="dia" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis
+                  dataKey="dia"
+                  tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
+                  stroke="rgba(148,163,184,0.2)"
+                  tickLine={false}
+                />
                 <YAxis
                   tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
                   tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                  width={50}
+                  stroke="rgba(148,163,184,0.2)"
+                  tickLine={false}
+                  width={52}
                 />
                 <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="agendado" name="Agendado" stroke="hsl(var(--chart-1))" fill="url(#colorAgeDiretor)" strokeWidth={1.5} dot={false} />
-                <Area type="monotone" dataKey="recebido" name="Recebido" stroke="hsl(var(--chart-2))" fill="url(#colorRecDiretor)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="agendado" name="Agendado" stroke={EVOL_AGENDADO} fill="url(#colorAgeDiretor)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="recebido" name="Recebido" stroke={EVOL_RECEBIDO} fill="url(#colorRecDiretor)" strokeWidth={2.5} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           )}
@@ -1044,9 +1066,9 @@ export default function PainelDiretoria() {
           <CardContent>
             <ResponsiveContainer width="100%" height={160}>
               <BarChart data={porStatus} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" strokeOpacity={0.5} />
-                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
-                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                <XAxis dataKey="name" tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="transparent" tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'hsl(var(--muted-foreground))' }} stroke="transparent" tickLine={false} />
                 <Tooltip formatter={(v: number) => [v, 'acordos']} />
                 <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                   {porStatus.map((entry, i) => (

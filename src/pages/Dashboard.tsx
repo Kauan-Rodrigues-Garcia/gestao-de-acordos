@@ -73,8 +73,7 @@ const stagger = {
 };
 
 const PIE_COLORS = [
-  'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
-  'hsl(var(--chart-4))', 'hsl(var(--chart-5))',
+  '#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6',
 ];
 
 const PER_PAGE = 20;

@@ -42,6 +42,10 @@ const BREAKDOWN_COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6',
 ];
 
+// Cores fixas para gráficos de área — legíveis em qualquer tema (claro/escuro)
+const CHART_RECEBIDO = '#22c55e'; // verde — sempre visível
+const CHART_AGENDADO = '#6366f1'; // indigo — contraste universal
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Sub: Tooltip customizado
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +137,7 @@ function DonutChart({ percent, label, sublabel, color = '#6366f1', size = 160 }:
             strokeWidth={0}
           >
             <Cell fill={clampedPerc >= 100 ? '#22c55e' : color} />
-            <Cell fill="hsl(var(--muted) / 0.6)" />
+            <Cell fill="rgba(148,163,184,0.22)" />
           </Pie>
         </PieChart>
       </ResponsiveContainer>
@@ -435,43 +439,55 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                   {/* AreaChart — Recebido vs Agendado por dia */}
                   <Card className="border-border bg-card">
                     <CardHeader className="pb-2 pt-4 px-4">
-                      <CardTitle className="text-sm font-semibold">
-                        Recebido vs Agendado — por dia
-                      </CardTitle>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-sm font-semibold">
+                          Recebido vs Agendado — por dia
+                        </CardTitle>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_RECEBIDO }} />
+                            Recebido
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="inline-block w-3 h-0.5 rounded" style={{ background: CHART_AGENDADO }} />
+                            Agendado
+                          </span>
+                        </div>
+                      </div>
                     </CardHeader>
                     <CardContent className="px-2 pb-4">
                       <ResponsiveContainer width="100%" height={200}>
                         <AreaChart data={porDia} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                           <defs>
                             <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#22c55e" stopOpacity={0.25} />
-                              <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                              <stop offset="5%" stopColor={CHART_RECEBIDO} stopOpacity={0.35} />
+                              <stop offset="95%" stopColor={CHART_RECEBIDO} stopOpacity={0.02} />
                             </linearGradient>
                             <linearGradient id="colorAge" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="hsl(var(--chart-1))" stopOpacity={0.25} />
-                              <stop offset="95%" stopColor="hsl(var(--chart-1))" stopOpacity={0} />
+                              <stop offset="5%" stopColor={CHART_AGENDADO} stopOpacity={0.28} />
+                              <stop offset="95%" stopColor={CHART_AGENDADO} stopOpacity={0.02} />
                             </linearGradient>
                           </defs>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
                           <XAxis
                             dataKey="dia"
                             tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            stroke="hsl(var(--border))"
+                            stroke="rgba(148,163,184,0.2)"
                             tickLine={false}
                           />
                           <YAxis
                             tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }}
-                            stroke="hsl(var(--border))"
+                            stroke="rgba(148,163,184,0.2)"
                             tickLine={false}
                           />
                           <Tooltip content={<CustomTooltip />} />
                           <Area
-                            type="monotone" dataKey="recebido" name="Recebido"
-                            stroke="#22c55e" fill="url(#colorRec)" strokeWidth={1.5}
+                            type="monotone" dataKey="agendado" name="Agendado"
+                            stroke={CHART_AGENDADO} fill="url(#colorAge)" strokeWidth={2}
                           />
                           <Area
-                            type="monotone" dataKey="agendado" name="Agendado"
-                            stroke="hsl(var(--chart-1))" fill="url(#colorAge)" strokeWidth={1.5}
+                            type="monotone" dataKey="recebido" name="Recebido"
+                            stroke={CHART_RECEBIDO} fill="url(#colorRec)" strokeWidth={2.5}
                           />
                         </AreaChart>
                       </ResponsiveContainer>
