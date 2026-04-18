@@ -43,25 +43,43 @@ export function createOpenAIProvider(cfg: AIConfig): AIProvider {
       }
       messages.push(...opts.messages.map(m => ({ role: m.role, content: m.content })));
 
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${cfg.apiKey}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens:  opts.maxTokens  ?? 500,
-          temperature: opts.temperature ?? 0.7,
-        }),
-      });
+      // Retry com backoff exponencial para rate-limit (HTTP 429) e 529
+      // Max: 3 tentativas, delays: 1s, 2s, 4s
+      const MAX_RETRIES = 3;
+      const RETRYABLE = new Set([429, 500, 502, 503, 529]);
+      let response: Response | null = null;
 
-      if (!response.ok) {
-        const err = await response.text();
-        throw new Error(`OpenAI error ${response.status}: ${err}`);
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        response = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cfg.apiKey}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            max_tokens:  opts.maxTokens  ?? 500,
+            temperature: opts.temperature ?? 0.7,
+          }),
+        });
+
+        if (response.ok || !RETRYABLE.has(response.status)) break;
+        const retryAfter = response.headers.get('Retry-After');
+        const delay = retryAfter
+          ? parseFloat(retryAfter) * 1000
+          : 1000 * Math.pow(2, attempt - 1);
+        console.warn(`[OpenAI] HTTP ${response.status} - tentativa ${attempt}/${MAX_RETRIES} em ${delay}ms`);
+        if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, delay));
       }
 
+      if (!response?.ok) {
+        const err = await response?.text() ?? 'no response';
+        throw new Error(`OpenAI error ${response?.status}: ${err}`);
+      }
+
+      const data: OpenAIResponse = await response!.json();
+      const text = data.choices[0]?.message?.content || '';
       const data: OpenAIResponse = await response.json();
       const text = data.choices[0]?.message?.content || '';
 

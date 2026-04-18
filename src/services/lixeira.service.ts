@@ -38,33 +38,12 @@
  * CREATE POLICY "lixeira_insert" ON public.lixeira_acordos FOR INSERT WITH CHECK (true);
  */
 
-import { supabase, Acordo } from '@/lib/supabase';
+import { supabase, Acordo, LixeiraAcordo, MotivoLixeira } from '@/lib/supabase';
 
-export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr';
+// LixeiraAcordo e MotivoLixeira sao definidos em @/lib/supabase.
+// Re-exportados aqui para compatibilidade.
+export type { LixeiraAcordo, MotivoLixeira };
 
-export interface LixeiraAcordo {
-  id: string;
-  acordo_id: string;
-  empresa_id?: string;
-  operador_id?: string;
-  operador_nome?: string;
-  nome_cliente?: string;
-  nr_cliente?: string;
-  valor?: number;
-  vencimento?: string;
-  tipo?: string;
-  status?: string;
-  observacoes?: string;
-  instituicao?: string;
-  dados_completos?: Record<string, unknown>;
-  motivo: MotivoLixeira;
-  autorizado_por_id?: string;
-  autorizado_por_nome?: string;
-  transferido_para_id?: string;
-  transferido_para_nome?: string;
-  excluido_em: string;
-  expira_em?: string;
-}
 
 export interface EnviarLixeiraParams {
   acordo: Acordo;

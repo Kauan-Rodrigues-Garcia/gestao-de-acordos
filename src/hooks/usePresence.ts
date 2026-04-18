@@ -1,10 +1,13 @@
 /**
  * src/hooks/usePresence.ts
  *
- * Re-exporta `useOnlineUsers` do PresenceProvider para compatibilidade
- * com o código existente que chama `usePresence`.
+ * @deprecated Use `useOnlineUsers` diretamente de '@/providers/PresenceProvider'.
+ * Este arquivo existe apenas para compatibilidade com imports antigos.
  *
- * O canal Supabase Presence é criado e gerenciado exclusivamente pelo
- * PresenceProvider (singleton em App.tsx). Este hook apenas lê o Context.
+ * Migracao:
+ *   Antigo: import { usePresence } from '@/hooks/usePresence';
+ *   Novo:   import { useOnlineUsers } from '@/providers/PresenceProvider';
  */
 export { useOnlineUsers as usePresence } from '@/providers/PresenceProvider';
+// Re-export direto para novos imports
+export { useOnlineUsers } from '@/providers/PresenceProvider';

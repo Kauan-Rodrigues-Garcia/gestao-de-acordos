@@ -3,27 +3,18 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+let _instance: SupabaseClient | null = null;
+
 function getSupabase(): SupabaseClient {
-  if (typeof window !== 'undefined') {
-    if (!(window as any).__supabaseInstance) {
-      (window as any).__supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
-        auth: {
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-        },
-      });
-    }
-    return (window as any).__supabaseInstance;
-  }
-  
-  return createClient(supabaseUrl, supabaseAnonKey, {
+  if (_instance) return _instance;
+  _instance = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
     },
   });
+  return _instance;
 }
 
 export const supabase = getSupabase();
@@ -155,6 +146,8 @@ export interface Notificacao {
   criado_em: string;
 }
 
+export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr';
+
 export interface LixeiraAcordo {
   id: string;
   acordo_id: string;
@@ -170,7 +163,7 @@ export interface LixeiraAcordo {
   observacoes?: string;
   instituicao?: string;
   dados_completos?: Record<string, unknown>;
-  motivo: 'exclusao_manual' | 'transferencia_nr';
+  motivo: MotivoLixeira;
   autorizado_por_id?: string;
   autorizado_por_nome?: string;
   transferido_para_id?: string;
