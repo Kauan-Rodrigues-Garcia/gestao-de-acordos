@@ -55,13 +55,13 @@ export const PERFIL_LABELS: Record<string, string> = {
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
-  operador: 'bg-primary/10 text-primary border-primary/30',
-  lider: 'bg-warning/10 text-warning border-warning/30',
-  administrador: 'bg-destructive/10 text-destructive border-destructive/30',
-  super_admin: 'bg-chart-1/10 text-chart-1 border-chart-1/30',
-  elite: 'bg-chart-2/10 text-chart-2 border-chart-2/30',
-  gerencia: 'bg-chart-3/10 text-chart-3 border-chart-3/30',
-  diretoria: 'bg-chart-5/10 text-chart-5 border-chart-5/30',
+  operador:      'bg-role-operador/10 text-role-operador border-role-operador/30',
+  lider:         'bg-role-lider/10 text-role-lider border-role-lider/30',
+  elite:         'bg-role-elite/10 text-role-elite border-role-elite/30',
+  gerencia:      'bg-role-gerencia/10 text-role-gerencia border-role-gerencia/30',
+  diretoria:     'bg-role-diretoria/10 text-role-diretoria border-role-diretoria/30',
+  administrador: 'bg-role-admin/10 text-role-admin border-role-admin/30',
+  super_admin:   'bg-role-super/10 text-role-super border-role-super/30',
 };
 
 // Perfis com acesso de líder (visão de setor + equipe)
@@ -70,6 +70,22 @@ export const PERFIS_LIDER = ['lider', 'elite', 'gerencia'] as const;
 export const PERFIS_ADMIN = ['administrador', 'super_admin'] as const;
 // Perfis com acesso de diretoria (analíticos globais sem edição)
 export const PERFIS_DIRETORIA = ['diretoria'] as const;
+
+// Hierarquia numérica de cargos (quanto maior, mais alto)
+export const PERFIL_NIVEL: Record<string, number> = {
+  operador:      1,
+  lider:         2,
+  elite:         3,
+  gerencia:      4,
+  diretoria:     5,
+  administrador: 6,
+  super_admin:   7,
+};
+
+// Perfis que visualizam apenas usuários do próprio setor (abaixo de Gerência)
+export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite'] as const;
+// Perfis que podem ver todos os usuários dentro da empresa mas ficam restritos ao próprio cargo ou acima
+export const PERFIS_VISAO_EMPRESA_RESTRITA = ['gerencia', 'diretoria'] as const;
 
 export function isPerfilLider(perfil: string): boolean {
   return PERFIS_LIDER.includes(perfil as typeof PERFIS_LIDER[number]);

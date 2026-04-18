@@ -31,6 +31,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,6 +69,8 @@ interface OperadorChipProps {
 }
 
 function OperadorChip({ operador, onRemove, onDragStart }: OperadorChipProps) {
+  const cargoLabel = PERFIL_LABELS[operador.perfil] ?? operador.perfil;
+  const cargoCss = PERFIL_COLORS[operador.perfil] ?? 'bg-muted/10 text-muted-foreground border-border';
   return (
     <motion.div
       layout
@@ -82,12 +85,9 @@ function OperadorChip({ operador, onRemove, onDragStart }: OperadorChipProps) {
       <span className="text-sm font-medium text-foreground truncate max-w-[120px]">
         {operador.nome}
       </span>
-      <Badge
-        variant="secondary"
-        className="text-[10px] px-1.5 py-0 h-4 capitalize flex-shrink-0"
-      >
-        {operador.perfil}
-      </Badge>
+      <span className={`inline-flex items-center text-[10px] px-1.5 py-0 h-4 rounded-full border font-medium flex-shrink-0 ${cargoCss}`}>
+        {cargoLabel}
+      </span>
       {onRemove && (
         <button
           type="button"
@@ -197,7 +197,7 @@ export default function AdminEquipes() {
         .from('perfis')
         .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id')
         .eq('empresa_id', empresaId)       // ← OBRIGATÓRIO — evita cross-tenant
-        .eq('perfil', 'operador')
+        .in('perfil', ['operador', 'lider', 'elite'])
         .order('nome');
 
       if (!isAdmin && perfil?.setor_id) {
@@ -636,7 +636,7 @@ export default function AdminEquipes() {
             <CardHeader className="py-3 px-4">
               <CardTitle className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                Operadores sem equipe
+                Membros sem equipe
                 <Badge variant="outline" className="text-xs font-normal">
                   {operadoresSemEquipe.length}
                 </Badge>
@@ -645,7 +645,7 @@ export default function AdminEquipes() {
             <CardContent className="px-4 pb-4">
               {operadoresSemEquipe.length === 0 ? (
                 <p className="text-xs text-muted-foreground/60 italic text-center py-4">
-                  Todos os operadores estão alocados em equipes.
+                  Todos os membros estão alocados em equipes.
                 </p>
               ) : (
                 <div className="flex flex-wrap gap-2">

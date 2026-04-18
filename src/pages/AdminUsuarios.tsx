@@ -19,19 +19,12 @@ import { Switch } from '@/components/ui/switch';
 import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_NIVEL, PERFIL_COLORS } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
-const PERFIL_BADGE: Record<string, string> = {
-  operador:      'bg-primary/10 text-primary border-primary/30',
-  lider:         'bg-warning/10 text-warning border-warning/30',
-  administrador: 'bg-destructive/10 text-destructive border-destructive/30',
-  super_admin:   'bg-chart-1/10 text-chart-1 border-chart-1/30',
-  elite:         'bg-chart-2/10 text-chart-2 border-chart-2/30',
-  gerencia:      'bg-chart-3/10 text-chart-3 border-chart-3/30',
-  diretoria:     'bg-chart-5/10 text-chart-5 border-chart-5/30',
-};
+// Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
+const PERFIL_BADGE = PERFIL_COLORS;
 
 interface UserForm {
   nome:       string;
@@ -340,9 +333,43 @@ export default function AdminUsuarios() {
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
-  const usuariosFiltrados = isSuperAdmin && filtroEmpresa
-    ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
-    : usuarios;
+
+  // ── Filtro de acesso por cargo ──────────────────────────────────────────────
+  // Abaixo de Gerência (operador, líder, elite): vê apenas usuários do próprio setor
+  // Gerência/Diretoria: vê todos da empresa, mas apenas com cargo igual ou superior
+  // Admin/SuperAdmin: vê todos sem restrição
+  const nivelAtual = PERFIL_NIVEL[perfilAtual?.perfil ?? ''] ?? 0;
+
+  const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
+    if (isSuperAdmin || isAdmin) return lista;
+    const p = perfilAtual?.perfil ?? '';
+    if (['operador', 'lider', 'elite'].includes(p)) {
+      return lista.filter(u => u.setor_id === perfilAtual?.setor_id);
+    }
+    if (['gerencia', 'diretoria'].includes(p)) {
+      return lista.filter(u => (PERFIL_NIVEL[u.perfil] ?? 0) >= nivelAtual);
+    }
+    return lista;
+  };
+
+  const usuariosFiltrados = aplicarFiltroAcesso(
+    isSuperAdmin && filtroEmpresa
+      ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
+      : usuarios
+  );
+
+  // ── Agrupamento por setor ────────────────────────────────────────────────────
+  const usuariosPorSetor = usuariosFiltrados.reduce<Record<string, { nomeSetor: string; lista: Perfil[] }>>((acc, u) => {
+    const sid = u.setor_id ?? '__sem_setor__';
+    const snome = nomeSetor(u);
+    if (!acc[sid]) acc[sid] = { nomeSetor: snome, lista: [] };
+    acc[sid].lista.push(u);
+    return acc;
+  }, {});
+
+  const setoresOrdenados = Object.entries(usuariosPorSetor).sort(([, a], [, b]) =>
+    a.nomeSetor.localeCompare(b.nomeSetor)
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -400,148 +427,144 @@ export default function AdminUsuarios() {
           {(isAdmin || isSuperAdmin) && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
 
-      <Card className="border-border">
-        <CardContent className="p-0">
-          <div className="w-full overflow-x-auto">
-            <table className="w-full text-sm table-fixed min-w-[800px]">
-              <thead>
-                <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[22%]">USUÁRIO</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[20%]">E-MAIL</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[12%]">PERFIL</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[13%]">SETOR</th>
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground text-xs w-[13%]">EMPRESA</th>
-                  <th className="text-center px-3 py-3 font-semibold text-muted-foreground text-xs w-[8%]">ATIVO</th>
-                  <th className="text-right px-3 py-3 font-semibold text-muted-foreground text-xs w-[12%]">AÇÕES</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground text-sm">Carregando...</td></tr>
-                ) : usuariosFiltrados.map((u, i) => (
-                  <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
-                    className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-2">
-                        {/* Avatar com foto real */}
-                        <div className="relative flex-shrink-0">
-                          <button
-                            type="button"
-                            className="relative"
-                            onClick={() => {
-                              const fotoUrl = u.foto_url;
-                              if (fotoUrl) setFotoExpandida({ url: fotoUrl, nome: u.nome });
-                            }}
-                            title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
-                          >
-                            <Avatar className="w-8 h-8">
-                              {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
-                              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                                {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
-                              </AvatarFallback>
-                            </Avatar>
-                          </button>
-                          {/* Indicador Online/Offline */}
-                          <span className={cn(
-                            'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background',
-                            onlineIds.has(u.id) ? 'bg-success' : 'bg-muted-foreground/40'
-                          )} title={onlineIds.has(u.id) ? 'Online' : 'Offline'} />
-                        </div>
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-1">
-                            <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
-                            {u.id === perfilAtual?.id && (
-                              <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
-                            <span className={cn('text-[9px] font-medium', onlineIds.has(u.id) ? 'text-success' : 'text-muted-foreground/50')}>
-                              {onlineIds.has(u.id) ? '● Online' : '○ Offline'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono truncate max-w-0">
-                      <span className="block truncate" title={u.email}>{u.email}</span>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border', PERFIL_BADGE[u.perfil])}>
-                        <Shield className="w-2.5 h-2.5" /> {PERFIL_LABELS[u.perfil]}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1 truncate">
-                        <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeSetor(u)}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1 truncate">
-                        <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeEmpresa(u)}</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-2.5 text-center">
-                      {(isAdmin || isSuperAdmin)
-                        ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
-                        : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
-                      }
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <div className="flex items-center justify-end gap-1">
-                        {/* Ações de foto e senha — lider/admin sobre outros usuários */}
-                        {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
-                          <>
-                            {/* Upload foto */}
-                            <Button
-                              variant="ghost" size="icon" className="w-7 h-7"
-                              title="Alterar foto de perfil"
-                              onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}
-                            >
-                              <Camera className="w-3.5 h-3.5" />
-                            </Button>
-                            {/* Excluir foto (só aparece se tiver foto) */}
-                            {u.foto_url && (
-                              <Button
-                                variant="ghost" size="icon"
-                                className="w-7 h-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                                title="Remover foto de perfil"
-                                onClick={() => excluirFotoDeUsuario(u)}
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </Button>
-                            )}
-                            {/* Alterar senha */}
-                            <Button
-                              variant="ghost" size="icon" className="w-7 h-7"
-                              title="Alterar senha do usuário"
-                              onClick={() => { setSenhaTarget(u); setNovaSenha(''); }}
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                            </Button>
-                          </>
-                        )}
-                        <Button
-                          variant="ghost" size="icon" className="w-7 h-7"
-                          title="Mover para outro setor"
-                          onClick={() => abrirMover(u)}
-                        >
-                          <ArrowRightLeft className="w-3.5 h-3.5" />
-                        </Button>
-                        {(isAdmin || isSuperAdmin) && (
-                          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
-                            <Edit className="w-3.5 h-3.5" />
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+      {/* ── Tabela agrupada por setor ── */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Carregando...</div>
+      ) : setoresOrdenados.length === 0 ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">Nenhum usuário encontrado.</div>
+      ) : (
+        <div className="space-y-4">
+          {setoresOrdenados.map(([sid, grupo]) => (
+            <div key={sid}>
+              {/* Cabeçalho do setor */}
+              <div className="flex items-center gap-2 mb-1.5 px-1">
+                <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                  {grupo.nomeSetor === '—' ? 'Sem Setor' : grupo.nomeSetor}
+                </span>
+                <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0">
+                  {grupo.lista.length} {grupo.lista.length === 1 ? 'usuário' : 'usuários'}
+                </span>
+              </div>
+              <Card className="border-border">
+                <CardContent className="p-0">
+                  <div className="w-full overflow-x-auto">
+                    <table className="w-full text-sm table-fixed min-w-[700px]">
+                      <thead>
+                        <tr className="border-b border-border bg-muted/30">
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[26%]">USUÁRIO</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[22%]">E-MAIL</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[14%]">CARGO</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-xs w-[13%]">EMPRESA</th>
+                          <th className="text-center px-3 py-2 font-semibold text-muted-foreground text-xs w-[9%]">ATIVO</th>
+                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-xs w-[16%]">AÇÕES</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {grupo.lista.map((u, i) => (
+                          <motion.tr key={u.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.03 }}
+                            className={cn('border-b border-border/50 hover:bg-accent/40 transition-colors', i % 2 === 0 && 'bg-muted/10')}>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-2">
+                                <div className="relative flex-shrink-0">
+                                  <button
+                                    type="button"
+                                    className="relative"
+                                    onClick={() => { if (u.foto_url) setFotoExpandida({ url: u.foto_url, nome: u.nome }); }}
+                                    title={u.foto_url ? 'Ver foto em tamanho maior' : undefined}
+                                  >
+                                    <Avatar className="w-8 h-8">
+                                      {u.foto_url && <AvatarImage src={u.foto_url} alt={u.nome} />}
+                                      <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                                        {u.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
+                                      </AvatarFallback>
+                                    </Avatar>
+                                  </button>
+                                  <span className={cn(
+                                    'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-background',
+                                    onlineIds.has(u.id) ? 'bg-success' : 'bg-muted-foreground/40'
+                                  )} title={onlineIds.has(u.id) ? 'Online' : 'Offline'} />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <p className="font-medium text-foreground text-xs truncate">{u.nome}</p>
+                                    {u.id === perfilAtual?.id && (
+                                      <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1">
+                                    {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
+                                    <span className={cn('text-[9px] font-medium', onlineIds.has(u.id) ? 'text-success' : 'text-muted-foreground/50')}>
+                                      {onlineIds.has(u.id) ? '● Online' : '○ Offline'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 text-muted-foreground text-xs font-mono truncate max-w-0">
+                              <span className="block truncate" title={u.email}>{u.email}</span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className={cn('inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] font-medium border', PERFIL_BADGE[u.perfil] ?? 'bg-muted/10 text-muted-foreground border-border')}>
+                                <Shield className="w-2.5 h-2.5" /> {PERFIL_LABELS[u.perfil] ?? u.perfil}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                              <span className="flex items-center gap-1 truncate">
+                                <Building2 className="w-3 h-3 flex-shrink-0" /> <span className="truncate">{nomeEmpresa(u)}</span>
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 text-center">
+                              {(isAdmin || isSuperAdmin)
+                                ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
+                                : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
+                              }
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center justify-end gap-1">
+                                {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="w-7 h-7"
+                                      title="Alterar foto de perfil"
+                                      onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}>
+                                      <Camera className="w-3.5 h-3.5" />
+                                    </Button>
+                                    {u.foto_url && (
+                                      <Button variant="ghost" size="icon"
+                                        className="w-7 h-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                        title="Remover foto de perfil" onClick={() => excluirFotoDeUsuario(u)}>
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                    <Button variant="ghost" size="icon" className="w-7 h-7"
+                                      title="Alterar senha do usuário"
+                                      onClick={() => { setSenhaTarget(u); setNovaSenha(''); }}>
+                                      <KeyRound className="w-3.5 h-3.5" />
+                                    </Button>
+                                  </>
+                                )}
+                                <Button variant="ghost" size="icon" className="w-7 h-7"
+                                  title="Mover para outro setor" onClick={() => abrirMover(u)}>
+                                  <ArrowRightLeft className="w-3.5 h-3.5" />
+                                </Button>
+                                {(isAdmin || isSuperAdmin) && (
+                                  <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
+                                    <Edit className="w-3.5 h-3.5" />
+                                  </Button>
+                                )}
+                              </div>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
         </div>
         </TabsContent>
 

@@ -82,7 +82,23 @@
   --chart-3: oklch(0.62 0.18 45);
   --chart-4: oklch(0.55 0.16 280);
   --chart-5: oklch(0.60 0.17 10);
-  
+
+  /* Cargo Role Colors (light) */
+  --role-operador:      oklch(0.45 0.15 220);
+  --role-operador-fg:   oklch(0.98 0.005 220);
+  --role-lider:         oklch(0.50 0.16 280);
+  --role-lider-fg:      oklch(0.98 0.005 280);
+  --role-elite:         oklch(0.40 0.22 15);
+  --role-elite-fg:      oklch(0.98 0.005 15);
+  --role-gerencia:      oklch(0.55 0.18 55);
+  --role-gerencia-fg:   oklch(0.15 0.02 55);
+  --role-diretoria:     oklch(0.48 0.18 300);
+  --role-diretoria-fg:  oklch(0.98 0.005 300);
+  --role-admin:         oklch(0.45 0.22 10);
+  --role-admin-fg:      oklch(0.98 0.005 10);
+  --role-super:         oklch(0.35 0.12 220);
+  --role-super-fg:      oklch(0.98 0.005 220);
+
   /* Sidebar Tokens */
   --sidebar: oklch(0.97 0.006 220);
   --sidebar-foreground: oklch(0.25 0.02 220);
@@ -129,7 +145,23 @@
   --chart-3: oklch(0.72 0.20 45);
   --chart-4: oklch(0.65 0.18 280);
   --chart-5: oklch(0.68 0.20 10);
-  
+
+  /* Cargo Role Colors (dark) */
+  --role-operador:      oklch(0.62 0.18 220);
+  --role-operador-fg:   oklch(0.12 0.015 220);
+  --role-lider:         oklch(0.65 0.18 280);
+  --role-lider-fg:      oklch(0.12 0.015 280);
+  --role-elite:         oklch(0.58 0.25 15);
+  --role-elite-fg:      oklch(0.12 0.015 15);
+  --role-gerencia:      oklch(0.70 0.20 55);
+  --role-gerencia-fg:   oklch(0.12 0.015 55);
+  --role-diretoria:     oklch(0.65 0.20 300);
+  --role-diretoria-fg:  oklch(0.12 0.015 300);
+  --role-admin:         oklch(0.62 0.25 10);
+  --role-admin-fg:      oklch(0.12 0.015 10);
+  --role-super:         oklch(0.55 0.15 220);
+  --role-super-fg:      oklch(0.95 0.008 220);
+
   /* Sidebar Tokens */
   --sidebar: oklch(0.10 0.012 220);
   --sidebar-foreground: oklch(0.85 0.015 220);
@@ -329,6 +361,22 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  /* Cargo Role Color Mapping */
+  --color-role-operador: var(--role-operador);
+  --color-role-operador-fg: var(--role-operador-fg);
+  --color-role-lider: var(--role-lider);
+  --color-role-lider-fg: var(--role-lider-fg);
+  --color-role-elite: var(--role-elite);
+  --color-role-elite-fg: var(--role-elite-fg);
+  --color-role-gerencia: var(--role-gerencia);
+  --color-role-gerencia-fg: var(--role-gerencia-fg);
+  --color-role-diretoria: var(--role-diretoria);
+  --color-role-diretoria-fg: var(--role-diretoria-fg);
+  --color-role-admin: var(--role-admin);
+  --color-role-admin-fg: var(--role-admin-fg);
+  --color-role-super: var(--role-super);
+  --color-role-super-fg: var(--role-super-fg);
 
   /* Sidebar Mapping */
   --color-sidebar: var(--sidebar);
