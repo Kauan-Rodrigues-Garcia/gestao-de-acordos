@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2 } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import AdminEquipes from '@/pages/AdminEquipes';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePresence } from '@/hooks/usePresence';
@@ -41,6 +44,8 @@ interface UserForm {
 }
 
 export default function AdminUsuarios() {
+  const [searchParams] = useSearchParams();
+  const tabFromUrl = searchParams.get('tab') ?? 'usuarios';
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const isAdmin = perfilAtual?.perfil === 'administrador';
@@ -340,15 +345,41 @@ export default function AdminUsuarios() {
     : usuarios;
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-            <Users className="w-5 h-5 text-primary" /> Usuários
-          </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">{usuariosFiltrados.length} usuário(s)</p>
+    <div className="h-full flex flex-col">
+      {/* Cabeçalho */}
+      <div className="px-6 pt-6 pb-0">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary" /> Usuários
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">Gestão de usuários e equipes</p>
+          </div>
         </div>
-        <div className="flex gap-2">
+      </div>
+
+      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
+        <div className="px-6 border-b border-border">
+          <TabsList className="h-10 bg-transparent p-0 gap-0">
+            <TabsTrigger
+              value="usuarios"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Users className="w-4 h-4" /> Usuários
+            </TabsTrigger>
+            <TabsTrigger
+              value="equipes"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Users2 className="w-4 h-4" /> Equipes
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
+        {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
+        <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
+        <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-end mb-4 gap-2">
           {isSuperAdmin && empresas.length > 1 && (
             <Select
               value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
@@ -368,7 +399,6 @@ export default function AdminUsuarios() {
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {(isAdmin || isSuperAdmin) && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
-      </div>
 
       <Card className="border-border">
         <CardContent className="p-0">
@@ -512,6 +542,15 @@ export default function AdminUsuarios() {
           </div>
         </CardContent>
       </Card>
+        </div>
+        </TabsContent>
+
+        {/* ─── Aba: Equipes ──────────────────────────────────────────── */}
+        <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
+          <AdminEquipes />
+        </TabsContent>
+
+      </Tabs>
 
       {/* ── Dialog editar/criar usuário ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

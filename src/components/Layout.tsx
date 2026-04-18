@@ -27,8 +27,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
-  BarChart3, ClipboardList, Building2, Upload, Bot, Users2, Target,
-  Camera, Loader2, Trash2, TrendingUp, ShieldCheck,
+  BarChart3, Building2, Upload, Target,
+  Camera, Loader2, Trash2, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -52,20 +52,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',     icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
-  { label: 'Acordos',       icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
-  { label: 'Novo Acordo',   icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'] },
-  { label: 'Painel Líder',  icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'] },
-  { label: 'Painel Diretoria', icon: TrendingUp,   to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
-  { label: 'Usuários',      icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'] },
-  { label: 'Setores',       icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
-  { label: 'Equipes',       icon: Users2,          to: '/admin/equipes',                roles: ['administrador','lider','elite','gerencia'] },
-  { label: 'Metas',         icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'] },
-  { label: 'Configurações', icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
-  { label: 'IA',            icon: Bot,             to: ROUTE_PATHS.ADMIN_IA,            roles: ['administrador'] },
-  { label: 'Permissões',    icon: ShieldCheck,     to: ROUTE_PATHS.ADMIN_CARGOS,        roles: ['administrador'] },
-  { label: 'Lixeira',       icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'] },
-  { label: 'Logs',          icon: ClipboardList,   to: ROUTE_PATHS.ADMIN_LOGS,          roles: ['administrador'] },
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'] },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'] },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'] },
+  { label: 'Setores',          icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'] },
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'] },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {

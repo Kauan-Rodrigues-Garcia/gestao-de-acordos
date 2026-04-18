@@ -1,4 +1,4 @@
-import { HashRouter as Router, Routes, Route } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
@@ -141,13 +141,8 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path="/admin/equipes" element={
-                <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador', 'lider', 'elite', 'gerencia']}>
-                    <AdminEquipes />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/equipes agora é aba dentro de /admin/usuarios */}
+              <Route path="/admin/equipes" element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
                   <ProtectedRoute roles={['administrador']}>
@@ -155,13 +150,8 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute roles={['administrador']}>
-                    <AdminLogs />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/logs agora é aba dentro de /admin/configuracoes */}
+              <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path="/admin/metas" element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']}>
@@ -169,13 +159,8 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path={ROUTE_PATHS.ADMIN_IA} element={
-                <LayoutWrapper>
-                  <ProtectedRoute roles={['administrador']}>
-                    <AdminIA />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/ia agora é aba dentro de /admin/configuracoes */}
+              <Route path={ROUTE_PATHS.ADMIN_IA} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=ia'} replace />} />
 
               <Route path="/admin/lixeira" element={
                 <LayoutWrapper>
@@ -194,14 +179,8 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
-              {/* Admin Cargos — apenas administradores */}
-              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={
-                <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','super_admin']}>
-                    <AdminCargos />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
+              <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=permissoes'} replace />} />
 
               <Route path="*" element={<NotFound />} />
             </Routes>
