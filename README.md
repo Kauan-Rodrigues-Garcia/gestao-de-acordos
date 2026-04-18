@@ -114,13 +114,19 @@ gestao-de-acordos/
 
 ## 🔐 Perfis de Acesso (RBAC)
 
-| Perfil | Permissões |
-|---|---|
-| **operador** | Acessa apenas seus próprios acordos |
-| **lider** | Acessa acordos e operadores do seu setor |
-| **administrador** | Acesso total — todos os setores, acordos, configurações e logs |
+O sistema implementa **7 perfis** com níveis crescentes de acesso, protegidos por RLS no PostgreSQL e pelo componente `ProtectedRoute` no frontend.
 
-As rotas são protegidas pelo componente `ProtectedRoute` com validação de perfil.
+| Perfil | Nível | Permissões |
+|---|---|---|
+| **operador** | 1 | Acessa apenas seus próprios acordos |
+| **lider** | 2 | Acessa acordos e operadores do seu setor; gerencia equipe |
+| **gerencia** | 3 | Visão multi-setor; relatórios gerenciais |
+| **elite** | 4 | Recursos avançados (toggle Elite); combinável com outros perfis |
+| **administrador** | 5 | Acesso total — todos os setores, acordos, configurações e logs |
+| **diretoria** | 6 | Painel estratégico com KPIs, projeções e comparativos mensais |
+| **super_admin** | 7 | Cross-tenant — gerencia todas as empresas do sistema |
+
+> Para detalhes completos de cada perfil, consulte a seção **Perfis de Acesso (RBAC)** no [ARQUITETURA.md](./ARQUITETURA.md).
 
 ---
 

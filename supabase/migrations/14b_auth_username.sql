@@ -1,5 +1,12 @@
 -- ============================================================
--- Migration 14: Username-based login + Clear Logs policy
+-- Migration 14b: Username-based login + Clear Logs policy
+--
+-- CONTEXTO:
+--   Segunda parte da migration 14, independente da 14a.
+--   Adiciona suporte a login por nome de usuário (campo `usuario`)
+--   e política de limpeza de logs.
+--
+-- DEPENDÊNCIAS: 13_fix_signup_database_error.sql, 14a_add_equipes.sql
 -- ============================================================
 
 -- ── 1. Add usuario (username) column to perfis ───────────────────────────────

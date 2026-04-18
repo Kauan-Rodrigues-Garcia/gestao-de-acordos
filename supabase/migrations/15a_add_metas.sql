@@ -1,4 +1,12 @@
--- Migration: Sistema de Metas por Setor, Equipe e Operador
+-- =====================================================================
+-- Migration 15a: Sistema de Metas por Setor, Equipe e Operador
+--
+-- CONTEXTO:
+--   Primeira parte da migration 15, focada na tabela de metas.
+--   Deve ser executada ANTES de 15b_fix_username_lookup.sql.
+--
+-- DEPENDÊNCIAS: 14a_add_equipes.sql (tabela equipes)
+-- =====================================================================
 
 CREATE TABLE IF NOT EXISTS public.metas (
   id           UUID DEFAULT gen_random_uuid() PRIMARY KEY,

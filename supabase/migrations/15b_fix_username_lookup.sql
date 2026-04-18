@@ -1,5 +1,11 @@
 -- ============================================================
--- Migration 15: Fix username lookup via SECURITY DEFINER RPC
+-- Migration 15b: Fix username lookup via SECURITY DEFINER RPC
+--
+-- CONTEXTO:
+--   Segunda parte da migration 15, corrige a busca de email por username.
+--   Deve ser executada APÓS 15a_add_metas.sql.
+--
+-- DEPENDÊNCIAS: 14b_auth_username.sql (campo usuario em perfis)
 -- ============================================================
 -- Problema: A query direta à tabela `perfis` para buscar email por username
 -- falha com 400 (Bad Request) porque a RLS exige auth.uid(), mas o usuário

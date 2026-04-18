@@ -1,0 +1,38 @@
+name: Edge Functions — Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'supabase/edge_function/**'
+      - 'supabase/functions/**'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'supabase/edge_function/**'
+      - 'supabase/functions/**'
+
+jobs:
+  test-edge-functions:
+    name: Test Supabase Edge Functions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+
+      - name: Run edge function tests
+        run: npm run test:edge-functions
+        env:
+          SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}

@@ -1,0 +1,57 @@
+name: PR — Code Review Check
+
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+    types:
+      - opened
+      - synchronize
+      - reopened
+
+jobs:
+  review-check:
+    name: PR Quality Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # necessário para diff completo
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: ESLint (changed files only)
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | tr '\n' ' ')
+          if [ -n "$CHANGED" ]; then
+            echo "Linting: $CHANGED"
+            npx eslint $CHANGED --max-warnings=0
+          else
+            echo "No TypeScript/TSX files changed."
+          fi
+
+      - name: TypeScript type-check
+        run: npx tsc --noEmit
+
+      - name: Check for console.log (warn)
+        run: |
+          echo "=== console.log occurrences in changed files ==="
+          git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.ts' '*.tsx' | \
+            xargs grep -n 'console\.log' 2>/dev/null || echo "None found ✓"
+
+      - name: Build check
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: npm run build

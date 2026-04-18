@@ -1,4 +1,12 @@
--- Migration: Adicionar tabela equipes e campo equipe_id em perfis
+-- =====================================================================
+-- Migration 14a: Adicionar tabela equipes e campo equipe_id em perfis
+--
+-- CONTEXTO:
+--   Primeira parte da migration 14, focada na estrutura de equipes.
+--   Deve ser executada ANTES de 14b_auth_username.sql.
+--
+-- DEPENDÊNCIAS: 09_multi_empresa.sql (tabelas empresas e perfis)
+-- =====================================================================
 
 -- Tabela equipes
 CREATE TABLE IF NOT EXISTS public.equipes (
