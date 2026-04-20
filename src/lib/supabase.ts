@@ -51,6 +51,7 @@ export interface Perfil {
   ativo: boolean;
   lider_id: string | null;
   setor_id: string | null;
+  equipe_id?: string | null;
   empresa_id?: string;
   usuario?: string;
   foto_url?: string | null;
@@ -87,6 +88,12 @@ export interface Acordo {
   acordo_grupo_id?: string | null;
   /** Número desta parcela dentro do grupo (1-based) */
   numero_parcela?: number | null;
+  /** Tipo de vínculo: 'direto' (padrão) ou 'extra' (NR/inscrição já vinculada a outro operador direto) */
+  tipo_vinculo?: 'direto' | 'extra' | null;
+  /** Quando tipo_vinculo = 'extra': ID do operador que detém o vínculo DIRETO do mesmo NR */
+  vinculo_operador_id?: string | null;
+  /** Quando tipo_vinculo = 'extra': nome do operador DIRETO (desnormalizado para exibição) */
+  vinculo_operador_nome?: string | null;
   criado_em: string;
   atualizado_em: string;
   perfis?: Perfil;

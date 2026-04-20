@@ -28,6 +28,12 @@ export interface AnalyticsData {
   valorNaoPago: number;
   valorAgendadoHoje: number;
 
+  // "Agendado restante no mês" — acordos PENDENTES (status='verificar_pendente')
+  // com vencimento no mês atual e ainda não resolvidos (exclui pago e não pago).
+  // Usado apenas em PaguePlay/Bookplay.
+  valorAgendadoRestanteMes: number;
+  totalAgendadoRestanteMes: number;
+
   // H.O. — Honorários Operacionais PaguePlay (24,96% do bruto recebido)
   // Disponível para todos, mas só relevante para PaguePlay
   valorHOMes: number;        // H.O. do total recebido no mês
@@ -320,6 +326,10 @@ export function useAnalytics(): AnalyticsData {
     const valorNaoPago       = naoPagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorAgendadoHoje  = acordosHoje.reduce((s, a) => s + (Number(a.valor) || 0), 0);
 
+    // ── "Agendado restante no mês" — pendentes (exclui pago e não pago) ────
+    const valorAgendadoRestanteMes = pendentes.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const totalAgendadoRestanteMes = pendentes.length;
+
     // H.O. — Honorários Operacionais (24,96% do bruto)
     const valorHOMes      = valorRecebidoMes * PP_HO_PERCENTUAL;
     const valorHOAgendado = valorAgendadoMes * PP_HO_PERCENTUAL;
@@ -401,6 +411,8 @@ export function useAnalytics(): AnalyticsData {
       valorAgendadoMes,
       valorNaoPago,
       valorAgendadoHoje,
+      valorAgendadoRestanteMes,
+      totalAgendadoRestanteMes,
       valorHOMes,
       valorHOAgendado,
       valorHONaoPago,

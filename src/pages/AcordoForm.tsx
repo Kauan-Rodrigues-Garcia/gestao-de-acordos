@@ -29,7 +29,8 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
-import { ModalAutorizacaoNR } from '@/components/AcordoNovoInline';
+import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -100,6 +101,20 @@ export default function AcordoForm() {
   const [autorizando, setAutorizando]         = useState(false);
   const [nrOriginalEdit, setNrOriginalEdit]   = useState<string | null>(null);
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
+
+  // Aviso Direto/Extra (CASO B) — usuário atual NÃO tem a lógica mas o operador do conflito TEM
+  interface PendingAvisoDiretoExtra {
+    payload:          Record<string, unknown>;
+    acordoAnteriorId: string;
+    operadorAntId:    string;
+    operadorAntNome:  string;
+    operadorAntSetor?: string;
+    nrLabel:          string;
+    labelCampo:       string;
+  }
+  const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
+  const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
   const { register, handleSubmit, watch, setValue, reset, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(isPP ? schemaPP : schemaBase),
     defaultValues: {
@@ -258,6 +273,67 @@ export default function AcordoForm() {
             setLoading(false);
             return;
           }
+
+          // ── NOVA LÓGICA: Direto e Extra ────────────────────────────────────
+          const atualTemLogica = isAtivoParaUsuario(
+            uid,
+            p?.setor_id ?? null,
+            (p as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+          );
+
+          const { data: opConflitoData } = await supabase
+            .from('perfis')
+            .select('id, nome, setor_id, equipe_id, setores(nome)')
+            .eq('id', conflitoFinal.operadorId)
+            .maybeSingle() as { data: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null };
+
+          const opConflitoTemLogica = opConflitoData
+            ? isAtivoParaUsuario(opConflitoData.id, opConflitoData.setor_id ?? null, opConflitoData.equipe_id ?? null)
+            : false;
+
+          // CASO A: usuário atual tem a lógica → tabula como EXTRA
+          if (atualTemLogica) {
+            const payloadExtra = {
+              ...payload,
+              tipo_vinculo:          'extra',
+              vinculo_operador_id:   conflitoFinal.operadorId,
+              vinculo_operador_nome: conflitoFinal.operadorNome,
+            };
+            const resultErr = await salvarAcordo(payloadExtra, uid);
+            if (resultErr) {
+              toast.error(`Erro ao salvar: ${resultErr.message}`);
+              setLoading(false);
+              return;
+            }
+            await criarNotificacao({
+              usuario_id: conflitoFinal.operadorId,
+              titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
+              mensagem:
+                `O ${labelNr} "${nrParaVerificar}" ((${(data.nome_cliente ?? '').trim() || '—'})) ` +
+                `agora possui um acordo EXTRA tabulado pelo operador ${p?.nome ?? 'outro operador'}.`,
+              empresa_id: empresa.id,
+            });
+            toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
+            navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
+            return;
+          }
+
+          // CASO B: usuário atual NÃO tem; operador do conflito TEM → aviso
+          if (opConflitoTemLogica) {
+            setAvisoDiretoExtra({
+              payload,
+              acordoAnteriorId: conflitoFinal.acordoId,
+              operadorAntId:    conflitoFinal.operadorId,
+              operadorAntNome:  conflitoFinal.operadorNome,
+              operadorAntSetor: opConflitoData?.setores?.nome,
+              nrLabel:          nrParaVerificar,
+              labelCampo:       labelNr,
+            });
+            setLoading(false);
+            return;
+          }
+
+          // CASO C: fluxo antigo — autorização do líder
           setConflito({
             acordoId:     conflitoFinal.acordoId,
             operadorId:   conflitoFinal.operadorId,
@@ -505,6 +581,61 @@ export default function AcordoForm() {
     }
   }
 
+  // ── Direto/Extra (CASO B): tabula como DIRETO e rebaixa anterior a EXTRA ──
+  async function confirmarDiretoExtraForm() {
+    if (!avisoDiretoExtra) return;
+    const uid = perfilLocal?.id ?? user?.id ?? '';
+    if (!uid || !empresa?.id) return;
+    setConfirmandoDiretoExtra(true);
+    try {
+      const { payload, acordoAnteriorId, operadorAntId, operadorAntNome, nrLabel: nrL, labelCampo } = avisoDiretoExtra;
+      const p = perfilLocal ?? perfil;
+
+      // 1. Rebaixar anterior para extra
+      const { error: errReb } = await supabase.from('acordos')
+        .update({
+          tipo_vinculo:          'extra',
+          vinculo_operador_id:   uid,
+          vinculo_operador_nome: p?.nome ?? 'Operador',
+        })
+        .eq('id', acordoAnteriorId);
+      if (errReb) { toast.error(`Erro ao rebaixar acordo: ${errReb.message}`); return; }
+
+      // 2. Liberar NR antigo
+      await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
+
+      // 3. Inserir novo como direto
+      const payloadDireto = { ...payload, tipo_vinculo: 'direto' };
+      const resultErr = await salvarAcordo(payloadDireto, uid);
+      if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); return; }
+
+      // 4. Buscar dados do anterior para a notificação
+      const { data: acData } = await supabase
+        .from('acordos')
+        .select('nome_cliente')
+        .eq('id', acordoAnteriorId)
+        .maybeSingle();
+
+      // 5. Notificar o operador anterior
+      await criarNotificacao({
+        usuario_id: operadorAntId,
+        titulo:     '🔄 Seu acordo foi convertido em EXTRA',
+        mensagem:
+          `O ${labelCampo} "${nrL}" (${acData?.nome_cliente ?? '—'}) foi tabulado como DIRETO ` +
+          `pelo operador ${p?.nome ?? 'outro operador'}. Seu acordo continua ativo, porém agora como EXTRA.`,
+        empresa_id: empresa.id,
+      });
+
+      setAvisoDiretoExtra(null);
+      toast.success(`Acordo tabulado como DIRETO. ${operadorAntNome} foi notificado.`);
+      navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+    } finally {
+      setConfirmandoDiretoExtra(false);
+    }
+  }
+
   // ── Render ────────────────────────────────────────────────────────────
   if (loadingData) return <div className="p-6 text-center text-muted-foreground">Carregando...</div>;
   if (!perfilLocal && perfilLoading) return <div className="p-6 text-center text-muted-foreground">Carregando perfil...</div>;
@@ -525,6 +656,17 @@ export default function AcordoForm() {
         onSenhaChange={setLiderSenha}
         onAutorizar={autorizarTransferencia}
         onCancel={() => { setConflito(null); setLiderEmail(''); setLiderSenha(''); }}
+      />
+
+      <ModalAvisoDiretoExtra
+        aberto={!!avisoDiretoExtra}
+        operadorNome={avisoDiretoExtra?.operadorAntNome ?? ''}
+        operadorSetor={avisoDiretoExtra?.operadorAntSetor}
+        nrLabel={avisoDiretoExtra?.nrLabel ?? ''}
+        labelCampo={avisoDiretoExtra?.labelCampo ?? ''}
+        confirmando={confirmandoDiretoExtra}
+        onConfirmar={confirmarDiretoExtraForm}
+        onCancel={() => setAvisoDiretoExtra(null)}
       />
 
       {/* Cabeçalho */}

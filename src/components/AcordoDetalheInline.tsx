@@ -13,6 +13,7 @@ import { motion } from 'framer-motion';
 import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
+  ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
@@ -27,6 +28,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { criarNotificacao } from '@/services/notificacoes.service';
 import {
   formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -81,6 +85,114 @@ export interface AcordoDetalheInlineProps {
   onClose: () => void;
   /** Callback após edição bem-sucedida (recebe o acordo principal atualizado) */
   onSaved?: (atualizado: Acordo) => void;
+  /** Callback quando um acordo extra é removido (convertido para direto por outro usuário) */
+  onAcordoRemovido?: (id: string) => void;
+}
+
+// ─── Modal: Converter Extra → Direto ─────────────────────────────────────────
+// Se o usuário atual for elite/lider/administrador/super_admin/gerencia/diretoria,
+// não é necessária autorização — executa direto.
+// Caso contrário, pede email+senha do líder.
+interface ModalExtraParaDiretoProps {
+  open:           boolean;
+  onClose:        () => void;
+  onConfirmar:    (liderCreds: { email: string; senha: string } | null) => Promise<void>;
+  executando:     boolean;
+  operadorDiretoNome: string;
+  nrLabel:        string;
+  precisaAutorizacao: boolean;
+}
+
+function ModalExtraParaDireto({
+  open, onClose, onConfirmar, executando, operadorDiretoNome, nrLabel, precisaAutorizacao,
+}: ModalExtraParaDiretoProps) {
+  const [email, setEmail] = useState('');
+  const [senha, setSenha] = useState('');
+
+  useEffect(() => {
+    if (!open) { setEmail(''); setSenha(''); }
+  }, [open]);
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <DialogContent className="max-w-md" aria-describedby="dlg-extra-para-direto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            <ArrowLeftRight className="w-5 h-5 shrink-0" />
+            Tornar este acordo DIRETO
+          </DialogTitle>
+          <DialogDescription id="dlg-extra-para-direto" asChild>
+            <div className="space-y-3 pt-1">
+              <p className="text-sm text-foreground/80">
+                Este acordo ({nrLabel}) ficará como <strong>Direto</strong> para você
+                e será <strong>removido</strong> do operador{' '}
+                <strong className="text-foreground">{operadorDiretoNome}</strong>.
+              </p>
+              <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3">
+                <p className="text-xs text-yellow-700 dark:text-yellow-400 flex items-start gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    O operador <strong>{operadorDiretoNome}</strong> será notificado e o acordo
+                    dele será movido para a lixeira (retido por 3 dias).
+                  </span>
+                </p>
+              </div>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+
+        {precisaAutorizacao && (
+          <div className="space-y-3 pt-1">
+            <div className="flex items-center gap-2 border-t border-border pt-3">
+              <Shield className="w-4 h-4 text-primary shrink-0" />
+              <p className="text-sm font-semibold">Autorização do Líder</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">E-mail do Líder / Admin</Label>
+              <Input
+                type="email" placeholder="lider@empresa.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="h-9 text-sm" disabled={executando}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Senha</Label>
+              <Input
+                type="password" placeholder="••••••••"
+                value={senha}
+                onChange={(e) => setSenha(e.target.value)}
+                className="h-9 text-sm" disabled={executando}
+                autoComplete="current-password"
+              />
+            </div>
+          </div>
+        )}
+
+        {!precisaAutorizacao && (
+          <div className="rounded-lg bg-primary/10 border border-primary/30 p-3 text-xs text-primary">
+            <Shield className="w-3.5 h-3.5 inline-block mr-1 shrink-0" />
+            Seu perfil já tem autorização — nenhuma senha adicional é necessária.
+          </div>
+        )}
+
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" className="flex-1" onClick={onClose} disabled={executando}>
+            Cancelar
+          </Button>
+          <Button
+            className="flex-1 gap-2"
+            onClick={() => onConfirmar(precisaAutorizacao ? { email, senha } : null)}
+            disabled={executando || (precisaAutorizacao && (!email.trim() || !senha.trim()))}
+          >
+            <ArrowLeftRight className="w-4 h-4" />
+            {executando ? 'Processando...' : 'Tornar Direto'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Campo somente-leitura ────────────────────────────────────────────────────
@@ -340,10 +452,12 @@ export function ModalEditarAcordoParcelado({
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 export function AcordoDetalheInline({
-  acordo, isPaguePlay, colSpan, onClose, onSaved,
+  acordo, isPaguePlay, colSpan, onClose, onSaved, onAcordoRemovido,
 }: AcordoDetalheInlineProps) {
   const statusLabels  = isPaguePlay ? STATUS_LABELS_PAGUEPLAY : STATUS_LABELS;
   const tipoLabels    = isPaguePlay ? TIPO_LABELS_PAGUEPLAY   : TIPO_LABELS;
+  const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
 
   // ── ESTADO LOCAL (deve vir ANTES de qualquer cálculo derivado) ────────────
   // Registros reais buscados do banco (mesmo grupo)
@@ -352,6 +466,9 @@ export function AcordoDetalheInline({
   const [marcandoPago,     setMarcandoPago]      = useState<string | null>(null);
   // Modal Editar Parcelado
   const [modalEditParcOpen, setModalEditParcOpen] = useState(false);
+  // Modal Extra → Direto
+  const [modalExtraDiretoOpen, setModalExtraDiretoOpen] = useState(false);
+  const [executandoExtraDireto, setExecutandoExtraDireto] = useState(false);
   // Acordo local (para reflectir edições sem fechar o detalhe)
   const [acordoLocal, setAcordoLocal] = useState<Acordo>(acordo);
 
@@ -437,6 +554,12 @@ export function AcordoDetalheInline({
                     {statusLabels[acordoLocal.status] ?? acordoLocal.status}
                   </span>
                   {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
+                  {acordoLocal.tipo_vinculo === 'extra' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/30 shadow-sm">
+                      <LinkIcon className="w-3 h-3" />
+                      Extra
+                    </span>
+                  )}
                   {deveExibirParcelas && (
                     <span className="text-[11px] font-mono bg-primary/10 text-primary px-1.5 py-0.5 rounded border border-primary/20">
                       Parcela {acordoLocal.numero_parcela ?? 1}/{totalParcelas}
@@ -445,6 +568,18 @@ export function AcordoDetalheInline({
                 </div>
                 {/* Botões de ação no cabeçalho */}
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Botão Acordo direto — só aparece se este acordo for Extra e o usuário for o dono do extra */}
+                  {acordoLocal.tipo_vinculo === 'extra' && perfil?.id === acordoLocal.operador_id && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={() => setModalExtraDiretoOpen(true)}
+                    >
+                      <ArrowLeftRight className="w-3 h-3" />
+                      Acordo direto
+                    </Button>
+                  )}
                   {/* Botão Editar: parcelado → abre ModalEditarAcordoParcelado; simples → usa o inline edit do pai */}
                   {deveExibirParcelas && (
                     <Button
@@ -462,6 +597,31 @@ export function AcordoDetalheInline({
                   </Button>
                 </div>
               </div>
+
+              {/* ─── Aviso de vínculo Direto/Extra ─── */}
+              {acordoLocal.tipo_vinculo === 'extra' && acordoLocal.vinculo_operador_nome && (
+                <div className="mb-4 px-3 py-2 rounded-lg bg-primary/8 border border-primary/25 flex items-start gap-2">
+                  <LinkIcon className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0 text-xs">
+                    <p className="font-semibold text-primary leading-tight">Acordo Extra</p>
+                    <p className="text-foreground/80 leading-tight">
+                      Vínculo com operador: <strong className="text-foreground">{acordoLocal.vinculo_operador_nome}</strong>
+                    </p>
+                  </div>
+                </div>
+              )}
+              {acordoLocal.tipo_vinculo === 'direto' && acordoLocal.vinculo_operador_nome && (
+                <div className="mb-4 px-3 py-2 rounded-lg bg-success/8 border border-success/25 flex items-start gap-2">
+                  <LinkIcon className="w-4 h-4 text-success shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0 text-xs">
+                    <p className="font-semibold text-success leading-tight">Acordo Direto (com Extra vinculado)</p>
+                    <p className="text-foreground/80 leading-tight">
+                      Existe um acordo EXTRA vinculado com o operador:{' '}
+                      <strong className="text-foreground">{acordoLocal.vinculo_operador_nome}</strong>
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* ─── Grid de campos ─── */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
@@ -648,6 +808,161 @@ export function AcordoDetalheInline({
           }}
         />
       )}
+
+      {/* Modal Extra → Direto (converter acordo extra em direto) */}
+      <ModalExtraParaDireto
+        open={modalExtraDiretoOpen}
+        onClose={() => setModalExtraDiretoOpen(false)}
+        executando={executandoExtraDireto}
+        operadorDiretoNome={acordoLocal.vinculo_operador_nome || 'outro operador'}
+        nrLabel={isPaguePlay ? `NR ${acordoLocal.nr_cliente ?? '—'}` : `Inscrição ${acordoLocal.inscricao ?? '—'}`}
+        precisaAutorizacao={!perfil || !['administrador', 'super_admin', 'lider', 'elite', 'gerencia', 'diretoria'].includes(String(perfil.perfil || '').toLowerCase())}
+        onConfirmar={async (liderCreds) => {
+          if (!perfil || !empresa) return;
+          setExecutandoExtraDireto(true);
+          try {
+            // 1. Se precisa autorização, validar credenciais do líder antes de prosseguir
+            //    Uso do padrão REST (como em AcordoNovoInline) — não altera a sessão do operador atual.
+            let liderNomeAutorizador: string | null = null;
+            if (liderCreds) {
+              const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
+              const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+              // 1.1 Autenticar líder via REST (sem persistir sessão local)
+              const authRes = await fetch(
+                `${supabaseUrl}/auth/v1/token?grant_type=password`,
+                {
+                  method:  'POST',
+                  headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
+                  body:    JSON.stringify({ email: liderCreds.email.trim(), password: liderCreds.senha }),
+                },
+              );
+              if (!authRes.ok) {
+                alert('Credenciais de líder inválidas.');
+                setExecutandoExtraDireto(false);
+                return;
+              }
+              const authData = await authRes.json() as { user?: { id: string }; access_token?: string };
+              const liderUid = authData.user?.id;
+              const liderToken = authData.access_token;
+              if (!liderUid || !liderToken) {
+                alert('Credenciais de líder inválidas.');
+                setExecutandoExtraDireto(false);
+                return;
+              }
+
+              // 1.2 Verificar nível do líder
+              const perfilRes = await fetch(
+                `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
+                {
+                  headers: {
+                    apikey: supabaseAnon,
+                    Authorization: `Bearer ${liderToken}`,
+                  },
+                },
+              );
+              if (!perfilRes.ok) {
+                alert('Erro ao verificar perfil do líder.');
+                setExecutandoExtraDireto(false);
+                return;
+              }
+              const perfilArr = await perfilRes.json() as Array<{ perfil: string; nome: string }>;
+              const liderPerfilData = Array.isArray(perfilArr) && perfilArr.length > 0 ? perfilArr[0] : null;
+              if (!liderPerfilData || !['lider', 'administrador', 'super_admin', 'elite', 'gerencia', 'diretoria'].includes(liderPerfilData.perfil)) {
+                alert('O usuário informado não tem permissão de líder ou administrador.');
+                setExecutandoExtraDireto(false);
+                return;
+              }
+              liderNomeAutorizador = liderPerfilData.nome;
+            }
+
+            // 2. Buscar o acordo original "direto" que está vinculado a este extra
+            const campoChave = isPaguePlay ? 'nr_cliente' : 'inscricao';
+            const valorChave = isPaguePlay ? acordoLocal.nr_cliente : acordoLocal.inscricao;
+            if (!valorChave) {
+              alert('Não foi possível identificar o registro deste acordo.');
+              setExecutandoExtraDireto(false);
+              return;
+            }
+
+            const { data: acordoDiretoOriginal, error: errBuscaDireto } = await supabase
+              .from('acordos')
+              .select('*')
+              .eq('empresa_id', empresa.id)
+              .eq(campoChave, valorChave)
+              .eq('tipo_vinculo', 'direto')
+              .neq('id', acordoLocal.id)
+              .maybeSingle();
+
+            if (errBuscaDireto) {
+              console.error(errBuscaDireto);
+              alert('Erro ao localizar o acordo direto original.');
+              setExecutandoExtraDireto(false);
+              return;
+            }
+
+            // 3. O acordo direto original (se existir) é removido do operador original
+            if (acordoDiretoOriginal) {
+              const { error: errDel } = await supabase
+                .from('acordos')
+                .delete()
+                .eq('id', acordoDiretoOriginal.id);
+              if (errDel) {
+                console.error(errDel);
+                alert('Erro ao remover o acordo original do outro operador.');
+                setExecutandoExtraDireto(false);
+                return;
+              }
+              // Notificar o operador original
+              try {
+                await criarNotificacao({
+                  usuario_id: acordoDiretoOriginal.operador_id,
+                  empresa_id: empresa.id,
+                  titulo: '⚠️ Acordo convertido em direto',
+                  mensagem:
+                    `O operador ${perfil.nome} assumiu como direto o acordo do ` +
+                    `${isPaguePlay ? `NR ${valorChave}` : `cliente de inscrição ${valorChave}`}. ` +
+                    `O acordo foi removido do seu painel.` +
+                    (liderNomeAutorizador ? ` (Autorizado por ${liderNomeAutorizador})` : ''),
+                });
+              } catch (e) {
+                console.warn('Falha ao notificar operador original', e);
+              }
+            }
+
+            // 4. Promover este acordo extra → direto, limpando vínculo
+            const { data: acordoAtualizado, error: errUpdate } = await supabase
+              .from('acordos')
+              .update({
+                tipo_vinculo: 'direto',
+                vinculo_operador_id: null,
+                vinculo_operador_nome: null,
+              })
+              .eq('id', acordoLocal.id)
+              .select()
+              .single();
+
+            if (errUpdate) {
+              console.error(errUpdate);
+              alert('Erro ao converter acordo para direto.');
+              setExecutandoExtraDireto(false);
+              return;
+            }
+
+            setAcordoLocal(acordoAtualizado as Acordo);
+            onSaved?.(acordoAtualizado as Acordo);
+            if (acordoDiretoOriginal) {
+              onAcordoRemovido?.(acordoDiretoOriginal.id);
+            }
+            setModalExtraDiretoOpen(false);
+          } catch (e) {
+            console.error(e);
+            alert('Erro inesperado ao converter para direto.');
+          } finally {
+            setExecutandoExtraDireto(false);
+          }
+        }}
+      />
     </>
   );
 }

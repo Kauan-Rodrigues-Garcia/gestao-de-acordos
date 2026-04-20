@@ -44,7 +44,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
-import { supabase, Acordo } from '@/lib/supabase';
+import { supabase, Acordo, Perfil } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
@@ -61,6 +61,7 @@ import { enviarParaLixeira }    from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
+import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 
@@ -80,6 +81,80 @@ export interface ModalAutorizacaoNRProps {
   onSenhaChange:  (v: string) => void;
   onAutorizar:    () => void;
   onCancel:       () => void;
+}
+
+// ── Modal simplificado: usuário SEM lógica Direto/Extra tentando tabular um
+//     NR vinculado a um operador COM lógica ativa. Não pede autorização —
+//     apenas avisa e permite confirmar. O outro operador é notificado.
+export interface ModalAvisoDiretoExtraProps {
+  aberto:          boolean;
+  operadorNome:    string;
+  operadorSetor?:  string;
+  nrLabel:         string;
+  labelCampo:      string;
+  confirmando:     boolean;
+  onConfirmar:     () => void;
+  onCancel:        () => void;
+}
+
+export function ModalAvisoDiretoExtra({
+  aberto, operadorNome, operadorSetor, nrLabel, labelCampo,
+  confirmando, onConfirmar, onCancel,
+}: ModalAvisoDiretoExtraProps) {
+  return (
+    <Dialog open={aberto} onOpenChange={(open) => { if (!open) onCancel(); }}>
+      <DialogContent className="max-w-md" aria-describedby="dlg-aviso-direto-extra">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-primary">
+            <AlertTriangle className="w-5 h-5 shrink-0" />
+            Vínculo detectado — operador Direto/Extra
+          </DialogTitle>
+
+          <DialogDescription id="dlg-aviso-direto-extra" asChild>
+            <div className="space-y-3 pt-1">
+              <p className="text-sm text-foreground/80">
+                O {labelCampo}{' '}
+                <strong className="font-mono text-foreground">{nrLabel}</strong>{' '}
+                já possui um vínculo com o operador{' '}
+                <strong className="text-foreground">{operadorNome}</strong>
+                {operadorSetor ? (<> do setor <strong className="text-foreground">{operadorSetor}</strong></>) : null}.
+              </p>
+
+              <div className="rounded-lg bg-primary/10 border border-primary/30 p-3 space-y-1">
+                <p className="text-xs font-semibold text-primary flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  Como a lógica Direto e Extra está ativa para este operador, nenhuma autorização é necessária.
+                </p>
+                <p className="text-xs text-foreground/80">
+                  Ao continuar, este acordo será tabulado como <strong>Direto</strong> para você e o acordo
+                  anterior de <strong>{operadorNome}</strong> passará a ser <strong>Extra</strong>. O operador
+                  receberá uma notificação automaticamente.
+                </p>
+              </div>
+            </div>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex gap-2 pt-1">
+          <Button
+            variant="outline"
+            className="flex-1"
+            onClick={onCancel}
+            disabled={confirmando}
+          >
+            Cancelar
+          </Button>
+          <Button
+            className="flex-1 gap-2"
+            onClick={onConfirmar}
+            disabled={confirmando}
+          >
+            {confirmando ? 'Tabulando...' : 'Tabular como Direto'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
 }
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -297,6 +372,7 @@ export function AcordoNovoInline({
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
 
   // Campos do formulário
   const [nomeCliente,  setNomeCliente]  = useState('');
@@ -318,6 +394,20 @@ export function AcordoNovoInline({
   const [liderEmail,  setLiderEmail]  = useState('');
   const [liderSenha,  setLiderSenha]  = useState('');
   const [autorizando, setAutorizando] = useState(false);
+
+  // Aviso Direto/Extra — quando o usuário logado NÃO tem a lógica ativa
+  // mas o operador do conflito TEM: não pede autorização, só confirma.
+  interface PendingAvisoDiretoExtra {
+    payload:         Record<string, unknown>;
+    acordoAnteriorId: string;
+    operadorAntId:    string;
+    operadorAntNome:  string;
+    operadorAntSetor?: string;
+    nrLabel:         string;
+    labelCampo:      string;
+  }
+  const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
+  const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
 
   const tipos      = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
   const tipoAtual  = tipos.find((t) => t.value === tipo);
@@ -430,7 +520,69 @@ export function AcordoNovoInline({
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
           }
-          // Pertence a outro operador → exigir autorização do líder
+
+          // ── NOVA LÓGICA: Direto e Extra ─────────────────────────────────────
+          // Resolve se o USUÁRIO ATUAL tem a lógica ativa
+          const atualTemLogica = isAtivoParaUsuario(
+            perfil.id,
+            perfil.setor_id ?? null,
+            (perfil as Perfil & { equipe_id?: string | null }).equipe_id ?? null,
+          );
+
+          // Buscar setor/equipe e perfil do operador do conflito
+          const { data: opConflitoData } = await supabase
+            .from('perfis')
+            .select('id, nome, setor_id, equipe_id, setores(nome)')
+            .eq('id', conflitoFinal.operadorId)
+            .maybeSingle() as { data: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null };
+
+          const opConflitoTemLogica = opConflitoData
+            ? isAtivoParaUsuario(opConflitoData.id, opConflitoData.setor_id ?? null, opConflitoData.equipe_id ?? null)
+            : false;
+
+          // ── CASO A: usuário atual tem a lógica ativa → insere como EXTRA ──
+          if (atualTemLogica) {
+            const payloadExtra = {
+              ...payload,
+              tipo_vinculo:          'extra',
+              vinculo_operador_id:   conflitoFinal.operadorId,
+              vinculo_operador_nome: conflitoFinal.operadorNome,
+            };
+            const inseridoExtra = await executarSalvar(payloadExtra);
+            if (inseridoExtra) {
+              // Notificar o operador DIRETO que agora há um extra
+              await criarNotificacao({
+                usuario_id: conflitoFinal.operadorId,
+                titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
+                mensagem:
+                  `O ${label} "${nrParaVerificar}" (${nomeCliente.trim() || '—'}) ` +
+                  `agora possui um acordo EXTRA tabulado pelo operador ${perfil.nome ?? 'outro operador'}. ` +
+                  `O seu acordo (Direto) continua ativo normalmente.`,
+                empresa_id: empresa.id,
+              });
+              onSaved(inseridoExtra);
+              toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
+            }
+            return;
+          }
+
+          // ── CASO B: usuário atual NÃO tem, mas operador do conflito TEM ──
+          //   → aviso simplificado (sem autorização). Ao confirmar, o novo
+          //     acordo entra como DIRETO e o antigo vira EXTRA (rebaixamento).
+          if (opConflitoTemLogica) {
+            setAvisoDiretoExtra({
+              payload,
+              acordoAnteriorId: conflitoFinal.acordoId,
+              operadorAntId:    conflitoFinal.operadorId,
+              operadorAntNome:  conflitoFinal.operadorNome,
+              operadorAntSetor: opConflitoData?.setores?.nome,
+              nrLabel:          nrParaVerificar,
+              labelCampo:       label,
+            });
+            return;
+          }
+
+          // ── CASO C: fluxo antigo — autorização do líder ─────────────────────
           setConflito({
             acordoId:     conflitoFinal.acordoId,
             operadorId:   conflitoFinal.operadorId,
@@ -656,6 +808,79 @@ export function AcordoNovoInline({
     setLiderSenha('');
   }
 
+  // ── Confirmar fluxo Direto/Extra (CASO B): usuário atual NÃO tem a lógica,
+  //     operador do conflito TEM. Não precisa de autorização: tabula como
+  //     direto e rebaixa o antigo para extra.
+  async function confirmarDiretoExtra() {
+    if (!avisoDiretoExtra || !perfil?.id || !empresa?.id) return;
+    setConfirmandoDiretoExtra(true);
+    try {
+      const {
+        payload, acordoAnteriorId, operadorAntId, operadorAntNome, nrLabel, labelCampo,
+      } = avisoDiretoExtra;
+
+      // Buscar acordo anterior completo para usar nas notificações
+      const { data: acordoAntData } = await supabase
+        .from('acordos')
+        .select('id, nome_cliente, valor, vencimento, status, nr_cliente, instituicao, tipo_vinculo, vinculo_operador_id')
+        .eq('id', acordoAnteriorId)
+        .maybeSingle();
+
+      // 1. Rebaixar o acordo anterior para EXTRA (e vinculá-lo ao novo operador direto)
+      const { error: errRebaixar } = await supabase
+        .from('acordos')
+        .update({
+          tipo_vinculo:          'extra',
+          vinculo_operador_id:   perfil.id,
+          vinculo_operador_nome: perfil.nome ?? 'Operador',
+        })
+        .eq('id', acordoAnteriorId);
+
+      if (errRebaixar) {
+        toast.error(`Erro ao rebaixar acordo anterior: ${errRebaixar.message}`);
+        return;
+      }
+
+      // 2. Liberar o NR do operador anterior para permitir re-registro no novo
+      //    (delete em nr_registros; o trigger de INSERT criará o novo vínculo)
+      //    Como o trigger v2 não permite dois registros com mesmo NR, fazemos delete
+      //    explícito para evitar conflito de chave única.
+      await supabase
+        .from('nr_registros')
+        .delete()
+        .eq('acordo_id', acordoAnteriorId);
+
+      // 3. Inserir o novo acordo como DIRETO (padrão)
+      const payloadDireto = { ...payload, tipo_vinculo: 'direto' };
+      const inserido = await executarSalvar(payloadDireto);
+      if (!inserido) return;
+
+      // 4. Notificar o operador anterior (que agora é EXTRA)
+      await criarNotificacao({
+        usuario_id: operadorAntId,
+        titulo:     '🔄 Seu acordo foi convertido em EXTRA',
+        mensagem:
+          `O ${labelCampo} "${nrLabel}" (${acordoAntData?.nome_cliente ?? '—'}) ` +
+          `foi tabulado como DIRETO pelo operador ${perfil.nome ?? 'outro operador'}. ` +
+          `Seu acordo continua ativo, porém agora como EXTRA vinculado a ele.`,
+        empresa_id: empresa.id,
+      });
+
+      // 5. Fechar modal e notificar sucesso
+      setAvisoDiretoExtra(null);
+      onSaved(inserido);
+      toast.success(`Acordo tabulado como DIRETO. ${operadorAntNome} foi notificado.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado ao tabular');
+    } finally {
+      setConfirmandoDiretoExtra(false);
+    }
+  }
+
+  function cancelarAvisoDiretoExtra() {
+    setAvisoDiretoExtra(null);
+  }
+
   // ─────────────────────────────────────────────────────────────────────────
   //  RENDER — PaguePay
   // ─────────────────────────────────────────────────────────────────────────
@@ -854,6 +1079,17 @@ export function AcordoNovoInline({
           onAutorizar={autorizarTransferencia}
           onCancel={cancelarConflito}
         />
+
+        <ModalAvisoDiretoExtra
+          aberto={!!avisoDiretoExtra}
+          operadorNome={avisoDiretoExtra?.operadorAntNome ?? ''}
+          operadorSetor={avisoDiretoExtra?.operadorAntSetor}
+          nrLabel={avisoDiretoExtra?.nrLabel ?? ''}
+          labelCampo={avisoDiretoExtra?.labelCampo ?? ''}
+          confirmando={confirmandoDiretoExtra}
+          onConfirmar={confirmarDiretoExtra}
+          onCancel={cancelarAvisoDiretoExtra}
+        />
       </>
     );
   }
@@ -1043,6 +1279,17 @@ export function AcordoNovoInline({
         onSenhaChange={setLiderSenha}
         onAutorizar={autorizarTransferencia}
         onCancel={cancelarConflito}
+      />
+
+      <ModalAvisoDiretoExtra
+        aberto={!!avisoDiretoExtra}
+        operadorNome={avisoDiretoExtra?.operadorAntNome ?? ''}
+        operadorSetor={avisoDiretoExtra?.operadorAntSetor}
+        nrLabel={avisoDiretoExtra?.nrLabel ?? ''}
+        labelCampo={avisoDiretoExtra?.labelCampo ?? ''}
+        confirmando={confirmandoDiretoExtra}
+        onConfirmar={confirmarDiretoExtra}
+        onCancel={cancelarAvisoDiretoExtra}
       />
     </>
   );

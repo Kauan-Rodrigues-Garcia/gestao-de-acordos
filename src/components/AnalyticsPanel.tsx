@@ -298,6 +298,8 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
+  // Métricas Direto & Extra (incluindo "Agendado restante no mês") valem para PaguePlay e Bookplay.
+  const mostraAgendadoRestante = tenantSlug === 'pagueplay' || tenantSlug === 'bookplay';
   // Bookplay (não-PaguePay): analytics sempre expandido, sem botão de ocultar
   const alwaysOpen = !isPP;
   const [open, setOpen] = useState(() => !isPP);
@@ -308,6 +310,8 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     valorAgendadoMes,
     valorNaoPago,
     valorAgendadoHoje,
+    valorAgendadoRestanteMes,
+    totalAgendadoRestanteMes,
     valorHOMes,
     valorHOAgendado,
     totalAcordosMes,
@@ -650,6 +654,22 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                       value={String(totalAcordosMes)}
                       sub={`${totalPendentes} pendentes`}
                     />
+                    {/* Card 5b: Agendado restante no mês (PaguePlay e Bookplay) */}
+                    {mostraAgendadoRestante && (
+                      <MetricCard
+                        label="Agendado restante no mês"
+                        icon={<Clock className="w-4 h-4" />}
+                        accentColor="#a855f7"
+                        gradientFrom="#a855f7"
+                        trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
+                        value={
+                          <span className="text-purple-500">
+                            {formatCurrency(valorAgendadoRestanteMes)}
+                          </span>
+                        }
+                        sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
+                      />
+                    )}
                     {/* Card 6: Meta */}
                     <MetricCard
                       label={labelMeta}
