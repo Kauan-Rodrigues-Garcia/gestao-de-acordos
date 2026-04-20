@@ -113,7 +113,7 @@ export default function Registro() {
       }
 
       // Garantir logout mesmo se o Supabase criar sessão automaticamente
-      try { await supabase.auth.signOut(); } catch (_) {}
+      try { await supabase.auth.signOut(); } catch { /* ignore */ }
 
       setSucesso(true);
     } catch (e) {

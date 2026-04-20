@@ -119,9 +119,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
 
     // Nome único e estável por empresa — criado apenas UMA VEZ
     const channelName = `rt-acordos-central-${empresaId}`;
-    let channel: RealtimeChannel;
-
-    channel = supabase
+    const channel: RealtimeChannel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',

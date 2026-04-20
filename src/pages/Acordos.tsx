@@ -75,8 +75,9 @@ export default function Acordos() {
   const { empresa, tenantSlug } = useEmpresa();
   const isPP = isPaguePlay(tenantSlug);
 
-  // PaguePlay usa o Dashboard como tela principal de acordos — redirecionar
-  if (isPP) return <Navigate to="/" replace />;
+  // Nota: PaguePlay usa o Dashboard como tela principal — o redirecionamento
+  // é feito após todos os Hooks (ver antes do return principal), para não
+  // violar as regras de hooks (rules-of-hooks).
   const statusLabels = getStatusLabels(tenantSlug);
   const tipoLabels   = getTipoLabels(tenantSlug);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -434,6 +435,10 @@ export default function Acordos() {
     }
     return acordos;
   }, [acordos, activeTab]);
+
+  // PaguePlay usa o Dashboard como tela principal — redirecionar
+  // (esta verificação fica após todos os hooks para respeitar rules-of-hooks)
+  if (isPP) return <Navigate to="/" replace />;
 
   return (
     <div className="p-6">

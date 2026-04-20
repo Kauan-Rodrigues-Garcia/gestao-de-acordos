@@ -111,8 +111,56 @@ export default function AdminDiretoExtra() {
     return idx;
   }, [configs]);
 
-  const isAtivo = (escopo: 'setor' | 'equipe' | 'usuario', id: string): boolean =>
+  // Config individual explícita (sem considerar herança)
+  const isAtivoExplicito = (escopo: 'setor' | 'equipe' | 'usuario', id: string): boolean =>
     configIndex.get(`${escopo}:${id}`) ?? false;
+
+  /**
+   * Status EFETIVO de um item, considerando herança:
+   *   • setor    → só o próprio setor (é o nível mais alto, nada herda para cima dele).
+   *   • equipe   → herda do setor da equipe quando não tem config própria.
+   *   • usuario  → herda da equipe quando não tem config própria;
+   *                depois herda do setor quando nem a equipe tem.
+   * Retorna ambos o estado final e a origem da ativação (para exibição).
+   */
+  type Origem = 'proprio' | 'equipe' | 'setor' | null;
+  function statusEfetivo(
+    escopo: 'setor' | 'equipe' | 'usuario',
+    item: SetorItem | EquipeItem | UsuarioItem,
+  ): { ativo: boolean; origem: Origem; origemNome?: string } {
+    // 1. Config explícita do próprio item
+    const propria = configIndex.get(`${escopo}:${item.id}`);
+    if (propria !== undefined) {
+      return { ativo: propria, origem: propria ? 'proprio' : null };
+    }
+
+    // 2. Usuário ou equipe podem herdar da equipe (usuário) ou do setor
+    if (escopo === 'usuario') {
+      const u = item as UsuarioItem;
+      if (u.equipe_id) {
+        const eq = configIndex.get(`equipe:${u.equipe_id}`);
+        if (eq) {
+          return { ativo: true, origem: 'equipe', origemNome: equipePorId.get(u.equipe_id) ?? '—' };
+        }
+      }
+      if (u.setor_id) {
+        const st = configIndex.get(`setor:${u.setor_id}`);
+        if (st) {
+          return { ativo: true, origem: 'setor', origemNome: setorPorId.get(u.setor_id) ?? '—' };
+        }
+      }
+    } else if (escopo === 'equipe') {
+      const e = item as EquipeItem;
+      if (e.setor_id) {
+        const st = configIndex.get(`setor:${e.setor_id}`);
+        if (st) {
+          return { ativo: true, origem: 'setor', origemNome: setorPorId.get(e.setor_id) ?? '—' };
+        }
+      }
+    }
+
+    return { ativo: false, origem: null };
+  }
 
   // ── Toggle genérico ───────────────────────────────────────────────────────
   async function toggle(escopo: 'setor' | 'equipe' | 'usuario', id: string, novoValor: boolean) {
@@ -164,12 +212,13 @@ export default function AdminDiretoExtra() {
       : usuarios;
   }, [usuarios, buscaUsuario]);
 
-  // ── Totais ativos por escopo (para badge no header de cada aba) ───────────
+  // ── Totais ativos por escopo (status EFETIVO — considera herança) ─────────
   const totais = useMemo(() => ({
-    setor:   configs.filter(c => c.escopo === 'setor'   && c.ativo).length,
-    equipe:  configs.filter(c => c.escopo === 'equipe'  && c.ativo).length,
-    usuario: configs.filter(c => c.escopo === 'usuario' && c.ativo).length,
-  }), [configs]);
+    setor:   setores.filter(s  => statusEfetivo('setor',   s).ativo).length,
+    equipe:  equipes.filter(e  => statusEfetivo('equipe',  e).ativo).length,
+    usuario: usuarios.filter(u => statusEfetivo('usuario', u).ativo).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [configs, setores, equipes, usuarios]);
 
   // ─────────────────────────────────────────────────────────────────────────
   return (
@@ -245,12 +294,20 @@ export default function AdminDiretoExtra() {
               <ListaToggle
                 emptyMsg={loading || loadingConfigs ? 'Carregando...' : 'Nenhum setor encontrado.'}
                 loading={loading || loadingConfigs}
-                items={setoresFiltrados.map(s => ({
-                  id: s.id,
-                  titulo: s.nome,
-                  ativo: isAtivo('setor', s.id),
-                  salvando: salvando === `setor:${s.id}`,
-                }))}
+                items={setoresFiltrados.map(s => {
+                  const st = statusEfetivo('setor', s);
+                  return {
+                    id: s.id,
+                    titulo: s.nome,
+                    ativo: st.ativo,
+                    origem: st.origem,
+                    origemNome: st.origemNome,
+                    // Setores não herdam de ninguém; switch sempre refletindo a config própria.
+                    ativoSwitch: isAtivoExplicito('setor', s.id),
+                    disabled: false,
+                    salvando: salvando === `setor:${s.id}`,
+                  };
+                })}
                 onToggle={(id, novo) => toggle('setor', id, novo)}
               />
             </TabsContent>
@@ -269,13 +326,23 @@ export default function AdminDiretoExtra() {
               <ListaToggle
                 emptyMsg={loading || loadingConfigs ? 'Carregando...' : 'Nenhuma equipe encontrada.'}
                 loading={loading || loadingConfigs}
-                items={equipesFiltradas.map(e => ({
-                  id: e.id,
-                  titulo: e.nome,
-                  subtitulo: e.setor_id ? `Setor: ${setorPorId.get(e.setor_id) ?? '—'}` : 'Sem setor',
-                  ativo: isAtivo('equipe', e.id),
-                  salvando: salvando === `equipe:${e.id}`,
-                }))}
+                items={equipesFiltradas.map(e => {
+                  const st = statusEfetivo('equipe', e);
+                  const herdadoDeSetor = st.origem === 'setor';
+                  return {
+                    id: e.id,
+                    titulo: e.nome,
+                    subtitulo: e.setor_id ? `Setor: ${setorPorId.get(e.setor_id) ?? '—'}` : 'Sem setor',
+                    ativo: st.ativo,
+                    origem: st.origem,
+                    origemNome: st.origemNome,
+                    // Switch mostra o efetivo; se veio de herança, fica travado e o usuário tem que
+                    // desativar o nível superior para alterar aqui.
+                    ativoSwitch: st.ativo,
+                    disabled: herdadoDeSetor,
+                    salvando: salvando === `equipe:${e.id}`,
+                  };
+                })}
                 onToggle={(id, novo) => toggle('equipe', id, novo)}
               />
             </TabsContent>
@@ -299,12 +366,18 @@ export default function AdminDiretoExtra() {
                   partesMeta.push(u.email);
                   if (u.setor_id)  partesMeta.push(`Setor: ${setorPorId.get(u.setor_id) ?? '—'}`);
                   if (u.equipe_id) partesMeta.push(`Equipe: ${equipePorId.get(u.equipe_id) ?? '—'}`);
+                  const st = statusEfetivo('usuario', u);
+                  const herdado = st.origem === 'equipe' || st.origem === 'setor';
                   return {
                     id: u.id,
                     titulo: u.nome,
                     subtitulo: partesMeta.join(' · '),
                     etiqueta: u.perfil,
-                    ativo: isAtivo('usuario', u.id),
+                    ativo: st.ativo,
+                    origem: st.origem,
+                    origemNome: st.origemNome,
+                    ativoSwitch: st.ativo,
+                    disabled: herdado,
                     salvando: salvando === `usuario:${u.id}`,
                   };
                 })}
@@ -324,7 +397,11 @@ interface ListaToggleItem {
   titulo: string;
   subtitulo?: string;
   etiqueta?: string;
-  ativo: boolean;
+  ativo: boolean;                       // status EFETIVO (herdado ou próprio)
+  origem: 'proprio' | 'equipe' | 'setor' | null;
+  origemNome?: string;
+  ativoSwitch: boolean;                 // valor que o Switch exibe
+  disabled: boolean;                    // bloqueia o Switch quando ativação herdada
   salvando: boolean;
 }
 
@@ -345,39 +422,53 @@ function ListaToggle({
   }
   return (
     <div className="divide-y divide-border/60 border border-border/60 rounded-lg overflow-hidden">
-      {items.map(item => (
-        <div
-          key={item.id}
-          className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium text-sm truncate">{item.titulo}</p>
-              {item.etiqueta && (
-                <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal capitalize">
-                  {item.etiqueta}
-                </Badge>
+      {items.map(item => {
+        const herdado = item.origem === 'equipe' || item.origem === 'setor';
+        return (
+          <div
+            key={item.id}
+            className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-muted/30 transition-colors"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="font-medium text-sm truncate">{item.titulo}</p>
+                {item.etiqueta && (
+                  <Badge variant="outline" className="h-4 px-1.5 text-[10px] font-normal capitalize">
+                    {item.etiqueta}
+                  </Badge>
+                )}
+                {item.ativo && item.origem === 'proprio' && (
+                  <Badge className="h-4 px-1.5 text-[10px] bg-success/15 text-success border border-success/30">
+                    Ativo
+                  </Badge>
+                )}
+                {item.ativo && herdado && (
+                  <Badge className="h-4 px-1.5 text-[10px] bg-primary/15 text-primary border border-primary/30">
+                    Ativo (via {item.origem === 'equipe' ? 'equipe' : 'setor'})
+                  </Badge>
+                )}
+              </div>
+              {item.subtitulo && (
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{item.subtitulo}</p>
               )}
-              {item.ativo && (
-                <Badge className="h-4 px-1.5 text-[10px] bg-success/15 text-success border border-success/30">
-                  Ativo
-                </Badge>
+              {herdado && item.origemNome && (
+                <p className="text-[11px] text-primary/80 mt-0.5">
+                  Ativação herdada{item.origem === 'equipe' ? ' da equipe' : ' do setor'}{' '}
+                  <strong>{item.origemNome}</strong>. Para alterar, ajuste no nível superior.
+                </p>
               )}
             </div>
-            {item.subtitulo && (
-              <p className="text-xs text-muted-foreground truncate mt-0.5">{item.subtitulo}</p>
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {item.salvando && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+              <Switch
+                checked={item.ativoSwitch}
+                disabled={item.salvando || item.disabled}
+                onCheckedChange={(v) => onToggle(item.id, v)}
+              />
+            </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            {item.salvando && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
-            <Switch
-              checked={item.ativo}
-              disabled={item.salvando}
-              onCheckedChange={(v) => onToggle(item.id, v)}
-            />
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

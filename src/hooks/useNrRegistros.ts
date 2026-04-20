@@ -98,9 +98,8 @@ export function useNrRegistros(): UseNrRegistrosResult {
     if (!empresaId) return;
 
     const channelName = `rt-nr-registros-${empresaId}`;
-    let channel: RealtimeChannel;
 
-    channel = supabase
+    const channel: RealtimeChannel = supabase
       .channel(channelName)
       .on(
         'postgres_changes',

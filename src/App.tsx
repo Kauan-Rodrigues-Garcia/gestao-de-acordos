@@ -33,6 +33,7 @@ const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const AdminCargos       = lazy(() => import('@/pages/AdminCargos'));
+const NotificacoesDetalhadas = lazy(() => import('@/pages/NotificacoesDetalhadas'));
 
 function PageLoader() {
   return (
@@ -181,6 +182,11 @@ export default function App() {
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
               <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=permissoes'} replace />} />
+
+              {/* Notificações Detalhadas (página dedicada) */}
+              <Route path="/notificacoes" element={
+                <LayoutWrapper><NotificacoesDetalhadas /></LayoutWrapper>
+              } />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

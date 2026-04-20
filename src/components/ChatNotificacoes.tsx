@@ -7,15 +7,15 @@
  * Atualiza em tempo real via Supabase Realtime (REPLICA IDENTITY FULL).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageCircle, X, Check, CheckCheck, Trash2, Bell,
-  AlertTriangle, Info, ArrowLeft, Clock, CheckCircle2,
-  Maximize2, Minimize2, History,
+  AlertTriangle, Info, ArrowLeft,
+  Maximize2, Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { supabase, Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
@@ -152,9 +152,9 @@ function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir }: Moda
 
 export function ChatNotificacoes() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [aberto, setAberto]             = useState(false);
   const [expandido, setExpandido]       = useState(false);
-  const [abaAtiva, setAbaAtiva]         = useState<'recentes' | 'detalhadas'>('recentes');
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading]           = useState(false);
   const [animarBadge, setAnimarBadge]   = useState(false);
@@ -162,28 +162,6 @@ export function ChatNotificacoes() {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const naoLidas = notificacoes.filter(n => !n.lida).length;
-
-  // Notificações dos últimos 5 dias, ordenadas por dia (desc) + timestamp (desc)
-  const notificacoesDetalhadas = notificacoes.filter(n => {
-    const diffMs = Date.now() - new Date(n.criado_em).getTime();
-    return diffMs <= 5 * 86_400_000;
-  });
-
-  // Agrupamento por dia (yyyy-mm-dd no fuso local) para a aba "Detalhadas"
-  const gruposDetalhadas = (() => {
-    const mapa = new Map<string, Notificacao[]>();
-    notificacoesDetalhadas.forEach(n => {
-      const d = new Date(n.criado_em);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const arr = mapa.get(key) ?? [];
-      arr.push(n);
-      mapa.set(key, arr);
-    });
-    // Ordenar cada grupo por criado_em desc
-    mapa.forEach(arr => arr.sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime()));
-    // Retornar array ordenado por chave desc (dias mais recentes primeiro)
-    return Array.from(mapa.entries()).sort(([a], [b]) => (a < b ? 1 : -1));
-  })();
 
   // ── Carregar notificações ─────────────────────────────────────────────
   const carregar = useCallback(async () => {
@@ -403,36 +381,9 @@ export function ChatNotificacoes() {
               </div>
             </div>
 
-            {/* Lista + Abas (Recentes | Detalhadas) */}
-            <Tabs
-              value={abaAtiva}
-              onValueChange={(v) => setAbaAtiva(v as 'recentes' | 'detalhadas')}
-              className="flex-1 flex flex-col min-h-0"
-            >
-              <TabsList className="mx-3 mt-2 h-8 grid grid-cols-2 shrink-0">
-                <TabsTrigger value="recentes" className="text-xs gap-1.5 data-[state=active]:bg-background">
-                  <Bell className="w-3.5 h-3.5" />
-                  Recentes
-                  {notificacoes.length > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/15 text-primary text-[10px] font-medium">
-                      {notificacoes.length > 99 ? '99+' : notificacoes.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-                <TabsTrigger value="detalhadas" className="text-xs gap-1.5 data-[state=active]:bg-background">
-                  <History className="w-3.5 h-3.5" />
-                  Detalhadas
-                  {notificacoesDetalhadas.length > 0 && (
-                    <span className="inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary/15 text-primary text-[10px] font-medium">
-                      {notificacoesDetalhadas.length > 99 ? '99+' : notificacoesDetalhadas.length}
-                    </span>
-                  )}
-                </TabsTrigger>
-              </TabsList>
-
-              {/* ─── Aba: Recentes (lista curta, comportamento original) ─── */}
-              <TabsContent value="recentes" className="flex-1 min-h-0 mt-2 data-[state=inactive]:hidden">
-                <ScrollArea className="h-full overflow-y-auto">
+            {/* Lista de Notificações (versão compacta do popup) */}
+            <div className="flex-1 flex flex-col min-h-0">
+              <ScrollArea className="flex-1 min-h-0 h-full overflow-y-auto">
                   {loading && notificacoes.length === 0 ? (
                     <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
                       Carregando...
@@ -510,125 +461,16 @@ export function ChatNotificacoes() {
                         <div className="px-4 py-2 text-center">
                           <button
                             className="text-[11px] text-primary hover:underline"
-                            onClick={() => { setAbaAtiva('detalhadas'); setExpandido(true); }}
+                            onClick={() => { setAberto(false); navigate('/notificacoes'); }}
                           >
-                            Ver {notificacoes.length - 30} mais em Detalhadas →
+                            Ver todas em Notificações Detalhadas →
                           </button>
                         </div>
                       )}
                     </div>
                   )}
                 </ScrollArea>
-              </TabsContent>
-
-              {/* ─── Aba: Detalhadas (últimos 5 dias, agrupadas por dia) ─── */}
-              <TabsContent value="detalhadas" className="flex-1 min-h-0 mt-2 data-[state=inactive]:hidden">
-                <ScrollArea className="h-full overflow-y-auto">
-                  {loading && notificacoesDetalhadas.length === 0 ? (
-                    <div className="flex items-center justify-center py-10 text-muted-foreground text-sm">
-                      Carregando...
-                    </div>
-                  ) : notificacoesDetalhadas.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
-                      <History className="w-8 h-8 opacity-20" />
-                      <p className="text-sm">Sem notificações nos últimos 5 dias</p>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col">
-                      <div className="px-4 py-2 text-[10px] uppercase tracking-wider text-muted-foreground/70 bg-muted/20 border-b border-border/60 shrink-0">
-                        Exibindo notificações dos últimos 5 dias
-                      </div>
-                      {gruposDetalhadas.map(([diaKey, itens]) => {
-                        // Formatar o dia para exibição amigável
-                        const [ano, mes, dia] = diaKey.split('-');
-                        const dataObj = new Date(Number(ano), Number(mes) - 1, Number(dia));
-                        const hoje = new Date();
-                        hoje.setHours(0, 0, 0, 0);
-                        const diffDias = Math.round((hoje.getTime() - dataObj.getTime()) / 86_400_000);
-                        const labelDia =
-                          diffDias === 0 ? 'Hoje' :
-                          diffDias === 1 ? 'Ontem' :
-                          dataObj.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' });
-                        return (
-                          <div key={diaKey} className="flex flex-col">
-                            <div className="sticky top-0 z-[1] px-4 py-1.5 bg-background/95 backdrop-blur-sm border-b border-border/60 text-[11px] font-semibold text-foreground/80 capitalize flex items-center gap-2">
-                              <Clock className="w-3 h-3 text-primary" />
-                              {labelDia}
-                              <span className="text-[10px] text-muted-foreground font-normal">({itens.length})</span>
-                            </div>
-                            <div className="divide-y divide-border/60">
-                              {itens.map(n => (
-                                <motion.div
-                                  key={n.id}
-                                  layout
-                                  initial={{ opacity: 0, x: 12 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  exit={{ opacity: 0, x: -12 }}
-                                  className={cn(
-                                    'group flex gap-3 px-4 py-3 hover:bg-accent/40 transition-colors cursor-pointer select-none',
-                                    !n.lida && 'bg-primary/5 border-l-2 border-l-primary/60'
-                                  )}
-                                  onClick={() => abrirDetalhe(n)}
-                                  title="Clique para ver detalhes"
-                                >
-                                  {iconeNotificacao(n.titulo, 'w-4 h-4')}
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <p className={cn(
-                                        'text-sm font-semibold leading-snug',
-                                        !n.lida ? 'text-foreground' : 'text-muted-foreground',
-                                      )}>
-                                        {n.titulo}
-                                      </p>
-                                      <span className="text-[10px] text-muted-foreground/70 shrink-0 mt-0.5 font-mono">
-                                        {dataFormatada(n.criado_em).split(' ')[1] /* só hh:mm */}
-                                      </span>
-                                    </div>
-                                    <p className="text-xs text-foreground/75 mt-1 leading-relaxed whitespace-pre-line">
-                                      {n.mensagem}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-1.5">
-                                      {!n.lida ? (
-                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
-                                          <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Não lida
-                                        </span>
-                                      ) : (
-                                        <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70">
-                                          <CheckCircle2 className="w-3 h-3" /> Lida
-                                        </span>
-                                      )}
-                                      <span className="text-[10px] text-muted-foreground/60">{tempoRelativo(n.criado_em)}</span>
-                                    </div>
-                                  </div>
-                                  <div className="flex flex-col items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-                                    {!n.lida && (
-                                      <button
-                                        className="w-6 h-6 rounded-full hover:bg-primary/20 flex items-center justify-center text-primary/60 hover:text-primary transition-colors"
-                                        title="Marcar como lida"
-                                        onClick={e => { e.stopPropagation(); marcarLida(n.id); }}
-                                      >
-                                        <Check className="w-3.5 h-3.5" />
-                                      </button>
-                                    )}
-                                    <button
-                                      className="w-6 h-6 rounded-full hover:bg-destructive/10 flex items-center justify-center text-muted-foreground/50 hover:text-destructive transition-colors"
-                                      title="Excluir"
-                                      onClick={e => { e.stopPropagation(); excluirNotificacao(n.id); }}
-                                    >
-                                      <X className="w-3.5 h-3.5" />
-                                    </button>
-                                  </div>
-                                </motion.div>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
+            </div>
 
             {/* Rodapé */}
             {notificacoes.length > 0 && (

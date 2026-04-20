@@ -28,7 +28,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Building2, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp,
+  Camera, Loader2, Trash2, TrendingUp, Bell,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -61,6 +61,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Setores',          icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
   { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'] },
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
+  { label: 'Notificações',    icon: Bell,            to: '/notificacoes',                 roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
   { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'] },
 ];
 

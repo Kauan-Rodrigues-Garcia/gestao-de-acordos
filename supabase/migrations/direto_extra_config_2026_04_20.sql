@@ -127,3 +127,29 @@ COMMENT ON COLUMN public.direto_extra_config.escopo    IS 'setor | equipe | usua
 COMMENT ON COLUMN public.direto_extra_config.referencia_id IS 'ID do setor, equipe ou usuário (conforme escopo)';
 COMMENT ON COLUMN public.acordos.tipo_vinculo          IS 'direto = acordo principal; extra = acordo adicional sobre um NR já vinculado a outro operador';
 COMMENT ON COLUMN public.acordos.vinculo_operador_id   IS 'Operador que possui o vínculo DIRETO do mesmo NR (preenchido somente quando tipo_vinculo = extra)';
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- ─── 3. Recriar a view `acordos_deduplicados` ───────────────────────────────
+-- A view foi originalmente criada em 2026-04-17 com `SELECT a.*`. Embora
+-- essa sintaxe deveria herdar novas colunas automaticamente, o PostgreSQL
+-- materializa a lista de colunas no momento da criação da view — ou seja,
+-- as colunas `tipo_vinculo`, `vinculo_operador_id` e `vinculo_operador_nome`
+-- adicionadas acima NÃO aparecem em SELECT via view até que ela seja
+-- recriada. Recriamos aqui para garantir que a listagem de acordos traga
+-- os novos campos e que a UI consiga exibir corretamente os acordos Extra.
+-- ═══════════════════════════════════════════════════════════════════════════
+DROP VIEW IF EXISTS public.acordos_deduplicados;
+
+CREATE VIEW public.acordos_deduplicados AS
+SELECT DISTINCT ON (
+  COALESCE(a.acordo_grupo_id::text, a.id::text)
+)
+  a.*
+FROM public.acordos a
+ORDER BY
+  COALESCE(a.acordo_grupo_id::text, a.id::text),
+  a.numero_parcela DESC NULLS LAST,
+  a.criado_em DESC;
+
+COMMENT ON VIEW public.acordos_deduplicados IS
+  'Acordos deduplicados por acordo_grupo_id (mantém apenas a parcela com maior numero_parcela de cada grupo). Recriada em 2026-04-20 após adição das colunas tipo_vinculo / vinculo_operador_id / vinculo_operador_nome.';
