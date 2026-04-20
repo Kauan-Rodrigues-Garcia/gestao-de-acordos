@@ -42,6 +42,12 @@ CREATE INDEX IF NOT EXISTS idx_direto_extra_config_ativo
 -- ─── RLS ───────────────────────────────────────────────────────────────────
 ALTER TABLE public.direto_extra_config ENABLE ROW LEVEL SECURITY;
 
+-- Policies idempotentes: dropam antes de recriar para permitir reexecução
+DROP POLICY IF EXISTS "direto_extra_config_select" ON public.direto_extra_config;
+DROP POLICY IF EXISTS "direto_extra_config_insert" ON public.direto_extra_config;
+DROP POLICY IF EXISTS "direto_extra_config_update" ON public.direto_extra_config;
+DROP POLICY IF EXISTS "direto_extra_config_delete" ON public.direto_extra_config;
+
 -- Todos autenticados podem ler (necessário para verificação em tempo real)
 CREATE POLICY "direto_extra_config_select"
   ON public.direto_extra_config FOR SELECT
@@ -98,7 +104,13 @@ CREATE TRIGGER trg_direto_extra_config_updated_at
   FOR EACH ROW EXECUTE FUNCTION public.set_direto_extra_config_updated_at();
 
 -- ─── Realtime ──────────────────────────────────────────────────────────────
-ALTER PUBLICATION supabase_realtime ADD TABLE public.direto_extra_config;
+-- Adiciona a tabela à publicação do Realtime (idempotente — ignora se já existir)
+DO $$
+BEGIN
+  ALTER PUBLICATION supabase_realtime ADD TABLE public.direto_extra_config;
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END $$;
 
 -- ─── 2. Colunas em acordos ─────────────────────────────────────────────────
 ALTER TABLE public.acordos
