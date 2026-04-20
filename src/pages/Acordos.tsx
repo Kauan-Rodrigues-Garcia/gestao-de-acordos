@@ -5,7 +5,7 @@ import {
   Plus, Search, MessageSquare, Edit,
   Filter, RefreshCw, X,
   Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2,
-  Layers, Building2,
+  Layers, Building2, PhoneIncoming, ArrowLeftRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ import {
   isPaguePlay, getStatusLabels, getTipoLabels,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isPerfilLider,
+  isSetorReceptivo, TIPO_RECEPTIVO_LABELS, TIPO_RECEPTIVO_COLORS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
@@ -81,6 +82,9 @@ export default function Acordos() {
   const tipoLabels   = getTipoLabels(tenantSlug);
   const [searchParams, setSearchParams] = useSearchParams();
 
+  // Detectar se o usuário logado é do setor Receptivo
+  const isReceptivo = isSetorReceptivo(perfil?.setores?.nome);
+
   // Estados locais sincronizados com URL
   const [busca, setBusca]           = useState(searchParams.get('busca') || '');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
@@ -94,6 +98,9 @@ export default function Acordos() {
   const isElite = perfil?.perfil === 'elite';
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
+
+  // ── Filtro exclusivo do Receptivo: 'todos' | 'direto' | 'extra' ──────────
+  const [filtroReceptivo, setFiltroReceptivo] = useState<'todos' | 'direto' | 'extra'>('todos');
 
   // Carregar equipes do setor para Líder/Elite
   useEffect(() => {
@@ -429,11 +436,16 @@ export default function Acordos() {
   // Analítico: apenas acordos que NÃO são pago nem nao_pago
   const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
   const acordosParaExibir = useMemo(() => {
+    let lista = acordos;
     if (activeTab === 'analitico') {
-      return acordos.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
+      lista = lista.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
     }
-    return acordos;
-  }, [acordos, activeTab]);
+    // ── Filtro Receptivo: só aplicado quando o usuário é do Receptivo ─────
+    if (isReceptivo && filtroReceptivo !== 'todos') {
+      lista = lista.filter(a => (a as any).tipo_receptivo === filtroReceptivo);
+    }
+    return lista;
+  }, [acordos, activeTab, isReceptivo, filtroReceptivo]);
 
   return (
     <div className="p-6">
@@ -556,6 +568,138 @@ export default function Acordos() {
             </button>
           ))}
         </div>
+
+        {/* ── Painel Receptivo — separação Direto / Extra (apenas no Analítico) ── */}
+        {isReceptivo && activeTab === 'analitico' && (() => {
+          const analiticoBase = acordos.filter(a => !['pago', 'nao_pago'].includes(a.status));
+          const qtdDireto = analiticoBase.filter(a => (a as any).tipo_receptivo === 'direto' || !(a as any).tipo_receptivo).length;
+          const qtdExtra  = analiticoBase.filter(a => (a as any).tipo_receptivo === 'extra').length;
+          const valorDireto = analiticoBase.filter(a => (a as any).tipo_receptivo === 'direto' || !(a as any).tipo_receptivo).reduce((s, a) => s + (Number(a.valor) || 0), 0);
+          const valorExtra  = analiticoBase.filter(a => (a as any).tipo_receptivo === 'extra').reduce((s, a) => s + (Number(a.valor) || 0), 0);
+          return (
+            <div className="mb-4 rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/5 to-blue-500/5 p-4">
+              {/* Header */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-violet-500/15">
+                  <PhoneIncoming className="w-3.5 h-3.5 text-violet-500" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide leading-none">
+                    Receptivo — Analítico
+                  </p>
+                  <p className="text-[11px] text-muted-foreground leading-none mt-0.5">
+                    Distribuição dos acordos ativos por classificação
+                  </p>
+                </div>
+              </div>
+
+              {/* Cards Direto / Extra */}
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                {/* Todos */}
+                <button
+                  onClick={() => setFiltroReceptivo('todos')}
+                  className={cn(
+                    'group flex flex-col gap-1 rounded-xl border p-3 text-left transition-all',
+                    filtroReceptivo === 'todos'
+                      ? 'border-primary bg-primary/10 shadow-sm'
+                      : 'border-border bg-card hover:border-primary/40 hover:bg-accent/30',
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Todos</span>
+                    {filtroReceptivo === 'todos' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                    )}
+                  </div>
+                  <span className="text-lg font-extrabold tabular-nums text-foreground leading-none">
+                    {qtdDireto + qtdExtra}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatCurrency(valorDireto + valorExtra)}
+                  </span>
+                </button>
+
+                {/* Direto */}
+                <button
+                  onClick={() => setFiltroReceptivo('direto')}
+                  className={cn(
+                    'group flex flex-col gap-1 rounded-xl border p-3 text-left transition-all',
+                    filtroReceptivo === 'direto'
+                      ? 'border-blue-500 bg-blue-500/10 shadow-sm shadow-blue-500/20'
+                      : 'border-border bg-card hover:border-blue-500/40 hover:bg-blue-500/5',
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Hash className="w-2.5 h-2.5 text-blue-500" />
+                      <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 uppercase tracking-wide">
+                        {TIPO_RECEPTIVO_LABELS.direto}
+                      </span>
+                    </div>
+                    {filtroReceptivo === 'direto' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                    )}
+                  </div>
+                  <span className="text-lg font-extrabold tabular-nums text-blue-600 dark:text-blue-400 leading-none">
+                    {qtdDireto}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatCurrency(valorDireto)}
+                  </span>
+                </button>
+
+                {/* Extra */}
+                <button
+                  onClick={() => setFiltroReceptivo('extra')}
+                  className={cn(
+                    'group flex flex-col gap-1 rounded-xl border p-3 text-left transition-all',
+                    filtroReceptivo === 'extra'
+                      ? 'border-violet-500 bg-violet-500/10 shadow-sm shadow-violet-500/20'
+                      : 'border-border bg-card hover:border-violet-500/40 hover:bg-violet-500/5',
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <ArrowLeftRight className="w-2.5 h-2.5 text-violet-500" />
+                      <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 uppercase tracking-wide">
+                        {TIPO_RECEPTIVO_LABELS.extra}
+                      </span>
+                    </div>
+                    {filtroReceptivo === 'extra' && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500" />
+                    )}
+                  </div>
+                  <span className="text-lg font-extrabold tabular-nums text-violet-600 dark:text-violet-400 leading-none">
+                    {qtdExtra}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {formatCurrency(valorExtra)}
+                  </span>
+                </button>
+              </div>
+
+              {/* Barra proporcional */}
+              {(qtdDireto + qtdExtra) > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Direto: {Math.round((qtdDireto / (qtdDireto + qtdExtra)) * 100)}%</span>
+                    <span>Extra: {Math.round((qtdExtra / (qtdDireto + qtdExtra)) * 100)}%</span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden flex">
+                    <div
+                      className="h-full rounded-l-full bg-blue-500 transition-all duration-500"
+                      style={{ width: `${Math.round((qtdDireto / (qtdDireto + qtdExtra)) * 100)}%` }}
+                    />
+                    <div
+                      className="h-full rounded-r-full bg-violet-500 transition-all duration-500"
+                      style={{ width: `${Math.round((qtdExtra / (qtdDireto + qtdExtra)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Seletor de visão Líder/Elite ── */}
         {(isLider || isElite) && equipesDoSetor.length > 0 && (
@@ -865,6 +1009,19 @@ export default function Acordos() {
                               </td>
                               <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
                                 {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
+                                {/* Badge Receptivo: exibe Direto/Extra apenas para usuário do Receptivo */}
+                                {isReceptivo && (a as any).tipo_receptivo && (
+                                  <span className={cn(
+                                    'ml-1.5 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border',
+                                    TIPO_RECEPTIVO_COLORS[(a as any).tipo_receptivo] ?? '',
+                                  )}>
+                                    {(a as any).tipo_receptivo === 'extra'
+                                      ? <ArrowLeftRight className="w-2 h-2" />
+                                      : <Hash className="w-2 h-2" />
+                                    }
+                                    {TIPO_RECEPTIVO_LABELS[(a as any).tipo_receptivo]}
+                                  </span>
+                                )}
                               </td>
                             </>
                           )}

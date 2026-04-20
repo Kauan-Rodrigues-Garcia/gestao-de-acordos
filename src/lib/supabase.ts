@@ -23,6 +23,13 @@ export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admi
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
 export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 
+/**
+ * Classificação exclusiva do setor Receptivo.
+ * - 'direto': acordo próprio do operador Receptivo (sem vínculo externo)
+ * - 'extra':  acordo vinculado com outro setor (dois operadores compartilham o acordo)
+ */
+export type TipoReceptivo = 'direto' | 'extra';
+
 export interface Empresa {
   id: string;
   nome: string;
@@ -87,6 +94,15 @@ export interface Acordo {
   acordo_grupo_id?: string | null;
   /** Número desta parcela dentro do grupo (1-based) */
   numero_parcela?: number | null;
+  /**
+   * Exclusivo do setor Receptivo.
+   * 'direto' = acordo próprio do operador Receptivo.
+   * 'extra'  = acordo vinculado a outro setor (dois operadores creditados).
+   * null     = não se aplica (demais setores).
+   */
+  tipo_receptivo?: TipoReceptivo | null;
+  /** ID do operador do outro setor vinculado (apenas para tipo_receptivo = 'extra') */
+  operador_vinculado_id?: string | null;
   criado_em: string;
   atualizado_em: string;
   perfis?: Perfil;
