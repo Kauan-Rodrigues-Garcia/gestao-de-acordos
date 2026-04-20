@@ -5,7 +5,7 @@ import {
   Plus, Search, MessageSquare, Edit,
   Filter, RefreshCw, X,
   Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2,
-  Layers, Building2, PhoneIncoming, ArrowLeftRight,
+  Layers, Building2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,7 +24,6 @@ import {
   isPaguePlay, getStatusLabels, getTipoLabels,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isPerfilLider,
-  isSetorReceptivo, TIPO_RECEPTIVO_LABELS, TIPO_RECEPTIVO_COLORS,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
@@ -81,16 +80,6 @@ export default function Acordos() {
   const statusLabels = getStatusLabels(tenantSlug);
   const tipoLabels   = getTipoLabels(tenantSlug);
   const [searchParams, setSearchParams] = useSearchParams();
-
-  // Detecta se o usuário logado é do setor Receptivo
-  const isReceptivo = isSetorReceptivo(perfil?.setores?.nome);
-
-  // ── Sub-aba exclusiva do Receptivo ───────────────────────────────────────
-  // 'todos' | 'direto' | 'extra' — filtra, ao lado das tabs principais,
-  // a lista de acordos mantendo o status selecionado (Analítico/Todos/Pagos/Não Pagos).
-  const [subTabReceptivo, setSubTabReceptivo] = useState<'todos' | 'direto' | 'extra'>(
-    (searchParams.get('rtipo') as 'todos' | 'direto' | 'extra') || 'todos',
-  );
 
   // Estados locais sincronizados com URL
   const [busca, setBusca]           = useState(searchParams.get('busca') || '');
@@ -161,13 +150,11 @@ export default function Acordos() {
       if (filtroData) params.set('data', filtroData); else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
-      // Sub-aba Receptivo (apenas se diferente de 'todos' e usuário for do Receptivo)
-      if (isReceptivo && subTabReceptivo !== 'todos') params.set('rtipo', subTabReceptivo); else params.delete('rtipo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, currentPage, subTabReceptivo, isReceptivo, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
   // Analítico = apenas acordos ativos (excluindo pago e nao_pago)
@@ -442,38 +429,11 @@ export default function Acordos() {
   // Analítico: apenas acordos que NÃO são pago nem nao_pago
   const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
   const acordosParaExibir = useMemo(() => {
-    let lista = acordos;
     if (activeTab === 'analitico') {
-      lista = lista.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
+      return acordos.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
     }
-    // ── Filtro Receptivo: aplicado em TODAS as tabs quando usuário é do Receptivo ──
-    if (isReceptivo && subTabReceptivo !== 'todos') {
-      lista = lista.filter(a => {
-        const tr = (a as any).tipo_receptivo;
-        // Itens antigos sem classificação são considerados 'direto' por padrão
-        if (subTabReceptivo === 'direto') return tr === 'direto' || !tr;
-        return tr === 'extra';
-      });
-    }
-    return lista;
-  }, [acordos, activeTab, isReceptivo, subTabReceptivo]);
-
-  // ── Contagens Direto/Extra para badges das sub-abas (apenas Receptivo) ──
-  const countsReceptivo = useMemo(() => {
-    if (!isReceptivo) return { todos: 0, direto: 0, extra: 0 };
-    // A base respeita o status da tab principal ativa (assim as sub-abas
-    // refletem quantos itens existem DENTRO do escopo da tab principal).
-    let base = acordos;
-    if (activeTab === 'analitico') {
-      base = base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
-    }
-    const direto = base.filter(a => {
-      const tr = (a as any).tipo_receptivo;
-      return tr === 'direto' || !tr;
-    }).length;
-    const extra = base.filter(a => (a as any).tipo_receptivo === 'extra').length;
-    return { todos: base.length, direto, extra };
-  }, [acordos, activeTab, isReceptivo]);
+    return acordos;
+  }, [acordos, activeTab]);
 
   return (
     <div className="p-6">
@@ -596,64 +556,6 @@ export default function Acordos() {
             </button>
           ))}
         </div>
-
-        {/* ── Sub-abas Receptivo (DIRETO / EXTRA) — exclusivo do setor Receptivo ── */}
-        {isReceptivo && (
-          <div className="mb-4 rounded-xl border border-violet-500/25 bg-gradient-to-r from-violet-500/[0.04] to-blue-500/[0.04] p-1.5">
-            <div className="flex items-center justify-between px-2 py-1.5 mb-1.5">
-              <div className="flex items-center gap-2">
-                <div className="flex items-center justify-center w-6 h-6 rounded-md bg-violet-500/15">
-                  <PhoneIncoming className="w-3 h-3 text-violet-500" />
-                </div>
-                <div>
-                  <p className="text-[11px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide leading-none">
-                    Receptivo
-                  </p>
-                  <p className="text-[10px] text-muted-foreground leading-none mt-0.5">
-                    Direto = próprio · Extra = vínculo com outro setor
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-1.5">
-              {([
-                { key: 'todos',  label: 'Todos',            count: countsReceptivo.todos,  active: 'border-primary bg-primary text-primary-foreground shadow-sm',
-                  idle: 'border-border bg-background hover:border-primary/40 hover:bg-accent/30',
-                  icon: <Layers className="w-3 h-3" /> },
-                { key: 'direto', label: TIPO_RECEPTIVO_LABELS.direto, count: countsReceptivo.direto, active: 'border-blue-500 bg-blue-500 text-white shadow-sm shadow-blue-500/30',
-                  idle: 'border-border bg-background text-blue-600 dark:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5',
-                  icon: <Hash className="w-3 h-3" /> },
-                { key: 'extra',  label: TIPO_RECEPTIVO_LABELS.extra,  count: countsReceptivo.extra,  active: 'border-violet-500 bg-violet-500 text-white shadow-sm shadow-violet-500/30',
-                  idle: 'border-border bg-background text-violet-600 dark:text-violet-400 hover:border-violet-500/40 hover:bg-violet-500/5',
-                  icon: <ArrowLeftRight className="w-3 h-3" /> },
-              ] as const).map(sub => {
-                const isActive = subTabReceptivo === sub.key;
-                return (
-                  <button
-                    key={sub.key}
-                    onClick={() => { setSubTabReceptivo(sub.key as typeof subTabReceptivo); setCurrentPage(1); }}
-                    className={cn(
-                      'flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border text-xs font-semibold transition-all',
-                      isActive ? sub.active : sub.idle,
-                    )}
-                  >
-                    {sub.icon}
-                    <span>{sub.label}</span>
-                    <span className={cn(
-                      'inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold tabular-nums',
-                      isActive
-                        ? 'bg-white/25 text-white'
-                        : 'bg-muted text-muted-foreground',
-                    )}>
-                      {sub.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
 
         {/* ── Seletor de visão Líder/Elite ── */}
         {(isLider || isElite) && equipesDoSetor.length > 0 && (
@@ -962,21 +864,7 @@ export default function Acordos() {
                                 </span>
                               </td>
                               <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span>{(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}</span>
-                                  {/* Badge Direto/Extra — apenas para usuário do Receptivo */}
-                                  {isReceptivo && (a as any).tipo_receptivo && (
-                                    <span className={cn(
-                                      'inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold border',
-                                      TIPO_RECEPTIVO_COLORS[(a as any).tipo_receptivo] ?? '',
-                                    )}>
-                                      {(a as any).tipo_receptivo === 'extra'
-                                        ? <ArrowLeftRight className="w-2 h-2" />
-                                        : <Hash className="w-2 h-2" />}
-                                      {TIPO_RECEPTIVO_LABELS[(a as any).tipo_receptivo]}
-                                    </span>
-                                  )}
-                                </div>
+                                {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
                               </td>
                             </>
                           )}

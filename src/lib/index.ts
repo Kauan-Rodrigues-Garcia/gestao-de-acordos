@@ -240,34 +240,6 @@ export function getMaxParcelas(slug: string): number {
   return isPaguePlay(slug) ? PARCELAS_MAX_PAGUEPLAY : PARCELAS_MAX_DEFAULT;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Setor Receptivo — vínculo entre operadores de setores distintos
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Nome canônico do setor Receptivo (comparação é case-insensitive) */
-export const NOME_SETOR_RECEPTIVO = 'Receptivo';
-
-/**
- * Retorna true se o nome do setor corresponde ao setor Receptivo.
- * A comparação é case-insensitive e tolerante a espaços (trim).
- */
-export function isSetorReceptivo(nomeSetor: string | null | undefined): boolean {
-  if (!nomeSetor) return false;
-  return nomeSetor.trim().toLowerCase() === NOME_SETOR_RECEPTIVO.toLowerCase();
-}
-
-/** Rótulos de exibição para a classificação Receptivo */
-export const TIPO_RECEPTIVO_LABELS: Record<string, string> = {
-  direto: 'Direto',
-  extra:  'Extra',
-};
-
-/** Cores para badges/abas do tipo Receptivo */
-export const TIPO_RECEPTIVO_COLORS: Record<string, string> = {
-  direto: 'bg-blue-500/15 text-blue-600 border-blue-500/30',
-  extra:  'bg-violet-500/15 text-violet-600 border-violet-500/30',
-};
-
 /**
  * Extracts the Brazilian state code stored as a prefix in the observacoes field.
  * Format: "[ESTADO:SP]\nRest of text"
