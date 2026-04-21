@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
   formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -876,11 +877,17 @@ export function AcordoDetalheInline({
               liderNomeAutorizador = liderPerfilData.nome;
             }
 
-            // 2. Buscar o acordo original "direto" que está vinculado a este extra
-            const campoChave = isPaguePlay ? 'nr_cliente' : 'inscricao';
-            const valorChave = isPaguePlay ? acordoLocal.nr_cliente : acordoLocal.inscricao;
-            if (!valorChave) {
-              alert('Não foi possível identificar o registro deste acordo.');
+            // 2. Buscar o acordo original "direto" que está vinculado a este extra.
+            //    IMPORTANTE: a chave de par é a MESMA usada em deduplicarVinculados:
+            //      • PaguePlay → instituicao  (a "Inscrição" do profissional)
+            //      • Bookplay  → nr_cliente   (o NR do cliente)
+            //    Versões antigas usavam "inscricao", campo que não existe na tabela
+            //    acordos, fazendo o SELECT sempre retornar null → o acordo DIRETO
+            //    nunca era removido → duplicação e quebra do bloqueio de NR.
+            const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
+            const valorChave = isPaguePlay ? acordoLocal.instituicao : acordoLocal.nr_cliente;
+            if (!valorChave || !String(valorChave).trim()) {
+              alert('Não foi possível identificar o registro deste acordo (chave de vínculo vazia).');
               setExecutandoExtraDireto(false);
               return;
             }
@@ -947,6 +954,32 @@ export function AcordoDetalheInline({
               alert('Erro ao converter acordo para direto.');
               setExecutandoExtraDireto(false);
               return;
+            }
+
+            // 5. Transferir o registro em nr_registros para o novo operador dono do acordo.
+            //    Sem isso, o bloqueio de NR continua apontando para o operador antigo
+            //    (ou para o acordo_id já deletado), permitindo novas tabulações duplicadas.
+            try {
+              await transferirNr({
+                empresaId:        empresa.id,
+                nrValue:          String(valorChave).trim(),
+                campo:            campoChave,
+                novoOperadorId:   perfil.id,
+                novoOperadorNome: perfil.nome ?? '',
+                novoAcordoId:     acordoLocal.id,
+              });
+            } catch (e) {
+              console.warn('[extra->direto] falha ao transferir nr_registros', e);
+            }
+
+            // 6. Se o acordo direto antigo foi deletado, garantir que nenhum
+            //    registro órfão ficou em nr_registros apontando para ele.
+            if (acordoDiretoOriginal) {
+              try {
+                await liberarNrPorAcordoId(acordoDiretoOriginal.id);
+              } catch (e) {
+                console.warn('[extra->direto] falha ao liberar nr_registros antigo', e);
+              }
             }
 
             setAcordoLocal(acordoAtualizado as Acordo);

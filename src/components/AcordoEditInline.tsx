@@ -13,6 +13,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { verificarNrRegistro, registrarNr } from '@/services/nr_registros.service';
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -33,6 +35,7 @@ interface AcordoEditInlineProps {
 const SEM_ESTADO_VALUE = '__sem_estado__';
 
 export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, onSaved, onCancel }: AcordoEditInlineProps) {
+  const { empresa } = useEmpresa();
   const [saving, setSaving] = useState(false);
 
   // Form state initialised from acordo
@@ -61,6 +64,48 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
     if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); return; }
     const parcelasNum = parseInt(parcelas || '1', 10);
 
+    // ─── Bloqueio de NR/Inscrição duplicado (edição) ──────────────────────
+    // Mesma validação feita no AcordoNovoInline/AcordoForm: quando o usuário
+    // ALTERA a chave (NR no Bookplay, Inscrição no PaguePlay) para um valor
+    // que já está registrado em outro acordo ativo, bloquear o salvamento.
+    //
+    // Chaves:
+    //   • PaguePlay → `instituicao` (Inscrição do profissional)
+    //   • Bookplay  → `nr_cliente`   (NR do cliente)
+    //
+    // O bloqueio ignora o próprio acordo (via `acordoIdExcluir`) e acordos
+    // com tipo_vinculo === 'extra' não deveriam existir como titulares no
+    // nr_registros (só Direto é titular lá), portanto a checagem é segura.
+    if (empresa?.id) {
+      const campoChave: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
+      const valorNovo = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+      const valorAntigo = isPaguePlay ? (acordo.instituicao ?? '').trim() : (acordo.nr_cliente ?? '').trim();
+
+      if (valorNovo && valorNovo !== valorAntigo) {
+        try {
+          const conflito = await verificarNrRegistro(
+            valorNovo,
+            empresa.id,
+            campoChave,
+            acordo.id, // ignora o próprio acordo
+          );
+          if (conflito) {
+            const label = isPaguePlay ? 'Inscrição' : 'NR';
+            toast.error(
+              `${label} ${valorNovo} já está vinculado ao operador ${conflito.operadorNome}. ` +
+              `Não é possível duplicar a tabulação pela edição.`,
+              { duration: 6000 },
+            );
+            return;
+          }
+        } catch (e) {
+          console.warn('[AcordoEditInline] falha ao verificar nr_registros', e);
+          // Em caso de falha na verificação, NÃO bloqueia — mas avisa.
+          toast.warning('Não foi possível validar duplicidade de NR/Inscrição. Salvando mesmo assim.');
+        }
+      }
+    }
+
     setSaving(true);
     try {
       const payload: Record<string, unknown> = {
@@ -88,6 +133,29 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
       if (error) {
         toast.error(`Erro ao salvar: ${error.message}`);
         return;
+      }
+
+      // Sincroniza nr_registros quando a chave NR/Inscrição mudou.
+      // Só sincroniza se este acordo for DIRETO — Extras não possuem titularidade
+      // no nr_registros (o Direto do par é que é titular).
+      if (empresa?.id && (acordo.tipo_vinculo ?? 'direto') === 'direto') {
+        const campoChave: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
+        const valorNovo = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+        const valorAntigo = isPaguePlay ? (acordo.instituicao ?? '').trim() : (acordo.nr_cliente ?? '').trim();
+        if (valorNovo && valorNovo !== valorAntigo) {
+          try {
+            await registrarNr({
+              empresaId:    empresa.id,
+              nrValue:      valorNovo,
+              campo:        campoChave,
+              operadorId:   acordo.operador_id,
+              operadorNome: (updated as Acordo)?.perfis?.nome ?? '',
+              acordoId:     acordo.id,
+            });
+          } catch (e) {
+            console.warn('[AcordoEditInline] falha ao sincronizar nr_registros', e);
+          }
+        }
       }
 
       toast.success('Acordo atualizado!');

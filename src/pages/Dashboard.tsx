@@ -36,6 +36,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { VinculoTag } from '@/components/VinculoTag';
+import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
@@ -45,6 +46,7 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 import { enviarParaLixeira }        from '@/services/lixeira.service';
+import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 
@@ -430,6 +432,18 @@ export default function Dashboard() {
   async function excluirAcordo(a: Acordo) {
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
+
+    // Tratar outro lado do vínculo ANTES do delete (se houver).
+    try {
+      await tratarExclusaoVinculo({
+        acordo: a,
+        isPaguePlay: isPP,
+        operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null,
+      });
+    } catch (e) {
+      console.warn('[Dashboard.excluirAcordo] tratarExclusaoVinculo falhou:', e);
+    }
+
     // Salvar na lixeira antes de excluir
     await enviarParaLixeira({
       acordo: a,
@@ -466,6 +480,18 @@ export default function Dashboard() {
     for (const id of selecionados) {
       setExcluindoId(id);
       const acordo = acordos.find(a => a.id === id);
+      // Tratar outro lado do vínculo ANTES do delete.
+      if (acordo) {
+        try {
+          await tratarExclusaoVinculo({
+            acordo,
+            isPaguePlay: isPP,
+            operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null,
+          });
+        } catch (e) {
+          console.warn('[Dashboard.excluirSelecionados] tratarExclusaoVinculo falhou:', e);
+        }
+      }
       // Salvar na lixeira antes de excluir
       if (acordo) {
         await enviarParaLixeira({
@@ -1054,8 +1080,8 @@ export default function Dashboard() {
                                 </td>
                                 {/* Operador — apenas PaguePay admin/lider */}
                                 {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
-                                  <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[100px]">
-                                    {a.operador_id ? (operadoresMap[a.operador_id] ?? '...') : '—'}
+                                  <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">
+                                    <OperadorCell acordo={a} operadoresMap={operadoresMap} />
                                   </td>
                                 )}
                                 {/* Ações */}

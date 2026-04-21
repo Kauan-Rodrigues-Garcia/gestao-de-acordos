@@ -33,8 +33,10 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 import { enviarParaLixeira }        from '@/services/lixeira.service';
+import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { VinculoTag } from '@/components/VinculoTag';
+import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
 
@@ -329,6 +331,19 @@ export default function Acordos() {
   async function excluirAcordo(a: Acordo) {
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
+
+    // 0. Tratar o OUTRO lado do vínculo Direto/Extra, se existir,
+    //    ANTES de remover este acordo. Garante que o par não fica órfão.
+    try {
+      await tratarExclusaoVinculo({
+        acordo: a,
+        isPaguePlay: isPP,
+        operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null,
+      });
+    } catch (e) {
+      console.warn('[excluirAcordo] tratarExclusaoVinculo falhou:', e);
+    }
+
     // 1. Salvar na lixeira antes de excluir
     await enviarParaLixeira({
       acordo: a,
@@ -370,6 +385,18 @@ export default function Acordos() {
     for (const id of selecionados) {
       setExcluindoId(id);
       const acordo = acordos.find(a => a.id === id);
+      // Tratar o outro lado do vínculo ANTES de excluir.
+      if (acordo) {
+        try {
+          await tratarExclusaoVinculo({
+            acordo,
+            isPaguePlay: isPP,
+            operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null,
+          });
+        } catch (e) {
+          console.warn('[excluirSelecionados] tratarExclusaoVinculo falhou:', e);
+        }
+      }
       // Salvar na lixeira antes de excluir
       if (acordo) {
         await enviarParaLixeira({
@@ -875,7 +902,7 @@ export default function Acordos() {
                               </td>
                               {/* Operador */}
                               <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                                {a.operador_id ? (operadoresMap[a.operador_id] || '...') : '—'}
+                                <OperadorCell acordo={a} operadoresMap={operadoresMap} />
                               </td>
                             </>
                           ) : (
