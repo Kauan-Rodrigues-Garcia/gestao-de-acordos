@@ -34,6 +34,7 @@ import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 import { enviarParaLixeira }        from '@/services/lixeira.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { VinculoTag } from '@/components/VinculoTag';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
 
@@ -815,21 +816,7 @@ export default function Acordos() {
                               <td className="px-3 py-2.5">
                                 <div className="flex items-center gap-1.5">
                                   <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
-                                  {a.tipo_vinculo === 'extra' && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
-                                      <Link2 className="w-2.5 h-2.5" /> Extra
-                                    </span>
-                                  )}
-                                  {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
-                                      <Link2 className="w-2.5 h-2.5" /> Vínculo
-                                    </span>
-                                  )}
-                                  {(a as AcordoComVinculo)._vinculoDuplo && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
-                                      <Link2 className="w-2.5 h-2.5" /> Direto+Extra
-                                    </span>
-                                  )}
+                                  <VinculoTag acordo={a} />
                                 </div>
                               </td>
                               {/* CPF — clica APENAS copia, não abre detalhe */}
@@ -907,21 +894,7 @@ export default function Acordos() {
                               <td className="px-3 py-2.5">
                                 <div className="flex items-center gap-1.5">
                                   <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
-                                  {a.tipo_vinculo === 'extra' && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
-                                      <Link2 className="w-2.5 h-2.5" /> Extra
-                                    </span>
-                                  )}
-                                  {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
-                                      <Link2 className="w-2.5 h-2.5" /> Vínculo
-                                    </span>
-                                  )}
-                                  {(a as AcordoComVinculo)._vinculoDuplo && (
-                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
-                                      <Link2 className="w-2.5 h-2.5" /> Direto+Extra
-                                    </span>
-                                  )}
+                                  <VinculoTag acordo={a} />
                                 </div>
                                 {a.instituicao && (
                                   <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>

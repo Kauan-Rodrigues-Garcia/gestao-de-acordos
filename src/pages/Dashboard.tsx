@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { supabase, Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { VinculoTag } from '@/components/VinculoTag';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
@@ -1000,21 +1001,7 @@ export default function Dashboard() {
                                     <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
                                     <div className="flex items-center gap-1.5 mt-0.5">
                                       <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
-                                      {a.tipo_vinculo === 'extra' && (
-                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
-                                          <Link2 className="w-2.5 h-2.5" /> Extra
-                                        </span>
-                                      )}
-                                      {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
-                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
-                                          <Link2 className="w-2.5 h-2.5" /> Vínculo
-                                        </span>
-                                      )}
-                                      {(a as AcordoComVinculo)._vinculoDuplo && (
-                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
-                                          <Link2 className="w-2.5 h-2.5" /> Direto+Extra
-                                        </span>
-                                      )}
+                                      <VinculoTag acordo={a} />
                                     </div>
                                   </div>
                                 </td>
