@@ -550,6 +550,16 @@ export function AcordoNovoInline({
             };
             const inseridoExtra = await executarSalvar(payloadExtra);
             if (inseridoExtra) {
+              // Atualiza o acordo DIRETO (do outro operador) para referenciar este EXTRA,
+              // permitindo que a UI exiba a tag "Existe um acordo EXTRA vinculado" para ele.
+              await supabase
+                .from('acordos')
+                .update({
+                  vinculo_operador_id:   perfil.id,
+                  vinculo_operador_nome: perfil.nome ?? 'Operador',
+                })
+                .eq('id', conflitoFinal.acordoId);
+
               // Notificar o operador DIRETO que agora há um extra
               await criarNotificacao({
                 usuario_id: conflitoFinal.operadorId,
@@ -850,8 +860,13 @@ export function AcordoNovoInline({
         .delete()
         .eq('acordo_id', acordoAnteriorId);
 
-      // 3. Inserir o novo acordo como DIRETO (padrão)
-      const payloadDireto = { ...payload, tipo_vinculo: 'direto' };
+      // 3. Inserir o novo acordo como DIRETO (com vínculo para o antigo, agora EXTRA)
+      const payloadDireto = {
+        ...payload,
+        tipo_vinculo: 'direto',
+        vinculo_operador_id:   operadorAntId,
+        vinculo_operador_nome: operadorAntNome,
+      };
       const inserido = await executarSalvar(payloadDireto);
       if (!inserido) return;
 

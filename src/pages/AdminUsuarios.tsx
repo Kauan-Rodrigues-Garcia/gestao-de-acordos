@@ -184,12 +184,18 @@ export default function AdminUsuarios() {
     setSaving(true);
     try {
       if (editando) {
-        const updatePayload: Record<string, unknown> = {
+        const updatePayload: Record<string, any> = {
           nome:       form.nome,
           perfil:     form.perfil,
           setor_id:   form.setor_id || null,
           empresa_id: empresaId,
         };
+
+        // Se o setor mudou, remove o usuário de qualquer equipe do setor antigo
+        if (editando.setor_id !== form.setor_id) {
+          updatePayload.equipe_id = null;
+        }
+
         if (form.usuario.trim()) {
           updatePayload.usuario = form.usuario.trim().toLowerCase();
         }
@@ -259,7 +265,10 @@ export default function AdminUsuarios() {
 
       const { data: linhasAtualizadas, error } = await supabase
         .from('perfis')
-        .update({ setor_id: moverSetorId })
+        .update({
+          setor_id: moverSetorId,
+          equipe_id: null
+        })
         .eq('id', moverUsuario.id)
         .select('id');
 

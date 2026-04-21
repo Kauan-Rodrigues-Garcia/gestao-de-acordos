@@ -21,6 +21,7 @@ import {
   TrendingDown, Target, Activity, PieChart,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
   ArrowUpRight, ArrowDownRight, Clock, Percent, Banknote, PiggyBank,
+  CalendarClock,
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -444,6 +445,8 @@ export default function PainelDiretoria() {
     totalPagosMes,
     totalNaoPagos,
     totalPendentes,
+    valorAgendadoRestanteMes,
+    totalAgendadoRestanteMes,
     porDia,
     porEquipe,
     porOperador,
@@ -723,9 +726,9 @@ export default function PainelDiretoria() {
       {/* ── Section: KPIs Principais ─────────────────────────────────────────── */}
       <SectionLabel>Indicadores-chave do mês</SectionLabel>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
         {loading ? (
-          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)
+          [...Array(5)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)
         ) : (
           <>
             <KpiCard
@@ -763,13 +766,22 @@ export default function PainelDiretoria() {
               delay={0.06}
             />
             <KpiCard
+              label="Agendado restante"
+              value={formatBRL(valorAgendadoRestanteMes)}
+              sub={`${totalAgendadoRestanteMes} pendentes no mês`}
+              icon={CalendarClock}
+              color="text-warning"
+              bg="bg-warning/10"
+              delay={0.12}
+            />
+            <KpiCard
               label="Não pagos"
               value={formatBRL(valorNaoPago)}
               sub={isPP ? `H.O. não pago: ${formatBRL(valorHONaoPago)}` : `${totalNaoPagos} acordos`}
               icon={AlertCircle}
               color="text-destructive"
               bg="bg-destructive/10"
-              delay={0.12}
+              delay={0.18}
             />
             <KpiCard
               label="Taxa de conversão"
@@ -778,7 +790,7 @@ export default function PainelDiretoria() {
               icon={CheckCircle2}
               color="text-chart-3"
               bg="bg-chart-3/10"
-              delay={0.18}
+              delay={0.24}
             />
           </>
         )}

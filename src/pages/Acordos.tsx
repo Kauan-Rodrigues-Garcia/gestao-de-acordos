@@ -33,6 +33,9 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { criarNotificacao }         from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }     from '@/services/nr_registros.service';
 import { enviarParaLixeira }        from '@/services/lixeira.service';
+import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import type { Perfil } from '@/lib/supabase';
 
 function buildMensagem(a: Acordo): string {
   if (a.status === 'nao_pago') {
@@ -118,6 +121,18 @@ export default function Acordos() {
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'analitico'
   );
 
+  // ── Filtro Direto / Extra ─────────────────────────────────────────────────
+  // Visível APENAS para usuários com a lógica Direto e Extra ativa.
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
+    perfil?.id ?? '',
+    perfil?.setor_id ?? null,
+    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+  );
+  const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
+    (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'
+  );
+
   // Mapa operadorId → nome
   const [operadoresMap, setOperadoresMap] = useState<Record<string, string>>({});
 
@@ -151,11 +166,12 @@ export default function Acordos() {
       if (filtroData) params.set('data', filtroData); else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
+      if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
   // Analítico = apenas acordos ativos (excluindo pago e nao_pago)
@@ -429,12 +445,31 @@ export default function Acordos() {
 
   // Analítico: apenas acordos que NÃO são pago nem nao_pago
   const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
-  const acordosParaExibir = useMemo(() => {
-    if (activeTab === 'analitico') {
-      return acordos.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
+
+  // Dedup aplicável a perfis com visão ampla (lider/elite/admin/gerencia/diretoria)
+  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
+
+  const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
+    let base: AcordoComVinculo[] = acordos;
+
+    // 1) Filtro por tipo de vínculo (aplicado quando ativo na UI)
+    if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
+      base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
     }
-    return acordos;
-  }, [acordos, activeTab]);
+
+    // 2) Dedup Direto+Extra para visão ampla (líder/elite/admin/etc)
+    //    Não dedup quando o filtro isola "apenas extra" ou "apenas direto",
+    //    pois nesses casos o usuário quer ver as duas pontas separadas.
+    if (visaoAmpla && filtroVinculo === 'todos') {
+      base = deduplicarVinculados(base, isPP);
+    }
+
+    // 3) Aba Analítico (filtro de status)
+    if (activeTab === 'analitico') {
+      return base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
+    }
+    return base;
+  }, [acordos, activeTab, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP]);
 
   // PaguePlay usa o Dashboard como tela principal — redirecionar
   // (esta verificação fica após todos os hooks para respeitar rules-of-hooks)
@@ -636,6 +671,19 @@ export default function Acordos() {
                   {Object.entries(tipoLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {usuarioTemLogicaDiretoExtra && (
+                <Select
+                  value={filtroVinculo}
+                  onValueChange={(v) => { setFiltroVinculo(v as 'todos' | 'direto' | 'extra'); setCurrentPage(1); }}
+                >
+                  <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Direto/Extra" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="todos">Direto e Extra</SelectItem>
+                    <SelectItem value="direto">Apenas Direto</SelectItem>
+                    <SelectItem value="extra">Apenas Extra</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
               <input
                 type="date"
                 value={filtroData}
@@ -765,7 +813,24 @@ export default function Acordos() {
                             <>
                               {/* Nome do profissional */}
                               <td className="px-3 py-2.5">
-                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                  {a.tipo_vinculo === 'extra' && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
+                                      <Link2 className="w-2.5 h-2.5" /> Extra
+                                    </span>
+                                  )}
+                                  {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
+                                      <Link2 className="w-2.5 h-2.5" /> Vínculo
+                                    </span>
+                                  )}
+                                  {(a as AcordoComVinculo)._vinculoDuplo && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
+                                      <Link2 className="w-2.5 h-2.5" /> Direto+Extra
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               {/* CPF — clica APENAS copia, não abre detalhe */}
                               <td className="px-3 py-2.5">
@@ -838,8 +903,26 @@ export default function Acordos() {
                                   <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
                                 </button>
                               </td>
+                              {/* Nome cliente (Bookplay) */}
                               <td className="px-3 py-2.5">
-                                <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                <div className="flex items-center gap-1.5">
+                                  <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                                  {a.tipo_vinculo === 'extra' && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
+                                      <Link2 className="w-2.5 h-2.5" /> Extra
+                                    </span>
+                                  )}
+                                  {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
+                                      <Link2 className="w-2.5 h-2.5" /> Vínculo
+                                    </span>
+                                  )}
+                                  {(a as AcordoComVinculo)._vinculoDuplo && (
+                                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
+                                      <Link2 className="w-2.5 h-2.5" /> Direto+Extra
+                                    </span>
+                                  )}
+                                </div>
                                 {a.instituicao && (
                                   <p className="text-[11px] text-muted-foreground/70 mt-0.5">{a.instituicao}</p>
                                 )}

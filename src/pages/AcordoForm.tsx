@@ -305,6 +305,16 @@ export default function AcordoForm() {
               setLoading(false);
               return;
             }
+            // Atualiza o acordo DIRETO (do outro operador) para referenciar este EXTRA,
+            // permitindo que a UI exiba a tag "Existe um acordo EXTRA vinculado" para ele.
+            await supabase
+              .from('acordos')
+              .update({
+                vinculo_operador_id:   uid,
+                vinculo_operador_nome: p?.nome ?? 'Operador',
+              })
+              .eq('id', conflitoFinal.acordoId);
+
             await criarNotificacao({
               usuario_id: conflitoFinal.operadorId,
               titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
@@ -605,7 +615,12 @@ export default function AcordoForm() {
       await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
 
       // 3. Inserir novo como direto
-      const payloadDireto = { ...payload, tipo_vinculo: 'direto' };
+      const payloadDireto = {
+        ...payload,
+        tipo_vinculo: 'direto',
+        vinculo_operador_id:   operadorAntId,
+        vinculo_operador_nome: operadorAntNome,
+      };
       const resultErr = await salvarAcordo(payloadDireto, uid);
       if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); return; }
 
