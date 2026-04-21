@@ -167,7 +167,9 @@ export default function Dashboard() {
     perfil?.setor_id ?? null,
     (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
   );
-  const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>('todos');
+  const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
+    (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'
+  );
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const [activeTab, setActiveTab]       = useState<'todos' | 'pagos' | 'nao_pagos'>(
@@ -290,11 +292,12 @@ export default function Dashboard() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
+      if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, currentPage, isPP]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, activeTab, filtroVinculo, currentPage, isPP]);
 
 
   const statusData = ['verificar_pendente', 'pago', 'nao_pago'].map(s => ({

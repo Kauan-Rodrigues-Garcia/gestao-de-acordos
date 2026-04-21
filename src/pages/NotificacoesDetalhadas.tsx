@@ -184,7 +184,18 @@ export default function NotificacoesDetalhadas() {
 
       {/* Conteúdo */}
       <ScrollArea className="flex-1 min-h-0 overflow-y-auto">
-        {loading && filtradas.length === 0 ? (
+        {erroCarregar ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-destructive">
+            <AlertTriangle className="w-10 h-10 opacity-60" />
+            <p className="text-sm font-medium">{erroCarregar}</p>
+            <button
+              className="text-xs text-primary hover:underline"
+              onClick={carregar}
+            >
+              Tentar novamente
+            </button>
+          </div>
+        ) : loading && filtradas.length === 0 ? (
           <div className="flex items-center justify-center py-20 text-muted-foreground text-sm">
             Carregando notificações...
           </div>
