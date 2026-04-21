@@ -33,6 +33,9 @@ import {
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { supabase, Acordo } from '@/lib/supabase';
+import type { Perfil } from '@/lib/supabase';
+import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -157,6 +160,16 @@ export default function Dashboard() {
   const [colFiltroEstado,  setColFiltroEstado]  = useState('');
   const [colFiltroDia,     setColFiltroDia]     = useState(''); // dia dentro do mesFiltro
   const [estadoDropdown,   setEstadoDropdown]   = useState(false);
+  // ── Filtro Direto / Extra ─────────────────────────────────────────────────
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
+    perfil?.id ?? '',
+    perfil?.setor_id ?? null,
+    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+  );
+  const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>('todos');
+  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
+
   const [activeTab, setActiveTab]       = useState<'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
@@ -224,11 +237,21 @@ export default function Dashboard() {
     [acordosHoje, hoje],
   );
 
-  // PaguePlay: reordenar e filtrar acordos com filtros de coluna
-  const acordosOrdenados = useMemo(() => {
-    if (!isPP) return acordos;
+  // PaguePlay: aplicar dedup Direto+Extra e filtros de coluna
+  const acordosOrdenados = useMemo<AcordoComVinculo[]>(() => {
+    // 1) Base para dedup/filtro de vínculo
+    let base: AcordoComVinculo[] = acordos;
+    if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
+      base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
+    }
+    if (visaoAmpla && filtroVinculo === 'todos') {
+      base = deduplicarVinculados(base, true); // Dashboard é sempre PP
+    }
+
+    // 2) Reordenar (PP)
+    if (!isPP) return base;
     const hoje_ = hoje;
-    let lista = [...acordos].sort((a, b) => {
+    let lista = [...base].sort((a, b) => {
       const aHoje = a.vencimento === hoje_ && a.status !== 'pago' ? 0 : 1;
       const bHoje = b.vencimento === hoje_ && b.status !== 'pago' ? 0 : 1;
       return aHoje - bHoje;
@@ -237,7 +260,7 @@ export default function Dashboard() {
     if (colFiltroEstado)  lista = lista.filter(a => extractEstado(a.observacoes) === colFiltroEstado);
     if (colFiltroDia)     lista = lista.filter(a => a.vencimento === `${mesFiltro}-${colFiltroDia.padStart(2,'0')}`);
     return lista;
-  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroDia, mesFiltro]);
+  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroDia, mesFiltro, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla]);
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
@@ -788,6 +811,19 @@ export default function Dashboard() {
                       }
                     </SelectContent>
                   </Select>
+                  {usuarioTemLogicaDiretoExtra && (
+                    <Select
+                      value={filtroVinculo}
+                      onValueChange={(v) => { setFiltroVinculo(v as 'todos' | 'direto' | 'extra'); setCurrentPage(1); }}
+                    >
+                      <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Direto/Extra" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todos">Direto e Extra</SelectItem>
+                        <SelectItem value="direto">Apenas Direto</SelectItem>
+                        <SelectItem value="extra">Apenas Extra</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
                   <input
                     type="date"
                     value={filtroData}
@@ -959,7 +995,24 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5">
                                   <div>
                                     <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
-                                    <p className="text-[10px] text-muted-foreground font-mono mt-0.5">{a.nome_cliente}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
+                                      {a.tipo_vinculo === 'extra' && (
+                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 border border-amber-500/30 uppercase" title={a.vinculo_operador_nome ? `Vínculo Extra — Direto com ${a.vinculo_operador_nome}` : 'Acordo Extra'}>
+                                          <Link2 className="w-2.5 h-2.5" /> Extra
+                                        </span>
+                                      )}
+                                      {a.tipo_vinculo === 'direto' && a.vinculo_operador_nome && (
+                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-700 border border-sky-500/30 uppercase" title={`Existe Extra vinculado: ${a.vinculo_operador_nome}`}>
+                                          <Link2 className="w-2.5 h-2.5" /> Vínculo
+                                        </span>
+                                      )}
+                                      {(a as AcordoComVinculo)._vinculoDuplo && (
+                                        <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-700 border border-violet-500/30 uppercase" title={`Direto + Extra (${(a as AcordoComVinculo)._vinculoExtraOperadorNome ?? 'outro operador'})`}>
+                                          <Link2 className="w-2.5 h-2.5" /> Direto+Extra
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </td>
                                 {/* Estado */}

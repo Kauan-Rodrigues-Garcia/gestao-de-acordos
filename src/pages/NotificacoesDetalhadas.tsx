@@ -57,23 +57,34 @@ export default function NotificacoesDetalhadas() {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
   const [filtro, setFiltro] = useState('');
+  const [erroCarregar, setErroCarregar] = useState<string | null>(null);
 
   const carregar = useCallback(async () => {
     if (!user?.id) return;
     setLoading(true);
-    // Carregar últimas 200 notificações dos últimos 5 dias
-    const cincoDiasAtras = new Date(Date.now() - 5 * 86_400_000).toISOString();
-    const { data, error } = await supabase
-      .from('notificacoes')
-      .select('*')
-      .eq('usuario_id', user.id)
-      .gte('criado_em', cincoDiasAtras)
-      .order('criado_em', { ascending: false })
-      .limit(500);
-    if (!error && data) {
-      setNotificacoes(data as Notificacao[]);
+    setErroCarregar(null);
+    try {
+      // Carregar últimas 200 notificações dos últimos 5 dias
+      const cincoDiasAtras = new Date(Date.now() - 5 * 86_400_000).toISOString();
+      const { data, error } = await supabase
+        .from('notificacoes')
+        .select('*')
+        .eq('usuario_id', user.id)
+        .gte('criado_em', cincoDiasAtras)
+        .order('criado_em', { ascending: false })
+        .limit(500);
+      if (error) {
+        console.error('[NotificacoesDetalhadas] erro ao carregar', error);
+        setErroCarregar('Erro ao carregar notificações — tente novamente.');
+      } else if (data) {
+        setNotificacoes(data as Notificacao[]);
+      }
+    } catch (e) {
+      console.error('[NotificacoesDetalhadas] erro ao carregar', e);
+      setErroCarregar('Erro ao carregar notificações — tente novamente.');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user?.id]);
 
   useEffect(() => { carregar(); }, [carregar]);

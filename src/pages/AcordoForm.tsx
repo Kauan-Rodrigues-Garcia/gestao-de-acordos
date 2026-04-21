@@ -287,9 +287,27 @@ export default function AcordoForm() {
             .eq('id', conflitoFinal.operadorId)
             .maybeSingle() as { data: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null };
 
-          const opConflitoTemLogica = opConflitoData
-            ? isAtivoParaUsuario(opConflitoData.id, opConflitoData.setor_id ?? null, opConflitoData.equipe_id ?? null)
+          // Fallback sem join (caso RLS bloqueie o join em setores na Bookplay)
+          let opConflitoDataEff = opConflitoData;
+          if (!opConflitoDataEff) {
+            const r2 = await supabase
+              .from('perfis')
+              .select('id, nome, setor_id, equipe_id')
+              .eq('id', conflitoFinal.operadorId)
+              .maybeSingle();
+            opConflitoDataEff = (r2.data as typeof opConflitoData) ?? null;
+          }
+
+          const opConflitoTemLogica = opConflitoDataEff
+            ? isAtivoParaUsuario(opConflitoDataEff.id, opConflitoDataEff.setor_id ?? null, opConflitoDataEff.equipe_id ?? null)
             : false;
+
+          console.info('[direto-extra/form]', {
+            atualTemLogica,
+            opConflitoTemLogica,
+            opConflitoDataEff,
+            conflitoFinal,
+          });
 
           // CASO A: usuário atual tem a lógica → tabula como EXTRA
           if (atualTemLogica) {
@@ -335,7 +353,7 @@ export default function AcordoForm() {
               acordoAnteriorId: conflitoFinal.acordoId,
               operadorAntId:    conflitoFinal.operadorId,
               operadorAntNome:  conflitoFinal.operadorNome,
-              operadorAntSetor: opConflitoData?.setores?.nome,
+              operadorAntSetor: opConflitoDataEff?.setores?.nome,
               nrLabel:          nrParaVerificar,
               labelCampo:       labelNr,
             });

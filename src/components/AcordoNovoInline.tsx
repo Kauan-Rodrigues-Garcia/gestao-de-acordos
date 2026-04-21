@@ -530,15 +530,41 @@ export function AcordoNovoInline({
           );
 
           // Buscar setor/equipe e perfil do operador do conflito
-          const { data: opConflitoData } = await supabase
-            .from('perfis')
-            .select('id, nome, setor_id, equipe_id, setores(nome)')
-            .eq('id', conflitoFinal.operadorId)
-            .maybeSingle() as { data: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null };
+          // Observação: o RLS da Bookplay às vezes bloqueia a leitura de perfis de outros
+          // operadores quando o campo equipe_id é usado no SELECT. Fazemos fallback para
+          // select('*') para garantir que conseguimos pelo menos o setor_id/perfil.
+          let opConflitoData: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null = null;
+          {
+            const r = await supabase
+              .from('perfis')
+              .select('id, nome, setor_id, equipe_id, setores(nome)')
+              .eq('id', conflitoFinal.operadorId)
+              .maybeSingle();
+            opConflitoData = (r.data as typeof opConflitoData) ?? null;
+            if (!opConflitoData) {
+              // Fallback sem join nos setores
+              const r2 = await supabase
+                .from('perfis')
+                .select('id, nome, setor_id, equipe_id')
+                .eq('id', conflitoFinal.operadorId)
+                .maybeSingle();
+              opConflitoData = (r2.data as typeof opConflitoData) ?? null;
+            }
+          }
 
           const opConflitoTemLogica = opConflitoData
             ? isAtivoParaUsuario(opConflitoData.id, opConflitoData.setor_id ?? null, opConflitoData.equipe_id ?? null)
             : false;
+
+          // Diagnóstico (útil para detectar por que o fluxo Direto/Extra não dispara)
+          console.info('[direto-extra/inline]', {
+            empresa: empresa.id,
+            isPaguePlay,
+            atualTemLogica,
+            opConflitoTemLogica,
+            opConflito: opConflitoData,
+            conflitoFinal,
+          });
 
           // ── CASO A: usuário atual tem a lógica ativa → insere como EXTRA ──
           if (atualTemLogica) {
