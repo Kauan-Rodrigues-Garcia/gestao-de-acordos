@@ -11,7 +11,8 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageCircle, X, Check, CheckCheck, Trash2, Bell,
-  AlertTriangle, Info, ArrowLeft,
+  AlertTriangle, Info, ArrowLeft, ExternalLink,
+  Clock, CheckCircle2,
   Maximize2, Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -60,9 +61,10 @@ interface ModalDetalheProps {
   onClose: () => void;
   onMarcarLida: (id: string) => Promise<void>;
   onExcluir: (id: string) => Promise<void>;
+  onVerPagina: () => void;
 }
 
-function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir }: ModalDetalheProps) {
+export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir, onVerPagina }: ModalDetalheProps) {
   return (
     <motion.div
       key="modal-detalhe"
@@ -134,6 +136,16 @@ function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir }: Moda
             Marcar como lida
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs px-3 gap-1.5"
+          onClick={onVerPagina}
+          title="Abrir página de Notificações Detalhadas"
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+          Ver detalhes
+        </Button>
         <Button
           size="sm"
           variant="ghost"
@@ -327,6 +339,7 @@ export function ChatNotificacoes() {
                   onClose={() => setDetalhe(null)}
                   onMarcarLida={marcarLida}
                   onExcluir={excluirNotificacao}
+                  onVerPagina={() => { setDetalhe(null); setAberto(false); navigate('/notificacoes'); }}
                 />
               )}
             </AnimatePresence>
@@ -457,7 +470,7 @@ export function ChatNotificacoes() {
                           </div>
                         </motion.div>
                       ))}
-                      {notificacoes.length > 30 && (
+                      {notificacoes.length > 0 && (
                         <div className="px-4 py-2 text-center">
                           <button
                             className="text-[11px] text-primary hover:underline"
