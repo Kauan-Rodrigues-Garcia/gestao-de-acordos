@@ -574,14 +574,16 @@ describe('useAnalytics', () => {
       const acordos = [
         makeAcordo({
           status: 'pago', valor: 800, vencimento: '2026-04-08',
-          equipe_id: 'equipe-001', operador_id: OPERADOR_ID,
+          // A equipe é derivada via perfis.equipe_id, NÃO via acordos.equipe_id.
+          operador_id: OPERADOR_ID,
         }),
       ];
       setupAdminResults({
         acordos,
         metasEquipe,
         metasOperador,
-        perfis:  [{ id: OPERADOR_ID, nome: 'Operador A' }],
+        // equipe_id precisa vir do perfil do operador (regra de negócio real).
+        perfis:  [{ id: OPERADOR_ID, nome: 'Operador A', equipe_id: 'equipe-001' }],
         equipes: [{ id: 'equipe-001', nome: 'Equipe Alpha' }],
       });
 
@@ -601,17 +603,52 @@ describe('useAnalytics', () => {
       expect(op?.perc).toBe(80); // 800/1000 * 100
     });
 
-    it('porEquipe usa "Sem equipe" quando equipe_id ausente', async () => {
+    it('porEquipe: agrupa acordos pela equipe do perfil do operador — NÃO pelo acordo (bug Jose_Victor)', async () => {
+      // Cenário reportado: Jose_Victor é operador da equipe Luciana.
+      // O acordo pago dele DEVE aparecer na equipe "Luciana", não em "Sem equipe".
+      // Bug antigo: `(a as any).equipe_id` lia um campo inexistente na tabela
+      // acordos e todos caíam em "Sem equipe".
+      const OP_JV = 'op-jose-victor';
       const acordos = [
-        makeAcordo({ status: 'pago', valor: 100, vencimento: '2026-04-01', equipe_id: undefined }),
+        makeAcordo({ status: 'pago', valor: 500, vencimento: '2026-04-10', operador_id: OP_JV }),
+        makeAcordo({ status: 'pago', valor: 300, vencimento: '2026-04-15', operador_id: OP_JV }),
       ];
-      setupAdminResults({ acordos });
+      setupAdminResults({
+        acordos,
+        perfis:  [{ id: OP_JV, nome: 'Jose_Victor', equipe_id: 'equipe-luciana' }],
+        equipes: [{ id: 'equipe-luciana', nome: 'Luciana' }],
+      });
+
+      const { result } = renderHook(() => useAnalytics());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      const luciana = result.current.porEquipe?.find(e => e.nome === 'Luciana');
+      expect(luciana).toBeDefined();
+      expect(luciana?.valor).toBe(800);
+      expect(luciana?.acordos).toBe(2);
+
+      // Não deve existir "Sem equipe" nesse cenário
+      const semEq = result.current.porEquipe?.find(e => e.nome === 'Sem equipe');
+      expect(semEq).toBeUndefined();
+    });
+
+    it('porEquipe usa "Sem equipe" quando o operador NÃO tem equipe_id no perfil', async () => {
+      const OP_SEM_EQ = 'op-sem-equipe';
+      const acordos = [
+        makeAcordo({ status: 'pago', valor: 100, vencimento: '2026-04-01', operador_id: OP_SEM_EQ }),
+      ];
+      setupAdminResults({
+        acordos,
+        perfis:  [{ id: OP_SEM_EQ, nome: 'Órfão', equipe_id: null }],
+        equipes: [],
+      });
 
       const { result } = renderHook(() => useAnalytics());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const semEq = result.current.porEquipe?.find(e => e.nome === 'Sem equipe');
       expect(semEq).toBeDefined();
+      expect(semEq?.valor).toBe(100);
     });
 
     it('porOperador usa "Operador" (fallback) quando operador_id não está no mapa', async () => {

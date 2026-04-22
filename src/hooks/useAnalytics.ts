@@ -127,6 +127,11 @@ export function useAnalytics(): AnalyticsData {
   const [metasOperador, setMetasOperador] = useState<MetaInfo[]>([]);
   const [operadoresMap, setOperadoresMap] = useState<Record<string, string>>({});
   const [equipesMap, setEquipesMap] = useState<Record<string, string>>({});
+  // BUG FIX Painel Diretoria / Performance por equipe:
+  // A tabela `acordos` NÃO tem coluna `equipe_id` — a equipe é uma propriedade do
+  // perfil (operador). Para agrupar corretamente por equipe, precisamos do mapa
+  // operador_id → equipe_id. Sem isto, todos os acordos caíam em "Sem equipe".
+  const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
   const { mes, ano } = getMesAtual();
   const inicio = primeiroDiaMes();
@@ -278,7 +283,7 @@ export function useAnalytics(): AnalyticsData {
         const [{ data: ops }, { data: eqs }] = await Promise.all([
           supabase
             .from('perfis')
-            .select('id, nome')
+            .select('id, nome, equipe_id')
             .eq('empresa_id', empresa.id)
             .in('perfil', ['operador', 'elite', 'gerencia']),
           supabase
@@ -288,8 +293,13 @@ export function useAnalytics(): AnalyticsData {
         ]);
 
         const opMap: Record<string, string> = {};
-        ((ops as { id: string; nome: string }[]) || []).forEach(o => { opMap[o.id] = o.nome; });
+        const opEqMap: Record<string, string | null> = {};
+        ((ops as { id: string; nome: string; equipe_id: string | null }[]) || []).forEach(o => {
+          opMap[o.id]   = o.nome;
+          opEqMap[o.id] = o.equipe_id ?? null;
+        });
         setOperadoresMap(opMap);
+        setOperadorEquipeMap(opEqMap);
 
         const eqMap: Record<string, string> = {};
         ((eqs as { id: string; nome: string }[]) || []).forEach(e => { eqMap[e.id] = e.nome; });
@@ -364,10 +374,16 @@ export function useAnalytics(): AnalyticsData {
     });
 
     // Por equipe
+    // BUG FIX: a equipe é derivada do OPERADOR (perfis.equipe_id), pois a
+    // tabela `acordos` não possui esse campo. O código anterior usava
+    // `(a as any).equipe_id` e caía sempre no fallback 'sem_equipe' — todo
+    // operador aparecia sem equipe (ex: Jose_Victor com equipe Luciana
+    // saía listado como "Sem equipe").
     const porEquipe = Object.entries(
       acordosMes.reduce<Record<string, { acordos: number; valor: number }>>(
         (acc, a) => {
-          const eid = (a as any).equipe_id ?? 'sem_equipe';
+          const oid = a.operador_id ?? null;
+          const eid = (oid && operadorEquipeMap[oid]) || 'sem_equipe';
           if (!acc[eid]) acc[eid] = { acordos: 0, valor: 0 };
           if (a.status === 'pago') { acc[eid].acordos++; acc[eid].valor += Number(a.valor) || 0; }
           return acc;
@@ -429,7 +445,7 @@ export function useAnalytics(): AnalyticsData {
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, equipesMap, inicio, fim, hoje, mes, ano, isPP]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mes, ano, isPP]);
 
   return {
     ...derived,
