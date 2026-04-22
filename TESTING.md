@@ -73,7 +73,7 @@ import { meuServico } from './meuServico';
 | `src/lib/index.ts` (formatters, parsers) | ⏳ próximo |
 | `src/lib/motion.ts` (springs) | baixa prioridade |
 
-### Camada 2 — Serviços com Supabase mockado (iniciada)
+### Camada 2 — Serviços com Supabase mockado (✅ **concluída**)
 
 | Arquivo | Status |
 |---|---|
@@ -81,7 +81,7 @@ import { meuServico } from './meuServico';
 | `src/services/nr_registros.service.ts` | ✅ 100% lines / 97% branches / 100% funcs (26 testes) |
 | `src/services/lixeira.service.ts` | ✅ 100% lines / 88% branches / 100% funcs (12 testes) |
 | `src/services/notificacoes.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (12 testes) |
-| `src/services/acordos.service.ts` | ⏳ |
+| `src/services/acordos.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (26 testes) |
 
 ### Camada 3 — Componentes integrados
 
@@ -122,6 +122,7 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`AcordoDetalheInline`** — conversão Extra → Direto, cenário do bug do campo `inscricao` inexistente. 12 testes cobrindo: badge "Extra" + botão "Acordo direto" condicional ao dono; modal Extra→Direto com/sem autorização do líder; **fluxo completo com par direto** (delete direto antigo + update extra→direto + notificação + transferirNr + liberarNrPorAcordoId); fluxo sem par direto (promoção órfã); PaguePlay usa `instituicao`; chave vazia → `toast.error` defensivo; erro no UPDATE → `toast.error` e aborto.
 - **`lixeira.service`** — 4 funções (`enviarParaLixeira`, `fetchLixeira`, `esvaziarLixeira`, `deletarItemLixeira`). 12 testes cobrindo snapshot completo no insert, fallback null para campos ausentes, erro de RLS, lista com limit custom, delete por empresa e por id. Se este serviço quebrar, acordos transferidos via transferência de NR são perdidos sem retenção.
 - **`notificacoes.service`** — 5 funções (`fetchNotificacoes`, `marcarComoLida`, `marcarTodasLidas`, `limparTodasNotificacoes`, `criarNotificacao`). 12 testes cobrindo: listagem ordenada por `criado_em desc` com limit 50; marcação individual e em lote (só não-lidas); limpeza total por usuário; insert com e sem `empresa_id`; todos os caminhos de erro apenas logam warning (não lançam). Serviço crítico: usado por `AcordoNovoInline` (CASO A + autorização do líder), `AcordoDetalheInline` (Extra→Direto) e pelo sino de notificações. Se quebrar, operadores deixam de receber avisos de transferência de chave.
+- **`acordos.service`** — fonte-de-verdade das queries e cálculos de acordos. 26 testes cobrindo: `fetchAcordos` (filtros status/tipo/operador/setor/empresa/vencimento/data_inicio/data_fim, `apenas_hoje`, `busca` com `.or()` multi-coluna, paginação server-side com `.range()`, fluxo `equipe_id` que faz 2 queries encadeadas — `perfis` antes de `acordos_deduplicados` — com early-return quando equipe não tem membros, propagação de erro); `verificarNrDuplicado` (nr vazio defensivo, sem/com duplicata, `acordoIdExcluir` na edição, campo `instituicao` para PaguePlay); `verificarNrsDuplicadosEmLote` (trim+dedupe, mapping por coluna, fallback "Operador desconhecido", guarda contra valores vazios); e as três funções puras `calcularMetricas`/`calcularMetricasMes`/`calcularMetricasDashboard` com `vi.setSystemTime` fixando 2026-04-22 para determinismo. Se este arquivo quebrar, TODA a listagem + paginação + métricas de dashboard deixam de funcionar.
 
 ### Exemplo prático: refatoração `alert()` → `toast.error()` (AcordoDetalheInline)
 
@@ -132,6 +133,39 @@ Depois que a suíte do `AcordoDetalheInline` ficou verde (12/12), foi possível 
 3. Resultado: a UX ficou consistente com o resto do app (sonner/toast) sem precisar abrir o navegador nem clicar manualmente em 9 cenários de erro.
 
 Esse tipo de refatoração só é seguro porque os testes existem. **É o payoff direto do investimento em testes** — manutenibilidade, não só detecção de bug.
+
+### Padrão de builder mock para serviços com múltiplas queries concorrentes
+
+Ao escrever o teste de `acordos.service`, descobrimos que o builder thenable usado até então tinha uma limitação: ele mantinha `currentCall` em variável **global** — funciona quando o serviço faz uma query por vez, mas **quebra silenciosamente** quando duas queries vivem simultaneamente. Cenário concreto: em `fetchAcordos({ equipe_id })`, o código faz `let query = supabase.from('acordos_deduplicados')...` criando o primeiro builder, depois chama `resolverOperadoresDaEquipe()` que cria o builder de `perfis` (sobrescrevendo `currentCall`), e por fim chama `query.in(...)` no builder ORIGINAL de `acordos_deduplicados`. Como o método `.in()` escrevia em `currentCall` (agora apontando para `perfis`), o teste via filtro aparecer no builder errado.
+
+**Solução**: cada builder captura seu próprio `call` via closure:
+
+```ts
+function createBuilder(table: string) {
+  const call: BuilderCall = { table, operation: null, filters: [] };
+  calls.push(call);
+
+  const builder = {
+    eq: vi.fn((col, val) => { call.filters.push(['eq', col, val]); return builder; }),
+    in: vi.fn((col, values) => { call.in = { col, values }; return builder; }),
+    // ... cada método referencia o `call` capturado, nunca `currentCall`
+    then: (resolve, reject) =>
+      Promise.resolve(nextResultFor(table)).then(resolve, reject),
+  };
+  return builder;
+}
+```
+
+E para simular múltiplas queries com resultados diferentes, usamos uma **fila por tabela**:
+
+```ts
+const resultsByTable: Record<string, MockResult[]> = {};
+// Setup:
+resultsByTable['perfis'] = [{ data: [...membros], error: null }];
+resultsByTable['acordos_deduplicados'] = [{ data: [...], count: N, error: null }];
+```
+
+Esse é o padrão recomendado para qualquer serviço novo que orquestre 2+ queries encadeadas.
 
 ### Padrão de mocks UI para Radix (Dialog / Popover / Select / Calendar)
 
