@@ -1,5 +1,10 @@
 # Sistema de Gestão de Acordos Financeiros
 
+[![CI](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml)
+![Tests](https://img.shields.io/badge/tests-497%20passing-brightgreen)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)
+![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
+
 Plataforma web para gerenciamento de acordos financeiros com controle de acesso por perfis (RBAC), dashboard analítico, importação via planilha Excel e integração com IA (OpenAI) para normalização de dados.
 
 ---
@@ -16,7 +21,7 @@ Plataforma web para gerenciamento de acordos financeiros com controle de acesso 
 | **Estado local** | Zustand |
 | **Animações** | Framer Motion |
 | **Gráficos** | Recharts |
-| **Planilhas** | xlsx |
+| **Planilhas** | @e965/xlsx (fork mantido do SheetJS) |
 | **Backend/BaaS** | Supabase (Auth, PostgreSQL, Edge Functions) |
 | **IA** | OpenAI API via Supabase Edge Function (Deno) |
 
