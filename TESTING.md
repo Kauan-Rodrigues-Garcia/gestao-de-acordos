@@ -88,8 +88,8 @@ import { meuServico } from './meuServico';
 | Componente | Status |
 |---|---|
 | `AcordoEditInline` — bloqueio de NR duplicado na edição | ✅ 81% lines / 79% branches / 84% funcs (9 testes) |
-| `AcordoNovoInline` — fluxo CASO A/B Direto/Extra | ⏳ alta prioridade |
-| `AcordoDetalheInline` — conversão Extra → Direto | ⏳ alta prioridade |
+| `AcordoNovoInline` — fluxo CASO A/B/C Direto/Extra + modal aviso | ✅ 52% lines (caminhos críticos 100%) — 15 testes |
+| `AcordoDetalheInline` — conversão Extra → Direto | ✅ 37% lines (fluxo Extra→Direto 100%) — 12 testes |
 | `AdminDiretoExtra` — herança ativação | ⏳ |
 | `ModalFilaWhatsApp` | ⏳ |
 | `NotificacoesDetalhadas` | ⏳ |
@@ -118,6 +118,37 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`tratarExclusaoVinculo`** — helper crítico de consistência pós-delete; se quebrar, pares ficam órfãos, bloqueio de NR aponta pra operador errado, notificações somem.
 - **`nr_registros.service`** — fonte-de-verdade do bloqueio de NR. 26 testes cobrindo 7 funções em 22 ms, 100% lines. Se este arquivo quebrar, tabulações duplicadas voltam a aparecer.
 - **`AcordoEditInline`** — cenário original do bug das tabulações duplicadas via edição. 9 testes cobrindo: não chama verificação quando chave não muda; bloqueia com toast quando muda para valor ocupado; salva + sincroniza `nr_registros` quando livre; Extras NÃO são registrados como titulares; PaguePlay usa `instituicao` como chave; queda da verificação → `toast.warning` e segue.
+- **`AcordoNovoInline`** — fluxo de criação com bloqueio de NR e ramificação Direto/Extra. 15 testes cobrindo: validações de campos obrigatórios; bloqueio por mesmo operador; **CASO A** (usuário tem lógica → insere como EXTRA + atualiza direto antigo + notifica); **CASO B** (só o outro tem lógica → abre modal de aviso sem autorização); **CASO C** (ninguém tem → abre modal de autorização do líder); NR livre → insert simples + onSaved. Também cobre o componente exportado `ModalAvisoDiretoExtra` em isolado.
+- **`AcordoDetalheInline`** — conversão Extra → Direto, cenário do bug do campo `inscricao` inexistente. 12 testes cobrindo: badge "Extra" + botão "Acordo direto" condicional ao dono; modal Extra→Direto com/sem autorização do líder; **fluxo completo com par direto** (delete direto antigo + update extra→direto + notificação + transferirNr + liberarNrPorAcordoId); fluxo sem par direto (promoção órfã); PaguePlay usa `instituicao`; chave vazia → alerta defensivo; erro no UPDATE → alerta e aborto.
+
+### Padrão de mocks UI para Radix (Dialog / Popover / Select / Calendar)
+
+Radix usa Portal para renderizar fora da DOM tree, o que complica os testes no happy-dom. Nos testes de componentes grandes (`AcordoNovoInline`, `AcordoDetalheInline`) adotamos stubs leves:
+
+```ts
+vi.mock('@/components/ui/dialog', () => ({
+  Dialog: ({ open, children }) => open ? <div role="dialog">{children}</div> : null,
+  DialogContent:     ({ children }) => <div>{children}</div>,
+  DialogHeader:      ({ children }) => <div>{children}</div>,
+  DialogTitle:       ({ children }) => <h2>{children}</h2>,
+  DialogDescription: ({ children }) => <div>{children}</div>,
+  DialogFooter:      ({ children }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/ui/popover', () => ({
+  Popover:        ({ children }) => <>{children}</>,
+  PopoverTrigger: ({ children }) => <>{children}</>,
+  PopoverContent: ({ children }) => <>{children}</>,
+}));
+
+vi.mock('@/components/ui/calendar', () => ({
+  Calendar: ({ onSelect }) => (
+    <button data-testid="pick-date" onClick={() => onSelect?.(new Date('2026-05-15'))}>pick-date</button>
+  ),
+}));
+```
+
+Isso mantém os testes focados no comportamento do SUT sem ter que lutar contra o sistema de Portal / animação do Radix.
 
 ### Padrão de mock chainable "thenable" (nr_registros.service.test.ts)
 
