@@ -79,7 +79,7 @@ import { meuServico } from './meuServico';
 |---|---|
 | `src/services/tratarExclusaoVinculo.ts` | ✅ 81% |
 | `src/services/nr_registros.service.ts` | ✅ 100% lines / 97% branches / 100% funcs (26 testes) |
-| `src/services/lixeira.service.ts` | ⏳ próximo |
+| `src/services/lixeira.service.ts` | ✅ 100% lines / 88% branches / 100% funcs (12 testes) |
 | `src/services/notificacoes.service.ts` | ⏳ |
 | `src/services/acordos.service.ts` | ⏳ |
 
@@ -120,6 +120,7 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`AcordoEditInline`** — cenário original do bug das tabulações duplicadas via edição. 9 testes cobrindo: não chama verificação quando chave não muda; bloqueia com toast quando muda para valor ocupado; salva + sincroniza `nr_registros` quando livre; Extras NÃO são registrados como titulares; PaguePlay usa `instituicao` como chave; queda da verificação → `toast.warning` e segue.
 - **`AcordoNovoInline`** — fluxo de criação com bloqueio de NR e ramificação Direto/Extra. 15 testes cobrindo: validações de campos obrigatórios; bloqueio por mesmo operador; **CASO A** (usuário tem lógica → insere como EXTRA + atualiza direto antigo + notifica); **CASO B** (só o outro tem lógica → abre modal de aviso sem autorização); **CASO C** (ninguém tem → abre modal de autorização do líder); NR livre → insert simples + onSaved. Também cobre o componente exportado `ModalAvisoDiretoExtra` em isolado.
 - **`AcordoDetalheInline`** — conversão Extra → Direto, cenário do bug do campo `inscricao` inexistente. 12 testes cobrindo: badge "Extra" + botão "Acordo direto" condicional ao dono; modal Extra→Direto com/sem autorização do líder; **fluxo completo com par direto** (delete direto antigo + update extra→direto + notificação + transferirNr + liberarNrPorAcordoId); fluxo sem par direto (promoção órfã); PaguePlay usa `instituicao`; chave vazia → alerta defensivo; erro no UPDATE → alerta e aborto.
+- **`lixeira.service`** — 4 funções (`enviarParaLixeira`, `fetchLixeira`, `esvaziarLixeira`, `deletarItemLixeira`). 12 testes cobrindo snapshot completo no insert, fallback null para campos ausentes, erro de RLS, lista com limit custom, delete por empresa e por id. Se este serviço quebrar, acordos transferidos via transferência de NR são perdidos sem retenção.
 
 ### Padrão de mocks UI para Radix (Dialog / Popover / Select / Calendar)
 
