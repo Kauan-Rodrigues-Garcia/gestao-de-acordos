@@ -72,7 +72,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as any)?.foto_url ?? null);
+  const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
@@ -93,7 +93,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'perfis', filter: `id=eq.${perfil.id}` },
         (payload) => {
-          const newFoto = (payload.new as any)?.foto_url ?? null;
+          const newFoto = (payload.new as { foto_url?: string | null } | null)?.foto_url ?? null;
           setFotoUrl(newFoto ? newFoto + '?t=' + Date.now() : null);
         }
       )
@@ -117,8 +117,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       if (dbErr) throw dbErr;
       // O realtime subscription vai atualizar fotoUrl automaticamente
       toast.success('Foto de perfil atualizada!');
-    } catch (err: any) {
-      toast.error('Erro ao enviar foto: ' + (err?.message ?? err));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Erro ao enviar foto: ' + msg);
     } finally {
       setUploadingFoto(false);
     }
@@ -137,8 +138,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setFotoUrl(null);
       toast.success('Foto removida!');
       setPerfilPopoverOpen(false);
-    } catch (err: any) {
-      toast.error('Erro ao remover foto: ' + (err?.message ?? err));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      toast.error('Erro ao remover foto: ' + msg);
     } finally {
       setDeletandoFoto(false);
     }

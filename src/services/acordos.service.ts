@@ -228,13 +228,18 @@ export async function verificarNrDuplicado(
 
   const { data } = await query;
   if (data && data.length > 0) {
-    const item = data[0] as any;
+    const item = data[0] as {
+      id: string;
+      status: string;
+      operador_id: string;
+      perfis?: { nome?: string | null } | null;
+    };
     return {
       duplicado: true,
       statusExistente: item.status,
       acordoIdExistente: item.id,
       operadorIdExistente: item.operador_id,
-      operadorNomeExistente: (item.perfis as any)?.nome ?? null,
+      operadorNomeExistente: item.perfis?.nome ?? null,
     };
   }
   return { duplicado: false };
@@ -268,7 +273,14 @@ export async function verificarNrsDuplicadosEmLote(
     .in(campo, nrsTrimados);
 
   if (data) {
-    for (const item of data as any[]) {
+    type DupRow = {
+      id: string;
+      operador_id: string;
+      perfis?: { nome?: string | null } | null;
+      nr_cliente?: string | null;
+      instituicao?: string | null;
+    };
+    for (const item of data as DupRow[]) {
       const val = item[campo];
       if (val) {
         resultado.set(val.trim(), {

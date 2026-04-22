@@ -181,8 +181,8 @@ export default function MetasConfig() {
       setSetores(validos);
       if (isAdmin) { if (!setorSelecionado && validos.length > 0) setSetorSelecionado(validos[0].id); }
       else { if (liderSetorId) setSetorSelecionado(liderSetorId); }
-    } catch (err: any) {
-      toast.error("Erro ao carregar setores", { description: String(err?.message ?? err) });
+    } catch (err: unknown) {
+      toast.error("Erro ao carregar setores", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingSetores(false); }
   }, [empresa?.id, isAdmin, liderSetorId, setorSelecionado]);
 
@@ -194,8 +194,8 @@ export default function MetasConfig() {
         .eq("setor_id", setorSelecionado).order("nome");
       if (error) throw error;
       setEquipes((data ?? []).filter((e): e is Equipe => typeof e?.id === "string" && e.id.length > 0));
-    } catch (err: any) {
-      toast.error("Erro ao carregar equipes", { description: String(err?.message ?? err) });
+    } catch (err: unknown) {
+      toast.error("Erro ao carregar equipes", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingEquipes(false); }
   }, [setorSelecionado]);
 
@@ -207,8 +207,8 @@ export default function MetasConfig() {
         .eq("setor_id", setorSelecionado).eq("perfil", "operador").order("nome");
       if (error) throw error;
       setOperadores((data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0));
-    } catch (err: any) {
-      toast.error("Erro ao carregar operadores", { description: String(err?.message ?? err) });
+    } catch (err: unknown) {
+      toast.error("Erro ao carregar operadores", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingOperadores(false); }
   }, [setorSelecionado]);
 
@@ -229,8 +229,8 @@ export default function MetasConfig() {
         };
       }
       setInputMetas(newInputs);
-    } catch (err: any) {
-      toast.error("Erro ao carregar metas", { description: String(err?.message ?? err) });
+    } catch (err: unknown) {
+      toast.error("Erro ao carregar metas", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingMetas(false); }
   }, [empresa?.id, mes, ano]);
 
@@ -277,8 +277,8 @@ export default function MetasConfig() {
         description: `${MESES[mes - 1]}/${ano}`,
       });
       await fetchMetas();
-    } catch (err: any) {
-      toast.error("Erro ao salvar metas", { description: String(err?.message ?? err) });
+    } catch (err: unknown) {
+      toast.error("Erro ao salvar metas", { description: err instanceof Error ? err.message : String(err) });
     } finally {
       setSalvandoTudo(false);
     }

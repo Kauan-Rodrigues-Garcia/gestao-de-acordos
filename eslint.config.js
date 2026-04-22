@@ -27,5 +27,20 @@ export default tseslint.config(
       "@typescript-eslint/no-empty-object-type": "warn", // 空对象类型降为 warn
       "@typescript-eslint/no-explicit-any": "warn", // any 类型降为 warn
     },
+  },
+  // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.
+  // Este override foi adicionado após o sweep de remoção de `any`;
+  // novo `any` aqui deve ser rejeitado pelo CI até refatoração explícita.
+  {
+    files: [
+      "src/services/acordos.service.ts",
+      "src/services/aiImport.service.ts",
+      "src/providers/RealtimeAcordosProvider.tsx",
+      "src/components/Layout.tsx",
+      "src/pages/MetasConfig.tsx",
+    ],
+    rules: {
+      "@typescript-eslint/no-explicit-any": "error",
+    },
   }
 );

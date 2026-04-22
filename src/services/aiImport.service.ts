@@ -68,9 +68,10 @@ export async function aiNormalizeImport(
 
       if (error) {
         // Se for erro HTTP 401, tenta novamente (o loop fará refresh)
+        const errObj = error as { status?: number; context?: { status?: number } };
         const is401 =
-          (error as any)?.status === 401 ||
-          (error as any)?.context?.status === 401 ||
+          errObj?.status === 401 ||
+          errObj?.context?.status === 401 ||
           (error.message && /401|unauthorized/i.test(error.message));
 
         if (is401 && attempt === 0) {

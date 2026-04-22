@@ -149,7 +149,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           // ── DELETE ──────────────────────────────────────────────────────────
           // Apenas o id é necessário para remover da lista local.
           if (eventType === 'DELETE') {
-            const deletedId = (payload.old as any)?.id as string | undefined;
+            const deletedId = (payload.old as { id?: string } | null)?.id;
             if (!deletedId) return;
             const event: AcordoRealtimeEvent = {
               eventType: 'DELETE',
@@ -163,7 +163,7 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           // Busca o registro COMPLETO com joins antes de notificar os subscribers.
           // Isso garante que o nome do operador e o setor apareçam corretamente.
           if (eventType === 'INSERT') {
-            const newId = (payload.new as any)?.id as string | undefined;
+            const newId = (payload.new as { id?: string } | null)?.id;
             if (!newId) return;
 
             const { data: full, error } = await supabase
