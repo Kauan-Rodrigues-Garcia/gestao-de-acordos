@@ -84,7 +84,7 @@ import { meuServico } from './meuServico';
 | `src/services/acordos.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (26 testes) |
 | `src/services/direto_extra.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (16 testes) |
 
-### Camada 3 — Componentes integrados
+### Camada 3 — Componentes integrados (✅ **concluída**)
 
 | Componente | Status |
 |---|---|
@@ -92,8 +92,8 @@ import { meuServico } from './meuServico';
 | `AcordoNovoInline` — fluxo CASO A/B/C Direto/Extra + modal aviso | ✅ 52% lines (caminhos críticos 100%) — 15 testes |
 | `AcordoDetalheInline` — conversão Extra → Direto | ✅ 37% lines (fluxo Extra→Direto 100%) — 12 testes |
 | `AdminDiretoExtra` — herança de ativação | ✅ 92% lines / 74% branches / 77% funcs — 10 testes (herança 100%) |
-| `ModalFilaWhatsApp` | ⏳ |
-| `NotificacoesDetalhadas` | ⏳ |
+| `ModalFilaWhatsApp` — fila de disparo WhatsApp + auto-envio | ✅ 100% lines / 91% branches / 100% funcs — 13 testes |
+| `NotificacoesDetalhadas` — página de histórico de notificações | ✅ 96% lines / 89% branches / 100% funcs — 13 testes |
 
 ### Camada 4 — E2E (futuro)
 
@@ -125,6 +125,8 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`notificacoes.service`** — 5 funções (`fetchNotificacoes`, `marcarComoLida`, `marcarTodasLidas`, `limparTodasNotificacoes`, `criarNotificacao`). 12 testes cobrindo: listagem ordenada por `criado_em desc` com limit 50; marcação individual e em lote (só não-lidas); limpeza total por usuário; insert com e sem `empresa_id`; todos os caminhos de erro apenas logam warning (não lançam). Serviço crítico: usado por `AcordoNovoInline` (CASO A + autorização do líder), `AcordoDetalheInline` (Extra→Direto) e pelo sino de notificações. Se quebrar, operadores deixam de receber avisos de transferência de chave.
 - **`acordos.service`** — fonte-de-verdade das queries e cálculos de acordos. 26 testes cobrindo: `fetchAcordos` (filtros status/tipo/operador/setor/empresa/vencimento/data_inicio/data_fim, `apenas_hoje`, `busca` com `.or()` multi-coluna, paginação server-side com `.range()`, fluxo `equipe_id` que faz 2 queries encadeadas — `perfis` antes de `acordos_deduplicados` — com early-return quando equipe não tem membros, propagação de erro); `verificarNrDuplicado` (nr vazio defensivo, sem/com duplicata, `acordoIdExcluir` na edição, campo `instituicao` para PaguePlay); `verificarNrsDuplicadosEmLote` (trim+dedupe, mapping por coluna, fallback "Operador desconhecido", guarda contra valores vazios); e as três funções puras `calcularMetricas`/`calcularMetricasMes`/`calcularMetricasDashboard` com `vi.setSystemTime` fixando 2026-04-22 para determinismo. Se este arquivo quebrar, TODA a listagem + paginação + métricas de dashboard deixam de funcionar.
 - **`direto_extra.service` + `AdminDiretoExtra`** — núcleo da lógica "Direto e Extra", que define se um operador pode tabular acordo sobre NR alheio. 16 testes no serviço (fetch/upsert/resolver em 3 níveis — usuário → equipe → setor) + 10 testes no componente (render das 3 abas, herança equipe←setor, herança usuário←equipe, herança usuário←setor, config própria sobrescreve herança, toggle com sucesso e erro, botões/switches travados em itens herdados, badges de total). Se quebrar, operadores deixam de poder tabular acordos extras — regra de negócio central do produto.
+- **`ModalFilaWhatsApp`** — modal de disparo de lembretes via WhatsApp (individual e em lote). 13 testes cobrindo: render do Dialog e progresso; label NR vs CPF condicional ao `isPaguePlay`; botão "Enviar todos" só visível em PaguePlay; `abrirProximo` chama `window.open` + registra log em `logs_sistema`; proteção `if (!usuarioId) return` no log; copiar mensagem individual e todas (com numeração `[n/total]` e separadores `---`); expansão/colapso de item via chevron; envio automático com fake timers e delay de 1500ms entre disparos; `toast.warning` quando popup é bloqueado; cancelamento do loop automático (botão "Cancelar" interrompe sem emitir toast final). Cobertura 100% de linhas e 91% de branches. Se quebrar, operadores não conseguem disparar cobrança via WhatsApp em lote.
+- **`NotificacoesDetalhadas`** — página `/notificacoes` que lista as notificações dos últimos 5 dias do usuário atual. 13 testes cobrindo: estado de loading → vazio; query correta (filtro `usuario_id`, `gte criado_em`, `order desc`, `limit 500`); agrupamento por dia com labels "Hoje"/"Ontem"/dia da semana; contagem de não-lidas no header; filtro textual por título ou mensagem + estado "Nenhuma notificação corresponde"; `marcarLida` individual; `marcarTodasLidas`; `excluir` individual; "Limpar todas" com guarda de `window.confirm` (teste que confirm=false não executa delete); fluxo de erro + "Tentar novamente"; realtime callback recarregando a lista. Usa `vi.setSystemTime` para determinismo nas datas relativas. Cobertura 96% de linhas.
 
 ### Exemplo prático: refatoração `alert()` → `toast.error()` (AcordoDetalheInline)
 
