@@ -25,6 +25,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   isPaguePlay, formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getTodayISO, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL,
+  calcHO,
 } from '@/lib/index';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -654,20 +655,24 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                       value={String(totalAcordosMes)}
                       sub={`${totalPendentes} pendentes`}
                     />
-                    {/* Card 5b: Agendado restante no mês (PaguePlay e Bookplay) */}
+                    {/* Card 5b: Agendado restante no mês (Bookplay: valor bruto; PaguePlay: H.O. = 24,96%) */}
                     {mostraAgendadoRestante && (
                       <MetricCard
-                        label="Agendado restante no mês"
+                        label={isPP ? 'H.O. Restante agendado no mês' : 'Agendado restante no mês'}
                         icon={<Clock className="w-4 h-4" />}
                         accentColor="#a855f7"
                         gradientFrom="#a855f7"
                         trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
                         value={
                           <span className="text-purple-500">
-                            {formatCurrency(valorAgendadoRestanteMes)}
+                            {formatCurrency(isPP ? calcHO(valorAgendadoRestanteMes) : valorAgendadoRestanteMes)}
                           </span>
                         }
-                        sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
+                        sub={
+                          isPP
+                            ? `${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · H.O. 24,96% de ${formatCurrency(valorAgendadoRestanteMes)}`
+                            : `${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`
+                        }
                       />
                     )}
                     {/* Card 6: Meta */}
