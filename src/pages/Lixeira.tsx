@@ -20,7 +20,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { fetchLixeira, esvaziarLixeira, LixeiraAcordo } from '@/services/lixeira.service';
+import { fetchLixeira, esvaziarLixeira, purgarExpirados, LixeiraAcordo } from '@/services/lixeira.service';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -101,6 +101,12 @@ export default function Lixeira() {
     if (!empresa?.id) return;
     setLoading(true);
     try {
+      // Purga lazy: antes de listar, remove permanentemente os itens cujo
+      // expira_em já passou (prazo padrão de 3 dias). Evita que o usuário
+      // veja itens com status "expirado" que já deveriam ter sido excluídos.
+      // Idealmente deveria existir um job pg_cron no Supabase; aqui fica
+      // como garantia de funcionalidade client-side.
+      await purgarExpirados(empresa.id);
       const data = await fetchLixeira(empresa.id);
       setItens(data);
     } finally {
@@ -125,6 +131,9 @@ export default function Lixeira() {
   useEffect(() => { carregar(); }, [empresa?.id]);
 
   const itensFiltrados = itens.filter(item => {
+    // Defesa em profundidade: se por qualquer motivo a purga server-side
+    // falhou, não mostra itens cujo expira_em já passou.
+    if (item.expira_em && new Date(item.expira_em).getTime() < Date.now()) return false;
     if (!busca.trim()) return true;
     const b = busca.toLowerCase();
     return (

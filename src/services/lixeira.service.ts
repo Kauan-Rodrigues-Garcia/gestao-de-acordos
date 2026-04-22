@@ -133,5 +133,45 @@ export async function deletarItemLixeira(id: string): Promise<{ ok: boolean; err
   return { ok: true };
 }
 
+/**
+ * Purga permanentemente todos os itens da lixeira cuja data de expiração
+ * (expira_em) já passou. Retorna o número de itens deletados.
+ *
+ * O requisito de negócio: itens retidos por 3 dias devem ser excluídos
+ * definitivamente ao final do prazo. Chame esta função na abertura da
+ * página Lixeira (purga lazy) antes do fetch — garante que itens com
+ * status "expirado" nunca apareçam para o usuário.
+ *
+ * Idealmente esta rotina deveria rodar como job pg_cron no Supabase
+ * (server-side, sem dependência de cliente abrir a página); mantida
+ * também client-side como garantia de funcionalidade imediata.
+ *
+ * @param empresaId Se informado, limita a purga à empresa; caso omitido,
+ *                  purga globalmente (uso administrativo).
+ * @returns         { ok, deletedCount, error? }
+ */
+export async function purgarExpirados(
+  empresaId?: string,
+): Promise<{ ok: boolean; deletedCount: number; error?: string }> {
+  const agoraISO = new Date().toISOString();
+  let query = supabase
+    .from('lixeira_acordos')
+    .delete()
+    .lt('expira_em', agoraISO)
+    .select('id');
+
+  if (empresaId) {
+    query = query.eq('empresa_id', empresaId);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.warn('[lixeira.service] purgarExpirados error:', error.message);
+    return { ok: false, deletedCount: 0, error: error.message };
+  }
+  return { ok: true, deletedCount: (data ?? []).length };
+}
+
 // Alias para compatibilidade
 export type EnviarParaLixeiraParams = EnviarLixeiraParams;

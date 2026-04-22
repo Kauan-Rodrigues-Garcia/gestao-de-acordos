@@ -44,7 +44,11 @@ function createBuilder(table: string) {
       return builder;
     }),
     select: vi.fn((cols?: string) => {
-      currentCall!.operation = 'select';
+      // Supabase permite .delete().select(...) para retornar os rows afetados.
+      // Só marca 'select' se não for um delete encadeado.
+      if (currentCall!.operation !== 'delete') {
+        currentCall!.operation = 'select';
+      }
       currentCall!.selectCols = cols;
       return builder;
     }),
@@ -54,6 +58,10 @@ function createBuilder(table: string) {
     }),
     eq: vi.fn((col: string, val: unknown) => {
       currentCall!.filters.push(['eq', col, val]);
+      return builder;
+    }),
+    lt: vi.fn((col: string, val: unknown) => {
+      currentCall!.filters.push(['lt', col, val]);
       return builder;
     }),
     order: vi.fn((col: string, opts?: unknown) => {
@@ -89,6 +97,7 @@ import {
   fetchLixeira,
   esvaziarLixeira,
   deletarItemLixeira,
+  purgarExpirados,
 } from './lixeira.service';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -308,5 +317,72 @@ describe('deletarItemLixeira', () => {
 
     expect(r).toEqual({ ok: false, error: 'not found' });
     warn.mockRestore();
+  });
+});
+
+describe('purgarExpirados (#9 lixeira — purga automática)', () => {
+  it('deleta registros cujo expira_em < agora, filtrado por empresa', async () => {
+    nextResult = { data: [{ id: 'a' }, { id: 'b' }, { id: 'c' }], error: null };
+
+    const antes = Date.now();
+    const r = await purgarExpirados('emp-1');
+    const depois = Date.now();
+
+    expect(r.ok).toBe(true);
+    expect(r.deletedCount).toBe(3);
+    expect(calls[0].table).toBe('lixeira_acordos');
+    expect(calls[0].operation).toBe('delete');
+
+    // Filtro principal: lt em expira_em com ISO timestamp de "agora"
+    const filtroLt = calls[0].filters.find(f => f[0] === 'lt' && f[1] === 'expira_em');
+    expect(filtroLt).toBeDefined();
+    const ts = new Date(filtroLt![2] as string).getTime();
+    expect(ts).toBeGreaterThanOrEqual(antes);
+    expect(ts).toBeLessThanOrEqual(depois);
+
+    // Escopo por empresa aplicado
+    const filtroEmpresa = calls[0].filters.find(f => f[0] === 'eq' && f[1] === 'empresa_id');
+    expect(filtroEmpresa).toEqual(['eq', 'empresa_id', 'emp-1']);
+
+    // Usa .select('id') para contar retorno
+    expect(calls[0].operation).toBe('delete');
+    expect(calls[0].selectCols).toBe('id');
+  });
+
+  it('sem empresaId: purga global (sem filtro eq empresa_id)', async () => {
+    nextResult = { data: [{ id: 'x' }], error: null };
+
+    const r = await purgarExpirados();
+
+    expect(r.ok).toBe(true);
+    expect(r.deletedCount).toBe(1);
+    const filtroEmpresa = calls[0].filters.find(f => f[0] === 'eq' && f[1] === 'empresa_id');
+    expect(filtroEmpresa).toBeUndefined();
+    const filtroLt = calls[0].filters.find(f => f[0] === 'lt' && f[1] === 'expira_em');
+    expect(filtroLt).toBeDefined();
+  });
+
+  it('quando nada expirou: deletedCount = 0 e ok = true', async () => {
+    nextResult = { data: [], error: null };
+    const r = await purgarExpirados('emp-2');
+    expect(r).toEqual({ ok: true, deletedCount: 0 });
+  });
+
+  it('erro no delete: retorna ok=false e deletedCount=0 sem throw', async () => {
+    nextResult = { data: null, error: { message: 'rls denied' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const r = await purgarExpirados('emp-3');
+    expect(r.ok).toBe(false);
+    expect(r.deletedCount).toBe(0);
+    expect(r.error).toBe('rls denied');
+
+    warn.mockRestore();
+  });
+
+  it('data nula ao final: não quebra, deletedCount = 0', async () => {
+    nextResult = { data: null, error: null };
+    const r = await purgarExpirados('emp-4');
+    expect(r).toEqual({ ok: true, deletedCount: 0 });
   });
 });
