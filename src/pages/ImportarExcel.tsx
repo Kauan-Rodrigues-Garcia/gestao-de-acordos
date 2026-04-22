@@ -498,7 +498,7 @@ const CAMPOS_CANONICOS_LINHA: CampoDestino[] = [
   'nr_cliente','valor','whatsapp','status','parcelas','nome_cliente','vencimento','instituicao','estado_uf','tipo',
 ];
 
-function classificarLinha(row: unknown[]): TipoLinha {
+export function classificarLinha(row: unknown[]): TipoLinha {
   const nv = celulasDaLinha(row);
 
   // ── 1. Vazia ──────────────────────────────────────────────────────────────
@@ -844,7 +844,7 @@ function mapaDeHeader(row: unknown[]): Record<number, CampoDestino> {
  *  4. Linha acordo_bloco → usa dataAtual + mapa de bloco
  *  5. Linha acordo_cont  → usa data da própria linha + mapa contínuo
  */
-function parsearPlanilha(rows: unknown[][]): ResultadoParser {
+export function parsearPlanilha(rows: unknown[][]): ResultadoParser {
   if (!rows || rows.length === 0) return { modo: 'tabela', registros: [] };
 
   // FIX: usar getTodayISO() (BRT) — evita off-by-one pós-21h BRT (ex: 23/04 → 22/04).
@@ -1031,8 +1031,22 @@ function parsearTabela(rows: unknown[][], hoje: string): ResultadoParser {
   for (let i = idxHeader + 1; i < rows.length; i++) {
     const row  = rows[i];
     const tipo = classificarLinha(row);
-    if (tipo === 'vazia' || tipo === 'ruido' || tipo === 'data_bloco') continue;
+    if (tipo === 'vazia' || tipo === 'data_bloco') continue;
     if (tipo === 'cabecalho' && i > idxHeader + 1) continue; // cabeçalho repetido
+
+    // FIX: no modo tabela, após o header, linhas de dados onde col[0] é um NR numérico puro
+    // (ex: planilha PaguePlay: 1000, 2000, ...) caem no fallback 'ruido' do classificarLinha
+    // porque não encaixam em acordo_cont (col[0] não é data) nem acordo_bloco (col[0] é número puro).
+    // Como o header já foi detectado e o mapa já está montado, o critério correto para
+    // pular uma linha é "não tem dado útil", não "foi classificada como ruído pelo heurístico genérico".
+    // O montarAcordo já faz descarte final (linha sem nome/nr/vencimento/valor → retorna null).
+    if (tipo === 'ruido') {
+      // Ruído REAL: linha com 0-1 célula não-vazia ou linha de totais/rodapé.
+      const nv = celulasDaLinha(row);
+      if (nv.length <= 1) continue;                    // 0 ou 1 célula → ruído genuíno
+      if (isLinhaTotaisOuRodape(row)) continue;        // linha de totais/rodapé
+      // Senão: provavelmente é uma linha de dados — segue para o mapeamento posicional.
+    }
 
     const dados = aplicarMapa(row, mapa);
     const acordo = montarAcordo(dados, hoje, i + 1, undefined);
