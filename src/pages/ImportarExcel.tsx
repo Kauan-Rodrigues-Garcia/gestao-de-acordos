@@ -34,6 +34,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
 import { ROUTE_PATHS, formatDate, formatCurrency, isPaguePlay, getTodayISO, buildObservacoesComEstado } from '@/lib/index';
+import { colunasPreviewImport, type ColunaPreviewKey } from '@/lib/importar_excel_colunas';
 import { safeNum } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -88,6 +89,28 @@ interface AcordoImportado {
 // (sem o overhead de carregar o componente inteiro). A função continua
 // disponível neste arquivo via re-export acima.
 void KEYWORDS; void CAMPO_PRIORIDADE; void norm;
+
+// ─── Classes Tailwind das <th> do preview ─────────────────────────────────
+// Mapeamento por chave de coluna. A ORDEM das chaves aqui é irrelevante —
+// a ordem real de renderização vem de colunasPreviewImport().
+const CLASSE_TH_PREVIEW: Record<ColunaPreviewKey, string> = {
+  '#':              'px-2 py-2 text-left font-semibold text-muted-foreground w-8',
+  'BLOCO':          'px-2 py-2 text-left font-semibold text-muted-foreground w-20',
+  '✓':              'px-2 py-2 text-center font-semibold text-muted-foreground w-8',
+  'NR':             'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'INSCRIÇÃO':      'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'ESTADO':         'px-2 py-2 text-center font-semibold text-muted-foreground w-14',
+  'CLASS.':         'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'NOME':           'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'CPF':            'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'VENCIMENTO':     'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'VALOR':          'px-2 py-2 text-right font-semibold text-muted-foreground',
+  'PARC.':          'px-2 py-2 text-center font-semibold text-muted-foreground',
+  'STATUS':         'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'WHATS':          'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'INST.':          'px-2 py-2 text-left font-semibold text-muted-foreground',
+  'AVISOS / ERROS': 'px-2 py-2 text-left font-semibold text-muted-foreground',
+};
 
 /** Detecta se uma célula é uma data válida de bloco, retornando ISO ou null.
  *  Aceita: dd/mm/yyyy, dd/mm/yy, yyyy-mm-dd e número serial do Excel.
@@ -1181,6 +1204,11 @@ export default function ImportarExcel() {
   const rawRowsRef = useRef<unknown[][] | null>(null);
   const { configs: configsDiretoExtra } = useDiretoExtraConfig();
 
+  // ── Flag de tenant: controla labels/colunas da UI (INSCRIÇÃO/CPF em PaguePlay) ───
+  // Derivada do tenantSlug — usada tanto em callbacks (confirmar/classificar)
+  // quanto na renderização da tabela "Dados reconhecidos".
+  const ehPaguePay = isPaguePlay(tenantSlug);
+
   const [etapa,     setEtapa]     = useState<Etapa>('upload');
   const [arquivo,   setArquivo]   = useState<File | null>(null);
   const [resultado, setResultado] = useState<ResultadoImportacao | null>(null);
@@ -1283,7 +1311,6 @@ export default function ImportarExcel() {
     }
     setCarregandoClassif(true);
     try {
-      const ehPaguePay = isPaguePlay(tenantSlug);
       const campoNr: 'nr_cliente' | 'instituicao' = ehPaguePay ? 'instituicao' : 'nr_cliente';
 
       const validos = regs.filter(r => r.valido);
@@ -1464,7 +1491,6 @@ export default function ImportarExcel() {
     const hoje = getTodayISO();
     const errosMsgs: string[] = [];
 
-    const ehPaguePay = isPaguePlay(tenantSlug);
     const labelNr = ehPaguePay ? 'Inscrição' : 'NR';
 
     // Se a classificação ainda não terminou, recalcula agora de forma síncrona.
@@ -1715,7 +1741,10 @@ export default function ImportarExcel() {
               <div>
                 <p className="text-xs font-semibold text-foreground mb-1.5">Colunas reconhecidas (nomes flexíveis):</p>
                 <div className="flex flex-wrap gap-1.5">
-                  {['NR / Número / Contrato', 'NOME / Cliente', 'VALOR / Parcela / VLR', 'VENC / Vencimento', 'WHATS / Telefone / Cel', 'STATUS / Situação', 'INST / Instituição / Banco', 'OBS / Observação'].map(c => (
+                  {(ehPaguePay
+                    ? ['INSCRIÇÃO', 'ESTADO / UF', 'FORMA DE PAGAMENTO / TIPO', 'QUANT. PARCELAS', 'VALOR', 'DATA DE VENCI. / VENCIMENTO', 'STATUS', 'NOME DO PROFISSIONAL / NOME', 'CPF', 'WHATSAPP / TELEFONE']
+                    : ['NR / Número / Contrato', 'NOME / Cliente', 'VALOR / Parcela / VLR', 'VENC / Vencimento', 'WHATS / Telefone / Cel', 'STATUS / Situação', 'INST / Instituição / Banco', 'OBS / Observação']
+                  ).map(c => (
                     <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
                   ))}
                 </div>
@@ -1887,19 +1916,13 @@ export default function ImportarExcel() {
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm border-b border-border z-10">
                     <tr>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground w-8">#</th>
-                      {modoParsed === 'blocos' && <th className="px-2 py-2 text-left font-semibold text-muted-foreground w-20">BLOCO</th>}
-                      <th className="px-2 py-2 text-center font-semibold text-muted-foreground w-8">✓</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">NR</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">CLASS.</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">NOME</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">VENCIMENTO</th>
-                      <th className="px-2 py-2 text-right font-semibold text-muted-foreground">VALOR</th>
-                      <th className="px-2 py-2 text-center font-semibold text-muted-foreground">PARC.</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">STATUS</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">WHATS</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">INST.</th>
-                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">AVISOS / ERROS</th>
+                      {/* Ordem canônica fornecida por colunasPreviewImport — sincronizada
+                          com o <tbody> abaixo via as mesmas chaves. Testes em
+                          src/lib/__tests__/importar_excel_colunas.test.ts. */}
+                      {colunasPreviewImport({ ehPaguePay, modoParsed }).map(col => {
+                        const classe = CLASSE_TH_PREVIEW[col];
+                        return <th key={col} className={classe}>{col}</th>;
+                      })}
                     </tr>
                   </thead>
                   <tbody>
@@ -1908,9 +1931,12 @@ export default function ImportarExcel() {
                       const errosFatais = r.erros.filter(e =>
                         e.includes('Vencimento') || e.includes('Valor')
                       );
-                      const avisosMsgs = r.erros.filter(e =>
-                        !e.includes('Vencimento') && !e.includes('Valor')
-                      );
+                      const avisosMsgs = r.erros
+                        .filter(e => !e.includes('Vencimento') && !e.includes('Valor'))
+                        // Em PaguePlay o identificador é a Inscrição (r.instituicao) e o
+                        // CPF é opcional — renomeia o aviso "NR não encontrado" para "CPF
+                        // não encontrado" para evitar o termo "NR" que não existe neste tenant.
+                        .map(e => ehPaguePay ? e.replace(/^NR não encontrado$/, 'CPF não encontrado') : e);
                       const classif = classifPorLinha.get(r.linhaOriginal);
                       const autorizada = linhasAutorizadas.has(r.linhaOriginal);
                       const bloqueada = classif?.categoria === 'duplicado' && classif?.precisaAutorizacao && !autorizada;
@@ -1945,9 +1971,22 @@ export default function ImportarExcel() {
                               ? <CheckCircle2 className="w-3.5 h-3.5 text-success inline" />
                               : <XCircle className="w-3.5 h-3.5 text-destructive inline" />}
                           </td>
-                          <td className="px-2 py-1.5 font-mono text-primary">
-                            {r.nr_cliente || <span className="text-muted-foreground/40 italic">—</span>}
-                          </td>
+                          {/* PaguePlay: INSCRIÇÃO (de r.instituicao) + ESTADO (de r.estado_uf).
+                              Bookplay: NR simples (de r.nr_cliente). */}
+                          {ehPaguePay ? (
+                            <>
+                              <td className="px-2 py-1.5 font-mono text-primary">
+                                {r.instituicao || <span className="text-muted-foreground/40 italic">—</span>}
+                              </td>
+                              <td className="px-2 py-1.5 text-center font-mono text-[11px] text-muted-foreground">
+                                {r.estado_uf || <span className="opacity-30">—</span>}
+                              </td>
+                            </>
+                          ) : (
+                            <td className="px-2 py-1.5 font-mono text-primary">
+                              {r.nr_cliente || <span className="text-muted-foreground/40 italic">—</span>}
+                            </td>
+                          )}
                           <td className="px-2 py-1.5">
                             <BadgeClassificacao
                               classif={classifPorLinha.get(r.linhaOriginal)}
@@ -1958,6 +1997,12 @@ export default function ImportarExcel() {
                           <td className="px-2 py-1.5 max-w-[130px] truncate font-medium">
                             {r.nome_cliente || <span className="text-muted-foreground/40 italic">sem nome</span>}
                           </td>
+                          {/* PaguePlay: coluna CPF dedicada (vem de r.nr_cliente — header "CPF" da planilha). */}
+                          {ehPaguePay && (
+                            <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground max-w-[110px] truncate">
+                              {r.nr_cliente || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
                           <td className="px-2 py-1.5 font-mono">
                             {r.vencimento
                               ? formatDate(r.vencimento)
@@ -1979,9 +2024,12 @@ export default function ImportarExcel() {
                           <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground max-w-[90px] truncate">
                             {r.whatsapp || <span className="opacity-30">—</span>}
                           </td>
-                          <td className="px-2 py-1.5 text-[11px] max-w-[80px] truncate text-muted-foreground">
-                            {r.instituicao || <span className="opacity-30">—</span>}
-                          </td>
+                          {/* PaguePlay: sem coluna INST. (Inscrição já foi exibida como 1ª coluna). */}
+                          {!ehPaguePay && (
+                            <td className="px-2 py-1.5 text-[11px] max-w-[80px] truncate text-muted-foreground">
+                              {r.instituicao || <span className="opacity-30">—</span>}
+                            </td>
+                          )}
                           <td className="px-2 py-1.5 text-[10px] max-w-[180px]">
                             {errosFatais.length > 0 && (
                               <span className="text-destructive block">{errosFatais.join('; ')}</span>

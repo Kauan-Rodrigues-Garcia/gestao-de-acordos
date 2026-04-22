@@ -19,7 +19,7 @@
  * — antes a col A (NR numérico puro, ex: 1000.0) fazia classificarLinha classificar
  * cada linha de dados como 'ruido' (fallback), e o parsearTabela pulava todas elas.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
@@ -37,7 +37,14 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, perfil: null }
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 
 describe('parsearPlanilha — planilha real da PaguePlay', () => {
-  async function carregarPlanilha() {
+  // Timeout generoso: o primeiro carregamento inclui dynamic import de
+  // ImportarExcel.tsx (transformação SWC da página inteira) + leitura XLSX.
+  const TEST_TIMEOUT = 30_000;
+
+  // Cache: carrega a página + planilha UMA VEZ para o describe inteiro.
+  let _cache: Awaited<ReturnType<typeof carregarPlanilhaImpl>> | null = null;
+
+  async function carregarPlanilhaImpl() {
     const filePath = path.resolve(
       process.cwd(),
       'tests/fixtures/pagueplay-planilha-real.xlsx',
@@ -46,10 +53,19 @@ describe('parsearPlanilha — planilha real da PaguePlay', () => {
     const wb  = xlsxRead(buf, { type: 'buffer', cellDates: false, raw: true });
     const ws  = wb.Sheets[wb.SheetNames[0]];
     const rows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' });
-    // Importa DEPOIS dos mocks para garantir que supabase já foi stubado.
     const { parsearPlanilha, classificarLinha } = await import('@/pages/ImportarExcel');
     return { rows, parsearPlanilha, classificarLinha };
   }
+
+  async function carregarPlanilha() {
+    if (!_cache) _cache = await carregarPlanilhaImpl();
+    return _cache;
+  }
+
+  beforeAll(async () => {
+    // Pré-aquece o cache (amortiza o custo do 1º import em um único lugar).
+    await carregarPlanilha();
+  }, TEST_TIMEOUT);
 
   it('carrega as 7 linhas esperadas da planilha real', async () => {
     const { rows } = await carregarPlanilha();
