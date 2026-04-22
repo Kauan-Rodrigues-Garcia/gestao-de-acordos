@@ -58,7 +58,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
 import {
-  CAMPO_PRIORIDADE, KEYWORDS, detectarCampo as detectarCampoPuro, norm,
+  CAMPO_PRIORIDADE, KEYWORDS, detectarCampo as detectarCampoPuro,
+  detectarCampoHeader, norm,
   type CampoDestino,
 } from '@/lib/importar_excel_keywords';
 
@@ -554,7 +555,10 @@ export function classificarLinha(row: unknown[]): TipoLinha {
       // Remove dois-pontos finais para testar labels como "Vencimento:"
       if (LABELS_IGNORAR.has(n.replace(/:$/, ''))) continue;
 
-      const campoConhecido = detectarCampo(s);
+      // Usa versao estrita: evita que VALORES como "CLIENTE A", "BANCO X" (que
+      // disparam startsWith em 'cliente'/'banco') sejam contados como keyword
+      // de cabeçalho dentro do bloco de data.
+      const campoConhecido = detectarCampoHeader(s);
       if (campoConhecido !== '_ignorar' && campoConhecido !== 'vencimento') {
         celulasDado++;   // palavra-chave de acordo → esta linha é cabeçalho
         continue;
@@ -579,7 +583,8 @@ export function classificarLinha(row: unknown[]): TipoLinha {
     // Se é número puro, é ruído (ex: totais, índices soltos)
     if (/^\d+([.,]\d+)?$/.test(s1)) return 'ruido';
     // Se a única célula é uma keyword de campo → cabeçalho isolado
-    const campo1 = detectarCampo(s1);
+    // Usa versão estrita: "CLIENTE A" sozinho não vira cabeçalho.
+    const campo1 = detectarCampoHeader(s1);
     if (campo1 !== '_ignorar' && CAMPOS_CANONICOS_LINHA.includes(campo1)) return 'cabecalho';
     // Qualquer outro texto isolado (ex: "NOVEMBRO/2025", "Setor A") → ruído
     return 'ruido';
@@ -591,13 +596,21 @@ export function classificarLinha(row: unknown[]): TipoLinha {
   // ── 4. Cabeçalho ─────────────────────────────────────────────────────────
   // ≥2 keywords canônicas entre as células (linha de cabeçalho multi-coluna)
   // Nota: linha de 1 célula com keyword já foi tratada no passo 3.
+  //
+  // BUG FIX: usa detectarCampoHeader (estrito) para não contar VALORES como
+  // keywords. Ex: uma linha de dados em modo blocos
+  // ["1001","CLIENTE A","100,00","1x","PENDENTE","(11)91111-1111","BANCO X"]
+  // tem "CLIENTE A" e "BANCO X" batendo com startsWith de "cliente"/"banco"
+  // — com o detector antigo (flexível), a linha era falsamente classificada
+  // como cabeçalho, fazendo registros nunca serem processados. O bloco do
+  // dia 14 sumia porque suas linhas viravam "cabecalho" repetido.
   {
     let contKeywords = 0;
     for (const c of nv) {
       const s = String(c).trim();
       if (/^\d+([.,]\d+)?$/.test(s)) continue;  // número puro
       if (isCelulaData(c)) continue;             // data
-      const campo = detectarCampo(s);
+      const campo = detectarCampoHeader(s);
       if (campo !== '_ignorar' && CAMPOS_CANONICOS_LINHA.includes(campo)) contKeywords++;
     }
     if (contKeywords >= 2) return 'cabecalho';
@@ -616,8 +629,9 @@ export function classificarLinha(row: unknown[]): TipoLinha {
     }
   }
 
-  // ── 6. Acordo de bloco ────────────────────────────────────────────────────
+  // ── 6. Acordo de bloco — variante NAME-first ────────────────────────────
   // Col A é texto (nome) E existe pelo menos um número nas demais colunas
+  // Layout legado: NOME | NR | VALOR | ...
   {
     const col0 = row[0];
     const s0   = String(col0 ?? '').trim();
@@ -629,6 +643,45 @@ export function classificarLinha(row: unknown[]): TipoLinha {
         return /^\d[\d,.]*$/.test(s) || /^\d{1,3}[xX.]$/.test(s) || /^R\$/.test(s);
       });
       if (temNumero) return 'acordo_bloco';
+    }
+  }
+
+  // ── 6b. Acordo de bloco — variante NR-first ─────────────────────────────
+  // Layout NR | NOME | VALOR | PARC | STATUS | WHATS | INST
+  // Heurística: col[0] é inteiro pequeno (1-9 dígitos, não-celular) E
+  //             col[1] é texto nome-like (2+ tokens alfabéticos) E
+  //             existe pelo menos 1 valor monetário/parcela nas demais.
+  // BUG FIX dia 14: sem este ramo, linhas como
+  //   ["1001","CLIENTE A","100,00","1x","PENDENTE","(11)91111-1111","BANCO X"]
+  // caíam em 'ruido' e o parser híbrido as descartava silenciosamente.
+  {
+    const col0 = row[0];
+    const col1 = row[1];
+    const s0   = String(col0 ?? '').trim();
+    const s1   = String(col1 ?? '').trim();
+
+    const col0EhNrCurto =
+      (/^\d{1,9}$/.test(s0) && !pareceWhatsapp(col0)) ||
+      (typeof col0 === 'number' && Number.isInteger(col0) &&
+       col0 > 0 && col0 < 1_000_000_000 && !pareceWhatsapp(col0));
+
+    // nome-like: texto com letra, 2+ tokens OU 4+ letras contíguas
+    const col1EhNomeLike =
+      s1.length >= 3 &&
+      /[A-Za-zÀ-ÿ]/.test(s1) &&
+      !isCelulaData(col1) &&
+      !/^\d+([.,]\d+)?$/.test(s1) &&
+      (s1.split(/\s+/).length >= 2 || /[A-Za-zÀ-ÿ]{4,}/.test(s1));
+
+    if (col0EhNrCurto && col1EhNomeLike) {
+      const temValorOuParc = row.slice(2).some(c => {
+        if (c === null || c === undefined || String(c).trim() === '') return false;
+        if (typeof c === 'number' && c > 0) return true;
+        const s = String(c).trim();
+        // valor monetário (com separador decimal) OU parcela (ex: "1x", "6x")
+        return /\d[,.]\d/.test(s) || /^\d{1,3}[xX.]$/.test(s) || /^R\$/.test(s);
+      });
+      if (temValorOuParc) return 'acordo_bloco';
     }
   }
 
@@ -659,20 +712,47 @@ interface ResultadoParser {
 function mapaAcordoBloco(row: unknown[]): Record<number, CampoDestino> {
   const mapa: Record<number, CampoDestino> = {};
 
-  // col[0] → nome (texto não-número, não-data)
-  const c0 = String(row[0] ?? '').trim();
-  if (c0 && !isCelulaData(row[0]) && !/^\d+$/.test(c0)) {
-    mapa[0] = 'nome_cliente';
-  }
+  // ── Detecção da variante do layout ────────────────────────────────────
+  // NR-first:  [NR numérico] [NOME texto] [VALOR] [PARC] [STATUS] [WHATS] [INST]
+  // NAME-first:[NOME texto]  [NR num|—]   [VALOR] [PARC] [STATUS] [WHATS] [INST]
+  const c0raw = row[0];
+  const c1raw = row[1];
+  const c0    = String(c0raw ?? '').trim();
+  const c1    = String(c1raw ?? '').trim();
 
-  // col[1] → NR (inteiro 1-9 dígitos, não é celular)
-  if (row[1] !== undefined && row[1] !== null && row[1] !== '') {
-    const c1 = String(row[1]).trim();
-    if (/^\d{1,9}$/.test(c1) && !pareceWhatsapp(row[1])) {
-      mapa[1] = 'nr_cliente';
-    } else if (typeof row[1] === 'number' && Number.isInteger(row[1]) &&
-               row[1] > 0 && row[1] < 1_000_000_000 && !pareceWhatsapp(row[1])) {
-      mapa[1] = 'nr_cliente';
+  const c0EhNrCurto =
+    (/^\d{1,9}$/.test(c0) && !pareceWhatsapp(c0raw)) ||
+    (typeof c0raw === 'number' && Number.isInteger(c0raw) &&
+     c0raw > 0 && c0raw < 1_000_000_000 && !pareceWhatsapp(c0raw));
+
+  const c1EhNomeLike =
+    c1.length >= 3 &&
+    /[A-Za-zÀ-ÿ]/.test(c1) &&
+    !isCelulaData(c1raw) &&
+    !/^\d+([.,]\d+)?$/.test(c1) &&
+    (c1.split(/\s+/).length >= 2 || /[A-Za-zÀ-ÿ]{4,}/.test(c1));
+
+  const layoutNrFirst = c0EhNrCurto && c1EhNomeLike;
+
+  if (layoutNrFirst) {
+    // col[0] → NR, col[1] → nome
+    mapa[0] = 'nr_cliente';
+    mapa[1] = 'nome_cliente';
+  } else {
+    // Layout NAME-first (legado)
+    // col[0] → nome (texto não-número, não-data)
+    if (c0 && !isCelulaData(c0raw) && !/^\d+$/.test(c0)) {
+      mapa[0] = 'nome_cliente';
+    }
+
+    // col[1] → NR (inteiro 1-9 dígitos, não é celular)
+    if (c1raw !== undefined && c1raw !== null && c1raw !== '') {
+      if (/^\d{1,9}$/.test(c1) && !pareceWhatsapp(c1raw)) {
+        mapa[1] = 'nr_cliente';
+      } else if (typeof c1raw === 'number' && Number.isInteger(c1raw) &&
+                 c1raw > 0 && c1raw < 1_000_000_000 && !pareceWhatsapp(c1raw)) {
+        mapa[1] = 'nr_cliente';
+      }
     }
   }
 
@@ -954,11 +1034,17 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
         const dados = aplicarMapa(row, mapaBloco);
         dados.vencimento = dataAtual;   // SEMPRE sobrescreve com a data do bloco
 
-        // Garantia extra: se nome ainda vazio, col[0] é o nome
+        // Garantia extra: se nome ainda vazio, tenta col[0] (name-first) ou col[1] (NR-first)
         if (!dados.nome_cliente) {
           const s0 = String(row[0] ?? '').trim();
           if (s0 && !isCelulaData(row[0]) && !/^\d+$/.test(s0)) {
             dados.nome_cliente = s0;
+          } else {
+            // Layout NR-first: col[0] é número, nome está em col[1]
+            const s1 = String(row[1] ?? '').trim();
+            if (s1 && !isCelulaData(row[1]) && !/^\d+([.,]\d+)?$/.test(s1) && /[A-Za-zÀ-ÿ]/.test(s1)) {
+              dados.nome_cliente = s1;
+            }
           }
         }
 

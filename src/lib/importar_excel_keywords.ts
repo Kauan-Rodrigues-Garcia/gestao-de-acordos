@@ -86,3 +86,75 @@ export function detectarCampo(header: string): CampoDestino {
   }
   return '_ignorar';
 }
+
+// ─── Conectores de header compostos ───────────────────────────────────────
+// Quando detectarCampoHeader vê uma célula "cliente x", precisa decidir:
+// é um header legítimo ("Nome do Cliente Principal") ou um valor
+// ("Cliente A", "Banco XP")?  Critério: o "resto" após o prefixo-keyword só
+// pode conter conectores ou outra keyword — nunca uma palavra/letra arbitrária.
+const CONECTORES_HEADER = new Set([
+  'de', 'do', 'da', 'dos', 'das', 'a', 'o', 'e',
+  'em', 'para', 'por', 'the', 'of',
+]);
+
+/** Todas as keywords juntas em um Set (usado para validar "resto" do header). */
+const TODAS_KEYWORDS_NORM: ReadonlySet<string> = (() => {
+  const s = new Set<string>();
+  for (const palavras of Object.values(KEYWORDS)) {
+    for (const p of palavras) s.add(norm(p));
+  }
+  return s;
+})();
+
+/**
+ * Versão estrita do detectarCampo — usada **apenas** pelo classificador de linha
+ * (classificarLinha), para decidir se uma linha é cabeçalho de tabela.
+ *
+ * Diferença vs detectarCampo (flexível, usado no mapeamento pós-cabeçalho):
+ *  - Match exato: ok
+ *  - startsWith (keyword mais curta que a cell): SÓ aceita se o "resto" da cell
+ *    após remover o prefixo for composto apenas por conectores de header
+ *    (de, do, da, ...) ou outras keywords.
+ *  - startsWith reverso (cell mais curta que keyword): mantém — casos como
+ *    "Nr" vs keyword "numero" onde a cell é abreviação válida.
+ *
+ * Isso evita que VALORES como "CLIENTE A", "BANCO X", "NOME DO PROFISSIONAL" (no
+ * lugar errado), "CARLOS MENDES" disparem detecção e inflem contKeywords,
+ * fazendo linhas de dados serem erroneamente classificadas como cabeçalho.
+ */
+export function detectarCampoHeader(header: string): CampoDestino {
+  const h = norm(header);
+  if (!h) return '_ignorar';
+
+  // 1ª passagem: match exato (igual ao detectarCampo).
+  for (const campo of CAMPO_PRIORIDADE) {
+    const palavras = KEYWORDS[campo];
+    if (palavras.some(p => norm(p) === h)) return campo;
+  }
+  // 2ª passagem: prefixo — estrita.
+  for (const campo of CAMPO_PRIORIDADE) {
+    const palavras = KEYWORDS[campo];
+    if (palavras.some(p => {
+      const np = norm(p);
+      if (np.length < 3 || h.length < 3) return false;
+
+      // cell mais curta que keyword (ex: "venc" ~ "vencimento"):
+      // mantém flexibilidade — abreviação legítima de header.
+      if (np.startsWith(h) && h !== np) return true;
+
+      // cell mais longa que keyword (ex: "cliente a" ~ "cliente"):
+      // só aceita se o restante for composto de conectores/keywords.
+      if (h.startsWith(np) && h !== np) {
+        const resto = h.slice(np.length).trim();
+        if (!resto) return true;
+        // Cada token do resto precisa ser conector ou outra keyword.
+        const tokens = resto.split(/\s+/);
+        return tokens.every(t =>
+          CONECTORES_HEADER.has(t) || TODAS_KEYWORDS_NORM.has(t),
+        );
+      }
+      return false;
+    })) return campo;
+  }
+  return '_ignorar';
+}
