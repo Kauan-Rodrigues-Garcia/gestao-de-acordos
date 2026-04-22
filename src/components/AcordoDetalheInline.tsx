@@ -839,7 +839,7 @@ export function AcordoDetalheInline({
                 },
               );
               if (!authRes.ok) {
-                alert('Credenciais de líder inválidas.');
+                toast.error('Credenciais de líder inválidas.');
                 setExecutandoExtraDireto(false);
                 return;
               }
@@ -847,7 +847,7 @@ export function AcordoDetalheInline({
               const liderUid = authData.user?.id;
               const liderToken = authData.access_token;
               if (!liderUid || !liderToken) {
-                alert('Credenciais de líder inválidas.');
+                toast.error('Credenciais de líder inválidas.');
                 setExecutandoExtraDireto(false);
                 return;
               }
@@ -863,14 +863,14 @@ export function AcordoDetalheInline({
                 },
               );
               if (!perfilRes.ok) {
-                alert('Erro ao verificar perfil do líder.');
+                toast.error('Erro ao verificar perfil do líder.');
                 setExecutandoExtraDireto(false);
                 return;
               }
               const perfilArr = await perfilRes.json() as Array<{ perfil: string; nome: string }>;
               const liderPerfilData = Array.isArray(perfilArr) && perfilArr.length > 0 ? perfilArr[0] : null;
               if (!liderPerfilData || !['lider', 'administrador', 'super_admin', 'elite', 'gerencia', 'diretoria'].includes(liderPerfilData.perfil)) {
-                alert('O usuário informado não tem permissão de líder ou administrador.');
+                toast.error('O usuário informado não tem permissão de líder ou administrador.');
                 setExecutandoExtraDireto(false);
                 return;
               }
@@ -887,7 +887,7 @@ export function AcordoDetalheInline({
             const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
             const valorChave = isPaguePlay ? acordoLocal.instituicao : acordoLocal.nr_cliente;
             if (!valorChave || !String(valorChave).trim()) {
-              alert('Não foi possível identificar o registro deste acordo (chave de vínculo vazia).');
+              toast.error('Não foi possível identificar o registro deste acordo (chave de vínculo vazia).');
               setExecutandoExtraDireto(false);
               return;
             }
@@ -903,7 +903,7 @@ export function AcordoDetalheInline({
 
             if (errBuscaDireto) {
               console.error(errBuscaDireto);
-              alert('Erro ao localizar o acordo direto original.');
+              toast.error('Erro ao localizar o acordo direto original.');
               setExecutandoExtraDireto(false);
               return;
             }
@@ -916,7 +916,7 @@ export function AcordoDetalheInline({
                 .eq('id', acordoDiretoOriginal.id);
               if (errDel) {
                 console.error(errDel);
-                alert('Erro ao remover o acordo original do outro operador.');
+                toast.error('Erro ao remover o acordo original do outro operador.');
                 setExecutandoExtraDireto(false);
                 return;
               }
@@ -951,7 +951,7 @@ export function AcordoDetalheInline({
 
             if (errUpdate) {
               console.error(errUpdate);
-              alert('Erro ao converter acordo para direto.');
+              toast.error('Erro ao converter acordo para direto.');
               setExecutandoExtraDireto(false);
               return;
             }
@@ -990,7 +990,7 @@ export function AcordoDetalheInline({
             setModalExtraDiretoOpen(false);
           } catch (e) {
             console.error(e);
-            alert('Erro inesperado ao converter para direto.');
+            toast.error('Erro inesperado ao converter para direto.');
           } finally {
             setExecutandoExtraDireto(false);
           }

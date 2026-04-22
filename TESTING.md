@@ -80,7 +80,7 @@ import { meuServico } from './meuServico';
 | `src/services/tratarExclusaoVinculo.ts` | ✅ 81% |
 | `src/services/nr_registros.service.ts` | ✅ 100% lines / 97% branches / 100% funcs (26 testes) |
 | `src/services/lixeira.service.ts` | ✅ 100% lines / 88% branches / 100% funcs (12 testes) |
-| `src/services/notificacoes.service.ts` | ⏳ |
+| `src/services/notificacoes.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (12 testes) |
 | `src/services/acordos.service.ts` | ⏳ |
 
 ### Camada 3 — Componentes integrados
@@ -119,8 +119,19 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`nr_registros.service`** — fonte-de-verdade do bloqueio de NR. 26 testes cobrindo 7 funções em 22 ms, 100% lines. Se este arquivo quebrar, tabulações duplicadas voltam a aparecer.
 - **`AcordoEditInline`** — cenário original do bug das tabulações duplicadas via edição. 9 testes cobrindo: não chama verificação quando chave não muda; bloqueia com toast quando muda para valor ocupado; salva + sincroniza `nr_registros` quando livre; Extras NÃO são registrados como titulares; PaguePlay usa `instituicao` como chave; queda da verificação → `toast.warning` e segue.
 - **`AcordoNovoInline`** — fluxo de criação com bloqueio de NR e ramificação Direto/Extra. 15 testes cobrindo: validações de campos obrigatórios; bloqueio por mesmo operador; **CASO A** (usuário tem lógica → insere como EXTRA + atualiza direto antigo + notifica); **CASO B** (só o outro tem lógica → abre modal de aviso sem autorização); **CASO C** (ninguém tem → abre modal de autorização do líder); NR livre → insert simples + onSaved. Também cobre o componente exportado `ModalAvisoDiretoExtra` em isolado.
-- **`AcordoDetalheInline`** — conversão Extra → Direto, cenário do bug do campo `inscricao` inexistente. 12 testes cobrindo: badge "Extra" + botão "Acordo direto" condicional ao dono; modal Extra→Direto com/sem autorização do líder; **fluxo completo com par direto** (delete direto antigo + update extra→direto + notificação + transferirNr + liberarNrPorAcordoId); fluxo sem par direto (promoção órfã); PaguePlay usa `instituicao`; chave vazia → alerta defensivo; erro no UPDATE → alerta e aborto.
+- **`AcordoDetalheInline`** — conversão Extra → Direto, cenário do bug do campo `inscricao` inexistente. 12 testes cobrindo: badge "Extra" + botão "Acordo direto" condicional ao dono; modal Extra→Direto com/sem autorização do líder; **fluxo completo com par direto** (delete direto antigo + update extra→direto + notificação + transferirNr + liberarNrPorAcordoId); fluxo sem par direto (promoção órfã); PaguePlay usa `instituicao`; chave vazia → `toast.error` defensivo; erro no UPDATE → `toast.error` e aborto.
 - **`lixeira.service`** — 4 funções (`enviarParaLixeira`, `fetchLixeira`, `esvaziarLixeira`, `deletarItemLixeira`). 12 testes cobrindo snapshot completo no insert, fallback null para campos ausentes, erro de RLS, lista com limit custom, delete por empresa e por id. Se este serviço quebrar, acordos transferidos via transferência de NR são perdidos sem retenção.
+- **`notificacoes.service`** — 5 funções (`fetchNotificacoes`, `marcarComoLida`, `marcarTodasLidas`, `limparTodasNotificacoes`, `criarNotificacao`). 12 testes cobrindo: listagem ordenada por `criado_em desc` com limit 50; marcação individual e em lote (só não-lidas); limpeza total por usuário; insert com e sem `empresa_id`; todos os caminhos de erro apenas logam warning (não lançam). Serviço crítico: usado por `AcordoNovoInline` (CASO A + autorização do líder), `AcordoDetalheInline` (Extra→Direto) e pelo sino de notificações. Se quebrar, operadores deixam de receber avisos de transferência de chave.
+
+### Exemplo prático: refatoração `alert()` → `toast.error()` (AcordoDetalheInline)
+
+Depois que a suíte do `AcordoDetalheInline` ficou verde (12/12), foi possível substituir 9 ocorrências de `window.alert(...)` por `toast.error(...)` em poucos segundos e com **zero risco**:
+
+1. Os 2 testes que validavam mensagens de erro passaram a asserir contra `toastError` (o mesmo mock já existente).
+2. O spy de `alert` foi transformado em **tripwire permanente**: `expect(alertSpy).not.toHaveBeenCalled()` em todos os fluxos de erro. Se alguém reintroduzir `window.alert` no componente por acidente, os testes falham na hora.
+3. Resultado: a UX ficou consistente com o resto do app (sonner/toast) sem precisar abrir o navegador nem clicar manualmente em 9 cenários de erro.
+
+Esse tipo de refatoração só é seguro porque os testes existem. **É o payoff direto do investimento em testes** — manutenibilidade, não só detecção de bug.
 
 ### Padrão de mocks UI para Radix (Dialog / Popover / Select / Calendar)
 

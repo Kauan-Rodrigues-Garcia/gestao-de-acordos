@@ -122,7 +122,8 @@ vi.mock('@/components/ui/sonner', () => ({
   },
 }));
 
-// 6) alert é usado nativo no componente — espionamos.
+// 6) alert nativo NAO deve mais ser usado pelo componente (migrado para toast).
+//    Mantemos um spy apenas para garantir que ninguem voltou a chamá-lo.
 const alertSpy = vi.fn();
 vi.stubGlobal('alert', alertSpy);
 
@@ -462,8 +463,10 @@ describe('AcordoDetalheInline — validações defensivas', () => {
     await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
     fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    expect(alertSpy.mock.calls[0][0]).toMatch(/chave de vínculo vazia/i);
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError.mock.calls[0][0]).toMatch(/chave de vínculo vazia/i);
+    // Regressão anti-alert: o componente deve usar toast, não alert nativo.
+    expect(alertSpy).not.toHaveBeenCalled();
 
     // Nenhuma ação no banco.
     expect(supabaseCalls.length).toBe(0);
@@ -482,8 +485,9 @@ describe('AcordoDetalheInline — validações defensivas', () => {
     await waitFor(() => screen.getByRole('button', { name: /Tornar Direto/i }));
     fireEvent.click(screen.getByRole('button', { name: /Tornar Direto/i }));
 
-    await waitFor(() => expect(alertSpy).toHaveBeenCalled());
-    expect(alertSpy.mock.calls.some(c => /Erro ao converter/i.test(String(c[0])))).toBe(true);
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(toastError.mock.calls.some(c => /Erro ao converter/i.test(String(c[0])))).toBe(true);
+    expect(alertSpy).not.toHaveBeenCalled();
 
     // onSaved não deve ser chamado.
     expect(onSaved).not.toHaveBeenCalled();
