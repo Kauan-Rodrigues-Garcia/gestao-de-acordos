@@ -902,8 +902,8 @@ function parsearPlanilha(rows: unknown[][]): ResultadoParser {
     if (classificarLinha(rows[i]) === 'data_bloco') { temBlocos = true; break; }
   }
 
-  console.log('[PARSER] Linhas:', rows.length, '| Modo:', temBlocos ? 'HÍBRIDO/BLOCOS' : 'TABELA CONTÍNUA');
-  console.log('[PARSER] Primeiras 5 linhas classificadas:',
+  console.info('[PARSER] Linhas:', rows.length, '| Modo:', temBlocos ? 'HÍBRIDO/BLOCOS' : 'TABELA CONTÍNUA');
+  console.info('[PARSER] Primeiras 5 linhas classificadas:',
     rows.slice(0, 5).map((r, i) => `L${i+1}=${classificarLinha(r)}`).join(', '));
 
   // Modo tabela contínua pura (nenhum bloco por data)
@@ -933,7 +933,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
     const linhaNum = i + 1;
     const tipo     = classificarLinha(row);
 
-    console.log(`[HÍBRIDO] L${linhaNum} tipo=${tipo} | cells=${JSON.stringify(row.slice(0,7))}`);
+    console.info(`[HÍBRIDO] L${linhaNum} tipo=${tipo} | cells=${JSON.stringify(row.slice(0,7))}`);
 
     switch (tipo) {
       // ── Data de bloco: atualiza contexto ────────────────────────────────
@@ -946,7 +946,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
         blocos++;
         modoMapa  = null;   // próximo cabeçalho ou 1ª linha decide o mapa
         mapaBloco = {};
-        console.log(`[HÍBRIDO] L${linhaNum} → dataAtual=${dataAtual}`);
+        console.info(`[HÍBRIDO] L${linhaNum} → dataAtual=${dataAtual}`);
         break;
       }
 
@@ -954,7 +954,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
       case 'cabecalho': {
         mapaBloco = mapaDeHeader(row);
         modoMapa  = 'header';
-        console.log(`[HÍBRIDO] L${linhaNum} → CABEÇALHO. Mapa:`, JSON.stringify(mapaBloco));
+        console.info(`[HÍBRIDO] L${linhaNum} → CABEÇALHO. Mapa:`, JSON.stringify(mapaBloco));
         break;
       }
 
@@ -962,14 +962,14 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
       case 'acordo_bloco': {
         if (!dataAtual) {
           // Acordo de bloco sem data de bloco prévia → descarta
-          console.log(`[HÍBRIDO] L${linhaNum} → acordo_bloco SEM dataAtual, descartado`);
+          console.info(`[HÍBRIDO] L${linhaNum} → acordo_bloco SEM dataAtual, descartado`);
           break;
         }
         // Se ainda não há mapa posicional, infere agora
         if (modoMapa === null) {
           mapaBloco = mapaAcordoBloco(row);
           modoMapa  = 'posicional';
-          console.log(`[HÍBRIDO] L${linhaNum} → mapa posicional bloco inferido:`, JSON.stringify(mapaBloco));
+          console.info(`[HÍBRIDO] L${linhaNum} → mapa posicional bloco inferido:`, JSON.stringify(mapaBloco));
         }
 
         const dados = aplicarMapa(row, mapaBloco);
@@ -988,7 +988,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
           dados.instituicao = extrairInstituicaoDaLinha(row, mapaBloco);
         }
 
-        console.log(`[HÍBRIDO] L${linhaNum} → dados bloco:`, JSON.stringify(dados));
+        console.info(`[HÍBRIDO] L${linhaNum} → dados bloco:`, JSON.stringify(dados));
         const acordo = montarAcordo(dados, hoje, linhaNum, dataAtual);
         if (acordo) registros.push(acordo);
         break;
@@ -999,7 +999,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
         const mapa = mapaAcordoContinuo(row);
         const dados = aplicarMapa(row, mapa);
 
-        console.log(`[HÍBRIDO] L${linhaNum} → dados contínuo:`, JSON.stringify(dados));
+        console.info(`[HÍBRIDO] L${linhaNum} → dados contínuo:`, JSON.stringify(dados));
         const acordo = montarAcordo(dados, hoje, linhaNum, undefined);
         if (acordo) registros.push(acordo);
         break;
@@ -1012,7 +1012,7 @@ function parsearHibrido(rows: unknown[][], hoje: string): ResultadoParser {
     }
   }
 
-  console.log('[HÍBRIDO] Total registros:', registros.length, '| Blocos:', blocos);
+  console.info('[HÍBRIDO] Total registros:', registros.length, '| Blocos:', blocos);
   return { modo: 'blocos', registros, blocos };
 }
 
@@ -1112,7 +1112,7 @@ function montarAcordo(
   blocoData?: string
 ): AcordoImportado | null {
 
-  console.log('[MONTAR] Linha', linha, '- dados recebidos:', JSON.stringify(dados));
+  console.info('[MONTAR] Linha', linha, '- dados recebidos:', JSON.stringify(dados));
 
   const nome_cliente = String(dados.nome_cliente ?? '').trim();
   const nr_cliente   = String(dados.nr_cliente   ?? '').trim();
@@ -1129,7 +1129,7 @@ function montarAcordo(
   const observacoes  = String(dados.observacoes  ?? '').trim() || null;
   const instituicao  = String(dados.instituicao  ?? '').trim() || null;
 
-  console.log('[MONTAR] Linha', linha, '- normalizado:',
+  console.info('[MONTAR] Linha', linha, '- normalizado:',
     'nome=', nome_cliente,
     '| nr=', nr_cliente,
     '| venc=', vencimento,

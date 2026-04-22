@@ -35,6 +35,9 @@ jobs:
       - name: TypeScript type-check
         run: npx tsc --noEmit
 
+      - name: Run tests (Vitest)
+        run: npm test -- --run
+
       - name: Build (production)
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
