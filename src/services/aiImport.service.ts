@@ -12,6 +12,8 @@ export type AINormalizedRecord = {
   parcelas: number | null;
   observacoes: string | null;
   instituicao: string | null;
+  /** UF do cliente (PaguePlay). 2 letras maiúsculas, ex: 'SP', 'RJ'. */
+  estado_uf?: string | null;
 };
 
 export type AINormalizeResponse = {

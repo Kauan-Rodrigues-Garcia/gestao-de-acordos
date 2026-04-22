@@ -23,7 +23,7 @@ import { motion } from 'framer-motion';
 import {
   Upload, FileSpreadsheet, ArrowLeft, CheckCircle2,
   XCircle, ChevronRight, RefreshCw, AlertCircle,
-  ArrowRight, Info, Building2, Eye, Layers, Bot
+  ArrowRight, Info, Building2, Eye, Layers, Bot, Shield,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
-import { ROUTE_PATHS, formatDate, formatCurrency, isPaguePlay } from '@/lib/index';
+import { ROUTE_PATHS, formatDate, formatCurrency, isPaguePlay, getTodayISO, buildObservacoesComEstado } from '@/lib/index';
 import { safeNum } from '@/lib/money';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -41,13 +41,25 @@ import { fetchAIConfig } from '@/services/aiConfig.service';
 import { aiNormalizeImport } from '@/services/aiImport.service';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { verificarNrsDuplicadosEmLote } from '@/services/acordos.service';
+import {
+  classificarNrsImportados,
+  agruparPorCategoria,
+  type ClassificacaoNR,
+  type CategoriaImport,
+} from '@/services/classificar_nrs_import.service';
+import { processarImportacaoEmLote, type PayloadAcordoImport } from '@/services/importar_excel_batch.service';
+import { autenticarLider, type AutorizadorInfo } from '@/services/autorizacao_lider.service';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 // ─── Tipos ─────────────────────────────────────────────────────────────────
 
 type CampoDestino =
   | 'nome_cliente' | 'nr_cliente' | 'vencimento' | 'valor'
   | 'whatsapp' | 'status' | 'tipo' | 'parcelas'
-  | 'observacoes' | 'data_cadastro' | 'instituicao' | '_ignorar';
+  | 'observacoes' | 'data_cadastro' | 'instituicao' | 'estado_uf' | '_ignorar';
 
 interface AcordoImportado {
   linhaOriginal: number;
@@ -62,6 +74,8 @@ interface AcordoImportado {
   parcelas:      number;
   observacoes:   string | null;
   instituicao:   string | null;
+  /** UF do cliente (PaguePlay). Serializada em observacoes via buildObservacoesComEstado. */
+  estado_uf:     string | null;
   valido:        boolean;
   erros:         string[];
 }
@@ -79,12 +93,16 @@ const KEYWORDS: Record<CampoDestino, string[]> = {
   vencimento:    ['venc', 'vencimento', 'data venc', 'data de venc', 'prazo', 'validade', 'data'],
   valor:         ['valor', 'vlr', 'montante', 'r$', 'valor acordo'],
   whatsapp:      ['whats', 'whatsapp', 'wpp', 'cel', 'celular', 'tel', 'telefone', 'fone', 'zap', 'contato', 'numero celular'],
-  status:        ['status', 'situacao', 'estado'],
+  // 'estado' REMOVIDO daqui — agora pertence a estado_uf (UF do cliente p/ PaguePlay).
+  status:        ['status', 'situacao'],
   tipo:          ['tipo', 'forma', 'modalidade'],
   parcelas:      ['parc', 'parcelas', 'parcela', 'qtd parc', 'nparc', 'prestacoes', 'qtd parcelas'],
   data_cadastro: ['cadastro', 'data cadastro', 'inclusao'],
   observacoes:   ['obs', 'observ', 'nota', 'anotacao', 'comentario', 'descricao'],
-  instituicao:   ['inst', 'instituicao', 'instituição', 'banco', 'origem', 'empresa', 'credor', 'entidade', 'financeira'],
+  // 'inscricao'/'inscrição' são o header natural da planilha PaguePlay para o NR único.
+  instituicao:   ['inst', 'instituicao', 'instituição', 'inscricao', 'inscrição', 'banco', 'origem', 'empresa', 'credor', 'entidade', 'financeira'],
+  // UF do cliente — usado no fluxo PaguePlay e serializado em observações como [ESTADO:XX].
+  estado_uf:     ['estado', 'uf', 'estado uf', 'uf cliente', 'estado cliente'],
   _ignorar:      [],
 };
 
@@ -93,7 +111,8 @@ const KEYWORDS: Record<CampoDestino, string[]> = {
 // PARCELAS vem antes de VALOR para evitar que PARC. seja confundido com VALOR.
 const CAMPO_PRIORIDADE: CampoDestino[] = [
   'parcelas', 'whatsapp', 'nr_cliente', 'nome_cliente', 'vencimento', 'valor',
-  'status', 'tipo', 'data_cadastro', 'observacoes', 'instituicao',
+  // estado_uf antes de status: header 'Estado' vai para UF (PaguePlay), não para status.
+  'estado_uf', 'status', 'tipo', 'data_cadastro', 'observacoes', 'instituicao',
 ];
 
 /** Normaliza string para comparação: minúsculo + sem acento */
@@ -892,7 +911,8 @@ function mapaDeHeader(row: unknown[]): Record<number, CampoDestino> {
 function parsearPlanilha(rows: unknown[][]): ResultadoParser {
   if (!rows || rows.length === 0) return { modo: 'tabela', registros: [] };
 
-  const hoje = new Date().toISOString().split('T')[0];
+  // FIX: usar getTodayISO() (BRT) — evita off-by-one pós-21h BRT (ex: 23/04 → 22/04).
+  const hoje = getTodayISO();
 
   // ── Pré-análise: decidir modo dominante ──────────────────────────────────
   // Se encontrarmos ao menos uma linha data_bloco nas primeiras 80 linhas
@@ -1128,6 +1148,9 @@ function montarAcordo(
   const parcelas     = normalizarParcelas(dados.parcelas);
   const observacoes  = String(dados.observacoes  ?? '').trim() || null;
   const instituicao  = String(dados.instituicao  ?? '').trim() || null;
+  // UF do cliente (2 letras). Serializada em observações em confirmarImportacao.
+  const estadoRaw    = String(dados.estado_uf ?? '').trim().toUpperCase();
+  const estado_uf    = /^[A-Z]{2}$/.test(estadoRaw) ? estadoRaw : null;
 
   console.info('[MONTAR] Linha', linha, '- normalizado:',
     'nome=', nome_cliente,
@@ -1182,6 +1205,7 @@ function montarAcordo(
     parcelas,
     observacoes:   observacoes || null,
     instituicao,
+    estado_uf,
     // VÁLIDO = sem erros fatais (vencimento e valor ok)
     // Avisos de nome/NR ausentes NÃO invalidam
     valido:        erros.length === 0,
@@ -1205,6 +1229,7 @@ export default function ImportarExcel() {
   const navigate   = useNavigate();
   const inputRef   = useRef<HTMLInputElement>(null);
   const rawRowsRef = useRef<unknown[][] | null>(null);
+  const { configs: configsDiretoExtra } = useDiretoExtraConfig();
 
   const [etapa,     setEtapa]     = useState<Etapa>('upload');
   const [arquivo,   setArquivo]   = useState<File | null>(null);
@@ -1220,6 +1245,20 @@ export default function ImportarExcel() {
   const [organizandoIA, setOrganizandoIA] = useState(false);
   const [lendoArquivo, setLendoArquivo] = useState(false);
   const [aiPrompt, setAiPrompt] = useState<string | null>(null);
+
+  // ── Classificação em batch dos NRs importados ──────────────────────────
+  const [classificacao, setClassificacao] = useState<ClassificacaoNR[]>([]);
+  const [carregandoClassif, setCarregandoClassif] = useState(false);
+
+  // ── Modal de autorização de NRs bloqueados ─────────────────────────────
+  const [modalAutorizacaoAberto, setModalAutorizacaoAberto] = useState(false);
+  const [linhasSelecionadas, setLinhasSelecionadas] = useState<Set<number>>(new Set());
+  const [liderEmail, setLiderEmail] = useState('');
+  const [liderSenha, setLiderSenha] = useState('');
+  const [autorizando, setAutorizando] = useState(false);
+  /** Autorizador validado e set de linhas cuja autorização foi concedida. */
+  const [autorizador, setAutorizador] = useState<AutorizadorInfo | null>(null);
+  const [linhasAutorizadas, setLinhasAutorizadas] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     (async () => {
@@ -1283,6 +1322,63 @@ export default function ImportarExcel() {
     return rawRows;
   }
 
+  /**
+   * Classifica todos os NRs dos registros válidos contra o banco + lógica
+   * Direto/Extra do operador atual. Armazena o resultado em `classificacao`.
+   */
+  async function carregarClassificacao(regs: AcordoImportado[]) {
+    if (!empresa?.id || !perfil?.id) {
+      setClassificacao([]);
+      return;
+    }
+    setCarregandoClassif(true);
+    try {
+      const ehPaguePay = isPaguePlay(tenantSlug);
+      const campoNr: 'nr_cliente' | 'instituicao' = ehPaguePay ? 'instituicao' : 'nr_cliente';
+
+      const validos = regs.filter(r => r.valido);
+      const inputs = validos.map(r => ({
+        linhaOriginal: r.linhaOriginal,
+        nr: ((ehPaguePay ? r.instituicao : r.nr_cliente) ?? '').trim(),
+      }));
+      const nrs = inputs.map(i => i.nr).filter(Boolean);
+      const duplicados = nrs.length > 0
+        ? await verificarNrsDuplicadosEmLote(nrs, empresa.id, campoNr)
+        : new Map();
+
+      const classif = await classificarNrsImportados({
+        registros:            inputs,
+        operadorAtualId:      perfil.id,
+        operadorAtualSetorId: perfil.setor_id ?? null,
+        operadorAtualEquipeId: perfil.equipe_id ?? null,
+        configsDiretoExtra,
+        duplicados,
+        resolverDadosOperador: async (operadorId: string) => {
+          const { data } = await supabase
+            .from('perfis')
+            .select('setor_id, equipe_id')
+            .eq('id', operadorId)
+            .maybeSingle();
+          if (!data) return null;
+          return {
+            setorId:  data.setor_id  ?? null,
+            equipeId: data.equipe_id ?? null,
+          };
+        },
+      });
+      setClassificacao(classif);
+      // Reseta autorizações anteriores — classificação mudou.
+      setLinhasAutorizadas(new Set());
+      setAutorizador(null);
+    } catch (err) {
+      console.error('[ImportarExcel] Erro ao classificar NRs:', err);
+      toast.error('Erro ao classificar NRs: ' + (err instanceof Error ? err.message : String(err)));
+      setClassificacao([]);
+    } finally {
+      setCarregandoClassif(false);
+    }
+  }
+
   async function organizarLocal() {
     if (!arquivo) { toast.error('Selecione um arquivo primeiro'); return; }
     setUsarIA(false);
@@ -1303,6 +1399,8 @@ export default function ImportarExcel() {
       setBlocosDetectados(res.blocos ?? 0);
       setEtapa('preview');
       toast.success(`${res.registros.length} registro(s) lido(s) — modo ${res.modo === 'blocos' ? 'por blocos' : 'tabela'}`);
+      // Classificação em batch: feita em background enquanto o usuário revisa.
+      void carregarClassificacao(res.registros);
     } catch (err) {
       toast.error('Erro ao ler arquivo: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -1314,7 +1412,7 @@ export default function ImportarExcel() {
     if (!arquivo) { toast.error('Selecione um arquivo primeiro'); return; }
     setOrganizandoIA(true);
     try {
-      const hoje = new Date().toISOString().split('T')[0];
+      const hoje = getTodayISO();
       const raw = await obterRawRows();
       if (raw.length === 0) { toast.error('Planilha vazia ou sem dados'); return; }
 
@@ -1347,6 +1445,7 @@ export default function ImportarExcel() {
           parcelas: rec?.parcelas ?? '',
           observacoes: rec?.observacoes ?? '',
           instituicao: rec?.instituicao ?? '',
+          estado_uf: rec?.estado_uf ?? '',
         };
         const acordo = montarAcordo(dados, hoje, linhaOriginal, undefined);
         if (acordo) novos.push(acordo);
@@ -1361,6 +1460,8 @@ export default function ImportarExcel() {
       setUsarIA(true);
       setEtapa('preview');
       toast.success(`IA organizou ${novos.length} registro(s)`);
+      // Classificação em batch: também no modo IA.
+      void carregarClassificacao(novos);
     } catch (e) {
       console.error('[ImportarExcel/IA]', e);
       const msg =
@@ -1407,102 +1508,90 @@ export default function ImportarExcel() {
   async function confirmarImportacao() {
     const aImportar = registros.filter(r => r.valido);
     if (aImportar.length === 0) { toast.error('Nenhum registro válido para importar'); return; }
+    if (!empresa?.id || !perfil?.id) { toast.error('Contexto de empresa/perfil indisponível'); return; }
 
     setImportando(true);
-    const hoje = new Date().toISOString().split('T')[0];
-    const BATCH = 50;
-    let ok = 0;
+    const hoje = getTodayISO();
     const errosMsgs: string[] = [];
 
-    // ── Validação de NR duplicado em lote (antes de inserir qualquer coisa) ──
-    // PaguePay: NR único = campo "instituicao" | Bookplay: campo "nr_cliente"
-    if (empresa?.id) {
-      const ehPaguePay = isPaguePlay(tenantSlug);
-      const campoNr: 'nr_cliente' | 'instituicao' = ehPaguePay ? 'instituicao' : 'nr_cliente';
-      const labelNr = ehPaguePay ? 'Inscrição' : 'NR';
+    const ehPaguePay = isPaguePlay(tenantSlug);
+    const labelNr = ehPaguePay ? 'Inscrição' : 'NR';
 
-      const todosNrs = aImportar
-        .map(r => (ehPaguePay ? r.instituicao : r.nr_cliente))
-        .filter(Boolean) as string[];
-
-      const duplicados = await verificarNrsDuplicadosEmLote(todosNrs, empresa.id, campoNr);
-
-      if (duplicados.size > 0) {
-        const nrsList = [...duplicados.keys()].join(', ');
-        const qtd = duplicados.size;
-        toast.error(
-          `${qtd} ${labelNr}(s) já existem e serão ignorados: ${nrsList.substring(0, 120)}${nrsList.length > 120 ? '…' : ''}`,
-          { duration: 8000 }
-        );
-        // Remover duplicados — comparar pelo campo correto
-        const filtrados = aImportar.filter(r => {
-          const val = (ehPaguePay ? r.instituicao : r.nr_cliente)?.trim() ?? '';
-          return !duplicados.has(val);
-        });
-        if (filtrados.length === 0) {
-          toast.error(`Todos os ${labelNr}s já existem. Nenhum registro foi importado.`);
-          setImportando(false);
-          return;
-        }
-        toast.info(`Importando ${filtrados.length} registro(s) sem conflito.`);
-        aImportar.length = 0;
-        aImportar.push(...filtrados);
-      }
+    // Se a classificação ainda não terminou, recalcula agora de forma síncrona.
+    let classifAtual = classificacao;
+    if (classifAtual.length === 0 && aImportar.length > 0) {
+      await carregarClassificacao(aImportar);
+      // Pega o valor atualizado do setState de forma imperativa: usa o retorno
+      // direto de classificarNrsImportados via state já atualizado no próximo tick.
+      // Como setState é assíncrono em React, usamos o fallback calculado aqui.
+      classifAtual = classificacao;
     }
 
     // Detectar se a coluna instituicao existe no banco (evita erro de schema cache)
     const temInstituicao = await detectarColunaInstituicao();
 
-    for (let i = 0; i < aImportar.length; i += BATCH) {
-      const lote = aImportar.slice(i, i + BATCH).map(r => {
-        // Observações: concatenar instituição se a coluna não existir (fallback)
-        const obsComInst = (!temInstituicao && r.instituicao)
-          ? [r.observacoes, `Inst.: ${r.instituicao}`].filter(Boolean).join(' | ')
-          : (r.observacoes || null);
-
-        const registro: Record<string, unknown> = {
-          nome_cliente:  r.nome_cliente,
-          nr_cliente:    r.nr_cliente,
-          vencimento:    r.vencimento ?? hoje,
-          valor:         r.valor ?? 0,
-          whatsapp:      r.whatsapp || null,
-          status:        r.status,
-          tipo:          r.tipo,
-          parcelas:      r.parcelas,
-          observacoes:   obsComInst,
-          data_cadastro: hoje,
-          operador_id:   perfil!.id,
-          setor_id:      perfil?.setor_id ?? null,
-          empresa_id:    empresa?.id ?? null,
-        };
-
-        // Só incluir `instituicao` se a coluna existir no banco
-        if (temInstituicao) {
-          registro.instituicao = r.instituicao || null;
-        }
-
-        return registro;
-      });
-
-      const { error, data } = await supabase.from('acordos').insert(lote).select('id');
-      if (error) {
-        // Se ainda falhar por schema cache desatualizado, retentar sem instituicao
-        if (error.message.includes('instituicao')) {
-          setColunaInstituicaoExiste(false);
-          const loteSeguro = lote.map(r => {
-            const { instituicao: inst, ...rest } = r as Record<string, unknown>;
-            if (inst) rest.observacoes = [rest.observacoes, `Inst.: ${inst}`].filter(Boolean).join(' | ') || null;
-            return rest;
-          });
-          const { error: e2, data: d2 } = await supabase.from('acordos').insert(loteSeguro).select('id');
-          if (e2) errosMsgs.push(`Lote ${Math.floor(i/BATCH)+1}: ${e2.message}`);
-          else ok += d2?.length ?? loteSeguro.length;
-        } else {
-          errosMsgs.push(`Lote ${Math.floor(i/BATCH)+1}: ${error.message}`);
-        }
-      } else {
-        ok += data?.length ?? lote.length;
+    // Monta o payload básico por registro (sem tipo_vinculo — service adiciona).
+    const payloads: PayloadAcordoImport[] = aImportar.map(r => {
+      // Observações: serializa [ESTADO:XX] quando PaguePlay tem estado_uf.
+      let obs = r.observacoes;
+      if (ehPaguePay && r.estado_uf) {
+        // buildObservacoesComEstado recebe (obs, estado) e retorna string com [ESTADO:XX].
+        obs = buildObservacoesComEstado(obs ?? '', r.estado_uf);
       }
+      // Observações: concatena instituição no texto se a coluna não existir (fallback)
+      const obsFinal = (!temInstituicao && r.instituicao)
+        ? [obs, `Inst.: ${r.instituicao}`].filter(Boolean).join(' | ')
+        : (obs || null);
+
+      const registro: Record<string, unknown> = {
+        nome_cliente:  r.nome_cliente,
+        nr_cliente:    r.nr_cliente,
+        vencimento:    r.vencimento ?? hoje,
+        valor:         r.valor ?? 0,
+        whatsapp:      r.whatsapp || null,
+        status:        r.status,
+        tipo:          r.tipo,
+        parcelas:      r.parcelas,
+        observacoes:   obsFinal,
+        data_cadastro: hoje,
+        operador_id:   perfil!.id,
+        setor_id:      perfil?.setor_id ?? null,
+        empresa_id:    empresa?.id ?? null,
+      };
+      if (temInstituicao) {
+        registro.instituicao = r.instituicao || null;
+      }
+      return {
+        linhaOriginal: r.linhaOriginal,
+        registro,
+        nr: ((ehPaguePay ? r.instituicao : r.nr_cliente) ?? '').trim(),
+        nomeCliente: r.nome_cliente,
+      };
+    });
+
+    const resultadoBatch = await processarImportacaoEmLote({
+      payloads,
+      classificacao:     classifAtual,
+      linhasAutorizadas,
+      autorizador,
+      operadorAtual:     { id: perfil.id, nome: perfil.nome ?? 'Operador' },
+      empresaId:         empresa.id,
+      labelNr,
+      isPaguePlay:       ehPaguePay,
+      batchSize:         50,
+    });
+
+    errosMsgs.push(...resultadoBatch.erros);
+    const ok = resultadoBatch.inseridos;
+
+    // Mensagem para bloqueados: ajuda o usuário a saber o que sobrou.
+    if (resultadoBatch.bloqueados.length > 0) {
+      const bloqLista = resultadoBatch.bloqueados.slice(0, 5)
+        .map(b => `#${b.linhaOriginal} "${b.nr}" (${b.motivo})`).join('; ');
+      errosMsgs.push(
+        `${resultadoBatch.bloqueados.length} ${labelNr}(s) bloqueado(s) e não importado(s): ${bloqLista}` +
+        (resultadoBatch.bloqueados.length > 5 ? '…' : ''),
+      );
     }
 
     setResultado({ ok, erros: aImportar.length - ok + invalidos, msgs: errosMsgs });
@@ -1521,6 +1610,72 @@ export default function ImportarExcel() {
     }
     if (!temInstituicao && ok > 0) {
       toast.warning('Coluna "instituição" não existe no banco. Execute a migration SQL para ativá-la.', { duration: 8000 });
+    }
+  }
+
+  // ── Derivados da classificação (para UI) ────────────────────────────────
+  const classifPorLinha = (() => {
+    const m = new Map<number, ClassificacaoNR>();
+    for (const c of classificacao) m.set(c.linhaOriginal, c);
+    return m;
+  })();
+
+  /** Linhas que precisam de autorização de líder (duplicado bloqueado). */
+  const linhasBloqueadas: ClassificacaoNR[] = classificacao.filter(
+    c => c.categoria === 'duplicado' && c.precisaAutorizacao,
+  );
+
+  const totaisClassif = agruparPorCategoria(classificacao);
+
+  // ── Abrir modal de autorização ───────────────────────────────────────────
+  function abrirModalAutorizacao() {
+    if (linhasBloqueadas.length === 0) {
+      toast.info('Nenhum NR bloqueado para autorizar');
+      return;
+    }
+    // Por padrão, seleciona todas as linhas bloqueadas.
+    const seedSet = new Set<number>();
+    for (const l of linhasBloqueadas) seedSet.add(l.linhaOriginal);
+    setLinhasSelecionadas(seedSet);
+    setLiderEmail('');
+    setLiderSenha('');
+    setModalAutorizacaoAberto(true);
+  }
+
+  function alternarLinhaSelecionada(linha: number) {
+    setLinhasSelecionadas(prev => {
+      const next = new Set(prev);
+      if (next.has(linha)) next.delete(linha);
+      else                 next.add(linha);
+      return next;
+    });
+  }
+
+  async function confirmarAutorizacaoBloqueados() {
+    if (linhasSelecionadas.size === 0) {
+      toast.error('Selecione pelo menos um NR para autorizar');
+      return;
+    }
+    setAutorizando(true);
+    try {
+      const res = await autenticarLider({ email: liderEmail, senha: liderSenha });
+      if (!res.ok) {
+        toast.error(res.erro);
+        return;
+      }
+      setAutorizador(res.autorizador);
+      setLinhasAutorizadas(new Set(linhasSelecionadas));
+      setModalAutorizacaoAberto(false);
+      setLiderEmail('');
+      setLiderSenha('');
+      toast.success(
+        `Autorização concedida por ${res.autorizador.nome}. ` +
+        `${linhasSelecionadas.size} NR(s) liberado(s).`,
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao autorizar NRs');
+    } finally {
+      setAutorizando(false);
     }
   }
 
@@ -1786,6 +1941,7 @@ export default function ImportarExcel() {
                       {modoParsed === 'blocos' && <th className="px-2 py-2 text-left font-semibold text-muted-foreground w-20">BLOCO</th>}
                       <th className="px-2 py-2 text-center font-semibold text-muted-foreground w-8">✓</th>
                       <th className="px-2 py-2 text-left font-semibold text-muted-foreground">NR</th>
+                      <th className="px-2 py-2 text-left font-semibold text-muted-foreground">CLASS.</th>
                       <th className="px-2 py-2 text-left font-semibold text-muted-foreground">NOME</th>
                       <th className="px-2 py-2 text-left font-semibold text-muted-foreground">VENCIMENTO</th>
                       <th className="px-2 py-2 text-right font-semibold text-muted-foreground">VALOR</th>
@@ -1805,6 +1961,10 @@ export default function ImportarExcel() {
                       const avisosMsgs = r.erros.filter(e =>
                         !e.includes('Vencimento') && !e.includes('Valor')
                       );
+                      const classif = classifPorLinha.get(r.linhaOriginal);
+                      const autorizada = linhasAutorizadas.has(r.linhaOriginal);
+                      const bloqueada = classif?.categoria === 'duplicado' && classif?.precisaAutorizacao && !autorizada;
+                      const destaqueExtraDireto = classif?.categoria === 'extra' || classif?.categoria === 'direto';
                       return (
                         <motion.tr
                           key={r.linhaOriginal}
@@ -1815,9 +1975,13 @@ export default function ImportarExcel() {
                             'border-b border-border/50',
                             !r.valido
                               ? 'bg-destructive/5 hover:bg-destructive/8'
-                              : avisosMsgs.length > 0
-                                ? 'bg-warning/5 hover:bg-warning/10'
-                                : 'hover:bg-muted/20'
+                              : bloqueada
+                                ? 'bg-destructive/10 hover:bg-destructive/15'
+                                : destaqueExtraDireto
+                                  ? 'bg-primary/5 hover:bg-primary/10'
+                                  : avisosMsgs.length > 0
+                                    ? 'bg-warning/5 hover:bg-warning/10'
+                                    : 'hover:bg-muted/20'
                           )}
                         >
                           <td className="px-2 py-1.5 text-muted-foreground">{r.linhaOriginal}</td>
@@ -1833,6 +1997,13 @@ export default function ImportarExcel() {
                           </td>
                           <td className="px-2 py-1.5 font-mono text-primary">
                             {r.nr_cliente || <span className="text-muted-foreground/40 italic">—</span>}
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <BadgeClassificacao
+                              classif={classifPorLinha.get(r.linhaOriginal)}
+                              autorizada={linhasAutorizadas.has(r.linhaOriginal)}
+                              carregando={carregandoClassif}
+                            />
                           </td>
                           <td className="px-2 py-1.5 max-w-[130px] truncate font-medium">
                             {r.nome_cliente || <span className="text-muted-foreground/40 italic">sem nome</span>}
@@ -1882,11 +2053,76 @@ export default function ImportarExcel() {
             <div className="flex items-start gap-2 p-3 bg-warning/8 border border-warning/20 rounded-lg text-xs text-warning">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>
-                {invalidos} registro(s) com erros serão <strong>ignorados</strong>. 
+                {invalidos} registro(s) com erros serão <strong>ignorados</strong>.
                 Apenas os {validos} válidos serão importados.
               </span>
             </div>
           )}
+
+          {/* ── Painel de classificação dos NRs ────────────────────────── */}
+          {(classificacao.length > 0 || carregandoClassif) && (
+            <div className="p-3 bg-muted/30 border border-border rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground">
+                  <Shield className="w-3.5 h-3.5" />
+                  Classificação de NRs
+                  {carregandoClassif && (
+                    <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/70">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> classificando…
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
+                    Novo: {totaisClassif.novo}
+                  </Badge>
+                  {totaisClassif.extra > 0 && (
+                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                      Extra: {totaisClassif.extra}
+                    </Badge>
+                  )}
+                  {totaisClassif.direto > 0 && (
+                    <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+                      Direto: {totaisClassif.direto}
+                    </Badge>
+                  )}
+                  {totaisClassif.duplicado > 0 && (
+                    <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+                      Duplicado: {totaisClassif.duplicado}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+              {linhasBloqueadas.length > 0 && (
+                <div className="flex items-start justify-between gap-3 p-2.5 bg-destructive/5 border border-destructive/20 rounded-md">
+                  <div className="text-[11px] text-destructive/90 leading-relaxed flex-1">
+                    <strong>{linhasBloqueadas.length}</strong> NR(s) duplicado(s) estão <strong>bloqueados</strong>.
+                    Para importá-los, é necessária a autorização de um líder,
+                    elite, gerência ou administrador. Ao autorizar, os NRs
+                    selecionados serão transferidos para o operador atual e o
+                    acordo anterior será enviado para a lixeira com notificação
+                    automática ao operador anterior.
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={abrirModalAutorizacao}
+                    className="text-xs h-8 whitespace-nowrap border-destructive/40 text-destructive hover:bg-destructive/10"
+                    disabled={importando}
+                  >
+                    <Shield className="w-3 h-3 mr-1" />
+                    Autorizar Nrs bloqueados
+                  </Button>
+                </div>
+              )}
+              {linhasAutorizadas.size > 0 && autorizador && (
+                <div className="text-[11px] text-success bg-success/5 border border-success/20 rounded-md p-2">
+                  ✓ {linhasAutorizadas.size} NR(s) autorizado(s) por {autorizador.nome} ({autorizador.perfil}).
+                </div>
+              )}
+            </div>
+          )}
+
 
           <div className="flex justify-between">
             <Button variant="outline" onClick={() => { setEtapa('upload'); setArquivo(null); }}>
@@ -1942,6 +2178,153 @@ export default function ImportarExcel() {
           </div>
         </div>
       )}
+
+      {/* ─── MODAL DE AUTORIZAÇÃO DE NRS BLOQUEADOS ─── */}
+      <Dialog open={modalAutorizacaoAberto} onOpenChange={setModalAutorizacaoAberto}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-destructive" /> Autorizar NRs bloqueados
+            </DialogTitle>
+            <DialogDescription className="text-xs leading-relaxed">
+              Selecione os NRs duplicados que devem ser transferidos para o
+              operador atual. É necessário e-mail e senha de um líder, elite,
+              gerência ou administrador. Ao confirmar, cada NR selecionado será
+              transferido e o acordo anterior do outro operador será enviado
+              para a lixeira com notificação automática.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[260px] overflow-y-auto border border-border rounded-md divide-y divide-border">
+            {linhasBloqueadas.length === 0 && (
+              <p className="p-3 text-xs text-muted-foreground text-center">
+                Nenhum NR bloqueado.
+              </p>
+            )}
+            {linhasBloqueadas.map(c => (
+              <label
+                key={c.linhaOriginal}
+                className="flex items-start gap-2 p-2 hover:bg-muted/30 cursor-pointer"
+              >
+                <Checkbox
+                  checked={linhasSelecionadas.has(c.linhaOriginal)}
+                  onCheckedChange={() => alternarLinhaSelecionada(c.linhaOriginal)}
+                  className="mt-0.5"
+                />
+                <div className="flex-1 text-xs">
+                  <div className="font-mono text-primary">
+                    #{c.linhaOriginal} — {c.nr}
+                  </div>
+                  <div className="text-muted-foreground">
+                    Atualmente em posse de <strong>{c.donoAtual?.operadorNome ?? '—'}</strong>
+                  </div>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          <div className="space-y-2 pt-2">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">
+                E-mail do líder/admin
+              </label>
+              <Input
+                type="email"
+                value={liderEmail}
+                onChange={e => setLiderEmail(e.target.value)}
+                placeholder="lider@empresa.com"
+                disabled={autorizando}
+              />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground">
+                Senha
+              </label>
+              <Input
+                type="password"
+                value={liderSenha}
+                onChange={e => setLiderSenha(e.target.value)}
+                disabled={autorizando}
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button
+              variant="outline"
+              onClick={() => setModalAutorizacaoAberto(false)}
+              disabled={autorizando}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarAutorizacaoBloqueados}
+              disabled={autorizando || linhasSelecionadas.size === 0}
+              className="gap-2"
+            >
+              {autorizando
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Autorizando…</>
+                : <><Shield className="w-4 h-4" /> Autorizar {linhasSelecionadas.size}</>
+              }
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+// ── Componente auxiliar: badge visual por categoria de classificação ────────
+function BadgeClassificacao({
+  classif,
+  autorizada,
+  carregando,
+}: {
+  classif: ClassificacaoNR | undefined;
+  autorizada: boolean;
+  carregando: boolean;
+}) {
+  if (!classif) {
+    return (
+      <span className="text-[10px] text-muted-foreground/50 italic">
+        {carregando ? '…' : '—'}
+      </span>
+    );
+  }
+  const cat: CategoriaImport = classif.categoria;
+
+  if (cat === 'novo' || cat === 'disponivel') {
+    return (
+      <Badge variant="outline" className="text-[10px] bg-success/10 text-success border-success/30">
+        Novo
+      </Badge>
+    );
+  }
+  if (cat === 'extra') {
+    return (
+      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+        Extra
+      </Badge>
+    );
+  }
+  if (cat === 'direto') {
+    return (
+      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/30">
+        Direto
+      </Badge>
+    );
+  }
+  // duplicado
+  if (autorizada) {
+    return (
+      <Badge variant="outline" className="text-[10px] bg-warning/10 text-warning border-warning/30">
+        Autorizado
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="text-[10px] bg-destructive/10 text-destructive border-destructive/30">
+      Duplicado
+    </Badge>
   );
 }

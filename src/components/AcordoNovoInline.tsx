@@ -54,6 +54,7 @@ import {
 } from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
+  isPerfilAdminOuLider,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { criarNotificacao }     from '@/services/notificacoes.service';
@@ -711,9 +712,9 @@ export function AcordoNovoInline({
 
       if (
         !liderPerfil ||
-        !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)
+        !isPerfilAdminOuLider(liderPerfil.perfil)
       ) {
-        toast.error('O usuário informado não tem permissão de líder ou administrador');
+        toast.error('O usuário informado não tem permissão de líder/elite/gerência/administrador');
         return;
       }
 
