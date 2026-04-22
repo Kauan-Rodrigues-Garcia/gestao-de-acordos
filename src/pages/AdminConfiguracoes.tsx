@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/hooks/useAuth';
+import { isPerfilAdmin } from '@/lib/index';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminIA from '@/pages/AdminIA';
@@ -36,17 +38,23 @@ export default function AdminConfiguracoes() {
   const [form, setForm] = useState({ nome: '', conteudo: '' });
   const [saving, setSaving] = useState(false);
   const { empresa } = useEmpresa();
+  const { perfil } = useAuth();
+  // Gate defensivo: card "Banco de Dados / Migrations" só para Admin/Super Admin
+  // (defesa em profundidade — além do ProtectedRoute da rota)
+  const podeVerBancoDados = isPerfilAdmin(perfil?.perfil ?? '');
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
   const [sqlCopiado, setSqlCopiado] = useState(false);
 
   useEffect(() => {
+    // Evita probe desnecessário quando o usuário nem verá o card
+    if (!podeVerBancoDados) return;
     (async () => {
       const { error } = await supabase.from('acordos').select('instituicao').limit(0);
       setSchemaStatus(!error ? 'ok' : 'missing');
     })();
-  }, []);
+  }, [podeVerBancoDados]);
 
   function copiarSQL() {
     navigator.clipboard.writeText(MIGRATION_SQL).then(() => {
@@ -182,6 +190,8 @@ export default function AdminConfiguracoes() {
           <div className="max-w-4xl mx-auto space-y-6">
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}
+          {/* Gate: visível apenas para Admin e Super Admin (item #8) */}
+          {podeVerBancoDados && (
           <Card className="border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -240,6 +250,7 @@ export default function AdminConfiguracoes() {
               </div>
             </CardContent>
           </Card>
+          )}
 
           {/* Modelos de mensagem */}
           <Card className="border-border">
