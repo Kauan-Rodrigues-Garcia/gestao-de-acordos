@@ -2,6 +2,21 @@
 
 Este projeto usa **[Vitest](https://vitest.dev/)** + **[Testing Library](https://testing-library.com/docs/react-testing-library/intro/)** com `happy-dom` como ambiente DOM. O setup está em `vitest.config.ts` e `src/test/setup.ts`.
 
+## Status atual (2026-04-22)
+
+| Métrica | Valor |
+|---|---:|
+| **Testes verdes** | **380** |
+| **Arquivos de teste** | **20** |
+| **Tempo da suíte** | ~16 s |
+| Cobertura `src/services/` (lines) | ~73 % |
+| Cobertura `src/lib/` (lines) | ~76 % |
+| Cobertura `src/hooks/` (lines, arquivos cobertos) | ~90 % (useAuth, useAcordos, useNrRegistros) |
+| Cobertura `src/providers/RealtimeAcordosProvider.tsx` | **100 %** lines / 86 % branches |
+| Cobertura global (lines) | ~18 % |
+
+> A cobertura global baixa é intencional: o `src/components/ui/` (shadcn) e arquivos muito grandes (`ImportarExcel`, `PainelDiretoria`, `Dashboard`) ainda não têm teste — foco foi em serviços, hooks críticos, providers e lógica de domínio.
+
 ## Como rodar
 
 ```bash
@@ -63,39 +78,63 @@ import { meuServico } from './meuServico';
 
 ## Roadmap de cobertura (pirâmide)
 
-### Camada 1 — Funções puras (concluída parcialmente)
+### Camada 1 — Funções puras (✅ **concluída**)
 
 | Arquivo | Status |
 |---|---|
-| `src/lib/deduplicarVinculados.ts` | ✅ 100% |
-| `src/components/VinculoTag.tsx` | ✅ 100% |
-| `src/components/OperadorCell.tsx` | ✅ 100% |
-| `src/lib/index.ts` (formatters, parsers) | ⏳ próximo |
-| `src/lib/motion.ts` (springs) | baixa prioridade |
+| `src/lib/deduplicarVinculados.ts` | ✅ 100 % |
+| `src/components/VinculoTag.tsx` | ✅ 100 % |
+| `src/components/OperadorCell.tsx` | ✅ 100 % |
+| `src/lib/index.ts` (formatters, parsers, getTodayISO, isPaguePlay, extractEstado, calcHO/Coren/Cofen) | ✅ ~100 % — **60 testes** |
+| `src/lib/motion.ts` (springs) | baixa prioridade (cosmético) |
 
 ### Camada 2 — Serviços com Supabase mockado (✅ **concluída**)
 
 | Arquivo | Status |
 |---|---|
-| `src/services/tratarExclusaoVinculo.ts` | ✅ 81% |
-| `src/services/nr_registros.service.ts` | ✅ 100% lines / 97% branches / 100% funcs (26 testes) |
-| `src/services/lixeira.service.ts` | ✅ 100% lines / 88% branches / 100% funcs (12 testes) |
-| `src/services/notificacoes.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (12 testes) |
-| `src/services/acordos.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (26 testes) |
-| `src/services/direto_extra.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (16 testes) |
+| `src/services/tratarExclusaoVinculo.ts` | ✅ 81 % |
+| `src/services/nr_registros.service.ts` | ✅ 100 % lines / 97 % branches / 100 % funcs (26 testes) |
+| `src/services/lixeira.service.ts` | ✅ 100 % lines / 88 % branches / 100 % funcs (12 testes) |
+| `src/services/notificacoes.service.ts` | ✅ 100 % lines / 100 % branches / 100 % funcs (12 testes) |
+| `src/services/acordos.service.ts` | ✅ 100 % lines / 100 % branches / 100 % funcs (26 testes) |
+| `src/services/direto_extra.service.ts` | ✅ 100 % lines / 100 % branches / 100 % funcs (16 testes) |
 
 ### Camada 3 — Componentes integrados (✅ **concluída**)
 
 | Componente | Status |
 |---|---|
-| `AcordoEditInline` — bloqueio de NR duplicado na edição | ✅ 81% lines / 79% branches / 84% funcs (9 testes) |
-| `AcordoNovoInline` — fluxo CASO A/B/C Direto/Extra + modal aviso | ✅ 52% lines (caminhos críticos 100%) — 15 testes |
-| `AcordoDetalheInline` — conversão Extra → Direto | ✅ 37% lines (fluxo Extra→Direto 100%) — 12 testes |
-| `AdminDiretoExtra` — herança de ativação | ✅ 92% lines / 74% branches / 77% funcs — 10 testes (herança 100%) |
-| `ModalFilaWhatsApp` — fila de disparo WhatsApp + auto-envio | ✅ 100% lines / 91% branches / 100% funcs — 13 testes |
-| `NotificacoesDetalhadas` — página de histórico de notificações | ✅ 96% lines / 89% branches / 100% funcs — 13 testes |
+| `AcordoEditInline` — bloqueio de NR duplicado na edição | ✅ 81 % lines / 79 % branches / 84 % funcs (9 testes) |
+| `AcordoNovoInline` — fluxo CASO A/B/C Direto/Extra + modal aviso | ✅ 52 % lines (caminhos críticos 100 %) — 15 testes |
+| `AcordoDetalheInline` — conversão Extra → Direto | ✅ 37 % lines (fluxo Extra→Direto 100 %) — 12 testes |
+| `AdminDiretoExtra` — herança de ativação | ✅ 92 % lines / 74 % branches / 77 % funcs — 10 testes |
+| `ModalFilaWhatsApp` — fila de disparo WhatsApp + auto-envio | ✅ 100 % lines / 91 % branches / 100 % funcs — 13 testes |
+| `NotificacoesDetalhadas` — página de histórico de notificações | ✅ 96 % lines / 89 % branches / 100 % funcs — 13 testes |
 
-### Camada 4 — E2E (futuro)
+### Camada 4 — Hooks com renderHook (🟡 **em progresso — 3 de 12**)
+
+| Hook | Status |
+|---|---|
+| `useAcordos.ts` — fetch + realtime + CRUD (inclui `useDashboardMetricas`) | ✅ **37 testes** — fetch/erro/refetch/patch/remove/add, realtime (INSERT/UPDATE/DELETE + cleanup), equipe_id |
+| `useNrRegistros.ts` — cache de NR + realtime + verificarConflito | ✅ **26 testes** — cache lowercase, realtime, verificarConflito (case/trim/acordoIdExcluir), refetch, cleanup |
+| `useAuth.tsx` — autenticação + backoff exponencial 7 tentativas + validação multi-tenant | ✅ **26 testes** — signIn (email/username), signOut, backoff, slug bypass (super_admin), cleanup de subscription |
+| `useAnalytics.ts` (447 linhas) | ⏳ dívida — escopo grande, merece iteração dedicada |
+| `useNotificacoes.ts` | ⏳ próximo |
+| `useCargoPermissoes.ts` — autorização | ⏳ próximo (segurança) |
+| `useDiretoExtraConfig.ts` | ⏳ |
+| `useEmpresa.tsx` | ⏳ |
+| `usePresence.ts` | ⏳ |
+| `useChartColors.ts` | baixa prioridade |
+| `use-mobile.tsx` | baixa prioridade |
+| `use-toast.ts` | baixa prioridade |
+
+### Camada 5 — Providers (🟡 **1 de N**)
+
+| Provider | Status |
+|---|---|
+| `RealtimeAcordosProvider.tsx` — canal único de realtime + distribuição para subscribers | ✅ **34 testes** — lifecycle do canal, múltiplos subscribers, INSERT/UPDATE/DELETE (incl. fetch pós-INSERT), early-returns defensivos — **100 % lines** |
+| `PresenceProvider.tsx` | ⏳ próximo |
+
+### Camada 6 — E2E (futuro)
 
 Ainda não foi decidido se usaremos Playwright ou Cypress. Sugestão: Playwright pela velocidade e suporte nativo ao Vitest.
 
