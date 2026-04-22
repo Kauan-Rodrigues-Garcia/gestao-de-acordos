@@ -78,7 +78,7 @@ import { meuServico } from './meuServico';
 | Arquivo | Status |
 |---|---|
 | `src/services/tratarExclusaoVinculo.ts` | ✅ 81% |
-| `src/services/nr_registros.service.ts` | ⏳ próximo — crítico |
+| `src/services/nr_registros.service.ts` | ✅ 100% lines / 97% branches / 100% funcs (26 testes) |
 | `src/services/lixeira.service.ts` | ⏳ próximo |
 | `src/services/notificacoes.service.ts` | ⏳ |
 | `src/services/acordos.service.ts` | ⏳ |
@@ -87,7 +87,7 @@ import { meuServico } from './meuServico';
 
 | Componente | Status |
 |---|---|
-| `AcordoEditInline` — bloqueio de NR duplicado na edição | ⏳ alta prioridade |
+| `AcordoEditInline` — bloqueio de NR duplicado na edição | ✅ 81% lines / 79% branches / 84% funcs (9 testes) |
 | `AcordoNovoInline` — fluxo CASO A/B Direto/Extra | ⏳ alta prioridade |
 | `AcordoDetalheInline` — conversão Extra → Direto | ⏳ alta prioridade |
 | `AdminDiretoExtra` — herança ativação | ⏳ |
@@ -116,6 +116,23 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`VinculoTag`** — o bug das duas tags simultâneas ("Vínculo" + "Direto+Extra") foi resolvido com regra de prioridade mutuamente exclusiva; agora temos um teste que GARANTE que só renderiza UMA tag.
 - **`OperadorCell`** — nova exigência de mostrar dois operadores; o teste previne que alguém apague a lógica sem querer.
 - **`tratarExclusaoVinculo`** — helper crítico de consistência pós-delete; se quebrar, pares ficam órfãos, bloqueio de NR aponta pra operador errado, notificações somem.
+- **`nr_registros.service`** — fonte-de-verdade do bloqueio de NR. 26 testes cobrindo 7 funções em 22 ms, 100% lines. Se este arquivo quebrar, tabulações duplicadas voltam a aparecer.
+- **`AcordoEditInline`** — cenário original do bug das tabulações duplicadas via edição. 9 testes cobrindo: não chama verificação quando chave não muda; bloqueia com toast quando muda para valor ocupado; salva + sincroniza `nr_registros` quando livre; Extras NÃO são registrados como titulares; PaguePlay usa `instituicao` como chave; queda da verificação → `toast.warning` e segue.
+
+### Padrão de mock chainable "thenable" (nr_registros.service.test.ts)
+
+O Supabase PostgrestBuilder é um objeto chainable que termina sendo awaited diretamente — ex.: `const { data } = await supabase.from().select().eq().limit(1)`. Para simular isso sem dependências externas, o builder mock implementa `then`:
+
+```ts
+const builder = {
+  select: vi.fn(() => builder),
+  eq:     vi.fn(() => builder),
+  limit:  vi.fn(() => builder),
+  then: (res, rej) => Promise.resolve(nextResult).then(res, rej),
+};
+```
+
+Assim `await builder` consome `nextResult` (controlado por cada `it`) e ainda permite asserções sobre quais métodos foram chamados.
 
 ## Adicionando um novo teste: checklist
 
