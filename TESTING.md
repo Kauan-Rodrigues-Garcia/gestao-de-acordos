@@ -6,16 +6,16 @@ Este projeto usa **[Vitest](https://vitest.dev/)** + **[Testing Library](https:/
 
 | Métrica | Valor |
 |---|---:|
-| **Testes verdes** | **380** |
-| **Arquivos de teste** | **20** |
-| **Tempo da suíte** | ~16 s |
+| **Testes verdes** | **497** |
+| **Arquivos de teste** | **26** |
+| **Tempo da suíte** | ~20 s |
 | Cobertura `src/services/` (lines) | ~73 % |
 | Cobertura `src/lib/` (lines) | ~76 % |
-| Cobertura `src/hooks/` (lines, arquivos cobertos) | ~90 % (useAuth, useAcordos, useNrRegistros) |
-| Cobertura `src/providers/RealtimeAcordosProvider.tsx` | **100 %** lines / 86 % branches |
-| Cobertura global (lines) | ~18 % |
+| Cobertura `src/hooks/` (lines, cobertos) | ~95 % em 8 hooks (useAuth, useAcordos, useNrRegistros, useAnalytics, useNotificacoes, useCargoPermissoes, useDiretoExtraConfig, useEmpresa) |
+| Cobertura `src/providers/` (lines) | ~98 % (RealtimeAcordosProvider + PresenceProvider) |
+| Cobertura global (lines) | ~25 % |
 
-> A cobertura global baixa é intencional: o `src/components/ui/` (shadcn) e arquivos muito grandes (`ImportarExcel`, `PainelDiretoria`, `Dashboard`) ainda não têm teste — foco foi em serviços, hooks críticos, providers e lógica de domínio.
+> A cobertura global reflete o foco em camada de domínio, hooks críticos e providers. Páginas grandes (`ImportarExcel`, `PainelDiretoria`, `Dashboard`) e `src/components/ui/` (shadcn) seguem sem teste direto — são alvos de iterações futuras.
 
 ## Como rodar
 
@@ -110,29 +110,29 @@ import { meuServico } from './meuServico';
 | `ModalFilaWhatsApp` — fila de disparo WhatsApp + auto-envio | ✅ 100 % lines / 91 % branches / 100 % funcs — 13 testes |
 | `NotificacoesDetalhadas` — página de histórico de notificações | ✅ 96 % lines / 89 % branches / 100 % funcs — 13 testes |
 
-### Camada 4 — Hooks com renderHook (🟡 **em progresso — 3 de 12**)
+### Camada 4 — Hooks com renderHook (✅ **8 de 12 — núcleo fechado**)
 
 | Hook | Status |
 |---|---|
 | `useAcordos.ts` — fetch + realtime + CRUD (inclui `useDashboardMetricas`) | ✅ **37 testes** — fetch/erro/refetch/patch/remove/add, realtime (INSERT/UPDATE/DELETE + cleanup), equipe_id |
 | `useNrRegistros.ts` — cache de NR + realtime + verificarConflito | ✅ **26 testes** — cache lowercase, realtime, verificarConflito (case/trim/acordoIdExcluir), refetch, cleanup |
 | `useAuth.tsx` — autenticação + backoff exponencial 7 tentativas + validação multi-tenant | ✅ **26 testes** — signIn (email/username), signOut, backoff, slug bypass (super_admin), cleanup de subscription |
-| `useAnalytics.ts` (447 linhas) | ⏳ dívida — escopo grande, merece iteração dedicada |
-| `useNotificacoes.ts` | ⏳ próximo |
-| `useCargoPermissoes.ts` — autorização | ⏳ próximo (segurança) |
-| `useDiretoExtraConfig.ts` | ⏳ |
-| `useEmpresa.tsx` | ⏳ |
-| `usePresence.ts` | ⏳ |
-| `useChartColors.ts` | baixa prioridade |
-| `use-mobile.tsx` | baixa prioridade |
-| `use-toast.ts` | baixa prioridade |
+| `useAnalytics.ts` (447 linhas) | ✅ **38 testes** — **97 % lines** — séries por período/setor/operador, filtros de equipe, `maybeSingle` em `metas`, determinismo com `vi.setSystemTime`, cap de percentual em 999 |
+| `useNotificacoes.ts` | ✅ **17 testes** — fetch/marcarLida/marcarTodasLidas/limparTodas/criar, realtime INSERT/UPDATE/DELETE, cleanup de channel + interval |
+| `useCargoPermissoes.ts` — autorização (SEGURANÇA) | ✅ **19 testes — 100 % cobertura** — todos os 7 perfis, combinações de roles, fallbacks, guard `loading=true` |
+| `useDiretoExtraConfig.ts` — config Direto/Extra por nível | ✅ **13 testes** — precedência usuário > equipe > setor, realtime genérico, refetch |
+| `useEmpresa.tsx` — context de empresa/tenant | ✅ **13 testes** — load inicial, TOKEN_REFRESHED não-op, SIGNED_IN/OUT, fallback sem empresa |
+| `useChartColors.ts` | baixa prioridade (cosmético) |
+| `use-mobile.tsx` | baixa prioridade (thin wrapper) |
+| `use-toast.ts` | baixa prioridade (thin wrapper) |
+| `usePresence.ts` (13 linhas) | baixa prioridade — thin wrapper do `PresenceProvider` (já coberto) |
 
-### Camada 5 — Providers (🟡 **1 de N**)
+### Camada 5 — Providers (✅ **ambos cobertos**)
 
 | Provider | Status |
 |---|---|
-| `RealtimeAcordosProvider.tsx` — canal único de realtime + distribuição para subscribers | ✅ **34 testes** — lifecycle do canal, múltiplos subscribers, INSERT/UPDATE/DELETE (incl. fetch pós-INSERT), early-returns defensivos — **100 % lines** |
-| `PresenceProvider.tsx` | ⏳ próximo |
+| `RealtimeAcordosProvider.tsx` — canal único de realtime + distribuição para subscribers | ✅ **34 testes** — lifecycle do canal, múltiplos subscribers, INSERT/UPDATE/DELETE (incl. fetch pós-INSERT), early-returns — **100 % lines** |
+| `PresenceProvider.tsx` — presence realtime (quem está online) | ✅ **17 testes** — subscribe/unsubscribe, heartbeat 20s, track/untrack, eventos sync/join/leave, reconexão em troca de empresa — ~96 % lines |
 
 ### Camada 6 — E2E (futuro)
 

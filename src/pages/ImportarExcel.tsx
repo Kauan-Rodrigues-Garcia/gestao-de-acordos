@@ -18,7 +18,7 @@
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { read as xlsxRead, utils as xlsxUtils } from 'xlsx';
+import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import { motion } from 'framer-motion';
 import {
   Upload, FileSpreadsheet, ArrowLeft, CheckCircle2,

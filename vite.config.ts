@@ -87,7 +87,7 @@ export default defineConfig(({ mode }) => {
             // Recharts — só carrega quando Dashboard/PainelDiretoria/AnalyticsPanel renderizam
             'vendor-charts': ['recharts'],
             // XLSX — só carrega na página de importação
-            'vendor-xlsx': ['xlsx'],
+            'vendor-xlsx': ['@e965/xlsx'],
             // Date / form / utility libs
             'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
           },
