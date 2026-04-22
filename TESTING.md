@@ -82,6 +82,7 @@ import { meuServico } from './meuServico';
 | `src/services/lixeira.service.ts` | ✅ 100% lines / 88% branches / 100% funcs (12 testes) |
 | `src/services/notificacoes.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (12 testes) |
 | `src/services/acordos.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (26 testes) |
+| `src/services/direto_extra.service.ts` | ✅ 100% lines / 100% branches / 100% funcs (16 testes) |
 
 ### Camada 3 — Componentes integrados
 
@@ -90,7 +91,7 @@ import { meuServico } from './meuServico';
 | `AcordoEditInline` — bloqueio de NR duplicado na edição | ✅ 81% lines / 79% branches / 84% funcs (9 testes) |
 | `AcordoNovoInline` — fluxo CASO A/B/C Direto/Extra + modal aviso | ✅ 52% lines (caminhos críticos 100%) — 15 testes |
 | `AcordoDetalheInline` — conversão Extra → Direto | ✅ 37% lines (fluxo Extra→Direto 100%) — 12 testes |
-| `AdminDiretoExtra` — herança ativação | ⏳ |
+| `AdminDiretoExtra` — herança de ativação | ✅ 92% lines / 74% branches / 77% funcs — 10 testes (herança 100%) |
 | `ModalFilaWhatsApp` | ⏳ |
 | `NotificacoesDetalhadas` | ⏳ |
 
@@ -123,6 +124,7 @@ Os testes iniciais cobrem **funções que causaram bugs reais em produção** em
 - **`lixeira.service`** — 4 funções (`enviarParaLixeira`, `fetchLixeira`, `esvaziarLixeira`, `deletarItemLixeira`). 12 testes cobrindo snapshot completo no insert, fallback null para campos ausentes, erro de RLS, lista com limit custom, delete por empresa e por id. Se este serviço quebrar, acordos transferidos via transferência de NR são perdidos sem retenção.
 - **`notificacoes.service`** — 5 funções (`fetchNotificacoes`, `marcarComoLida`, `marcarTodasLidas`, `limparTodasNotificacoes`, `criarNotificacao`). 12 testes cobrindo: listagem ordenada por `criado_em desc` com limit 50; marcação individual e em lote (só não-lidas); limpeza total por usuário; insert com e sem `empresa_id`; todos os caminhos de erro apenas logam warning (não lançam). Serviço crítico: usado por `AcordoNovoInline` (CASO A + autorização do líder), `AcordoDetalheInline` (Extra→Direto) e pelo sino de notificações. Se quebrar, operadores deixam de receber avisos de transferência de chave.
 - **`acordos.service`** — fonte-de-verdade das queries e cálculos de acordos. 26 testes cobrindo: `fetchAcordos` (filtros status/tipo/operador/setor/empresa/vencimento/data_inicio/data_fim, `apenas_hoje`, `busca` com `.or()` multi-coluna, paginação server-side com `.range()`, fluxo `equipe_id` que faz 2 queries encadeadas — `perfis` antes de `acordos_deduplicados` — com early-return quando equipe não tem membros, propagação de erro); `verificarNrDuplicado` (nr vazio defensivo, sem/com duplicata, `acordoIdExcluir` na edição, campo `instituicao` para PaguePlay); `verificarNrsDuplicadosEmLote` (trim+dedupe, mapping por coluna, fallback "Operador desconhecido", guarda contra valores vazios); e as três funções puras `calcularMetricas`/`calcularMetricasMes`/`calcularMetricasDashboard` com `vi.setSystemTime` fixando 2026-04-22 para determinismo. Se este arquivo quebrar, TODA a listagem + paginação + métricas de dashboard deixam de funcionar.
+- **`direto_extra.service` + `AdminDiretoExtra`** — núcleo da lógica "Direto e Extra", que define se um operador pode tabular acordo sobre NR alheio. 16 testes no serviço (fetch/upsert/resolver em 3 níveis — usuário → equipe → setor) + 10 testes no componente (render das 3 abas, herança equipe←setor, herança usuário←equipe, herança usuário←setor, config própria sobrescreve herança, toggle com sucesso e erro, botões/switches travados em itens herdados, badges de total). Se quebrar, operadores deixam de poder tabular acordos extras — regra de negócio central do produto.
 
 ### Exemplo prático: refatoração `alert()` → `toast.error()` (AcordoDetalheInline)
 
