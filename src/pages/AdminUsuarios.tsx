@@ -53,11 +53,6 @@ export default function AdminUsuarios() {
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
-  // ── Mover usuário entre setores ─────────────────────────────────────────
-  const [moverDialog, setMoverDialog]       = useState(false);
-  const [moverUsuario, setMoverUsuario]     = useState<Perfil | null>(null);
-  const [moverSetorId, setMoverSetorId]     = useState('');
-  const [moverSaving, setMoverSaving]       = useState(false);
   // Online/Offline — lê do PresenceProvider (canal singleton global)
   const { onlineIds } = usePresence();
   // Foto expandida
@@ -66,7 +61,9 @@ export default function AdminUsuarios() {
   const [uploadTarget,    setUploadTarget]    = useState<Perfil | null>(null);
   const [uploadando,      setUploadando]      = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Alterar senha de operador
+  // Alterar senha de operador (agora integrado ao modal unificado;
+  // `senhaTarget` é mantido como compat para chamadas externas/testes —
+  // o fluxo principal usa `editando` + `novaSenha`).
   const [senhaTarget,     setSenhaTarget]     = useState<Perfil | null>(null);
   const [novaSenha,       setNovaSenha]       = useState('');
   const [salvandoSenha,   setSalvandoSenha]   = useState(false);
@@ -168,14 +165,13 @@ export default function AdminUsuarios() {
   function abrirEditar(u: Perfil) {
     setEditando(u);
     setForm({ nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
+    setNovaSenha('');
     setDialogOpen(true);
   }
 
-  function abrirMover(u: Perfil) {
-    setMoverUsuario(u);
-    setMoverSetorId(u.setor_id ?? setores[0]?.id ?? '');
-    setMoverDialog(true);
-  }
+  // (Mover usuário entre setores agora é feito dentro do modal unificado,
+  // ajustando o campo "Setor" e clicando em Salvar. Os handlers dedicados
+  // foram removidos em 2026-04-22 junto com o dialog separado.)
 
   async function salvar() {
     const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
@@ -256,38 +252,9 @@ export default function AdminUsuarios() {
     }
   }
 
-  async function confirmarMover() {
-    if (!moverUsuario || !moverSetorId) return;
-    setMoverSaving(true);
-    try {
-      const setorAnterior = (moverUsuario.setores as { nome?: string } | undefined)?.nome ?? '—';
-      const setorNovo = setores.find(s => s.id === moverSetorId)?.nome ?? moverSetorId;
-
-      const { data: linhasAtualizadas, error } = await supabase
-        .from('perfis')
-        .update({
-          setor_id: moverSetorId,
-          equipe_id: null
-        })
-        .eq('id', moverUsuario.id)
-        .select('id');
-
-      if (error) throw error;
-
-      if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
-        throw new Error('Sem permissão para mover este usuário. Verifique as políticas de acesso.');
-      }
-
-      toast.success(`${moverUsuario.nome} movido de "${setorAnterior}" → "${setorNovo}"`);
-      setMoverDialog(false);
-      setMoverUsuario(null);
-      fetchDados();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao mover usuário');
-    } finally {
-      setMoverSaving(false);
-    }
-  }
+  // (confirmarMover removido em 2026-04-22 — a mudança de setor agora
+  // acontece via campo "Setor" no modal unificado de editar usuário,
+  // persistido pela função salvar() que já trata `editando.setor_id !== form.setor_id`.)
 
   async function fazerUploadFotoParaUsuario(targetId: string, file: File) {
     setUploadando(true);
@@ -320,15 +287,16 @@ export default function AdminUsuarios() {
   }
 
   async function alterarSenhaOperador() {
-    if (!senhaTarget || !novaSenha.trim()) { toast.error('Preencha a nova senha'); return; }
+    const alvo = senhaTarget ?? editando;
+    if (!alvo || !novaSenha.trim()) { toast.error('Preencha a nova senha'); return; }
     if (novaSenha.length < 6) { toast.error('A senha deve ter pelo menos 6 caracteres'); return; }
     setSalvandoSenha(true);
     try {
       const { data, error } = await supabase.functions.invoke('admin-change-password', {
-        body: { p_user_id: senhaTarget.id, p_new_password: novaSenha.trim() },
+        body: { p_user_id: alvo.id, p_new_password: novaSenha.trim() },
       });
       if (error || data?.error) { toast.error(`Erro: ${error?.message ?? data?.error}`); return; }
-      toast.success(`Senha de ${senhaTarget.nome} alterada com sucesso!`);
+      toast.success(`Senha de ${alvo.nome} alterada com sucesso!`);
       setSenhaTarget(null);
       setNovaSenha('');
     } finally { setSalvandoSenha(false); }
@@ -535,36 +503,18 @@ export default function AdminUsuarios() {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">
-                                {(isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id && (
-                                  <>
-                                    <Button variant="ghost" size="icon" className="w-7 h-7"
-                                      title="Alterar foto de perfil"
-                                      onClick={() => { setUploadTarget(u); fileInputRef.current?.click(); }}>
-                                      <Camera className="w-3.5 h-3.5" />
-                                    </Button>
-                                    {u.foto_url && (
-                                      <Button variant="ghost" size="icon"
-                                        className="w-7 h-7 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
-                                        title="Remover foto de perfil" onClick={() => excluirFotoDeUsuario(u)}>
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    )}
-                                    <Button variant="ghost" size="icon" className="w-7 h-7"
-                                      title="Alterar senha do usuário"
-                                      onClick={() => { setSenhaTarget(u); setNovaSenha(''); }}>
-                                      <KeyRound className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </>
-                                )}
-                                <Button variant="ghost" size="icon" className="w-7 h-7"
-                                  title="Mover para outro setor" onClick={() => abrirMover(u)}>
-                                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                                </Button>
-                                {(isAdmin || isSuperAdmin) && (
-                                  <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(u)}>
+                                {((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin) ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 gap-1.5 px-2"
+                                    title="Editar usuário (dados, foto e senha)"
+                                    onClick={() => abrirEditar(u)}
+                                  >
                                     <Edit className="w-3.5 h-3.5" />
+                                    <span className="text-xs">Editar</span>
                                   </Button>
-                                )}
+                                ) : null}
                               </div>
                             </td>
                           </motion.tr>
@@ -588,15 +538,59 @@ export default function AdminUsuarios() {
 
       </Tabs>
 
-      {/* ── Dialog editar/criar usuário ── */}
+      {/* ── Dialog unificado: editar/criar usuário (dados + foto + senha) ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-md" aria-describedby="modal-usuario-desc">
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" aria-describedby="modal-usuario-desc">
           <DialogHeader>
             <DialogTitle>{editando ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
             <DialogDescription id="modal-usuario-desc" className="sr-only">
-              {editando ? 'Editar dados do usuário' : 'Criar novo usuário'}
+              {editando ? 'Editar dados, foto e senha do usuário' : 'Criar novo usuário'}
             </DialogDescription>
           </DialogHeader>
+
+          {/* ── Seção: Foto de perfil (só em modo edição) ─────────────── */}
+          {editando && (
+            <div className="space-y-2 py-1 border-b border-border pb-4">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Foto de perfil
+              </Label>
+              <div className="flex items-center gap-3">
+                <Avatar className="w-14 h-14">
+                  {editando.foto_url && <AvatarImage src={editando.foto_url} alt={editando.nome} />}
+                  <AvatarFallback className="bg-primary text-primary-foreground text-sm">
+                    {editando.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('')}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col gap-1.5">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 gap-1.5"
+                    disabled={uploadando}
+                    onClick={() => { setUploadTarget(editando); fileInputRef.current?.click(); }}
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    {uploadando ? 'Enviando...' : (editando.foto_url ? 'Trocar foto' : 'Adicionar foto')}
+                  </Button>
+                  {editando.foto_url && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 gap-1.5 text-destructive/70 hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => excluirFotoDeUsuario(editando)}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Remover foto
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── Seção: Dados cadastrais ───────────────────────────────── */}
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
               <Label className="text-xs">Nome *</Label>
@@ -640,6 +634,12 @@ export default function AdminUsuarios() {
                   {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {editando && form.setor_id !== (editando.setor_id ?? '') && (
+                <p className="text-[11px] text-primary flex items-center gap-1">
+                  <ArrowRightLeft className="w-3 h-3" />
+                  O usuário será movido para o novo setor ao salvar. A equipe atual será removida.
+                </p>
+              )}
             </div>
              <div className="space-y-1.5">
                <Label className="text-xs">Empresa</Label>
@@ -655,6 +655,42 @@ export default function AdminUsuarios() {
                )}
              </div>
           </div>
+
+          {/* ── Seção: Alterar senha (só em modo edição) ──────────────── */}
+          {editando && (
+            <div className="space-y-2 py-2 border-t border-border pt-4">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Alterar senha
+              </Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Nova senha</Label>
+                <Input
+                  type="password"
+                  value={novaSenha}
+                  onChange={e => setNovaSenha(e.target.value)}
+                  placeholder="Deixe em branco para manter a senha atual"
+                  className="h-9 text-sm"
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Mínimo 6 caracteres. Deixe em branco para não alterar.
+                </p>
+              </div>
+              {novaSenha.length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 gap-1.5 w-full"
+                  disabled={salvandoSenha || novaSenha.length < 6}
+                  onClick={alterarSenhaOperador}
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {salvandoSenha ? 'Salvando senha...' : 'Salvar nova senha'}
+                </Button>
+              )}
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button size="sm" onClick={salvar} disabled={saving} className="gap-2">
@@ -664,85 +700,7 @@ export default function AdminUsuarios() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog mover usuário de setor ── */}
-      <Dialog open={moverDialog} onOpenChange={v => { if (!v) { setMoverDialog(false); setMoverUsuario(null); } }}>
-        <DialogContent className="max-w-md" aria-describedby="modal-mover-desc">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ArrowRightLeft className="w-4 h-4 text-primary" />
-              Mover para outro setor
-            </DialogTitle>
-            <DialogDescription id="modal-mover-desc" className="sr-only">
-              Selecionar novo setor para o usuário
-            </DialogDescription>
-          </DialogHeader>
-          {moverUsuario && (
-            <div className="space-y-4 py-2">
-              <div className="p-3 bg-muted/30 rounded-lg border border-border">
-                <div className="flex items-center gap-2.5">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                      {moverUsuario.nome.split(' ').map(n => n[0]).slice(0,2).join('')}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">{moverUsuario.nome}</p>
-                    <p className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Building2 className="w-3 h-3" />
-                      Setor atual: <strong className="text-foreground ml-1">{nomeSetor(moverUsuario)}</strong>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs">Novo setor *</Label>
-                <Select value={moverSetorId} onValueChange={setMoverSetorId}>
-                  <SelectTrigger className="h-9 text-sm">
-                    <SelectValue placeholder="Selecione o setor destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {setores.map(s => (
-                      <SelectItem key={s.id} value={s.id}>
-                        <span className={cn(s.id === moverUsuario.setor_id && 'font-semibold text-primary')}>
-                          {s.nome}{s.id === moverUsuario.setor_id ? ' (atual)' : ''}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {moverSetorId && moverSetorId !== moverUsuario.setor_id && (
-                <div className="flex items-center gap-2 p-2.5 bg-primary/5 border border-primary/20 rounded-lg text-xs text-primary">
-                  <ArrowRightLeft className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span>
-                    <strong>{moverUsuario.nome}</strong> será movido para{' '}
-                    <strong>{setores.find(s => s.id === moverSetorId)?.nome}</strong>.
-                    As permissões do novo setor serão aplicadas imediatamente.
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => { setMoverDialog(false); setMoverUsuario(null); }}>
-              Cancelar
-            </Button>
-            <Button
-              size="sm"
-              onClick={confirmarMover}
-              disabled={moverSaving || !moverSetorId || moverSetorId === moverUsuario?.setor_id}
-              className="gap-2"
-            >
-              <ArrowRightLeft className="w-3.5 h-3.5" />
-              {moverSaving ? 'Movendo...' : 'Confirmar Movimentação'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Input file oculto para upload de foto */}
+      {/* Input file oculto para upload de foto (usado pelo Dialog unificado) */}
       <input
         ref={fileInputRef}
         type="file"
@@ -755,49 +713,6 @@ export default function AdminUsuarios() {
           e.target.value = '';
         }}
       />
-
-      {/* Modal alterar senha de operador */}
-      <Dialog open={!!senhaTarget} onOpenChange={v => !v && setSenhaTarget(null)}>
-        <DialogContent className="max-w-sm" aria-describedby="modal-senha-desc">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <KeyRound className="w-4 h-4 text-primary" />
-              Alterar Senha
-            </DialogTitle>
-            <DialogDescription id="modal-senha-desc" className="sr-only">
-              Definir nova senha para o usuário selecionado
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-3 space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Definir nova senha para <span className="font-semibold text-foreground">{senhaTarget?.nome}</span>
-            </p>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium">Nova senha *</Label>
-              <Input
-                type="password"
-                value={novaSenha}
-                onChange={e => setNovaSenha(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-                className="h-9 text-sm"
-                onKeyDown={e => e.key === 'Enter' && alterarSenhaOperador()}
-              />
-            </div>
-            <p className="text-[11px] text-muted-foreground">
-              O usuário precisará usar esta senha no próximo login.
-            </p>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => setSenhaTarget(null)} disabled={salvandoSenha}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={alterarSenhaOperador} disabled={salvandoSenha || novaSenha.length < 6} className="gap-1.5">
-              <KeyRound className="w-3.5 h-3.5" />
-              {salvandoSenha ? 'Salvando...' : 'Salvar senha'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Modal foto expandida */}
       {fotoExpandida && (
