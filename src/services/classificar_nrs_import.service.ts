@@ -51,6 +51,15 @@ export interface DuplicadoInfo {
   acordoId:     string;
   operadorId:   string;
   operadorNome: string;
+  /**
+   * Setor do operador dono do NR. Quando preenchido, a classificação
+   * usa este valor direto, sem depender do callback `resolverDadosOperador`
+   * (que sofre RLS do classificador). Preenchido por
+   * `verificarNrsDuplicadosEmLote` desde 2026-04-22.
+   */
+  operadorSetorId?:  string | null;
+  /** Equipe do operador dono do NR. Ver nota acima. */
+  operadorEquipeId?: string | null;
 }
 
 export interface ClassificacaoNR {
@@ -138,23 +147,41 @@ export async function classificarNrsImportados(
   // Cache de "operador X tem lógica ativa?" para evitar rodadas redundantes.
   const cacheLogicaOperador = new Map<string, boolean>();
 
-  async function donoTemLogicaAtiva(donoId: string): Promise<boolean> {
+  async function donoTemLogicaAtiva(dup: DuplicadoInfo): Promise<boolean> {
+    const donoId = dup.operadorId;
     if (donoId === operadorAtualId) return atualTemLogica;
     if (cacheLogicaOperador.has(donoId)) return cacheLogicaOperador.get(donoId)!;
 
-    if (!resolverDadosOperador) {
-      cacheLogicaOperador.set(donoId, false);
-      return false;
+    // Preferência: usar setor/equipe embutidos no próprio DuplicadoInfo.
+    // Assim a classificação NÃO depende de RLS sobre `perfis` no contexto do
+    // classificador — corrige bug em que operador Carlos via "duplicado"
+    // enquanto admin via "direto" para o mesmo NR.
+    let setorId:  string | null | undefined = dup.operadorSetorId;
+    let equipeId: string | null | undefined = dup.operadorEquipeId;
+
+    // Fallback (retrocompat): se o DuplicadoInfo não trouxer os campos
+    // embutidos, tenta o callback de resolução.
+    const precisaFallback =
+      setorId === undefined && equipeId === undefined;
+
+    if (precisaFallback) {
+      if (!resolverDadosOperador) {
+        cacheLogicaOperador.set(donoId, false);
+        return false;
+      }
+      const dados = await resolverDadosOperador(donoId);
+      if (!dados) {
+        cacheLogicaOperador.set(donoId, false);
+        return false;
+      }
+      setorId  = dados.setorId;
+      equipeId = dados.equipeId;
     }
-    const dados = await resolverDadosOperador(donoId);
-    if (!dados) {
-      cacheLogicaOperador.set(donoId, false);
-      return false;
-    }
+
     const ativo = resolverDiretoExtraAtivo({
       userId:       donoId,
-      userSetorId:  dados.setorId,
-      userEquipeId: dados.equipeId,
+      userSetorId:  setorId  ?? null,
+      userEquipeId: equipeId ?? null,
       configs:      configsDiretoExtra,
     });
     cacheLogicaOperador.set(donoId, ativo);
@@ -202,7 +229,7 @@ export async function classificarNrsImportados(
       continue;
     }
 
-    const donoLogica = await donoTemLogicaAtiva(dup.operadorId);
+    const donoLogica = await donoTemLogicaAtiva(dup);
     if (donoLogica) {
       // Caso B cruzado: operador atual vira DIRETO, dono anterior vira EXTRA.
       resultado.push({

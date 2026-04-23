@@ -419,8 +419,20 @@ describe('verificarNrsDuplicadosEmLote', () => {
     expect(new Set(c.in?.values)).toEqual(new Set(['111', '222', '333']));
 
     expect(r.size).toBe(2);
-    expect(r.get('111')).toEqual({ acordoId: 'a-1', operadorId: 'op-1', operadorNome: 'Ana' });
-    expect(r.get('222')).toEqual({ acordoId: 'a-2', operadorId: 'op-2', operadorNome: 'Bruno' });
+    expect(r.get('111')).toEqual({
+      acordoId: 'a-1',
+      operadorId: 'op-1',
+      operadorNome: 'Ana',
+      operadorSetorId: null,
+      operadorEquipeId: null,
+    });
+    expect(r.get('222')).toEqual({
+      acordoId: 'a-2',
+      operadorId: 'op-2',
+      operadorNome: 'Bruno',
+      operadorSetorId: null,
+      operadorEquipeId: null,
+    });
   });
 
   it('campo "instituicao" muda coluna do select e do .in()', async () => {

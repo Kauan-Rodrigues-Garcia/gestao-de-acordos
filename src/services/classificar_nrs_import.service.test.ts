@@ -135,4 +135,161 @@ describe('classificarNrsImportados', () => {
       direto: 1
     });
   });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Regressão 2026-04-22 — bug #10 (Inscrição 1000)
+  // ═══════════════════════════════════════════════════════════════════════════
+  //
+  // ANTES:
+  //   - A lógica Direto/Extra do operador dono era descoberta via
+  //     `resolverDadosOperador`, que fazia SELECT em `perfis` sob RLS
+  //     do classificador.
+  //   - Operador Carlos (sem permissão RLS para ler perfil de outro setor)
+  //     recebia `dados=null` → `donoTemLogica=false` → categoria 'duplicado'.
+  //   - Admin (RLS global) recebia dados corretos → 'direto'.
+  //   - Resultado: MESMO NR com mesma planilha dava categorias diferentes
+  //     dependendo de quem estava classificando.
+  //
+  // DEPOIS:
+  //   - `DuplicadoInfo` carrega `operadorSetorId`/`operadorEquipeId` embutidos
+  //     pela query batch de duplicados (join com `perfis`).
+  //   - A classificação usa esses campos direto, sem depender de RLS no
+  //     contexto do classificador → mesmo NR dá a mesma categoria para qualquer
+  //     classificador.
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('regressão #10: classificação independe do perfil do classificador', () => {
+    const SETOR_DONO = 'setor-dono';
+    const configSetorDonoAtiva: DiretoExtraConfig = {
+      id: 'cfg-setor-dono',
+      escopo: 'setor',
+      referencia_id: SETOR_DONO,
+      ativo: true,
+      empresa_id: 'e1',
+      criado_em: '',
+      atualizado_em: '',
+    };
+    const dupInfoEmbutido: DuplicadoInfo = {
+      acordoId: 'a-1000',
+      operadorId: opOutroId,
+      operadorNome: 'Dono',
+      operadorSetorId: SETOR_DONO,
+      operadorEquipeId: null,
+    };
+
+    it('usa setor/equipe embutidos no DuplicadoInfo — resolverDadosOperador NÃO é chamado', async () => {
+      const resolverSpy = vi.fn(async () => ({ setorId: null, equipeId: null }));
+
+      const res = await classificarNrsImportados({
+        ...baseParams,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'INSC-1000' }],
+        duplicados: new Map([['INSC-1000', dupInfoEmbutido]]),
+        resolverDadosOperador: resolverSpy,
+      });
+
+      expect(res[0].categoria).toBe('direto');
+      expect(res[0].donoTemLogica).toBe(true);
+      // O callback (sujeito a RLS) NÃO deve ter sido acionado quando o
+      // DuplicadoInfo já traz os dados embutidos.
+      expect(resolverSpy).not.toHaveBeenCalled();
+    });
+
+    it('mesmo com resolverDadosOperador retornando null (RLS bloqueou), categoria ainda é "direto" via dados embutidos', async () => {
+      // Cenário exato do bug: RLS bloqueia leitura de perfis de outro setor.
+      // Antes do fix, isso derrubava a categoria para 'duplicado'. Com os
+      // dados embutidos, a classificação ignora o fallback bloqueado.
+      const res = await classificarNrsImportados({
+        ...baseParams,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'INSC-1000' }],
+        duplicados: new Map([['INSC-1000', dupInfoEmbutido]]),
+        resolverDadosOperador: async () => null, // RLS bloqueou
+      });
+
+      expect(res[0].categoria).toBe('direto');
+      expect(res[0].donoTemLogica).toBe(true);
+    });
+
+    it('dois classificadores diferentes produzem a MESMA categoria para o mesmo duplicado embutido', async () => {
+      // Classificador A: operador "Carlos" sem permissão de ler outros perfis.
+      const resCarlos = await classificarNrsImportados({
+        operadorAtualId: 'carlos-id',
+        operadorAtualSetorId: 'setor-carlos',
+        operadorAtualEquipeId: null,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'INSC-1000' }],
+        duplicados: new Map([['INSC-1000', dupInfoEmbutido]]),
+        resolverDadosOperador: async () => null, // RLS bloqueia Carlos
+      });
+
+      // Classificador B: "Admin" com visão global.
+      const resAdmin = await classificarNrsImportados({
+        operadorAtualId: 'admin-id',
+        operadorAtualSetorId: 'setor-admin',
+        operadorAtualEquipeId: null,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'INSC-1000' }],
+        duplicados: new Map([['INSC-1000', dupInfoEmbutido]]),
+        resolverDadosOperador: async () => ({
+          setorId: SETOR_DONO,
+          equipeId: null,
+        }),
+      });
+
+      expect(resCarlos[0].categoria).toBe(resAdmin[0].categoria);
+      expect(resCarlos[0].categoria).toBe('direto');
+    });
+
+    it('retrocompat: DuplicadoInfo sem setor/equipe embutidos ainda cai no resolverDadosOperador (callback)', async () => {
+      const dupLegado: DuplicadoInfo = {
+        acordoId: 'a-legado',
+        operadorId: opOutroId,
+        operadorNome: 'Legado',
+        // SEM operadorSetorId / operadorEquipeId → cai no fallback
+      };
+      const resolverSpy = vi.fn(async () => ({
+        setorId: SETOR_DONO,
+        equipeId: null,
+      }));
+
+      const res = await classificarNrsImportados({
+        ...baseParams,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'NR-LEG' }],
+        duplicados: new Map([['NR-LEG', dupLegado]]),
+        resolverDadosOperador: resolverSpy,
+      });
+
+      expect(res[0].categoria).toBe('direto');
+      expect(resolverSpy).toHaveBeenCalledWith(opOutroId);
+    });
+
+    it('dados embutidos indicando "sem lógica" no dono → duplicado com autorização (não chama callback)', async () => {
+      const dupEmbutidoSemLogica: DuplicadoInfo = {
+        acordoId: 'a-2',
+        operadorId: opOutroId,
+        operadorNome: 'Outro',
+        operadorSetorId: 'setor-neutro',  // sem config ativa
+        operadorEquipeId: null,
+      };
+      const resolverSpy = vi.fn(async () => ({
+        // Se chamado por engano, isso MUDARIA a resposta — o teste garante
+        // que não é chamado.
+        setorId: SETOR_DONO,
+        equipeId: null,
+      }));
+
+      const res = await classificarNrsImportados({
+        ...baseParams,
+        configsDiretoExtra: [configSetorDonoAtiva],
+        registros: [{ linhaOriginal: 1, nr: 'NR-X' }],
+        duplicados: new Map([['NR-X', dupEmbutidoSemLogica]]),
+        resolverDadosOperador: resolverSpy,
+      });
+
+      expect(res[0].categoria).toBe('duplicado');
+      expect(res[0].precisaAutorizacao).toBe(true);
+      expect(resolverSpy).not.toHaveBeenCalled();
+    });
+  });
 });

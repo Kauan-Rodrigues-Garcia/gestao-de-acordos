@@ -258,12 +258,27 @@ export async function verificarNrsDuplicadosEmLote(
   nrs: string[],
   empresaId: string,
   campo: 'nr_cliente' | 'instituicao' = 'nr_cliente'
-): Promise<Map<string, { acordoId: string; operadorId: string; operadorNome: string }>> {
-  const resultado = new Map<string, { acordoId: string; operadorId: string; operadorNome: string }>();
+): Promise<Map<string, {
+  acordoId: string;
+  operadorId: string;
+  operadorNome: string;
+  operadorSetorId: string | null;
+  operadorEquipeId: string | null;
+}>> {
+  const resultado = new Map<string, {
+    acordoId: string;
+    operadorId: string;
+    operadorNome: string;
+    operadorSetorId: string | null;
+    operadorEquipeId: string | null;
+  }>();
   const nrsTrimados = [...new Set(nrs.map(n => n.trim()).filter(Boolean))];
   if (!nrsTrimados.length) return resultado;
 
-  const colSelect = `id, ${campo}, operador_id, perfis(nome)`;
+  // Inclui setor_id/equipe_id do dono para alimentar a classificação
+  // Direto/Extra SEM depender de RLS aplicada sobre a tabela `perfis` no
+  // contexto do classificador (bug corrigido em 2026-04-22).
+  const colSelect = `id, ${campo}, operador_id, perfis(nome, setor_id, equipe_id)`;
 
   const { data } = await supabase
     .from('acordos')
@@ -276,7 +291,11 @@ export async function verificarNrsDuplicadosEmLote(
     type DupRow = {
       id: string;
       operador_id: string;
-      perfis?: { nome?: string | null } | null;
+      perfis?: {
+        nome?: string | null;
+        setor_id?: string | null;
+        equipe_id?: string | null;
+      } | null;
       nr_cliente?: string | null;
       instituicao?: string | null;
     };
@@ -287,6 +306,8 @@ export async function verificarNrsDuplicadosEmLote(
           acordoId: item.id,
           operadorId: item.operador_id,
           operadorNome: item.perfis?.nome ?? 'Operador desconhecido',
+          operadorSetorId:  item.perfis?.setor_id  ?? null,
+          operadorEquipeId: item.perfis?.equipe_id ?? null,
         });
       }
     }
