@@ -4,6 +4,8 @@ import { motion } from 'framer-motion';
 import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
+import AdminSetoresAba from '@/pages/AdminSetoresAba';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { usePresence } from '@/hooks/usePresence';
@@ -43,6 +45,11 @@ export default function AdminUsuarios() {
   const { empresa: empresaAtual } = useEmpresa();
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
+  // Gate para a aba Setores: visível apenas para Gerência ou superior
+  // (gerencia, diretoria, administrador, super_admin).
+  const podeVerSetores =
+    !!perfilAtual?.perfil &&
+    ['gerencia', 'diretoria', 'administrador', 'super_admin'].includes(perfilAtual.perfil);
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -348,9 +355,20 @@ export default function AdminUsuarios() {
     return acc;
   }, {});
 
-  const setoresOrdenados = Object.entries(usuariosPorSetor).sort(([, a], [, b]) =>
-    a.nomeSetor.localeCompare(b.nomeSetor)
-  );
+  const setoresOrdenados = (() => {
+    const entries = Object.entries(usuariosPorSetor);
+    // Aplica a mesma ordem persistida pelo DnD da aba Setores para manter
+    // consistência visual entre as abas Usuários e Setores.
+    const empresaId = empresaAtual?.id;
+    const ordenados = aplicarOrdemSetores(
+      entries.map(([sid, g]) => ({ id: sid, nome: g.nomeSetor })),
+      empresaId,
+    );
+    const byId = new Map(entries);
+    return ordenados
+      .map(({ id }) => [id, byId.get(id)!] as [string, typeof entries[number][1]])
+      .filter(([, g]) => !!g);
+  })();
 
   return (
     <div className="h-full flex flex-col">
@@ -375,6 +393,14 @@ export default function AdminUsuarios() {
             >
               <Users className="w-4 h-4" /> Usuários
             </TabsTrigger>
+            {podeVerSetores && (
+              <TabsTrigger
+                value="setores"
+                className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+              >
+                <Building2 className="w-4 h-4" /> Setores
+              </TabsTrigger>
+            )}
             <TabsTrigger
               value="equipes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -530,6 +556,13 @@ export default function AdminUsuarios() {
       )}
         </div>
         </TabsContent>
+
+        {/* ─── Aba: Setores ──────────────────────────────────────────── */}
+        {podeVerSetores && (
+          <TabsContent value="setores" className="flex-1 overflow-y-auto mt-0">
+            <AdminSetoresAba />
+          </TabsContent>
+        )}
 
         {/* ─── Aba: Equipes ──────────────────────────────────────────── */}
         <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
