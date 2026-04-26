@@ -625,7 +625,7 @@ export function AcordoNovoInline({
             }
           }
 
-          // Fallback anterior removido: const opConflitoTemLogica_old = opConflitoData
+          const opConflitoTemLogica = await fetchIsDiretoExtraAtivo({ userId: conflitoFinal.operadorId, empresaId: empresa.id });
           // Diagnóstico (útil para detectar por que o fluxo Direto/Extra não dispara)
           console.info('[direto-extra/inline]', {
             empresa: empresa.id,
