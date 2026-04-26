@@ -43,7 +43,7 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
   // Caso 1 + 2: vínculo Direto/Extra consolidado → tag azul ÚNICA "VÍNCULO"
   const duplo = Boolean(a._vinculoDuplo);
   const diretoComVinculo =
-    (a.tipo_vinculo ?? 'direto') === 'direto' && Boolean(a.vinculo_operador_nome);
+    (a.tipo_vinculo ?? 'direto') === 'direto' && (Boolean(a.vinculo_operador_nome) || Boolean(a._vinculoExtraOperadorNome));
 
   if (duplo || diretoComVinculo) {
     const nomeOutro =

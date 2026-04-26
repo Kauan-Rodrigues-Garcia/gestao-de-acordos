@@ -190,7 +190,6 @@ async function aplicarCasoA(
       vinculo_operador_nome: params.operadorAtual.nome,
     })
     .eq('id', dono.acordoId);
-
   await criarNotificacao({
     usuario_id: dono.operadorId,
     titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
