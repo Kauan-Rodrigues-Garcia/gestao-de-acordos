@@ -63,6 +63,7 @@ import { enviarParaLixeira }    from '@/services/lixeira.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
+import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 
@@ -943,6 +944,15 @@ export function AcordoNovoInline({
       const {
         payload, acordoAnteriorId, operadorAntId, operadorAntNome, nrLabel, labelCampo,
       } = avisoDiretoExtra;
+
+      // Re-validar que o operador do conflito ainda tem a lógica ativa no momento da confirmação.
+      // Entre a exibição do aviso e o clique em Confirmar, a config pode ter sido desativada.
+      const lógicaAindaAtiva = await fetchIsDiretoExtraAtivo({ userId: operadorAntId, empresaId: empresa.id });
+      if (!lógicaAindaAtiva) {
+        toast.error('A lógica Direto/Extra do operador em conflito foi desativada. Atualize e tente novamente.');
+        setConfirmandoDiretoExtra(false);
+        return;
+      }
 
       // Buscar acordo anterior completo para usar nas notificações
       const { data: acordoAntData } = await supabase

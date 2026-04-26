@@ -816,7 +816,7 @@ export function AcordoDetalheInline({
         onClose={() => setModalExtraDiretoOpen(false)}
         executando={executandoExtraDireto}
         operadorDiretoNome={acordoLocal.vinculo_operador_nome || 'outro operador'}
-        nrLabel={isPaguePlay ? `NR ${acordoLocal.nr_cliente ?? '—'}` : `Inscrição ${acordoLocal.inscricao ?? '—'}`}
+        nrLabel={isPaguePlay ? `Inscrição ${acordoLocal.instituicao ?? '—'}` : `NR ${acordoLocal.nr_cliente ?? '—'}`}
         precisaAutorizacao={!perfil || !['administrador', 'super_admin', 'lider', 'elite', 'gerencia', 'diretoria'].includes(String(perfil.perfil || '').toLowerCase())}
         onConfirmar={async (liderCreds) => {
           if (!perfil || !empresa) return;
@@ -928,7 +928,7 @@ export function AcordoDetalheInline({
                   titulo: '⚠️ Acordo convertido em direto',
                   mensagem:
                     `O operador ${perfil.nome} assumiu como direto o acordo do ` +
-                    `${isPaguePlay ? `NR ${valorChave}` : `cliente de inscrição ${valorChave}`}. ` +
+                    `${isPaguePlay ? `inscrição ${valorChave}` : `NR ${valorChave}`}. ` +
                     `O acordo foi removido do seu painel.` +
                     (liderNomeAutorizador ? ` (Autorizado por ${liderNomeAutorizador})` : ''),
                 });
