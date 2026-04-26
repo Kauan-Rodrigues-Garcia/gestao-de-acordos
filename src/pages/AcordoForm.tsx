@@ -330,6 +330,7 @@ export default function AcordoForm() {
               .update({
                 vinculo_operador_id:   uid,
                 vinculo_operador_nome: p?.nome ?? 'Operador',
+                vinculo_operador_nome: p?.nome ?? 'Operador',
               })
               .eq('id', conflitoFinal.acordoId);
 
