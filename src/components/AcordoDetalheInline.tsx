@@ -606,19 +606,19 @@ export function AcordoDetalheInline({
                   <div className="flex-1 min-w-0 text-xs">
                     <p className="font-semibold text-primary leading-tight">Acordo Extra</p>
                     <p className="text-foreground/80 leading-tight">
-                      Vínculo com operador: <strong className="text-foreground">{acordoLocal.vinculo_operador_nome}</strong>
+                      Vínculo com operador: <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome}</strong>
                     </p>
                   </div>
                 </div>
               )}
-              {acordoLocal.tipo_vinculo === 'direto' && acordoLocal.vinculo_operador_nome && (
+              {(acordoLocal.tipo_vinculo === 'direto' || !acordoLocal.tipo_vinculo) && (acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome) && (
                 <div className="mb-4 px-3 py-2 rounded-lg bg-success/8 border border-success/25 flex items-start gap-2">
                   <LinkIcon className="w-4 h-4 text-success shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0 text-xs">
                     <p className="font-semibold text-success leading-tight">Acordo Direto (com Extra vinculado)</p>
                     <p className="text-foreground/80 leading-tight">
                       Existe um acordo EXTRA vinculado com o operador:{' '}
-                      <strong className="text-foreground">{acordoLocal.vinculo_operador_nome}</strong>
+                      <strong className="text-foreground">{acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome}</strong>
                     </p>
                   </div>
                 </div>
