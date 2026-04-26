@@ -315,6 +315,46 @@ export default function AdminUsuarios() {
     else toast.error('Erro ao alterar status');
   }
 
+  // #6: excluir usuário direto do modal Editar.
+  // Estratégia: deletar o registro em `perfis` (cascata no banco remove vínculos).
+  // Obs.: o auth.user correspondente só pode ser deletado por uma Edge Function com
+  // service-role key — se ela existir (admin-delete-user), chamamos; caso contrário
+  // removemos só o perfil (o auth.user fica órfão mas sem acesso, pois RLS exige perfil).
+  const [excluindoUsuario, setExcluindoUsuario] = useState(false);
+  const [confirmExclusaoUser, setConfirmExclusaoUser] = useState(false);
+
+  async function excluirUsuarioEditado() {
+    if (!editando) return;
+    if (editando.id === perfilAtual?.id) {
+      toast.error('Você não pode excluir a si mesmo.');
+      return;
+    }
+    setExcluindoUsuario(true);
+    try {
+      // Tenta Edge Function primeiro (remove também do auth.users)
+      const ef = await supabase.functions.invoke('admin-delete-user', {
+        body: { p_user_id: editando.id },
+      });
+      const efErro = ef.error || (ef.data as { error?: string } | null)?.error;
+      if (efErro) {
+        // Fallback: deleta apenas o perfil
+        const { error } = await supabase.from('perfis').delete().eq('id', editando.id);
+        if (error) {
+          toast.error(`Erro ao excluir usuário: ${error.message}`);
+          return;
+        }
+        toast.success(`Perfil de ${editando.nome} removido. (auth.user pode permanecer órfão — rode admin-delete-user no Supabase)`);
+      } else {
+        toast.success(`Usuário ${editando.nome} excluído com sucesso!`);
+      }
+      setConfirmExclusaoUser(false);
+      setDialogOpen(false);
+      fetchDados();
+    } finally {
+      setExcluindoUsuario(false);
+    }
+  }
+
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
 
@@ -724,10 +764,54 @@ export default function AdminUsuarios() {
             </div>
           )}
 
+          <DialogFooter className="sm:justify-between">
+            {/* #6: excluir usuário — só no modo Editar e não permite auto-exclusão */}
+            {editando && editando.id !== perfilAtual?.id ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
+                onClick={() => setConfirmExclusaoUser(true)}
+                disabled={excluindoUsuario}
+              >
+                <Trash2 className="w-4 h-4" />
+                Excluir usuário
+              </Button>
+            ) : <div />}
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+              <Button size="sm" onClick={salvar} disabled={saving} className="gap-2">
+                <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* #6: diálogo de confirmação de exclusão de usuário */}
+      <Dialog open={confirmExclusaoUser} onOpenChange={setConfirmExclusaoUser}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir usuário</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir{' '}
+              <strong>{editando?.nome}</strong>? Esta ação não pode ser desfeita e removerá
+              o acesso do usuário ao sistema.
+            </DialogDescription>
+          </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button size="sm" onClick={salvar} disabled={saving} className="gap-2">
-              <Save className="w-4 h-4" /> {saving ? 'Salvando...' : 'Salvar'}
+            <Button variant="outline" size="sm" onClick={() => setConfirmExclusaoUser(false)} disabled={excluindoUsuario}>
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={excluirUsuarioEditado}
+              disabled={excluindoUsuario}
+              className="gap-2"
+            >
+              <Trash2 className="w-4 h-4" />
+              {excluindoUsuario ? 'Excluindo...' : 'Excluir definitivamente'}
             </Button>
           </DialogFooter>
         </DialogContent>

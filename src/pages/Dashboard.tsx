@@ -957,7 +957,7 @@ export default function Dashboard() {
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
-                          {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                          {visaoAmpla && (
                             <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                           )}
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
@@ -967,7 +967,7 @@ export default function Dashboard() {
                         {novoInlineAbertoTabela && (
                           <AcordoNovoInline
                             isPaguePlay={isPP}
-                            colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10}
+                            colSpan={visaoAmpla ? 11 : 10}
                             onSaved={(inserido) => {
                               setNovoInlineAbertoTabela(false);
                               addAcordo(inserido); // Optimistic: adiciona sem refetch
@@ -977,7 +977,7 @@ export default function Dashboard() {
                         )}
                         {acordos.length === 0 ? (
                           <tr>
-                            <td colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10} className="px-4 py-12 text-center">
+                            <td colSpan={visaoAmpla ? 11 : 10} className="px-4 py-12 text-center">
                               <div className="flex flex-col items-center gap-2 text-muted-foreground">
                                 <Filter className="w-8 h-8 opacity-30" />
                                 <p className="font-medium">Nenhum acordo encontrado</p>
@@ -1079,7 +1079,7 @@ export default function Dashboard() {
                                   </span>
                                 </td>
                                 {/* Operador — apenas PaguePay admin/lider */}
-                                {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                                {visaoAmpla && (
                                   <td className="px-3 py-2.5 text-xs text-muted-foreground truncate max-w-[140px]">
                                     <OperadorCell acordo={a} operadoresMap={operadoresMap} />
                                   </td>
@@ -1148,7 +1148,7 @@ export default function Dashboard() {
                                   key={`detalhe-${a.id}`}
                                   acordo={a}
                                   isPaguePlay={isPP}
-                                  colSpan={isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') ? 11 : 10}
+                                  colSpan={visaoAmpla ? 11 : 10}
                                   onClose={() => setDetalheInlineIdTabela(null)}
                                   onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
                                 />

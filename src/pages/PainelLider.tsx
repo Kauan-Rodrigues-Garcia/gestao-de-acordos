@@ -14,7 +14,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Users, CheckCircle2, Clock, AlertTriangle, ArrowRight, Calendar,
-  BarChart3, BarChart2, ChevronRight, RefreshCw, X, Trophy, Target,
+  BarChart3, BarChart2, ChevronRight, ChevronLeft, RefreshCw, X, Trophy, Target,
   TrendingUp, Loader2, DollarSign, Hash, Building2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -157,6 +157,27 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
   const [erroLocal,     setErroLocal]     = useState<string | null>(null);
   const [filtroStatus,  setFiltroStatus]  = useState<string>('all');
 
+  // #3: filtro de mês — por padrão mostra só o mês atual; permite navegar meses anteriores/futuros.
+  const hojeDate = new Date();
+  const [mesRef, setMesRef] = useState<{ ano: number; mes: number }>({
+    ano: hojeDate.getFullYear(),
+    mes: hojeDate.getMonth(), // 0-11
+  });
+  const inicioMesISO = useMemo(() => {
+    const d = new Date(mesRef.ano, mesRef.mes, 1);
+    return d.toISOString().slice(0, 10);
+  }, [mesRef]);
+  const fimMesISO = useMemo(() => {
+    const d = new Date(mesRef.ano, mesRef.mes + 1, 0); // último dia do mês
+    return d.toISOString().slice(0, 10);
+  }, [mesRef]);
+  const labelMes = useMemo(() => {
+    const d = new Date(mesRef.ano, mesRef.mes, 1);
+    const nome = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+    return nome.charAt(0).toUpperCase() + nome.slice(1);
+  }, [mesRef]);
+  const ehMesAtual = mesRef.ano === hojeDate.getFullYear() && mesRef.mes === hojeDate.getMonth();
+
   const carregarAcordos = useCallback(async () => {
     setLoadingLocal(true);
     setErroLocal(null);
@@ -165,6 +186,8 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
         .from('acordos')
         .select('id, nome_cliente, nr_cliente, vencimento, valor, status, tipo, operador_id, setor_id, parcelas, whatsapp, observacoes, data_cadastro, criado_em, atualizado_em')
         .eq('operador_id', operadorId)
+        .gte('vencimento', inicioMesISO)
+        .lte('vencimento', fimMesISO)
         .order('vencimento', { ascending: true });
       if (error) throw error;
       setAcordos((data as Acordo[]) ?? []);
@@ -173,7 +196,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
     } finally {
       setLoadingLocal(false);
     }
-  }, [operadorId]);
+  }, [operadorId, inicioMesISO, fimMesISO]);
 
   useEffect(() => {
     carregarAcordos();
@@ -213,7 +236,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
             <div className="flex-1">
               <h3 className="font-bold text-foreground">{operadorNome}</h3>
               <p className="text-xs text-muted-foreground">
-                {loadingLocal ? 'Carregando...' : `${acordos.length} acordos na carteira`}
+                {loadingLocal ? 'Carregando...' : `${acordos.length} acordos em ${labelMes}`}
               </p>
             </div>
             <div className="flex items-center gap-1">
@@ -224,6 +247,48 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
                 <X className="w-4 h-4" />
               </Button>
             </div>
+          </div>
+
+          {/* #3: navegador de mês */}
+          <div className="flex items-center justify-between gap-2 mb-3 p-2 rounded-lg bg-muted/40 border border-border">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setMesRef(m => {
+                const d = new Date(m.ano, m.mes - 1, 1);
+                return { ano: d.getFullYear(), mes: d.getMonth() };
+              })}
+              title="Mês anterior"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+            <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+              <Calendar className="w-3.5 h-3.5 text-muted-foreground" />
+              <span>{labelMes}</span>
+              {!ehMesAtual && (
+                <Button
+                  variant="link"
+                  size="sm"
+                  className="h-auto p-0 text-xs"
+                  onClick={() => setMesRef({ ano: hojeDate.getFullYear(), mes: hojeDate.getMonth() })}
+                >
+                  (hoje)
+                </Button>
+              )}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setMesRef(m => {
+                const d = new Date(m.ano, m.mes + 1, 1);
+                return { ano: d.getFullYear(), mes: d.getMonth() };
+              })}
+              title="Próximo mês"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
 
           {loadingLocal ? (

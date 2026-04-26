@@ -28,10 +28,11 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Building2, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell,
+  Camera, Loader2, Trash2, TrendingUp,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPaguePlay, isPerfilLider, isPerfilAdmin } from '@/lib/index';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -49,20 +50,21 @@ interface NavItem {
   roles?: string[];
   /** Se true, o item fica oculto quando o tenant for PaguePay */
   hiddenForPaguePay?: boolean;
+  /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
+  permissaoKey?: string;
 }
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'] },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'] },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos_gerais' },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'] },
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   { label: 'Setores',          icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'] },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'] },
-  { label: 'Notificações',    icon: Bell,            to: '/notificacoes',                 roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'] },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas' },
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -148,11 +150,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const isPP = isPaguePlay(tenantSlug);
   const userRole = perfil?.perfil ?? 'operador';
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
-  // Filtra por role E por visibilidade PaguePay
+  // Filtra por role, visibilidade PaguePay e permissões configuráveis (#7).
+  // Enquanto as permissões estão carregando, exibimos tudo o que o role permite
+  // (fail-open) para evitar flicker; quando carregado, aplica o gate `permissaoKey`.
   const navItems = NAV_ITEMS.filter(item => {
     if (item.roles && !item.roles.includes(userRole) && userRole !== 'super_admin') return false;
     if (item.hiddenForPaguePay && isPP) return false;
+    if (item.permissaoKey && !permLoading && !temPermissao(item.permissaoKey)) return false;
     return true;
   });
 

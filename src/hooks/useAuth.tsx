@@ -189,19 +189,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // Ouvir mudanças de auth
+    // IMPORTANTE: ignorar TOKEN_REFRESHED / USER_UPDATED / INITIAL_SESSION para não
+    // remontar a árvore quando o usuário volta para a aba do navegador (bug #1).
+    // Apenas SIGNED_IN (novo login) e SIGNED_OUT devem disparar side-effects.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        // Pular se signIn já está buscando o perfil manualmente
-        if (!isSigningIn.current) {
-          fetchPerfil(s.user.id);
-        }
-      } else {
+      // Só atualizamos session/user em eventos relevantes — assim o React não re-renderiza
+      // o AuthProvider a cada refresh silencioso de token (que ocorre ao voltar para a aba).
+      if (_event === 'SIGNED_OUT') {
+        setSession(null);
+        setUser(null);
         setPerfil(null);
         setEmpresa(null);
         setLoading(false);
+        return;
+      }
+      if (_event === 'SIGNED_IN') {
+        setSession(s);
+        setUser(s?.user ?? null);
+        if (s?.user && !isSigningIn.current) {
+          fetchPerfil(s.user.id);
+        }
+        return;
+      }
+      // TOKEN_REFRESHED, USER_UPDATED, INITIAL_SESSION: só atualiza a session
+      // (para manter o access_token válido) sem recarregar o perfil nem re-renderizar
+      // a UI a ponto de perder estado de formulários em andamento.
+      if (s) {
+        setSession(s);
       }
     });
 

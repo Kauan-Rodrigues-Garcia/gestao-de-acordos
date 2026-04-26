@@ -107,7 +107,12 @@ export default function Lixeira() {
       // Idealmente deveria existir um job pg_cron no Supabase; aqui fica
       // como garantia de funcionalidade client-side.
       await purgarExpirados(empresa.id);
-      const data = await fetchLixeira(empresa.id);
+      // #8: operador só vê os próprios acordos excluídos. Elite/Líder/Gerência/Diretoria/Admin veem tudo.
+      const ehOperador = perfil?.perfil === 'operador';
+      const data = await fetchLixeira(
+        empresa.id,
+        ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,
+      );
       setItens(data);
     } finally {
       setLoading(false);

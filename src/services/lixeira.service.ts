@@ -89,12 +89,39 @@ export async function enviarParaLixeira(params: EnviarParaLixeiraParams): Promis
   return { ok: true };
 }
 
-/** Busca itens da lixeira de uma empresa (para admin/líder) */
-export async function fetchLixeira(empresaId: string, limit = 200): Promise<LixeiraAcordo[]> {
-  const { data, error } = await supabase
+/**
+ * Busca itens da lixeira de uma empresa.
+ *
+ * - Perfis Elite+ (líder, gerencia, diretoria, administrador, super_admin): passar só `empresaId`
+ *   retorna todos os itens da empresa.
+ * - Perfis Operador: passar `operadorId` (= perfil.id) para restringir à lixeira pessoal
+ *   do próprio operador.
+ *
+ * Aceita tanto a assinatura nova `(empresaId, { operadorId?, limit? })` quanto a
+ * antiga `(empresaId, limit?)` para retrocompatibilidade.
+ */
+export async function fetchLixeira(
+  empresaId: string,
+  optsOrLimit?: number | { operadorId?: string; limit?: number },
+): Promise<LixeiraAcordo[]> {
+  let operadorId: string | undefined;
+  let limit = 200;
+  if (typeof optsOrLimit === 'number') {
+    limit = optsOrLimit;
+  } else if (optsOrLimit && typeof optsOrLimit === 'object') {
+    operadorId = optsOrLimit.operadorId;
+    if (typeof optsOrLimit.limit === 'number') limit = optsOrLimit.limit;
+  }
+
+  let query = supabase
     .from('lixeira_acordos')
     .select('*')
-    .eq('empresa_id', empresaId)
+    .eq('empresa_id', empresaId);
+  if (operadorId) {
+    query = query.eq('operador_id', operadorId);
+  }
+
+  const { data, error } = await query
     .order('excluido_em', { ascending: false })
     .limit(limit);
 
