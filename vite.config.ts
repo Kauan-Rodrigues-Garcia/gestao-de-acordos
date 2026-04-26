@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import { componentTagger } from 'lovable-tagger';
+import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 
 import { cdnPrefixImages } from './vite-plugins/cdn-prefix-images';
@@ -19,13 +20,19 @@ export default defineConfig(({ mode }) => {
       react(),
       mode === 'development' && componentTagger(),
       cdnPrefixImages(),
+      // Ativo apenas em `npm run analyze` (mode=analyze): gera stats.html com mapa do bundle.
+      mode === 'analyze' && visualizer({ open: true, gzipSize: true, brotliSize: true, filename: 'stats.html' }),
     ].filter(Boolean),
     resolve: {
       alias: {
         '@': path.resolve(__dirname, './src'),
-        // Proxy react-router-dom para o wrapper customizado do projeto
+        // Proxy customizado de react-router-dom para integração com o editor Lovable.
+        // O wrapper intercepta <Routes>, <HashRouter> e navegações para emitir eventos
+        // via postMessage para o iframe pai (ROUTES_INFO, ROUTE_CHANGE, ROUTE_CONTROL).
+        // Isso permite que o editor saiba as rotas disponíveis e navegue programaticamente.
+        // Em produção, __ROUTE_MESSAGING_ENABLED__ é false por padrão (sem overhead).
+        // O alias de 'react-router-dom-original' evita loop de importação circular.
         'react-router-dom': path.resolve(__dirname, './src/lib/react-router-dom-proxy.tsx'),
-        // react-router-dom original acessível sob nome alternativo
         'react-router-dom-original': 'react-router-dom',
       },
     },
@@ -90,6 +97,8 @@ export default defineConfig(({ mode }) => {
             'vendor-xlsx': ['@e965/xlsx'],
             // Date / form / utility libs
             'vendor-forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+            // Sentry — carrega apenas se VITE_SENTRY_DSN estiver definido (inicializado em main.tsx)
+            'vendor-sentry': ['@sentry/react'],
           },
         },
       },

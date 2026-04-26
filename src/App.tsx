@@ -137,7 +137,7 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.ADMIN_SETORES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['administrador']}>
+                  <ProtectedRoute allowedProfiles={['administrador']}>
                     <AdminSetores />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -146,7 +146,7 @@ export default function App() {
               <Route path="/admin/equipes" element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute roles={['administrador']}>
+                  <ProtectedRoute allowedProfiles={['administrador']}>
                     <AdminConfiguracoes />
                   </ProtectedRoute>
                 </LayoutWrapper>

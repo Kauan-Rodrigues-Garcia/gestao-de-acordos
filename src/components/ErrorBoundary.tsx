@@ -22,6 +22,7 @@
  */
 
 import { Component, ErrorInfo, ReactNode } from 'react';
+import * as Sentry from '@sentry/react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -56,6 +57,9 @@ export class ErrorBoundary extends Component<Props, State> {
     const scope = this.props.scope ?? 'ErrorBoundary';
     console.error(`[${scope}] Erro capturado pelo ErrorBoundary:`, error, errorInfo);
     this.setState({ errorInfo });
+    Sentry.captureException(error, {
+      extra: { componentStack: errorInfo.componentStack, scope },
+    });
   }
 
   handleReset = () => {

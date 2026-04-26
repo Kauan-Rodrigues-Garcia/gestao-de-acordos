@@ -42,11 +42,11 @@ export default defineConfig({
         'src/vite-env.d.ts',
       ],
       thresholds: {
-        // Baixos inicialmente — subiremos conforme a cobertura crescer.
-        lines: 0,
-        functions: 0,
-        branches: 0,
-        statements: 0,
+        // Thresholds conservadores — aumentar gradualmente a cada sprint.
+        lines: 25,
+        functions: 20,
+        branches: 15,
+        statements: 25,
       },
     },
   },

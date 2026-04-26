@@ -23,9 +23,12 @@ export default tseslint.config(
         "warn",
         { allowConstantExport: true },
       ],
-      "@typescript-eslint/no-unused-vars": "warn", // 未使用变量降为 warn
-      "@typescript-eslint/no-empty-object-type": "warn", // 空对象类型降为 warn
-      "@typescript-eslint/no-explicit-any": "warn", // any 类型降为 warn
+      "@typescript-eslint/no-unused-vars": "warn",
+      "@typescript-eslint/no-empty-object-type": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+      // Permite console.warn/error/info (usados em logging de auth/realtime),
+      // mas sinaliza console.log acidental deixado em código de produção.
+      "no-console": ["warn", { allow: ["warn", "error", "info"] }],
     },
   },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.

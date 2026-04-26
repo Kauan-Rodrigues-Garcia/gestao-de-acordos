@@ -80,6 +80,9 @@ storybook-static/
 # --- E2E / testing artifacts ---
 playwright-report/
 test-results/
+
+# --- Bundle analysis (rollup-plugin-visualizer) ---
+stats.html
 cypress/videos/
 cypress/screenshots/
 cypress/downloads/
