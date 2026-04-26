@@ -710,6 +710,22 @@ export function AcordoNovoInline({
       // automaticamente via INSERT — não precisamos chamar registrarNr() aqui.
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        // ── Atualizar acordo DIRETO com vinculo_operador_nome (mesmo sem lógica ativa) ──
+        // Se há conflito e o usuário não tem a lógica DIRETO/EXTRA ativada,
+        // ainda assim atualizamos o acordo DIRETO para que a TAG apareça para operadores.
+        if (conflitoFinal && !atualTemLogica) {
+          await supabase
+            .from('acordos')
+            .update({
+              vinculo_operador_id:   perfil.id,
+              vinculo_operador_nome: perfil.nome ?? 'Operador',
+            })
+            .eq('id', conflitoFinal.acordoId)
+            .catch(() => {
+              // Silenciosamente ignora erros (ex: RLS pode bloquear)
+            });
+        }
+        
         limparDraft();
         onSaved(inserido);
         toast.success(
