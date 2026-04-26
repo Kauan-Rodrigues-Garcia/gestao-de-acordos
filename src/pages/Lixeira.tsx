@@ -20,6 +20,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { fetchLixeira, esvaziarLixeira, purgarExpirados, LixeiraAcordo } from '@/services/lixeira.service';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
@@ -81,6 +82,7 @@ function AvatarInitials({ name }: { name?: string | null }) {
 export default function Lixeira() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
 
   const [itens, setItens]               = useState<LixeiraAcordo[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -89,12 +91,7 @@ export default function Lixeira() {
   const [confirmEsvaziar, setConfirmEsvaziar] = useState(false);
   const [esvaziando, setEsvaziando]     = useState(false);
 
-  const podeAcessar =
-    perfil?.perfil === 'administrador' ||
-    perfil?.perfil === 'super_admin' ||
-    perfil?.perfil === 'lider' ||
-    perfil?.perfil === 'operador';
-
+  const podeAcessar = temPermissao('ver_lixeira');
   const podeEsvaziar = podeAcessar;
 
   async function carregar() {
@@ -108,7 +105,7 @@ export default function Lixeira() {
       // como garantia de funcionalidade client-side.
       await purgarExpirados(empresa.id);
       // #8: operador só vê os próprios acordos excluídos. Elite/Líder/Gerência/Diretoria/Admin veem tudo.
-      const ehOperador = perfil?.perfil === 'operador';
+      const ehOperador = !temPermissao('ver_acordos_gerais');
       const data = await fetchLixeira(
         empresa.id,
         ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,

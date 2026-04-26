@@ -23,6 +23,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAcordos } from '@/hooks/useAcordos';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatCurrency, formatDate,
   STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, TIPO_COLORS,
@@ -111,6 +112,7 @@ type VisaoFiltro = 'setor' | `equipe:${string}` | 'individual';
 export default function Dashboard() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const isPP = isPaguePlay(tenantSlug);
   const statusLabels = getStatusLabels(tenantSlug);
   const tipoLabels   = getTipoLabels(tenantSlug);
@@ -223,7 +225,7 @@ export default function Dashboard() {
       data_inicio:  filtroData ? undefined : mesFiltroInicio,
       data_fim:     filtroData ? undefined : mesFiltroFim,
       // Filtro de operador: operador normal OU Elite em modo individual
-      operador_id:  (perfil?.perfil === 'operador' || visaoFiltro === 'individual')
+      operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual')
         ? perfil?.id
         : undefined,
       // Filtro de equipe: Líder/Elite em modo equipe
@@ -709,7 +711,7 @@ export default function Dashboard() {
                       <MessageSquare className="w-3.5 h-3.5" />
                       WhatsApp ({selecionados.length})
                     </Button>
-                    {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                    {temPermissao('excluir_em_lote') && (
                       <Button
                         variant="outline" size="sm"
                         className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs h-8"
@@ -1274,14 +1276,14 @@ export default function Dashboard() {
                     {selecionados.length} selecionado(s)
                   </span>
                   <div className="w-px h-5 bg-white/20" />
-                  {(perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+                  {temPermissao('excluir_em_lote') && (
                     <Button
                       size="sm" variant="ghost"
                       className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
                       onClick={() => setConfirmandoExclusaoLote(true)}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
-                      Excluir Selecionados
+                      Excluir ({selecionados.length})
                     </Button>
                   )}
                   <Button

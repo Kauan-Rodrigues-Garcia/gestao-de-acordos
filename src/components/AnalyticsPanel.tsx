@@ -22,6 +22,7 @@ import {
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   isPaguePlay, formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getTodayISO, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL,
@@ -298,6 +299,7 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const { tenantSlug } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const isPP = isPaguePlay(tenantSlug);
   // Métricas Direto & Extra (incluindo "Agendado restante no mês") valem para PaguePlay e Bookplay.
   const mostraAgendadoRestante = tenantSlug === 'pagueplay' || tenantSlug === 'bookplay';
@@ -363,8 +365,8 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     }
   }, [operadorFiltroExterno]);
 
-  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
-  const isLider = perfil?.perfil === 'lider';
+  const isAdmin = temPermissao('ver_analiticos_global');
+  const isLider = temPermissao('ver_painel_lider');
 
   const { mes, ano } = useMemo(() => {
     const d = new Date();
