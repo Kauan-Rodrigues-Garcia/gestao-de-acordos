@@ -29,7 +29,7 @@
  *   - ModalAutorizacaoNRProps (interface)
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { format, parseISO } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
@@ -375,20 +375,92 @@ export function AcordoNovoInline({
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
 
-  // Campos do formulário
-  const [nomeCliente,  setNomeCliente]  = useState('');
-  const [nrCliente,    setNrCliente]    = useState('');
-  const [vencimento,   setVencimento]   = useState('');
-  const [valorStr,     setValorStr]     = useState('');
-  const [tipo,         setTipo]         = useState(isPaguePlay ? 'boleto_pix' : 'boleto');
-  const [parcelasStr,  setParcelasStr]  = useState('1');
-  const [whatsapp,     setWhatsapp]     = useState('');
-  const [instituicao,  setInstituicao]  = useState('');
-  const [status,       setStatus]       = useState('verificar_pendente');
-  const [observacoes,  setObservacoes]  = useState('');
-  const [estadoSel,    setEstadoSel]    = useState('');
-  const [link,         setLink]         = useState('');
+  // ── Persistência em sessionStorage ──────────────────────────────────────
+  // Objetivo: preservar o formulário ao trocar/retornar de aba do navegador,
+  // mesmo que o componente seja desmontado/remontado pelo pai (Dashboard/Acordos
+  // re-renderizam e fazem realtime sub que pode forçar remount do AcordoNovoInline).
+  // Chave por empresa + perfil → não vaza entre tenants nem entre usuários.
+  const storageKey = `acordo-inline-draft::${empresa?.id ?? 'noemp'}::${perfil?.id ?? 'nouser'}::${isPaguePlay ? 'pp' : 'bp'}`;
+
+  interface DraftAcordoInline {
+    nomeCliente:  string;
+    nrCliente:    string;
+    vencimento:   string;
+    valorStr:     string;
+    tipo:         string;
+    parcelasStr:  string;
+    whatsapp:     string;
+    instituicao:  string;
+    status:       string;
+    observacoes:  string;
+    estadoSel:    string;
+    link:         string;
+  }
+
+  function loadDraft(): Partial<DraftAcordoInline> {
+    if (typeof window === 'undefined') return {};
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as Partial<DraftAcordoInline>;
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  const draftInicial = loadDraft();
+
+  // Campos do formulário (inicializados com o rascunho persistido, se houver)
+  const [nomeCliente,  setNomeCliente]  = useState(draftInicial.nomeCliente  ?? '');
+  const [nrCliente,    setNrCliente]    = useState(draftInicial.nrCliente    ?? '');
+  const [vencimento,   setVencimento]   = useState(draftInicial.vencimento   ?? '');
+  const [valorStr,     setValorStr]     = useState(draftInicial.valorStr     ?? '');
+  const [tipo,         setTipo]         = useState(draftInicial.tipo         ?? (isPaguePlay ? 'boleto_pix' : 'boleto'));
+  const [parcelasStr,  setParcelasStr]  = useState(draftInicial.parcelasStr  ?? '1');
+  const [whatsapp,     setWhatsapp]     = useState(draftInicial.whatsapp     ?? '');
+  const [instituicao,  setInstituicao]  = useState(draftInicial.instituicao  ?? '');
+  const [status,       setStatus]       = useState(draftInicial.status       ?? 'verificar_pendente');
+  const [observacoes,  setObservacoes]  = useState(draftInicial.observacoes  ?? '');
+  const [estadoSel,    setEstadoSel]    = useState(draftInicial.estadoSel    ?? '');
+  const [link,         setLink]         = useState(draftInicial.link         ?? '');
   const [salvando,     setSalvando]     = useState(false);
+
+  // Persiste o rascunho a cada alteração relevante (debounce simples via rAF).
+  const persistRafRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (persistRafRef.current !== null) cancelAnimationFrame(persistRafRef.current);
+    persistRafRef.current = requestAnimationFrame(() => {
+      try {
+        const draft: DraftAcordoInline = {
+          nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr,
+          whatsapp, instituicao, status, observacoes, estadoSel, link,
+        };
+        // Só persistimos se tiver algum conteúdo — evita lixo no storage
+        const temConteudo = Object.values(draft).some(v => typeof v === 'string' && v.trim() !== '' && v !== '1' && v !== 'boleto' && v !== 'boleto_pix' && v !== 'verificar_pendente');
+        if (temConteudo) sessionStorage.setItem(storageKey, JSON.stringify(draft));
+        else sessionStorage.removeItem(storageKey);
+      } catch {
+        // QuotaExceededError ou storage indisponível — ignora
+      }
+    });
+    return () => {
+      if (persistRafRef.current !== null) {
+        cancelAnimationFrame(persistRafRef.current);
+        persistRafRef.current = null;
+      }
+    };
+  }, [
+    storageKey,
+    nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr,
+    whatsapp, instituicao, status, observacoes, estadoSel, link,
+  ]);
+
+  // Limpa o rascunho: após salvar com sucesso ou cancelar explicitamente.
+  function limparDraft() {
+    try { sessionStorage.removeItem(storageKey); } catch { /* noop */ }
+  }
 
   // Estado do conflito de NR
   const [conflito,    setConflito]    = useState<ConflitNR | null>(null);
@@ -597,6 +669,7 @@ export function AcordoNovoInline({
                   `O seu acordo (Direto) continua ativo normalmente.`,
                 empresa_id: empresa.id,
               });
+              limparDraft();
               onSaved(inseridoExtra);
               toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
             }
@@ -637,6 +710,7 @@ export function AcordoNovoInline({
       // automaticamente via INSERT — não precisamos chamar registrarNr() aqui.
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        limparDraft();
         onSaved(inserido);
         toast.success(
           parcelas > 1
@@ -824,6 +898,7 @@ export function AcordoNovoInline({
       });
 
       // Finalizar
+      limparDraft();
       onSaved(inserido);
       toast.success('Transferência autorizada! Acordo registrado com sucesso.');
       setConflito(null);
@@ -910,6 +985,7 @@ export function AcordoNovoInline({
 
       // 5. Fechar modal e notificar sucesso
       setAvisoDiretoExtra(null);
+      limparDraft();
       onSaved(inserido);
       toast.success(`Acordo tabulado como DIRETO. ${operadorAntNome} foi notificado.`);
     } catch (e) {

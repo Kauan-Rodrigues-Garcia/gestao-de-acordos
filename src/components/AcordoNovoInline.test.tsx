@@ -225,6 +225,9 @@ beforeEach(() => {
   routes.perfisMaybeSingle = { data: null, error: null };
   perfilValue = { id: 'me-1', nome: 'Eu Operador', setor_id: 'setor-A', equipe_id: null };
   empresaValue = { id: 'emp-1' };
+  // Limpa rascunho persistido em sessionStorage entre testes (ver persistência
+  // introduzida em AcordoNovoInline para preservar form ao trocar de aba).
+  try { sessionStorage.clear(); } catch { /* jsdom fallback */ }
 });
 
 // ── Testes do ModalAvisoDiretoExtra (unit puro) ─────────────────────────────
@@ -565,5 +568,47 @@ describe('AcordoNovoInline — cancelamento', () => {
       fireEvent.click(fechar);
       expect(onCancel).toHaveBeenCalled();
     }
+  });
+});
+
+// ── #1 (extensão): persistência do rascunho em sessionStorage ──────────────
+// Garante que o formulário não perde dados quando o componente é desmontado
+// e remontado (simula trocar de aba → voltar à aba → parent re-render).
+describe('AcordoNovoInline — persistência de rascunho', () => {
+  it('preserva nomeCliente/nrCliente/valor entre unmount e remount', async () => {
+    const { unmount } = renderInline();
+
+    const nome = screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement;
+    fireEvent.change(nome, { target: { value: 'João da Silva' } });
+    const nr = screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement;
+    fireEvent.change(nr, { target: { value: '1234' } });
+    const valor = screen.getByPlaceholderText('0,00') as HTMLInputElement;
+    fireEvent.change(valor, { target: { value: '250,50' } });
+
+    // Aguarda o requestAnimationFrame do useEffect de persistência rodar
+    await waitFor(() => {
+      const raw = sessionStorage.getItem('acordo-inline-draft::emp-1::me-1::bp');
+      expect(raw).toBeTruthy();
+      expect(raw).toContain('João da Silva');
+    });
+
+    // Simula desmontar (como ocorre quando o componente `{open && <Inline/>}`
+    // fica false temporariamente por re-render do pai).
+    unmount();
+
+    // Remonta: os valores devem retornar do sessionStorage
+    renderInline();
+
+    expect((screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement).value).toBe('João da Silva');
+    expect((screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement).value).toBe('1234');
+    expect((screen.getByPlaceholderText('0,00') as HTMLInputElement).value).toBe('250,50');
+  });
+
+  it('não restaura nada se o storage estiver vazio', () => {
+    sessionStorage.clear();
+    renderInline();
+    expect((screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement).value).toBe('');
+    expect((screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement).value).toBe('');
+    expect((screen.getByPlaceholderText('0,00') as HTMLInputElement).value).toBe('');
   });
 });
