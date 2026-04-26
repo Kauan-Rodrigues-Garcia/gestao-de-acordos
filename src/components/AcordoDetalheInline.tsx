@@ -611,7 +611,7 @@ export function AcordoDetalheInline({
                   </div>
                 </div>
               )}
-              {(acordoLocal.tipo_vinculo === 'direto' || !acordoLocal.tipo_vinculo) && (acordoLocal.vinculo_operador_nome || (acordoLocal as any)._vinculoExtraOperadorNome) && (
+              {( (acordoLocal.tipo_vinculo === 'direto' || !acordoLocal.tipo_vinculo) && (acordoLocal.vinculo_operador_id || (acordoLocal as any)._vinculoExtraOperadorId) ) && (
                 <div className="mb-4 px-3 py-2 rounded-lg bg-success/8 border border-success/25 flex items-start gap-2">
                   <LinkIcon className="w-4 h-4 text-success shrink-0 mt-0.5" />
                   <div className="flex-1 min-w-0 text-xs">

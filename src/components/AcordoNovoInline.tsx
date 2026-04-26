@@ -625,10 +625,7 @@ export function AcordoNovoInline({
             }
           }
 
-          const opConflitoTemLogica = opConflitoData
-            ? isAtivoParaUsuario(opConflitoData.id, opConflitoData.setor_id ?? null, opConflitoData.equipe_id ?? null)
-            : false;
-
+          // Fallback anterior removido: const opConflitoTemLogica_old = opConflitoData
           // Diagnóstico (útil para detectar por que o fluxo Direto/Extra não dispara)
           console.info('[direto-extra/inline]', {
             empresa: empresa.id,

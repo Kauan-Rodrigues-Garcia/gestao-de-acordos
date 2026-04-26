@@ -31,6 +31,7 @@ import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -298,9 +299,7 @@ export default function AcordoForm() {
             opConflitoDataEff = (r2.data as typeof opConflitoData) ?? null;
           }
 
-          const opConflitoTemLogica = opConflitoDataEff
-            ? isAtivoParaUsuario(opConflitoDataEff.id, opConflitoDataEff.setor_id ?? null, opConflitoDataEff.equipe_id ?? null)
-            : false;
+          const opConflitoTemLogica = await fetchIsDiretoExtraAtivo({ userId: conflitoFinal.operadorId, empresaId: empresa.id });
 
           console.info('[direto-extra/form]', {
             atualTemLogica,

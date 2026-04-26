@@ -123,3 +123,33 @@ export function resolverDiretoExtraAtivo(params: {
 
   return false;
 }
+
+/**
+ * Resolve se um usuário tem a lógica ativa buscando diretamente no banco.
+ * Útil para verificar a lógica de OUTRO usuário (conflito) sem depender do cache do hook.
+ */
+export async function fetchIsDiretoExtraAtivo(params: {
+  userId: string;
+  empresaId: string;
+}): Promise<boolean> {
+  const { userId, empresaId } = params;
+
+  // 1. Buscar perfil para pegar setor/equipe
+  const { data: perfil } = await supabase
+    .from('perfis')
+    .select('setor_id, equipe_id')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (!perfil) return false;
+
+  // 2. Buscar todas as configs da empresa
+  const configs = await fetchDiretoExtraConfigs(empresaId);
+
+  return resolverDiretoExtraAtivo({
+    userId,
+    userSetorId: perfil.setor_id,
+    userEquipeId: (perfil as any).equipe_id,
+    configs,
+  });
+}
