@@ -66,7 +66,7 @@ function TableSkeleton() {
   );
 }
 
-const PER_PAGE = 20;
+const PER_PAGE = 60;
 
 type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
 

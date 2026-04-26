@@ -42,17 +42,22 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
   roles?: string[];
   allowedProfiles?: string[];
+  /** Chave de permissão configurável: se o usuário tiver essa permissão,
+   *  ganha acesso independente do perfil (allowedProfiles fica como fallback). */
+  requiredPermissao?: string;
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
-  if (loading) {
+  if (loading || (requiredPermissao && permLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-3 w-64">
@@ -66,7 +71,13 @@ export function ProtectedRoute({ children, roles, allowedProfiles }: ProtectedRo
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
-  // Suporte a ambos: roles e allowedProfiles (sinônimos)
+  // Se tem permissão configurada E o usuário a possui → acesso garantido
+  // (temPermissao já retorna true para admin/super_admin)
+  if (requiredPermissao && temPermissao(requiredPermissao)) {
+    return <>{children}</> as React.ReactElement;
+  }
+
+  // Fallback: verificação por perfil (comportamento original)
   const perfilRequerido = roles ?? allowedProfiles;
   if (perfilRequerido && perfil && perfil.perfil !== 'super_admin' && !perfilRequerido.includes(perfil.perfil)) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;

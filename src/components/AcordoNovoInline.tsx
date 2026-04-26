@@ -427,6 +427,11 @@ export function AcordoNovoInline({
   const [link,         setLink]         = useState(draftInicial.link         ?? '');
   const [salvando,     setSalvando]     = useState(false);
 
+  // Ref que impede o RAF de re-escrever o draft após limparDraft() ser chamado.
+  // Sem isso, existe race condition: limparDraft remove do storage, mas um RAF
+  // pendente ainda pode re-escrever antes do componente desmontar.
+  const draftClearedRef = useRef(false);
+
   // Persiste o rascunho a cada alteração relevante (debounce simples via rAF).
   const persistRafRef = useRef<number | null>(null);
   useEffect(() => {
@@ -434,11 +439,15 @@ export function AcordoNovoInline({
     if (persistRafRef.current !== null) cancelAnimationFrame(persistRafRef.current);
     persistRafRef.current = requestAnimationFrame(() => {
       try {
+        // Se o draft foi limpo (após salvar), garantir que o storage continue vazio
+        if (draftClearedRef.current) {
+          sessionStorage.removeItem(storageKey);
+          return;
+        }
         const draft: DraftAcordoInline = {
           nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr,
           whatsapp, instituicao, status, observacoes, estadoSel, link,
         };
-        // Só persistimos se tiver algum conteúdo — evita lixo no storage
         const temConteudo = Object.values(draft).some(v => typeof v === 'string' && v.trim() !== '' && v !== '1' && v !== 'boleto' && v !== 'boleto_pix' && v !== 'verificar_pendente');
         if (temConteudo) sessionStorage.setItem(storageKey, JSON.stringify(draft));
         else sessionStorage.removeItem(storageKey);
@@ -458,8 +467,10 @@ export function AcordoNovoInline({
     whatsapp, instituicao, status, observacoes, estadoSel, link,
   ]);
 
-  // Limpa o rascunho: após salvar com sucesso ou cancelar explicitamente.
+  // Limpa o rascunho e bloqueia nova persistência.
+  // Chamado após salvar com sucesso — garante que ao reabrir o form esteja vazio.
   function limparDraft() {
+    draftClearedRef.current = true;
     try { sessionStorage.removeItem(storageKey); } catch { /* noop */ }
   }
 

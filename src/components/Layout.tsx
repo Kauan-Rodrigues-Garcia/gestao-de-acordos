@@ -152,13 +152,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
-  // Filtra por role, visibilidade PaguePay e permissões configuráveis (#7).
-  // Enquanto as permissões estão carregando, exibimos tudo o que o role permite
-  // (fail-open) para evitar flicker; quando carregado, aplica o gate `permissaoKey`.
+  // Filtra por role, visibilidade PaguePay e permissões configuráveis.
+  // Lógica de UNIÃO: item visível se o perfil está em roles OU se tem a permissão ativa.
+  // Isso permite que permissões estendam acesso a perfis de nível inferior
+  // (ex: operador com ver_painel_lider habilitado vê o link Painel Líder).
   const navItems = NAV_ITEMS.filter(item => {
-    if (item.roles && !item.roles.includes(userRole) && userRole !== 'super_admin') return false;
     if (item.hiddenForPaguePay && isPP) return false;
-    if (item.permissaoKey && !permLoading && !temPermissao(item.permissaoKey)) return false;
+
+    const hasRole = !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
+    const hasPerm = item.permissaoKey
+      ? (!permLoading && temPermissao(item.permissaoKey))
+      : false;
+
+    // Mostrar se tem perfil OU tem permissão; esconder apenas se nenhum dos dois
+    if (!hasRole && !hasPerm) return false;
+    // Se tem perfil mas a permissão está explicitamente desabilitada → manter visível (não revogar via permissão)
     return true;
   });
 

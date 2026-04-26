@@ -83,7 +83,7 @@ const PIE_COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6',
 ];
 
-const PER_PAGE = 20;
+const PER_PAGE = 60;
 
 // ─── Table Skeleton ───────────────────────────────────────────────────────────
 
@@ -478,61 +478,71 @@ export default function Dashboard() {
 
   async function excluirSelecionados() {
     setConfirmandoExclusaoLote(false);
-    let deletedCount = 0, failedCount = 0;
-    for (const id of selecionados) {
-      setExcluindoId(id);
-      const acordo = acordos.find(a => a.id === id);
-      // Tratar outro lado do vínculo ANTES do delete.
-      if (acordo) {
-        try {
-          await tratarExclusaoVinculo({
+    const ids = [...selecionados];
+    const acordosParaExcluir = acordos.filter(a => ids.includes(a.id));
+
+    // Spinner genérico (sem atualizar item a item)
+    setExcluindoId('__lote__');
+    try {
+      // 1. Tratar vínculos em paralelo (antes do delete)
+      await Promise.allSettled(
+        acordosParaExcluir.map(acordo =>
+          tratarExclusaoVinculo({
             acordo,
             isPaguePlay: isPP,
             operadorExecutorNome: perfil?.nome ?? perfil?.email ?? null,
-          });
-        } catch (e) {
-          console.warn('[Dashboard.excluirSelecionados] tratarExclusaoVinculo falhou:', e);
-        }
-      }
-      // Salvar na lixeira antes de excluir
-      if (acordo) {
-        await enviarParaLixeira({
-          acordo,
-          motivo: 'exclusao_manual',
-          operadorNome: perfil?.nome ?? perfil?.email ?? undefined,
-        });
-      }
-      const { error } = await supabase.from('acordos').delete().eq('id', id);
+          }),
+        ),
+      );
+
+      // 2. Enviar para lixeira em paralelo
+      await Promise.allSettled(
+        acordosParaExcluir.map(acordo =>
+          enviarParaLixeira({
+            acordo,
+            motivo: 'exclusao_manual',
+            operadorNome: perfil?.nome ?? perfil?.email ?? undefined,
+          }),
+        ),
+      );
+
+      // 3. Delete em lote — 1 única query em vez de N sequenciais
+      const { error } = await supabase.from('acordos').delete().in('id', ids);
       if (error) {
-        failedCount++;
-        console.error(`[excluirSelecionados] erro ao excluir ${id}:`, error.message);
-      } else {
-        deletedCount++;
-        liberarNrPorAcordoId(id); // Liberar NR (best-effort)
-        removeAcordo(id); // Optimistic: remove da lista local imediatamente
-        if (acordo) {
-          supabase.from('logs_sistema').insert({
-            usuario_id:  perfil?.id ?? null,
-            acao:        'exclusao_acordo',
-            tabela:      'acordos',
-            registro_id: id,
-            empresa_id:  empresa?.id ?? null,
-            detalhes: {
-              nome_cliente: acordo.nome_cliente,
-              nr_cliente:   acordo.nr_cliente,
-              excluido_por: perfil?.nome ?? perfil?.email ?? null,
-              excluido_em:  new Date().toISOString(),
-              modo:         'lote',
-            },
-          }).then(({ error: logError }) => { if (logError) console.warn('[excluirSelecionados] log error:', logError.message); });
-        }
+        toast.error(`Erro ao excluir acordos: ${error.message}`);
+        return;
       }
+
+      // 4. Liberar NRs e remover da lista local de uma vez
+      ids.forEach(id => liberarNrPorAcordoId(id));
+      ids.forEach(id => removeAcordo(id));
+
+      // 5. Logs em paralelo (fire-and-forget)
+      const agora = new Date().toISOString();
+      acordosParaExcluir.forEach(acordo => {
+        supabase.from('logs_sistema').insert({
+          usuario_id:  perfil?.id ?? null,
+          acao:        'exclusao_acordo',
+          tabela:      'acordos',
+          registro_id: acordo.id,
+          empresa_id:  empresa?.id ?? null,
+          detalhes: {
+            nome_cliente: acordo.nome_cliente,
+            nr_cliente:   acordo.nr_cliente,
+            excluido_por: perfil?.nome ?? perfil?.email ?? null,
+            excluido_em:  agora,
+            modo:         'lote',
+          },
+        }).then(({ error: logError }) => {
+          if (logError) console.warn('[excluirSelecionados] log error:', logError.message);
+        });
+      });
+
+      setSelecionados([]);
+      toast.success(`${ids.length} acordo(s) excluído(s) com sucesso!`);
+    } finally {
+      setExcluindoId(null);
     }
-    setExcluindoId(null);
-    setSelecionados([]);
-    if (deletedCount > 0) toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
-    if (failedCount > 0) toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
-    // Realtime / refetch desnecessário — removeAcordo já foi chamado por item acima
   }
 
 

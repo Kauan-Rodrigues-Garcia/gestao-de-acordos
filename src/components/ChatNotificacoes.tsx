@@ -7,11 +7,10 @@
  * Atualiza em tempo real via Supabase Realtime (REPLICA IDENTITY FULL).
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   MessageCircle, X, Check, CheckCheck, Trash2, Bell,
-  AlertTriangle, Info, ArrowLeft, ExternalLink,
+  AlertTriangle, Info, ArrowLeft,
   Clock, CheckCircle2,
   Maximize2, Minimize2,
 } from 'lucide-react';
@@ -61,10 +60,9 @@ interface ModalDetalheProps {
   onClose: () => void;
   onMarcarLida: (id: string) => Promise<void>;
   onExcluir: (id: string) => Promise<void>;
-  onVerPagina: () => void;
 }
 
-export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir, onVerPagina }: ModalDetalheProps) {
+export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir }: ModalDetalheProps) {
   return (
     <motion.div
       key="modal-detalhe"
@@ -138,16 +136,6 @@ export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir,
         )}
         <Button
           size="sm"
-          variant="outline"
-          className="h-8 text-xs px-3 gap-1.5"
-          onClick={onVerPagina}
-          title="Abrir página de Notificações Detalhadas"
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-          Ver detalhes
-        </Button>
-        <Button
-          size="sm"
           variant="ghost"
           className="h-8 text-xs px-3 text-destructive hover:text-destructive hover:bg-destructive/10 gap-1.5"
           onClick={async () => { await onExcluir(n.id); onClose(); }}
@@ -164,7 +152,6 @@ export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir,
 
 export function ChatNotificacoes() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [aberto, setAberto]             = useState(false);
   const [expandido, setExpandido]       = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
@@ -339,7 +326,6 @@ export function ChatNotificacoes() {
                   onClose={() => setDetalhe(null)}
                   onMarcarLida={marcarLida}
                   onExcluir={excluirNotificacao}
-                  onVerPagina={() => { setDetalhe(null); setAberto(false); navigate('/notificacoes'); }}
                 />
               )}
             </AnimatePresence>
@@ -470,16 +456,6 @@ export function ChatNotificacoes() {
                           </div>
                         </motion.div>
                       ))}
-                      {notificacoes.length > 0 && (
-                        <div className="px-4 py-2 text-center">
-                          <button
-                            className="text-[11px] text-primary hover:underline"
-                            onClick={() => { setAberto(false); navigate('/notificacoes'); }}
-                          >
-                            Ver todas em Notificações Detalhadas →
-                          </button>
-                        </div>
-                      )}
                     </div>
                   )}
                 </ScrollArea>
