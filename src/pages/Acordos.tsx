@@ -16,6 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import {
@@ -79,6 +80,7 @@ function ensureAbsoluteUrl(url: string): string {
 export default function Acordos() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const isPP = isPaguePlay(tenantSlug);
 
   // Nota: PaguePlay usa o Dashboard como tela principal — o redirecionamento
@@ -205,7 +207,7 @@ export default function Acordos() {
     data_inicio:  filtroData ? undefined : bpMesInicio,
     data_fim:     filtroData ? undefined : bpMesFim,
     // Líder/Elite: filtro individual, ou por equipe, ou setor geral (padrão do RLS)
-    operador_id:  (perfil?.perfil === 'operador' || isVisaoIndividual)
+    operador_id:  (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:    equipeFiltroAtivo ?? undefined,
@@ -718,7 +720,7 @@ export default function Acordos() {
                 onChange={e => { setFiltroData(e.target.value); setCurrentPage(1); }}
                 className="h-8 text-sm bg-background border border-input rounded-md px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
               />
-              {isPP && (perfil?.perfil === 'administrador' || perfil?.perfil === 'lider') && (
+              {isPP && temPermissao('filtrar_por_usuario') && (
                 <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
                   <SelectContent>
@@ -1163,15 +1165,17 @@ export default function Acordos() {
                 <MessageSquare className="w-3.5 h-3.5" />
                 Enviar Lembretes
               </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
-                onClick={() => setConfirmandoExclusaoLote(true)}
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-                Excluir Selecionados
-              </Button>
+              {temPermissao('excluir_em_lote') && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
+                  onClick={() => setConfirmandoExclusaoLote(true)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Excluir Selecionados
+                </Button>
+              )}
               <Button
                 size="sm"
                 variant="ghost"

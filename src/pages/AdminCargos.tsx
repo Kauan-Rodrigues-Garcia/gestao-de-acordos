@@ -51,12 +51,14 @@ const PERMISSOES_META: {
   { key: 'criar_acordos',          label: 'Criar acordos',            descricao: 'Cadastrar novos acordos no sistema',                                          grupo: 'Acordos' },
   { key: 'editar_acordos',         label: 'Editar acordos',           descricao: 'Editar campos de acordos já existentes',                                      grupo: 'Acordos' },
   { key: 'excluir_acordos',        label: 'Excluir acordos',          descricao: 'Excluir acordos (mover para lixeira)',                                        grupo: 'Acordos' },
+  { key: 'excluir_em_lote',        label: 'Excluir em lote',          descricao: 'Excluir múltiplos acordos simultaneamente',                                    grupo: 'Acordos' },
   { key: 'importar_excel',         label: 'Importar Excel',           descricao: 'Importar acordos em lote via planilha Excel com suporte a IA',                grupo: 'Acordos' },
   // ── Painéis ───────────────────────────────────────────────────────────────
   { key: 'ver_painel_lider',       label: 'Painel Líder',             descricao: 'Acessar o painel analítico do líder (acordos por operador, métricas)',        grupo: 'Painéis' },
   { key: 'ver_analiticos_setor',   label: 'Analíticos do setor',      descricao: 'Ver métricas, gráficos e KPIs do próprio setor',                              grupo: 'Painéis' },
   { key: 'ver_analiticos_global',  label: 'Analíticos globais',       descricao: 'Ver métricas e KPIs de toda a empresa (todos os setores)',                    grupo: 'Painéis' },
   { key: 'ver_todos_setores',      label: 'Ver todos os setores',     descricao: 'Acesso a dados de todos os setores da empresa',                               grupo: 'Painéis' },
+  { key: 'gerenciar_metas',        label: 'Gerenciar metas',          descricao: 'Criar, editar e acompanhar metas do setor/empresa',                           grupo: 'Painéis' },
   // ── Filtros ───────────────────────────────────────────────────────────────
   { key: 'filtrar_por_setor',      label: 'Filtrar por setor',        descricao: 'Aplicar filtro de setor nos relatórios e listagens',                         grupo: 'Filtros' },
   { key: 'filtrar_por_equipe',     label: 'Filtrar por equipe',       descricao: 'Aplicar filtro de equipe nos relatórios e listagens',                        grupo: 'Filtros' },
@@ -66,6 +68,8 @@ const PERMISSOES_META: {
   { key: 'ver_equipes',            label: 'Ver equipes',              descricao: 'Acessar a lista e configuração de equipes',                                  grupo: 'Gestão' },
   { key: 'ver_metas',              label: 'Ver metas',                descricao: 'Acessar a aba de configuração e acompanhamento de metas',                    grupo: 'Gestão' },
   { key: 'ver_operadores',         label: 'Ver dados de operadores',  descricao: 'Ver informações detalhadas de outros operadores do setor',                   grupo: 'Gestão' },
+  { key: 'editar_usuarios',        label: 'Editar usuários',          descricao: 'Editar dados e permissões de usuários',                                       grupo: 'Gestão' },
+  { key: 'editar_equipes',         label: 'Editar equipes',           descricao: 'Criar, editar e remover equipes',                                            grupo: 'Gestão' },
   // ── Lixeira & Logs ────────────────────────────────────────────────────────
   { key: 'ver_lixeira',            label: 'Acessar lixeira',          descricao: 'Ver e restaurar acordos excluídos na lixeira',                               grupo: 'Lixeira & Logs' },
   { key: 'ver_logs',               label: 'Acessar logs',             descricao: 'Ver histórico de alterações e auditoria do sistema',                         grupo: 'Lixeira & Logs' },
