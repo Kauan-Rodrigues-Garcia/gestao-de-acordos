@@ -362,21 +362,37 @@ export default function AcordoForm() {
             const resultErr = await salvarAcordo(payloadExtra, uid);
             if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); setLoading(false); return; }
 
-            await supabase.from('acordos')
-              .update({
-                ...buildSyncPayload(payload),
-                vinculo_operador_id:   uid,
-                vinculo_operador_nome: p?.nome ?? 'Operador',
-              })
-              .eq('id', conflitoFinal.acordoId);
+            // Vincular EXTRA ao DIRETO via RPC (bypassa RLS)
+            const { error: rpcErr } = await supabase.rpc('fn_vincular_extra_ao_direto', {
+              p_direto_id:     conflitoFinal.acordoId,
+              p_extra_op_id:   uid,
+              p_extra_op_nome: p?.nome ?? 'Operador',
+              p_valor:         payload.valor as number,
+              p_vencimento:    payload.vencimento as string,
+              p_nome_cliente:  (payload.nome_cliente as string) ?? '',
+              p_tipo:          (payload.tipo as string) ?? 'boleto',
+              p_whatsapp:      (payload.whatsapp as string | null) ?? null,
+              p_parcelas:      (payload.parcelas as number) ?? 1,
+            });
+            if (rpcErr) {
+              console.warn('[Caso A Form] RPC falhou, tentando update direto:', rpcErr.message);
+              await supabase.from('acordos')
+                .update({
+                  ...buildSyncPayload(payload),
+                  vinculo_operador_id:   uid,
+                  vinculo_operador_nome: p?.nome ?? 'Operador',
+                })
+                .eq('id', conflitoFinal.acordoId);
+            }
 
             await criarNotificacao({
               usuario_id: conflitoFinal.operadorId,
-              titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
+              titulo:     'Novo vínculo EXTRA no seu acordo',
               mensagem:
-                `O ${labelNr} "${nrParaVerificar}" (${(data.nome_cliente ?? '').trim() || '—'}) agora possui ` +
-                `um acordo EXTRA tabulado por ${p?.nome ?? 'outro operador'}. Seu acordo continua DIRETO. ` +
-                `Dados sincronizados — Valor: ${fmtValor(payload.valor)}, Vencimento: ${fmtData(payload.vencimento)}.`,
+                `O operador ${p?.nome ?? 'outro operador'} tabulou o ${labelNr} "${nrParaVerificar}" ` +
+                `como EXTRA vinculado ao seu acordo. Seu acordo permanece como DIRETO.\n` +
+                `Dados atualizados → Valor: ${fmtValor(payload.valor)} | Vencimento: ${fmtData(payload.vencimento)} | ` +
+                `Cliente: ${(payload.nome_cliente as string || '').trim() || '—'}.`,
               empresa_id: empresa.id,
             });
             toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
@@ -721,19 +737,31 @@ export default function AcordoForm() {
         return;
       }
 
-      // 1. Liberar NR do operador anterior
-      await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
-
-      // 2. Converter anterior em EXTRA + sincronizar dados da nova tabulação
-      const { error: errReb } = await supabase.from('acordos')
-        .update({
-          ...buildSyncPayload(payload),
-          tipo_vinculo:          'extra',
-          vinculo_operador_id:   uid,
-          vinculo_operador_nome: p?.nome ?? 'Operador',
-        })
-        .eq('id', acordoAnteriorId);
-      if (errReb) { toast.error(`Erro ao converter acordo: ${errReb.message}`); return; }
+      // 1. Converter DIRETO → EXTRA via RPC (bypassa RLS; também remove nr_registros)
+      const { error: rpcErr } = await supabase.rpc('fn_converter_para_extra', {
+        p_acordo_id:           acordoAnteriorId,
+        p_novo_direto_op_id:   uid,
+        p_novo_direto_op_nome: p?.nome ?? 'Operador',
+        p_valor:               payload.valor as number,
+        p_vencimento:          payload.vencimento as string,
+        p_nome_cliente:        (payload.nome_cliente as string) ?? '',
+        p_tipo:                (payload.tipo as string) ?? 'boleto',
+        p_whatsapp:            (payload.whatsapp as string | null) ?? null,
+        p_parcelas:            (payload.parcelas as number) ?? 1,
+      });
+      if (rpcErr) {
+        console.warn('[Caso B Form] RPC falhou, usando fallback:', rpcErr.message);
+        await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
+        const { error: errReb } = await supabase.from('acordos')
+          .update({
+            ...buildSyncPayload(payload),
+            tipo_vinculo:          'extra',
+            vinculo_operador_id:   uid,
+            vinculo_operador_nome: p?.nome ?? 'Operador',
+          })
+          .eq('id', acordoAnteriorId);
+        if (errReb) { toast.error(`Erro ao converter acordo: ${errReb.message}`); return; }
+      }
 
       // 3. Inserir novo como DIRETO (com vínculo para o EXTRA)
       const payloadDireto = {

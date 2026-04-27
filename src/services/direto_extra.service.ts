@@ -126,7 +126,9 @@ export function resolverDiretoExtraAtivo(params: {
 
 /**
  * Resolve se um usuário tem a lógica ativa buscando diretamente no banco.
- * Útil para verificar a lógica de OUTRO usuário (conflito) sem depender do cache do hook.
+ * Usa RPC fn_direto_extra_ativo (SECURITY DEFINER) para contornar RLS na
+ * tabela perfis quando consultamos dados de outro operador.
+ * Fallback para query direta caso o RPC ainda não exista.
  */
 export async function fetchIsDiretoExtraAtivo(params: {
   userId: string;
@@ -134,7 +136,15 @@ export async function fetchIsDiretoExtraAtivo(params: {
 }): Promise<boolean> {
   const { userId, empresaId } = params;
 
-  // 1. Buscar perfil para pegar setor/equipe
+  const { data: rpcData, error: rpcError } = await supabase.rpc(
+    'fn_direto_extra_ativo',
+    { p_user_id: userId, p_empresa_id: empresaId },
+  );
+
+  if (!rpcError) return Boolean(rpcData);
+
+  // Fallback: query direta (funciona se RLS de perfis permitir SELECT de outros usuários)
+  console.warn('[direto_extra] RPC fn_direto_extra_ativo indisponível, usando fallback:', rpcError.message);
   const { data: perfil } = await supabase
     .from('perfis')
     .select('setor_id, equipe_id')
@@ -143,9 +153,7 @@ export async function fetchIsDiretoExtraAtivo(params: {
 
   if (!perfil) return false;
 
-  // 2. Buscar todas as configs da empresa
   const configs = await fetchDiretoExtraConfigs(empresaId);
-
   return resolverDiretoExtraAtivo({
     userId,
     userSetorId: perfil.setor_id,

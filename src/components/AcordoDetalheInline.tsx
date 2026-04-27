@@ -328,6 +328,21 @@ export function ModalEditarAcordoParcelado({
         } as Acordo;
       });
 
+      // Sincronizar dados com o acordo par (DIRETO↔EXTRA) via RPC
+      if (acordo.tipo_vinculo === 'extra' || acordo.vinculo_operador_id) {
+        const valorSync = parseCurrencyInput(parcRows[0]?.valor ?? acordo.valor.toFixed(2).replace('.', ','));
+        await supabase.rpc('fn_sync_par_vinculo', {
+          p_acordo_id:    acordo.id,
+          p_valor:        isNaN(valorSync) ? acordo.valor : valorSync,
+          p_vencimento:   parcRows[0]?.vencimento ?? acordo.vencimento,
+          p_nome_cliente: nomeCliente.trim(),
+          p_tipo:         tipo,
+          p_whatsapp:     whatsapp.trim() || null,
+          p_parcelas:     acordo.parcelas,
+          p_status:       acordo.status,
+        });
+      }
+
       toast.success('Acordo atualizado com sucesso!');
       onSaved((principal ?? acordo) as Acordo, todasAtualizadas);
       onClose();
@@ -511,6 +526,19 @@ export function AcordoDetalheInline({
     } else {
       toast.success('Parcela marcada como paga!');
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
+      // Sincronizar status com o acordo par (DIRETO↔EXTRA)
+      if (acordoLocal.tipo_vinculo === 'extra' || acordoLocal.vinculo_operador_id) {
+        await supabase.rpc('fn_sync_par_vinculo', {
+          p_acordo_id:    p.id,
+          p_valor:        p.valor,
+          p_vencimento:   p.vencimento,
+          p_nome_cliente: p.nome_cliente,
+          p_tipo:         p.tipo,
+          p_whatsapp:     p.whatsapp,
+          p_parcelas:     p.parcelas,
+          p_status:       'pago',
+        });
+      }
     }
     setMarcandoPago(null);
   }
