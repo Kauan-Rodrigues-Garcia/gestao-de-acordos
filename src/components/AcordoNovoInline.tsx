@@ -1323,7 +1323,7 @@ export function AcordoNovoInline({
                 <Button
                   variant="outline" size="sm"
                   className="gap-1.5 border-border hover:bg-muted"
-                  onClick={onCancel} disabled={salvando}
+                  onClick={cancelar} disabled={salvando}
                 >
                   <X className="w-3.5 h-3.5" /> Cancelar
                 </Button>
@@ -1524,7 +1524,7 @@ export function AcordoNovoInline({
               <Button
                 variant="outline" size="sm"
                 className="gap-1.5 border-border hover:bg-muted"
-                onClick={onCancel} disabled={salvando}
+                onClick={cancelar} disabled={salvando}
               >
                 <X className="w-3.5 h-3.5" /> Cancelar
               </Button>
