@@ -29,7 +29,7 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
-import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
+import { ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/components/AcordoNovoInline';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
@@ -90,13 +90,7 @@ export default function AcordoForm() {
   const maxParcelas = getMaxParcelas(tenantSlug);
 
   // NR duplicate / leader auth state
-  interface ConflitNRForm {
-    acordoId: string;
-    operadorId: string;
-    operadorNome: string;
-    payload: Record<string, unknown>;
-  }
-  const [conflito, setConflito]               = useState<ConflitNRForm | null>(null);
+  const [conflito, setConflito]               = useState<ConflitNR | null>(null);
   const [liderEmail, setLiderEmail]           = useState('');
   const [liderSenha, setLiderSenha]           = useState('');
   const [autorizando, setAutorizando]         = useState(false);
@@ -173,6 +167,31 @@ export default function AcordoForm() {
       setLoadingData(false);
     });
   }, [id, isEdit, reset, navigate]);
+
+  // ── Helpers de sincronização ──────────────────────────────────────────
+  function buildSyncPayload(p: Record<string, unknown>): Record<string, unknown> {
+    return {
+      valor:        p.valor,
+      vencimento:   p.vencimento,
+      nome_cliente: p.nome_cliente,
+      tipo:         p.tipo,
+      whatsapp:     p.whatsapp ?? null,
+      parcelas:     p.parcelas,
+    };
+  }
+
+  function fmtValor(valor: unknown): string {
+    return typeof valor === 'number'
+      ? `R$ ${valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+      : '—';
+  }
+
+  function fmtData(data: unknown): string {
+    if (typeof data !== 'string') return '—';
+    try {
+      return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
+    } catch { return String(data); }
+  }
 
   // ── Salvar acordo (após autorização ou direto) ────────────────────────
   async function salvarAcordo(payload: Record<string, unknown>, uid: string) {
@@ -275,41 +294,65 @@ export default function AcordoForm() {
             return;
           }
 
-          // ── NOVA LÓGICA: Direto e Extra ────────────────────────────────────
-          const atualTemLogica = isAtivoParaUsuario(
+          // Buscar estado atual do acordo DIRETO para saber se já há um EXTRA
+          const { data: acordoDireto } = await supabase
+            .from('acordos')
+            .select('id, tipo_vinculo, vinculo_operador_id, vinculo_operador_nome')
+            .eq('id', conflitoFinal.acordoId)
+            .maybeSingle();
+
+          const jaTemExtra = Boolean(acordoDireto?.vinculo_operador_id);
+
+          // REGRA: NR já tem 2 vínculos → exige autorização para trocar o EXTRA
+          if (jaTemExtra) {
+            const campoCampo2: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
+            const { data: acordoExtraAtual } = await supabase
+              .from('acordos')
+              .select('id, operador_id, vinculo_operador_nome')
+              .eq('empresa_id', empresa.id)
+              .eq(campoCampo2, nrParaVerificar)
+              .eq('tipo_vinculo', 'extra')
+              .maybeSingle();
+
+            setConflito({
+              acordoId:         conflitoFinal.acordoId,
+              operadorId:       conflitoFinal.operadorId,
+              operadorNome:     conflitoFinal.operadorNome,
+              payload,
+              modo:             'troca_extra',
+              extraAtualId:     acordoExtraAtual?.id ?? null,
+              extraAtualOpId:   acordoExtraAtual?.operador_id ?? acordoDireto?.vinculo_operador_id ?? null,
+              extraAtualOpNome: acordoDireto?.vinculo_operador_nome ?? null,
+            });
+            setLoading(false);
+            return;
+          }
+
+          // DIRETO sem EXTRA — verifica lógicas de ambos os operadores
+          const euTemLogica = isAtivoParaUsuario(
             uid,
             p?.setor_id ?? null,
             (p as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
           );
 
-          const { data: opConflitoData } = await supabase
-            .from('perfis')
-            .select('id, nome, setor_id, equipe_id, setores(nome)')
-            .eq('id', conflitoFinal.operadorId)
-            .maybeSingle() as { data: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null };
-
-          // Fallback sem join (caso RLS bloqueie o join em setores na Bookplay)
-          let opConflitoDataEff = opConflitoData;
-          if (!opConflitoDataEff) {
-            const r2 = await supabase
-              .from('perfis')
-              .select('id, nome, setor_id, equipe_id')
-              .eq('id', conflitoFinal.operadorId)
-              .maybeSingle();
-            opConflitoDataEff = (r2.data as typeof opConflitoData) ?? null;
+          let opConflitoDataEff: { id: string; nome: string; setor_id: string | null; equipe_id?: string | null; setores?: { nome?: string } | null } | null = null;
+          {
+            const r = await supabase
+              .from('perfis').select('id, nome, setor_id, equipe_id, setores(nome)')
+              .eq('id', conflitoFinal.operadorId).maybeSingle();
+            opConflitoDataEff = (r.data as typeof opConflitoDataEff) ?? null;
+            if (!opConflitoDataEff) {
+              const r2 = await supabase
+                .from('perfis').select('id, nome, setor_id, equipe_id')
+                .eq('id', conflitoFinal.operadorId).maybeSingle();
+              opConflitoDataEff = (r2.data as typeof opConflitoDataEff) ?? null;
+            }
           }
 
-          const opConflitoTemLogica = await fetchIsDiretoExtraAtivo({ userId: conflitoFinal.operadorId, empresaId: empresa.id });
+          const donoTemLogica = await fetchIsDiretoExtraAtivo({ userId: conflitoFinal.operadorId, empresaId: empresa.id });
 
-          console.info('[direto-extra/form]', {
-            atualTemLogica,
-            opConflitoTemLogica,
-            opConflitoDataEff,
-            conflitoFinal,
-          });
-
-          // CASO A: usuário atual tem a lógica → tabula como EXTRA
-          if (atualTemLogica) {
+          // CASO A: EU tem lógica, DONO não → EU = EXTRA, DONO continua DIRETO
+          if (euTemLogica && !donoTemLogica) {
             const payloadExtra = {
               ...payload,
               tipo_vinculo:          'extra',
@@ -317,16 +360,11 @@ export default function AcordoForm() {
               vinculo_operador_nome: conflitoFinal.operadorNome,
             };
             const resultErr = await salvarAcordo(payloadExtra, uid);
-            if (resultErr) {
-              toast.error(`Erro ao salvar: ${resultErr.message}`);
-              setLoading(false);
-              return;
-            }
-            // Atualiza o acordo DIRETO (do outro operador) para referenciar este EXTRA,
-            // permitindo que a UI exiba a tag "Existe um acordo EXTRA vinculado" para ele.
-            await supabase
-              .from('acordos')
+            if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); setLoading(false); return; }
+
+            await supabase.from('acordos')
               .update({
+                ...buildSyncPayload(payload),
                 vinculo_operador_id:   uid,
                 vinculo_operador_nome: p?.nome ?? 'Operador',
               })
@@ -336,8 +374,9 @@ export default function AcordoForm() {
               usuario_id: conflitoFinal.operadorId,
               titulo:     '📎 Novo acordo EXTRA vinculado ao seu',
               mensagem:
-                `O ${labelNr} "${nrParaVerificar}" ((${(data.nome_cliente ?? '').trim() || '—'})) ` +
-                `agora possui um acordo EXTRA tabulado pelo operador ${p?.nome ?? 'outro operador'}.`,
+                `O ${labelNr} "${nrParaVerificar}" (${(data.nome_cliente ?? '').trim() || '—'}) agora possui ` +
+                `um acordo EXTRA tabulado por ${p?.nome ?? 'outro operador'}. Seu acordo continua DIRETO. ` +
+                `Dados sincronizados — Valor: ${fmtValor(payload.valor)}, Vencimento: ${fmtData(payload.vencimento)}.`,
               empresa_id: empresa.id,
             });
             toast.success(`Acordo tabulado como EXTRA (vínculo com ${conflitoFinal.operadorNome}).`);
@@ -345,8 +384,8 @@ export default function AcordoForm() {
             return;
           }
 
-          // CASO B: usuário atual NÃO tem; operador do conflito TEM → aviso
-          if (opConflitoTemLogica) {
+          // CASO B: EU não tem lógica, DONO tem → aviso (EU=DIRETO, DONO→EXTRA)
+          if (!euTemLogica && donoTemLogica) {
             setAvisoDiretoExtra({
               payload,
               acordoAnteriorId: conflitoFinal.acordoId,
@@ -360,12 +399,13 @@ export default function AcordoForm() {
             return;
           }
 
-          // CASO C: fluxo antigo — autorização do líder
+          // CASO C/D: ambos têm lógica OU nenhum tem → autorização completa
           setConflito({
             acordoId:     conflitoFinal.acordoId,
             operadorId:   conflitoFinal.operadorId,
             operadorNome: conflitoFinal.operadorNome,
             payload,
+            modo:         'transferencia_completa',
           });
           setLoading(false);
           return;
@@ -511,39 +551,110 @@ export default function AcordoForm() {
         return;
       }
 
-      // ── Campo NR correto por empresa ──────────────────────────────────────
-      // PaguePay → NR único = instituicao | Bookplay → NR único = nr_cliente
-      const campoNr: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
-      const nrLabel =
-        ((isPP
-          ? conflito.payload.instituicao
-          : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
-
+      const labelNR    = isPP ? 'Inscrição' : 'NR';
+      const nrLogLabel = ((isPP ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
       const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
 
-      // 1. Buscar acordo anterior completo ANTES de qualquer delete
-      // Usar maybeSingle() para não lançar erro se não encontrar (RLS ou já deletado)
+      // ── MODO troca_extra: transfere apenas o EXTRA, DIRETO não é afetado ──
+      if (conflito.modo === 'troca_extra') {
+        const { extraAtualId, extraAtualOpId, extraAtualOpNome } = conflito;
+
+        const { data: acordoExtraAnt } = await supabase
+          .from('acordos')
+          .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
+          .eq('id', extraAtualId!)
+          .maybeSingle();
+
+        const valorExtFmt = acordoExtraAnt?.valor != null
+          ? `R$ ${Number(acordoExtraAnt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+        const vencExtFmt  = acordoExtraAnt?.vencimento
+          ? new Date(acordoExtraAnt.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+
+        if (acordoExtraAnt) {
+          await enviarParaLixeira({
+            acordo:              acordoExtraAnt as import('@/lib/supabase').Acordo,
+            motivo:              'troca_extra',
+            operadorNome:        extraAtualOpNome ?? '—',
+            autorizadoPorId:     liderUid,
+            autorizadoPorNome:   liderPerfil.nome,
+            transferidoParaId:   uid,
+            transferidoParaNome: nomeNovoOp,
+          });
+        }
+
+        const { error: errDelExt } = await supabase.from('acordos').delete().eq('id', extraAtualId!);
+        if (errDelExt) { toast.error(`Erro ao remover vínculo extra anterior: ${errDelExt.message}`); return; }
+
+        const payloadExtra = {
+          ...conflito.payload,
+          tipo_vinculo:          'extra',
+          vinculo_operador_id:   conflito.operadorId,
+          vinculo_operador_nome: conflito.operadorNome,
+        };
+        const resultError2 = await salvarAcordo(payloadExtra, uid);
+        if (resultError2) { toast.error(`Erro ao salvar: ${resultError2.message}`); return; }
+
+        await supabase.from('acordos')
+          .update({
+            ...buildSyncPayload(conflito.payload),
+            vinculo_operador_id:   uid,
+            vinculo_operador_nome: nomeNovoOp,
+          })
+          .eq('id', conflito.acordoId);
+
+        await supabase.from('logs_sistema').insert({
+          usuario_id: uid, acao: 'troca_extra', tabela: 'acordos',
+          registro_id: extraAtualId, empresa_id: empresa?.id ?? null,
+          detalhes: {
+            nr: nrLogLabel, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
+            operador_extra_anterior: extraAtualOpId, operador_extra_ant_nome: extraAtualOpNome,
+            operador_extra_novo: uid, operador_extra_novo_nome: nomeNovoOp,
+            operador_direto: conflito.operadorId, operador_direto_nome: conflito.operadorNome,
+            empresa_id: empresa?.id ?? null,
+          },
+        });
+
+        if (extraAtualOpId) {
+          await criarNotificacao({
+            usuario_id: extraAtualOpId,
+            titulo: '⚠️ Seu vínculo EXTRA foi transferido',
+            mensagem:
+              `Seu acordo EXTRA do ${labelNR} "${nrLogLabel}" foi transferido para ${nomeNovoOp} ` +
+              `com autorização de ${liderPerfil.nome}. Detalhes: Valor ${valorExtFmt} | Vencimento ${vencExtFmt}.`,
+            empresa_id: empresa?.id,
+          });
+        }
+        await criarNotificacao({
+          usuario_id: conflito.operadorId,
+          titulo: '🔄 Vínculo EXTRA do seu acordo foi atualizado',
+          mensagem:
+            `O vínculo EXTRA do ${labelNR} "${nrLogLabel}" mudou de ${extraAtualOpNome ?? 'operador anterior'} ` +
+            `para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo DIRETO continua inalterado.`,
+          empresa_id: empresa?.id,
+        });
+
+        toast.success('Vínculo EXTRA transferido com sucesso!');
+        setConflito(null); setLiderEmail(''); setLiderSenha('');
+        navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
+        return;
+      }
+
+      // ── MODO transferencia_completa: remove o DIRETO e cria novo ────────────
       const { data: acordoAntData, error: errBusca } = await supabase
         .from('acordos')
         .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
         .eq('id', conflito.acordoId)
         .maybeSingle();
 
-      if (errBusca) {
-        console.warn('[transferência] erro ao buscar acordo anterior:', errBusca.message);
-      }
+      if (errBusca) console.warn('[transferência] erro ao buscar acordo anterior:', errBusca.message);
 
-      // Guardar dados para notificação mesmo após o delete
       const nomeClienteAnt = acordoAntData?.nome_cliente ?? '—';
-      const valorFmt = acordoAntData?.valor != null
-        ? `R$ ${Number(acordoAntData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-        : '—';
-      const vencimentoFmt = acordoAntData?.vencimento
-        ? new Date(acordoAntData.vencimento + 'T00:00:00').toLocaleDateString('pt-BR')
-        : '—';
-      const statusAnt = acordoAntData?.status ?? '—';
+      const valorFmt       = acordoAntData?.valor != null
+        ? `R$ ${Number(acordoAntData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+      const vencimentoFmt  = acordoAntData?.vencimento
+        ? new Date(acordoAntData.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+      const statusAnt      = acordoAntData?.status ?? '—';
 
-      // 2. Salvar acordo anterior na lixeira
       if (acordoAntData) {
         await enviarParaLixeira({
           acordo: acordoAntData as import('@/lib/supabase').Acordo,
@@ -556,50 +667,35 @@ export default function AcordoForm() {
         });
       }
 
-      // 3. Excluir acordo anterior do banco
-      //    ⚠ O trigger trg_sync_nr_registros remove nr_registros automaticamente
-      //    NÃO chamar transferirNr() depois — evita duplicidade no nr_registros
-      const { error: errDelete } = await supabase
-        .from('acordos').delete().eq('id', conflito.acordoId);
+      const { error: errDelete } = await supabase.from('acordos').delete().eq('id', conflito.acordoId);
       if (errDelete) { toast.error(`Erro ao remover acordo anterior: ${errDelete.message}`); return; }
 
-      // 4. Registrar log
       await supabase.from('logs_sistema').insert({
         usuario_id: uid, acao: 'transferencia_nr', tabela: 'acordos',
         registro_id: conflito.acordoId, empresa_id: empresa?.id ?? null,
         detalhes: {
-          nr: nrLabel, nome_cliente: nomeClienteAnt,
-          valor: valorFmt, vencimento: vencimentoFmt, status_anterior: statusAnt,
-          aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
+          nr: nrLogLabel, nome_cliente: nomeClienteAnt, valor: valorFmt, vencimento: vencimentoFmt,
+          status_anterior: statusAnt, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
           operador_anterior: conflito.operadorId, operador_anterior_nome: conflito.operadorNome,
-          operador_novo: uid, operador_novo_nome: nomeNovoOp,
-          empresa_id: empresa?.id ?? null,
+          operador_novo: uid, operador_novo_nome: nomeNovoOp, empresa_id: empresa?.id ?? null,
         },
       });
 
-      // 5. Salvar novo acordo
-      //    ⚠ O trigger trg_sync_nr_registros fará INSERT em nr_registros automaticamente
       const resultError = await salvarAcordo(conflito.payload, uid);
       if (resultError) { toast.error(`Erro ao salvar: ${resultError.message}`); return; }
 
-      // 6. Notificar operador anterior com TODOS os detalhes do acordo removido
       await criarNotificacao({
         usuario_id: conflito.operadorId,
         titulo: '⚠️ Seu acordo foi transferido pelo líder',
         mensagem:
-          `O ${isPP ? 'Inscrição' : 'NR'} "${nrLabel}" ` +
-          `(${nomeClienteAnt}) foi transferido para ${nomeNovoOp} ` +
-          `com autorização de ${liderPerfil.nome}. ` +
-          `Seu acordo foi movido para a lixeira. ` +
-          `Detalhes do acordo removido: ` +
-          `Valor ${valorFmt} | Vencimento ${vencimentoFmt} | Status: ${statusAnt}.`,
+          `O ${labelNR} "${nrLogLabel}" (${nomeClienteAnt}) foi transferido para ${nomeNovoOp} ` +
+          `com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira. ` +
+          `Detalhes: Valor ${valorFmt} | Vencimento ${vencimentoFmt} | Status: ${statusAnt}.`,
         empresa_id: empresa?.id,
       });
 
       toast.success('Transferência autorizada! Acordo registrado com sucesso.');
       setConflito(null); setLiderEmail(''); setLiderSenha('');
-      // Suprimir aviso lint
-      void campoNr;
       navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro inesperado');
@@ -618,43 +714,45 @@ export default function AcordoForm() {
       const { payload, acordoAnteriorId, operadorAntId, operadorAntNome, nrLabel: nrL, labelCampo } = avisoDiretoExtra;
       const p = perfilLocal ?? perfil;
 
-      // 1. Rebaixar anterior para extra
+      // Re-validar que o operador ainda tem lógica ativa
+      const logicaAindaAtiva = await fetchIsDiretoExtraAtivo({ userId: operadorAntId, empresaId: empresa.id });
+      if (!logicaAindaAtiva) {
+        toast.error('A lógica Direto/Extra do operador foi desativada. Atualize e tente novamente.');
+        return;
+      }
+
+      // 1. Liberar NR do operador anterior
+      await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
+
+      // 2. Converter anterior em EXTRA + sincronizar dados da nova tabulação
       const { error: errReb } = await supabase.from('acordos')
         .update({
+          ...buildSyncPayload(payload),
           tipo_vinculo:          'extra',
           vinculo_operador_id:   uid,
           vinculo_operador_nome: p?.nome ?? 'Operador',
         })
         .eq('id', acordoAnteriorId);
-      if (errReb) { toast.error(`Erro ao rebaixar acordo: ${errReb.message}`); return; }
+      if (errReb) { toast.error(`Erro ao converter acordo: ${errReb.message}`); return; }
 
-      // 2. Liberar NR antigo
-      await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
-
-      // 3. Inserir novo como direto
+      // 3. Inserir novo como DIRETO (com vínculo para o EXTRA)
       const payloadDireto = {
         ...payload,
-        tipo_vinculo: 'direto',
+        tipo_vinculo:          'direto',
         vinculo_operador_id:   operadorAntId,
         vinculo_operador_nome: operadorAntNome,
       };
       const resultErr = await salvarAcordo(payloadDireto, uid);
       if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); return; }
 
-      // 4. Buscar dados do anterior para a notificação
-      const { data: acData } = await supabase
-        .from('acordos')
-        .select('nome_cliente')
-        .eq('id', acordoAnteriorId)
-        .maybeSingle();
-
-      // 5. Notificar o operador anterior
+      // 4. Notificar o operador anterior (agora EXTRA)
       await criarNotificacao({
         usuario_id: operadorAntId,
         titulo:     '🔄 Seu acordo foi convertido em EXTRA',
         mensagem:
-          `O ${labelCampo} "${nrL}" (${acData?.nome_cliente ?? '—'}) foi tabulado como DIRETO ` +
-          `pelo operador ${p?.nome ?? 'outro operador'}. Seu acordo continua ativo, porém agora como EXTRA.`,
+          `O ${labelCampo} "${nrL}" foi tabulado como DIRETO pelo operador ${p?.nome ?? 'outro operador'}. ` +
+          `Seu acordo continua ativo como EXTRA. ` +
+          `Dados sincronizados — Valor: ${fmtValor(payload.valor)}, Vencimento: ${fmtData(payload.vencimento)}.`,
         empresa_id: empresa.id,
       });
 

@@ -217,40 +217,43 @@ export async function classificarNrsImportados(
       continue;
     }
 
-    // Dono é outro operador. Precisamos checar lógica dos dois lados.
-    if (atualTemLogica) {
+    // Dono é outro operador. Verificamos lógica de ambos os lados.
+    const donoLogica = await donoTemLogicaAtiva(dup);
+
+    // Caso A: EU tem lógica, DONO não → EU = EXTRA
+    if (atualTemLogica && !donoLogica) {
       resultado.push({
         linhaOriginal: r.linhaOriginal,
         nr,
-        categoria:        'extra',
-        donoAtual:        dup,
+        categoria:         'extra',
+        donoAtual:         dup,
         operadorTemLogica: true,
+        donoTemLogica:     false,
       });
       continue;
     }
 
-    const donoLogica = await donoTemLogicaAtiva(dup);
-    if (donoLogica) {
-      // Caso B cruzado: operador atual vira DIRETO, dono anterior vira EXTRA.
+    // Caso B: EU não tem lógica, DONO tem → EU = DIRETO, DONO → EXTRA
+    if (!atualTemLogica && donoLogica) {
       resultado.push({
         linhaOriginal: r.linhaOriginal,
         nr,
-        categoria:     'direto',
-        donoAtual:     dup,
+        categoria:         'direto',
+        donoAtual:         dup,
         operadorTemLogica: false,
         donoTemLogica:     true,
       });
       continue;
     }
 
-    // Nenhum dos dois tem lógica → bloqueado, precisa autorização.
+    // Caso C/D: ambos têm lógica OU nenhum tem → bloqueado, precisa autorização.
     resultado.push({
       linhaOriginal: r.linhaOriginal,
       nr,
       categoria:          'duplicado',
       donoAtual:          dup,
-      operadorTemLogica:  false,
-      donoTemLogica:      false,
+      operadorTemLogica:  atualTemLogica,
+      donoTemLogica:      donoLogica,
       precisaAutorizacao: true,
     });
   }
