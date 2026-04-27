@@ -474,6 +474,21 @@ export function AcordoNovoInline({
     try { sessionStorage.removeItem(storageKey); } catch { /* noop */ }
   }
 
+  // Cancela o formulário limpando o draft antes de notificar o pai.
+  function cancelar() {
+    limparDraft();
+    onCancel();
+  }
+
+  // Limpa o draft se o usuário recarregar ou fechar a página com o form aberto.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try { sessionStorage.removeItem(storageKey); } catch { /* noop */ }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [storageKey]);
+
   // Estado do conflito de NR
   const [conflito,    setConflito]    = useState<ConflitNR | null>(null);
   const [liderEmail,  setLiderEmail]  = useState('');
@@ -719,22 +734,6 @@ export function AcordoNovoInline({
       // automaticamente via INSERT — não precisamos chamar registrarNr() aqui.
       const inserido = await executarSalvar(payload);
       if (inserido) {
-        // ── Atualizar acordo DIRETO com vinculo_operador_nome (mesmo sem lógica ativa) ──
-        // Se há conflito e o usuário não tem a lógica DIRETO/EXTRA ativada,
-        // ainda assim atualizamos o acordo DIRETO para que a TAG apareça para operadores.
-        if (conflitoFinal && !atualTemLogica) {
-          await supabase
-            .from('acordos')
-            .update({
-              vinculo_operador_id:   perfil.id,
-              vinculo_operador_nome: perfil.nome ?? 'Operador',
-            })
-            .eq('id', conflitoFinal.acordoId)
-            .catch(() => {
-              // Silenciosamente ignora erros (ex: RLS pode bloquear)
-            });
-        }
-        
         limparDraft();
         onSaved(inserido);
         toast.success(
@@ -1050,7 +1049,7 @@ export function AcordoNovoInline({
                 </p>
                 <Button
                   variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
-                  onClick={onCancel} disabled={salvando}
+                  onClick={cancelar} disabled={salvando}
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -1262,7 +1261,7 @@ export function AcordoNovoInline({
               </p>
               <Button
                 variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive"
-                onClick={onCancel} disabled={salvando}
+                onClick={cancelar} disabled={salvando}
               >
                 <X className="w-4 h-4" />
               </Button>
