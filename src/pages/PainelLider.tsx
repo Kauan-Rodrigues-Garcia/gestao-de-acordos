@@ -20,7 +20,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -93,6 +93,7 @@ function CardOperador({
         <CardContent className="p-4">
           <div className="flex items-center gap-3 mb-3">
             <Avatar className="w-9 h-9 flex-shrink-0">
+              <AvatarImage src={resumo.perfil.foto_url ?? undefined} alt={resumo.perfil.nome} />
               <AvatarFallback className={cn(
                 'text-xs font-bold',
                 selecionado ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground',
@@ -144,10 +145,11 @@ function CardOperador({
 interface AnaliticoOperadorProps {
   operadorId:   string;
   operadorNome: string;
+  fotoUrl?:     string | null;
   onFechar:     () => void;
 }
 
-function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOperadorProps) {
+function AnaliticoOperador({ operadorId, operadorNome, fotoUrl, onFechar }: AnaliticoOperadorProps) {
   const { tenantSlug } = useEmpresa();
   const statusLabels = getStatusLabels(tenantSlug);
   const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
@@ -229,6 +231,7 @@ function AnaliticoOperador({ operadorId, operadorNome, onFechar }: AnaliticoOper
         <CardContent className="p-4">
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="w-10 h-10">
+              <AvatarImage src={fotoUrl ?? undefined} alt={operadorNome} />
               <AvatarFallback className="bg-primary text-primary-foreground font-bold text-sm">
                 {initials}
               </AvatarFallback>
@@ -702,6 +705,7 @@ export default function PainelLider() {
                   key={opSel.id}
                   operadorId={opSel.id}
                   operadorNome={opSel.nome}
+                  fotoUrl={opSel.perfil.foto_url}
                   onFechar={() => setOpSel(null)}
                 />
               )}

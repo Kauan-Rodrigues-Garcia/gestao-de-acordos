@@ -633,7 +633,7 @@ export default function AcordoForm() {
         if (extraAtualOpId) {
           await criarNotificacao({
             usuario_id: extraAtualOpId,
-            titulo: '⚠️ Seu vínculo EXTRA foi transferido',
+            titulo: 'Vínculo EXTRA transferido',
             mensagem:
               `Seu acordo EXTRA do ${labelNR} "${nrLogLabel}" foi transferido para ${nomeNovoOp} ` +
               `com autorização de ${liderPerfil.nome}. Detalhes: Valor ${valorExtFmt} | Vencimento ${vencExtFmt}.`,
@@ -642,7 +642,7 @@ export default function AcordoForm() {
         }
         await criarNotificacao({
           usuario_id: conflito.operadorId,
-          titulo: '🔄 Vínculo EXTRA do seu acordo foi atualizado',
+          titulo: 'Vínculo EXTRA do seu acordo foi atualizado',
           mensagem:
             `O vínculo EXTRA do ${labelNR} "${nrLogLabel}" mudou de ${extraAtualOpNome ?? 'operador anterior'} ` +
             `para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo DIRETO continua inalterado.`,
@@ -702,7 +702,7 @@ export default function AcordoForm() {
 
       await criarNotificacao({
         usuario_id: conflito.operadorId,
-        titulo: '⚠️ Seu acordo foi transferido pelo líder',
+        titulo: 'Acordo transferido pelo líder',
         mensagem:
           `O ${labelNR} "${nrLogLabel}" (${nomeClienteAnt}) foi transferido para ${nomeNovoOp} ` +
           `com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira. ` +
@@ -776,7 +776,7 @@ export default function AcordoForm() {
       // 4. Notificar o operador anterior (agora EXTRA)
       await criarNotificacao({
         usuario_id: operadorAntId,
-        titulo:     '🔄 Seu acordo foi convertido em EXTRA',
+        titulo:     'Seu acordo foi convertido em EXTRA',
         mensagem:
           `O ${labelCampo} "${nrL}" foi tabulado como DIRETO pelo operador ${p?.nome ?? 'outro operador'}. ` +
           `Seu acordo continua ativo como EXTRA. ` +
@@ -1079,7 +1079,7 @@ export default function AcordoForm() {
                     rows={2}
                   />
                   <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                    📅 Data de cadastro registrada automaticamente pelo sistema
+                    Data de cadastro registrada automaticamente pelo sistema
                   </p>
                 </CardContent>
               </Card>
@@ -1254,9 +1254,9 @@ export default function AcordoForm() {
                     >
                       <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="verificar_pendente">🔍 Verificar</SelectItem>
-                        <SelectItem value="pago">✅ Pago</SelectItem>
-                        <SelectItem value="nao_pago">❌ Não Pago</SelectItem>
+                        <SelectItem value="verificar_pendente">Verificar</SelectItem>
+                        <SelectItem value="pago">Pago</SelectItem>
+                        <SelectItem value="nao_pago">Não Pago</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1281,7 +1281,7 @@ export default function AcordoForm() {
                     rows={2}
                   />
                   <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                    📅 Data de cadastro registrada automaticamente pelo sistema
+                    Data de cadastro registrada automaticamente pelo sistema
                   </p>
                 </CardContent>
               </Card>

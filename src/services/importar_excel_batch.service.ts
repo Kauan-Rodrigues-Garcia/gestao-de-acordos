@@ -246,7 +246,7 @@ async function aplicarCasoBCruzado(
 
   await criarNotificacao({
     usuario_id: dono.operadorId,
-    titulo:     '🔄 Seu acordo foi convertido em EXTRA',
+    titulo:     'Seu acordo foi convertido em EXTRA',
     mensagem:
       `O ${params.labelNr} "${p.nr}" (${p.nomeCliente || '—'}) ` +
       `foi tabulado como DIRETO via importação por ${params.operadorAtual.nome}. ` +
@@ -336,7 +336,7 @@ async function aplicarCasoC(
   // 6. Notificar operador anterior.
   await criarNotificacao({
     usuario_id: dono.operadorId,
-    titulo:     '⚠️ Seu acordo foi transferido pelo líder (importação)',
+    titulo:     'Acordo transferido pelo líder (importação)',
     mensagem:
       `O ${params.labelNr} "${p.nr}" (${acordoAntData?.nome_cliente ?? p.nomeCliente}) ` +
       `foi transferido para ${params.operadorAtual.nome} ` +

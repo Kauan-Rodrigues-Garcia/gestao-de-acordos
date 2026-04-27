@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -22,6 +23,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { fetchLixeira, esvaziarLixeira, purgarExpirados, LixeiraAcordo } from '@/services/lixeira.service';
+import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -61,23 +63,6 @@ function tempoUrgencia(expiraEm?: string): 'green' | 'yellow' | 'red' | 'gray' {
   return 'green';
 }
 
-function AvatarInitials({ name }: { name?: string | null }) {
-  if (!name) return <span className="text-muted-foreground">—</span>;
-  const initials = name
-    .split(' ')
-    .slice(0, 2)
-    .map(p => p[0])
-    .join('')
-    .toUpperCase();
-  return (
-    <div className="flex items-center gap-2">
-      <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0">
-        <span className="text-[9px] font-bold text-primary">{initials}</span>
-      </div>
-      <span className="text-muted-foreground truncate max-w-[110px]">{name}</span>
-    </div>
-  );
-}
 
 export default function Lixeira() {
   const { perfil } = useAuth();
@@ -90,6 +75,7 @@ export default function Lixeira() {
   const [detalhe, setDetalhe]           = useState<LixeiraAcordo | null>(null);
   const [confirmEsvaziar, setConfirmEsvaziar] = useState(false);
   const [esvaziando, setEsvaziando]     = useState(false);
+  const [fotoMap, setFotoMap]           = useState<Record<string, string | null>>({});
 
   const podeAcessar = temPermissao('ver_lixeira');
   const podeEsvaziar = podeAcessar;
@@ -111,6 +97,25 @@ export default function Lixeira() {
         ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,
       );
       setItens(data);
+
+      // Buscar foto_url dos perfis para os operadores presentes na lista
+      const ids = [
+        ...new Set([
+          ...data.map((i: LixeiraAcordo) => i.operador_id).filter(Boolean),
+          ...data.map((i: LixeiraAcordo) => i.transferido_para_id).filter(Boolean),
+        ]),
+      ] as string[];
+      if (ids.length > 0) {
+        const { data: perfis } = await supabase
+          .from('perfis')
+          .select('id, foto_url')
+          .in('id', ids);
+        const map: Record<string, string | null> = {};
+        (perfis ?? []).forEach((p: { id: string; foto_url?: string | null }) => {
+          map[p.id] = p.foto_url ?? null;
+        });
+        setFotoMap(map);
+      }
     } finally {
       setLoading(false);
     }
@@ -387,18 +392,31 @@ export default function Lixeira() {
 
                         {/* Operador */}
                         <td className="px-4 py-3">
-                          <AvatarInitials name={item.operador_nome} />
+                          {item.operador_nome ? (
+                            <div className="flex items-center gap-2">
+                              <Avatar className="w-6 h-6 flex-shrink-0">
+                                <AvatarImage src={item.operador_id ? (fotoMap[item.operador_id] ?? undefined) : undefined} alt={item.operador_nome} />
+                                <AvatarFallback className="text-[9px] font-bold bg-primary/15 border border-primary/20 text-primary">
+                                  {item.operador_nome.split(' ').slice(0,2).map((p: string) => p[0]).join('').toUpperCase()}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-muted-foreground truncate max-w-[110px]">{item.operador_nome}</span>
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
 
                         {/* Transferido para */}
                         <td className="px-4 py-3">
                           {item.transferido_para_nome ? (
                             <div className="flex items-center gap-2">
-                              <div className="w-6 h-6 rounded-full bg-primary/15 border border-primary/20 flex items-center justify-center flex-shrink-0">
-                                <span className="text-[9px] font-bold text-primary">
+                              <Avatar className="w-6 h-6 flex-shrink-0">
+                                <AvatarImage src={item.transferido_para_id ? (fotoMap[item.transferido_para_id] ?? undefined) : undefined} alt={item.transferido_para_nome} />
+                                <AvatarFallback className="text-[9px] font-bold bg-primary/10 border border-primary/20 text-primary">
                                   {item.transferido_para_nome.split(' ').slice(0, 2).map((p: string) => p[0]).join('').toUpperCase()}
-                                </span>
-                              </div>
+                                </AvatarFallback>
+                              </Avatar>
                               <span className="text-primary font-medium truncate max-w-[110px]">
                                 {item.transferido_para_nome}
                               </span>

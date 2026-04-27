@@ -981,7 +981,7 @@ export function AcordoNovoInline({
         if (extraAtualOpId) {
           await criarNotificacao({
             usuario_id: extraAtualOpId,
-            titulo:     '⚠️ Seu vínculo EXTRA foi transferido',
+            titulo:     'Vínculo EXTRA transferido',
             mensagem:
               `Seu acordo EXTRA do ${labelNR} "${nrLogLabel}" foi transferido para ${nomeNovoOp} ` +
               `com autorização de ${liderPerfil.nome}. ` +
@@ -993,7 +993,7 @@ export function AcordoNovoInline({
         // 8. Notificar o dono do DIRETO (apenas informa a mudança)
         await criarNotificacao({
           usuario_id: conflito.operadorId,
-          titulo:     '🔄 Vínculo EXTRA do seu acordo foi atualizado',
+          titulo:     'Vínculo EXTRA do seu acordo foi atualizado',
           mensagem:
             `O vínculo EXTRA do ${labelNR} "${nrLogLabel}" mudou de ` +
             `${extraAtualOpNome ?? 'operador anterior'} para ${nomeNovoOp} ` +
@@ -1068,7 +1068,7 @@ export function AcordoNovoInline({
 
       await criarNotificacao({
         usuario_id: conflito.operadorId,
-        titulo:     '⚠️ Seu acordo foi transferido pelo líder',
+        titulo:     'Acordo transferido pelo líder',
         mensagem:
           `O ${labelNR} "${nrLogLabel}" (${nomeClienteAnt}) foi transferido para ${nomeNovoOp} ` +
           `com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira. ` +
@@ -1150,7 +1150,7 @@ export function AcordoNovoInline({
       // 4. Notificar o operador anterior (agora EXTRA)
       await criarNotificacao({
         usuario_id: operadorAntId,
-        titulo:     '🔄 Seu acordo foi convertido em EXTRA',
+        titulo:     'Seu acordo foi convertido em EXTRA',
         mensagem:
           `O ${labelCampo} "${nrLabel}" foi tabulado como DIRETO pelo operador ` +
           `${perfil.nome ?? 'outro operador'}. Seu acordo continua ativo como EXTRA. ` +

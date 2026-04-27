@@ -44,7 +44,7 @@ function dataFormatada(iso: string): string {
 
 function iconeNotificacao(titulo: string, size = 'w-4 h-4') {
   const t = titulo.toLowerCase();
-  if (t.includes('⚠️') || t.includes('transfer') || t.includes('nr')) {
+  if (t.includes('transfer') || t.includes('nr') || t.includes('vínculo') || t.includes('aviso')) {
     return <AlertTriangle className={cn(size, 'text-warning shrink-0 mt-0.5')} />;
   }
   if (t.includes('exclu') || t.includes('lixeira')) {
@@ -298,14 +298,16 @@ export function ChatNotificacoes() {
     <div ref={containerRef} className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
 
       {/* ── Janela de chat ── */}
+      {/* Wrapper com pointer-events:none durante exit para não bloquear cliques */}
+      <div style={{ pointerEvents: aberto ? 'auto' : 'none' }}>
       <AnimatePresence>
         {aberto && (
           <motion.div
             key="chat-window"
-            initial={{ opacity: 0, y: 16, scale: 0.96 }}
+            initial={{ opacity: 0, y: 14, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.96 }}
-            transition={{ type: 'spring', stiffness: 320, damping: 28 }}
+            exit={{ opacity: 0, y: 14, scale: 0.97 }}
+            transition={{ type: 'tween', duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className={cn(
               'bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col relative transition-[width,height] duration-200',
               expandido
@@ -481,6 +483,7 @@ export function ChatNotificacoes() {
           </motion.div>
         )}
       </AnimatePresence>
+      </div>
 
       {/* ── Botão flutuante ── */}
       <motion.button

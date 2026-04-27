@@ -336,9 +336,9 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
   // Para PaguePlay: exibir H.O. como valor principal
   const valorPrincipal  = isPP ? valorHOMes     : valorRecebidoMes;
   const valorAgendadoPP = isPP ? valorHOAgendado : valorAgendadoMes;
-  const labelRecebido   = isPP ? '🟠 H.O. recebido no mês' : '💰 Recebido no mês';
-  const labelAgendado   = isPP ? '📅 H.O. agendado no mês' : '📅 Agendado no mês';
-  const labelMeta       = isPP ? '🎯 Meta H.O.' : '🎯 Meta';
+  const labelRecebido   = isPP ? 'H.O. recebido no mês' : 'Recebido no mês';
+  const labelAgendado   = isPP ? 'H.O. agendado no mês' : 'Agendado no mês';
+  const labelMeta       = isPP ? 'Meta H.O.' : 'Meta';
   // Gráfico de área: PaguePlay usa H.O. como linha "recebido"
   const porDiaChart = isPP
     ? porDia.map(d => ({ ...d, recebido: d.ho }))

@@ -381,7 +381,7 @@ export function ModalEditarAcordoParcelado({
                   : 'text-muted-foreground hover:text-foreground'
               )}
             >
-              {tab === 'geral' ? '📋 Geral (todas as parcelas)' : `🗂️ Parcelas (${parcRows.length})`}
+              {tab === 'geral' ? 'Geral (todas as parcelas)' : `Parcelas (${parcRows.length})`}
             </button>
           ))}
         </div>
@@ -953,7 +953,7 @@ export function AcordoDetalheInline({
                 await criarNotificacao({
                   usuario_id: acordoDiretoOriginal.operador_id,
                   empresa_id: empresa.id,
-                  titulo: '⚠️ Acordo convertido em direto',
+                  titulo: 'Acordo convertido em direto',
                   mensagem:
                     `O operador ${perfil.nome} assumiu como direto o acordo do ` +
                     `${isPaguePlay ? `inscrição ${valorChave}` : `NR ${valorChave}`}. ` +

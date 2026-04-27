@@ -114,7 +114,7 @@ export async function tratarExclusaoVinculo({
       await criarNotificacao({
         usuario_id: parData.operador_id,
         empresa_id: acordo.empresa_id,
-        titulo:     '✅ Seu acordo EXTRA virou DIRETO',
+        titulo:     'Seu acordo EXTRA virou DIRETO',
         mensagem:
           `O acordo ${isPaguePlay ? `da inscrição ${valorChave}` : `do NR ${valorChave}`} ` +
           `foi excluído pelo operador ${operadorExecutorNome ?? 'responsável'}. ` +
@@ -145,7 +145,7 @@ export async function tratarExclusaoVinculo({
     await criarNotificacao({
       usuario_id: parData.operador_id,
       empresa_id: acordo.empresa_id,
-      titulo:     'ℹ️ Vínculo EXTRA removido',
+      titulo:     'Vínculo EXTRA removido',
       mensagem:
         `O acordo EXTRA ${isPaguePlay ? `da inscrição ${valorChave}` : `do NR ${valorChave}`} ` +
         `foi excluído pelo operador ${operadorExecutorNome ?? 'responsável'}. ` +

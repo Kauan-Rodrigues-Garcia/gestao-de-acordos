@@ -182,7 +182,7 @@ export default function AdminSetores() {
                   </span>
                   <span className="text-border">|</span>
                   <span className="flex items-center gap-1.5">
-                    <span className="text-[11px]">📋</span>
+                    <span className="text-[11px]">·</span>
                     <span className="font-medium text-foreground">{s.total_acordos}</span> acordo(s)
                   </span>
                 </div>
@@ -275,7 +275,7 @@ export default function AdminSetores() {
                 </p>
                 {(confirmandoExclusao.total_usuarios ?? 0) > 0 || (confirmandoExclusao.total_acordos ?? 0) > 0 ? (
                   <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive space-y-1">
-                    <p className="font-semibold">⚠️ Este setor possui dados vinculados:</p>
+                    <p className="font-semibold">Este setor possui dados vinculados:</p>
                     {(confirmandoExclusao.total_usuarios ?? 0) > 0 && (
                       <p>• {confirmandoExclusao.total_usuarios} usuário(s)</p>
                     )}
