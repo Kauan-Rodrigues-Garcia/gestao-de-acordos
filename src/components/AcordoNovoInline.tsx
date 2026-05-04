@@ -448,6 +448,7 @@ export function AcordoNovoInline({
   const [estadoSel,    setEstadoSel]    = useState(draftInicial.estadoSel    ?? '');
   const [link,         setLink]         = useState(draftInicial.link         ?? '');
   const [salvando,     setSalvando]     = useState(false);
+  const [isExtra,      setIsExtra]      = useState(false);
 
   // Ref que impede o RAF de re-escrever o draft após limparDraft() ser chamado.
   // Sem isso, existe race condition: limparDraft remove do storage, mas um RAF
@@ -641,6 +642,7 @@ export function AcordoNovoInline({
         data_cadastro:   new Date().toISOString().split('T')[0],
         acordo_grupo_id: grupoId,
         numero_parcela:  1,
+        ...(isPaguePlay && isExtra ? { tipo_vinculo: 'extra' } : {}),
       };
 
       // ── VERIFICAÇÃO DE NR ÚNICO ────────────────────────────────────────────
@@ -1355,6 +1357,21 @@ export function AcordoNovoInline({
                 >
                   <X className="w-3.5 h-3.5" /> Cancelar
                 </Button>
+                <button
+                  type="button"
+                  onClick={() => setIsExtra(v => !v)}
+                  disabled={salvando}
+                  title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
+                  className={cn(
+                    'ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border transition-all whitespace-nowrap',
+                    isExtra
+                      ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
+                      : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                  )}
+                >
+                  <Link2 className="w-2.5 h-2.5" />
+                  {isExtra ? 'Extra' : 'Direto'}
+                </button>
               </div>
 
             </div>

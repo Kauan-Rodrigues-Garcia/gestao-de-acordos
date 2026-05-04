@@ -54,6 +54,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const [estado,      setEstado]      = useState(initialEstado);
   const [observacoes, setObservacoes] = useState(initialObservacoes);
   const [status,      setStatus]      = useState<Acordo['status']>(acordo.status);
+  const [isExtra,     setIsExtra]     = useState(acordo.tipo_vinculo === 'extra');
 
   async function handleSave() {
     if (!nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
@@ -120,6 +121,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
         observacoes:  isPaguePlay
           ? buildObservacoesComEstado(estado, observacoes)
           : (observacoes.trim() || null),
+        ...(isPaguePlay ? { tipo_vinculo: isExtra ? 'extra' : 'direto' } : {}),
       };
 
       if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
@@ -336,25 +338,44 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
               </div>
 
               {/* Actions */}
-              <div className="flex gap-2 justify-end mt-3 pt-3 border-t border-primary/15">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={onCancel}
-                  disabled={saving}
-                >
-                  <X className="w-3 h-3" /> Cancelar
-                </Button>
-                <Button
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={handleSave}
-                  disabled={saving}
-                >
-                  <Save className="w-3 h-3" />
-                  {saving ? 'Salvando...' : 'Salvar'}
-                </Button>
+              <div className="flex items-center gap-2 mt-3 pt-3 border-t border-primary/15">
+                {isPaguePlay && (
+                  <button
+                    type="button"
+                    onClick={() => setIsExtra(v => !v)}
+                    disabled={saving}
+                    title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
+                    className={cn(
+                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border transition-all whitespace-nowrap',
+                      isExtra
+                        ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
+                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                    )}
+                  >
+                    <Link2 className="w-2.5 h-2.5" />
+                    {isExtra ? 'Extra' : 'Direto'}
+                  </button>
+                )}
+                <div className="flex gap-2 ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={onCancel}
+                    disabled={saving}
+                  >
+                    <X className="w-3 h-3" /> Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs gap-1"
+                    onClick={handleSave}
+                    disabled={saving}
+                  >
+                    <Save className="w-3 h-3" />
+                    {saving ? 'Salvando...' : 'Salvar'}
+                  </Button>
+                </div>
               </div>
             </div>
           </motion.div>
