@@ -275,20 +275,28 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     return () => unsubscribe(instanceId);
   }, [enableRealtime, subscribe, unsubscribe, instanceId]);
 
-  // ── Refetch ao focar a aba — só quando Realtime está desconectado ────────────
-  // Quando conectado, o canal Realtime já mantém os dados atualizados em tempo
-  // real e o refetch seria redundante (e causaria uma recarga visual desnecessária).
-  // Quando desconectado/com erro, o refetch garante que dados perdidos sejam
-  // recuperados ao voltar para a aba.
+  // ── Refetch ao focar a aba — só após ausência prolongada ─────────────────────
+  // O Supabase client pausa o WebSocket quando a aba fica oculta (mesmo por
+  // poucos segundos), então realtimeStatus fica 'off' em qualquer troca de aba.
+  // Usar o status como condição causaria reload em toda troca rápida.
+  // Solução: só recarregar se a aba ficou oculta por mais de 2 minutos.
   useEffect(() => {
+    const THRESHOLD_MS = 2 * 60 * 1000;
+    let hiddenAt: number | null = null;
+
     const handleVisibility = () => {
-      if (document.visibilityState === 'visible' && realtimeStatus !== 'connected') {
-        fetchAcordos();
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now();
+      } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
+        const elapsed = Date.now() - hiddenAt;
+        hiddenAt = null;
+        if (elapsed > THRESHOLD_MS) fetchAcordos();
       }
     };
+
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [realtimeStatus, fetchAcordos]);
+  }, [fetchAcordos]);
 
   return {
     acordos, totalCount, loading, error, realtimeStatus,
