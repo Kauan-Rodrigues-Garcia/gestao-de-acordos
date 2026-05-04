@@ -202,8 +202,10 @@ export default function Dashboard() {
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
   // Reagendar parcela (PaguePLAY)
-  const [reagendarAcordo,   setReagendarAcordo]   = useState<AcordoComVinculo | null>(null);
-  const [salvandoReagendar, setSalvandoReagendar] = useState(false);
+  const [reagendarAcordo,    setReagendarAcordo]    = useState<AcordoComVinculo | null>(null);
+  const [salvandoReagendar,  setSalvandoReagendar]  = useState(false);
+  // Grupos cujo próximo reagendamento já foi criado (verificado no BD ao mudar mês)
+  const [gruposReagendadosBD, setGruposReagendadosBD] = useState<Set<string>>(new Set());
   // Inline edit — estados separados por seção para evitar abertura dupla
   const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
@@ -229,6 +231,37 @@ export default function Dashboard() {
         return `${mesFiltro}-${String(ultimo).padStart(2, '0')}`;
       })()
     : undefined;
+
+  // Intervalo do mês SEGUINTE ao filtrado — usado para checar parcelas já reagendadas
+  const nextMonthRange = useMemo(() => {
+    if (!mesFiltro) return null;
+    const [y, m] = mesFiltro.split('-').map(Number);
+    const nextM = m === 12 ? 1 : m + 1;
+    const nextY = m === 12 ? y + 1 : y;
+    const start = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
+    const end   = new Date(nextY, nextM, 0).toISOString().split('T')[0];
+    return { start, end };
+  }, [mesFiltro]);
+
+  // Busca no BD quais grupos já têm parcela no próximo mês (para ocultar botão Reagendar após reload)
+  useEffect(() => {
+    if (!isPP || !nextMonthRange || !empresa?.id) { setGruposReagendadosBD(new Set()); return; }
+    supabase
+      .from('acordos')
+      .select('acordo_grupo_id')
+      .eq('empresa_id', empresa.id)
+      .gte('vencimento', nextMonthRange.start)
+      .lte('vencimento', nextMonthRange.end)
+      .gt('numero_parcela', 1)
+      .then(({ data }) => {
+        if (data) setGruposReagendadosBD(new Set(
+          (data as { acordo_grupo_id: string | null }[])
+            .map(d => d.acordo_grupo_id)
+            .filter((v): v is string => !!v),
+        ));
+      });
+   
+  }, [isPP, nextMonthRange, empresa?.id]);
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
@@ -256,6 +289,21 @@ export default function Dashboard() {
   const acordosDeHoje = useMemo(() =>
     acordosHoje.filter(a => a.vencimento === hoje),
     [acordosHoje, hoje],
+  );
+
+  // Grupos que, na sessão corrente, já ganharam próxima parcela via addAcordo (numero_parcela > 1)
+  const gruposComProximaParcela = useMemo(() => {
+    const s = new Set<string>();
+    for (const a of acordos) {
+      if ((a.numero_parcela ?? 1) > 1 && a.acordo_grupo_id) s.add(a.acordo_grupo_id);
+    }
+    return s;
+  }, [acordos]);
+
+  // União das verificações em memória e no BD — usada na condição do botão Reagendar
+  const gruposJaReagendados = useMemo(
+    () => new Set([...gruposComProximaParcela, ...gruposReagendadosBD]),
+    [gruposComProximaParcela, gruposReagendadosBD],
   );
 
   // PaguePlay: aplicar dedup Direto+Extra e filtros de coluna
@@ -436,6 +484,22 @@ export default function Dashboard() {
       const quantToCreate = params.aplicarTodas
         ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
         : 1;
+
+      // Verificar se a próxima parcela já existe no BD (proteção contra duplo clique ou reload)
+      if (parcelaAtual.acordo_grupo_id) {
+        const { data: jaExiste } = await supabase
+          .from('acordos')
+          .select('id')
+          .eq('empresa_id', empresa.id)
+          .eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
+          .eq('numero_parcela', proximaNumero)
+          .maybeSingle();
+        if (jaExiste) {
+          toast.info(`Parcela ${proximaNumero}/${totalParcelas} já foi reagendada.`);
+          setReagendarAcordo(null);
+          return;
+        }
+      }
 
       const basePayload = {
         nome_cliente:          parcelaAtual.nome_cliente,
@@ -1249,8 +1313,8 @@ export default function Dashboard() {
                                         <CheckCircle className="w-3 h-3" />
                                       </Button>
                                     )}
-                                    {/* Reagendar — aparece quando parcela paga e há próxima a criar */}
-                                    {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && (
+                                    {/* Reagendar — aparece quando parcela paga, há próxima a criar e ela ainda não foi criada */}
+                                    {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && !gruposJaReagendados.has(a.acordo_grupo_id ?? '') && (
                                       <Button
                                         variant="ghost" size="icon" className="w-6 h-6 text-primary hover:bg-primary/10"
                                         title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}

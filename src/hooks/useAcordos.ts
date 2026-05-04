@@ -126,7 +126,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     q.then(({ data }) => {
       setOperadoresEquipeIds(((data as { id: string }[]) ?? []).map(m => m.id));
     });
-  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);  
 
   // Canal centralizado
   const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
@@ -274,6 +274,21 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     subscribe(instanceId, handleEvent);
     return () => unsubscribe(instanceId);
   }, [enableRealtime, subscribe, unsubscribe, instanceId]);
+
+  // ── Refetch ao focar a aba — só quando Realtime está desconectado ────────────
+  // Quando conectado, o canal Realtime já mantém os dados atualizados em tempo
+  // real e o refetch seria redundante (e causaria uma recarga visual desnecessária).
+  // Quando desconectado/com erro, o refetch garante que dados perdidos sejam
+  // recuperados ao voltar para a aba.
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && realtimeStatus !== 'connected') {
+        fetchAcordos();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [realtimeStatus, fetchAcordos]);
 
   return {
     acordos, totalCount, loading, error, realtimeStatus,

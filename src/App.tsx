@@ -13,6 +13,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useVersionCheck } from '@/hooks/useVersionCheck';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -61,6 +62,11 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
   );
 }
 
+function VersionWatcher(): null {
+  useVersionCheck();
+  return null;
+}
+
 function TenantThemeApplier(): null {
   const { tenantSlug } = useEmpresa();
   useEffect(() => {
@@ -81,6 +87,7 @@ export default function App() {
           <RealtimeAcordosProvider>
           <PresenceProvider>
         <TenantThemeApplier />
+        <VersionWatcher />
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>

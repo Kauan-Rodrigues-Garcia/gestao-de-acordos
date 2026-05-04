@@ -5,8 +5,14 @@ import tailwindcss from '@tailwindcss/vite';
 import { componentTagger } from 'lovable-tagger';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
+import fs from 'fs';
 
 import { cdnPrefixImages } from './vite-plugins/cdn-prefix-images';
+
+// Versão do build: timestamp em produção, 'dev' em desenvolvimento.
+// Injetada no bundle como __APP_VERSION__ e gravada em dist/version.json
+// para que o polling de atualização detecte novos deploys.
+const BUILD_VERSION = process.env.NODE_ENV === 'production' ? String(Date.now()) : 'dev';
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -20,6 +26,16 @@ export default defineConfig(({ mode }) => {
       react(),
       mode === 'development' && componentTagger(),
       cdnPrefixImages(),
+      // Grava dist/version.json ao final do build para o polling de atualização
+      {
+        name: 'version-json',
+        closeBundle() {
+          fs.writeFileSync(
+            path.resolve(__dirname, 'dist/version.json'),
+            JSON.stringify({ v: BUILD_VERSION }),
+          );
+        },
+      },
       // Ativo apenas em `npm run analyze` (mode=analyze): gera stats.html com mapa do bundle.
       mode === 'analyze' && visualizer({ open: true, gzipSize: true, brotliSize: true, filename: 'stats.html' }),
     ].filter(Boolean),
@@ -44,6 +60,8 @@ export default defineConfig(({ mode }) => {
           ? process.env.VITE_ENABLE_ROUTE_MESSAGING === 'true'
           : process.env.VITE_ENABLE_ROUTE_MESSAGING !== 'false'
       ),
+      // Versão do build — usada pelo hook useVersionCheck para detectar novos deploys
+      __APP_VERSION__: JSON.stringify(BUILD_VERSION),
     },
     build: {
       // Sobe o aviso de chunk-size só para bibliotecas realmente pesadas
