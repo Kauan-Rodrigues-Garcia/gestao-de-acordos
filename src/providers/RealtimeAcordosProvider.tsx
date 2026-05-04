@@ -13,16 +13,10 @@
  *  registry de subscribers. Cada hook (useAcordos, useAnalytics) registra
  *  um callback e recebe os eventos, sem criar canais próprios.
  *
- * ─── ARQUITETURA ─────────────────────────────────────────────────────────────
- *
- *   App
- *   └─ RealtimeAcordosProvider        ← 1 canal WebSocket
- *       ├─ subscribersRef (Map)        ← callbacks registrados
- *       └─ RealtimeContext             ← status + subscribe/unsubscribe
- *           ├─ useAcordos (instância 1) ← subscribe no mount
- *           ├─ useAcordos (instância 2) ← subscribe no mount
- *           ├─ useAcordos (instância 3) ← subscribe no mount
- *           └─ useAnalytics             ← subscribe no mount
+ * ─── RECONEXÃO AUTOMÁTICA ────────────────────────────────────────────────────
+ *  Quando o canal fecha (CLOSED/TIMED_OUT/CHANNEL_ERROR), o provider destrói
+ *  o canal morto e cria um novo com backoff exponencial (2s → 4s → … → 30s).
+ *  Ao voltar para a aba com o canal morto, a reconexão é imediata (sem backoff).
  *
  * ─── TIPOS EXPORTADOS ────────────────────────────────────────────────────────
  *  RealtimeStatus      → 'off' | 'connecting' | 'connected' | 'error'
@@ -90,13 +84,21 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   const { empresa } = useEmpresa();
 
   const [status, setStatus] = useState<RealtimeStatus>('off');
+  // Incrementar força recriação do canal (reconexão automática ou por visibilidade)
+  const [reconnectTick, setReconnectTick] = useState(0);
 
   // Registry: id → callback
-  const subscribersRef = useRef<Map<string, Subscriber>>(new Map());
+  const subscribersRef    = useRef<Map<string, Subscriber>>(new Map());
   // Guard contra setState após unmount
-  const mountedRef = useRef(true);
-  // Grace timer: evita flicker de status ao trocar de aba (CLOSED → reconecta em ~1s)
-  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef        = useRef(true);
+  // Ref do status atual — leitura sem causar dependência em effects
+  const statusRef         = useRef<RealtimeStatus>('off');
+  // Grace timer: aguarda antes de confirmar CLOSED/ERROR (troca de aba reconecta em ~1s)
+  const closeTimerRef     = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Backoff timer: atraso antes de tentar reconectar após falha
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Contador de tentativas de reconexão consecutivas (para backoff)
+  const reconnectRef      = useRef(0);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -112,15 +114,36 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     subscribersRef.current.delete(id);
   }, []);
 
-  // ── Canal centralizado ────────────────────────────────────────────────────
+  // ── Reconectar ao voltar para a aba com canal morto ───────────────────────
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible' && mountedRef.current &&
+          (statusRef.current === 'off' || statusRef.current === 'error')) {
+        // Reconexão imediata sem backoff — é o usuário voltando para a aba
+        reconnectRef.current = 0;
+        setReconnectTick(t => t + 1);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, []);
+
+  // ── Canal centralizado — recria quando empresa muda ou reconnectTick sobe ──
   useEffect(() => {
     const empresaId = empresa?.id ?? perfil?.empresa_id;
     if (!empresaId) return;
 
-    if (mountedRef.current) setStatus('connecting');
+    // Helper que sincroniza statusRef e state ao mesmo tempo
+    const upd = (s: RealtimeStatus) => {
+      statusRef.current = s;
+      if (mountedRef.current) setStatus(s);
+    };
 
-    // Nome único e estável por empresa — criado apenas UMA VEZ
-    const channelName = `rt-acordos-central-${empresaId}`;
+    upd('connecting');
+
+    // Nome único por empresa — ao recriar, usamos um novo nome para forçar
+    // o Supabase a criar um canal fresh (não reutilizar um canal CLOSED)
+    const channelName = `rt-acordos-${empresaId}-${reconnectTick}`;
     const channel: RealtimeChannel = supabase
       .channel(channelName)
       .on(
@@ -186,34 +209,44 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       )
       .subscribe((channelStatus, err) => {
         if (!mountedRef.current) return;
+
         if (channelStatus === 'SUBSCRIBED') {
-          // Reconectou — cancela qualquer grace timer pendente
+          // Conexão estabelecida — cancela grace timer e zera backoff
           if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
-          setStatus('connected');
+          if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+          reconnectRef.current = 0;
+          upd('connected');
           return;
         }
-        // CLOSED/ERROR: aguarda 3s antes de atualizar o status (troca de aba
-        // → WebSocket reconecta tipicamente em < 2s, evitando flicker no UI)
-        if (channelStatus === 'CLOSED') {
+
+        // CLOSED/ERROR: aguarda 3s (troca rápida de aba → reconecta automaticamente)
+        // Se não reconectar, destrói o canal e cria um novo com backoff exponencial.
+        const handleFailure = (nextStatus: RealtimeStatus) => {
           if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
           closeTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setStatus('off');
+            if (!mountedRef.current) return;
+            upd(nextStatus);
+            // Agendar reconexão com backoff: 2s → 4s → 8s → 16s → 30s (cap)
+            reconnectRef.current++;
+            const delay = Math.min(1000 * Math.pow(2, reconnectRef.current), 30_000);
+            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) setReconnectTick(t => t + 1);
+            }, delay);
           }, 3000);
+        };
+
+        if (channelStatus === 'CLOSED') {
+          handleFailure('off');
           return;
         }
         if (channelStatus === 'CHANNEL_ERROR') {
-          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-          closeTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setStatus('error');
-          }, 3000);
+          handleFailure('error');
           console.warn('[Realtime] channel error:', err);
           return;
         }
         if (channelStatus === 'TIMED_OUT') {
-          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
-          closeTimerRef.current = setTimeout(() => {
-            if (mountedRef.current) setStatus('error');
-          }, 3000);
+          handleFailure('error');
           console.warn('[Realtime] channel timed out');
           return;
         }
@@ -221,12 +254,11 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
 
     return () => {
       if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+      if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
       supabase.removeChannel(channel);
-      if (mountedRef.current) setStatus('off');
     };
-  // Só recria o canal quando a empresa muda — subscribe/unsubscribe são estáveis
    
-  }, [empresa?.id, perfil?.empresa_id]);
+  }, [empresa?.id, perfil?.empresa_id, reconnectTick]);
 
   return (
     <RealtimeContext.Provider value={{ status, subscribe, unsubscribe }}>
