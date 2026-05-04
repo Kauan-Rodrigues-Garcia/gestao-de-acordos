@@ -13,7 +13,7 @@ import { motion } from 'framer-motion';
 import {
   X, Hash, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
-  ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon,
+  ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon, CalendarClock,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
   formatCurrency, formatDate, parseCurrencyInput,
@@ -485,6 +486,9 @@ export function AcordoDetalheInline({
   // Modal Extra → Direto
   const [modalExtraDiretoOpen, setModalExtraDiretoOpen] = useState(false);
   const [executandoExtraDireto, setExecutandoExtraDireto] = useState(false);
+  // Modal Reagendar
+  const [reagendarParcela,  setReagendarParcela]  = useState<Acordo | null>(null);
+  const [salvandoReagendar, setSalvandoReagendar] = useState(false);
   // Acordo local (para reflectir edições sem fechar o detalhe)
   const [acordoLocal, setAcordoLocal] = useState<Acordo>(acordo);
 
@@ -525,7 +529,8 @@ export function AcordoDetalheInline({
       toast.error(`Erro: ${error.message}`);
     } else {
       toast.success('Parcela marcada como paga!');
-      setRegistrosReais(prev => prev.map(x => x.id === p.id ? { ...x, status: 'pago' } : x));
+      const parcelaAtualizada = { ...p, status: 'pago' as const };
+      setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));
       // Sincronizar status com o acordo par (DIRETO↔EXTRA)
       if (acordoLocal.tipo_vinculo === 'extra' || acordoLocal.vinculo_operador_id) {
         await supabase.rpc('fn_sync_par_vinculo', {
@@ -539,8 +544,115 @@ export function AcordoDetalheInline({
           p_status:       'pago',
         });
       }
+      // Oferecer reagendamento se PaguePLAY, parcelado e não foi a última parcela
+      if (isPaguePlay && (p.numero_parcela ?? 1) < totalParcelas) {
+        setReagendarParcela(parcelaAtualizada);
+      }
     }
     setMarcandoPago(null);
+  }
+
+  // ── Reagendar próxima parcela ─────────────────────────────────────────────
+  async function handleReagendar(params: ReagendarParams) {
+    if (!reagendarParcela || !empresa?.id) return;
+    setSalvandoReagendar(true);
+    try {
+      const parcelaAtual  = reagendarParcela;
+      const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
+      const quantToCreate = params.aplicarTodas
+        ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
+        : 1;
+
+      const basePayload = {
+        nome_cliente:          parcelaAtual.nome_cliente,
+        nr_cliente:            parcelaAtual.nr_cliente,
+        tipo:                  parcelaAtual.tipo,
+        parcelas:              parcelaAtual.parcelas,
+        whatsapp:              parcelaAtual.whatsapp,
+        instituicao:           parcelaAtual.instituicao,
+        observacoes:           parcelaAtual.observacoes,
+        operador_id:           parcelaAtual.operador_id,
+        empresa_id:            parcelaAtual.empresa_id,
+        setor_id:              parcelaAtual.setor_id ?? null,
+        data_cadastro:         new Date().toISOString().split('T')[0],
+        acordo_grupo_id:       parcelaAtual.acordo_grupo_id,
+        tipo_vinculo:          parcelaAtual.tipo_vinculo,
+        vinculo_operador_id:   parcelaAtual.vinculo_operador_id,
+        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome,
+        status:                'verificar_pendente' as const,
+        valor:                 params.novoValor,
+      };
+
+      // Criar parcelas para o usuário atual
+      const novasParcelas: Acordo[] = [];
+      for (let i = 0; i < quantToCreate; i++) {
+        const numero      = proximaNumero + i;
+        const vencCalc    = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
+        const { data: novo, error: errIns } = await supabase
+          .from('acordos')
+          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc })
+          .select('*')
+          .single();
+        if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }
+        novasParcelas.push(novo as Acordo);
+      }
+
+      // Sincronizar com o par Direto/Extra (cria parcelas para o parceiro)
+      if (parcelaAtual.vinculo_operador_id && parcelaAtual.acordo_grupo_id) {
+        const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
+        const valorChave = isPaguePlay ? parcelaAtual.instituicao : parcelaAtual.nr_cliente;
+        if (valorChave) {
+          const { data: parInstall } = await supabase
+            .from('acordos')
+            .select('*')
+            .eq('empresa_id', empresa.id)
+            .eq('operador_id', parcelaAtual.vinculo_operador_id)
+            .eq(campoChave, valorChave)
+            .eq('numero_parcela', parcelaAtual.numero_parcela ?? 1)
+            .maybeSingle();
+
+          if (parInstall) {
+            for (let i = 0; i < quantToCreate; i++) {
+              const numero   = proximaNumero + i;
+              const vencCalc = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
+              await supabase.from('acordos').insert({
+                nome_cliente:          (parInstall as Acordo).nome_cliente,
+                nr_cliente:            (parInstall as Acordo).nr_cliente,
+                tipo:                  (parInstall as Acordo).tipo,
+                parcelas:              (parInstall as Acordo).parcelas,
+                whatsapp:              (parInstall as Acordo).whatsapp,
+                instituicao:           (parInstall as Acordo).instituicao,
+                observacoes:           (parInstall as Acordo).observacoes,
+                operador_id:           (parInstall as Acordo).operador_id,
+                empresa_id:            (parInstall as Acordo).empresa_id,
+                setor_id:              (parInstall as Acordo).setor_id ?? null,
+                data_cadastro:         new Date().toISOString().split('T')[0],
+                acordo_grupo_id:       (parInstall as Acordo).acordo_grupo_id,
+                tipo_vinculo:          (parInstall as Acordo).tipo_vinculo,
+                vinculo_operador_id:   (parInstall as Acordo).vinculo_operador_id,
+                vinculo_operador_nome: (parInstall as Acordo).vinculo_operador_nome,
+                status:                'verificar_pendente',
+                valor:                 params.novoValor,
+                numero_parcela:        numero,
+                vencimento:            vencCalc,
+              });
+            }
+          }
+        }
+      }
+
+      setRegistrosReais(prev => [...prev, ...novasParcelas]);
+      setReagendarParcela(null);
+
+      const msg = quantToCreate > 1
+        ? `${quantToCreate} parcelas agendadas a partir de ${formatDate(params.novoVencimento)}!`
+        : `Parcela ${proximaNumero}/${totalParcelas} agendada para ${formatDate(params.novoVencimento)}!`;
+      toast.success(msg);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
+    } finally {
+      setSalvandoReagendar(false);
+    }
   }
   // ── Montar lista mista: real ou virtual para cada índice 1..N ────────────
   type LinhaTabela = {
@@ -802,6 +914,16 @@ export function AcordoDetalheInline({
                                           <span className="flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Pago</span>
                                         )}
                                       </Button>
+                                    ) : isPaguePlay && real && real.status === 'pago' && index < totalParcelas && !linhas[index]?.real ? (
+                                      <Button variant="ghost" size="sm"
+                                        className="h-6 text-[10px] px-2.5 text-primary hover:bg-primary/10 hover:text-primary border border-primary/20 font-semibold"
+                                        onClick={() => setReagendarParcela(real)}
+                                        title="Reagendar próxima parcela"
+                                      >
+                                        <span className="flex items-center gap-1">
+                                          <CalendarClock className="w-2.5 h-2.5" /> Reagendar
+                                        </span>
+                                      </Button>
                                     ) : (
                                       <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
                                     )}
@@ -835,6 +957,19 @@ export function AcordoDetalheInline({
             setRegistrosReais(todasAtualizadas);
             onSaved?.(principal);
           }}
+        />
+      )}
+
+      {/* Modal Reagendar próxima parcela */}
+      {reagendarParcela && (
+        <ModalReagendar
+          aberto={!!reagendarParcela}
+          parcelaAtual={reagendarParcela}
+          proximaNumero={(reagendarParcela.numero_parcela ?? 1) + 1}
+          totalParcelas={totalParcelas}
+          salvando={salvandoReagendar}
+          onConfirm={handleReagendar}
+          onClose={() => setReagendarParcela(null)}
         />
       )}
 

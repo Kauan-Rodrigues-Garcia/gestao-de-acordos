@@ -7,7 +7,7 @@ import {
   Search, Filter, RefreshCw, X,
   Edit, Eye, CheckCircle, CheckCircle2, Hash, MapPin, Link2,
   ChevronLeft, ChevronRight, ChevronDown, Trash2,
-  ToggleLeft, ToggleRight, Layers, Users,
+  ToggleLeft, ToggleRight, Layers, Users, CalendarClock,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,8 +50,19 @@ import { enviarParaLixeira }        from '@/services/lixeira.service';
 import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
+
+/** Soma N meses a uma string YYYY-MM-DD (usado no Reagendar) */
+function addMesesDash(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const total = m - 1 + months;
+  return `${y + Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/** Tipos parcelados no PaguePLAY (boleto salvo em DB = boleto_pix no form) */
+const TIPOS_PARCELADOS_PP = ['boleto', 'pix'];
 
 /** Garante que a URL seja absoluta (com esquema http/https). */
 function ensureAbsoluteUrl(url: string): string {
@@ -190,6 +201,9 @@ export default function Dashboard() {
   const [excluindoId,             setExcluindoId]             = useState<string | null>(null);
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
+  // Reagendar parcela (PaguePLAY)
+  const [reagendarAcordo,   setReagendarAcordo]   = useState<AcordoComVinculo | null>(null);
+  const [salvandoReagendar, setSalvandoReagendar] = useState(false);
   // Inline edit — estados separados por seção para evitar abertura dupla
   const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
@@ -385,8 +399,135 @@ export default function Dashboard() {
       toast.error('Erro ao atualizar status');
     } else {
       toast.success('Acordo marcado como Pago!');
+      const acordoObj = acordos.find(a => a.id === id) ?? acordosOrdenados.find(a => a.id === id);
+      // Sincronizar status com o par Direto/Extra
+      if (acordoObj && (acordoObj.vinculo_operador_id || acordoObj.tipo_vinculo === 'extra')) {
+        supabase.rpc('fn_sync_par_vinculo', {
+          p_acordo_id:    id,
+          p_valor:        acordoObj.valor,
+          p_vencimento:   acordoObj.vencimento,
+          p_nome_cliente: acordoObj.nome_cliente,
+          p_tipo:         acordoObj.tipo,
+          p_whatsapp:     acordoObj.whatsapp ?? null,
+          p_parcelas:     acordoObj.parcelas,
+          p_status:       'pago',
+        }).then(({ error: rpcErr }) => {
+          if (rpcErr) console.warn('[marcarComoPago] sync par falhou:', rpcErr.message);
+        });
+      }
+      // Oferecer Reagendar se PaguePLAY, parcelado e não é a última parcela
+      if (isPP && acordoObj && (acordoObj.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordoObj.tipo)) {
+        const numParcela = acordoObj.numero_parcela ?? 1;
+        if (numParcela < (acordoObj.parcelas ?? 1)) {
+          setReagendarAcordo(acordoObj);
+        }
+      }
     }
     setAtualizandoStatus(null);
+  }
+
+  async function handleReagendarDashboard(params: ReagendarParams) {
+    if (!reagendarAcordo || !empresa?.id) return;
+    setSalvandoReagendar(true);
+    try {
+      const parcelaAtual  = reagendarAcordo;
+      const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
+      const totalParcelas = parcelaAtual.parcelas ?? 1;
+      const quantToCreate = params.aplicarTodas
+        ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
+        : 1;
+
+      const basePayload = {
+        nome_cliente:          parcelaAtual.nome_cliente,
+        nr_cliente:            parcelaAtual.nr_cliente,
+        tipo:                  parcelaAtual.tipo,
+        parcelas:              parcelaAtual.parcelas,
+        whatsapp:              parcelaAtual.whatsapp ?? null,
+        instituicao:           parcelaAtual.instituicao ?? null,
+        observacoes:           parcelaAtual.observacoes ?? null,
+        operador_id:           parcelaAtual.operador_id,
+        empresa_id:            parcelaAtual.empresa_id,
+        setor_id:              parcelaAtual.setor_id ?? null,
+        data_cadastro:         new Date().toISOString().split('T')[0],
+        acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
+        tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
+        vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
+        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome ?? null,
+        status:                'verificar_pendente',
+        valor:                 params.novoValor,
+      };
+
+      let ultimoInserido: Acordo | null = null;
+      for (let i = 0; i < quantToCreate; i++) {
+        const numero   = proximaNumero + i;
+        const vencCalc = i === 0 ? params.novoVencimento : addMesesDash(params.novoVencimento, i);
+        const { data, error: errIns } = await supabase
+          .from('acordos')
+          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc })
+          .select('*, perfis(id, nome, email, perfil, setor_id)')
+          .single();
+        if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }
+        ultimoInserido = data as Acordo;
+      }
+
+      // Sincronizar com par Direto/Extra
+      if (parcelaAtual.vinculo_operador_id && parcelaAtual.acordo_grupo_id) {
+        const valorChave = parcelaAtual.instituicao; // PaguePLAY usa instituicao
+        if (valorChave) {
+          const { data: parInstall } = await supabase
+            .from('acordos')
+            .select('*')
+            .eq('empresa_id', empresa.id)
+            .eq('operador_id', parcelaAtual.vinculo_operador_id)
+            .eq('instituicao', valorChave)
+            .eq('numero_parcela', parcelaAtual.numero_parcela ?? 1)
+            .maybeSingle();
+
+          if (parInstall) {
+            for (let i = 0; i < quantToCreate; i++) {
+              const numero   = proximaNumero + i;
+              const vencCalc = i === 0 ? params.novoVencimento : addMesesDash(params.novoVencimento, i);
+              await supabase.from('acordos').insert({
+                nome_cliente:          (parInstall as Acordo).nome_cliente,
+                nr_cliente:            (parInstall as Acordo).nr_cliente,
+                tipo:                  (parInstall as Acordo).tipo,
+                parcelas:              (parInstall as Acordo).parcelas,
+                whatsapp:              (parInstall as Acordo).whatsapp ?? null,
+                instituicao:           (parInstall as Acordo).instituicao ?? null,
+                observacoes:           (parInstall as Acordo).observacoes ?? null,
+                operador_id:           (parInstall as Acordo).operador_id,
+                empresa_id:            (parInstall as Acordo).empresa_id,
+                setor_id:              (parInstall as Acordo).setor_id ?? null,
+                data_cadastro:         new Date().toISOString().split('T')[0],
+                acordo_grupo_id:       (parInstall as Acordo).acordo_grupo_id ?? null,
+                tipo_vinculo:          (parInstall as Acordo).tipo_vinculo ?? null,
+                vinculo_operador_id:   (parInstall as Acordo).vinculo_operador_id ?? null,
+                vinculo_operador_nome: (parInstall as Acordo).vinculo_operador_nome ?? null,
+                status:                'verificar_pendente',
+                valor:                 params.novoValor,
+                numero_parcela:        numero,
+                vencimento:            vencCalc,
+              });
+            }
+          }
+        }
+      }
+
+      if (ultimoInserido) {
+        removeAcordo(parcelaAtual.id);
+        addAcordo(ultimoInserido);
+      }
+
+      setReagendarAcordo(null);
+      const msg = quantToCreate > 1
+        ? `${quantToCreate} parcelas agendadas a partir de ${formatDate(params.novoVencimento)}!`
+        : `Parcela ${proximaNumero}/${totalParcelas} reagendada para ${formatDate(params.novoVencimento)}!`;
+      toast.success(msg);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
+    } finally {
+      setSalvandoReagendar(false);
+    }
   }
 
   function prepararFila(lista: Acordo[]) {
@@ -1109,6 +1250,16 @@ export default function Dashboard() {
                                         <CheckCircle className="w-3 h-3" />
                                       </Button>
                                     )}
+                                    {/* Reagendar — aparece quando parcela paga e há próxima a criar */}
+                                    {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && (
+                                      <Button
+                                        variant="ghost" size="icon" className="w-6 h-6 text-primary hover:bg-primary/10"
+                                        title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
+                                        onClick={() => setReagendarAcordo(a)}
+                                      >
+                                        <CalendarClock className="w-3 h-3" />
+                                      </Button>
+                                    )}
                                     {/* WhatsApp — oculto para PaguePay */}
                                     <Button
                                       variant="ghost" size="icon"
@@ -1269,6 +1420,19 @@ export default function Dashboard() {
                 </div>
               </DialogContent>
             </Dialog>
+          )}
+
+          {/* Modal Reagendar próxima parcela */}
+          {reagendarAcordo && (
+            <ModalReagendar
+              aberto={!!reagendarAcordo}
+              parcelaAtual={reagendarAcordo}
+              proximaNumero={(reagendarAcordo.numero_parcela ?? 1) + 1}
+              totalParcelas={reagendarAcordo.parcelas ?? 1}
+              salvando={salvandoReagendar}
+              onConfirm={handleReagendarDashboard}
+              onClose={() => setReagendarAcordo(null)}
+            />
           )}
 
           {/* Floating Action Bar (seleção múltipla) */}
