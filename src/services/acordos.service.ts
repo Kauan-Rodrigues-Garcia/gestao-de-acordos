@@ -40,24 +40,26 @@ async function resolverOperadoresDaEquipe(
 
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
-  // ── Estratégia de paginação ────────────────────────────────────────────────
-  // A deduplicação por acordo_grupo_id (manter apenas a parcela mais recente
-  // de cada grupo) é feita diretamente no banco via a view `acordos_deduplicados`.
+  // ── Estratégia de fonte de dados ─────────────────────────────────────────
+  // Quando há filtro de intervalo de mês (data_inicio + data_fim), usamos a
+  // tabela `acordos` diretamente: cada acordo_grupo_id tem no máximo 1 parcela
+  // por mês, portanto não há duplicatas no período e o dedup da view é
+  // desnecessário — e prejudicial, pois a view aplica DISTINCT ON sobre toda a
+  // tabela antes do WHERE de data, ocultando parcelas pagas de meses anteriores
+  // quando a parcela seguinte já existe no banco.
   //
-  // Isso garante que:
-  //   - O `count` retornado é EXATO (sem parcelas duplicadas)
-  //   - A paginação server-side é correta em qualquer volume
-  //   - Não há overhead de busca de lotes ampliados no cliente
-  //
-  // A view usa DISTINCT ON (acordo_grupo_id) ORDER BY numero_parcela DESC,
-  // mantendo sempre a parcela mais recente. Acordos sem grupo passam intactos.
+  // Sem filtro de data usamos `acordos_deduplicados` (DISTINCT ON por grupo,
+  // mantendo a parcela mais recente) para evitar duplicatas na visão geral.
+
+  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim);
+  const sourceTable   = hasMonthRange ? 'acordos' : 'acordos_deduplicados';
 
   const paginar = !!(filtros?.page && filtros?.perPage);
   const perPage = filtros?.perPage ?? 20;
   const page    = filtros?.page ?? 1;
 
   let query = supabase
-    .from('acordos_deduplicados')
+    .from(sourceTable)
     .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
     .order('vencimento', { ascending: true });
 
