@@ -170,11 +170,15 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     filtros?.enableRealtime,
   ]);
 
-  // ── fetch completo (montagem ou refresh manual) ───────────────────────────
-  const fetchAcordos = useCallback(async () => {
+  // Rastreia o timestamp do último fetch para o silent refresh por visibilidade
+  const lastFetchAt = useRef<number>(0);
+
+  // ── fetch interno — showLoading=false para silent refresh (sem spinner) ───
+  const _fetch = useCallback(async (showLoading: boolean) => {
     const empresaId = empresa?.id ?? perfil?.empresa_id;
     if (!perfil || !empresaId) return;
-    setLoading(true);
+    lastFetchAt.current = Date.now();
+    if (showLoading) setLoading(true);
     setError(null);
     try {
       const { data, count } = await fetchAcordosService({
@@ -189,10 +193,13 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       setError(e instanceof Error ? e.message : 'Erro ao carregar acordos');
       console.error('[useAcordos]', e);
     } finally {
-      if (mountedRef.current) setLoading(false);
+      if (mountedRef.current && showLoading) setLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil, empresa?.id, perfil?.empresa_id, filtrosEstavel]);
+
+  // ── fetch público — exibe spinner (montagem ou refresh manual) ───────────
+  const fetchAcordos = useCallback(() => _fetch(true), [_fetch]);
 
   useEffect(() => { fetchAcordos(); }, [fetchAcordos]);
 
@@ -275,28 +282,20 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     return () => unsubscribe(instanceId);
   }, [enableRealtime, subscribe, unsubscribe, instanceId]);
 
-  // ── Refetch ao focar a aba — só após ausência prolongada ─────────────────────
-  // O Supabase client pausa o WebSocket quando a aba fica oculta (mesmo por
-  // poucos segundos), então realtimeStatus fica 'off' em qualquer troca de aba.
-  // Usar o status como condição causaria reload em toda troca rápida.
-  // Solução: só recarregar se a aba ficou oculta por mais de 2 minutos.
+  // ── Silent refresh ao focar a aba ──────────────────────────────────────────
+  // Ao voltar para a aba, atualiza dados em background (sem spinner) se
+  // passaram 60s+ desde o último fetch. Evita qualquer flash de loading.
   useEffect(() => {
-    const THRESHOLD_MS = 2 * 60 * 1000;
-    let hiddenAt: number | null = null;
-
+    const STALE_AFTER = 60 * 1000;
     const handleVisibility = () => {
-      if (document.visibilityState === 'hidden') {
-        hiddenAt = Date.now();
-      } else if (document.visibilityState === 'visible' && hiddenAt !== null) {
-        const elapsed = Date.now() - hiddenAt;
-        hiddenAt = null;
-        if (elapsed > THRESHOLD_MS) fetchAcordos();
+      if (document.visibilityState === 'visible' &&
+          Date.now() - lastFetchAt.current > STALE_AFTER) {
+        _fetch(false);
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [fetchAcordos]);
+  }, [_fetch]);
 
   return {
     acordos, totalCount, loading, error, realtimeStatus,

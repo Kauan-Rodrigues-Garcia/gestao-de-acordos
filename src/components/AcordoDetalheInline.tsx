@@ -721,8 +721,8 @@ export function AcordoDetalheInline({
                       Acordo direto
                     </Button>
                   )}
-                  {/* Botão Editar: parcelado → abre ModalEditarAcordoParcelado; simples → usa o inline edit do pai */}
-                  {deveExibirParcelas && (
+                  {/* Botão Editar parcelado — oculto no PaguePLAY */}
+                  {deveExibirParcelas && !isPaguePlay && (
                     <Button
                       variant="outline"
                       size="sm"
@@ -944,8 +944,8 @@ export function AcordoDetalheInline({
         </td>
       </tr>
 
-      {/* Modal editar parcelado */}
-      {deveExibirParcelas && (
+      {/* Modal editar parcelado — oculto no PaguePLAY */}
+      {deveExibirParcelas && !isPaguePlay && (
         <ModalEditarAcordoParcelado
           acordo={acordoLocal}
           isPaguePlay={isPaguePlay}

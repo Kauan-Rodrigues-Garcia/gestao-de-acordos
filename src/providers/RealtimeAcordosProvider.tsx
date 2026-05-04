@@ -95,6 +95,8 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
   const subscribersRef = useRef<Map<string, Subscriber>>(new Map());
   // Guard contra setState após unmount
   const mountedRef = useRef(true);
+  // Grace timer: evita flicker de status ao trocar de aba (CLOSED → reconecta em ~1s)
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -184,18 +186,46 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
       )
       .subscribe((channelStatus, err) => {
         if (!mountedRef.current) return;
-        if (channelStatus === 'SUBSCRIBED')    setStatus('connected');
-        if (channelStatus === 'CHANNEL_ERROR') { setStatus('error'); console.warn('[Realtime] channel error:', err); }
-        if (channelStatus === 'CLOSED')         setStatus('off');
-        if (channelStatus === 'TIMED_OUT')      { setStatus('error'); console.warn('[Realtime] channel timed out'); }
+        if (channelStatus === 'SUBSCRIBED') {
+          // Reconectou — cancela qualquer grace timer pendente
+          if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
+          setStatus('connected');
+          return;
+        }
+        // CLOSED/ERROR: aguarda 3s antes de atualizar o status (troca de aba
+        // → WebSocket reconecta tipicamente em < 2s, evitando flicker no UI)
+        if (channelStatus === 'CLOSED') {
+          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setStatus('off');
+          }, 3000);
+          return;
+        }
+        if (channelStatus === 'CHANNEL_ERROR') {
+          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setStatus('error');
+          }, 3000);
+          console.warn('[Realtime] channel error:', err);
+          return;
+        }
+        if (channelStatus === 'TIMED_OUT') {
+          if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setStatus('error');
+          }, 3000);
+          console.warn('[Realtime] channel timed out');
+          return;
+        }
       });
 
     return () => {
+      if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
       supabase.removeChannel(channel);
       if (mountedRef.current) setStatus('off');
     };
   // Só recria o canal quando a empresa muda — subscribe/unsubscribe são estáveis
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [empresa?.id, perfil?.empresa_id]);
 
   return (
