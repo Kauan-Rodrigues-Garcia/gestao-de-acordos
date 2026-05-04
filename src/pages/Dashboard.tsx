@@ -514,7 +514,6 @@ export default function Dashboard() {
       }
 
       if (ultimoInserido) {
-        removeAcordo(parcelaAtual.id);
         addAcordo(ultimoInserido);
       }
 
