@@ -1309,9 +1309,16 @@ export default function Dashboard() {
                                 {/* Estado — removido (já exibido acima) */}
                                 {/* Forma de pagamento */}
                                 <td className="px-3 py-2.5">
-                                  <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
-                                    {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
-                                  </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={cn('inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium border', TIPO_COLORS[a.tipo])}>
+                                      {TIPO_LABELS_PAGUEPLAY[a.tipo] || TIPO_LABELS[a.tipo]}
+                                    </span>
+                                    {(a.parcelas ?? 1) > 1 && (
+                                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 tabular-nums tracking-tight">
+                                        {a.numero_parcela ?? 1}/{a.parcelas}
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 {/* Link do acordo */}
                                 <td className="px-3 py-2.5 max-w-[120px]">
