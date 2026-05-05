@@ -6,8 +6,8 @@ import {
   ArrowRight, MessageSquare, Plus, Building2,
   Search, Filter, RefreshCw, X,
   Edit, Eye, CheckCircle, CheckCircle2, Hash, MapPin, Link2,
-  ChevronLeft, ChevronRight, ChevronDown, Trash2,
-  ToggleLeft, ToggleRight, Layers, Users, CalendarClock,
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Trash2,
+  ToggleLeft, ToggleRight, Layers, Users, CalendarClock, FileX,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -100,19 +100,35 @@ const PER_PAGE = 60;
 
 function TableSkeleton() {
   return (
-    <div className="space-y-3 p-4">
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="flex items-center gap-4">
-          <Skeleton className="h-4 w-4 rounded" />
-          <Skeleton className="h-4 w-12" />
+    <div className="divide-y divide-border/50">
+      {[...Array(7)].map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <Skeleton className="h-4 w-4 rounded shrink-0" />
+          <Skeleton className="h-4 w-28 shrink-0" />
+          <Skeleton className="h-4 w-10 shrink-0" />
+          <Skeleton className="h-4 w-20 shrink-0 font-mono" />
+          <Skeleton className="h-4 w-24 shrink-0 font-mono text-right" />
+          <Skeleton className="h-5 w-16 rounded-full shrink-0" />
           <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-5 w-20 rounded-full shrink-0" />
+          <div className="flex gap-1 shrink-0">
+            <Skeleton className="h-8 w-8 rounded" />
+            <Skeleton className="h-8 w-8 rounded" />
+          </div>
         </div>
       ))}
     </div>
   );
+}
+
+function getPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | '...')[] = [1];
+  if (current > 3) pages.push('...');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -437,16 +453,16 @@ export default function Dashboard() {
   }
 
   async function marcarComoPago(id: string) {
+    const statusAnterior = (acordos.find(a => a.id === id) ?? acordosOrdenados.find(a => a.id === id))?.status ?? 'verificar_pendente';
     setAtualizandoStatus(id);
     // Optimistic: atualiza o status visualmente antes da resposta do banco
     patchAcordo(id, { status: 'pago' });
     const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
     if (error) {
       // Rollback: reverte o status se houve erro
-      patchAcordo(id, { status: acordos.find(a => a.id === id)?.status ?? 'verificar_pendente' });
+      patchAcordo(id, { status: statusAnterior });
       toast.error('Erro ao atualizar status');
     } else {
-      toast.success('Acordo marcado como Pago!');
       const acordoObj = acordos.find(a => a.id === id) ?? acordosOrdenados.find(a => a.id === id);
       // Sincronizar status com o par Direto/Extra
       if (acordoObj && (acordoObj.vinculo_operador_id || acordoObj.tipo_vinculo === 'extra')) {
@@ -464,11 +480,21 @@ export default function Dashboard() {
         });
       }
       // Oferecer Reagendar se PaguePLAY, parcelado e não é a última parcela
-      if (isPP && acordoObj && (acordoObj.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordoObj.tipo)) {
-        const numParcela = acordoObj.numero_parcela ?? 1;
-        if (numParcela < (acordoObj.parcelas ?? 1)) {
-          setReagendarAcordo(acordoObj);
-        }
+      const numParcela = acordoObj?.numero_parcela ?? 1;
+      const deveReagendar = isPP && acordoObj && (acordoObj.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordoObj.tipo) && numParcela < (acordoObj.parcelas ?? 1);
+      if (deveReagendar && acordoObj) {
+        setReagendarAcordo(acordoObj);
+      } else {
+        toast.success('Acordo marcado como Pago!', {
+          duration: 5000,
+          action: {
+            label: 'Desfazer',
+            onClick: async () => {
+              patchAcordo(id, { status: statusAnterior });
+              await supabase.from('acordos').update({ status: statusAnterior }).eq('id', id);
+            },
+          },
+        });
       }
     }
     setAtualizandoStatus(null);
@@ -1193,11 +1219,26 @@ export default function Dashboard() {
                         )}
                         {acordos.length === 0 ? (
                           <tr>
-                            <td colSpan={visaoAmpla ? 11 : 10} className="px-4 py-12 text-center">
-                              <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                                <Filter className="w-8 h-8 opacity-30" />
-                                <p className="font-medium">Nenhum acordo encontrado</p>
-                                <p className="text-xs">Ajuste os filtros ou cadastre um novo acordo</p>
+                            <td colSpan={visaoAmpla ? 11 : 10} className="px-4 py-14 text-center">
+                              <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                                <div className="w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+                                  <FileX className="w-6 h-6 opacity-40" />
+                                </div>
+                                <div>
+                                  <p className="font-medium text-sm text-foreground/70">Nenhum acordo encontrado</p>
+                                  <p className="text-xs text-muted-foreground/60 mt-0.5">
+                                    {temFiltros ? 'Tente ajustar os filtros aplicados' : 'Comece cadastrando um novo acordo'}
+                                  </p>
+                                </div>
+                                {temFiltros ? (
+                                  <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 mt-1" onClick={limparFiltros}>
+                                    <X className="w-3.5 h-3.5" /> Limpar filtros
+                                  </Button>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 mt-1" onClick={() => setNovoInlineAbertoTabela(true)}>
+                                    <Plus className="w-3.5 h-3.5" /> Novo Acordo
+                                  </Button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -1302,55 +1343,45 @@ export default function Dashboard() {
                                 )}
                                 {/* Ações */}
                                 <td className="px-3 py-2.5">
-                                  <div className="flex items-center justify-end gap-1">
+                                  <div className="flex items-center justify-end gap-0.5">
                                     {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                       <Button
-                                        variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
+                                        variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                                         title="Marcar como Pago"
                                         disabled={atualizandoStatus === a.id}
                                         onClick={() => marcarComoPago(a.id)}
                                       >
-                                        <CheckCircle className="w-3 h-3" />
+                                        <CheckCircle className="w-4 h-4" />
                                       </Button>
                                     )}
                                     {/* Reagendar — aparece quando parcela paga, há próxima a criar e ela ainda não foi criada */}
                                     {a.status === 'pago' && (a.parcelas ?? 1) > 1 && (a.numero_parcela ?? 1) < (a.parcelas ?? 1) && TIPOS_PARCELADOS_PP.includes(a.tipo) && !gruposJaReagendados.has(a.acordo_grupo_id ?? '') && (
                                       <Button
-                                        variant="ghost" size="icon" className="w-6 h-6 text-primary hover:bg-primary/10"
+                                        variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
                                         title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
                                         onClick={() => setReagendarAcordo(a)}
                                       >
-                                        <CalendarClock className="w-3 h-3" />
+                                        <CalendarClock className="w-4 h-4" />
                                       </Button>
                                     )}
-                                    {/* WhatsApp — oculto para PaguePay */}
                                     <Button
                                       variant="ghost" size="icon"
-                                      className={cn(
-                                        'w-6 h-6 hidden',
-                                        a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
-                                      )}
-                                      title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
-                                      onClick={() => enviarUmWhatsapp(a)}
-                                    >
-                                      <MessageSquare className="w-3 h-3" />
-                                    </Button>
-                                    <Button
-                                      variant="ghost" size="icon"
-                                      className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
+                                      className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
                                       title={isEditingThis ? 'Fechar editor' : 'Editar'}
                                       onClick={() => setEditandoInlineIdTabela(isEditingThis ? null : a.id)}
                                     >
-                                      <Edit className="w-3 h-3" />
+                                      <Edit className="w-4 h-4" />
                                     </Button>
+                                    {/* Separador visual antes do destrutivo */}
+                                    <span className="w-px h-5 bg-border mx-1 shrink-0" />
                                     <Button
                                       variant="ghost" size="icon"
-                                      className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                      className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
                                       title="Excluir acordo"
                                       disabled={excluindoId === a.id}
                                       onClick={() => setConfirmandoExclusao(a)}
                                     >
-                                      <Trash2 className="w-3 h-3" />
+                                      <Trash2 className="w-4 h-4" />
                                     </Button>
                                   </div>
                                 </td>
@@ -1391,14 +1422,27 @@ export default function Dashboard() {
 
             {/* Paginação */}
             {!loading && totalPages > 1 && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-xs text-muted-foreground">Página {currentPage} de {totalPages}</p>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>
-                    <ChevronLeft className="w-4 h-4 mr-1" /> Anterior
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                <p className="text-xs text-muted-foreground order-2 sm:order-1">
+                  Exibindo {((currentPage - 1) * PER_PAGE) + 1}–{Math.min(currentPage * PER_PAGE, totalCount)} de {totalCount} acordos
+                </p>
+                <div className="flex items-center gap-1 order-1 sm:order-2">
+                  <Button variant="outline" size="icon" className="w-8 h-8" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="Primeira página">
+                    <ChevronsLeft className="w-4 h-4" />
                   </Button>
-                  <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>
-                    Próximo <ChevronRight className="w-4 h-4 ml-1" />
+                  <Button variant="outline" size="icon" className="w-8 h-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} title="Página anterior">
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  {getPageNumbers(currentPage, totalPages).map((pg, i) =>
+                    pg === '...'
+                      ? <span key={`ellipsis-${i}`} className="w-8 h-8 flex items-center justify-center text-xs text-muted-foreground">…</span>
+                      : <Button key={pg} variant={pg === currentPage ? 'default' : 'outline'} size="icon" className="w-8 h-8 text-xs" onClick={() => setCurrentPage(pg as number)}>{pg}</Button>
+                  )}
+                  <Button variant="outline" size="icon" className="w-8 h-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} title="Próxima página">
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" size="icon" className="w-8 h-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} title="Última página">
+                    <ChevronsRight className="w-4 h-4" />
                   </Button>
                 </div>
               </div>

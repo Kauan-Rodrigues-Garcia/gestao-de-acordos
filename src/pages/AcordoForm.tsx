@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { motion } from 'framer-motion';
 import {
   Save, ArrowLeft, User, Hash,
-  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, MapPin, Link2
+  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, MapPin, Link2, ChevronDown,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
@@ -85,6 +85,7 @@ export default function AcordoForm() {
   const [loadingData, setLoadingData] = useState(isEdit);
   const [perfilLocal, setPerfilLocal] = useState<Perfil | null>(null);
   const [estadoSelecionado, setEstadoSelecionado] = useState('');
+  const [showObs, setShowObs] = useState(isEdit);
 
   const isPP = isPaguePlay(tenantSlug);
   const maxParcelas = getMaxParcelas(tenantSlug);
@@ -988,21 +989,23 @@ export default function AcordoForm() {
                     </Select>
                   </div>
 
-                  {/* Status */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Status *</Label>
-                    <Select
-                      value={watch('status')}
-                      onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
-                        <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
-                        <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* Status — apenas em modo edição */}
+                  {isEdit && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Status *</Label>
+                      <Select
+                        value={watch('status')}
+                        onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
+                      >
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
+                          <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
+                          <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                 </CardContent>
               </Card>
@@ -1062,26 +1065,35 @@ export default function AcordoForm() {
                 </CardContent>
               </Card>
 
-              {/* ── PP BLOCO 4: Link do Acordo ── */}
+              {/* ── PP BLOCO 4: Link do Acordo (colapsável) ── */}
               <Card className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                    <Link2 className="w-4 h-4" />
-                    Link do Acordo
-                    <span className="text-xs font-normal">(opcional)</span>
-                  </CardTitle>
+                  <button
+                    type="button"
+                    onClick={() => setShowObs(v => !v)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                      <Link2 className="w-4 h-4" />
+                      Link do Acordo
+                      <span className="text-xs font-normal">(opcional)</span>
+                    </CardTitle>
+                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', showObs && 'rotate-180')} />
+                  </button>
                 </CardHeader>
-                <CardContent>
-                  <Textarea
-                    {...register('observacoes')}
-                    placeholder="Cole aqui o link do acordo..."
-                    className="text-sm resize-none"
-                    rows={2}
-                  />
-                  <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                    Data de cadastro registrada automaticamente pelo sistema
-                  </p>
-                </CardContent>
+                {showObs && (
+                  <CardContent>
+                    <Textarea
+                      {...register('observacoes')}
+                      placeholder="Cole aqui o link do acordo..."
+                      className="text-sm resize-none"
+                      rows={2}
+                    />
+                    <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                      Data de cadastro registrada automaticamente pelo sistema
+                    </p>
+                  </CardContent>
+                )}
               </Card>
             </>
           ) : (
@@ -1246,44 +1258,56 @@ export default function AcordoForm() {
                     </div>
                   )}
 
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Status *</Label>
-                    <Select
-                      value={watch('status')}
-                      onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="verificar_pendente">Verificar</SelectItem>
-                        <SelectItem value="pago">Pago</SelectItem>
-                        <SelectItem value="nao_pago">Não Pago</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  {/* Status — apenas em modo edição */}
+                  {isEdit && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium">Status *</Label>
+                      <Select
+                        value={watch('status')}
+                        onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
+                      >
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="verificar_pendente">Verificar</SelectItem>
+                          <SelectItem value="pago">Pago</SelectItem>
+                          <SelectItem value="nao_pago">Não Pago</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
                 </CardContent>
               </Card>
 
-              {/* ══ BLOCO 4: Observações ══ */}
+              {/* ══ BLOCO 4: Observações (colapsável) ══ */}
               <Card className="border-border">
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                    <Info className="w-4 h-4" />
-                    Observações
-                    <span className="text-xs font-normal">(opcional)</span>
-                  </CardTitle>
+                  <button
+                    type="button"
+                    onClick={() => setShowObs(v => !v)}
+                    className="w-full flex items-center justify-between text-left"
+                  >
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
+                      <Info className="w-4 h-4" />
+                      Observações
+                      <span className="text-xs font-normal">(opcional)</span>
+                    </CardTitle>
+                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', showObs && 'rotate-180')} />
+                  </button>
                 </CardHeader>
-                <CardContent>
-                  <Textarea
-                    {...register('observacoes')}
-                    placeholder="Informações adicionais..."
-                    className="text-sm resize-none"
-                    rows={2}
-                  />
-                  <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                    Data de cadastro registrada automaticamente pelo sistema
-                  </p>
-                </CardContent>
+                {showObs && (
+                  <CardContent>
+                    <Textarea
+                      {...register('observacoes')}
+                      placeholder="Informações adicionais..."
+                      className="text-sm resize-none"
+                      rows={2}
+                    />
+                    <p className="text-[10px] text-muted-foreground/60 mt-1.5">
+                      Data de cadastro registrada automaticamente pelo sistema
+                    </p>
+                  </CardContent>
+                )}
               </Card>
             </>
           )}

@@ -4,8 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus, Search, MessageSquare, Edit,
   Filter, RefreshCw, X,
-  Trash2, ChevronLeft, ChevronRight, CheckCircle, Hash, MapPin, Link2,
-  Layers, Building2,
+  Trash2, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
+  CheckCircle, Hash, MapPin, Link2,
+  Layers, Building2, FileX,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -51,15 +52,21 @@ function buildMensagem(a: Acordo): string {
 // ─── Tabela Skeleton ────────────────────────────────────────────────────────
 function TableSkeleton() {
   return (
-    <div className="space-y-3 p-4">
-      {[...Array(5)].map((_, i) => (
-        <div key={i} className="flex items-center gap-4">
-          <Skeleton className="h-4 w-4 rounded" />
-          <Skeleton className="h-4 w-12" />
+    <div className="divide-y divide-border/50">
+      {[...Array(7)].map((_, i) => (
+        <div key={i} className="flex items-center gap-3 px-4 py-3">
+          <Skeleton className="h-4 w-4 rounded shrink-0" />
+          <Skeleton className="h-4 w-14 shrink-0 font-mono" />
+          <Skeleton className="h-4 w-36" />
           <Skeleton className="h-4 flex-1" />
-          <Skeleton className="h-4 w-20" />
-          <Skeleton className="h-4 w-16" />
-          <Skeleton className="h-8 w-8 rounded-full" />
+          <Skeleton className="h-5 w-20 rounded-full shrink-0" />
+          <Skeleton className="h-5 w-16 rounded-full shrink-0" />
+          <Skeleton className="h-4 w-10 shrink-0" />
+          <div className="flex gap-1 shrink-0">
+            <Skeleton className="h-8 w-8 rounded" />
+            <Skeleton className="h-8 w-8 rounded" />
+            <Skeleton className="h-8 w-8 rounded" />
+          </div>
         </div>
       ))}
     </div>
@@ -67,6 +74,16 @@ function TableSkeleton() {
 }
 
 const PER_PAGE = 60;
+
+function getPageNumbers(current: number, total: number): (number | '...')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages: (number | '...')[] = [1];
+  if (current > 3) pages.push('...');
+  for (let i = Math.max(2, current - 1); i <= Math.min(total - 1, current + 1); i++) pages.push(i);
+  if (current < total - 2) pages.push('...');
+  pages.push(total);
+  return pages;
+}
 
 type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
 
@@ -231,6 +248,14 @@ export default function Acordos() {
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje = getTodayISO();
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
+  const filtrosAtivosCount = [
+    busca,
+    filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
+    filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
+    filtroData,
+    filtroVinculo !== 'todos' ? filtroVinculo : '',
+    filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
+  ].filter(Boolean).length;
 
   // ── Mover acordos atrasados → nao_pago ──────────────────────────────────────
   // Guard via ref: evita loop (useEffect depende de `acordos`, patchAcordo previne refetch).
@@ -283,14 +308,24 @@ export default function Acordos() {
   }
 
  async function marcarComoPago(id: string) {
+   const statusAnterior = acordos.find(a => a.id === id)?.status ?? 'verificar_pendente';
    setAtualizandoStatus(id);
     patchAcordo(id, { status: 'pago' }); // Optimistic update
     const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
     if (error) {
-      patchAcordo(id, { status: acordos.find(a => a.id === id)?.status ?? 'verificar_pendente' }); // rollback
+      patchAcordo(id, { status: statusAnterior }); // rollback
       toast.error('Erro ao atualizar status');
     } else {
-      toast.success('Acordo marcado como Pago!');
+      toast.success('Acordo marcado como Pago!', {
+        duration: 5000,
+        action: {
+          label: 'Desfazer',
+          onClick: async () => {
+            patchAcordo(id, { status: statusAnterior });
+            await supabase.from('acordos').update({ status: statusAnterior }).eq('id', id);
+          },
+        },
+      });
     }
     setAtualizandoStatus(null);
   }
@@ -677,6 +712,44 @@ export default function Acordos() {
         {/* ── Filtros ── */}
         <Card className="border-border mb-4">
           <CardContent className="p-3">
+            {/* Chips de filtros ativos */}
+            {filtrosAtivosCount > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 mb-2.5 pb-2.5 border-b border-border/50">
+                <span className="text-[11px] font-medium text-muted-foreground">
+                  {filtrosAtivosCount} {filtrosAtivosCount === 1 ? 'filtro ativo' : 'filtros ativos'}:
+                </span>
+                {busca && (
+                  <button onClick={() => { setBusca(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    &quot;{busca}&quot; <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {filtroStatus && filtroStatus !== 'all' && (
+                  <button onClick={() => { setFiltroStatus(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    {statusLabels[filtroStatus] || filtroStatus} <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {filtroTipo && filtroTipo !== 'all' && (
+                  <button onClick={() => { setFiltroTipo(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    {tipoLabels[filtroTipo] || filtroTipo} <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {filtroData && (
+                  <button onClick={() => { setFiltroData(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    Data: {filtroData} <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {filtroVinculo !== 'todos' && (
+                  <button onClick={() => { setFiltroVinculo('todos'); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    {filtroVinculo === 'direto' ? 'Apenas Direto' : 'Apenas Extra'} <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+                {filtroOperador && filtroOperador !== 'all' && (
+                  <button onClick={() => { setFiltroOperador(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                    {operadoresMap[filtroOperador] || 'Operador'} <X className="w-2.5 h-2.5" />
+                  </button>
+                )}
+              </div>
+            )}
             <div className="flex flex-wrap gap-2 items-center">
               <div className="relative flex-1 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -795,11 +868,26 @@ export default function Acordos() {
                     )}
                     {acordosParaExibir.length === 0 ? (
                       <tr>
-                        <td colSpan={isPP ? 11 : 10} className="px-4 py-12 text-center">
-                          <div className="flex flex-col items-center gap-2 text-muted-foreground">
-                            <Filter className="w-8 h-8 opacity-30" />
-                            <p className="font-medium">Nenhum acordo encontrado</p>
-                            <p className="text-xs">Ajuste os filtros ou cadastre um novo acordo</p>
+                        <td colSpan={isPP ? 11 : 10} className="px-4 py-14 text-center">
+                          <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                            <div className="w-12 h-12 rounded-2xl bg-muted/60 flex items-center justify-center">
+                              <FileX className="w-6 h-6 opacity-40" />
+                            </div>
+                            <div>
+                              <p className="font-medium text-sm text-foreground/70">Nenhum acordo encontrado</p>
+                              <p className="text-xs text-muted-foreground/60 mt-0.5">
+                                {temFiltros ? 'Tente ajustar os filtros aplicados' : 'Comece cadastrando um novo acordo'}
+                              </p>
+                            </div>
+                            {temFiltros ? (
+                              <Button size="sm" variant="ghost" className="h-8 text-xs gap-1.5 mt-1" onClick={limparFiltros}>
+                                <X className="w-3.5 h-3.5" /> Limpar filtros
+                              </Button>
+                            ) : (
+                              <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 mt-1" onClick={() => setNovoInlineAberto(true)}>
+                                <Plus className="w-3.5 h-3.5" /> Novo Acordo
+                              </Button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -959,46 +1047,48 @@ export default function Acordos() {
                             </>
                           )}
                           <td className="px-3 py-2.5">
-                            <div className="flex items-center justify-end gap-1">
+                            <div className="flex items-center justify-end gap-0.5">
                               {a.status !== 'pago' && a.status !== 'nao_pago' && (
                                 <Button
-                                  variant="ghost" size="icon" className="w-6 h-6 text-success hover:bg-success/10"
+                                  variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                                   title="Marcar como Pago"
                                   disabled={atualizandoStatus === a.id}
                                   onClick={() => marcarComoPago(a.id)}
                                 >
-                                  <CheckCircle className="w-3 h-3" />
+                                  <CheckCircle className="w-4 h-4" />
                                 </Button>
                               )}
                               {/* Botão WhatsApp individual — oculto para PaguePay */}
                               <Button
                                 variant="ghost" size="icon"
                                 className={cn(
-                                  'w-6 h-6',
+                                  'w-8 h-8',
                                   a.whatsapp ? 'text-success hover:bg-success/10' : 'text-muted-foreground/30',
                                   isPP && 'hidden'
                                 )}
                                 title={a.whatsapp ? 'Enviar WhatsApp' : 'Sem WhatsApp'}
                                 onClick={() => enviarUmWhatsapp(a)}
                               >
-                                <MessageSquare className="w-3 h-3" />
+                                <MessageSquare className="w-4 h-4" />
                               </Button>
 
                               <Button
-                                variant="ghost" size="icon" className={cn('w-6 h-6', isEditingThis && 'bg-primary/10 text-primary')}
+                                variant="ghost" size="icon" className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
                                 title={isEditingThis ? 'Fechar editor' : 'Editar'}
                                 onClick={() => setEditandoInlineId(isEditingThis ? null : a.id)}
                               >
-                                <Edit className="w-3 h-3" />
+                                <Edit className="w-4 h-4" />
                               </Button>
+                              {/* Separador visual antes do destrutivo */}
+                              <span className="w-px h-5 bg-border mx-1 shrink-0" />
                               <Button
                                 variant="ghost" size="icon"
-                                className="w-6 h-6 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
                                 title="Excluir acordo"
                                 disabled={excluindoId === a.id}
                                 onClick={() => setConfirmandoExclusao(a)}
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
                           </td>
@@ -1041,11 +1131,28 @@ export default function Acordos() {
 
         {/* Paginação */}
         {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-between mt-4">
-            <p className="text-xs text-muted-foreground">Página {currentPage} de {totalPages}</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft className="w-4 h-4 mr-1" /> Anterior</Button>
-              <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Próximo <ChevronRight className="w-4 h-4 ml-1" /></Button>
+          <div className="flex flex-col sm:flex-row items-center justify-between mt-4 gap-3">
+            <p className="text-xs text-muted-foreground">
+              Exibindo {((currentPage - 1) * PER_PAGE) + 1}–{Math.min(currentPage * PER_PAGE, totalCount)} de {totalCount} acordos
+            </p>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(1)} title="Primeira página">
+                <ChevronsLeft className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} title="Anterior">
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              {getPageNumbers(currentPage, totalPages).map((p, i) =>
+                p === '...'
+                  ? <span key={`e${i}`} className="px-1 text-xs text-muted-foreground select-none">…</span>
+                  : <Button key={p} variant={p === currentPage ? 'default' : 'outline'} size="icon" className="h-8 w-8 text-xs" onClick={() => setCurrentPage(p as number)}>{p}</Button>
+              )}
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} title="Próxima">
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)} title="Última página">
+                <ChevronsRight className="w-4 h-4" />
+              </Button>
             </div>
           </div>
         )}
