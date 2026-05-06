@@ -6,7 +6,7 @@
  * Bookplay: navega automaticamente entre Dashboard (/) e Acordos (/acordos).
  * PaguePLAY: tudo no Dashboard — tabela de acordos fica dentro do {isPP && …}.
  *
- * Controlado por localStorage: key = `onboarding_v2_${userId}`.
+ * Controlado por localStorage: key = `onboarding_v3_${userId}`.
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
@@ -22,7 +22,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { isPaguePlay } from '@/lib/index';
 import { cn } from '@/lib/utils';
 
-const STORAGE_KEY = (uid: string) => `onboarding_v2_${uid}`;
+const STORAGE_KEY = (uid: string) => `onboarding_v3_${uid}`;
 const PAD    = 12;   // padding ao redor do elemento destacado
 const TW     = 308;  // largura do tooltip em px
 const GAP    = 18;   // espaço entre spotlight e tooltip
@@ -37,7 +37,8 @@ interface TourStep {
   emoji?:    string;
   title:     string;
   body:      string;
-  route?:    string; // navegar para esta rota antes de exibir o passo
+  route?:    string;   // navegar para esta rota antes de exibir o passo
+  spotMaxH?: number;   // limita a altura do spotlight (evita selecionar listas longas)
 }
 
 // ─── Definição dos passos por tenant ──────────────────────────────────────────
@@ -63,6 +64,7 @@ const STEPS_PP: TourStep[] = [
   },
   {
     target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/',
+    spotMaxH: 140,
     title: 'Tabela de acordos',
     body:  'Cada linha é um acordo. Use os botões de ação: marcar como pago, reagendar, editar ou excluir. Clique na linha para detalhes.',
   },
@@ -88,6 +90,7 @@ const STEPS_BOOKPLAY: TourStep[] = [
   },
   {
     target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/acordos',
+    spotMaxH: 140,
     title: 'Tabela de acordos',
     body:  'Cada linha é um acordo. Use os botões de ação: marcar como pago, reagendar, editar ou excluir. Clique na linha para detalhes.',
   },
@@ -106,25 +109,26 @@ function clamp(val: number, min: number, max: number) {
 
 interface SpotRect { x: number; y: number; w: number; h: number }
 
-function measureTarget(selector: string): SpotRect | null {
+function measureTarget(selector: string, maxH?: number): SpotRect | null {
   const el = document.querySelector(selector);
   if (!el) return null;
   const r = el.getBoundingClientRect();
+  const h = maxH ? Math.min(r.height, maxH) : r.height;
   return {
     x: r.left  - PAD,
     y: r.top   - PAD,
     w: r.width  + PAD * 2,
-    h: r.height + PAD * 2,
+    h: h        + PAD * 2,
   };
 }
 
-function useSpotRect(target: string | null, active: boolean): SpotRect | null {
+function useSpotRect(target: string | null, active: boolean, maxH?: number): SpotRect | null {
   const [rect, setRect] = useState<SpotRect | null>(null);
 
   useEffect(() => {
     if (!active || !target) { setRect(null); return; }
 
-    const update = () => setRect(measureTarget(target));
+    const update = () => setRect(measureTarget(target, maxH));
     const el = document.querySelector(target);
     if (!el) { setRect(null); return; }
 
@@ -259,7 +263,7 @@ export function OnboardingTour() {
 
   // ── Renderização ───────────────────────────────────────────────────────────
   const step       = STEPS[stepIdx];
-  const spotRect   = useSpotRect(step.target, active);
+  const spotRect   = useSpotRect(step.target, active, step.spotMaxH);
   const tooltipPos = computeTooltipStyle(step, spotRect, vw, vh);
   const isFirst    = stepIdx === 0;
   const isLast     = stepIdx === STEPS.length - 1;
