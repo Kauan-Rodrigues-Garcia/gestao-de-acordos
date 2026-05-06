@@ -84,7 +84,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
 
   if (filtros?.busca) {
     query = query.or(
-      `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%`
+      `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
     );
   }
 

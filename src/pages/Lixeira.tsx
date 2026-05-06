@@ -147,7 +147,8 @@ export default function Lixeira() {
       item.nr_cliente?.toLowerCase().includes(b) ||
       item.nome_cliente?.toLowerCase().includes(b) ||
       item.operador_nome?.toLowerCase().includes(b) ||
-      item.transferido_para_nome?.toLowerCase().includes(b)
+      item.transferido_para_nome?.toLowerCase().includes(b) ||
+      (item as { instituicao?: string | null }).instituicao?.toLowerCase().includes(b)
     );
   });
 
@@ -317,7 +318,7 @@ export default function Lixeira() {
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
-                      NR / Inscrição
+                      NR / Código
                     </th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">
                       Cliente
@@ -496,7 +497,7 @@ export default function Lixeira() {
                     </div>
                     <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-3 text-xs">
                       <div>
-                        <p className="text-muted-foreground mb-0.5">NR / Inscrição</p>
+                        <p className="text-muted-foreground mb-0.5">NR / Código</p>
                         <p className="font-mono font-bold text-foreground">{detalhe.nr_cliente || detalhe.instituicao || '—'}</p>
                       </div>
                       <div>

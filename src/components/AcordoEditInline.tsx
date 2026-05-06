@@ -91,7 +91,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
             acordo.id, // ignora o próprio acordo
           );
           if (conflito) {
-            const label = isPaguePlay ? 'Inscrição' : 'NR';
+            const label = isPaguePlay ? 'Código' : 'NR';
             toast.error(
               `${label} ${valorNovo} já está vinculado ao operador ${conflito.operadorNome}. ` +
               `Não é possível duplicar a tabulação pela edição.`,
@@ -102,7 +102,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
         } catch (e) {
           console.warn('[AcordoEditInline] falha ao verificar nr_registros', e);
           // Em caso de falha na verificação, NÃO bloqueia — mas avisa.
-          toast.warning('Não foi possível validar duplicidade de NR/Inscrição. Salvando mesmo assim.');
+          toast.warning('Não foi possível validar duplicidade de NR/Código. Salvando mesmo assim.');
         }
       }
     }
@@ -232,13 +232,13 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
                 {/* Inscrição */}
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium">{isPaguePlay ? 'Inscrição' : 'Instituição'}</Label>
+                  <Label className="text-xs font-medium">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
                   <div className="relative">
                     <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                     <Input
                       value={instituicao}
                       onChange={e => setInstituicao(e.target.value)}
-                      placeholder={isPaguePlay ? 'Número de inscrição (opcional)' : 'Instituição (opcional)'}
+                      placeholder={isPaguePlay ? 'Código (opcional)' : 'Instituição (opcional)'}
                       className="h-8 text-xs pl-6"
                     />
                   </div>

@@ -438,6 +438,26 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acordos, loading, isPP]);
 
+  // ── Atalhos de teclado: N = novo acordo, Esc = fechar inline ─────────────────
+  useEffect(() => {
+    if (!isPP) return;
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setNovoInlineAbertoTabela(v => !v);
+      }
+      if (e.key === 'Escape') {
+        setEditandoInlineIdTabela(null);
+        setDetalheInlineIdTabela(null);
+        setNovoInlineAbertoTabela(false);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isPP]);
+
   // ── handlers ─────────────────────────────────────────────────────────────────
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setCurrentPage(1);
@@ -880,7 +900,7 @@ export default function Dashboard() {
       </div>
 
       {/* Painel analítico — filtro de setor para admin + Analytics */}
-      <div className="mb-6 space-y-2">
+      <div className="mb-6 space-y-2" data-tour="metricas">
         {isAdmin && setoresList.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
             <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -966,6 +986,7 @@ export default function Dashboard() {
                 <Button
                   size="sm"
                   className="gap-1.5"
+                  data-tour="novo-acordo"
                   onClick={() => setNovoInlineAbertoTabela(v => !v)}
                 >
                   <Plus className="w-4 h-4" /> Novo Acordo
@@ -1051,13 +1072,13 @@ export default function Dashboard() {
             </div>
 
             {/* Filtros */}
-            <Card className="border-border mb-4">
+            <Card className="border-border mb-4" data-tour="filtros">
               <CardContent className="p-3">
                 <div className="flex flex-wrap gap-2 items-center">
                   <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar NR, nome, WhatsApp..."
+                      placeholder="Buscar Código, nome ou CPF..."
                       value={busca}
                       onChange={e => { setBusca(e.target.value); setCurrentPage(1); }}
                       className="pl-8 h-8 text-sm"
@@ -1112,7 +1133,7 @@ export default function Dashboard() {
             </Card>
 
             {/* Tabela completa */}
-            <Card className="border-border">
+            <Card className="border-border" data-tour="tabela-acordos">
               <CardContent className="p-0">
                 {loading ? <TableSkeleton /> : (
                   <div className="overflow-x-auto">
@@ -1127,7 +1148,7 @@ export default function Dashboard() {
                               onChange={selecionarTodos}
                             />
                           </th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
                           {/* ── ESTADO: dropdown de siglas ── */}
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
                             <div className="flex flex-col gap-1">
@@ -1355,6 +1376,7 @@ export default function Dashboard() {
                                       <Button
                                         variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                                         title="Marcar como Pago"
+                                        aria-label={`Marcar acordo de ${a.nome_cliente || a.instituicao || a.nr_cliente} como Pago`}
                                         disabled={atualizandoStatus === a.id}
                                         onClick={() => marcarComoPago(a.id)}
                                       >
@@ -1366,6 +1388,7 @@ export default function Dashboard() {
                                       <Button
                                         variant="ghost" size="icon" className="w-8 h-8 text-primary hover:bg-primary/10"
                                         title={`Reagendar parcela ${(a.numero_parcela ?? 1) + 1}/${a.parcelas}`}
+                                        aria-label={`Reagendar próxima parcela do acordo ${a.nome_cliente || a.instituicao}`}
                                         onClick={() => setReagendarAcordo(a)}
                                       >
                                         <CalendarClock className="w-4 h-4" />
@@ -1375,16 +1398,18 @@ export default function Dashboard() {
                                       variant="ghost" size="icon"
                                       className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
                                       title={isEditingThis ? 'Fechar editor' : 'Editar'}
+                                      aria-label={isEditingThis ? 'Fechar editor inline' : `Editar acordo de ${a.nome_cliente || a.instituicao}`}
                                       onClick={() => setEditandoInlineIdTabela(isEditingThis ? null : a.id)}
                                     >
                                       <Edit className="w-4 h-4" />
                                     </Button>
                                     {/* Separador visual antes do destrutivo */}
-                                    <span className="w-px h-5 bg-border mx-1 shrink-0" />
+                                    <span className="w-px h-5 bg-border mx-1 shrink-0" aria-hidden="true" />
                                     <Button
                                       variant="ghost" size="icon"
                                       className="w-8 h-8 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
                                       title="Excluir acordo"
+                                      aria-label={`Excluir acordo de ${a.nome_cliente || a.instituicao}`}
                                       disabled={excluindoId === a.id}
                                       onClick={() => setConfirmandoExclusao(a)}
                                     >

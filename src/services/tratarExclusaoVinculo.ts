@@ -116,7 +116,7 @@ export async function tratarExclusaoVinculo({
         empresa_id: acordo.empresa_id,
         titulo:     'Seu acordo EXTRA virou DIRETO',
         mensagem:
-          `O acordo ${isPaguePlay ? `da inscrição ${valorChave}` : `do NR ${valorChave}`} ` +
+          `O acordo ${isPaguePlay ? `do Código ${valorChave}` : `do NR ${valorChave}`} ` +
           `foi excluído pelo operador ${operadorExecutorNome ?? 'responsável'}. ` +
           `Como você tinha o vínculo EXTRA, seu acordo foi promovido a DIRETO ` +
           `e as tags de vínculo foram removidas.`,
@@ -147,7 +147,7 @@ export async function tratarExclusaoVinculo({
       empresa_id: acordo.empresa_id,
       titulo:     'Vínculo EXTRA removido',
       mensagem:
-        `O acordo EXTRA ${isPaguePlay ? `da inscrição ${valorChave}` : `do NR ${valorChave}`} ` +
+        `O acordo EXTRA ${isPaguePlay ? `do Código ${valorChave}` : `do NR ${valorChave}`} ` +
         `foi excluído pelo operador ${operadorExecutorNome ?? 'responsável'}. ` +
         `Seu acordo DIRETO continua ativo, mas agora sem a informação de vínculo EXTRA.`,
     });

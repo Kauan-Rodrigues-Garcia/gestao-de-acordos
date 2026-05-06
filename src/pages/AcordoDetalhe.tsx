@@ -128,7 +128,7 @@ export default function AcordoDetalhe() {
                     {[
                       { label: 'Nome do Profissional', value: acordo.nome_cliente, icon: User },
                       { label: 'CPF', value: acordo.nr_cliente, icon: Hash, mono: true },
-                      { label: 'Inscrição', value: acordo.instituicao || '-', icon: Building2 },
+                      { label: 'Código', value: acordo.instituicao || '-', icon: Building2 },
                       { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
                       { label: 'Estado', value: extractEstado(acordo.observacoes) || '-', icon: MapPin },
                       { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },

@@ -571,7 +571,7 @@ export function AcordoNovoInline({
     if (!vencimento)                        return 'Data de vencimento obrigatória';
     const v = parseCurrencyInput(valorStr);
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
-    if (isPaguePlay && !instituicao.trim()) return 'Inscrição é obrigatória';
+    if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
     return null;
   }
 
@@ -651,7 +651,7 @@ export function AcordoNovoInline({
       // O cache local (Realtime) é usado apenas para feedback visual enquanto digita.
       const campoCampo: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPaguePlay ? instituicao.trim() : nrCliente.trim();
-      const label           = isPaguePlay ? 'Inscrição' : 'NR';
+      const label           = isPaguePlay ? 'Código' : 'NR';
 
       if (nrParaVerificar && empresa?.id) {
         // 1. Verificar no banco (fonte de verdade garantida)
@@ -898,7 +898,7 @@ export function AcordoNovoInline({
         return;
       }
 
-      const labelNR   = isPaguePlay ? 'Inscrição' : 'NR';
+      const labelNR   = isPaguePlay ? 'Código' : 'NR';
       const nrLogLabel =
         ((isPaguePlay ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)
           ?.trim() || '—';
@@ -1206,11 +1206,11 @@ export function AcordoNovoInline({
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {/* Inscrição = NR único para PaguePay */}
                   <div className="space-y-1">
-                    <Label className="text-xs">Inscrição *</Label>
+                    <Label className="text-xs">Código *</Label>
                     <Input
                       value={instituicao}
                       onChange={(e) => setInstituicao(e.target.value)}
-                      placeholder="Número de inscrição"
+                      placeholder="Código"
                       className="h-8 text-xs"
                     />
                   </div>

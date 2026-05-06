@@ -403,7 +403,7 @@ export function ModalEditarAcordoParcelado({
               <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="h-8 text-xs font-mono" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'Inscrição' : 'Instituição'}</Label>
+              <Label className="text-xs">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
               <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} className="h-8 text-xs" />
             </div>
             <div className="space-y-1">
@@ -767,7 +767,7 @@ export function AcordoDetalheInline({
               {/* ─── Grid de campos ─── */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 text-sm">
                 {isPaguePlay && acordoLocal.instituicao && (
-                  <Campo icon={Building2} label="Inscrição" value={acordoLocal.instituicao} />
+                  <Campo icon={Building2} label="Código" value={acordoLocal.instituicao} />
                 )}
                 {acordoLocal.nr_cliente && (
                   <Campo icon={Hash} label={isPaguePlay ? 'CPF' : 'NR'} value={acordoLocal.nr_cliente} mono />
@@ -979,7 +979,7 @@ export function AcordoDetalheInline({
         onClose={() => setModalExtraDiretoOpen(false)}
         executando={executandoExtraDireto}
         operadorDiretoNome={acordoLocal.vinculo_operador_nome || 'outro operador'}
-        nrLabel={isPaguePlay ? `Inscrição ${acordoLocal.instituicao ?? '—'}` : `NR ${acordoLocal.nr_cliente ?? '—'}`}
+        nrLabel={isPaguePlay ? `Código ${acordoLocal.instituicao ?? '—'}` : `NR ${acordoLocal.nr_cliente ?? '—'}`}
         precisaAutorizacao={!perfil || !['administrador', 'super_admin', 'lider', 'elite', 'gerencia', 'diretoria'].includes(String(perfil.perfil || '').toLowerCase())}
         onConfirmar={async (liderCreds) => {
           if (!perfil || !empresa) return;
@@ -1091,7 +1091,7 @@ export function AcordoDetalheInline({
                   titulo: 'Acordo convertido em direto',
                   mensagem:
                     `O operador ${perfil.nome} assumiu como direto o acordo do ` +
-                    `${isPaguePlay ? `inscrição ${valorChave}` : `NR ${valorChave}`}. ` +
+                    `${isPaguePlay ? `Código ${valorChave}` : `NR ${valorChave}`}. ` +
                     `O acordo foi removido do seu painel.` +
                     (liderNomeAutorizador ? ` (Autorizado por ${liderNomeAutorizador})` : ''),
                 });

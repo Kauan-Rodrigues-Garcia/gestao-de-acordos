@@ -65,7 +65,7 @@ const schemaPP = z.object({
   tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
   parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
   whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
-  instituicao: z.string().min(1, 'Inscrição é obrigatória').max(100, 'Nome da instituição muito longo'),
+  instituicao: z.string().min(1, 'Código é obrigatório').max(100, 'Código muito longo'),
   status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
   observacoes: z.string().max(500, 'Campo muito longo').optional(),
 });
@@ -270,7 +270,7 @@ export default function AcordoForm() {
       const nrParaVerificar = isPP
         ? (data.instituicao ?? '').trim()
         : nrTrimmed;
-      const labelNr = isPP ? 'Inscrição' : 'NR';
+      const labelNr = isPP ? 'Código' : 'NR';
 
       const nrOriginal = isPP ? null : nrOriginalEdit;
       const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
@@ -568,7 +568,7 @@ export default function AcordoForm() {
         return;
       }
 
-      const labelNR    = isPP ? 'Inscrição' : 'NR';
+      const labelNR    = isPP ? 'Código' : 'NR';
       const nrLogLabel = ((isPP ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
       const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
 
@@ -878,12 +878,12 @@ export default function AcordoForm() {
 
                   {/* Inscrição — obrigatório no PP */}
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Inscrição *</Label>
+                    <Label className="text-xs font-semibold text-primary">Código *</Label>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
                       <Input
                         {...register('instituicao')}
-                        placeholder="Número de inscrição"
+                        placeholder="Código"
                         className={cn(
                           'h-10 text-sm pl-8 border-primary/40 focus:border-primary',
                           errors.instituicao && 'border-destructive'

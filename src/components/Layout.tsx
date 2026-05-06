@@ -28,7 +28,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Building2, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp,
+  Camera, Loader2, Trash2, TrendingUp, Bell,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -42,6 +42,10 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
+import { HelpDrawer } from './HelpDrawer';
+import { OnboardingTour } from './OnboardingTour';
+import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
+import { Bell } from 'lucide-react';
 
 interface NavItem {
   label: string;
@@ -151,6 +155,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isPP = isPaguePlay(tenantSlug);
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const { naoLidas, animarBadge } = useNotificacoesCount();
 
   // Filtra por role, visibilidade PaguePay e permissões configuráveis.
   // Lógica de UNIÃO: item visível se o perfil está em roles OU se tem a permissão ativa.
@@ -318,6 +323,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
+            {/* Badge de notificações — indica novas sem abrir o painel */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 text-muted-foreground hover:text-foreground relative"
+              title={naoLidas > 0 ? `${naoLidas} notificação${naoLidas > 1 ? 'ões' : ''} não lida${naoLidas > 1 ? 's' : ''}` : 'Notificações'}
+              aria-label={`Notificações${naoLidas > 0 ? ` — ${naoLidas} não lida${naoLidas > 1 ? 's' : ''}` : ''}`}
+              onClick={() => document.querySelector<HTMLButtonElement>('[data-notif-trigger]')?.click()}
+            >
+              <Bell className="w-4 h-4" />
+              {naoLidas > 0 && (
+                <span
+                  className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center leading-none transition-transform ${animarBadge ? 'scale-125' : 'scale-100'}`}
+                >
+                  {naoLidas > 99 ? '99+' : naoLidas}
+                </span>
+              )}
+            </Button>
+            <HelpDrawer />
             <ThemeToggle />
             {/* Perfil no header — clicável para upload de foto */}
             <Popover open={perfilPopoverOpen} onOpenChange={setPerfilPopoverOpen}>
@@ -426,6 +450,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <main className="flex-1 overflow-y-auto bg-background">
           {children}
         </main>
+        <OnboardingTour />
       </div>
     </div>
   );

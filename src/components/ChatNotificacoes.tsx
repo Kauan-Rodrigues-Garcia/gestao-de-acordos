@@ -487,6 +487,7 @@ export function ChatNotificacoes() {
 
       {/* ── Botão flutuante ── */}
       <motion.button
+        data-notif-trigger
         whileHover={{ scale: 1.07 }}
         whileTap={{ scale: 0.95 }}
         onClick={() => {
