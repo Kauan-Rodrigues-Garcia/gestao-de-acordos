@@ -301,9 +301,10 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  const { isPaguePlay: isPP } = useTenant();
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
   // Métricas Direto & Extra (incluindo "Agendado restante no mês") valem para PaguePlay e Bookplay.
-  const mostraAgendadoRestante = tenantSlug === 'pagueplay' || tenantSlug === 'bookplay';
+  const mostraAgendadoRestante = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
   // Bookplay (não-PaguePay): analytics sempre expandido, sem botão de ocultar
   const alwaysOpen = !isPP;
   const [open, setOpen] = useState(() => !isPP);
