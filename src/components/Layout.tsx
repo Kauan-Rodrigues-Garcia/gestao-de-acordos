@@ -45,7 +45,6 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
-import { Bell } from 'lucide-react';
 
 interface NavItem {
   label: string;
