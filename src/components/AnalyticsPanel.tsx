@@ -21,13 +21,13 @@ import {
 } from 'recharts';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAuth } from '@/hooks/useAuth';
-import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  isPaguePlay, formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
+  formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getTodayISO, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL,
   calcHO,
 } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -293,14 +293,15 @@ interface AnalyticsPanelProps {
   equipeFiltroExterno?: string | null;
   /** Operador individual para Elite em visão individual */
   operadorFiltroExterno?: string | null;
+  /** Quando true (PaguePLAY + config ativada), mostra métricas separadas Direto/Extra */
+  temLogicaDiretoExtra?: boolean;
 }
 
-export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno, operadorFiltroExterno }: AnalyticsPanelProps = {}) {
+export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno, operadorFiltroExterno, temLogicaDiretoExtra = false }: AnalyticsPanelProps = {}) {
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
-  const { tenantSlug } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const isPP = isPaguePlay(tenantSlug);
+  const { isPaguePlay: isPP } = useTenant();
   // Métricas Direto & Extra (incluindo "Agendado restante no mês") valem para PaguePlay e Bookplay.
   const mostraAgendadoRestante = tenantSlug === 'pagueplay' || tenantSlug === 'bookplay';
   // Bookplay (não-PaguePay): analytics sempre expandido, sem botão de ocultar
@@ -434,6 +435,26 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
   }, [valorRecebidoMes, mes, ano]);
 
+  // Direto / Extra split — só calculado quando a lógica está ativa
+  const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
+    if (!temLogicaDiretoExtra || !isPP) {
+      return { valorRecebidoDireto: 0, valorRecebidoExtra: 0, valorHODireto: 0, valorHOExtra: 0, qtdDireto: 0, qtdExtra: 0 };
+    }
+    const pagos = (acordosMes ?? []).filter(a => a.status === 'pago');
+    const direto = pagos.filter(a => a.tipo_vinculo !== 'extra');
+    const extra  = pagos.filter(a => a.tipo_vinculo === 'extra');
+    const vDireto = direto.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const vExtra  = extra.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    return {
+      valorRecebidoDireto: vDireto,
+      valorRecebidoExtra:  vExtra,
+      valorHODireto:  vDireto * PP_HO_PERCENTUAL,
+      valorHOExtra:   vExtra  * PP_HO_PERCENTUAL,
+      qtdDireto: direto.length,
+      qtdExtra:  extra.length,
+    };
+  }, [acordosMes, temLogicaDiretoExtra, isPP]);
+
   // ── Cor do anel central baseada no percentual ──────────────────────────────
   const donutColor = percMeta >= 100
     ? '#22c55e'          // verde: meta batida
@@ -508,11 +529,23 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                 {formatCurrency(valorPrincipal)}
               </span>
             </div>
-            {isPP && (
+            {isPP && !temLogicaDiretoExtra && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
                 <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorRecebidoMes)}</span>
               </div>
+            )}
+            {isPP && temLogicaDiretoExtra && (
+              <>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Direto</span>
+                  <span className="font-semibold tabular-nums font-mono text-emerald-500">{formatCurrency(valorHODireto)}</span>
+                </div>
+                <div className="flex flex-col items-end">
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Extra</span>
+                  <span className="font-semibold tabular-nums font-mono text-violet-500">{formatCurrency(valorHOExtra)}</span>
+                </div>
+              </>
             )}
             {!isPP && (
               <div className="flex flex-col items-end">
@@ -724,6 +757,44 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                             </span>
                           }
                           sub="18,76% do bruto recebido"
+                        />
+                      </>
+                    )}
+
+                    {/* Cards Direto / Extra — somente PaguePLAY com lógica ativada */}
+                    {isPP && temLogicaDiretoExtra && (
+                      <>
+                        <MetricCard
+                          label="Recebido Direto"
+                          icon={<DollarSign className="w-4 h-4" />}
+                          accentColor="#22c55e"
+                          gradientFrom="#22c55e"
+                          value={<span className="text-emerald-500">{formatCurrency(valorRecebidoDireto)}</span>}
+                          sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · H.O. ${formatCurrency(valorHODireto)}`}
+                        />
+                        <MetricCard
+                          label="H.O. Direto"
+                          icon={<DollarSign className="w-4 h-4" />}
+                          accentColor="#10b981"
+                          gradientFrom="#10b981"
+                          value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
+                          sub={`24,96% de ${formatCurrency(valorRecebidoDireto)}`}
+                        />
+                        <MetricCard
+                          label="Recebido Extra"
+                          icon={<DollarSign className="w-4 h-4" />}
+                          accentColor="#8b5cf6"
+                          gradientFrom="#8b5cf6"
+                          value={<span className="text-violet-500">{formatCurrency(valorRecebidoExtra)}</span>}
+                          sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · H.O. ${formatCurrency(valorHOExtra)}`}
+                        />
+                        <MetricCard
+                          label="H.O. Extra"
+                          icon={<DollarSign className="w-4 h-4" />}
+                          accentColor="#7c3aed"
+                          gradientFrom="#7c3aed"
+                          value={<span className="text-violet-500">{formatCurrency(valorHOExtra)}</span>}
+                          sub={`24,96% de ${formatCurrency(valorRecebidoExtra)}`}
                         />
                       </>
                     )}

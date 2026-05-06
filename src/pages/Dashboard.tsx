@@ -940,6 +940,7 @@ export default function Dashboard() {
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
+          temLogicaDiretoExtra={isPP && usuarioTemLogicaDiretoExtra}
         />
       </div>
 
