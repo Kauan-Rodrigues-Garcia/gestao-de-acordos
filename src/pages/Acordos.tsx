@@ -625,6 +625,7 @@ export default function Acordos() {
             </Button>
             <Button
               size="sm"
+              data-tour="novo-acordo"
               onClick={() => setNovoInlineAberto(v => !v)}
               className={cn(
                 'gap-1.5 shadow-sm transition-all',
@@ -710,7 +711,7 @@ export default function Acordos() {
         )}
 
         {/* ── Filtros ── */}
-        <Card className="border-border mb-4">
+        <Card className="border-border mb-4" data-tour="filtros">
           <CardContent className="p-3">
             {/* Chips de filtros ativos */}
             {filtrosAtivosCount > 0 && (
@@ -814,7 +815,7 @@ export default function Acordos() {
         </Card>
 
         {/* ── Tabela ── */}
-        <Card className="border-border">
+        <Card className="border-border" data-tour="tabela-acordos">
           <CardContent className="p-0">
             {loading ? <TableSkeleton /> : (
               <div className="overflow-x-auto">
