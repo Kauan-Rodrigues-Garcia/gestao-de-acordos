@@ -5,7 +5,7 @@
  * Usa react-joyride com tema personalizado alinhado ao design system.
  */
 import { useState, useEffect, useCallback } from 'react';
-import Joyride, { type CallBackProps, type Step, STATUS, EVENTS } from 'react-joyride';
+import { Joyride, type CallBackProps, type Step, STATUS, EVENTS } from 'react-joyride';
 import { useAuth } from '@/hooks/useAuth';
 
 const STORAGE_KEY = (uid: string) => `onboarding_v1_${uid}`;
