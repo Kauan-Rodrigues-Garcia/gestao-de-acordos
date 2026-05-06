@@ -39,6 +39,7 @@ interface TourStep {
   body:      string;
   route?:    string;   // navegar para esta rota antes de exibir o passo
   spotMaxH?: number;   // limita a altura do spotlight (evita selecionar listas longas)
+  scrollPx?: number;   // distância em px do topo do elemento ao topo da viewport após scroll
 }
 
 // ─── Definição dos passos por tenant ──────────────────────────────────────────
@@ -65,6 +66,7 @@ const STEPS_PP: TourStep[] = [
   {
     target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/',
     spotMaxH: 140,
+    scrollPx: 320,
     title: 'Tabela de acordos',
     body:  'Cada linha é um acordo. Use os botões de ação: marcar como pago, reagendar, editar ou excluir. Clique na linha para detalhes.',
   },
@@ -91,6 +93,7 @@ const STEPS_BOOKPLAY: TourStep[] = [
   {
     target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/acordos',
     spotMaxH: 140,
+    scrollPx: 320,
     title: 'Tabela de acordos',
     body:  'Cada linha é um acordo. Use os botões de ação: marcar como pago, reagendar, editar ou excluir. Clique na linha para detalhes.',
   },
@@ -122,7 +125,7 @@ function measureTarget(selector: string, maxH?: number): SpotRect | null {
   };
 }
 
-function useSpotRect(target: string | null, active: boolean, maxH?: number): SpotRect | null {
+function useSpotRect(target: string | null, active: boolean, maxH?: number, scrollPx?: number): SpotRect | null {
   const [rect, setRect] = useState<SpotRect | null>(null);
 
   useEffect(() => {
@@ -132,14 +135,22 @@ function useSpotRect(target: string | null, active: boolean, maxH?: number): Spo
     const el = document.querySelector(target);
     if (!el) { setRect(null); return; }
 
-    // Scroll suave até o elemento (garante que não esteja fora da viewport)
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    if (scrollPx !== undefined) {
+      // Scroll customizado: posiciona o topo do elemento a `scrollPx` px do topo da viewport.
+      // Necessário quando o elemento é muito alto e o spotlight mostra apenas o topo
+      // (evita que o scrollIntoView role para o centro da lista).
+      const absTop = el.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo({ top: Math.max(0, absTop - scrollPx), behavior: 'smooth' });
+    } else {
+      // Scroll mínimo: só rola o suficiente para tornar o elemento visível
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
 
     // Medição imediata (para elementos já visíveis)
     update();
 
-    // Re-medição após o scroll terminar (~350 ms)
-    const t = setTimeout(update, 350);
+    // Re-medição após o scroll terminar (~380 ms)
+    const t = setTimeout(update, 380);
 
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -152,7 +163,7 @@ function useSpotRect(target: string | null, active: boolean, maxH?: number): Spo
       window.removeEventListener('resize', update);
       window.removeEventListener('scroll', update);
     };
-  }, [target, active]);
+  }, [target, active, maxH, scrollPx]);
 
   return rect;
 }
@@ -263,7 +274,7 @@ export function OnboardingTour() {
 
   // ── Renderização ───────────────────────────────────────────────────────────
   const step       = STEPS[stepIdx];
-  const spotRect   = useSpotRect(step.target, active, step.spotMaxH);
+  const spotRect   = useSpotRect(step.target, active, step.spotMaxH, step.scrollPx);
   const tooltipPos = computeTooltipStyle(step, spotRect, vw, vh);
   const isFirst    = stepIdx === 0;
   const isLast     = stepIdx === STEPS.length - 1;
