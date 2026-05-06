@@ -26,7 +26,8 @@ import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, getStatusLabels, isPaguePlay, isPerfilAdmin, isPerfilLider } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { calcularMetricasMes } from '@/services/acordos.service';
 import { cn } from '@/lib/utils';
 
@@ -150,9 +151,9 @@ interface AnaliticoOperadorProps {
 }
 
 function AnaliticoOperador({ operadorId, operadorNome, fotoUrl, onFechar }: AnaliticoOperadorProps) {
-  const { tenantSlug } = useEmpresa();
-  const statusLabels = getStatusLabels(tenantSlug);
-  const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
+  const _t = useTenant();
+  const statusLabels = _t.statusLabels;
+  const nrLabel = _t.isPaguePlay ? 'CPF' : 'NR';
 
   const [acordos,       setAcordos]       = useState<Acordo[]>([]);
   const [loadingLocal,  setLoadingLocal]  = useState(true);
@@ -419,9 +420,10 @@ interface OperadorInfo { id: string; nome: string; perfil: Perfil; }
 
 export default function PainelLider() {
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
-  const statusLabels = getStatusLabels(tenantSlug);
-  const nrLabel = isPaguePlay(tenantSlug) ? 'CPF' : 'NR';
+  const { empresa } = useEmpresa();
+  const tenant = useTenant();
+  const statusLabels = tenant.statusLabels;
+  const nrLabel = tenant.isPaguePlay ? 'CPF' : 'NR';
 
   const [operadores,          setOperadores]          = useState<Perfil[]>([]);
   const [acordosPorOperador,  setAcordosPorOperador]  = useState<Record<string, Acordo[]>>({});

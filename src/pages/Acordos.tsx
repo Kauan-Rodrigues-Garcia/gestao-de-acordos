@@ -23,10 +23,10 @@ import { toast } from 'sonner';
 import {
   ROUTE_PATHS, STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, getTodayISO, isAtrasado,
-  isPaguePlay, getStatusLabels, getTipoLabels,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isPerfilLider,
 } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -96,15 +96,16 @@ function ensureAbsoluteUrl(url: string): string {
 
 export default function Acordos() {
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const isPP = isPaguePlay(tenantSlug);
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
 
   // Nota: PaguePlay usa o Dashboard como tela principal — o redirecionamento
   // é feito após todos os Hooks (ver antes do return principal), para não
   // violar as regras de hooks (rules-of-hooks).
-  const statusLabels = getStatusLabels(tenantSlug);
-  const tipoLabels   = getTipoLabels(tenantSlug);
+  const statusLabels = tenant.statusLabels;
+  const tipoLabels   = tenant.tipoLabels;
   const [searchParams, setSearchParams] = useSearchParams();
 
   // Estados locais sincronizados com URL

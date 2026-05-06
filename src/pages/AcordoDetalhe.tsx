@@ -14,19 +14,20 @@ import { toast } from 'sonner';
 import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
-  isPaguePlay, getStatusLabels,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo,
 } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 
 export default function AcordoDetalhe() {
   const { id } = useParams<{ id: string }>();
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa } = useEmpresa();
   const navigate = useNavigate();
-  const isPP = isPaguePlay(tenantSlug);
-  const statusLabels = getStatusLabels(tenantSlug);
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
+  const statusLabels = tenant.statusLabels;
   const [acordo, setAcordo] = useState<Acordo | null>(null);
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
   const [loading, setLoading] = useState(true);

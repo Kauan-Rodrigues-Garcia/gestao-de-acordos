@@ -3,6 +3,17 @@ import { Toaster } from '@/components/ui/sonner';
 import { AuthProvider } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { ThemeProvider } from 'next-themes';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60 * 1000,
+      refetchOnWindowFocus: true,
+      retry: 1,
+    },
+  },
+});
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
@@ -81,6 +92,7 @@ function TenantThemeApplier(): null {
 export default function App() {
   return (
     <ErrorBoundary scope="App" fallbackMessage="Erro crítico na aplicação. Recarregue a página.">
+    <QueryClientProvider client={queryClient}>
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
       <AuthProvider>
         <EmpresaProvider>
@@ -199,6 +211,7 @@ export default function App() {
         </EmpresaProvider>
       </AuthProvider>
     </ThemeProvider>
+    </QueryClientProvider>
     </ErrorBoundary>
   );
 }

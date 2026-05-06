@@ -83,6 +83,8 @@ export interface Acordo {
   setor_id: string | null;
   empresa_id?: string;
   observacoes: string | null;
+  /** Estado (UF) — coluna dedicada, substitui o hack [ESTADO:SP] em observacoes */
+  estado_uf: string | null;
   instituicao: string | null;
   /** UUID que agrupa parcelas de um mesmo acordo parcelado */
   acordo_grupo_id?: string | null;

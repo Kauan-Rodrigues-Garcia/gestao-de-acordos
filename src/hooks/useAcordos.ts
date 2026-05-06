@@ -1,12 +1,12 @@
 /**
- * src/hooks/useAcordos.ts  — v4 (Fase 3: canal centralizado)
+ * src/hooks/useAcordos.ts  — v5 (React Query)
  *
- * ─── O QUE MUDOU EM RELAÇÃO À v3 ─────────────────────────────────────────────
- *  • Removido: canal Supabase próprio (causava conflito com N instâncias do hook)
- *  • Adicionado: subscribe/unsubscribe no RealtimeAcordosProvider (1 canal global)
- *  • realtimeStatus agora reflete o estado do canal central (compartilhado)
- *  • Cada instância recebe o mesmo evento e aplica matchesFiltros independentemente
- *  • Canal de métricas (useDashboardMetricas) também migrado para o provider
+ * ─── O QUE MUDOU EM RELAÇÃO À v4 ─────────────────────────────────────────────
+ *  • Internamente migrado para @tanstack/react-query (useQuery / setQueryData)
+ *  • Estado manual (useState) removido — React Query gerencia loading/error/cache
+ *  • staleTime: 60s e refetchOnWindowFocus nativo substituem o polling manual
+ *  • optimistic updates via queryClient.setQueryData (mesmo comportamento público)
+ *  • API pública (UseAcordosResult) 100% compatível — zero mudanças nos callers
  *
  * ─── API PÚBLICA ─────────────────────────────────────────────────────────────
  *  acordos            – lista atual (atualiza cirurgicamente)
@@ -19,7 +19,8 @@
  *  removeAcordo(id)          – remove item localmente (optimistic)
  *  addAcordo(acordo)         – insere item localmente (optimistic)
  */
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import { useEffect, useCallback, useRef, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, Acordo } from '@/lib/supabase';
 import { useAuth }    from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -69,6 +70,8 @@ export interface UseAcordosResult {
   addAcordo: (acordo: Acordo) => void;
 }
 
+type QueryData = { data: Acordo[]; count: number };
+
 // ─── Helper: verifica se um acordo atende os filtros ativos ──────────────────
 function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
   if (!filtros) return true;
@@ -79,7 +82,6 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
   if (filtros.operador_id && acordo.operador_id !== filtros.operador_id) return false;
   if (filtros.setor_id    && acordo.setor_id    !== filtros.setor_id)    return false;
   if (filtros.empresa_id  && acordo.empresa_id  !== filtros.empresa_id)  return false;
-  // equipe_id: filtra por lista de operadores resolvidos (equipe_id está em perfis, não em acordos)
   if (filtros._operadoresEquipeIds) {
     if (!filtros._operadoresEquipeIds.includes(acordo.operador_id)) return false;
   }
@@ -103,54 +105,13 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
 
 // ─── Hook principal ───────────────────────────────────────────────────────────
 export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
-  const { perfil }   = useAuth();
-  const { empresa }  = useEmpresa();
+  const { perfil }       = useAuth();
+  const { empresa }      = useEmpresa();
+  const queryClient      = useQueryClient();
 
-  const [acordos,    setAcordos]    = useState<Acordo[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [loading,    setLoading]    = useState(true);
-  const [error,      setError]      = useState<string | null>(null);
+  const empresaId = empresa?.id ?? perfil?.empresa_id;
 
-  // Resolver operadores da equipe quando equipe_id mudar
-  // Armazena internamente para uso no matchesFiltros (realtime)
-  const [operadoresEquipeIds, setOperadoresEquipeIds] = useState<string[] | null>(null);
-  useEffect(() => {
-    if (!filtros?.equipe_id) {
-      setOperadoresEquipeIds(null);
-      return;
-    }
-    const eId = filtros.equipe_id;
-    const eEmpresaId = filtros.empresa_id ?? empresa?.id ?? perfil?.empresa_id;
-    let q = supabase.from('perfis').select('id').eq('equipe_id', eId);
-    if (eEmpresaId) q = q.eq('empresa_id', eEmpresaId);
-    q.then(({ data }) => {
-      setOperadoresEquipeIds(((data as { id: string }[]) ?? []).map(m => m.id));
-    });
-  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);  
-
-  // Canal centralizado
-  const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
-
-  // Refs para guards e acesso estável a filtros dentro de callbacks
-  const mountedRef  = useRef(true);
-  // Inclui _operadoresEquipeIds para que o matchesFiltros do realtime use os membros resolvidos
-  const filtrosComEquipe = filtros
-    ? { ...filtros, ...(operadoresEquipeIds !== null ? { _operadoresEquipeIds: operadoresEquipeIds } : {}) }
-    : filtros;
-  const filtrosRef  = useRef(filtrosComEquipe);
-  filtrosRef.current = filtrosComEquipe;
-
-  // ID único e estável por instância do hook
-  const instanceId = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
-
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
-
-  // ── Estabiliza filtros com useMemo ────────────────────────────────────────────
-  // Serializa cada campo individualmente. Isso evita recriar useCallback
-  // quando a referencia do objeto filtros muda sem mudar os valores.
+  // ── Estabiliza filtros com useMemo ────────────────────────────────────────
   const filtrosEstavel = useMemo(() => {
     if (!filtros) return '';
     const {
@@ -165,141 +126,135 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
-    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio, filtros?.data_fim,
-    filtros?.busca, filtros?.apenas_hoje, filtros?.page, filtros?.perPage,
-    filtros?.enableRealtime,
+    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
+    filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
+    filtros?.perPage, filtros?.enableRealtime,
   ]);
 
-  // Rastreia o timestamp do último fetch para o silent refresh por visibilidade
-  const lastFetchAt = useRef<number>(0);
+  const queryKey = useMemo(
+    () => ['acordos', empresaId ?? '', filtrosEstavel] as const,
+    [empresaId, filtrosEstavel],
+  );
 
-  // ── fetch interno — showLoading=false para silent refresh (sem spinner) ───
-  const _fetch = useCallback(async (showLoading: boolean) => {
-    const empresaId = empresa?.id ?? perfil?.empresa_id;
-    if (!perfil || !empresaId) return;
-    lastFetchAt.current = Date.now();
-    if (showLoading) setLoading(true);
-    setError(null);
-    try {
-      const { data, count } = await fetchAcordosService({
+  // ── React Query — gerencia loading, error, cache e refetch-on-focus ───────
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey,
+    queryFn: () =>
+      fetchAcordosService({
         ...filtros,
         empresa_id: filtros?.empresa_id ?? empresaId,
-      });
-      if (!mountedRef.current) return;
-      setAcordos(data);
-      setTotalCount(count);
-    } catch (e) {
-      if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : 'Erro ao carregar acordos');
-      console.error('[useAcordos]', e);
-    } finally {
-      if (mountedRef.current && showLoading) setLoading(false);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfil, empresa?.id, perfil?.empresa_id, filtrosEstavel]);
+      }),
+    enabled: !!perfil && !!empresaId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
 
-  // ── fetch público — exibe spinner (montagem ou refresh manual) ───────────
-  const fetchAcordos = useCallback(() => _fetch(true), [_fetch]);
+  // ── Resolver operadores da equipe (para filtro de realtime) ───────────────
+  const equipeIdsRef = useRef<string[] | null>(null);
+  useEffect(() => {
+    if (!filtros?.equipe_id) { equipeIdsRef.current = null; return; }
+    const eId        = filtros.equipe_id;
+    const eEmpresaId = filtros.empresa_id ?? empresa?.id ?? perfil?.empresa_id;
+    let q = supabase.from('perfis').select('id').eq('equipe_id', eId);
+    if (eEmpresaId) q = q.eq('empresa_id', eEmpresaId);
+    q.then(({ data: rows }) => {
+      equipeIdsRef.current = ((rows as { id: string }[]) ?? []).map(m => m.id);
+    });
+  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);
 
-  useEffect(() => { fetchAcordos(); }, [fetchAcordos]);
+  // filtrosRef estável para o handler do realtime (evita re-subscribe)
+  const filtrosRef = useRef<UseAcordosOptions | undefined>(filtros);
+  useEffect(() => {
+    filtrosRef.current = filtros
+      ? { ...filtros, ...(equipeIdsRef.current !== null ? { _operadoresEquipeIds: equipeIdsRef.current } : {}) }
+      : filtros;
+  });
 
-  // ── Optimistic update helpers ─────────────────────────────────────────────
-
+  // ── Optimistic updates via queryClient.setQueryData ───────────────────────
   const patchAcordo = useCallback((id: string, partial: Partial<Acordo>) => {
-    setAcordos(prev => prev.map(a => a.id === id ? { ...a, ...partial } : a));
-  }, []);
+    queryClient.setQueryData<QueryData>(queryKey, old => {
+      if (!old) return old;
+      return { ...old, data: old.data.map(a => a.id === id ? { ...a, ...partial } : a) };
+    });
+  }, [queryClient, queryKey]);
 
   const removeAcordo = useCallback((id: string) => {
-    setAcordos(prev => {
-      const next = prev.filter(a => a.id !== id);
-      if (next.length < prev.length) setTotalCount(c => Math.max(0, c - 1));
-      return next;
+    queryClient.setQueryData<QueryData>(queryKey, old => {
+      if (!old) return old;
+      const next    = old.data.filter(a => a.id !== id);
+      const removed = old.data.length - next.length;
+      return { data: next, count: Math.max(0, old.count - removed) };
     });
-  }, []);
+  }, [queryClient, queryKey]);
 
   const addAcordo = useCallback((acordo: Acordo) => {
-    setAcordos(prev => {
-      if (prev.some(a => a.id === acordo.id)) return prev; // dedup
-      setTotalCount(c => c + 1);
-      return [acordo, ...prev];
+    queryClient.setQueryData<QueryData>(queryKey, old => {
+      if (!old) return old;
+      if (old.data.some(a => a.id === acordo.id)) return old; // dedup
+      return { data: [acordo, ...old.data], count: old.count + 1 };
     });
-  }, []);
+  }, [queryClient, queryKey]);
 
-  // ── Subscribe no canal central (sem criar canal próprio) ──────────────────
+  // ── Subscribe no canal central ────────────────────────────────────────────
+  const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
+  const instanceId    = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
   const enableRealtime = filtros?.enableRealtime !== false;
 
   useEffect(() => {
     if (!enableRealtime) return;
 
     const handleEvent = (event: AcordoRealtimeEvent) => {
-      if (!mountedRef.current) return;
-
       // ── UPDATE: merge cirúrgico preservando joins locais ─────────────────
       if (event.eventType === 'UPDATE' && event.newRecord) {
         const updated = event.newRecord;
-        setAcordos(prev =>
-          prev.map(a =>
-            a.id === updated.id
-              ? {
-                  ...a,
-                  ...updated,
-                  // Preserva perfis/setores já carregados — o payload UPDATE
-                  // não inclui joins, mas o registro local já os tem.
-                  perfis:  a.perfis  ?? (updated as any).perfis,
-                  setores: a.setores ?? (updated as any).setores,
-                }
-              : a
-          )
-        );
+        queryClient.setQueryData<QueryData>(queryKey, old => {
+          if (!old) return old;
+          return {
+            ...old,
+            data: old.data.map(a =>
+              a.id === updated.id
+                ? {
+                    ...a,
+                    ...updated,
+                    perfis:  a.perfis  ?? (updated as Acordo & { perfis?: Acordo['perfis'] }).perfis,
+                    setores: a.setores ?? (updated as Acordo & { setores?: Acordo['setores'] }).setores,
+                  }
+                : a
+            ),
+          };
+        });
         return;
       }
 
       // ── DELETE: remove da lista local ────────────────────────────────────
       if (event.eventType === 'DELETE' && event.oldRecord?.id) {
-        const deletedId = event.oldRecord.id;
-        setAcordos(prev => {
-          const next = prev.filter(a => a.id !== deletedId);
-          if (next.length < prev.length) setTotalCount(c => Math.max(0, c - 1));
-          return next;
-        });
+        removeAcordo(event.oldRecord.id);
         return;
       }
 
       // ── INSERT: adiciona apenas se atende os filtros ativos ──────────────
-      // O newRecord já vem com joins completos (buscado no provider).
       if (event.eventType === 'INSERT' && event.newRecord) {
         const full = event.newRecord;
         if (!matchesFiltros(full, filtrosRef.current)) return;
-        setAcordos(prev => {
-          if (prev.some(a => a.id === full.id)) return prev; // dedup (optimistic já inseriu)
-          setTotalCount(c => c + 1);
-          return [full, ...prev];
+        queryClient.setQueryData<QueryData>(queryKey, old => {
+          if (!old) return old;
+          if (old.data.some(a => a.id === full.id)) return old; // dedup
+          return { data: [full, ...old.data], count: old.count + 1 };
         });
       }
     };
 
     subscribe(instanceId, handleEvent);
     return () => unsubscribe(instanceId);
-  }, [enableRealtime, subscribe, unsubscribe, instanceId]);
-
-  // ── Silent refresh ao focar a aba ──────────────────────────────────────────
-  // Ao voltar para a aba, atualiza dados em background (sem spinner) se
-  // passaram 60s+ desde o último fetch. Evita qualquer flash de loading.
-  useEffect(() => {
-    const STALE_AFTER = 60 * 1000;
-    const handleVisibility = () => {
-      if (document.visibilityState === 'visible' &&
-          Date.now() - lastFetchAt.current > STALE_AFTER) {
-        _fetch(false);
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibility);
-    return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [_fetch]);
+  }, [enableRealtime, subscribe, unsubscribe, instanceId, queryClient, queryKey, removeAcordo]);
 
   return {
-    acordos, totalCount, loading, error, realtimeStatus,
-    refetch: fetchAcordos,
+    acordos:    data?.data   ?? [],
+    totalCount: data?.count  ?? 0,
+    loading:    isLoading,
+    error:      error instanceof Error ? error.message : error ? String(error) : null,
+    realtimeStatus,
+    refetch:    async () => { await refetch(); },
     patchAcordo, removeAcordo, addAcordo,
   };
 }
@@ -308,9 +263,38 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
 export function useDashboardMetricas() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const queryClient = useQueryClient();
   const { subscribe, unsubscribe } = useRealtimeAcordos();
 
-  const [metricas, setMetricas] = useState<MetricasDashboard>({
+  const empresaId = empresa?.id ?? perfil?.empresa_id;
+  const instanceId = useRef(`useDashboardMetricas-${Math.random().toString(36).slice(2, 10)}`).current;
+
+  const { data: metricas, isLoading } = useQuery({
+    queryKey: ['metricas-dashboard', empresaId ?? ''],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('acordos')
+        .select('status, valor, vencimento')
+        .eq('empresa_id', empresaId!);
+      if (error) throw error;
+      return calcularMetricasDashboard(
+        (data ?? []) as { status: string; valor: unknown; vencimento: string }[]
+      );
+    },
+    enabled: !!perfil && !!empresaId,
+    staleTime: 60 * 1000,
+    refetchOnWindowFocus: true,
+  });
+
+  // Invalida cache de métricas em qualquer evento do realtime
+  useEffect(() => {
+    subscribe(instanceId, () => {
+      queryClient.invalidateQueries({ queryKey: ['metricas-dashboard', empresaId ?? ''] });
+    });
+    return () => unsubscribe(instanceId);
+  }, [subscribe, unsubscribe, instanceId, queryClient, empresaId]);
+
+  const defaultMetricas: MetricasDashboard = {
     acordos_hoje:        0,
     pagos_hoje:          0,
     pendentes_hoje:      0,
@@ -319,40 +303,7 @@ export function useDashboardMetricas() {
     valor_recebido_hoje: 0,
     em_acompanhamento:   0,
     total_geral:         0,
-  });
-  const [loading, setLoading] = useState(true);
-  const mountedRef = useRef(true);
-  useEffect(() => {
-    mountedRef.current = true;
-    return () => { mountedRef.current = false; };
-  }, []);
+  };
 
-  // ID estável para o subscriber de métricas
-  const instanceId = useRef(`useDashboardMetricas-${Math.random().toString(36).slice(2, 10)}`).current;
-
-  const fetchMetricas = useCallback(async () => {
-    const empresaId = empresa?.id ?? perfil?.empresa_id;
-    if (!perfil || !empresaId) return;
-    const { data, error } = await supabase
-      .from('acordos')
-      .select('status, valor, vencimento')
-      .eq('empresa_id', empresaId);
-    if (error) { console.error('[useDashboardMetricas]', error); if (mountedRef.current) setLoading(false); return; }
-    if (data && mountedRef.current) {
-      setMetricas(calcularMetricasDashboard(
-        data as { status: string; valor: unknown; vencimento: string }[]
-      ));
-    }
-    if (mountedRef.current) setLoading(false);
-  }, [perfil, empresa?.id, perfil?.empresa_id]);
-
-  useEffect(() => { fetchMetricas(); }, [fetchMetricas]);
-
-  // Subscribe no canal central — refaz as métricas a cada mudança
-  useEffect(() => {
-    subscribe(instanceId, () => { fetchMetricas(); });
-    return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId, fetchMetricas]);
-
-  return { metricas, loading };
+  return { metricas: metricas ?? defaultMetricas, loading: isLoading };
 }

@@ -33,7 +33,8 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
-import { ROUTE_PATHS, formatDate, formatCurrency, isPaguePlay, getTodayISO, buildObservacoesComEstado } from '@/lib/index';
+import { ROUTE_PATHS, formatDate, formatCurrency, getTodayISO, buildObservacoesComEstado } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { colunasPreviewImport, type ColunaPreviewKey } from '@/lib/importar_excel_colunas';
 import { safeNum } from '@/lib/money';
 import { toast } from 'sonner';
@@ -1284,7 +1285,8 @@ interface ResultadoImportacao {
 
 export default function ImportarExcel() {
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa } = useEmpresa();
+  const tenant = useTenant();
   const navigate   = useNavigate();
   const inputRef   = useRef<HTMLInputElement>(null);
   const rawRowsRef = useRef<unknown[][] | null>(null);
@@ -1293,7 +1295,7 @@ export default function ImportarExcel() {
   // ── Flag de tenant: controla labels/colunas da UI (INSCRIÇÃO/CPF em PaguePlay) ───
   // Derivada do tenantSlug — usada tanto em callbacks (confirmar/classificar)
   // quanto na renderização da tabela "Dados reconhecidos".
-  const ehPaguePay = isPaguePlay(tenantSlug);
+  const ehPaguePay = tenant.isPaguePlay;
 
   const [etapa,     setEtapa]     = useState<Etapa>('upload');
   const [arquivo,   setArquivo]   = useState<File | null>(null);

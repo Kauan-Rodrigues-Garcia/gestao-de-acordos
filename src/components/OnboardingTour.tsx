@@ -18,8 +18,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
-import { useEmpresa } from '@/hooks/useEmpresa';
-import { isPaguePlay } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 
 const STORAGE_KEY = (uid: string) => `onboarding_v3_${uid}`;
@@ -221,9 +220,9 @@ function computeTooltipStyle(
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function OnboardingTour() {
-  const { user }       = useAuth();
-  const { tenantSlug } = useEmpresa();
-  const navigate       = useNavigate();
+  const { user }  = useAuth();
+  const tenant    = useTenant();
+  const navigate  = useNavigate();
   const location       = useLocation();
 
   const [active, setActive]           = useState(false);
@@ -231,7 +230,7 @@ export function OnboardingTour() {
   const [confirmSkip, setConfirmSkip] = useState(false);
   const { vw, vh } = useViewport();
 
-  const isPP  = isPaguePlay(tenantSlug ?? '');
+  const isPP  = tenant.isPaguePlay;
   const STEPS = useMemo(() => (isPP ? STEPS_PP : STEPS_BOOKPLAY), [isPP]);
 
   // ── Inicialização ──────────────────────────────────────────────────────────

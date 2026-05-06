@@ -27,11 +27,12 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatCurrency, formatDate,
   STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, TIPO_COLORS,
-  getTodayISO, isPaguePlay, getTipoLabels, getStatusLabels,
+  getTodayISO,
   TIPO_OPTIONS_PAGUEPLAY, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   extractEstado, extractLinkAcordo, isAtrasado, ESTADOS_BRASIL,
   isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { supabase, Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
@@ -138,11 +139,12 @@ type VisaoFiltro = 'setor' | `equipe:${string}` | 'individual';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const isPP = isPaguePlay(tenantSlug);
-  const statusLabels = getStatusLabels(tenantSlug);
-  const tipoLabels   = getTipoLabels(tenantSlug);
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
+  const statusLabels = tenant.statusLabels;
+  const tipoLabels   = tenant.tipoLabels;
 
   // ── filtro de setor para admin (via useAnalytics) ───────────────────────────
   const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useAnalytics();

@@ -33,7 +33,8 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPaguePlay, isPerfilLider, isPerfilAdmin } from '@/lib/index';
+import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPerfilLider, isPerfilAdmin } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -72,7 +73,8 @@ const NAV_ITEMS: NavItem[] = [
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
-  const { empresa, branding, tenantSlug } = useEmpresa();
+  const { empresa, branding } = useEmpresa();
+  const tenant = useTenant();
   const navigate = useNavigate();
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -151,7 +153,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const isPP = isPaguePlay(tenantSlug);
+  const isPP = tenant.isPaguePlay;
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { naoLidas, animarBadge } = useNotificacoesCount();

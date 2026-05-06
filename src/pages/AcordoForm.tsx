@@ -20,10 +20,11 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
 import {
   ROUTE_PATHS, parseCurrencyInput,
-  isPaguePlay, ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  getMaxParcelas, extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+  ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
+  extractEstado, extractLinkAcordo, buildObservacoesComEstado,
   INSTITUICOES_OPTIONS,
 } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { criarNotificacao }  from '@/services/notificacoes.service';
 import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
@@ -79,16 +80,17 @@ export default function AcordoForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = !!id;
   const { perfil, user, perfilLoading } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
+  const { empresa } = useEmpresa();
   const navigate = useNavigate();
+  const tenant = useTenant();
   const [loading, setLoading]         = useState(false);
   const [loadingData, setLoadingData] = useState(isEdit);
   const [perfilLocal, setPerfilLocal] = useState<Perfil | null>(null);
   const [estadoSelecionado, setEstadoSelecionado] = useState('');
   const [showObs, setShowObs] = useState(isEdit);
 
-  const isPP = isPaguePlay(tenantSlug);
-  const maxParcelas = getMaxParcelas(tenantSlug);
+  const isPP = tenant.isPaguePlay;
+  const maxParcelas = tenant.maxParcelas;
 
   // NR duplicate / leader auth state
   const [conflito, setConflito]               = useState<ConflitNR | null>(null);
@@ -148,7 +150,7 @@ export default function AcordoForm() {
         const obs = data.observacoes || '';
         const estado = extractEstado(obs);
         const link   = extractLinkAcordo(obs);
-        if (isPaguePlay(tenantSlug)) {
+        if (tenant.isPaguePlay) {
           setEstadoSelecionado(estado || '');
         }
         reset({
@@ -162,7 +164,7 @@ export default function AcordoForm() {
           instituicao:  data.instituicao || '',
           status:       data.status,
           // For PaguePlay show only the link part (strip [ESTADO:XX] prefix)
-          observacoes:  isPaguePlay(tenantSlug) ? link : (data.observacoes || ''),
+          observacoes:  tenant.isPaguePlay ? link : (data.observacoes || ''),
         });
       }
       setLoadingData(false);

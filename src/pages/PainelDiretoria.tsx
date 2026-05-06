@@ -31,7 +31,8 @@ import {
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { isPaguePlay, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
+import { PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { formatBRL, safeNum, sumSafe } from '@/lib/money';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -431,8 +432,7 @@ function SetorRow({ setor, index, tipos }: { setor: SetorAgendamento; index: num
 export default function PainelDiretoria() {
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
-  const { tenantSlug } = useEmpresa();
-  const isPP = isPaguePlay(tenantSlug);
+  const isPP = useTenant().isPaguePlay;
 
   const {
     valorRecebidoMes,

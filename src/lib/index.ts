@@ -251,6 +251,17 @@ export function extractEstado(observacoes: string | null | undefined): string {
 }
 
 /**
+ * Returns the state (UF) for an acordo.
+ * Prefers the dedicated estado_uf column (populated after the DB migration).
+ * Falls back to the legacy regex extraction from observacoes.
+ */
+export function getEstadoFromAcordo(
+  acordo: { estado_uf?: string | null; observacoes?: string | null }
+): string {
+  return acordo.estado_uf ?? extractEstado(acordo.observacoes);
+}
+
+/**
  * Extracts the link/observation text from observacoes, stripping any estado prefix.
  */
 export function extractLinkAcordo(observacoes: string | null | undefined): string {

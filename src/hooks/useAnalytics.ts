@@ -7,7 +7,8 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
-import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL, isPaguePlay } from '@/lib/index';
+import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,8 +112,8 @@ function calcPerc(realizado: number, meta: number): number {
 
 export function useAnalytics(): AnalyticsData {
   const { perfil } = useAuth();
-  const { empresa, tenantSlug } = useEmpresa();
-  const isPP = isPaguePlay(tenantSlug ?? '');
+  const { empresa } = useEmpresa();
+  const isPP = useTenant().isPaguePlay;
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   // ID estável por instância
   const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
