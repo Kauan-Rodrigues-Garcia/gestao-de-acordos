@@ -20,7 +20,7 @@ SELECT DISTINCT ON (
 )
   a.*,
   CASE
-    WHEN a.vencimento = to_char(CURRENT_DATE, 'YYYY-MM-DD')
+    WHEN a.vencimento = CURRENT_DATE
      AND a.status NOT IN ('pago')
     THEN 0
     ELSE 1
