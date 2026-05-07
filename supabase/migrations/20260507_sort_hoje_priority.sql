@@ -1,29 +1,24 @@
--- Migração: adiciona coluna sort_prioridade à view acordos_deduplicados
+-- Migração: restaura view acordos_deduplicados ao estado original
 --
--- Problema: O sort "hoje-primeiro" era feito client-side sobre a página atual.
--- Se existem acordos com datas antigas (vencimento < hoje), eles ocupam as
--- primeiras páginas e os acordos de hoje só aparecem na sua posição natural.
+-- A abordagem anterior tentava adicionar uma coluna sort_prioridade à view
+-- para ordenar no banco, mas causou erros de tipo (date vs text) e
+-- dependência de coluna não-standard.
 --
--- Solução: sort_prioridade = 0 para acordos com vencimento = hoje e status != 'pago',
--- 1 para todos os demais. A query ordena por sort_prioridade ASC, vencimento ASC
--- antes de aplicar o LIMIT/OFFSET da paginação, garantindo que acordos de hoje
--- sempre apareçam no topo da primeira página.
+-- A ordenação "hoje-primeiro" foi reimplementada no service (fetchAcordos)
+-- via duas queries: uma busca todos os acordos de hoje (sem paginação) e
+-- outra busca o resto paginado com offset ajustado. Nenhuma mudança de
+-- schema é necessária.
 --
--- COMO APLICAR:
---   1. Acesse o Supabase Dashboard → SQL Editor
---   2. Cole e execute este script
---   3. É idempotente — pode rodar mais de uma vez.
+-- Este script restaura a view ao seu estado original caso tenha sido
+-- alterada pelas migrações anteriores desta sessão.
+--
+-- É idempotente — pode rodar mais de uma vez.
 
 CREATE OR REPLACE VIEW public.acordos_deduplicados AS
 SELECT DISTINCT ON (
   COALESCE(a.acordo_grupo_id::text, a.id::text)
 )
-  a.*,
-  CASE
-    WHEN a.vencimento = CURRENT_DATE AND a.status NOT IN ('pago') THEN 0  -- hoje não-pago: topo
-    WHEN a.vencimento  > CURRENT_DATE                                THEN 1  -- futuro: crescente
-    ELSE                                                                  2  -- passado / hoje pago: final
-  END AS sort_prioridade
+  a.*
 FROM public.acordos a
 ORDER BY
   COALESCE(a.acordo_grupo_id::text, a.id::text),
@@ -31,6 +26,4 @@ ORDER BY
   a.criado_em DESC;
 
 COMMENT ON VIEW public.acordos_deduplicados IS
-  'Acordos deduplicados por acordo_grupo_id: mantém a parcela com maior numero_parcela.
-   Coluna sort_prioridade=0 para acordos que vencem hoje e não estão pagos (usado para
-   ordenação prioritária na listagem paginada). Para acordos sem grupo, retorna o registro original.';
+  'Acordos deduplicados por acordo_grupo_id: mantém apenas a parcela com maior numero_parcela de cada grupo. Para acordos sem grupo, retorna o registro original. Use esta view para listagens e paginação exatas.';

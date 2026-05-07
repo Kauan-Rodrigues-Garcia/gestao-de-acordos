@@ -22,6 +22,8 @@ export interface FiltrosAcordo {
   apenas_hoje?: boolean;
   page?: number;
   perPage?: number;
+  /** Garante que acordos de hoje apareçam sempre na página 1 via duas queries */
+  prioritize_today?: boolean;
 }
 
 /**
@@ -40,17 +42,8 @@ async function resolverOperadoresDaEquipe(
 
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
-  // ── Estratégia de fonte de dados ─────────────────────────────────────────
-  // Quando há filtro de intervalo de mês (data_inicio + data_fim), usamos a
-  // tabela `acordos` diretamente: cada acordo_grupo_id tem no máximo 1 parcela
-  // por mês, portanto não há duplicatas no período e o dedup da view é
-  // desnecessário — e prejudicial, pois a view aplica DISTINCT ON sobre toda a
-  // tabela antes do WHERE de data, ocultando parcelas pagas de meses anteriores
-  // quando a parcela seguinte já existe no banco.
-  //
-  // Sem filtro de data usamos `acordos_deduplicados` (DISTINCT ON por grupo,
-  // mantendo a parcela mais recente) para evitar duplicatas na visão geral.
-
+  // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
+  // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim);
   const sourceTable   = hasMonthRange ? 'acordos' : 'acordos_deduplicados';
 
@@ -58,51 +51,98 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   const perPage = filtros?.perPage ?? 20;
   const page    = filtros?.page ?? 1;
 
-  let query = supabase
-    .from(sourceTable)
-    .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' });
-
-  // A view acordos_deduplicados expõe sort_prioridade=0 para acordos de hoje
-  // não-pagos. Ordenar por ela primeiro garante que apareçam na página 1,
-  // independente de quantos registros históricos existam com datas anteriores.
-  if (!hasMonthRange) {
-    query = query
-      .order('sort_prioridade', { ascending: true })
-      .order('vencimento', { ascending: true });
-  } else {
-    query = query.order('vencimento', { ascending: true });
+  // Resolve membros da equipe UMA VEZ (usado pelas duas queries abaixo)
+  let membrosEquipe: string[] | null = null;
+  if (filtros?.equipe_id) {
+    membrosEquipe = await resolverOperadoresDaEquipe(filtros.equipe_id, filtros.empresa_id);
+    if (membrosEquipe.length === 0) return { data: [], count: 0 };
   }
+
+  // Helper: aplica todos os filtros que NÃO são de vencimento/data
+  // (vencimento é tratado separadamente em cada branch)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const applyFilters = (q: any): any => {
+    if (filtros?.status)      q = q.eq('status', filtros.status);
+    if (filtros?.tipo)        q = q.eq('tipo', filtros.tipo);
+    if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
+    if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
+    if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
+    if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
+    if (filtros?.busca) {
+      q = q.or(
+        `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
+      );
+    }
+    return q;
+  };
+
+  const SELECT = '*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)';
+
+  // ── DOIS-QUERIES: garante acordos de hoje sempre na página 1 ──────────────
+  // Funciona mesmo quando os acordos de hoje caem em páginas intermediárias
+  // na ordenação cronológica simples (ex.: muitos acordos históricos antes deles).
+  if (paginar && filtros?.prioritize_today && !hasMonthRange) {
+    const hoje = getTodayISO();
+
+    // Query A: TODOS os acordos de hoje (sem paginação)
+    const { data: dataHoje, error: errA } = await applyFilters(
+      supabase.from(sourceTable).select(SELECT).eq('vencimento', hoje).order('criado_em', { ascending: true })
+    );
+    if (errA) throw errA;
+    const acordosHoje = (dataHoje as Acordo[]) ?? [];
+    const T = acordosHoje.length;
+
+    // Matemática da página combinada: lista = [hoje[0..T-1], resto[0..]]
+    // Para a página N, precisamos de combined[(N-1)*P .. N*P-1]
+    //   De hoje:  slice( max(0,(N-1)*P), min(T, N*P) )
+    //   Do resto: offset = max(0,(N-1)*P - T), qtd = N*P - max(T,(N-1)*P)
+    const todaySlice = acordosHoje.slice(
+      Math.max(0, (page - 1) * perPage),
+      Math.min(T, page * perPage),
+    );
+    const restOffset  = Math.max(0, (page - 1) * perPage - T);
+    const restNeeded  = page * perPage - Math.max(T, (page - 1) * perPage);
+
+    if (restNeeded <= 0) {
+      // Página inteiramente coberta pelos acordos de hoje
+      // Ainda precisa do count total do resto para calcular páginas
+      const { count: restCount, error: errC } = await applyFilters(
+        supabase.from(sourceTable).select('id', { count: 'exact', head: true }).neq('vencimento', hoje)
+      );
+      if (errC) throw errC;
+      return { data: todaySlice, count: T + (restCount ?? 0) };
+    }
+
+    // Query B: acordos NÃO de hoje, paginados com offset ajustado
+    const { data: dataResto, count: restCount, error: errB } = await applyFilters(
+      supabase.from(sourceTable)
+        .select(SELECT, { count: 'exact' })
+        .neq('vencimento', hoje)
+        .order('vencimento', { ascending: true })
+        .range(restOffset, restOffset + restNeeded - 1)
+    );
+    if (errB) throw errB;
+    const acordosResto = (dataResto as Acordo[]) ?? [];
+
+    return {
+      data: [...todaySlice, ...acordosResto],
+      count: T + (restCount ?? 0),
+    };
+  }
+
+  // ── QUERY ÚNICA (caminho normal) ──────────────────────────────────────────
+  let query = applyFilters(
+    supabase.from(sourceTable).select(SELECT, { count: 'exact' }).order('vencimento', { ascending: true })
+  );
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
-  if (filtros?.status)      query = query.eq('status', filtros.status);
-  if (filtros?.tipo)        query = query.eq('tipo', filtros.tipo);
-  if (filtros?.operador_id) query = query.eq('operador_id', filtros.operador_id);
-  if (filtros?.setor_id)    query = query.eq('setor_id', filtros.setor_id);
-  // equipe_id existe em perfis, não em acordos — resolve operadores da equipe e filtra por IN
-  if (filtros?.equipe_id) {
-    const membros = await resolverOperadoresDaEquipe(filtros.equipe_id, filtros.empresa_id);
-    if (membros.length === 0) {
-      // Equipe sem membros — retorna vazio imediatamente
-      return { data: [], count: 0 };
-    }
-    query = query.in('operador_id', membros);
-  }
-  if (filtros?.empresa_id)  query = query.eq('empresa_id', filtros.empresa_id);
   if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
   if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);
   if (filtros?.data_fim)    query = query.lte('vencimento', filtros.data_fim);
 
-  if (filtros?.busca) {
-    query = query.or(
-      `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
-    );
-  }
-
-  // Paginação server-side: agora precisa e diretamente sobre a view deduplicada
   if (paginar) {
     const from = (page - 1) * perPage;
-    const to   = from + perPage - 1;
-    query = query.range(from, to);
+    query = query.range(from, from + perPage - 1);
   }
 
   const { data, error, count } = await query;

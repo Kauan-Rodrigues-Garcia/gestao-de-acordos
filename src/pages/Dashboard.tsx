@@ -296,9 +296,10 @@ export default function Dashboard() {
         ? perfil?.id
         : undefined,
       // Filtro de equipe: Líder/Elite em modo equipe
-      equipe_id:    equipeFiltroAtivo ?? undefined,
-      page:         currentPage,
-      perPage:      PER_PAGE,
+      equipe_id:        equipeFiltroAtivo ?? undefined,
+      page:             currentPage,
+      perPage:          PER_PAGE,
+      prioritize_today: true,
     } : {},
   );
 
