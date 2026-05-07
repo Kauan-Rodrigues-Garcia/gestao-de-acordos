@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, Bot, ShieldCheck, ClipboardList, ArrowLeftRight } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, Bot, ShieldCheck, ClipboardList, ArrowLeftRight, Tag } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ import AdminIA from '@/pages/AdminIA';
 import AdminCargos from '@/pages/AdminCargos';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
+import AdminTags from '@/components/admin/AdminTags';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -177,6 +178,12 @@ export default function AdminConfiguracoes() {
               <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
             </TabsTrigger>
             <TabsTrigger
+              value="tags"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Tag className="w-4 h-4" /> Tags
+            </TabsTrigger>
+            <TabsTrigger
               value="logs"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
@@ -327,6 +334,11 @@ export default function AdminConfiguracoes() {
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
         <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
           <AdminDiretoExtra />
+        </TabsContent>
+
+        {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
+        <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
+          <AdminTags />
         </TabsContent>
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}

@@ -24,7 +24,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  getTodayISO, PP_HO_PERCENTUAL, PP_COREN_PERCENTUAL, PP_COFEN_PERCENTUAL,
+  getTodayISO, PP_HO_PERCENTUAL,
   calcHO,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -622,186 +622,204 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
               className="space-y-4 pt-1"
             >
 
-              {/* ── ROW 1 — 6 cards métricas principais ── */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {loading ? (
-                  Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)
-                ) : (
-                  <>
-                    {/* Card 1: H.O. (PaguePlay) ou Recebido (Bookplay) */}
+              {/* ── Cards métricas ── */}
+              {loading ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+                </div>
+              ) : isPP ? (
+                /* ══ Layout PaguePLAY — 3 grupos com separação ══ */
+                <div className="space-y-3">
+                  {/* ── Grupo 1: H.O. principal ── */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {temLogicaDiretoExtra && (
+                      <MetricCard
+                        label="H.O. Direto"
+                        icon={<DollarSign className="w-4 h-4" />}
+                        accentColor="#10b981"
+                        gradientFrom="#10b981"
+                        trend="up"
+                        value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
+                        sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoDireto)}`}
+                      />
+                    )}
+                    {temLogicaDiretoExtra && (
+                      <MetricCard
+                        label="H.O. Extra"
+                        icon={<DollarSign className="w-4 h-4" />}
+                        accentColor="#7c3aed"
+                        gradientFrom="#7c3aed"
+                        trend="up"
+                        value={<span className="text-violet-500">{formatCurrency(valorHOExtra)}</span>}
+                        sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoExtra)}`}
+                      />
+                    )}
                     <MetricCard
-                      label={labelRecebido}
+                      label="H.O. Total recebido no mês"
                       icon={<DollarSign className="w-4 h-4" />}
                       accentColor="#22c55e"
                       gradientFrom="#22c55e"
                       trend="up"
-                      value={
-                        <span className="text-emerald-500">
-                          {formatCurrency(valorPrincipal)}
-                        </span>
-                      }
-                      sub={
-                        isPP
-                          ? `Bruto: ${formatCurrency(valorRecebidoMes)} · ${totalPagosMes} pagos`
-                          : `${totalPagosMes} acordos pagos`
-                      }
+                      value={<span className="text-emerald-500">{formatCurrency(valorHOMes)}</span>}
+                      sub={`Bruto: ${formatCurrency(valorRecebidoMes)} · ${totalPagosMes} pagos`}
                     />
-                    {/* Card 2 */}
+                  </div>
+
+                  {/* ── Grupo 2: Recebido bruto + acordos ── */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {temLogicaDiretoExtra && (
+                      <MetricCard
+                        label="Recebido Direto do mês (TOTAL)"
+                        icon={<DollarSign className="w-4 h-4" />}
+                        accentColor="#22c55e"
+                        gradientFrom="#22c55e"
+                        value={<span className="text-emerald-500">{formatCurrency(valorRecebidoDireto)}</span>}
+                        sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''}`}
+                      />
+                    )}
+                    {temLogicaDiretoExtra && (
+                      <MetricCard
+                        label="Recebido Extra do mês (TOTAL)"
+                        icon={<DollarSign className="w-4 h-4" />}
+                        accentColor="#8b5cf6"
+                        gradientFrom="#8b5cf6"
+                        value={<span className="text-violet-500">{formatCurrency(valorRecebidoExtra)}</span>}
+                        sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''}`}
+                      />
+                    )}
                     <MetricCard
-                      label={labelAgendado}
-                      icon={<Calendar className="w-4 h-4" />}
-                      accentColor="#6366f1"
-                      gradientFrom="#6366f1"
-                      trend="neutral"
-                      value={formatCurrency(valorAgendadoPP)}
-                      sub={
-                        isPP
-                          ? `Bruto: ${formatCurrency(valorAgendadoMes)} · ${totalAcordosMes} acordos`
-                          : `${totalAcordosMes} acordos`
-                      }
-                    />
-                    {/* Card 3 */}
-                    <MetricCard
-                      label="Não Pagos"
-                      icon={<XCircle className="w-4 h-4" />}
-                      accentColor="#ef4444"
-                      gradientFrom="#ef4444"
-                      trend={valorNaoPago > 0 ? 'down' : 'neutral'}
-                      value={
-                        <span className="text-red-500">
-                          {formatCurrency(valorNaoPago)}
-                        </span>
-                      }
-                      sub={`${totalNaoPagos} acordos`}
-                    />
-                    {/* Card 4 */}
-                    <MetricCard
-                      label="Agendado hoje"
-                      icon={<Clock className="w-4 h-4" />}
-                      accentColor="#f59e0b"
-                      gradientFrom="#f59e0b"
-                      value={formatCurrency(valorAgendadoHoje)}
-                    />
-                    {/* Card 5 */}
-                    <MetricCard
-                      label="Acordos no mês"
+                      label="Acordos do Mês"
                       icon={<BarChart2 className="w-4 h-4" />}
                       accentColor="#3b82f6"
                       gradientFrom="#3b82f6"
                       value={String(totalAcordosMes)}
-                      sub={`${totalPendentes} pendentes`}
+                      sub={`${totalPagosMes} pagos · ${totalPendentes} pendentes`}
                     />
-                    {/* Card 5b: Agendado restante no mês (Bookplay: valor bruto; PaguePlay: H.O. = 24,96%) */}
-                    {mostraAgendadoRestante && (
-                      <MetricCard
-                        label={isPP ? 'H.O. Restante agendado no mês' : 'Agendado restante no mês'}
-                        icon={<Clock className="w-4 h-4" />}
-                        accentColor="#a855f7"
-                        gradientFrom="#a855f7"
-                        trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
-                        value={
-                          <span className="text-purple-500">
-                            {formatCurrency(isPP ? calcHO(valorAgendadoRestanteMes) : valorAgendadoRestanteMes)}
-                          </span>
-                        }
-                        sub={
-                          isPP
-                            ? `${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · H.O. 24,96% de ${formatCurrency(valorAgendadoRestanteMes)}`
-                            : `${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`
-                        }
-                      />
-                    )}
-                    {/* Card 6: Meta */}
+                  </div>
+
+                  {/* ── Grupo 3: Restante + Não Pagos ── */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     <MetricCard
-                      label={labelMeta}
-                      icon={<Target className="w-4 h-4" />}
-                      accentColor={donutColor}
-                      gradientFrom={donutColor}
-                      trend={meta ? (percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down') : undefined}
+                      label="H.O. Restante agendado no mês"
+                      icon={<Clock className="w-4 h-4" />}
+                      accentColor="#a855f7"
+                      gradientFrom="#a855f7"
+                      trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
                       value={
-                        meta ? (
-                          <span style={{ color: donutColor }}>{percMeta}% atingida</span>
-                        ) : (
-                          <span className="text-muted-foreground text-base">—</span>
-                        )
+                        <span className="text-purple-500">
+                          {formatCurrency(calcHO(valorAgendadoRestanteMes))}
+                        </span>
                       }
-                      sub={
-                        meta
-                          ? `${formatCurrency(valorPrincipal)} / ${formatCurrency(meta.meta_valor)}`
-                          : 'Sem meta definida'
-                      }
+                      sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''}`}
                     />
+                    <MetricCard
+                      label="Valor total restante agendado no mês"
+                      icon={<Clock className="w-4 h-4" />}
+                      accentColor="#6366f1"
+                      gradientFrom="#6366f1"
+                      trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
+                      value={formatCurrency(valorAgendadoRestanteMes)}
+                      sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
+                    />
+                    <MetricCard
+                      label="Valor total não pago do mês"
+                      icon={<XCircle className="w-4 h-4" />}
+                      accentColor="#ef4444"
+                      gradientFrom="#ef4444"
+                      trend={valorNaoPago > 0 ? 'down' : 'neutral'}
+                      value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+                      sub={`${totalNaoPagos} acordo${totalNaoPagos !== 1 ? 's' : ''} no mês`}
+                    />
+                  </div>
 
-                    {/* Cards extras PaguePlay: Coren + Cofen */}
-                    {isPP && valorRecebidoMes > 0 && (
-                      <>
-                        <MetricCard
-                          label="Repasse Coren"
-                          icon={<Percent className="w-4 h-4" />}
-                          accentColor="#3b82f6"
-                          gradientFrom="#3b82f6"
-                          value={
-                            <span className="text-blue-500">
-                              {formatCurrency(valorRecebidoMes * PP_COREN_PERCENTUAL)}
-                            </span>
-                          }
-                          sub="56,28% do bruto recebido"
-                        />
-                        <MetricCard
-                          label="Repasse Cofen"
-                          icon={<Percent className="w-4 h-4" />}
-                          accentColor="#8b5cf6"
-                          gradientFrom="#8b5cf6"
-                          value={
-                            <span className="text-violet-500">
-                              {formatCurrency(valorRecebidoMes * PP_COFEN_PERCENTUAL)}
-                            </span>
-                          }
-                          sub="18,76% do bruto recebido"
-                        />
-                      </>
-                    )}
-
-                    {/* Cards Direto / Extra — somente PaguePLAY com lógica ativada */}
-                    {isPP && temLogicaDiretoExtra && (
-                      <>
-                        <MetricCard
-                          label="Recebido Direto"
-                          icon={<DollarSign className="w-4 h-4" />}
-                          accentColor="#22c55e"
-                          gradientFrom="#22c55e"
-                          value={<span className="text-emerald-500">{formatCurrency(valorRecebidoDireto)}</span>}
-                          sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · H.O. ${formatCurrency(valorHODireto)}`}
-                        />
-                        <MetricCard
-                          label="H.O. Direto"
-                          icon={<DollarSign className="w-4 h-4" />}
-                          accentColor="#10b981"
-                          gradientFrom="#10b981"
-                          value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
-                          sub={`24,96% de ${formatCurrency(valorRecebidoDireto)}`}
-                        />
-                        <MetricCard
-                          label="Recebido Extra"
-                          icon={<DollarSign className="w-4 h-4" />}
-                          accentColor="#8b5cf6"
-                          gradientFrom="#8b5cf6"
-                          value={<span className="text-violet-500">{formatCurrency(valorRecebidoExtra)}</span>}
-                          sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · H.O. ${formatCurrency(valorHOExtra)}`}
-                        />
-                        <MetricCard
-                          label="H.O. Extra"
-                          icon={<DollarSign className="w-4 h-4" />}
-                          accentColor="#7c3aed"
-                          gradientFrom="#7c3aed"
-                          value={<span className="text-violet-500">{formatCurrency(valorHOExtra)}</span>}
-                          sub={`24,96% de ${formatCurrency(valorRecebidoExtra)}`}
-                        />
-                      </>
-                    )}
-                  </>
-                )}
-              </div>
+                  {/* ── Meta ── */}
+                  {meta && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <MetricCard
+                        label={labelMeta}
+                        icon={<Target className="w-4 h-4" />}
+                        accentColor={donutColor}
+                        gradientFrom={donutColor}
+                        trend={percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down'}
+                        value={<span style={{ color: donutColor }}>{percMeta}% atingida</span>}
+                        sub={`${formatCurrency(valorHOMes)} / ${formatCurrency(meta.meta_valor)}`}
+                      />
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* ══ Layout Bookplay — mantém estrutura original ══ */
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <MetricCard
+                    label={labelRecebido}
+                    icon={<DollarSign className="w-4 h-4" />}
+                    accentColor="#22c55e"
+                    gradientFrom="#22c55e"
+                    trend="up"
+                    value={<span className="text-emerald-500">{formatCurrency(valorRecebidoMes)}</span>}
+                    sub={`${totalPagosMes} acordos pagos`}
+                  />
+                  <MetricCard
+                    label={labelAgendado}
+                    icon={<Calendar className="w-4 h-4" />}
+                    accentColor="#6366f1"
+                    gradientFrom="#6366f1"
+                    trend="neutral"
+                    value={formatCurrency(valorAgendadoMes)}
+                    sub={`${totalAcordosMes} acordos`}
+                  />
+                  <MetricCard
+                    label="Não Pagos"
+                    icon={<XCircle className="w-4 h-4" />}
+                    accentColor="#ef4444"
+                    gradientFrom="#ef4444"
+                    trend={valorNaoPago > 0 ? 'down' : 'neutral'}
+                    value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+                    sub={`${totalNaoPagos} acordos`}
+                  />
+                  <MetricCard
+                    label="Agendado hoje"
+                    icon={<Clock className="w-4 h-4" />}
+                    accentColor="#f59e0b"
+                    gradientFrom="#f59e0b"
+                    value={formatCurrency(valorAgendadoHoje)}
+                  />
+                  <MetricCard
+                    label="Acordos no mês"
+                    icon={<BarChart2 className="w-4 h-4" />}
+                    accentColor="#3b82f6"
+                    gradientFrom="#3b82f6"
+                    value={String(totalAcordosMes)}
+                    sub={`${totalPendentes} pendentes`}
+                  />
+                  {mostraAgendadoRestante && (
+                    <MetricCard
+                      label="Agendado restante no mês"
+                      icon={<Clock className="w-4 h-4" />}
+                      accentColor="#a855f7"
+                      gradientFrom="#a855f7"
+                      trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
+                      value={<span className="text-purple-500">{formatCurrency(valorAgendadoRestanteMes)}</span>}
+                      sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
+                    />
+                  )}
+                  <MetricCard
+                    label={labelMeta}
+                    icon={<Target className="w-4 h-4" />}
+                    accentColor={donutColor}
+                    gradientFrom={donutColor}
+                    trend={meta ? (percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down') : undefined}
+                    value={
+                      meta ? (
+                        <span style={{ color: donutColor }}>{percMeta}% atingida</span>
+                      ) : (
+                        <span className="text-muted-foreground text-base">—</span>
+                      )
+                    }
+                    sub={meta ? `${formatCurrency(valorRecebidoMes)} / ${formatCurrency(meta.meta_valor)}` : 'Sem meta definida'}
+                  />
+                </div>
+              )}
 
               {/* ── ROW 2 — Gráficos (AreaChart + Anel com Breakdown) ── */}
               {!loading && (

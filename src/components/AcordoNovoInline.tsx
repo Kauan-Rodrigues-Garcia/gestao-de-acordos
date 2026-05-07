@@ -64,6 +64,8 @@ import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
+import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
+import { TagsSelector }             from '@/components/TagsSelector';
 
 // ─── Tipos exportados ────────────────────────────────────────────────────────
 
@@ -397,6 +399,7 @@ export function AcordoNovoInline({
   const { empresa } = useEmpresa();
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  const { tags: empresaTags }  = useEmpresaTags();
 
   // ── Persistência em sessionStorage ──────────────────────────────────────
   // Objetivo: preservar o formulário ao trocar/retornar de aba do navegador,
@@ -449,6 +452,7 @@ export function AcordoNovoInline({
   const [link,         setLink]         = useState(draftInicial.link         ?? '');
   const [salvando,     setSalvando]     = useState(false);
   const [isExtra,      setIsExtra]      = useState(false);
+  const [tagIds,       setTagIds]       = useState<string[]>([]);
 
   // Ref que impede o RAF de re-escrever o draft após limparDraft() ser chamado.
   // Sem isso, existe race condition: limparDraft remove do storage, mas um RAF
@@ -643,6 +647,7 @@ export function AcordoNovoInline({
         acordo_grupo_id: grupoId,
         numero_parcela:  1,
         ...(isPaguePlay && isExtra ? { tipo_vinculo: 'extra' } : {}),
+        tag_ids: tagIds.length > 0 ? tagIds : null,
       };
 
       // ── VERIFICAÇÃO DE NR ÚNICO ────────────────────────────────────────────
@@ -1282,19 +1287,23 @@ export function AcordoNovoInline({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Status</Label>
-                    <Select value={status} onValueChange={setStatus}>
-                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {STATUS_OPTIONS.map((s) => (
-                          <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
                 </div>
               </div>
+
+              {/* Tags visuais */}
+              {empresaTags.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                    Tags <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                  </p>
+                  <TagsSelector
+                    tags={empresaTags}
+                    selectedIds={tagIds}
+                    onChange={setTagIds}
+                    disabled={salvando}
+                  />
+                </div>
+              )}
 
               {/* Dados do Profissional */}
               <div>

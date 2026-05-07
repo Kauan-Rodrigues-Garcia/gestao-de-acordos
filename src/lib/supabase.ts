@@ -96,6 +96,8 @@ export interface Acordo {
   vinculo_operador_id?: string | null;
   /** Quando tipo_vinculo = 'extra': nome do operador DIRETO (desnormalizado para exibição) */
   vinculo_operador_nome?: string | null;
+  /** IDs das tags visuais aplicadas a este acordo */
+  tag_ids?: string[] | null;
   criado_em: string;
   atualizado_em: string;
   perfis?: Perfil;
@@ -179,6 +181,14 @@ export interface LixeiraAcordo {
   transferido_para_nome?: string;
   excluido_em: string;
   expira_em?: string;
+}
+
+export interface AcordoTag {
+  id: string;
+  empresa_id: string;
+  nome: string;
+  cor: string;
+  criado_em: string;
 }
 
 export interface AIConfig {

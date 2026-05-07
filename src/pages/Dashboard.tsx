@@ -40,6 +40,7 @@ import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/li
 import { VinculoTag } from '@/components/VinculoTag';
 import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { toast } from 'sonner';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -205,6 +206,7 @@ export default function Dashboard() {
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'
   );
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
+  const { tags: empresaTags } = useEmpresaTags();
 
   const [activeTab, setActiveTab]       = useState<'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
@@ -1306,8 +1308,22 @@ export default function Dashboard() {
                                 <td className="px-3 py-2.5">
                                   <div>
                                     <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                       <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
+                                      {(a.tag_ids ?? []).map(tid => {
+                                        const tag = empresaTags.find(t => t.id === tid);
+                                        if (!tag) return null;
+                                        return (
+                                          <span
+                                            key={tid}
+                                            className="inline-flex items-center font-bold uppercase rounded-full border px-1.5 py-0.5 text-[9px] whitespace-nowrap"
+                                            style={{ backgroundColor: `${tag.cor}22`, color: tag.cor, borderColor: `${tag.cor}55` }}
+                                            title={tag.nome}
+                                          >
+                                            {tag.nome}
+                                          </span>
+                                        );
+                                      })}
                                       <VinculoTag acordo={a} />
                                     </div>
                                   </div>

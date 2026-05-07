@@ -22,6 +22,8 @@ import {
 } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
+import { useEmpresaTags } from '@/hooks/useEmpresaTags';
+import { TagsSelector } from '@/components/TagsSelector';
 
 interface AcordoEditInlineProps {
   acordo: Acordo;
@@ -55,6 +57,8 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const [observacoes, setObservacoes] = useState(initialObservacoes);
   const [status,      setStatus]      = useState<Acordo['status']>(acordo.status);
   const [isExtra,     setIsExtra]     = useState(acordo.tipo_vinculo === 'extra');
+  const [tagIds,      setTagIds]      = useState<string[]>(acordo.tag_ids ?? []);
+  const { tags: empresaTags }         = useEmpresaTags();
 
   async function handleSave() {
     if (!nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
@@ -122,6 +126,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
           ? buildObservacoesComEstado(estado, observacoes)
           : (observacoes.trim() || null),
         ...(isPaguePlay ? { tipo_vinculo: isExtra ? 'extra' : 'direto' } : {}),
+        tag_ids: tagIds.length > 0 ? tagIds : null,
       };
 
       if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
@@ -336,6 +341,19 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 </div>
 
               </div>
+
+              {/* Tags visuais */}
+              {empresaTags.length > 0 && (
+                <div className="space-y-1 mt-3">
+                  <Label className="text-xs font-medium">Tags</Label>
+                  <TagsSelector
+                    tags={empresaTags}
+                    selectedIds={tagIds}
+                    onChange={setTagIds}
+                    disabled={saving}
+                  />
+                </div>
+              )}
 
               {/* Actions */}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-primary/15">
