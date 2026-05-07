@@ -98,9 +98,21 @@ export function useResumoDia({
         return (q as any).eq('operador_id', perfil.id);
       }
 
-      // ── Acordos com vencimento hoje ──────────────────────────────────────
-      const { data: hojeData } = await applyScope(
-        supabase.from('acordos').select('*').eq('empresa_id', empresa.id).eq('vencimento', hoje)
+      // ── Acordos pagos hoje via pago_em (independe do vencimento) ───────────
+      // pago_em é TIMESTAMPTZ em UTC; usamos range para cobrir o dia Brasil (UTC-3)
+      const { data: pagosHojeData } = await applyScope(
+        supabase
+          .from('acordos')
+          .select('*')
+          .eq('empresa_id', empresa.id)
+          .eq('status', 'pago')
+          .gte('pago_em', `${hoje}T00:00:00`)
+          .lt('pago_em', `${amanha}T00:00:00`)
+      );
+
+      // ── Acordos com vencimento hoje (para taxa de eficiência) ────────────
+      const { data: agendadosHojeData } = await applyScope(
+        supabase.from('acordos').select('id, status').eq('empresa_id', empresa.id).eq('vencimento', hoje)
       );
 
       // ── Acordos formalizados hoje (criados hoje) ─────────────────────────
@@ -114,8 +126,10 @@ export function useResumoDia({
       );
 
       // ── Métricas ─────────────────────────────────────────────────────────
-      const acordos = (hojeData as Acordo[]) || [];
-      const pagos = acordos.filter(a => a.status === 'pago');
+      // pagos hoje = acordos com pago_em hoje (qualquer vencimento)
+      const pagos = (pagosHojeData as Acordo[]) || [];
+      // agendados hoje = acordos com vencimento hoje (para cálculo de eficiência)
+      const agendadosHoje = (agendadosHojeData as { id: string; status: string }[]) || [];
 
       const valorRecebido = pagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
       let valorDireto = 0, valorExtra = 0;
@@ -154,7 +168,7 @@ export function useResumoDia({
 
       const qtdFormalizados = (formalizadosData || []).length;
       const qtdPagos = pagos.length;
-      const totalHoje = acordos.length;
+      const totalHoje = agendadosHoje.length;
 
       setData({
         valorRecebido,

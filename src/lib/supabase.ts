@@ -100,6 +100,8 @@ export interface Acordo {
   tag_ids?: string[] | null;
   criado_em: string;
   atualizado_em: string;
+  /** Timestamp de quando o acordo foi marcado como pago (preenchido automaticamente pelo trigger) */
+  pago_em?: string | null;
   perfis?: Perfil;
   setores?: Setor;
   empresas?: Empresa;
