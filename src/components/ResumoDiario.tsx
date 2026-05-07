@@ -192,12 +192,7 @@ export function ResumoDiario({ temLogicaDiretoExtra = false, operadorFiltroExter
               className="space-y-3"
             >
               {/* ── Grupo 1: H.O. ── */}
-              <div className={cn(
-                'grid gap-3',
-                temLogicaDiretoExtra
-                  ? 'grid-cols-2 sm:grid-cols-3'
-                  : 'grid-cols-2 sm:grid-cols-3',
-              )}>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 {temLogicaDiretoExtra && (
                   <MiniCard
                     label="H.O. Direto"
@@ -205,6 +200,24 @@ export function ResumoDiario({ temLogicaDiretoExtra = false, operadorFiltroExter
                     accentColor="#10b981"
                     value={<span className="text-emerald-500">{formatCurrency(data.valorHODireto)}</span>}
                     sub={`Bruto direto: ${formatCurrency(data.valorDireto)}`}
+                  />
+                )}
+                {!temLogicaDiretoExtra && (
+                  <MiniCard
+                    label="Bruto recebido hoje"
+                    icon={<DollarSign className="w-4 h-4" />}
+                    accentColor="#10b981"
+                    value={<span className="text-emerald-400">{formatCurrency(data.valorRecebido)}</span>}
+                    sub={`${data.qtdPagos} pago${data.qtdPagos !== 1 ? 's' : ''} hoje`}
+                  />
+                )}
+                {!temLogicaDiretoExtra && (
+                  <MiniCard
+                    label="Agendados hoje"
+                    icon={<BarChart2 className="w-4 h-4" />}
+                    accentColor="#3b82f6"
+                    value={String(data.totalHoje)}
+                    sub={`${data.qtdPagos} pagos · ${data.totalHoje - data.qtdPagos} pendentes`}
                   />
                 )}
                 {temLogicaDiretoExtra && (

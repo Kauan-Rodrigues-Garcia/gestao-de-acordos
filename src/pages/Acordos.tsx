@@ -38,6 +38,7 @@ import { enviarParaLixeira }        from '@/services/lixeira.service';
 import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { VinculoTag } from '@/components/VinculoTag';
+import { DatePickerField } from '@/components/DatePickerField';
 import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
@@ -789,12 +790,26 @@ export default function Acordos() {
                   </SelectContent>
                 </Select>
               )}
-              <input
-                type="date"
-                value={filtroData}
-                onChange={e => { setFiltroData(e.target.value); setCurrentPage(1); }}
-                className="h-8 text-sm bg-background border border-input rounded-md px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-              />
+              <div className="flex items-center gap-1">
+                <div className="w-36">
+                  <DatePickerField
+                    value={filtroData}
+                    onChange={v => { setFiltroData(v); setCurrentPage(1); }}
+                    size="sm"
+                  />
+                </div>
+                {filtroData && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                    onClick={() => { setFiltroData(''); setCurrentPage(1); }}
+                    title="Limpar data"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                )}
+              </div>
               {isPP && temPermissao('filtrar_por_usuario') && (
                 <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
