@@ -14,7 +14,10 @@
 --
 -- É idempotente — pode rodar mais de uma vez.
 
-CREATE OR REPLACE VIEW public.acordos_deduplicados AS
+-- DROP obrigatório pois CREATE OR REPLACE VIEW não remove colunas existentes
+DROP VIEW IF EXISTS public.acordos_deduplicados;
+
+CREATE VIEW public.acordos_deduplicados AS
 SELECT DISTINCT ON (
   COALESCE(a.acordo_grupo_id::text, a.id::text)
 )
