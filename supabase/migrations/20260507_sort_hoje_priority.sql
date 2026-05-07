@@ -20,10 +20,9 @@ SELECT DISTINCT ON (
 )
   a.*,
   CASE
-    WHEN a.vencimento = CURRENT_DATE
-     AND a.status NOT IN ('pago')
-    THEN 0
-    ELSE 1
+    WHEN a.vencimento = CURRENT_DATE AND a.status NOT IN ('pago') THEN 0  -- hoje não-pago: topo
+    WHEN a.vencimento  > CURRENT_DATE                                THEN 1  -- futuro: crescente
+    ELSE                                                                  2  -- passado / hoje pago: final
   END AS sort_prioridade
 FROM public.acordos a
 ORDER BY
