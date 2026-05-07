@@ -55,7 +55,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
-  const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const { permissoes, isAdmin, loading: permLoading } = useCargoPermissoes();
 
   if (loading || (requiredPermissao && permLoading)) {
     return (
@@ -71,13 +71,28 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
-  // Se tem permissão configurada E o usuário a possui → acesso garantido
-  // (temPermissao já retorna true para admin/super_admin)
-  if (requiredPermissao && temPermissao(requiredPermissao)) {
+  if (requiredPermissao) {
+    // Admin/super_admin sempre têm acesso total
+    if (isAdmin) return <>{children}</> as React.ReactElement;
+
+    const valorExplicito = permissoes[requiredPermissao];
+
+    // Permissão explicitamente habilitada no painel → acesso
+    if (valorExplicito === true) return <>{children}</> as React.ReactElement;
+
+    // Permissão explicitamente desabilitada → bloqueado (sobrepõe cargo)
+    if (valorExplicito === false) return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+
+    // Sem configuração no banco (empresa nova ou cargo sem row) →
+    // fallback para allowedProfiles para não quebrar acessos existentes
+    const perfilFallback = roles ?? allowedProfiles;
+    if (perfilFallback && !perfilFallback.includes(perfil?.perfil ?? '')) {
+      return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+    }
     return <>{children}</> as React.ReactElement;
   }
 
-  // Fallback: verificação por perfil (comportamento original)
+  // Sem requiredPermissao: verificação por perfil (comportamento original)
   const perfilRequerido = roles ?? allowedProfiles;
   if (perfilRequerido && perfil && perfil.perfil !== 'super_admin' && !perfilRequerido.includes(perfil.perfil)) {
     return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;

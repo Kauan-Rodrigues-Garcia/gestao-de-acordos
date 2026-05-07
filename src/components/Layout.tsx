@@ -60,7 +60,7 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos_gerais' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
@@ -159,21 +159,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoesCount();
 
   // Filtra por role, visibilidade PaguePay e permissões configuráveis.
-  // Lógica de UNIÃO: item visível se o perfil está em roles OU se tem a permissão ativa.
-  // Isso permite que permissões estendam acesso a perfis de nível inferior
-  // (ex: operador com ver_painel_lider habilitado vê o link Painel Líder).
+  //
+  // Itens COM permissaoKey são controlados exclusivamente pela permissão:
+  //   - admin/super_admin sempre veem (temPermissao retorna true)
+  //   - outros cargos: visível se e somente se a permissão estiver ativa no painel
+  //   Isso mantém a nav consistente com o ProtectedRoute da rota correspondente.
+  //
+  // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
   const navItems = NAV_ITEMS.filter(item => {
     if (item.hiddenForPaguePay && isPP) return false;
 
-    const hasRole = !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
-    const hasPerm = item.permissaoKey
-      ? (!permLoading && temPermissao(item.permissaoKey))
-      : false;
+    if (item.permissaoKey) {
+      return !permLoading && temPermissao(item.permissaoKey);
+    }
 
-    // Mostrar se tem perfil OU tem permissão; esconder apenas se nenhum dos dois
-    if (!hasRole && !hasPerm) return false;
-    // Se tem perfil mas a permissão está explicitamente desabilitada → manter visível (não revogar via permissão)
-    return true;
+    return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';

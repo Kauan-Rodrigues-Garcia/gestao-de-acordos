@@ -127,9 +127,13 @@ export default function App() {
                 <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
               } />
 
-              {/* Importar Excel — operadores, líderes e admins */}
+              {/* Importar Excel — controlado pela permissão importar_excel */}
               <Route path="/acordos/importar" element={
-                <LayoutWrapper><ImportarExcel /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="importar_excel">
+                    <ImportarExcel />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
@@ -148,13 +152,14 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider', 'administrador', 'elite', 'gerencia']}>
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_usuarios">
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_SETORES} element={
                 <LayoutWrapper>
+                  {/* Setores é admin-only por design — sem permissão configurável */}
                   <ProtectedRoute allowedProfiles={['administrador']}>
                     <AdminSetores />
                   </ProtectedRoute>
@@ -164,7 +169,7 @@ export default function App() {
               <Route path="/admin/equipes" element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador']}>
+                  <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">
                     <AdminConfiguracoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -173,7 +178,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path="/admin/metas" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']}>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -183,7 +188,7 @@ export default function App() {
 
               <Route path="/admin/lixeira" element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']}>
+                  <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
