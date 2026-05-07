@@ -58,8 +58,8 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     if (membrosEquipe.length === 0) return { data: [], count: 0 };
   }
 
-  // Helper: aplica todos os filtros que NÃO são de vencimento/data
-  // (vencimento é tratado separadamente em cada branch)
+  // Helper: aplica todos os filtros exceto vencimento exato / apenas_hoje
+  // (esses são gerenciados individualmente em cada branch)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyFilters = (q: any): any => {
     if (filtros?.status)      q = q.eq('status', filtros.status);
@@ -68,6 +68,9 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
     if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
     if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
+    // Intervalo de mês: aplicado aqui para que ambas as queries (hoje + resto) respeitem o filtro
+    if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
+    if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
     if (filtros?.busca) {
       q = q.or(
         `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
@@ -81,7 +84,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // ── DOIS-QUERIES: garante acordos de hoje sempre na página 1 ──────────────
   // Funciona mesmo quando os acordos de hoje caem em páginas intermediárias
   // na ordenação cronológica simples (ex.: muitos acordos históricos antes deles).
-  if (paginar && filtros?.prioritize_today && !hasMonthRange) {
+  if (paginar && filtros?.prioritize_today) {
     const hoje = getTodayISO();
 
     // Query A: TODOS os acordos de hoje (sem paginação)
@@ -137,8 +140,6 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
   if (filtros?.vencimento)  query = query.eq('vencimento', filtros.vencimento);
-  if (filtros?.data_inicio) query = query.gte('vencimento', filtros.data_inicio);
-  if (filtros?.data_fim)    query = query.lte('vencimento', filtros.data_fim);
 
   if (paginar) {
     const from = (page - 1) * perPage;
