@@ -337,15 +337,10 @@ export default function Dashboard() {
       base = deduplicarVinculados(base, true); // Dashboard é sempre PP
     }
 
-    // 2) Reordenar (PP)
+    // 2) Filtros de coluna client-side (PP)
+    // Nota: a ordenação "hoje-primeiro" é feita server-side via sort_prioridade na view.
     if (!isPP) return base;
-    const hoje_ = hoje;
-    let lista = [...base].sort((a, b) => {
-      const aHoje = a.vencimento === hoje_ && a.status !== 'pago' ? 0 : 1;
-      const bHoje = b.vencimento === hoje_ && b.status !== 'pago' ? 0 : 1;
-      return aHoje - bHoje;
-    });
-    // Filtros de coluna client-side
+    let lista = [...base];
     if (colFiltroEstado)  lista = lista.filter(a => extractEstado(a.observacoes) === colFiltroEstado);
     if (colFiltroDia)     lista = lista.filter(a => a.vencimento === `${mesFiltro}-${colFiltroDia.padStart(2,'0')}`);
     return lista;

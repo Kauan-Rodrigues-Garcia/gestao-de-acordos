@@ -60,8 +60,18 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
 
   let query = supabase
     .from(sourceTable)
-    .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' })
-    .order('vencimento', { ascending: true });
+    .select('*, perfis(id, nome, email, perfil, setor_id), setores(id, nome)', { count: 'exact' });
+
+  // A view acordos_deduplicados expõe sort_prioridade=0 para acordos de hoje
+  // não-pagos. Ordenar por ela primeiro garante que apareçam na página 1,
+  // independente de quantos registros históricos existam com datas anteriores.
+  if (!hasMonthRange) {
+    query = query
+      .order('sort_prioridade', { ascending: true })
+      .order('vencimento', { ascending: true });
+  } else {
+    query = query.order('vencimento', { ascending: true });
+  }
 
   if (filtros?.apenas_hoje) query = query.eq('vencimento', getTodayISO());
   if (filtros?.status)      query = query.eq('status', filtros.status);
