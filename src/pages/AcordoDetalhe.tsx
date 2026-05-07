@@ -15,7 +15,7 @@ import {
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, isAtrasado,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo,
+  getEstadoFromAcordo, extractLinkAcordo,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
@@ -131,7 +131,7 @@ export default function AcordoDetalhe() {
                       { label: 'CPF', value: acordo.nr_cliente, icon: Hash, mono: true },
                       { label: 'Código', value: acordo.instituicao || '-', icon: Building2 },
                       { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
-                      { label: 'Estado', value: extractEstado(acordo.observacoes) || '-', icon: MapPin },
+                      { label: 'Estado', value: getEstadoFromAcordo(acordo) || '-', icon: MapPin },
                       { label: 'Empresa', value: empresa?.nome || '-', icon: Building2 },
                     ].map(({ label, value, icon: Icon, mono }) => (
                       <div key={label} className="flex items-start gap-2">

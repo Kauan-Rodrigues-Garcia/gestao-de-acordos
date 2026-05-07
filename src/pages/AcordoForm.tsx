@@ -21,7 +21,7 @@ import { supabase, Perfil } from '@/lib/supabase';
 import {
   ROUTE_PATHS, parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
   INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -147,8 +147,8 @@ export default function AcordoForm() {
       if (data) {
         setNrOriginalEdit(data.nr_cliente);
         // For PaguePlay, parse estado from observacoes prefix
-        const obs = data.observacoes || '';
-        const estado = extractEstado(obs);
+        const obs    = data.observacoes || '';
+        const estado = getEstadoFromAcordo(data);
         const link   = extractLinkAcordo(obs);
         if (tenant.isPaguePlay) {
           setEstadoSelecionado(estado || '');

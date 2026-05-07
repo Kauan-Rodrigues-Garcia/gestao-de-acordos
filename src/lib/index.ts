@@ -1,19 +1,24 @@
 export const ROUTE_PATHS = {
   LOGIN: '/login',
+  REGISTRO: '/registro',
   DASHBOARD: '/',
   ACORDOS: '/acordos',
   ACORDO_NOVO: '/acordos/novo',
   ACORDO_EDITAR: '/acordos/:id/editar',
   ACORDO_DETALHE: '/acordos/:id',
+  IMPORTAR_EXCEL: '/acordos/importar',
   PAINEL_LIDER: '/lider',
   PAINEL_LIDER_OPERADOR: '/lider/operador/:id',
+  PAINEL_DIRETORIA: '/diretoria',
   ADMIN_USUARIOS: '/admin/usuarios',
   ADMIN_SETORES: '/admin/setores',
+  ADMIN_EQUIPES: '/admin/equipes',
+  ADMIN_METAS: '/admin/metas',
+  ADMIN_LIXEIRA: '/admin/lixeira',
   ADMIN_CONFIGURACOES: '/admin/configuracoes',
   ADMIN_LOGS: '/admin/logs',
   ADMIN_IA: '/admin/ia',
   ADMIN_CARGOS: '/admin/cargos',
-  PAINEL_DIRETORIA: '/diretoria',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

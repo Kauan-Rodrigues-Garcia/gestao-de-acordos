@@ -29,7 +29,7 @@ import {
   STATUS_COLORS, STATUS_LABELS, TIPO_LABELS, TIPO_COLORS,
   getTodayISO,
   TIPO_OPTIONS_PAGUEPLAY, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, isAtrasado, ESTADOS_BRASIL,
+  getEstadoFromAcordo, extractLinkAcordo, isAtrasado, ESTADOS_BRASIL,
   isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -342,7 +342,7 @@ export default function Dashboard() {
     // Nota: a ordenação "hoje-primeiro" é feita server-side via sort_prioridade na view.
     if (!isPP) return base;
     let lista = [...base];
-    if (colFiltroEstado)  lista = lista.filter(a => extractEstado(a.observacoes) === colFiltroEstado);
+    if (colFiltroEstado)  lista = lista.filter(a => getEstadoFromAcordo(a) === colFiltroEstado);
     if (colFiltroDia)     lista = lista.filter(a => a.vencimento === `${mesFiltro}-${colFiltroDia.padStart(2,'0')}`);
     return lista;
   }, [acordos, hoje, isPP, colFiltroEstado, colFiltroDia, mesFiltro, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla]);
@@ -1325,9 +1325,9 @@ export default function Dashboard() {
                                 </td>
                                 {/* Estado */}
                                 <td className="px-3 py-2.5">
-                                  {extractEstado(a.observacoes) ? (
+                                  {getEstadoFromAcordo(a) ? (
                                     <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                                      <MapPin className="w-2.5 h-2.5" />{extractEstado(a.observacoes)}
+                                      <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
                                     </span>
                                   ) : '—'}
                                 </td>

@@ -37,7 +37,7 @@ import {
   formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, isAtrasado,
+  extractLinkAcordo, getEstadoFromAcordo, isAtrasado,
 } from '@/lib/index';
 
 // ── Labels locais (evita TDZ em bundles concatenados) ────────────────────────
@@ -502,7 +502,7 @@ export function AcordoDetalheInline({
   const isAcordoSimples = !deveExibirParcelas;
 
   const link   = extractLinkAcordo(acordoLocal.observacoes);
-  const estado = extractEstado(acordoLocal.observacoes);
+  const estado = getEstadoFromAcordo(acordoLocal);
   const nomeOp = (acordoLocal.perfis as { nome?: string } | undefined)?.nome ?? '—';
 
   // ── Buscar registros reais do grupo ──────────────────────────────────────

@@ -4,7 +4,7 @@
  * ─── O QUE MUDOU EM RELAÇÃO À v4 ─────────────────────────────────────────────
  *  • Internamente migrado para @tanstack/react-query (useQuery / setQueryData)
  *  • Estado manual (useState) removido — React Query gerencia loading/error/cache
- *  • staleTime: 60s e refetchOnWindowFocus nativo substituem o polling manual
+ *  • staleTime: 60s; refetchOnWindowFocus desativado — RealtimeAcordosProvider mantém o cache em sincronia
  *  • optimistic updates via queryClient.setQueryData (mesmo comportamento público)
  *  • API pública (UseAcordosResult) 100% compatível — zero mudanças nos callers
  *
@@ -146,7 +146,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       }),
     enabled: !!perfil && !!empresaId,
     staleTime: 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   // ── Resolver operadores da equipe (para filtro de realtime) ───────────────
@@ -283,7 +283,7 @@ export function useDashboardMetricas() {
     },
     enabled: !!perfil && !!empresaId,
     staleTime: 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   // Invalida cache de métricas em qualquer evento do realtime

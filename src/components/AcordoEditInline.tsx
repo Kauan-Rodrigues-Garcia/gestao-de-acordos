@@ -18,7 +18,7 @@ import { verificarNrRegistro, registrarNr } from '@/services/nr_registros.servic
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
 } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -41,7 +41,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const [saving, setSaving] = useState(false);
 
   // Form state initialised from acordo
-  const initialEstado = extractEstado(acordo.observacoes);
+  const initialEstado = getEstadoFromAcordo(acordo);
   const initialLink   = extractLinkAcordo(acordo.observacoes);
   const initialObservacoes = isPaguePlay ? initialLink : (acordo.observacoes || '');
 

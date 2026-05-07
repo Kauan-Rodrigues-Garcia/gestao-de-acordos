@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { supabase, Acordo, AcordoTag } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -77,7 +78,7 @@ export function useResumoDia({
             .eq('setor_id', perfil.setor_id);
           const eqIds = ((eqs as { id: string }[]) || []).map(e => e.id);
           if (eqIds.length > 0) {
-            opQ = (opQ as any).in('equipe_id', eqIds);
+            opQ = (opQ as PostgrestFilterBuilder<any, any, any[]>).in('equipe_id', eqIds);
           }
         }
 
@@ -86,16 +87,17 @@ export function useResumoDia({
       }
 
       // ── Aplica escopo de perfil à query ──────────────────────────────────
-      function applyScope(q: ReturnType<typeof supabase.from>) {
+      type AnyBuilder = PostgrestFilterBuilder<any, any, any[]>;
+      function applyScope(q: AnyBuilder): AnyBuilder {
         if (_isAdmin || _isDiretoria) {
-          return selectedOperadorId ? (q as any).eq('operador_id', selectedOperadorId) : q;
+          return selectedOperadorId ? q.eq('operador_id', selectedOperadorId) : q;
         }
         if (_isLider) {
-          if (selectedOperadorId) return (q as any).eq('operador_id', selectedOperadorId);
-          if (perfil.setor_id) return (q as any).eq('setor_id', perfil.setor_id);
-          return (q as any).eq('operador_id', perfil.id);
+          if (selectedOperadorId) return q.eq('operador_id', selectedOperadorId);
+          if (perfil.setor_id) return q.eq('setor_id', perfil.setor_id);
+          return q.eq('operador_id', perfil.id);
         }
-        return (q as any).eq('operador_id', perfil.id);
+        return q.eq('operador_id', perfil.id);
       }
 
       // ── Acordos pagos hoje via pago_em (independe do vencimento) ───────────
@@ -107,12 +109,12 @@ export function useResumoDia({
           .eq('empresa_id', empresa.id)
           .eq('status', 'pago')
           .gte('pago_em', `${hoje}T00:00:00`)
-          .lt('pago_em', `${amanha}T00:00:00`)
+          .lt('pago_em', `${amanha}T00:00:00`) as unknown as AnyBuilder
       );
 
       // ── Acordos com vencimento hoje (para taxa de eficiência) ────────────
       const { data: agendadosHojeData } = await applyScope(
-        supabase.from('acordos').select('id, status').eq('empresa_id', empresa.id).eq('vencimento', hoje)
+        supabase.from('acordos').select('id, status').eq('empresa_id', empresa.id).eq('vencimento', hoje) as unknown as AnyBuilder
       );
 
       // ── Acordos formalizados hoje (criados hoje) ─────────────────────────
@@ -122,7 +124,7 @@ export function useResumoDia({
           .select('id')
           .eq('empresa_id', empresa.id)
           .gte('criado_em', `${hoje}T00:00:00`)
-          .lt('criado_em', `${amanha}T00:00:00`)
+          .lt('criado_em', `${amanha}T00:00:00`) as unknown as AnyBuilder
       );
 
       // ── Métricas ─────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import {
   parseCurrencyInput, formatCurrency,
   ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, buildObservacoesComEstado,
+  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
 } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
 
@@ -31,7 +31,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
   const [saving, setSaving] = useState(false);
 
   // Form state initialised from acordo
-  const initialEstado = extractEstado(acordo.observacoes);
+  const initialEstado = getEstadoFromAcordo(acordo);
   const initialLink   = extractLinkAcordo(acordo.observacoes);
 
   const [nomeCliente, setNomeCliente] = useState(acordo.nome_cliente);

@@ -24,7 +24,7 @@ import {
   ROUTE_PATHS, STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_COLORS,
   formatCurrency, formatDate, getTodayISO, isAtrasado,
   STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  extractEstado, extractLinkAcordo, isPerfilLider,
+  getEstadoFromAcordo, extractLinkAcordo, isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
@@ -974,9 +974,9 @@ export default function Acordos() {
                               </td>
                               {/* Estado */}
                               <td className="px-3 py-2.5">
-                                {extractEstado(a.observacoes) ? (
+                                {getEstadoFromAcordo(a) ? (
                                   <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
-                                    <MapPin className="w-2.5 h-2.5" />{extractEstado(a.observacoes)}
+                                    <MapPin className="w-2.5 h-2.5" />{getEstadoFromAcordo(a)}
                                   </span>
                                 ) : '—'}
                               </td>

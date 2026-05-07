@@ -9,7 +9,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 60 * 1000,
-      refetchOnWindowFocus: true,
+      refetchOnWindowFocus: false,  // Realtime mantém cache em sincronia — refetch no foco é redundante e causa "piscar"
+      refetchOnReconnect: true,     // refaz se internet caiu e voltou (importante)
       retry: 1,
     },
   },
