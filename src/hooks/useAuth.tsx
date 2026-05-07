@@ -64,6 +64,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [perfilLoading, setPerfilLoading] = useState(false);
   const [authError, setAuthError]     = useState<string | null>(null);
   const isSigningIn                   = useRef(false);
+  const isManualSignOut               = useRef(false);
 
   async function rejectTenantMismatch(currentEmpresa: Empresa | null) {
     const tenantSlug = getConfiguredTenantSlug();
@@ -197,6 +198,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Só atualizamos session/user em eventos relevantes — assim o React não re-renderiza
       // o AuthProvider a cada refresh silencioso de token (que ocorre ao voltar para a aba).
       if (_event === 'SIGNED_OUT') {
+        if (!isManualSignOut.current) {
+          // Logout inesperado: sessão expirou ou token foi revogado
+          setAuthError('Sua sessão expirou. Por favor, faça login novamente.');
+        }
+        isManualSignOut.current = false;
         setSession(null);
         setUser(null);
         setPerfil(null);
@@ -292,6 +298,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    isManualSignOut.current = true;
     await supabase.auth.signOut();
     setPerfil(null);
     setEmpresa(null);

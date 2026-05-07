@@ -63,9 +63,15 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
   const [loading, setLoading]     = useState(true);
 
-  const channelRef    = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const heartbeatRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const mountedRef    = useRef(true);
+  const [reconnectKey, setReconnectKey] = useState(0);
+
+  const channelRef          = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const heartbeatRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const reconnectTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+  const mountedRef          = useRef(true);
+
+  const MAX_RECONNECTS = 5;
 
   // ── Extrai IDs do presenceState ────────────────────────────────────────────
   // Object.keys(state) retorna a `key` configurada no canal — que definimos
@@ -137,10 +143,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         if (!mountedRef.current) return;
 
         if (status === 'SUBSCRIBED') {
-          // Track imediato após conectar
+          reconnectAttemptsRef.current = 0;
           await doTrack();
 
-          // Heartbeat: re-track periódico para manter presença viva
           if (heartbeatRef.current) clearInterval(heartbeatRef.current);
           heartbeatRef.current = setInterval(() => {
             if (mountedRef.current) doTrack();
@@ -148,7 +153,15 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         }
 
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[PresenceProvider] canal com problema, status:', status, err);
+          console.warn('[Realtime] channel error:', err);
+          if (reconnectAttemptsRef.current < MAX_RECONNECTS) {
+            const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
+            reconnectAttemptsRef.current += 1;
+            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+            reconnectTimerRef.current = setTimeout(() => {
+              if (mountedRef.current) setReconnectKey(k => k + 1);
+            }, delay);
+          }
         }
       });
 
@@ -159,15 +172,17 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         clearInterval(heartbeatRef.current);
         heartbeatRef.current = null;
       }
-      // untrack + removeChannel garante que o usuário sai do presenceState
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       channel.untrack().catch(() => {}).finally(() => {
         supabase.removeChannel(channel);
       });
       channelRef.current = null;
     };
-    // Reconecta se trocar de empresa ou de usuário logado
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [perfil?.id, empresa?.id]);
+  }, [perfil?.id, empresa?.id, reconnectKey]);
 
   return (
     <PresenceContext.Provider value={{ onlineIds, loading }}>
