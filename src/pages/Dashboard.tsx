@@ -349,11 +349,10 @@ export default function Dashboard() {
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
-  // Carrega nomes dos operadores (PaguePay + admin/lider)
+  // Carrega nomes dos operadores para qualquer cargo com ver_acordos_gerais
   useEffect(() => {
     if (!isPP) return;
-    const perfilAtual = perfil?.perfil;
-    if (perfilAtual !== 'administrador' && perfilAtual !== 'lider' && perfilAtual !== 'super_admin') return;
+    if (!temPermissao('ver_acordos_gerais')) return;
     const ids = [...new Set([...acordosDeHoje, ...acordos].map(a => a.operador_id).filter(Boolean))];
     if (ids.length === 0) return;
     supabase.from('perfis').select('id, nome').in('id', ids as string[]).then(({ data }) => {
@@ -363,7 +362,7 @@ export default function Dashboard() {
         setOperadoresMap(prev => ({ ...prev, ...map }));
       }
     });
-  }, [acordosDeHoje, acordos, isPP, perfil?.perfil]);
+  }, [acordosDeHoje, acordos, isPP, temPermissao]);
 
   // sync URL (apenas PaguePay)
   useEffect(() => {
