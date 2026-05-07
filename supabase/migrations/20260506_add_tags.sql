@@ -33,47 +33,75 @@ CREATE INDEX IF NOT EXISTS idx_acordos_tag_ids
 -- 5. RLS na tabela tags
 ALTER TABLE public.tags ENABLE ROW LEVEL SECURITY;
 
--- Todos os usuários autenticados da empresa podem ver as tags
-CREATE POLICY IF NOT EXISTS "tags_select"
-  ON public.tags FOR SELECT
-  USING (
-    empresa_id IN (
-      SELECT empresa_id FROM public.perfis WHERE id = auth.uid()
-    )
-  );
+-- Cria policies apenas se ainda não existirem (CREATE POLICY não suporta IF NOT EXISTS)
+DO $$
+BEGIN
 
--- Apenas admins podem criar/editar/remover tags
-CREATE POLICY IF NOT EXISTS "tags_insert"
-  ON public.tags FOR INSERT
-  WITH CHECK (
-    empresa_id IN (
-      SELECT empresa_id FROM public.perfis
-      WHERE id = auth.uid()
-        AND perfil IN ('administrador', 'super_admin')
-    )
-  );
+  -- Todos os usuários da empresa podem ver as tags
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'tags' AND policyname = 'tags_select'
+  ) THEN
+    CREATE POLICY tags_select ON public.tags FOR SELECT
+      USING (
+        empresa_id IN (
+          SELECT empresa_id FROM public.perfis WHERE id = auth.uid()
+        )
+      );
+  END IF;
 
-CREATE POLICY IF NOT EXISTS "tags_update"
-  ON public.tags FOR UPDATE
-  USING (
-    empresa_id IN (
-      SELECT empresa_id FROM public.perfis
-      WHERE id = auth.uid()
-        AND perfil IN ('administrador', 'super_admin')
-    )
-  );
+  -- Apenas admins podem criar tags
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'tags' AND policyname = 'tags_insert'
+  ) THEN
+    CREATE POLICY tags_insert ON public.tags FOR INSERT
+      WITH CHECK (
+        empresa_id IN (
+          SELECT empresa_id FROM public.perfis
+          WHERE id = auth.uid()
+            AND perfil IN ('administrador', 'super_admin')
+        )
+      );
+  END IF;
 
-CREATE POLICY IF NOT EXISTS "tags_delete"
-  ON public.tags FOR DELETE
-  USING (
-    empresa_id IN (
-      SELECT empresa_id FROM public.perfis
-      WHERE id = auth.uid()
-        AND perfil IN ('administrador', 'super_admin')
-    )
-  );
+  -- Apenas admins podem editar tags
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'tags' AND policyname = 'tags_update'
+  ) THEN
+    CREATE POLICY tags_update ON public.tags FOR UPDATE
+      USING (
+        empresa_id IN (
+          SELECT empresa_id FROM public.perfis
+          WHERE id = auth.uid()
+            AND perfil IN ('administrador', 'super_admin')
+        )
+      );
+  END IF;
+
+  -- Apenas admins podem excluir tags
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public' AND tablename = 'tags' AND policyname = 'tags_delete'
+  ) THEN
+    CREATE POLICY tags_delete ON public.tags FOR DELETE
+      USING (
+        empresa_id IN (
+          SELECT empresa_id FROM public.perfis
+          WHERE id = auth.uid()
+            AND perfil IN ('administrador', 'super_admin')
+        )
+      );
+  END IF;
+
+END $$;
 
 -- 6. Confirma resultado
 SELECT
-  (SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'tags' AND table_schema = 'public') AS tabela_tags_criada,
-  (SELECT COUNT(*) FROM information_schema.columns WHERE table_name = 'acordos' AND column_name = 'tag_ids' AND table_schema = 'public') AS coluna_tag_ids_criada;
+  (SELECT COUNT(*) FROM information_schema.tables
+   WHERE table_name = 'tags' AND table_schema = 'public') AS tabela_tags_criada,
+  (SELECT COUNT(*) FROM information_schema.columns
+   WHERE table_name = 'acordos' AND column_name = 'tag_ids' AND table_schema = 'public') AS coluna_tag_ids_criada,
+  (SELECT COUNT(*) FROM pg_policies
+   WHERE tablename = 'tags' AND schemaname = 'public') AS policies_criadas;
