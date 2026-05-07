@@ -1,9 +1,20 @@
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from '@/components/ui/sonner';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ThemeProvider } from 'next-themes';
 import { AuthProvider } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
-import { ThemeProvider } from 'next-themes';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
+import Layout from '@/components/Layout';
+import { ChatNotificacoes } from '@/components/ChatNotificacoes';
+import { Toaster } from '@/components/ui/sonner';
+import { Skeleton } from '@/components/ui/skeleton';
+import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
+import { PresenceProvider } from '@/providers/PresenceProvider';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { useVersionCheck } from '@/hooks/useVersionCheck';
+import { ROUTE_PATHS } from '@/lib/index';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,17 +26,6 @@ const queryClient = new QueryClient({
     },
   },
 });
-import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
-import Layout from '@/components/Layout';
-import { ChatNotificacoes } from '@/components/ChatNotificacoes';
-import { ROUTE_PATHS } from '@/lib/index';
-import { lazy, Suspense, useEffect } from 'react';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useEmpresa } from '@/hooks/useEmpresa';
-import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
-import { PresenceProvider } from '@/providers/PresenceProvider';
-import { ErrorBoundary } from '@/components/ErrorBoundary';
-import { useVersionCheck } from '@/hooks/useVersionCheck';
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
@@ -104,11 +104,10 @@ export default function App() {
         <Router>
           <Suspense fallback={<PageLoader />}>
             <Routes>
-              {/* ... rotas ... */}
               <Route path={ROUTE_PATHS.LOGIN} element={
                 <PublicRoute><Login /></PublicRoute>
               } />
-              <Route path="/registro" element={
+              <Route path={ROUTE_PATHS.REGISTRO} element={
                 <PublicRoute><Registro /></PublicRoute>
               } />
 
@@ -129,7 +128,7 @@ export default function App() {
               } />
 
               {/* Importar Excel — controlado pela permissão importar_excel */}
-              <Route path="/acordos/importar" element={
+              <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="importar_excel">
                     <ImportarExcel />
@@ -167,7 +166,7 @@ export default function App() {
                 </LayoutWrapper>
               } />
               {/* /admin/equipes agora é aba dentro de /admin/usuarios */}
-              <Route path="/admin/equipes" element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
+              <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">
@@ -177,7 +176,7 @@ export default function App() {
               } />
               {/* /admin/logs agora é aba dentro de /admin/configuracoes */}
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
-              <Route path="/admin/metas" element={
+              <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
                     <MetasConfig />
@@ -187,7 +186,7 @@ export default function App() {
               {/* /admin/ia agora é aba dentro de /admin/configuracoes */}
               <Route path={ROUTE_PATHS.ADMIN_IA} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=ia'} replace />} />
 
-              <Route path="/admin/lixeira" element={
+              <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
                     <Lixeira />

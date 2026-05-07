@@ -28,9 +28,11 @@ import {
   useState, useCallback, type ReactNode,
 } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { supabase, type Acordo } from '@/lib/supabase';
 import { useAuth }    from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { logger } from '@/lib/logger';
 
 // ── Tipos públicos ────────────────────────────────────────────────────────────
 
@@ -80,8 +82,9 @@ export function useRealtimeAcordos(): RealtimeContextValue {
 // ── Provider ──────────────────────────────────────────────────────────────────
 
 export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
-  const { perfil }  = useAuth();
-  const { empresa } = useEmpresa();
+  const { perfil }    = useAuth();
+  const { empresa }   = useEmpresa();
+  const queryClient   = useQueryClient();
 
   const [status, setStatus] = useState<RealtimeStatus>('off');
   // Incrementar força recriação do canal (reconexão automática ou por visibilidade)
@@ -214,6 +217,10 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           // Conexão estabelecida — cancela grace timer e zera backoff
           if (closeTimerRef.current) { clearTimeout(closeTimerRef.current); closeTimerRef.current = null; }
           if (reconnectTimerRef.current) { clearTimeout(reconnectTimerRef.current); reconnectTimerRef.current = null; }
+          // Reconexão após falha: invalida cache para recuperar eventos perdidos durante o downtime
+          if (reconnectRef.current > 0) {
+            queryClient.invalidateQueries({ queryKey: ['acordos'] });
+          }
           reconnectRef.current = 0;
           upd('connected');
           return;
@@ -242,12 +249,12 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
         }
         if (channelStatus === 'CHANNEL_ERROR') {
           handleFailure('error');
-          console.warn('[Realtime] channel error:', err);
+          logger.warn('[Realtime] channel error:', err);
           return;
         }
         if (channelStatus === 'TIMED_OUT') {
           handleFailure('error');
-          console.warn('[Realtime] channel timed out');
+          logger.warn('[Realtime] channel timed out');
           return;
         }
       });
