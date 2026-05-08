@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
 import { AuthProvider } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
@@ -35,17 +36,13 @@ const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
 const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
 const AdminSetores      = lazy(() => import('@/pages/AdminSetores'));
-const AdminEquipes      = lazy(() => import('@/pages/AdminEquipes'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
-const AdminLogs         = lazy(() => import('@/pages/AdminLogs'));
-const AdminIA           = lazy(() => import('@/pages/AdminIA'));
 const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
 const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
-const AdminCargos       = lazy(() => import('@/pages/AdminCargos'));
 
 function PageLoader() {
   return (
@@ -216,6 +213,7 @@ export default function App() {
         </EmpresaProvider>
       </AuthProvider>
     </ThemeProvider>
+    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />}
     </QueryClientProvider>
     </ErrorBoundary>
   );

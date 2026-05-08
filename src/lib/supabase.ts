@@ -1,13 +1,16 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from './database.types';
+
+export type { Database };
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-let _instance: SupabaseClient | null = null;
+let _instance: SupabaseClient<Database> | null = null;
 
-function getSupabase(): SupabaseClient {
+function getSupabase(): SupabaseClient<Database> {
   if (_instance) return _instance;
-  _instance = createClient(supabaseUrl, supabaseAnonKey, {
+  _instance = createClient<Database>(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
@@ -18,6 +21,11 @@ function getSupabase(): SupabaseClient {
 }
 
 export const supabase = getSupabase();
+
+// Aliases de conveniência para operações de banco puras (sem campos de join)
+export type AcordoRow    = Database['public']['Tables']['acordos']['Row'];
+export type AcordoInsert = Database['public']['Tables']['acordos']['Insert'];
+export type AcordoUpdate = Database['public']['Tables']['acordos']['Update'];
 
 export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin' | 'elite' | 'gerencia' | 'diretoria';
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';

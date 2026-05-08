@@ -3,9 +3,10 @@ import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
+import importX from "eslint-plugin-import-x";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  { ignores: ["dist", "src/lib/database.types.ts"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
@@ -16,6 +17,7 @@ export default tseslint.config(
     plugins: {
       "react-hooks": reactHooks,
       "react-refresh": reactRefresh,
+      "import-x": importX,
     },
     rules: {
       ...reactHooks.configs.recommended.rules,
@@ -29,6 +31,8 @@ export default tseslint.config(
       // Permite console.warn/error/info (usados em logging de auth/realtime),
       // mas sinaliza console.log acidental deixado em código de produção.
       "no-console": ["warn", { allow: ["warn", "error", "info"] }],
+      // Impede declarações não-import entre blocos de import (ex: queryClient no meio dos imports)
+      "import-x/first": "error",
     },
   },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.
