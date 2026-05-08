@@ -5,7 +5,6 @@ import tailwindcss from '@tailwindcss/vite';
 import { componentTagger } from 'lovable-tagger';
 import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
-import fs from 'fs';
 
 import { cdnPrefixImages } from './vite-plugins/cdn-prefix-images';
 
@@ -26,14 +25,17 @@ export default defineConfig(({ mode }) => {
       react(),
       mode === 'development' && componentTagger(),
       cdnPrefixImages(),
-      // Grava dist/version.json ao final do build para o polling de atualização
+      // Grava dist/version.json ao final do build para o polling de atualização.
+      // Usa emitFile (API Rollup) em vez de fs.writeFileSync para que o Vite
+      // gerencie o outDir corretamente em qualquer ambiente (local, CI, Render).
       {
         name: 'version-json',
-        closeBundle() {
-          fs.writeFileSync(
-            path.resolve(__dirname, 'dist/version.json'),
-            JSON.stringify({ v: BUILD_VERSION }),
-          );
+        generateBundle() {
+          this.emitFile({
+            type: 'asset',
+            fileName: 'version.json',
+            source: JSON.stringify({ v: BUILD_VERSION }),
+          });
         },
       },
       // Ativo apenas em `npm run analyze` (mode=analyze): gera stats.html com mapa do bundle.
