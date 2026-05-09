@@ -252,6 +252,11 @@ export default function Dashboard() {
       })()
     : undefined;
 
+  // Dia específico como ISO (server-side): sobrescreve o range do mês quando definido
+  const colFiltroDiaISO = colFiltroDia && mesFiltro
+    ? `${mesFiltro}-${colFiltroDia.padStart(2, '0')}`
+    : undefined;
+
   // Intervalo do mês SEGUINTE ao filtrado — usado para checar parcelas já reagendadas
   const nextMonthRange = useMemo(() => {
     if (!mesFiltro) return null;
@@ -283,14 +288,19 @@ export default function Dashboard() {
    
   }, [isPP, nextMonthRange, empresa?.id]);
 
+  // Reset página ao mudar filtros de coluna (server-side)
+  useEffect(() => { setCurrentPage(1); }, [colFiltroEstado, colFiltroDia]);
+
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
       busca:        busca || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
+      // Quando filtra por dia exato sobrescreve o range do mês (data_inicio=data_fim=dia)
       vencimento:   filtroData || undefined,
-      data_inicio:  filtroData ? undefined : mesFiltroInicio,
-      data_fim:     filtroData ? undefined : mesFiltroFim,
+      data_inicio:  filtroData ? undefined : (colFiltroDiaISO ?? mesFiltroInicio),
+      data_fim:     filtroData ? undefined : (colFiltroDiaISO ?? mesFiltroFim),
+      estado_uf:    colFiltroEstado || undefined,
       // Filtro de operador: operador normal OU Elite em modo individual
       operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual')
         ? perfil?.id
@@ -327,25 +337,17 @@ export default function Dashboard() {
     [gruposComProximaParcela, gruposReagendadosBD],
   );
 
-  // PaguePlay: aplicar dedup Direto+Extra e filtros de coluna
+  // PaguePlay: aplicar dedup Direto+Extra (filtros de coluna agora são server-side)
   const acordosOrdenados = useMemo<AcordoComVinculo[]>(() => {
-    // 1) Base para dedup/filtro de vínculo
     let base: AcordoComVinculo[] = acordos;
     if (usuarioTemLogicaDiretoExtra && filtroVinculo !== 'todos') {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
     }
     if (visaoAmpla && filtroVinculo === 'todos') {
-      base = deduplicarVinculados(base, true); // Dashboard é sempre PP
+      base = deduplicarVinculados(base, true);
     }
-
-    // 2) Filtros de coluna client-side (PP)
-    // Nota: a ordenação "hoje-primeiro" é feita server-side via sort_prioridade na view.
-    if (!isPP) return base;
-    let lista = [...base];
-    if (colFiltroEstado)  lista = lista.filter(a => getEstadoFromAcordo(a) === colFiltroEstado);
-    if (colFiltroDia)     lista = lista.filter(a => a.vencimento === `${mesFiltro}-${colFiltroDia.padStart(2,'0')}`);
-    return lista;
-  }, [acordos, hoje, isPP, colFiltroEstado, colFiltroDia, mesFiltro, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla]);
+    return base;
+  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla]);
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 
@@ -1201,7 +1203,7 @@ export default function Dashboard() {
                                   onChange={e => setColFiltroDia(e.target.value)}
                                   placeholder="dd"
                                   className={cn(
-                                    'w-8 h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
+                                    'w-12 h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1.5 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
                                     colFiltroDia ? 'border-primary/50 bg-primary/10' : ''
                                   )}
                                 />

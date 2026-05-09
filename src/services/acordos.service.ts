@@ -20,6 +20,7 @@ export interface FiltrosAcordo {
   busca?: string;
   vencimento?: string;
   apenas_hoje?: boolean;
+  estado_uf?: string;
   page?: number;
   perPage?: number;
   /** Garante que acordos de hoje apareçam sempre na página 1 via duas queries */
@@ -71,6 +72,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     // Intervalo de mês: aplicado aqui para que ambas as queries (hoje + resto) respeitem o filtro
     if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
     if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
+    if (filtros?.estado_uf) q = q.eq('estado_uf', filtros.estado_uf);
     if (filtros?.busca) {
       q = q.or(
         `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`
