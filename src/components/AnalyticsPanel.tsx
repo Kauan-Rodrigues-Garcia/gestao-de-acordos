@@ -337,8 +337,12 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     setOperadorFiltro,
   } = useAnalytics();
 
-  // Para PaguePlay: exibir H.O. como valor principal
-  const valorPrincipal  = isPP ? valorHOMes     : valorRecebidoMes;
+  // Para PaguePlay: exibir H.O. como valor principal.
+  // Sem lógica Direto/Extra (admin/lider/diretoria): usa apenas H.O. de acordos
+  // diretos para não inflar o total com extras de outros operadores.
+  const valorPrincipal  = isPP
+    ? (temLogicaDiretoExtra ? valorHOMes : valorHODireto)
+    : valorRecebidoMes;
   const valorAgendadoPP = isPP ? valorHOAgendado : valorAgendadoMes;
   const labelRecebido   = isPP ? 'H.O. recebido no mês' : 'Recebido no mês';
   const labelAgendado   = isPP ? 'H.O. agendado no mês' : 'Agendado no mês';
@@ -438,9 +442,11 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
   }, [valorRecebidoMes, mes, ano]);
 
-  // Direto / Extra split — só calculado quando a lógica está ativa
+  // Direto / Extra split — sempre calculado para PP (independe da lógica ativa).
+  // valorHODireto é a base correta para admin/lider/diretoria que não têm a lógica
+  // ativa: evita somar acordos extra que pertenceriam ao H.O. de outro operador.
   const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
-    if (!temLogicaDiretoExtra || !isPP) {
+    if (!isPP) {
       return { valorRecebidoDireto: 0, valorRecebidoExtra: 0, valorHODireto: 0, valorHOExtra: 0, qtdDireto: 0, qtdExtra: 0 };
     }
     const pagos = (acordosMes ?? []).filter(a => a.status === 'pago');
@@ -456,7 +462,7 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
       qtdDireto: direto.length,
       qtdExtra:  extra.length,
     };
-  }, [acordosMes, temLogicaDiretoExtra, isPP]);
+  }, [acordosMes, isPP]);
 
   // ── Cor do anel central baseada no percentual ──────────────────────────────
   const donutColor = percMeta >= 100
@@ -705,8 +711,8 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                           accentColor="#22c55e"
                           gradientFrom="#22c55e"
                           trend="up"
-                          value={<span className="text-emerald-500">{formatCurrency(valorHOMes)}</span>}
-                          sub={`${totalPagosMes} pagos · 24,96% do bruto`}
+                          value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
+                          sub={`${qtdDireto} diretos pagos · 24,96% do bruto`}
                         />
                         <MetricCard
                           label="H.O. agendado no mês"
