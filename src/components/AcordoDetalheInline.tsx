@@ -11,7 +11,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  X, Hash, Calendar, DollarSign, Smartphone, Building2,
+  X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
   ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon, CalendarClock,
 } from 'lucide-react';
