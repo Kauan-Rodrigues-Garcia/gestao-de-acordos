@@ -61,7 +61,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const { tags: empresaTags }         = useEmpresaTags();
 
   async function handleSave() {
-    if (!nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
+    if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
     if (!isPaguePlay && !nrCliente.trim()) { toast.error('NR é obrigatório'); return; }
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
 
@@ -189,7 +189,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
                 {/* Nome */}
                 <div className="space-y-1 sm:col-span-2 lg:col-span-2">
-                  <Label className="text-xs font-medium">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'} *</Label>
+                  <Label className="text-xs font-medium">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'}{!isPaguePlay && ' *'}</Label>
                   <Input
                     value={nomeCliente}
                     onChange={e => setNomeCliente(e.target.value)}

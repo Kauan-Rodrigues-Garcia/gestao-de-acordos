@@ -400,6 +400,11 @@ export function AcordoNovoInline({
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const { tags: empresaTags }  = useEmpresaTags();
+  const usuarioTemLogicaDiretoExtra = isPaguePlay && isAtivoParaUsuario(
+    perfil?.id ?? '',
+    perfil?.setor_id ?? null,
+    (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+  );
 
   // ── Persistência em sessionStorage ──────────────────────────────────────
   // Objetivo: preservar o formulário ao trocar/retornar de aba do navegador,
@@ -1287,24 +1292,26 @@ export function AcordoNovoInline({
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Vínculo</Label>
-                    <button
-                      type="button"
-                      onClick={() => setIsExtra(v => !v)}
-                      disabled={salvando}
-                      title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
-                      className={cn(
-                        'h-8 w-full flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
-                        isExtra
-                          ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
-                          : 'bg-background text-foreground border-input hover:bg-accent/50',
-                      )}
-                    >
-                      <Link2 className="w-3 h-3 shrink-0" />
-                      {isExtra ? 'Extra' : 'Direto'}
-                    </button>
-                  </div>
+                  {usuarioTemLogicaDiretoExtra && (
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vínculo</Label>
+                      <button
+                        type="button"
+                        onClick={() => setIsExtra(v => !v)}
+                        disabled={salvando}
+                        title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
+                        className={cn(
+                          'h-8 w-full flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
+                          isExtra
+                            ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
+                            : 'bg-background text-foreground border-input hover:bg-accent/50',
+                        )}
+                      >
+                        <Link2 className="w-3 h-3 shrink-0" />
+                        {isExtra ? 'Extra' : 'Direto'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
