@@ -38,7 +38,6 @@ import { enviarParaLixeira }        from '@/services/lixeira.service';
 import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { VinculoTag } from '@/components/VinculoTag';
-import { DatePickerField } from '@/components/DatePickerField';
 import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
@@ -113,7 +112,6 @@ export default function Acordos() {
   const [busca, setBusca]           = useState(searchParams.get('busca') || '');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') || '');
-  const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
 
@@ -187,7 +185,6 @@ export default function Acordos() {
       if (busca) params.set('busca', busca); else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo) params.set('tipo', filtroTipo); else params.delete('tipo');
-      if (filtroData) params.set('data', filtroData); else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
@@ -195,7 +192,7 @@ export default function Acordos() {
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
   // Analítico = apenas acordos ativos (excluindo pago e nao_pago)
@@ -222,9 +219,8 @@ export default function Acordos() {
     busca:        busca || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-    vencimento:   filtroData || undefined,
-    data_inicio:  filtroData ? undefined : bpMesInicio,
-    data_fim:     filtroData ? undefined : bpMesFim,
+    data_inicio:  bpMesInicio,
+    data_fim:     bpMesFim,
     // Líder/Elite: filtro individual, ou por equipe, ou setor geral (padrão do RLS)
     operador_id:  (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
       ? perfil?.id
@@ -249,12 +245,11 @@ export default function Acordos() {
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroOperador);
   const filtrosAtivosCount = [
     busca,
     filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
     filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
-    filtroData,
     filtroVinculo !== 'todos' ? filtroVinculo : '',
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
   ].filter(Boolean).length;
@@ -297,7 +292,7 @@ export default function Acordos() {
   }, [acordos, loading]);
 
   function limparFiltros() {
-    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
+    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroOperador(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -736,11 +731,6 @@ export default function Acordos() {
                     {tipoLabels[filtroTipo] || filtroTipo} <X className="w-2.5 h-2.5" />
                   </button>
                 )}
-                {filtroData && (
-                  <button onClick={() => { setFiltroData(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
-                    Data: {filtroData} <X className="w-2.5 h-2.5" />
-                  </button>
-                )}
                 {filtroVinculo !== 'todos' && (
                   <button onClick={() => { setFiltroVinculo('todos'); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
                     {filtroVinculo === 'direto' ? 'Apenas Direto' : 'Apenas Extra'} <X className="w-2.5 h-2.5" />
@@ -790,26 +780,6 @@ export default function Acordos() {
                   </SelectContent>
                 </Select>
               )}
-              <div className="flex items-center gap-1">
-                <div className="w-36">
-                  <DatePickerField
-                    value={filtroData}
-                    onChange={v => { setFiltroData(v); setCurrentPage(1); }}
-                    size="sm"
-                  />
-                </div>
-                {filtroData && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-                    onClick={() => { setFiltroData(''); setCurrentPage(1); }}
-                    title="Limpar data"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </Button>
-                )}
-              </div>
               {isPP && temPermissao('filtrar_por_usuario') && (
                 <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
                   <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>

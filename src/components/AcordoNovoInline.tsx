@@ -1236,7 +1236,7 @@ export function AcordoNovoInline({
                     <Label className="text-xs">Estado</Label>
                     <Select value={estadoSel} onValueChange={setEstadoSel}>
                       <SelectTrigger className="h-8 text-xs">
-                        <SelectValue placeholder="UF" />
+                        <SelectValue placeholder="Selecionar Estado" />
                       </SelectTrigger>
                       <SelectContent>
                         {([...ESTADOS_BRASIL] as string[]).map((uf) => (
@@ -1286,6 +1286,24 @@ export function AcordoNovoInline({
                         ))}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Vínculo</Label>
+                    <button
+                      type="button"
+                      onClick={() => setIsExtra(v => !v)}
+                      disabled={salvando}
+                      title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
+                      className={cn(
+                        'h-8 w-full flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
+                        isExtra
+                          ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
+                          : 'bg-background text-foreground border-input hover:bg-accent/50',
+                      )}
+                    >
+                      <Link2 className="w-3 h-3 shrink-0" />
+                      {isExtra ? 'Extra' : 'Direto'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1366,21 +1384,6 @@ export function AcordoNovoInline({
                 >
                   <X className="w-3.5 h-3.5" /> Cancelar
                 </Button>
-                <button
-                  type="button"
-                  onClick={() => setIsExtra(v => !v)}
-                  disabled={salvando}
-                  title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
-                  className={cn(
-                    'ml-auto inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border transition-all whitespace-nowrap',
-                    isExtra
-                      ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
-                      : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
-                  )}
-                >
-                  <Link2 className="w-2.5 h-2.5" />
-                  {isExtra ? 'Extra' : 'Direto'}
-                </button>
               </div>
 
             </div>

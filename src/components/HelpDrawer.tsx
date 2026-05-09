@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   HelpCircle, X, ChevronDown, Search,
-  LayoutDashboard, FileText, Filter, Settings, Bell, Users, Zap,
+  FileText, Filter, Plus, CalendarClock, Zap,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,58 +27,46 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    id: 'dashboard',
-    icon: LayoutDashboard,
-    title: 'Dashboard',
+    id: 'planilha',
+    icon: FileText,
+    title: 'Planilha de Acordos',
     color: 'text-blue-500 bg-blue-500/10 border-blue-500/20',
     faqs: [
       {
-        q: 'O que são os cards de métricas no topo?',
-        a: 'Os cards exibem um resumo do dia atual: total de acordos com vencimento hoje, quantos foram pagos, quantos estão pendentes de verificação e quantos estão vencidos (data passada sem resolução). Os valores monetários mostram o previsto vs. o já recebido.',
+        q: 'O que significam as cores das linhas?',
+        a: 'Vermelho: vencimento já passou (atrasado). Amarelo/laranja: vence hoje e ainda não foi pago. Branco/neutro: acordo normal dentro do prazo. As cores ajudam a priorizar rapidamente os acordos mais urgentes.',
       },
       {
-        q: 'Por que alguns acordos aparecem com borda vermelha/laranja?',
-        a: 'Vermelho indica que o vencimento já passou (acordo atrasado). Laranja/amarelo indica que o vencimento é hoje e o acordo ainda não foi pago. Essas cores ajudam a priorizar os acordos mais urgentes.',
-      },
-      {
-        q: 'O que significa a tag "X/Y" ao lado da forma de pagamento?',
-        a: 'Indica que o acordo é parcelado. O número antes da barra é a parcela atual e o número depois é o total de parcelas — por exemplo, "2/5" significa que é a 2ª parcela de um total de 5.',
+        q: 'O que significa "X/Y" ao lado da forma de pagamento?',
+        a: 'Indica parcelas. Por exemplo, "2/5" = 2ª parcela de 5. Ao marcar como pago, o sistema oferece reagendar a próxima parcela automaticamente.',
       },
       {
         q: 'Como marcar um acordo como pago?',
-        a: 'Clique no ícone ✓ (CheckCircle) verde na coluna de ações. O sistema atualiza o status imediatamente. Para acordos parcelados, você terá a opção de reagendar a próxima parcela automaticamente. Você tem 5 segundos para "Desfazer" a ação caso ocorra um erro.',
+        a: 'Clique no ícone ✓ verde na coluna de ações. O status muda imediatamente. Você tem 5 segundos para desfazer caso tenha clicado por engano.',
       },
       {
-        q: 'O filtro de busca procura em quais campos?',
-        a: 'A busca pesquisa simultaneamente em: Código (número do profissional), Nome do cliente e CPF. Basta digitar qualquer parte de um desses valores para filtrar os resultados.',
-      },
-      {
-        q: 'O realtime parou de funcionar, o que fazer?',
-        a: 'O sistema reconecta automaticamente com backoff progressivo (2s, 4s, 8s…). Ao voltar para a aba após inatividade, a reconexão é imediata. Se o indicador de status continuar em vermelho por mais de 30 segundos, recarregue a página.',
+        q: 'Como editar ou ver detalhes de um acordo?',
+        a: 'Clique em qualquer linha para expandir os detalhes. Use o ícone de lápis para editar campos, ou o ícone de olho para ver o histórico completo.',
       },
     ],
   },
   {
-    id: 'acordos',
-    icon: FileText,
-    title: 'Acordos',
+    id: 'novo-acordo',
+    icon: Plus,
+    title: 'Novo Acordo',
     color: 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20',
     faqs: [
       {
-        q: 'Qual a diferença entre "Verificar", "Pago" e "Não Pago"?',
-        a: '"Verificar Pendente" é o status padrão de um acordo recém-criado, aguardando confirmação do pagamento. "Pago" indica que o pagamento foi confirmado. "Não Pago" indica que o pagamento não foi realizado e o acordo está encerrado para fins de controle.',
+        q: 'Como criar um novo acordo?',
+        a: 'Clique no botão "+ Novo Acordo" no topo da planilha. O formulário abre diretamente na tabela — preencha NR, valor, vencimento e forma de pagamento. Clique em "Salvar Acordo" para confirmar.',
       },
       {
-        q: 'O que é um acordo "Direto" vs "Extra"?',
-        a: '"Direto" significa que o operador é o responsável principal pelo NR/Código do cliente. "Extra" indica que outro operador já possui o vínculo direto com esse cliente, mas este acordo extra foi permitido pela liderança. Acordos extras são identificados por uma tag especial.',
+        q: 'O que é "Direto" e "Extra" no campo Vínculo?',
+        a: '"Direto" = você é o responsável principal pelo NR do cliente. "Extra" = outro operador já possui o vínculo direto, mas você criou um acordo adicional autorizado. Clique no campo Vínculo para alternar entre os dois.',
       },
       {
-        q: 'Posso editar um acordo após criá-lo?',
-        a: 'Sim. Clique no ícone de lápis (Edit) na linha do acordo para abrir o formulário de edição inline, ou use o ícone de olho (Eye) para ver detalhes e editar campos específicos. Alterações na chave principal (Código/NR) passam por validação de duplicidade.',
-      },
-      {
-        q: 'Como funciona a importação via Excel?',
-        a: 'Acesse "Importar Excel" no menu lateral. Selecione o arquivo .xlsx com as colunas no formato esperado. O sistema detecta automaticamente os campos e classifica os acordos como Direto ou Extra antes de importar. Revise os erros apontados antes de confirmar.',
+        q: 'O sistema bloqueou meu novo acordo. O que aconteceu?',
+        a: 'Quando o NR já pertence a outro operador, o sistema pede autorização da liderança antes de salvar. Aguarde a aprovação ou selecione o vínculo "Extra" se for um acordo adicional.',
       },
     ],
   },
@@ -89,80 +77,56 @@ const SECTIONS: Section[] = [
     color: 'text-purple-500 bg-purple-500/10 border-purple-500/20',
     faqs: [
       {
-        q: 'Como usar múltiplos filtros simultaneamente?',
-        a: 'Todos os filtros são cumulativos. Você pode combinar busca por texto, filtro de status, tipo de pagamento e data ao mesmo tempo. Os filtros ativos aparecem como chips coloridos abaixo dos controles — clique no "×" de qualquer chip para removê-lo individualmente.',
+        q: 'Como buscar um acordo específico?',
+        a: 'Use a barra de busca no topo da planilha. Ela pesquisa simultaneamente por NR/Código, nome do cliente e WhatsApp. Basta digitar qualquer parte do valor.',
       },
       {
-        q: 'O filtro de data exibe acordos de um dia específico ou de um período?',
-        a: 'Você pode filtrar por dia específico usando o campo de data, ou por período usando as opções "Data início" e "Data fim". Quando ambas são preenchidas, o sistema exibe todos os acordos com vencimento dentro do intervalo.',
+        q: 'Como filtrar por status ou tipo de pagamento?',
+        a: 'Use os seletores ao lado da busca: escolha o status desejado (Verificar, Pago, Não Pago) e/ou o tipo de pagamento. Os filtros são cumulativos — você pode combinar vários ao mesmo tempo.',
       },
       {
-        q: 'Por que os filtros somem ao recarregar a página?',
-        a: 'Os filtros são sincronizados com a URL da página (parâmetros de query). Isso significa que você pode compartilhar a URL com os filtros ativos. Se os filtros sumiram, verifique se a URL foi preservada ou use o botão "Limpar" e reaplique-os.',
+        q: 'Como navegar entre meses?',
+        a: 'Use as setas "‹ ›" ao lado do nome do mês no topo da página para avançar ou voltar. A planilha exibe apenas os acordos com vencimento no mês selecionado.',
+      },
+      {
+        q: 'Como limpar todos os filtros de uma vez?',
+        a: 'Clique no botão "Limpar" que aparece na barra de filtros quando algum filtro está ativo. Ele remove todos os filtros de texto, status e tipo simultaneamente.',
       },
     ],
   },
   {
-    id: 'notificacoes',
-    icon: Bell,
-    title: 'Notificações',
+    id: 'reagendamento',
+    icon: CalendarClock,
+    title: 'Reagendamento',
     color: 'text-amber-500 bg-amber-500/10 border-amber-500/20',
     faqs: [
       {
-        q: 'O que gera notificações no sistema?',
-        a: 'Notificações são geradas em: transferências de NR/Código entre operadores, promoção de acordo extra para direto, aprovações de liderança para acordos conflitantes e outras ações administrativas que afetam seus acordos.',
+        q: 'Como reagendar um acordo para outra data?',
+        a: 'Abra os detalhes do acordo (clique na linha) e use o campo "Vencimento" para selecionar uma nova data. Salve a alteração. O acordo será movido para o mês correspondente.',
       },
       {
-        q: 'Como visualizar as notificações?',
-        a: 'Clique no ícone de sino (🔔) no header para ver o badge com a contagem, ou no botão flutuante no canto inferior direito da tela para abrir o painel completo de notificações. Clique em cada notificação para ver os detalhes.',
-      },
-      {
-        q: 'As notificações chegam em tempo real?',
-        a: 'Sim. O sistema usa Supabase Realtime para entregar notificações instantaneamente via WebSocket. Quando uma nova notificação chega, o badge pulsa e (em dispositivos móveis) o aparelho vibra levemente.',
+        q: 'O que acontece ao marcar como pago um acordo parcelado?',
+        a: 'O sistema pergunta se deseja criar a próxima parcela automaticamente. Confirme para gerar a próxima parcela com a data calculada, ou cancele para não reagendar.',
       },
     ],
   },
   {
-    id: 'usuarios',
-    icon: Users,
-    title: 'Usuários e Permissões',
-    color: 'text-rose-500 bg-rose-500/10 border-rose-500/20',
-    faqs: [
-      {
-        q: 'Quais são os níveis de acesso disponíveis?',
-        a: 'Operador: acesso apenas aos próprios acordos. Líder: visão da equipe/setor, aprovações. Elite/Gerência: visão ampla, sem configurações admin. Administrador: acesso total, incluindo configurações, usuários e lixeira. Diretoria: acesso ao painel executivo.',
-      },
-      {
-        q: 'Como alterar a foto de perfil?',
-        a: 'Clique no avatar no canto superior direito do header para abrir o popover de perfil. Depois clique em "Adicionar foto" ou "Alterar foto" e selecione uma imagem JPG/PNG de até 3 MB. A foto é atualizada em tempo real para todos os dispositivos conectados.',
-      },
-      {
-        q: 'O que é o campo "Setor" no perfil?',
-        a: 'O setor define a área de atuação do operador dentro da empresa. Líderes de setor veem os acordos de todos os operadores do seu setor. O setor também é usado para agrupamento nos relatórios analíticos.',
-      },
-    ],
-  },
-  {
-    id: 'sistema',
+    id: 'dicas',
     icon: Zap,
-    title: 'Sistema e Desempenho',
+    title: 'Dicas Rápidas',
     color: 'text-cyan-500 bg-cyan-500/10 border-cyan-500/20',
     faqs: [
       {
+        q: 'A planilha atualiza sozinha ou preciso recarregar?',
+        a: 'Atualiza sozinha. Quando outro usuário cria ou altera um acordo, sua tela reflete a mudança em tempo real sem precisar recarregar a página.',
+      },
+      {
+        q: 'Excluí um acordo por engano. É possível recuperar?',
+        a: 'Sim. Acesse "Lixeira" no menu lateral — acordos excluídos ficam disponíveis por 3 dias para restauração.',
+      },
+      {
         q: 'Como mudar o tema do sistema?',
-        a: 'Clique no ícone de lua/sol ao lado do "?" no header. Você pode escolher entre: Claro, Escuro (padrão), Cinza Escuro, Azul Profundo e Sistema (segue as preferências do seu dispositivo). A preferência é salva automaticamente.',
-      },
-      {
-        q: 'Os dados são atualizados automaticamente?',
-        a: 'Sim. O sistema usa Realtime via WebSocket para atualizações instantâneas sem precisar recarregar. Quando você está com a aba em segundo plano por mais de 60 segundos e volta, uma atualização silenciosa é feita em segundo plano, sem exibir spinner.',
-      },
-      {
-        q: 'O que é a Lixeira de Acordos?',
-        a: 'Acordos excluídos manualmente ou transferidos ficam retidos na lixeira por 3 dias antes da exclusão permanente. Isso garante rastreabilidade e permite investigar inconsistências. Apenas usuários com permissão "ver_lixeira" têm acesso.',
-      },
-      {
-        q: 'Estou com problemas de acesso. Com quem falar?',
-        a: 'Entre em contato com o administrador do sistema da sua empresa. Eles podem redefinir sua senha, ajustar permissões e resolver problemas de acesso. Não compartilhe suas credenciais com outros usuários.',
+        a: 'Clique no ícone de lua/sol no header (ao lado do "?"). Escolha entre Claro, Escuro ou Sistema (segue seu dispositivo).',
       },
     ],
   },

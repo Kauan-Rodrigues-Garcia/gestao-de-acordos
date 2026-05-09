@@ -134,14 +134,20 @@ export function useResumoDia({
       const agendadosHoje = (agendadosHojeData as { id: string; status: string }[]) || [];
 
       const valorRecebido = pagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-      let valorDireto = 0, valorExtra = 0;
 
+      // Diretos = todos os pagos que não são 'extra' (cálculo base para H.O.)
+      const pagosDiretos = pagos.filter(a => a.tipo_vinculo !== 'extra');
+      const valorDiretoTotal = pagosDiretos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+
+      let valorDireto = 0, valorExtra = 0;
       if (temLogicaDiretoExtra) {
-        const direto = pagos.filter(a => a.tipo_vinculo !== 'extra');
-        const extra = pagos.filter(a => a.tipo_vinculo === 'extra');
-        valorDireto = direto.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-        valorExtra = extra.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+        valorDireto = valorDiretoTotal;
+        valorExtra = pagos.filter(a => a.tipo_vinculo === 'extra').reduce((s, a) => s + (Number(a.valor) || 0), 0);
       }
+
+      // H.O.: para líderes/admins/diretoria (sem lógica direto/extra) usa apenas diretos.
+      // Para operadores com lógica ativa, usa o total recebido (direto + extra).
+      const valorParaHO = temLogicaDiretoExtra ? valorRecebido : valorDiretoTotal;
 
       // ── Recebimento por tag ───────────────────────────────────────────────
       const tagMap: Record<string, { valor: number; qtd: number }> = {};
@@ -174,7 +180,7 @@ export function useResumoDia({
 
       setData({
         valorRecebido,
-        valorHO: valorRecebido * PP_HO_PERCENTUAL,
+        valorHO: valorParaHO * PP_HO_PERCENTUAL,
         valorDireto,
         valorExtra,
         valorHODireto: valorDireto * PP_HO_PERCENTUAL,
