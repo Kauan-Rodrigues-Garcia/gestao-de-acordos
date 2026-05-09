@@ -337,6 +337,29 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     setOperadorFiltro,
   } = useAnalytics();
 
+  // Direto / Extra split — sempre calculado para PP (independe da lógica ativa).
+  // DEVE ficar ANTES de qualquer uso de valorHODireto para evitar TDZ no bundle
+  // de produção (Rollup pode colocar const valorHODireto num bloco posterior ao
+  // ponto onde é lido, causando ReferenceError em PaguePlay).
+  const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
+    if (!isPP) {
+      return { valorRecebidoDireto: 0, valorRecebidoExtra: 0, valorHODireto: 0, valorHOExtra: 0, qtdDireto: 0, qtdExtra: 0 };
+    }
+    const pagos = (acordosMes ?? []).filter(a => a.status === 'pago');
+    const direto = pagos.filter(a => a.tipo_vinculo !== 'extra');
+    const extra  = pagos.filter(a => a.tipo_vinculo === 'extra');
+    const vDireto = direto.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const vExtra  = extra.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    return {
+      valorRecebidoDireto: vDireto,
+      valorRecebidoExtra:  vExtra,
+      valorHODireto:  vDireto * PP_HO_PERCENTUAL,
+      valorHOExtra:   vExtra  * PP_HO_PERCENTUAL,
+      qtdDireto: direto.length,
+      qtdExtra:  extra.length,
+    };
+  }, [acordosMes, isPP]);
+
   // Para PaguePlay: exibir H.O. como valor principal.
   // Sem lógica Direto/Extra (admin/lider/diretoria): usa apenas H.O. de acordos
   // diretos para não inflar o total com extras de outros operadores.
@@ -441,28 +464,6 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
     if (diaAtual === 0) return 0;
     return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
   }, [valorRecebidoMes, mes, ano]);
-
-  // Direto / Extra split — sempre calculado para PP (independe da lógica ativa).
-  // valorHODireto é a base correta para admin/lider/diretoria que não têm a lógica
-  // ativa: evita somar acordos extra que pertenceriam ao H.O. de outro operador.
-  const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
-    if (!isPP) {
-      return { valorRecebidoDireto: 0, valorRecebidoExtra: 0, valorHODireto: 0, valorHOExtra: 0, qtdDireto: 0, qtdExtra: 0 };
-    }
-    const pagos = (acordosMes ?? []).filter(a => a.status === 'pago');
-    const direto = pagos.filter(a => a.tipo_vinculo !== 'extra');
-    const extra  = pagos.filter(a => a.tipo_vinculo === 'extra');
-    const vDireto = direto.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-    const vExtra  = extra.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-    return {
-      valorRecebidoDireto: vDireto,
-      valorRecebidoExtra:  vExtra,
-      valorHODireto:  vDireto * PP_HO_PERCENTUAL,
-      valorHOExtra:   vExtra  * PP_HO_PERCENTUAL,
-      qtdDireto: direto.length,
-      qtdExtra:  extra.length,
-    };
-  }, [acordosMes, isPP]);
 
   // ── Cor do anel central baseada no percentual ──────────────────────────────
   const donutColor = percMeta >= 100
