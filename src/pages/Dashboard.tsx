@@ -191,10 +191,11 @@ export default function Dashboard() {
   const [filtroTipo,   setFiltroTipo]   = useState(searchParams.get('tipo')   || '');
   const [filtroData,   setFiltroData]   = useState(searchParams.get('data')   || '');
   const [currentPage,  setCurrentPage]  = useState(Number(searchParams.get('page')) || 1);
-  // Filtros de coluna (client-side, PaguePay)
-  const [colFiltroEstado,  setColFiltroEstado]  = useState('');
-  const [colFiltroDia,     setColFiltroDia]     = useState(''); // dia dentro do mesFiltro
-  const [estadoDropdown,   setEstadoDropdown]   = useState(false);
+  // Filtros de coluna (server-side, PaguePay)
+  const [colFiltroEstado,    setColFiltroEstado]    = useState('');
+  const [colFiltroDia,       setColFiltroDia]       = useState(''); // valor commitado (dispara query)
+  const [colFiltroDiaInput,  setColFiltroDiaInput]  = useState(''); // valor digitado (pendente)
+  const [estadoDropdown,     setEstadoDropdown]     = useState(false);
   // ── Filtro Direto / Extra ─────────────────────────────────────────────────
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -461,7 +462,9 @@ export default function Dashboard() {
 
   // ── handlers ─────────────────────────────────────────────────────────────────
   function limparFiltros() {
-    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setCurrentPage(1);
+    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData('');
+    setColFiltroEstado(''); setColFiltroDia(''); setColFiltroDiaInput('');
+    setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -1199,18 +1202,30 @@ export default function Dashboard() {
                                 <input
                                   type="number"
                                   min={1} max={31}
-                                  value={colFiltroDia}
-                                  onChange={e => setColFiltroDia(e.target.value)}
+                                  value={colFiltroDiaInput}
+                                  onChange={e => setColFiltroDiaInput(e.target.value)}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') { setColFiltroDia(colFiltroDiaInput); }
+                                    if (e.key === 'Escape') { setColFiltroDiaInput(colFiltroDia); }
+                                  }}
                                   placeholder="dd"
                                   className={cn(
                                     'w-12 h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1.5 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
                                     colFiltroDia ? 'border-primary/50 bg-primary/10' : ''
                                   )}
                                 />
-                                {colFiltroDia && (
+                                {colFiltroDiaInput !== colFiltroDia && colFiltroDiaInput && (
                                   <button
                                     type="button"
-                                    onClick={() => setColFiltroDia('')}
+                                    onClick={() => setColFiltroDia(colFiltroDiaInput)}
+                                    className="h-5 px-1 text-[8px] font-medium bg-primary text-primary-foreground rounded flex-shrink-0 hover:bg-primary/90"
+                                    title="Aplicar filtro de dia"
+                                  >ok</button>
+                                )}
+                                {colFiltroDia && colFiltroDiaInput === colFiltroDia && (
+                                  <button
+                                    type="button"
+                                    onClick={() => { setColFiltroDia(''); setColFiltroDiaInput(''); }}
                                     className="text-[8px] text-muted-foreground hover:text-destructive flex-shrink-0 leading-none"
                                     title="Limpar filtro de dia"
                                   >✕</button>
