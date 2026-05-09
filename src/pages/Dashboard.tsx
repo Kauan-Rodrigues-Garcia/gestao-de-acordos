@@ -1150,28 +1150,28 @@ export default function Dashboard() {
                           </th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
                           {/* ── ESTADO: dropdown de siglas ── */}
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                            <div className="flex flex-col gap-1">
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
                               <span>ESTADO</span>
                               <div className="relative" onClick={e => e.stopPropagation()}>
                                 <button
                                   type="button"
                                   onClick={() => setEstadoDropdown(v => !v)}
                                   className={cn(
-                                    'w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-normal text-left flex items-center justify-between gap-1',
+                                    'h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-left flex items-center gap-1 whitespace-nowrap',
                                     colFiltroEstado ? 'border-primary/50 bg-primary/10 text-primary' : 'text-muted-foreground/70'
                                   )}
                                 >
-                                  <span>{colFiltroEstado || 'UF…'}</span>
+                                  <span>{colFiltroEstado || 'UF'}</span>
                                   {colFiltroEstado && (
                                     <span
-                                      className="text-[9px] text-muted-foreground hover:text-destructive cursor-pointer"
+                                      className="text-[8px] text-muted-foreground hover:text-destructive cursor-pointer leading-none"
                                       onClick={e => { e.stopPropagation(); setColFiltroEstado(''); setEstadoDropdown(false); }}
                                     >✕</span>
                                   )}
                                 </button>
                                 {estadoDropdown && (
-                                  <div className="absolute top-7 left-0 z-50 bg-background border border-border rounded-lg shadow-xl p-1.5 grid grid-cols-4 gap-0.5 min-w-[140px]">
+                                  <div className="absolute top-6 left-0 z-50 bg-background border border-border rounded-lg shadow-xl p-1.5 grid grid-cols-4 gap-0.5 min-w-[140px]">
                                     {(ESTADOS_BRASIL as readonly string[]).map(uf => (
                                       <button
                                         key={uf} type="button"
@@ -1189,19 +1189,19 @@ export default function Dashboard() {
                               </div>
                             </div>
                           </th>
-                          {/* ── VENCIMENTO: calendário de dia dentro do mês selecionado ── */}
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">
-                            <div className="flex flex-col gap-1">
+                          {/* ── VENCIMENTO: filtro de dia inline ── */}
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
                               <span>VENCIMENTO</span>
-                              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
+                              <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
                                 <input
                                   type="number"
                                   min={1} max={31}
                                   value={colFiltroDia}
                                   onChange={e => setColFiltroDia(e.target.value)}
-                                  placeholder="dia"
+                                  placeholder="dd"
                                   className={cn(
-                                    'w-full h-6 text-[10px] bg-muted/40 border border-border/50 rounded px-1.5 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
+                                    'w-8 h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
                                     colFiltroDia ? 'border-primary/50 bg-primary/10' : ''
                                   )}
                                 />
@@ -1209,7 +1209,7 @@ export default function Dashboard() {
                                   <button
                                     type="button"
                                     onClick={() => setColFiltroDia('')}
-                                    className="text-[9px] text-muted-foreground hover:text-destructive flex-shrink-0"
+                                    className="text-[8px] text-muted-foreground hover:text-destructive flex-shrink-0 leading-none"
                                     title="Limpar filtro de dia"
                                   >✕</button>
                                 )}
