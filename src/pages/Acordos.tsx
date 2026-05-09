@@ -819,7 +819,6 @@ export default function Acordos() {
                       {isPP ? (
                         <>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">NOME</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CPF</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">INSCRIÇÃO</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">ESTADO</th>
@@ -922,17 +921,6 @@ export default function Acordos() {
                                   <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
                                   <VinculoTag acordo={a} />
                                 </div>
-                              </td>
-                              {/* CPF — clica APENAS copia, não abre detalhe */}
-                              <td className="px-3 py-2.5">
-                                <button
-                                  type="button"
-                                  title="Clique para copiar o CPF"
-                                  onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); toast.success(`CPF ${a.nr_cliente} copiado!`); }}
-                                  className="inline-flex items-center gap-1 font-mono text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded text-primary font-bold hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
-                                >
-                                  <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                                </button>
                               </td>
                               {/* Inscrição */}
                               <td className="px-3 py-2.5 text-muted-foreground text-[11px]">

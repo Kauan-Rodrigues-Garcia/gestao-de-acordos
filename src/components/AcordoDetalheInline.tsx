@@ -769,9 +769,6 @@ export function AcordoDetalheInline({
                 {isPaguePlay && acordoLocal.instituicao && (
                   <Campo icon={Building2} label="Código" value={acordoLocal.instituicao} />
                 )}
-                {acordoLocal.nr_cliente && (
-                  <Campo icon={Hash} label={isPaguePlay ? 'CPF' : 'NR'} value={acordoLocal.nr_cliente} mono />
-                )}
                 {isPaguePlay && acordoLocal.nome_cliente && (
                   <Campo icon={User} label="Nome do Profissional" value={acordoLocal.nome_cliente} />
                 )}

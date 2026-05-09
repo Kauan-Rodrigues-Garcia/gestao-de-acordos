@@ -45,7 +45,6 @@ export function ModalFilaWhatsApp({
   onClose,
 }: ModalFilaWhatsAppProps) {
   const isPP = useTenant().isPaguePlay;
-  const nrLabel = isPP ? 'CPF' : 'NR';
   const [filaLocal, setFilaLocal] = useState<ItemFila[]>(fila);
   const [expandido, setExpandido] = useState<string | null>(null);
   const [enviandoAuto, setEnviandoAuto] = useState(false);
@@ -124,7 +123,7 @@ export function ModalFilaWhatsApp({
 
   function copiarTodasMensagens() {
     const texto = filaLocal
-      .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente} (${nrLabel} ${i.nr_cliente})\n${i.mensagem}`)
+      .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente}\n${i.mensagem}`)
       .join('\n\n---\n\n');
     navigator.clipboard.writeText(texto).then(() => toast.success(`${total} mensagens copiadas!`));
   }
@@ -229,8 +228,6 @@ export function ModalFilaWhatsApp({
                 {/* Info do cliente */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono font-bold text-primary">{nrLabel} {item.nr_cliente}</span>
-                    <span className="text-xs text-muted-foreground">·</span>
                     <span className="text-xs font-medium text-foreground truncate">{item.nome_cliente}</span>
                   </div>
                   <p className="text-xs text-muted-foreground font-mono">

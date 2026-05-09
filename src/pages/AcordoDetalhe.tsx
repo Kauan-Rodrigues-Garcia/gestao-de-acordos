@@ -98,7 +98,6 @@ export default function AcordoDetalhe() {
             </span>
             {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
           </div>
-          <p className="text-sm text-muted-foreground font-mono mt-0.5">{isPP ? 'CPF' : 'NR'}: {acordo.nr_cliente}</p>
         </div>
         <div className="flex gap-2">
           {acordo.whatsapp && (
@@ -128,7 +127,6 @@ export default function AcordoDetalhe() {
                   <>
                     {[
                       { label: 'Nome do Profissional', value: acordo.nome_cliente, icon: User },
-                      { label: 'CPF', value: acordo.nr_cliente, icon: Hash, mono: true },
                       { label: 'Código', value: acordo.instituicao || '-', icon: Building2 },
                       { label: 'WhatsApp', value: acordo.whatsapp || '-', icon: Smartphone, mono: true },
                       { label: 'Estado', value: getEstadoFromAcordo(acordo) || '-', icon: MapPin },

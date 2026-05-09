@@ -1083,7 +1083,7 @@ export default function Dashboard() {
                   <div className="relative flex-1 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input
-                      placeholder="Buscar Código, nome ou CPF..."
+                      placeholder="Buscar Código ou nome..."
                       value={busca}
                       onChange={e => { setBusca(e.target.value); setCurrentPage(1); }}
                       className="pl-8 h-8 text-sm"

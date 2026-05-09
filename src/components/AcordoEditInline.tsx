@@ -62,7 +62,6 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
   async function handleSave() {
     if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
-    if (!isPaguePlay && !nrCliente.trim()) { toast.error('NR é obrigatório'); return; }
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
 
     const valorNum = parseCurrencyInput(valor);
@@ -198,19 +197,6 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                   />
                 </div>
 
-                {/* CPF */}
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">{isPaguePlay ? 'CPF' : 'NR'} {!isPaguePlay && '*'}</Label>
-                  <div className="relative">
-                    <Hash className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                    <Input
-                      value={nrCliente}
-                      onChange={e => setNrCliente(e.target.value)}
-                      placeholder="000.000.000-00"
-                      className="h-8 text-xs pl-6 font-mono"
-                    />
-                  </div>
-                </div>
 
                 {/* Vencimento */}
                 <DatePickerField

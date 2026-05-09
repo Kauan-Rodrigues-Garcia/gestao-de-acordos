@@ -11,8 +11,7 @@
  *   F  Data de venci.
  *   G  Status pendente/ pago ou não pago
  *   H  Nome do profissional
- *   I  CPF
- *   J  Whatsapp
+ *   I  Whatsapp
  *
  * Este teste garante que a função `detectarCampo` (exportada de
  * `src/pages/ImportarExcel.tsx`) reconhece cada um desses headers e os
@@ -67,11 +66,6 @@ describe('detectarCampo — headers reais da planilha PaguePlay', () => {
     expect(detectarCampo('Nome do profissional')).toBe('nome_cliente');
     expect(detectarCampo('Nome completo')).toBe('nome_cliente');
     expect(detectarCampo('Nome')).toBe('nome_cliente');
-  });
-
-  it('reconhece "CPF" como nr_cliente (mapeamento via keyword cpf)', () => {
-    expect(detectarCampo('CPF')).toBe('nr_cliente');
-    expect(detectarCampo('cpf')).toBe('nr_cliente');
   });
 
   it('reconhece "Whatsapp" como whatsapp', () => {

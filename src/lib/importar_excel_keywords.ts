@@ -22,7 +22,7 @@ export type CampoDestino =
 // 'vl' em valor → falso positivo.
 export const KEYWORDS: Record<CampoDestino, string[]> = {
   nome_cliente:  ['nome', 'cliente', 'devedor', 'razao social', 'nome cliente', 'nome do cliente', 'tomador'],
-  nr_cliente:    ['nr', 'num', 'nro', 'numero', 'cod', 'codigo', 'contrato', 'cpf', 'cnpj', 'acordo'],
+  nr_cliente:    ['nr', 'num', 'nro', 'numero', 'cod', 'codigo', 'contrato', 'acordo'],
   vencimento:    ['venc', 'vencimento', 'data venc', 'data de venc', 'prazo', 'validade', 'data'],
   valor:         ['valor', 'vlr', 'montante', 'r$', 'valor acordo'],
   whatsapp:      ['whats', 'whatsapp', 'wpp', 'cel', 'celular', 'tel', 'telefone', 'fone', 'zap', 'contato', 'numero celular'],

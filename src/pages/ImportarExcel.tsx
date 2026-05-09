@@ -104,7 +104,6 @@ const CLASSE_TH_PREVIEW: Record<ColunaPreviewKey, string> = {
   'ESTADO':         'px-2 py-2 text-center font-semibold text-muted-foreground w-14',
   'CLASS.':         'px-2 py-2 text-left font-semibold text-muted-foreground',
   'NOME':           'px-2 py-2 text-left font-semibold text-muted-foreground',
-  'CPF':            'px-2 py-2 text-left font-semibold text-muted-foreground',
   'VENCIMENTO':     'px-2 py-2 text-left font-semibold text-muted-foreground',
   'VALOR':          'px-2 py-2 text-right font-semibold text-muted-foreground',
   'PARC.':          'px-2 py-2 text-center font-semibold text-muted-foreground',
@@ -1830,7 +1829,7 @@ export default function ImportarExcel() {
                 <p className="text-xs font-semibold text-foreground mb-1.5">Colunas reconhecidas (nomes flexíveis):</p>
                 <div className="flex flex-wrap gap-1.5">
                   {(ehPaguePay
-                    ? ['INSCRIÇÃO', 'ESTADO / UF', 'FORMA DE PAGAMENTO / TIPO', 'QUANT. PARCELAS', 'VALOR', 'DATA DE VENCI. / VENCIMENTO', 'STATUS', 'NOME DO PROFISSIONAL / NOME', 'CPF', 'WHATSAPP / TELEFONE']
+                    ? ['INSCRIÇÃO', 'ESTADO / UF', 'FORMA DE PAGAMENTO / TIPO', 'QUANT. PARCELAS', 'VALOR', 'DATA DE VENCI. / VENCIMENTO', 'STATUS', 'NOME DO PROFISSIONAL / NOME', 'WHATSAPP / TELEFONE']
                     : ['NR / Número / Contrato', 'NOME / Cliente', 'VALOR / Parcela / VLR', 'VENC / Vencimento', 'WHATS / Telefone / Cel', 'STATUS / Situação', 'INST / Instituição / Banco', 'OBS / Observação']
                   ).map(c => (
                     <Badge key={c} variant="outline" className="text-[10px]">{c}</Badge>
@@ -2021,10 +2020,6 @@ export default function ImportarExcel() {
                       );
                       const avisosMsgs = r.erros
                         .filter(e => !e.includes('Vencimento') && !e.includes('Valor'))
-                        // Em PaguePlay o identificador é a Inscrição (r.instituicao) e o
-                        // CPF é opcional — renomeia o aviso "NR não encontrado" para "CPF
-                        // não encontrado" para evitar o termo "NR" que não existe neste tenant.
-                        .map(e => ehPaguePay ? e.replace(/^NR não encontrado$/, 'CPF não encontrado') : e);
                       const classif = classifPorLinha.get(r.linhaOriginal);
                       const autorizada = linhasAutorizadas.has(r.linhaOriginal);
                       const bloqueada = classif?.categoria === 'duplicado' && classif?.precisaAutorizacao && !autorizada;
@@ -2085,12 +2080,6 @@ export default function ImportarExcel() {
                           <td className="px-2 py-1.5 max-w-[130px] truncate font-medium">
                             {r.nome_cliente || <span className="text-muted-foreground/40 italic">sem nome</span>}
                           </td>
-                          {/* PaguePlay: coluna CPF dedicada (vem de r.nr_cliente — header "CPF" da planilha). */}
-                          {ehPaguePay && (
-                            <td className="px-2 py-1.5 font-mono text-[11px] text-muted-foreground max-w-[110px] truncate">
-                              {r.nr_cliente || <span className="opacity-30">—</span>}
-                            </td>
-                          )}
                           <td className="px-2 py-1.5 font-mono">
                             {r.vencimento
                               ? formatDate(r.vencimento)

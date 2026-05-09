@@ -153,7 +153,6 @@ interface AnaliticoOperadorProps {
 function AnaliticoOperador({ operadorId, operadorNome, fotoUrl, onFechar }: AnaliticoOperadorProps) {
   const _t = useTenant();
   const statusLabels = _t.statusLabels;
-  const nrLabel = _t.isPaguePlay ? 'CPF' : 'NR';
 
   const [acordos,       setAcordos]       = useState<Acordo[]>([]);
   const [loadingLocal,  setLoadingLocal]  = useState(true);
@@ -358,7 +357,6 @@ function AnaliticoOperador({ operadorId, operadorNome, fotoUrl, onFechar }: Anal
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b border-border bg-muted/30">
-                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">{nrLabel}</th>
                       <th className="text-left px-4 py-2 font-medium text-muted-foreground">CLIENTE</th>
                       <th className="text-left px-4 py-2 font-medium text-muted-foreground">VENCIMENTO</th>
                       <th className="text-right px-4 py-2 font-medium text-muted-foreground">VALOR</th>
@@ -375,7 +373,6 @@ function AnaliticoOperador({ operadorId, operadorNome, fotoUrl, onFechar }: Anal
                           key={a.id}
                           className="border-b border-border/50 hover:bg-muted/20 transition-colors"
                         >
-                          <td className="px-4 py-2 font-mono text-muted-foreground">{a.nr_cliente}</td>
                           <td className="px-4 py-2 font-medium text-foreground max-w-[160px] truncate">{a.nome_cliente}</td>
                           <td className="px-4 py-2 text-muted-foreground">
                             {formatDate(a.vencimento)}
@@ -423,7 +420,6 @@ export default function PainelLider() {
   const { empresa } = useEmpresa();
   const tenant = useTenant();
   const statusLabels = tenant.statusLabels;
-  const nrLabel = tenant.isPaguePlay ? 'CPF' : 'NR';
 
   const [operadores,          setOperadores]          = useState<Perfil[]>([]);
   const [acordosPorOperador,  setAcordosPorOperador]  = useState<Record<string, Acordo[]>>({});

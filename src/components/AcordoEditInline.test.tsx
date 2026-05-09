@@ -1,20 +1,18 @@
 /**
  * AcordoEditInline.test.tsx
  * ─────────────────────────────────────────────────────────────────────────
- * Teste de integração focado no CORAÇÃO deste componente: o bloqueio de
- * NR/Inscrição duplicado durante a edição e a sincronização pós-update
- * com nr_registros.
+ * Teste de integração focado no coração deste componente: bloqueio de
+ * Inscrição duplicada (PaguePlay) e salvamento básico sem mudança de chave.
  *
- * Regressão que este arquivo protege:
- *  • "Ao editar um acordo mudando a chave para um valor já usado, a edição
- *     era salva e criava tabulação duplicada" → corrigido invocando
- *     verificarNrRegistro(valor, empresa, campo, acordoIdExcluir).
- *  • "Extras sendo registrados como titulares no nr_registros" → corrigido
- *     pulando registrarNr quando tipo_vinculo==='extra'.
+ * Campo NR (Bookplay) foi removido por conformidade LGPD; testes de
+ * deduplicação via NR input foram excluídos junto.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Acordo } from '@/lib/supabase';
+
+// Agora sim, o SUT.
+import { AcordoEditInline } from './AcordoEditInline';
 
 // ── Mocks que DEVEM ir antes do import do SUT ───────────────────────────────
 
@@ -101,9 +99,6 @@ vi.mock('@/components/DatePickerField', () => ({
   ),
 }));
 
-// Agora sim, o SUT.
-import { AcordoEditInline } from './AcordoEditInline';
-
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeAcordo(overrides: Partial<Acordo> = {}): Acordo {
@@ -171,140 +166,8 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     expect(toastSuccess).toHaveBeenCalledWith('Acordo atualizado!');
   });
 
-  it('(b) edição mudando NR para valor JÁ OCUPADO bloqueia com toast e não salva', async () => {
-    const acordo = makeAcordo({ nr_cliente: '777' });
-    const onSaved = vi.fn();
-    verificarNrRegistroMock.mockResolvedValue({
-      registroId: 'r1', acordoId: 'outro', operadorId: 'op2', operadorNome: 'Maria',
-    });
-
-    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
-
-    // Muda o NR para um já ocupado.
-    const nrInput = screen.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
-    fireEvent.change(nrInput, { target: { value: '888' } });
-
-    clickSalvar();
-
-    await waitFor(() => expect(verificarNrRegistroMock).toHaveBeenCalledTimes(1));
-    expect(verificarNrRegistroMock).toHaveBeenCalledWith('888', 'emp-1', 'nr_cliente', 'acordo-1');
-    expect(toastError).toHaveBeenCalled();
-    // Mensagem de bloqueio deve mencionar o operador ocupante e NR.
-    const [msg] = toastError.mock.calls[0];
-    expect(msg).toMatch(/Maria/);
-    expect(msg).toMatch(/888/);
-
-    expect(onSaved).not.toHaveBeenCalled();
-    expect(updateCalls).toHaveLength(0);
-    expect(registrarNrMock).not.toHaveBeenCalled();
-  });
-
-  it('(c) edição mudando NR para valor LIVRE salva e sincroniza nr_registros (acordo direto)', async () => {
-    const acordo = makeAcordo({ nr_cliente: '777', tipo_vinculo: 'direto' });
-    const onSaved = vi.fn();
-    verificarNrRegistroMock.mockResolvedValue(null); // livre
-    registrarNrMock.mockResolvedValue({ ok: true });
-    nextSingleResult = {
-      data: { ...acordo, nr_cliente: '888', perfis: { nome: 'Op Teste' } },
-      error: null,
-    };
-
-    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
-
-    const nrInput = screen.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
-    fireEvent.change(nrInput, { target: { value: '888' } });
-
-    clickSalvar();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(verificarNrRegistroMock).toHaveBeenCalledWith('888', 'emp-1', 'nr_cliente', 'acordo-1');
-    expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].id).toBe('acordo-1');
-
-    // Sincroniza nr_registros com o novo valor + operador_id do acordo.
-    expect(registrarNrMock).toHaveBeenCalledTimes(1);
-    expect(registrarNrMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        empresaId:  'emp-1',
-        nrValue:    '888',
-        campo:      'nr_cliente',
-        operadorId: 'op-1',
-        acordoId:   'acordo-1',
-      }),
-    );
-    expect(toastSuccess).toHaveBeenCalled();
-  });
-
-  it('(d) acordo tipo_vinculo=extra NÃO chama registrarNr (Extra não é titular)', async () => {
-    const acordo = makeAcordo({ nr_cliente: '777', tipo_vinculo: 'extra' });
-    const onSaved = vi.fn();
-    verificarNrRegistroMock.mockResolvedValue(null);
-    nextSingleResult = {
-      data: { ...acordo, nr_cliente: '888', perfis: { nome: 'Op Teste' } },
-      error: null,
-    };
-
-    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
-
-    const nrInput = screen.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
-    fireEvent.change(nrInput, { target: { value: '888' } });
-
-    clickSalvar();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    // A VERIFICAÇÃO de duplicidade ainda ocorre (proteção universal).
-    expect(verificarNrRegistroMock).toHaveBeenCalled();
-    // Mas o registro de titularidade NÃO, porque é extra.
-    expect(registrarNrMock).not.toHaveBeenCalled();
-  });
-
-  it('(e) empresa ausente: pula verificação e salva assim mesmo', async () => {
-    empresaValue = null; // sem empresa selecionada
-    const acordo = makeAcordo({ nr_cliente: '777' });
-    const onSaved = vi.fn();
-    nextSingleResult = {
-      data: { ...acordo, nr_cliente: '888', perfis: { nome: 'Op Teste' } },
-      error: null,
-    };
-
-    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
-
-    const nrInput = screen.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
-    fireEvent.change(nrInput, { target: { value: '888' } });
-
-    clickSalvar();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(verificarNrRegistroMock).not.toHaveBeenCalled();
-    expect(registrarNrMock).not.toHaveBeenCalled();
-    expect(toastSuccess).toHaveBeenCalled();
-  });
-
-  it('(f) falha na verificação → avisa com toast.warning e prossegue com o salvamento', async () => {
-    const acordo = makeAcordo({ nr_cliente: '777' });
-    const onSaved = vi.fn();
-    verificarNrRegistroMock.mockRejectedValue(new Error('rede caiu'));
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    nextSingleResult = {
-      data: { ...acordo, nr_cliente: '888', perfis: { nome: 'Op Teste' } },
-      error: null,
-    };
-
-    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
-
-    const nrInput = screen.getByPlaceholderText('000.000.000-00') as HTMLInputElement;
-    fireEvent.change(nrInput, { target: { value: '888' } });
-
-    clickSalvar();
-
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(toastWarning).toHaveBeenCalled();
-    expect(updateCalls).toHaveLength(1);
-    warn.mockRestore();
-  });
-
-  it('(g) PaguePlay: usa campo "instituicao" como chave, não nr_cliente', async () => {
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: 'cpf-1' });
+  it('(b) PaguePlay: usa campo "instituicao" como chave, não nr_cliente', async () => {
+    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '' });
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'outro', operadorId: 'op2', operadorNome: 'Ana',
@@ -319,8 +182,8 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
       />,
     );
 
-    // No modo PaguePlay, o campo Inscrição é o "instituicao".
-    const inscInput = screen.getByPlaceholderText(/Número de inscrição/i) as HTMLInputElement;
+    // No modo PaguePlay, o campo Código é o "instituicao".
+    const inscInput = screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
     fireEvent.change(inscInput, { target: { value: 'INS-200' } });
 
     clickSalvar();
@@ -333,7 +196,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     expect(onSaved).not.toHaveBeenCalled();
     expect(toastError).toHaveBeenCalled();
     const [msg] = toastError.mock.calls[0];
-    expect(msg).toMatch(/Inscrição/);
+    expect(msg).toMatch(/Código/);
   });
 });
 

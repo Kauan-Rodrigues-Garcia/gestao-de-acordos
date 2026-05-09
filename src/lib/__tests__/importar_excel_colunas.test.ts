@@ -4,7 +4,7 @@
  *
  * REQUISITO do usuário (PaguePlay):
  *   "Em 'Dados reconhecidos' a ordem deve ser: (INSCRIÇÃO/ESTADO/CLASS./NOME/
- *    CPF/VENCIMENTO/VALOR/PARC./STATUS/WHATS/AVISOS / ERROS). NR não existe em
+ *    VENCIMENTO/VALOR/PARC./STATUS/WHATS/AVISOS / ERROS). NR não existe em
  *    pagueplay, nem instituição."
  */
 import { describe, it, expect } from 'vitest';
@@ -12,12 +12,12 @@ import { colunasPreviewImport } from '@/lib/importar_excel_colunas';
 
 describe('colunasPreviewImport — ordem das colunas do preview por tenant', () => {
   describe('PaguePlay (modo tabela)', () => {
-    it('exibe INSCRIÇÃO/ESTADO em vez de NR, CPF após NOME, SEM INST. ao final', () => {
+    it('exibe INSCRIÇÃO/ESTADO em vez de NR, SEM CPF, SEM INST. ao final', () => {
       const cols = colunasPreviewImport({ ehPaguePay: true, modoParsed: 'tabela' });
       expect(cols).toEqual([
         '#', '✓',
         'INSCRIÇÃO', 'ESTADO',
-        'CLASS.', 'NOME', 'CPF',
+        'CLASS.', 'NOME',
         'VENCIMENTO', 'VALOR', 'PARC.', 'STATUS', 'WHATS',
         'AVISOS / ERROS',
       ]);
@@ -50,11 +50,10 @@ describe('colunasPreviewImport — ordem das colunas do preview por tenant', () 
       ]);
     });
 
-    it('NÃO contém INSCRIÇÃO/ESTADO/CPF (colunas exclusivas de PaguePlay)', () => {
+    it('NÃO contém INSCRIÇÃO/ESTADO (colunas exclusivas de PaguePlay)', () => {
       const cols = colunasPreviewImport({ ehPaguePay: false, modoParsed: 'tabela' });
       expect(cols).not.toContain('INSCRIÇÃO');
       expect(cols).not.toContain('ESTADO');
-      expect(cols).not.toContain('CPF');
     });
 
     it('modo blocos adiciona coluna BLOCO na 2ª posição', () => {
@@ -67,12 +66,12 @@ describe('colunasPreviewImport — ordem das colunas do preview por tenant', () 
   });
 
   describe('Invariantes de contagem', () => {
-    it('PaguePlay tabela tem exatamente 13 colunas', () => {
-      expect(colunasPreviewImport({ ehPaguePay: true, modoParsed: 'tabela' })).toHaveLength(13);
+    it('PaguePlay tabela tem exatamente 12 colunas', () => {
+      expect(colunasPreviewImport({ ehPaguePay: true, modoParsed: 'tabela' })).toHaveLength(12);
     });
 
-    it('PaguePlay blocos tem exatamente 14 colunas (+BLOCO)', () => {
-      expect(colunasPreviewImport({ ehPaguePay: true, modoParsed: 'blocos' })).toHaveLength(14);
+    it('PaguePlay blocos tem exatamente 13 colunas (+BLOCO)', () => {
+      expect(colunasPreviewImport({ ehPaguePay: true, modoParsed: 'blocos' })).toHaveLength(13);
     });
 
     it('Bookplay tabela tem exatamente 12 colunas', () => {
@@ -94,20 +93,12 @@ describe('colunasPreviewImport — ordem das colunas do preview por tenant', () 
       expect(idxInsc).toBeLessThan(idxEst);
     });
 
-    it('PaguePlay: CPF aparece DEPOIS de NOME (nessa ordem)', () => {
+    it('PaguePlay: NOME aparece ANTES de VENCIMENTO', () => {
       const cols = colunasPreviewImport({ ehPaguePay: true, modoParsed: 'tabela' });
       const idxNome = cols.indexOf('NOME');
-      const idxCpf  = cols.indexOf('CPF');
+      const idxVenc = cols.indexOf('VENCIMENTO');
       expect(idxNome).toBeGreaterThan(-1);
-      expect(idxCpf).toBeGreaterThan(-1);
-      expect(idxNome).toBeLessThan(idxCpf);
-    });
-
-    it('PaguePlay: CPF aparece ANTES de VENCIMENTO', () => {
-      const cols = colunasPreviewImport({ ehPaguePay: true, modoParsed: 'tabela' });
-      const idxCpf   = cols.indexOf('CPF');
-      const idxVenc  = cols.indexOf('VENCIMENTO');
-      expect(idxCpf).toBeLessThan(idxVenc);
+      expect(idxNome).toBeLessThan(idxVenc);
     });
   });
 });

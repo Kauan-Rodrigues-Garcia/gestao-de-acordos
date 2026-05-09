@@ -60,7 +60,7 @@ const STEPS_PP: TourStep[] = [
   {
     target: '[data-tour="filtros"]', placement: 'bottom', Icon: Filter, route: '/',
     title: 'Busca e filtros',
-    body:  'Encontre acordos pelo Código, nome ou CPF. Combine filtros de status, forma de pagamento e data para resultados precisos.',
+    body:  'Encontre acordos pelo Código ou nome. Combine filtros de status, forma de pagamento e data para resultados precisos.',
   },
   {
     target: '[data-tour="tabela-acordos"]', placement: 'top', Icon: FileText, route: '/',

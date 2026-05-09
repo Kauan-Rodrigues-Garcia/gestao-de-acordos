@@ -26,6 +26,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Acordo } from '@/lib/supabase';
 
+// Agora o SUT.
+import { AcordoDetalheInline } from './AcordoDetalheInline';
+
 // ── Mocks (ANTES do SUT) ────────────────────────────────────────────────────
 
 // 1) nr_registros.service
@@ -160,9 +163,6 @@ vi.mock('@/components/DatePickerField', () => ({
     <input aria-label="date" value={value} onChange={e => onChange(e.target.value)} />
   ),
 }));
-
-// Agora o SUT.
-import { AcordoDetalheInline } from './AcordoDetalheInline';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -379,7 +379,7 @@ describe('AcordoDetalheInline — fluxo Extra → Direto (com par direto existen
   it('PaguePlay: usa campo "instituicao" como chave de vínculo', async () => {
     const acordo = makeAcordoExtra({
       instituicao: 'INS-999',
-      nr_cliente: 'cpf-xxx', // em PaguePlay nr_cliente é CPF, não a chave
+      nr_cliente: '',
     });
     routes.selectAcordoDiretoOriginal = {
       data: { id: 'a-direto-antigo', operador_id: 'op-direto' },

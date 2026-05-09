@@ -39,7 +39,7 @@ import { cn } from '@/lib/utils';
 // ── Schema base (Bookplay / !isPP) ─────────────────────────────────────
 const schemaBase = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
-  nr_cliente:   z.string().min(1, 'Campo obrigatório').regex(/^\d+$/, 'Deve conter apenas números'),
+  nr_cliente:   z.string().optional().or(z.literal('')),
   vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);
@@ -1047,22 +1047,6 @@ export default function AcordoForm() {
                     </div>
                   </div>
 
-                  {/* CPF (nr_cliente) — opcional no PP */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">CPF</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input
-                        {...register('nr_cliente')}
-                        placeholder="000.000.000-00"
-                        className={cn(
-                          'h-9 text-sm pl-8 font-mono',
-                          errors.nr_cliente && 'border-destructive'
-                        )}
-                      />
-                    </div>
-                    {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
-                  </div>
 
                 </CardContent>
               </Card>
@@ -1113,22 +1097,6 @@ export default function AcordoForm() {
                 </CardHeader>
                 <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
-                  {/* NR / CPF — identificador principal */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">NR do Cliente *</Label>
-                    <div className="relative">
-                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                      <Input
-                        {...register('nr_cliente')}
-                        placeholder="000000"
-                        className={cn(
-                          'h-10 text-sm pl-8 font-mono font-bold border-primary/40 focus:border-primary',
-                          errors.nr_cliente && 'border-destructive'
-                        )}
-                      />
-                    </div>
-                    {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
-                  </div>
 
                   {/* Vencimento — campo prioritário */}
                   <div className="space-y-1.5">

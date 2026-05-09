@@ -23,6 +23,8 @@ import { describe, it, expect, vi, beforeAll } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
+import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
+
 // Stub do cliente Supabase para evitar "supabaseUrl is required" ao importar a página.
 vi.mock('@/lib/supabase', () => ({
   supabase: {
@@ -33,8 +35,6 @@ vi.mock('@/lib/supabase', () => ({
 
 // Stub do hook useAuth (puxado transitivamente pela página).
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: null, perfil: null }) }));
-
-import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 
 describe('parsearPlanilha — planilha real da PaguePlay', () => {
   // Timeout generoso: o primeiro carregamento inclui dynamic import de
@@ -103,9 +103,9 @@ describe('parsearPlanilha — planilha real da PaguePlay', () => {
     const { rows, parsearPlanilha } = await carregarPlanilha();
     const { registros } = parsearPlanilha(rows);
     const r0 = registros[0];
-    // PaguePlay: col A 'Inscrição' → instituicao; CPF (col I) → nr_cliente (vazio nesta amostra)
+    // PaguePlay: col A 'Inscrição' → instituicao
     expect(r0.instituicao).toBe('1000');
-    expect(r0.nr_cliente).toBe(''); // CPF vazio na planilha-exemplo
+    expect(r0.nr_cliente).toBe('');
     expect(r0.nome_cliente).toContain('Heloisa');
     expect(r0.estado_uf).toBe('PI');
     expect(r0.tipo).toBe('boleto');

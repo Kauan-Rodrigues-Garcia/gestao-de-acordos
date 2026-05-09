@@ -1346,15 +1346,6 @@ export function AcordoNovoInline({
                       className="h-8 text-xs"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">CPF</Label>
-                    <Input
-                      value={nrCliente}
-                      onChange={(e) => setNrCliente(e.target.value)}
-                      placeholder="000.000.000-00"
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
                 </div>
               </div>
 
@@ -1450,16 +1441,6 @@ export function AcordoNovoInline({
                 <Hash className="w-3 h-3" /> Dados Principais
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                {/* NR = NR único para Bookplay */}
-                <div className="space-y-1">
-                  <Label className="text-xs">NR</Label>
-                  <Input
-                    value={nrCliente}
-                    onChange={(e) => setNrCliente(e.target.value)}
-                    placeholder="Número NR"
-                    className="h-8 text-xs font-mono"
-                  />
-                </div>
                 <DatePickerField
                     label="Vencimento" required
                     value={vencimento} onChange={setVencimento}

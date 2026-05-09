@@ -3,7 +3,6 @@
  * ─────────────────────────────────────────────────────────────────────────
  * Testes do componente ModalFilaWhatsApp:
  *   - render básico e progresso
- *   - label NR vs CPF (isPaguePlay)
  *   - botão "Enviar todos" condicional
  *   - abrir próximo + log supabase
  *   - ausência de log quando sem usuarioId
@@ -19,6 +18,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
+
+// ── Import do componente (depois dos mocks) ───────────────────────────────
+import { ModalFilaWhatsApp, ItemFila } from './ModalFilaWhatsApp';
 
 // ── Variáveis hoistadas ────────────────────────────────────────────────────
 const mocks = vi.hoisted(() => ({
@@ -82,9 +84,6 @@ vi.mock('@/components/ui/dialog', () => ({
   DialogDescription: ({ children }: any) => <p>{children}</p>,
 }));
 
-// ── Import do componente (depois dos mocks) ───────────────────────────────
-import { ModalFilaWhatsApp, ItemFila } from './ModalFilaWhatsApp';
-
 // ── Helper de fila ────────────────────────────────────────────────────────
 function criarFila(overrides: Partial<ItemFila>[] = []): ItemFila[] {
   const base: ItemFila[] = [
@@ -147,28 +146,7 @@ describe('ModalFilaWhatsApp', () => {
     expect(screen.getByText('Carla')).toBeInTheDocument();
   });
 
-  // 2. Label NR vs CPF
-  it('2. exibe "CPF" para pagueplay e "NR" para outros tenants', () => {
-    const onClose = vi.fn();
-
-    // pagueplay → CPF
-    tenantSlugMock = 'pagueplay';
-    const { unmount } = render(
-      <ModalFilaWhatsApp fila={criarFila()} onClose={onClose} />,
-    );
-    expect(screen.getByText('CPF 111')).toBeInTheDocument();
-    unmount();
-
-    // outro tenant → NR
-    tenantSlugMock = 'bookplay';
-    render(
-      <ModalFilaWhatsApp fila={criarFila()} onClose={onClose} />,
-    );
-    expect(screen.getByText('NR 111')).toBeInTheDocument();
-    expect(screen.queryByText('CPF 111')).not.toBeInTheDocument();
-  });
-
-  // 3. Botão "Enviar todos" só aparece no PaguePlay
+  // 2. Botão "Enviar todos" só aparece no PaguePlay
   it('3. botão "Enviar todos" só aparece quando isPaguePlay', () => {
     const onClose = vi.fn();
 
