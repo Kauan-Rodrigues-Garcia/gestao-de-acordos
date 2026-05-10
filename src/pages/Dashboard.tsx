@@ -195,6 +195,7 @@ export default function Dashboard() {
   // Filtros de coluna (server-side, PaguePay)
   const [colFiltroEstado,    setColFiltroEstado]    = useState('');
   const [estadoDropdown,     setEstadoDropdown]     = useState(false);
+  const [statusDropdown,     setStatusDropdown]     = useState(false);
   // ── Filtro Direto / Extra ─────────────────────────────────────────────────
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -1202,7 +1203,46 @@ export default function Dashboard() {
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <span>STATUS</span>
+                              <div className="relative" onClick={e => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  onClick={() => setStatusDropdown(v => !v)}
+                                  className={cn(
+                                    'h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1 font-normal text-left flex items-center gap-1 whitespace-nowrap',
+                                    filtroStatus && filtroStatus !== 'all' ? 'border-primary/50 bg-primary/10 text-primary' : 'text-muted-foreground/70'
+                                  )}
+                                >
+                                  <span>{filtroStatus && filtroStatus !== 'all' ? (statusLabels[filtroStatus as keyof typeof statusLabels] || filtroStatus).slice(0, 4) : 'Sta'}</span>
+                                  {filtroStatus && filtroStatus !== 'all' && (
+                                    <span
+                                      className="text-[8px] text-muted-foreground hover:text-destructive cursor-pointer leading-none"
+                                      onClick={e => { e.stopPropagation(); setFiltroStatus(''); setStatusDropdown(false); setCurrentPage(1); }}
+                                    >✕</span>
+                                  )}
+                                </button>
+                                {statusDropdown && (
+                                  <div className="absolute top-6 left-0 z-50 bg-background border border-border rounded-lg shadow-xl p-1.5 min-w-[110px]">
+                                    {Object.entries(statusLabels).map(([k, v]) => (
+                                      <button
+                                        key={k}
+                                        type="button"
+                                        onClick={() => { setFiltroStatus(k); setStatusDropdown(false); setCurrentPage(1); }}
+                                        className={cn(
+                                          'text-[10px] px-2 py-0.5 rounded hover:bg-primary/10 hover:text-primary transition-colors w-full text-left font-normal',
+                                          filtroStatus === k && 'bg-primary/15 text-primary font-semibold'
+                                        )}
+                                      >
+                                        {v}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </th>
                           {visaoAmpla && (
                             <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
                           )}
