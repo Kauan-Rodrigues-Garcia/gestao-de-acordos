@@ -52,8 +52,18 @@ function normalizeSlug(value: string | undefined | null): string {
   return value?.trim().toLowerCase() ?? '';
 }
 
+/** Detecta o slug do tenant pelo hostname quando VITE_TENANT_SLUG não está configurado. */
+function detectSlugFromHostname(): string {
+  if (typeof window === 'undefined') return '';
+  const host = window.location.hostname.toLowerCase();
+  if (host.includes('pagueplay')) return 'pagueplay';
+  if (host.includes('bookplay')) return 'bookplay';
+  return '';
+}
+
 export function getConfiguredTenantSlug(): string {
-  return normalizeSlug(import.meta.env.VITE_TENANT_SLUG as string | undefined);
+  const envSlug = normalizeSlug(import.meta.env.VITE_TENANT_SLUG as string | undefined);
+  return envSlug || detectSlugFromHostname();
 }
 
 export function getConfiguredSiteUrl(): string | null {
