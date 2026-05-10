@@ -270,8 +270,7 @@ export default function MetasConfig() {
     }
 
     try {
-      const { error } = await supabase.from("metas")
-        .upsert(payloads, { onConflict: "tipo,referencia_id,empresa_id,mes,ano" });
+      const { error } = await supabase.rpc("upsert_metas", { p_payloads: payloads });
       if (error) throw error;
       toast.success(`${payloads.length} meta(s) salva(s) com sucesso!`, {
         description: `${MESES[mes - 1]}/${ano}`,
