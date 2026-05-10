@@ -244,7 +244,7 @@ export default function AdminConfiguracoes() {
                         </Button>
                       </div>
                       <a
-                        href="https://supabase.com/dashboard/project/hslhdgmwicezfuieffll/sql/new"
+                        href="https://supabase.com/dashboard/project/vfrvvoetidtsqbbhdkmj/sql/new"
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1 text-xs text-primary underline underline-offset-2"
