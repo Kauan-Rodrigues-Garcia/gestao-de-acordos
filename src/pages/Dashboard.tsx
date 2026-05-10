@@ -1539,12 +1539,20 @@ export default function Dashboard() {
                     <p>Esta ação não pode ser desfeita.</p>
                   </div>
                   <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">NR: <span className="text-primary font-mono font-bold">#{confirmandoExclusao.nr_cliente}</span></span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Cliente: <span className="text-foreground font-bold">{confirmandoExclusao.nome_cliente.toUpperCase()}</span></span>
-                    </div>
+                    {isPP ? (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Código: <span className="text-primary font-mono font-bold">#{confirmandoExclusao.instituicao}</span></span>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">NR: <span className="text-primary font-mono font-bold">#{confirmandoExclusao.nr_cliente}</span></span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-muted-foreground">Cliente: <span className="text-foreground font-bold">{confirmandoExclusao.nome_cliente.toUpperCase()}</span></span>
+                        </div>
+                      </>
+                    )}
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Valor: <span className="text-foreground font-bold">{formatCurrency(confirmandoExclusao.valor)}</span></span>
                     </div>

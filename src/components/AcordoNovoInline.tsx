@@ -1330,6 +1330,21 @@ export function AcordoNovoInline({
                 </div>
               )}
 
+              {/* Link do Acordo */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" /> Link do Acordo
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <Textarea
+                  value={link}
+                  onChange={(e) => setLink(e.target.value)}
+                  placeholder="Cole aqui o link do acordo..."
+                  className="text-xs resize-none"
+                  rows={1}
+                />
+              </div>
+
               {/* Dados do Profissional */}
               <div>
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
@@ -1347,21 +1362,6 @@ export function AcordoNovoInline({
                     />
                   </div>
                 </div>
-              </div>
-
-              {/* Link do Acordo */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                  <Link2 className="w-3 h-3" /> Link do Acordo
-                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
-                </p>
-                <Textarea
-                  value={link}
-                  onChange={(e) => setLink(e.target.value)}
-                  placeholder="Cole aqui o link do acordo..."
-                  className="text-xs resize-none"
-                  rows={2}
-                />
               </div>
 
               {/* Ações */}

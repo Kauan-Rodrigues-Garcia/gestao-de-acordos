@@ -398,10 +398,12 @@ export function ModalEditarAcordoParcelado({
               <Label className="text-xs">{isPaguePlay ? 'CPF' : 'NR'}</Label>
               <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} className="h-8 text-xs font-mono" />
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">WhatsApp</Label>
-              <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="h-8 text-xs font-mono" />
-            </div>
+            {!isPaguePlay && (
+              <div className="space-y-1">
+                <Label className="text-xs">WhatsApp</Label>
+                <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="h-8 text-xs font-mono" />
+              </div>
+            )}
             <div className="space-y-1">
               <Label className="text-xs">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
               <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} className="h-8 text-xs" />

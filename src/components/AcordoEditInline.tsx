@@ -236,18 +236,20 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 </div>
 
                 {/* WhatsApp */}
-                <div className="space-y-1">
-                  <Label className="text-xs font-medium">WhatsApp</Label>
-                  <div className="relative">
-                    <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                    <Input
-                      value={whatsapp}
-                      onChange={e => setWhatsapp(e.target.value)}
-                      placeholder="(11) 99999-9999"
-                      className="h-8 text-xs pl-6 font-mono"
-                    />
+                {!isPaguePlay && (
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">WhatsApp</Label>
+                    <div className="relative">
+                      <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input
+                        value={whatsapp}
+                        onChange={e => setWhatsapp(e.target.value)}
+                        placeholder="(11) 99999-9999"
+                        className="h-8 text-xs pl-6 font-mono"
+                      />
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {isPaguePlay && (
                   <div className="space-y-1">
