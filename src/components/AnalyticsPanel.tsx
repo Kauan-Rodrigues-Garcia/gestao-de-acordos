@@ -807,20 +807,6 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                     </div>
                   )}
 
-                  {/* ── Meta ── */}
-                  {meta && (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                      <MetricCard
-                        label={labelMeta}
-                        icon={<Target className="w-4 h-4" />}
-                        accentColor={donutColor}
-                        gradientFrom={donutColor}
-                        trend={percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down'}
-                        value={<span style={{ color: donutColor }}>{percMeta}% atingida</span>}
-                        sub={`${formatCurrency(valorHOMes)} / ${formatCurrency(meta.meta_valor)}`}
-                      />
-                    </div>
-                  )}
                 </div>
               ) : (
                 /* ══ Layout Bookplay — mantém estrutura original ══ */
@@ -878,21 +864,6 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                       sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
                     />
                   )}
-                  <MetricCard
-                    label={labelMeta}
-                    icon={<Target className="w-4 h-4" />}
-                    accentColor={donutColor}
-                    gradientFrom={donutColor}
-                    trend={meta ? (percMeta >= 100 ? 'up' : percMeta >= 50 ? 'neutral' : 'down') : undefined}
-                    value={
-                      meta ? (
-                        <span style={{ color: donutColor }}>{percMeta}% atingida</span>
-                      ) : (
-                        <span className="text-muted-foreground text-base">—</span>
-                      )
-                    }
-                    sub={meta ? `${formatCurrency(valorRecebidoMes)} / ${formatCurrency(meta.meta_valor)}` : 'Sem meta definida'}
-                  />
                 </div>
               )}
 
@@ -1252,50 +1223,6 @@ export function AnalyticsPanel({ setorFiltro: setorExterno, equipeFiltroExterno,
                       {formatCurrency(ticketMedio)}
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">por acordo pago</span>
-                  </motion.div>
-
-                  {/* Em atraso */}
-                  <motion.div
-                    variants={itemVariants}
-                    whileHover={{ y: -2 }}
-                    className={cn(
-                      'relative flex flex-col gap-2 rounded-xl border p-4 overflow-hidden shadow-sm',
-                      acordosAtrasados > 0
-                        ? 'border-red-500/30 bg-red-500/5'
-                        : 'border-border/70 bg-card',
-                    )}
-                  >
-                    <div
-                      className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl"
-                      style={{ background: acordosAtrasados > 0 ? '#ef4444' : '#6366f1' }}
-                    />
-                    <div className="flex items-center justify-between pl-1">
-                      <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
-                        Em atraso
-                      </span>
-                      <Clock
-                        className={cn(
-                          'w-3.5 h-3.5',
-                          acordosAtrasados > 0 ? 'text-red-500' : 'text-muted-foreground',
-                        )}
-                      />
-                    </div>
-                    <span
-                      className={cn(
-                        'text-2xl font-extrabold tabular-nums font-mono pl-1',
-                        acordosAtrasados > 0 ? 'text-red-500' : 'text-foreground',
-                      )}
-                    >
-                      {acordosAtrasados}
-                    </span>
-                    <span className="text-[11px] text-muted-foreground pl-1">acordos vencidos</span>
-                    {/* Pulse animation on concerning metrics */}
-                    {acordosAtrasados > 5 && (
-                      <span className="absolute top-3 right-3 flex h-2 w-2">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500" />
-                      </span>
-                    )}
                   </motion.div>
 
                   {/* Projeção do mês */}

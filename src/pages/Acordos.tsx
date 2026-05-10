@@ -173,6 +173,7 @@ export default function Acordos() {
   const [detalheInlineId, setDetalheInlineId] = useState<string | null>(null);
   // Novo acordo inline
   const [novoInlineAberto, setNovoInlineAberto] = useState(false);
+  const novoInlineRef = useRef<HTMLDivElement>(null);
 
   // Filtro de mês — ativo para Bookplay
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
@@ -233,6 +234,13 @@ export default function Acordos() {
     page:         currentPage,
     perPage:      PER_PAGE,
   });
+
+  // Auto-scroll para o formulário inline quando aberto
+  useEffect(() => {
+    if (novoInlineAberto) {
+      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [novoInlineAberto]);
 
   // Buscar nomes dos operadores após carregar acordos
   useEffect(() => {
@@ -821,7 +829,7 @@ export default function Acordos() {
         </Card>
 
         {/* ── Tabela ── */}
-        <Card className="border-border" data-tour="tabela-acordos">
+        <Card ref={novoInlineRef} className="border-border" data-tour="tabela-acordos">
           <CardContent className="p-0">
             {loading ? <TableSkeleton /> : (
               <div className="overflow-x-auto">

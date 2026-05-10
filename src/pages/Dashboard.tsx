@@ -232,6 +232,7 @@ export default function Dashboard() {
   const [detalheInlineIdTabela,   setDetalheInlineIdTabela]   = useState<string | null>(null);
   // Novo acordo inline (tabela completa)
   const [novoInlineAbertoTabela,  setNovoInlineAbertoTabela]  = useState(false);
+  const novoInlineRef = useRef<HTMLDivElement>(null);
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
 
@@ -286,6 +287,13 @@ export default function Dashboard() {
 
   // Reset página ao mudar filtros de coluna (server-side)
   useEffect(() => { setCurrentPage(1); }, [colFiltroEstado]);
+
+  // Auto-scroll para o formulário inline quando aberto
+  useEffect(() => {
+    if (novoInlineAbertoTabela) {
+      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [novoInlineAbertoTabela]);
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
@@ -1177,7 +1185,7 @@ export default function Dashboard() {
             </Card>
 
             {/* Tabela completa */}
-            <Card className="border-border" data-tour="tabela-acordos">
+            <Card ref={novoInlineRef} className="border-border" data-tour="tabela-acordos">
               <CardContent className="p-0">
                 {loading ? <TableSkeleton /> : (
                   <div className="overflow-x-auto">

@@ -45,7 +45,8 @@ async function resolverOperadoresDaEquipe(
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
-  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim);
+  // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
+  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento;
   const sourceTable   = hasMonthRange ? 'acordos' : 'acordos_deduplicados';
 
   const paginar = !!(filtros?.page && filtros?.perPage);
@@ -86,7 +87,8 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // ── DOIS-QUERIES: garante acordos de hoje sempre na página 1 ──────────────
   // Funciona mesmo quando os acordos de hoje caem em páginas intermediárias
   // na ordenação cronológica simples (ex.: muitos acordos históricos antes deles).
-  if (paginar && filtros?.prioritize_today) {
+  // Quando há filtro de data exata, ignorar prioritize_today — o caminho de query única aplica corretamente o filtro
+  if (paginar && filtros?.prioritize_today && !filtros?.vencimento) {
     const hoje = getTodayISO();
 
     // Query A: TODOS os acordos de hoje (sem paginação)

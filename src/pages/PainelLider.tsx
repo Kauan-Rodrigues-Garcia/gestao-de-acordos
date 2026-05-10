@@ -466,7 +466,7 @@ export default function PainelLider() {
         .from('perfis')
         .select('*, setores(id, nome)')
         .eq('empresa_id', empresa.id)      // ← FILTRO OBRIGATÓRIO — evita cross-tenant
-        .eq('perfil', 'operador')
+        .in('perfil', ['operador', 'elite'])
         .eq('ativo', true);
 
       if (!isAdmin && isLiderOuSimilar && perfil.setor_id) {
@@ -590,7 +590,7 @@ export default function PainelLider() {
             <Users className="w-5 h-5 text-primary" /> Painel da Equipe
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {operadores.length} operador(es)
+            {operadores.length} membro(s)
             {nomeSetor && <span className="text-primary font-medium"> · {nomeSetor}</span>}
           </p>
           {empresa && (

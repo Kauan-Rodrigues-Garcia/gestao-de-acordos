@@ -204,7 +204,7 @@ export default function MetasConfig() {
     setLoadingOperadores(true);
     try {
       const { data, error } = await supabase.from("perfis").select("id, nome")
-        .eq("setor_id", setorSelecionado).eq("perfil", "operador").order("nome");
+        .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
       setOperadores((data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0));
     } catch (err: unknown) {

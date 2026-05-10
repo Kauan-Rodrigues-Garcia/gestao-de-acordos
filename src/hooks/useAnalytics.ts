@@ -324,16 +324,28 @@ export function useAnalytics(): AnalyticsData {
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
+    const isAdminRole    = isPerfilAdmin(perfil?.perfil ?? '');
+    const isLiderRole    = isPerfilLider(perfil?.perfil ?? '');
+    const isDiretoriaRole = isPerfilDiretoria(perfil?.perfil ?? '');
+    // Visão ampla: admin/diretoria ou líder sem filtro individual — exclui acordos Extra para não inflar totais
+    const isWideView = isAdminRole || isDiretoriaRole || (isLiderRole && !operadorFiltro);
+
     const acordosMes = acordos.filter(
       a => a.vencimento >= inicio && a.vencimento <= fim,
     );
     const acordosHoje = acordosMes.filter(a => a.vencimento === hoje);
-    const pagos       = acordosMes.filter(a => a.status === 'pago');
-    const naoPagos    = acordosMes.filter(a => a.status === 'nao_pago');
-    const pendentes   = acordosMes.filter(a => a.status === 'verificar_pendente');
+
+    // Para métricas de valor: exclui extras na visão ampla (evita dupla contagem)
+    const acordosMesMetricas = isPP && isWideView
+      ? acordosMes.filter(a => a.tipo_vinculo !== 'extra')
+      : acordosMes;
+
+    const pagos       = acordosMesMetricas.filter(a => a.status === 'pago');
+    const naoPagos    = acordosMesMetricas.filter(a => a.status === 'nao_pago');
+    const pendentes   = acordosMesMetricas.filter(a => a.status === 'verificar_pendente');
 
     const valorRecebidoMes   = pagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
-    const valorAgendadoMes   = acordosMes.reduce((s, a) => s + (Number(a.valor) || 0), 0);
+    const valorAgendadoMes   = acordosMesMetricas.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorNaoPago       = naoPagos.reduce((s, a) => s + (Number(a.valor) || 0), 0);
     const valorAgendadoHoje  = acordosHoje.reduce((s, a) => s + (Number(a.valor) || 0), 0);
 
@@ -364,7 +376,7 @@ export function useAnalytics(): AnalyticsData {
     const porDia = Array.from({ length: diasNoMes }, (_, i) => {
       const d = String(i + 1).padStart(2, '0');
       const iso = `${ano}-${String(mes).padStart(2, '0')}-${d}`;
-      const doDia = acordosMes.filter(a => a.vencimento === iso);
+      const doDia = acordosMesMetricas.filter(a => a.vencimento === iso);
       const recDia = doDia.filter(a => a.status === 'pago').reduce((s, a) => s + (Number(a.valor) || 0), 0);
       return {
         dia: String(i + 1),
@@ -381,7 +393,7 @@ export function useAnalytics(): AnalyticsData {
     // operador aparecia sem equipe (ex: Jose_Victor com equipe Luciana
     // saía listado como "Sem equipe").
     const porEquipe = Object.entries(
-      acordosMes.reduce<Record<string, { acordos: number; valor: number }>>(
+      acordosMesMetricas.reduce<Record<string, { acordos: number; valor: number }>>(
         (acc, a) => {
           const oid = a.operador_id ?? null;
           const eid = (oid && operadorEquipeMap[oid]) || 'sem_equipe';
@@ -403,7 +415,7 @@ export function useAnalytics(): AnalyticsData {
 
     // Por operador
     const porOperador = Object.entries(
-      acordosMes.reduce<Record<string, { acordos: number; valor: number }>>(
+      acordosMesMetricas.reduce<Record<string, { acordos: number; valor: number }>>(
         (acc, a) => {
           const oid = (a as any).operador_id ?? 'desconhecido';
           if (!acc[oid]) acc[oid] = { acordos: 0, valor: 0 };
@@ -433,7 +445,7 @@ export function useAnalytics(): AnalyticsData {
       valorHOMes,
       valorHOAgendado,
       valorHONaoPago,
-      totalAcordosMes: acordosMes.length,
+      totalAcordosMes: acordosMesMetricas.length,
       totalAcordosHoje: acordosHoje.length,
       totalPagosMes: pagos.length,
       totalNaoPagos: naoPagos.length,
@@ -446,7 +458,7 @@ export function useAnalytics(): AnalyticsData {
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mes, ano, isPP]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
 
   return {
     ...derived,

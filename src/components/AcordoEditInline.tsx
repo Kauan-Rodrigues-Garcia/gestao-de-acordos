@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, DollarSign, Smartphone, MapPin, Link2, Building2 } from 'lucide-react';
+import { Save, X, DollarSign, Smartphone, Link2, Building2 } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -270,10 +270,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                       onValueChange={value => setEstado(value === SEM_ESTADO_VALUE ? '' : value)}
                     >
                       <SelectTrigger className="h-8 text-xs">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3 h-3 text-muted-foreground" />
-                          <SelectValue placeholder="Selecione" />
-                        </div>
+                        <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value={SEM_ESTADO_VALUE}>Nenhum</SelectItem>
@@ -298,18 +295,26 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                   </Select>
                 </div>
 
-                {/* Parcelas — only for boleto, cartao_recorrente, pix_automatico */}
-                {['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && (
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">Parcelas</Label>
-                    <Input
-                      type="number" min="1" max="12"
-                      value={parcelas}
-                      onChange={e => setParcelas(e.target.value)}
-                      className="h-8 text-xs font-mono"
-                    />
-                  </div>
-                )}
+                {/* Parcelas */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">
+                    Parcelas{!['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && (
+                      <span className="text-muted-foreground/50 font-normal"> (não se aplica)</span>
+                    )}
+                  </Label>
+                  <Select
+                    value={parcelas}
+                    onValueChange={setParcelas}
+                    disabled={!['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo)}
+                  >
+                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                        <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
                 {/* Status */}
                 <div className="space-y-1">
