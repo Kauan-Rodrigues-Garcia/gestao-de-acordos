@@ -28,6 +28,8 @@ interface DatePickerFieldProps {
   /** Data mínima no formato ISO (yyyy-MM-dd) */
   minDate?: string;
   disabled?: boolean;
+  /** Texto placeholder quando nenhuma data está selecionada */
+  placeholder?: string;
 }
 
 export function DatePickerField({
@@ -40,6 +42,7 @@ export function DatePickerField({
   size = 'sm',
   minDate,
   disabled = false,
+  placeholder,
 }: DatePickerFieldProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
@@ -68,7 +71,7 @@ export function DatePickerField({
             )}
           >
             <CalendarIcon className={cn('shrink-0 text-muted-foreground', isSm ? 'w-3 h-3' : 'w-3.5 h-3.5')} />
-            {selected ? format(selected, 'dd/MM/yyyy') : 'Selecionar data'}
+            {selected ? format(selected, 'dd/MM/yyyy') : (placeholder ?? 'Selecionar data')}
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">

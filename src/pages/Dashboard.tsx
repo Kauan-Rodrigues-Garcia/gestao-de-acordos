@@ -53,6 +53,7 @@ import { tratarExclusaoVinculo }    from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
+import { DatePickerField } from '@/components/DatePickerField';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -193,8 +194,6 @@ export default function Dashboard() {
   const [currentPage,  setCurrentPage]  = useState(Number(searchParams.get('page')) || 1);
   // Filtros de coluna (server-side, PaguePay)
   const [colFiltroEstado,    setColFiltroEstado]    = useState('');
-  const [colFiltroDia,       setColFiltroDia]       = useState(''); // valor commitado (dispara query)
-  const [colFiltroDiaInput,  setColFiltroDiaInput]  = useState(''); // valor digitado (pendente)
   const [estadoDropdown,     setEstadoDropdown]     = useState(false);
   // ── Filtro Direto / Extra ─────────────────────────────────────────────────
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
@@ -253,10 +252,6 @@ export default function Dashboard() {
       })()
     : undefined;
 
-  // Dia específico como ISO (server-side): sobrescreve o range do mês quando definido
-  const colFiltroDiaISO = colFiltroDia && mesFiltro
-    ? `${mesFiltro}-${colFiltroDia.padStart(2, '0')}`
-    : undefined;
 
   // Intervalo do mês SEGUINTE ao filtrado — usado para checar parcelas já reagendadas
   const nextMonthRange = useMemo(() => {
@@ -290,17 +285,16 @@ export default function Dashboard() {
   }, [isPP, nextMonthRange, empresa?.id]);
 
   // Reset página ao mudar filtros de coluna (server-side)
-  useEffect(() => { setCurrentPage(1); }, [colFiltroEstado, colFiltroDia]);
+  useEffect(() => { setCurrentPage(1); }, [colFiltroEstado]);
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
       busca:        busca || undefined,
       status:       statusFiltroComputed,
       tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-      // Quando filtra por dia exato sobrescreve o range do mês (data_inicio=data_fim=dia)
       vencimento:   filtroData || undefined,
-      data_inicio:  filtroData ? undefined : (colFiltroDiaISO ?? mesFiltroInicio),
-      data_fim:     filtroData ? undefined : (colFiltroDiaISO ?? mesFiltroFim),
+      data_inicio:  filtroData ? undefined : mesFiltroInicio,
+      data_fim:     filtroData ? undefined : mesFiltroFim,
       estado_uf:    colFiltroEstado || undefined,
       // Filtro de operador: operador normal OU Elite em modo individual
       operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual')
@@ -463,7 +457,7 @@ export default function Dashboard() {
   // ── handlers ─────────────────────────────────────────────────────────────────
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData('');
-    setColFiltroEstado(''); setColFiltroDia(''); setColFiltroDiaInput('');
+    setColFiltroEstado('');
     setCurrentPage(1);
   }
 
@@ -1080,7 +1074,7 @@ export default function Dashboard() {
             <Card className="border-border mb-4" data-tour="filtros">
               <CardContent className="p-3">
                 <div className="flex flex-wrap gap-2 items-center">
-                  <div className="relative flex-1 min-w-[200px]">
+                  <div className="relative flex-1 min-w-[160px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                     <Input
                       placeholder="Buscar Código ou nome..."
@@ -1090,16 +1084,14 @@ export default function Dashboard() {
                     />
                   </div>
                   <Select value={filtroStatus} onValueChange={v => { setFiltroStatus(v); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+                    <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Status</SelectItem>
                       {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <Select value={filtroTipo} onValueChange={v => { setFiltroTipo(v); setCurrentPage(1); }}>
-                    <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
+                    <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Tipos</SelectItem>
                       {isPP
                         ? [
                             <SelectItem key="boleto" value="boleto">Boleto / PIX</SelectItem>,
@@ -1122,12 +1114,24 @@ export default function Dashboard() {
                       </SelectContent>
                     </Select>
                   )}
-                  <input
-                    type="date"
-                    value={filtroData}
-                    onChange={e => { setFiltroData(e.target.value); setCurrentPage(1); }}
-                    className="h-8 text-sm bg-background border border-input rounded-md px-3 text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-                  />
+                  <div className="flex items-center gap-1">
+                    <DatePickerField
+                      value={filtroData}
+                      onChange={v => { setFiltroData(v); setCurrentPage(1); }}
+                      triggerClassName="w-40 text-xs"
+                      placeholder="Filtrar data"
+                    />
+                    {filtroData && (
+                      <button
+                        type="button"
+                        onClick={() => { setFiltroData(''); setCurrentPage(1); }}
+                        className="h-8 w-8 flex items-center justify-center rounded-md border border-input text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Limpar filtro de data"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
                   {temFiltros && (
                     <Button variant="ghost" size="sm" onClick={limparFiltros} className="h-8 text-xs gap-1">
                       <X className="w-3 h-3" /> Limpar
@@ -1194,45 +1198,7 @@ export default function Dashboard() {
                               </div>
                             </div>
                           </th>
-                          {/* ── VENCIMENTO: filtro de dia inline ── */}
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">
-                            <div className="flex items-center gap-1.5">
-                              <span>VENCIMENTO</span>
-                              <div className="flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
-                                <input
-                                  type="number"
-                                  min={1} max={31}
-                                  value={colFiltroDiaInput}
-                                  onChange={e => setColFiltroDiaInput(e.target.value)}
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter') { setColFiltroDia(colFiltroDiaInput); }
-                                    if (e.key === 'Escape') { setColFiltroDiaInput(colFiltroDia); }
-                                  }}
-                                  placeholder="dd"
-                                  className={cn(
-                                    'w-12 h-5 text-[9px] bg-muted/40 border border-border/50 rounded px-1.5 font-mono font-normal text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-1 focus:ring-ring',
-                                    colFiltroDia ? 'border-primary/50 bg-primary/10' : ''
-                                  )}
-                                />
-                                {colFiltroDiaInput !== colFiltroDia && colFiltroDiaInput && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setColFiltroDia(colFiltroDiaInput)}
-                                    className="h-5 px-1 text-[8px] font-medium bg-primary text-primary-foreground rounded flex-shrink-0 hover:bg-primary/90"
-                                    title="Aplicar filtro de dia"
-                                  >ok</button>
-                                )}
-                                {colFiltroDia && colFiltroDiaInput === colFiltroDia && (
-                                  <button
-                                    type="button"
-                                    onClick={() => { setColFiltroDia(''); setColFiltroDiaInput(''); }}
-                                    className="text-[8px] text-muted-foreground hover:text-destructive flex-shrink-0 leading-none"
-                                    title="Limpar filtro de dia"
-                                  >✕</button>
-                                )}
-                              </div>
-                            </div>
-                          </th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">VENCIMENTO</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
@@ -1541,7 +1507,7 @@ export default function Dashboard() {
                   <div className="p-4 bg-muted/40 border border-border rounded-xl space-y-2">
                     {isPP ? (
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Código: <span className="text-primary font-mono font-bold">#{confirmandoExclusao.instituicao}</span></span>
+                        <span className="text-muted-foreground">Código: <span className="text-primary font-mono font-bold">{confirmandoExclusao.instituicao}</span></span>
                       </div>
                     ) : (
                       <>

@@ -41,6 +41,7 @@ import { VinculoTag } from '@/components/VinculoTag';
 import { OperadorCell } from '@/components/OperadorCell';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
+import { DatePickerField } from '@/components/DatePickerField';
 
 function buildMensagem(a: Acordo): string {
   if (a.status === 'nao_pago') {
@@ -112,6 +113,7 @@ export default function Acordos() {
   const [busca, setBusca]           = useState(searchParams.get('busca') || '');
   const [filtroStatus, setFiltroStatus] = useState(searchParams.get('status') || '');
   const [filtroTipo, setFiltroTipo] = useState(searchParams.get('tipo') || '');
+  const [filtroData, setFiltroData] = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
   const [currentPage, setCurrentPage] = useState(Number(searchParams.get('page')) || 1);
 
@@ -185,6 +187,7 @@ export default function Acordos() {
       if (busca) params.set('busca', busca); else params.delete('busca');
       if (filtroStatus) params.set('status', filtroStatus); else params.delete('status');
       if (filtroTipo) params.set('tipo', filtroTipo); else params.delete('tipo');
+      if (filtroData) params.set('data', filtroData); else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
@@ -192,7 +195,7 @@ export default function Acordos() {
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
   // Calcular status baseado na tab ativa e filtro manual
   // Analítico = apenas acordos ativos (excluindo pago e nao_pago)
@@ -219,8 +222,9 @@ export default function Acordos() {
     busca:        busca || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
-    data_inicio:  bpMesInicio,
-    data_fim:     bpMesFim,
+    vencimento:   filtroData || undefined,
+    data_inicio:  filtroData ? undefined : bpMesInicio,
+    data_fim:     filtroData ? undefined : bpMesFim,
     // Líder/Elite: filtro individual, ou por equipe, ou setor geral (padrão do RLS)
     operador_id:  (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
       ? perfil?.id
@@ -245,7 +249,7 @@ export default function Acordos() {
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroOperador);
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
   const filtrosAtivosCount = [
     busca,
     filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
@@ -292,7 +296,7 @@ export default function Acordos() {
   }, [acordos, loading]);
 
   function limparFiltros() {
-    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroOperador(''); setCurrentPage(1);
+    setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -754,16 +758,14 @@ export default function Acordos() {
                 />
               </div>
               <Select value={filtroStatus} onValueChange={(v) => { setFiltroStatus(v); setCurrentPage(1); }}>
-                <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
+                <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos Status</SelectItem>
                   {Object.entries(statusLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
               <Select value={filtroTipo} onValueChange={(v) => { setFiltroTipo(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Todos Tipos</SelectItem>
                   {Object.entries(tipoLabels).map(([k,v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -791,6 +793,24 @@ export default function Acordos() {
                   </SelectContent>
                 </Select>
               )}
+              <div className="flex items-center gap-1">
+                <DatePickerField
+                  value={filtroData}
+                  onChange={v => { setFiltroData(v); setCurrentPage(1); }}
+                  triggerClassName="w-40 text-xs"
+                  placeholder="Filtrar data"
+                />
+                {filtroData && (
+                  <button
+                    type="button"
+                    onClick={() => { setFiltroData(''); setCurrentPage(1); }}
+                    className="h-8 w-8 flex items-center justify-center rounded-md border border-input text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                    title="Limpar filtro de data"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
               {temFiltros && (
                 <Button variant="ghost" size="sm" onClick={limparFiltros} className="h-8 text-xs gap-1">
                   <X className="w-3 h-3" /> Limpar

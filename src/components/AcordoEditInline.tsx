@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Save, X, DollarSign, Smartphone, MapPin, Link2, Building2 } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,9 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/hooks/useAuth';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import type { Perfil } from '@/lib/supabase';
 import { verificarNrRegistro, registrarNr } from '@/services/nr_registros.service';
 import {
   parseCurrencyInput,
@@ -38,6 +42,13 @@ const SEM_ESTADO_VALUE = '__sem_estado__';
 
 export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, onSaved, onCancel }: AcordoEditInlineProps) {
   const { empresa } = useEmpresa();
+  const { perfil }  = useAuth();
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
+  const usuarioTemLogicaDiretoExtra = isPaguePlay && isAtivoParaUsuario(
+    perfil?.id ?? '',
+    perfil?.setor_id ?? null,
+    (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
+  );
   const [saving, setSaving] = useState(false);
 
   // Form state initialised from acordo
@@ -345,20 +356,20 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
               {/* Actions */}
               <div className="flex items-center gap-2 mt-3 pt-3 border-t border-primary/15">
-                {isPaguePlay && (
+                {usuarioTemLogicaDiretoExtra && (
                   <button
                     type="button"
                     onClick={() => setIsExtra(v => !v)}
                     disabled={saving}
                     title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
                     className={cn(
-                      'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase border transition-all whitespace-nowrap',
+                      'h-8 flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer whitespace-nowrap',
                       isExtra
                         ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
-                        : 'bg-muted text-muted-foreground border-border hover:bg-muted/80',
+                        : 'bg-background text-foreground border-input hover:bg-accent/50',
                     )}
                   >
-                    <Link2 className="w-2.5 h-2.5" />
+                    <Link2 className="w-3 h-3 shrink-0" />
                     {isExtra ? 'Extra' : 'Direto'}
                   </button>
                 )}
