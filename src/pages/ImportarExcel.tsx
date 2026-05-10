@@ -2256,12 +2256,12 @@ export default function ImportarExcel() {
 
       {/* ─── MODAL DE AUTORIZAÇÃO DE NRS BLOQUEADOS ─── */}
       <Dialog open={modalAutorizacaoAberto} onOpenChange={setModalAutorizacaoAberto}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg" aria-describedby="dlg-autorizar-nrs-desc">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="w-5 h-5 text-destructive" /> Autorizar NRs bloqueados
             </DialogTitle>
-            <DialogDescription className="text-xs leading-relaxed">
+            <DialogDescription id="dlg-autorizar-nrs-desc" className="text-xs leading-relaxed">
               Selecione os NRs duplicados que devem ser transferidos para o
               operador atual. É necessário e-mail e senha de um líder, elite,
               gerência ou administrador. Ao confirmar, cada NR selecionado será

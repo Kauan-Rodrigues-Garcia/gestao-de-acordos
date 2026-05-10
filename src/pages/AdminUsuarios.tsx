@@ -790,10 +790,10 @@ export default function AdminUsuarios() {
 
       {/* #6: diálogo de confirmação de exclusão de usuário */}
       <Dialog open={confirmExclusaoUser} onOpenChange={setConfirmExclusaoUser}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" aria-describedby="dlg-excl-user-desc">
           <DialogHeader>
             <DialogTitle>Excluir usuário</DialogTitle>
-            <DialogDescription>
+            <DialogDescription id="dlg-excl-user-desc">
               Tem certeza que deseja excluir{' '}
               <strong>{editando?.nome}</strong>? Esta ação não pode ser desfeita e removerá
               o acesso do usuário ao sistema.
