@@ -238,7 +238,7 @@ export default function Acordos() {
   // Auto-scroll para o formulário inline quando aberto
   useEffect(() => {
     if (novoInlineAberto) {
-      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [novoInlineAberto]);
 
@@ -828,8 +828,11 @@ export default function Acordos() {
           </CardContent>
         </Card>
 
+        {/* Âncora de scroll para o formulário inline */}
+        <div ref={novoInlineRef} />
+
         {/* ── Tabela ── */}
-        <Card ref={novoInlineRef} className="border-border" data-tour="tabela-acordos">
+        <Card className="border-border" data-tour="tabela-acordos">
           <CardContent className="p-0">
             {loading ? <TableSkeleton /> : (
               <div className="overflow-x-auto">

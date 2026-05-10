@@ -291,7 +291,7 @@ export default function Dashboard() {
   // Auto-scroll para o formulário inline quando aberto
   useEffect(() => {
     if (novoInlineAbertoTabela) {
-      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      novoInlineRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [novoInlineAbertoTabela]);
 
@@ -1184,8 +1184,11 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
+            {/* Âncora de scroll para o formulário inline */}
+            <div ref={novoInlineRef} />
+
             {/* Tabela completa */}
-            <Card ref={novoInlineRef} className="border-border" data-tour="tabela-acordos">
+            <Card className="border-border" data-tour="tabela-acordos">
               <CardContent className="p-0">
                 {loading ? <TableSkeleton /> : (
                   <div className="overflow-x-auto">
