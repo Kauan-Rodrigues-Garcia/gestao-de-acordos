@@ -478,7 +478,9 @@ export default function PainelDiretoria() {
 
   // ── Recebimentos Extra (PaguePlay only) ─────────────────────────────────────
   const [extrasAcordos, setExtrasAcordos] = useState<any[]>([]);
-  const [extrasOperadoresMap, setExtrasOperadoresMap] = useState<Map<string, string>>(new Map());
+  const [extrasOperadoresMap, setExtrasOperadoresMap] = useState<Map<string, string>>(new Map()); // operador_id → nome
+  const [extrasOpEquipeMap, setExtrasOpEquipeMap] = useState<Map<string, string>>(new Map());     // operador_id → equipe_id
+  const [extrasEquipesMap, setExtrasEquipesMap] = useState<Map<string, string>>(new Map());       // equipe_id → nome
   const [loadingExtras, setLoadingExtras] = useState(false);
   const [extraSetorFiltro, setExtraSetorFiltro] = useState<string | null>(null);
   const [extraEquipeFiltro, setExtraEquipeFiltro] = useState<string | null>(null);
@@ -565,9 +567,10 @@ export default function PainelDiretoria() {
       const ultimoDia = new Date(anoAtual, mesAtual, 0).getDate();
       const fim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
 
+      // acordos NÃO tem coluna equipe_id — equipe fica em perfis.equipe_id
       const { data: extrasData } = await supabase
         .from('acordos')
-        .select('id, valor, status, tipo, setor_id, equipe_id, operador_id, tipo_vinculo, equipes(id, nome)')
+        .select('id, valor, status, tipo, setor_id, operador_id, tipo_vinculo')
         .eq('empresa_id', empresa.id)
         .eq('tipo_vinculo', 'extra')
         .gte('vencimento', inicio)
@@ -576,17 +579,36 @@ export default function PainelDiretoria() {
       if (extrasData) {
         const acordos = extrasData as any[];
         setExtrasAcordos(acordos);
+
         const opIds = [...new Set(acordos.map((a: any) => a.operador_id).filter(Boolean))];
         if (opIds.length > 0) {
-          const { data: operadoresData } = await supabase
+          const { data: perfisData } = await supabase
             .from('perfis')
-            .select('id, nome')
+            .select('id, nome, equipe_id')
             .in('id', opIds);
-          if (operadoresData) {
-            setExtrasOperadoresMap(new Map((operadoresData as any[]).map(p => [p.id, p.nome])));
+
+          if (perfisData) {
+            const pList = perfisData as { id: string; nome: string; equipe_id: string | null }[];
+            setExtrasOperadoresMap(new Map(pList.map(p => [p.id, p.nome])));
+            setExtrasOpEquipeMap(new Map(pList.filter(p => p.equipe_id).map(p => [p.id, p.equipe_id!])));
+
+            const eqIds = [...new Set(pList.map(p => p.equipe_id).filter(Boolean))] as string[];
+            if (eqIds.length > 0) {
+              const { data: equipeData } = await supabase
+                .from('equipes')
+                .select('id, nome')
+                .in('id', eqIds);
+              if (equipeData) {
+                setExtrasEquipesMap(new Map((equipeData as { id: string; nome: string }[]).map(e => [e.id, e.nome])));
+              }
+            } else {
+              setExtrasEquipesMap(new Map());
+            }
           }
         } else {
           setExtrasOperadoresMap(new Map());
+          setExtrasOpEquipeMap(new Map());
+          setExtrasEquipesMap(new Map());
         }
       }
     } catch (err) {
@@ -724,24 +746,31 @@ export default function PainelDiretoria() {
   }, [extrasAcordos, setores]);
 
   const extrasEquipes = useMemo(() => {
-    const eqMap = new Map<string, string>();
+    const eqSet = new Set<string>();
     extrasAcordos
       .filter(a => !extraSetorFiltro || a.setor_id === extraSetorFiltro)
       .forEach(a => {
-        if (a.equipes?.id) eqMap.set(a.equipes.id, a.equipes.nome);
+        if (a.operador_id) {
+          const eqId = extrasOpEquipeMap.get(a.operador_id);
+          if (eqId) eqSet.add(eqId);
+        }
       });
-    return Array.from(eqMap.entries())
-      .map(([id, nome]) => ({ id, nome }))
+    return Array.from(eqSet)
+      .map(id => ({ id, nome: extrasEquipesMap.get(id) ?? id }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [extrasAcordos, extraSetorFiltro]);
+  }, [extrasAcordos, extraSetorFiltro, extrasOpEquipeMap, extrasEquipesMap]);
 
   const extrasOperadores = useMemo(() => {
     const opMap = new Map<string, string>();
     extrasAcordos
-      .filter(a =>
-        (!extraSetorFiltro || a.setor_id === extraSetorFiltro) &&
-        (!extraEquipeFiltro || a.equipes?.id === extraEquipeFiltro)
-      )
+      .filter(a => {
+        if (extraSetorFiltro && a.setor_id !== extraSetorFiltro) return false;
+        if (extraEquipeFiltro) {
+          const opEq = a.operador_id ? extrasOpEquipeMap.get(a.operador_id) : null;
+          if (opEq !== extraEquipeFiltro) return false;
+        }
+        return true;
+      })
       .forEach(a => {
         if (a.operador_id && extrasOperadoresMap.has(a.operador_id)) {
           opMap.set(a.operador_id, extrasOperadoresMap.get(a.operador_id)!);
@@ -750,16 +779,19 @@ export default function PainelDiretoria() {
     return Array.from(opMap.entries())
       .map(([id, nome]) => ({ id, nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extrasOperadoresMap]);
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extrasOperadoresMap, extrasOpEquipeMap]);
 
   const extrasFiltrados = useMemo(() => {
     return extrasAcordos.filter(a => {
       if (extraSetorFiltro && a.setor_id !== extraSetorFiltro) return false;
-      if (extraEquipeFiltro && a.equipes?.id !== extraEquipeFiltro) return false;
+      if (extraEquipeFiltro) {
+        const opEq = a.operador_id ? extrasOpEquipeMap.get(a.operador_id) : null;
+        if (opEq !== extraEquipeFiltro) return false;
+      }
       if (extraOperadorFiltro && a.operador_id !== extraOperadorFiltro) return false;
       return true;
     });
-  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro]);
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro, extrasOpEquipeMap]);
 
   const extrasKpis = useMemo(() => {
     const pagos = extrasFiltrados.filter(a => a.status === 'pago');
