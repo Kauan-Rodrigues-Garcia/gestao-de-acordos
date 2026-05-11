@@ -349,8 +349,20 @@ export default function Dashboard() {
     if (visaoAmpla && filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, true);
     }
-    return base;
-  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla]);
+    // Dentro do grupo de hoje: pendentes (laranja) antes dos pagos
+    return [...base].sort((a, b) => {
+      const aHoje = a.vencimento === hoje;
+      const bHoje = b.vencimento === hoje;
+      if (aHoje && bHoje) {
+        const aPago = a.status === 'pago' ? 1 : 0;
+        const bPago = b.status === 'pago' ? 1 : 0;
+        return aPago - bPago;
+      }
+      if (aHoje && !bHoje) return -1;
+      if (!aHoje && bHoje) return 1;
+      return 0;
+    });
+  }, [acordos, usuarioTemLogicaDiretoExtra, filtroVinculo, visaoAmpla, hoje]);
 
   // NOTA: O Realtime cirúrgico (patch/add/remove) já está no useAcordos — não duplicar aqui.
 

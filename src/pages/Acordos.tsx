@@ -542,8 +542,21 @@ export default function Acordos() {
     if (activeTab === 'analitico') {
       return base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
     }
-    return base;
-  }, [acordos, activeTab, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP]);
+
+    // 4) Dentro do grupo de hoje: pendentes (laranja) antes dos pagos
+    return [...base].sort((a, b) => {
+      const aHoje = a.vencimento === hoje;
+      const bHoje = b.vencimento === hoje;
+      if (aHoje && bHoje) {
+        const aPago = a.status === 'pago' ? 1 : 0;
+        const bPago = b.status === 'pago' ? 1 : 0;
+        return aPago - bPago;
+      }
+      if (aHoje && !bHoje) return -1;
+      if (!aHoje && bHoje) return 1;
+      return 0;
+    });
+  }, [acordos, activeTab, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
   // PaguePlay usa o Dashboard como tela principal — redirecionar
   // (esta verificação fica após todos os hooks para respeitar rules-of-hooks)
