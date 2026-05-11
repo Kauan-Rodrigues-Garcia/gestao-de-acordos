@@ -476,6 +476,14 @@ export default function PainelDiretoria() {
 
   const { empresa } = useEmpresa();
 
+  // ── Recebimentos Extra (PaguePlay only) ─────────────────────────────────────
+  const [extrasAcordos, setExtrasAcordos] = useState<any[]>([]);
+  const [extrasOperadoresMap, setExtrasOperadoresMap] = useState<Map<string, string>>(new Map());
+  const [loadingExtras, setLoadingExtras] = useState(false);
+  const [extraSetorFiltro, setExtraSetorFiltro] = useState<string | null>(null);
+  const [extraEquipeFiltro, setExtraEquipeFiltro] = useState<string | null>(null);
+  const [extraOperadorFiltro, setExtraOperadorFiltro] = useState<string | null>(null);
+
   const carregarSetoresDetalhes = useCallback(async () => {
     if (!empresa?.id) return;
     setLoadingSetores(true);
@@ -503,14 +511,16 @@ export default function PainelDiretoria() {
           .order('nome'),
         supabase
           .from('acordos')
-          .select('id, valor, status, tipo, setor_id, vencimento')
+          .select('id, valor, status, tipo, setor_id, vencimento, tipo_vinculo')
           .eq('empresa_id', empresa.id)
+          .neq('tipo_vinculo', 'extra')
           .gte('vencimento', inicio)
           .lte('vencimento', fim),
         supabase
           .from('acordos')
-          .select('id, valor, status, vencimento')
+          .select('id, valor, status, vencimento, tipo_vinculo')
           .eq('empresa_id', empresa.id)
+          .neq('tipo_vinculo', 'extra')
           .gte('vencimento', inicioPrev)
           .lte('vencimento', fimPrev),
       ]);
@@ -543,6 +553,52 @@ export default function PainelDiretoria() {
   useEffect(() => {
     carregarSetoresDetalhes();
   }, [carregarSetoresDetalhes]);
+
+  const carregarExtras = useCallback(async () => {
+    if (!empresa?.id || !isPP) return;
+    setLoadingExtras(true);
+    try {
+      const hoje = new Date();
+      const mesAtual = hoje.getMonth() + 1;
+      const anoAtual = hoje.getFullYear();
+      const inicio = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-01`;
+      const ultimoDia = new Date(anoAtual, mesAtual, 0).getDate();
+      const fim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+
+      const { data: extrasData } = await supabase
+        .from('acordos')
+        .select('id, valor, status, tipo, setor_id, equipe_id, operador_id, tipo_vinculo, equipes(id, nome)')
+        .eq('empresa_id', empresa.id)
+        .eq('tipo_vinculo', 'extra')
+        .gte('vencimento', inicio)
+        .lte('vencimento', fim);
+
+      if (extrasData) {
+        const acordos = extrasData as any[];
+        setExtrasAcordos(acordos);
+        const opIds = [...new Set(acordos.map((a: any) => a.operador_id).filter(Boolean))];
+        if (opIds.length > 0) {
+          const { data: operadoresData } = await supabase
+            .from('perfis')
+            .select('id, nome')
+            .in('id', opIds);
+          if (operadoresData) {
+            setExtrasOperadoresMap(new Map((operadoresData as any[]).map(p => [p.id, p.nome])));
+          }
+        } else {
+          setExtrasOperadoresMap(new Map());
+        }
+      }
+    } catch (err) {
+      console.error('[PainelDiretoria] erro ao carregar extras:', err);
+    } finally {
+      setLoadingExtras(false);
+    }
+  }, [empresa?.id, isPP]);
+
+  useEffect(() => {
+    carregarExtras();
+  }, [carregarExtras]);
 
   // ── Consolidar dados por setor ──────────────────────────────────────────────
   const setoresAgendamento = useMemo<SetorAgendamento[]>(() => {
@@ -615,10 +671,11 @@ export default function PainelDiretoria() {
     ? Math.round(((valorRecebidoMes - mesAnterior.valorRecebido) / mesAnterior.valorRecebido) * 100)
     : null;
 
-  // Distribuição por tipo (dados do accordosMes do hook)
+  // Distribuição por tipo (dados do acordosMes do hook — extras excluídos no isPP)
   const distribuicaoPorTipo = useMemo(() => {
     const map: Record<string, { agendado: number; recebido: number; qtd: number }> = {};
-    acordosMes.forEach(a => {
+    const base = isPP ? acordosMes.filter(a => (a as any).tipo_vinculo !== 'extra') : acordosMes;
+    base.forEach(a => {
       const tipo = (a as any).tipo ?? 'outros';
       if (!map[tipo]) map[tipo] = { agendado: 0, recebido: 0, qtd: 0 };
       map[tipo].agendado += safeNum(a.valor);
@@ -635,7 +692,7 @@ export default function PainelDiretoria() {
         fill: TIPO_CORES[tipo] ?? '#94a3b8',
       }))
       .sort((a, b) => b.value - a.value);
-  }, [acordosMes]);
+  }, [acordosMes, isPP]);
 
   // Projeção do mês (baseado em dias úteis estimados)
   const hoje = new Date();
@@ -651,6 +708,94 @@ export default function PainelDiretoria() {
     : 0;
 
   const totalAgendadoGeral = setoresAgendamento.reduce((s, x) => s + x.totalAgendado, 0);
+
+  // ── Extras computados ────────────────────────────────────────────────────────
+  const extrasSetores = useMemo(() => {
+    const setMap = new Map<string, string>();
+    extrasAcordos.forEach(a => {
+      if (a.setor_id) {
+        const s = setores.find((x: any) => x.id === a.setor_id);
+        if (s) setMap.set(s.id, s.nome);
+      }
+    });
+    return Array.from(setMap.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [extrasAcordos, setores]);
+
+  const extrasEquipes = useMemo(() => {
+    const eqMap = new Map<string, string>();
+    extrasAcordos
+      .filter(a => !extraSetorFiltro || a.setor_id === extraSetorFiltro)
+      .forEach(a => {
+        if (a.equipes?.id) eqMap.set(a.equipes.id, a.equipes.nome);
+      });
+    return Array.from(eqMap.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [extrasAcordos, extraSetorFiltro]);
+
+  const extrasOperadores = useMemo(() => {
+    const opMap = new Map<string, string>();
+    extrasAcordos
+      .filter(a =>
+        (!extraSetorFiltro || a.setor_id === extraSetorFiltro) &&
+        (!extraEquipeFiltro || a.equipes?.id === extraEquipeFiltro)
+      )
+      .forEach(a => {
+        if (a.operador_id && extrasOperadoresMap.has(a.operador_id)) {
+          opMap.set(a.operador_id, extrasOperadoresMap.get(a.operador_id)!);
+        }
+      });
+    return Array.from(opMap.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extrasOperadoresMap]);
+
+  const extrasFiltrados = useMemo(() => {
+    return extrasAcordos.filter(a => {
+      if (extraSetorFiltro && a.setor_id !== extraSetorFiltro) return false;
+      if (extraEquipeFiltro && a.equipes?.id !== extraEquipeFiltro) return false;
+      if (extraOperadorFiltro && a.operador_id !== extraOperadorFiltro) return false;
+      return true;
+    });
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro]);
+
+  const extrasKpis = useMemo(() => {
+    const pagos = extrasFiltrados.filter(a => a.status === 'pago');
+    const naoPagos = extrasFiltrados.filter(a => a.status === 'nao_pago');
+    const totalAgendado = sumSafe(extrasFiltrados.map(a => a.valor));
+    const totalRecebido = sumSafe(pagos.map(a => a.valor));
+    const totalNaoPago = sumSafe(naoPagos.map(a => a.valor));
+    return {
+      totalAgendado,
+      totalRecebido,
+      hoAgendado: totalAgendado * PP_HO_PERCENTUAL,
+      hoRecebido: totalRecebido * PP_HO_PERCENTUAL,
+      totalNaoPago,
+      hoNaoPago: totalNaoPago * PP_HO_PERCENTUAL,
+      totalAcordos: extrasFiltrados.length,
+      totalPagos: pagos.length,
+    };
+  }, [extrasFiltrados]);
+
+  const extrasPorOperador = useMemo(() => {
+    const map = new Map<string, { nome: string; acordos: number; recebido: number; agendado: number; pagos: number }>();
+    extrasFiltrados.forEach(a => {
+      const opId = a.operador_id ?? '__sem__';
+      const opNome = a.operador_id
+        ? (extrasOperadoresMap.get(a.operador_id) ?? 'Desconhecido')
+        : 'Sem operador';
+      if (!map.has(opId)) map.set(opId, { nome: opNome, acordos: 0, recebido: 0, agendado: 0, pagos: 0 });
+      const entry = map.get(opId)!;
+      entry.acordos++;
+      entry.agendado += safeNum(a.valor);
+      if (a.status === 'pago') { entry.recebido += safeNum(a.valor); entry.pagos++; }
+    });
+    return Array.from(map.entries())
+      .map(([id, d]) => ({ id, ...d }))
+      .sort((a, b) => b.recebido - a.recebido);
+  }, [extrasFiltrados, extrasOperadoresMap]);
 
   if (!perfil) return null;
 
@@ -712,11 +857,11 @@ export default function PainelDiretoria() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => { refetch(); carregarSetoresDetalhes(); }}
-              disabled={loading || loadingSetores}
+              onClick={() => { refetch(); carregarSetoresDetalhes(); carregarExtras(); }}
+              disabled={loading || loadingSetores || loadingExtras}
               className="rounded-xl h-9 border-border/50 bg-background/60 hover:bg-accent/40"
             >
-              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', (loading || loadingSetores) && 'animate-spin')} />
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', (loading || loadingSetores || loadingExtras) && 'animate-spin')} />
               Atualizar
             </Button>
           </div>
@@ -1530,6 +1675,209 @@ export default function PainelDiretoria() {
           </div>
         </div>
       </div>
+
+      {/* ── Recebimentos Extra (PaguePlay only) ─────────────────────────────── */}
+      {isPP && (
+        <>
+          <SectionLabel>Recebimentos Extra</SectionLabel>
+          <div className="rounded-2xl border border-border/40 bg-card/80 backdrop-blur-sm overflow-hidden">
+            {/* Header + filtros */}
+            <div className="px-5 py-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                  <ArrowUpRight className="w-4 h-4 text-violet-500" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-foreground">Recebimentos Extra</h3>
+                  <p className="text-[11px] text-muted-foreground">Acordos com tipo_vinculo = extra no mês</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Filtro setor */}
+                {extrasSetores.length > 0 && (
+                  <Select
+                    value={extraSetorFiltro ?? 'all'}
+                    onValueChange={v => {
+                      setExtraSetorFiltro(v === 'all' ? null : v);
+                      setExtraEquipeFiltro(null);
+                      setExtraOperadorFiltro(null);
+                    }}
+                  >
+                    <SelectTrigger className="w-40 h-8 text-xs rounded-xl border-border/50 bg-background/60">
+                      <Building2 className="w-3 h-3 mr-1 text-muted-foreground" />
+                      <SelectValue placeholder="Todos os setores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os setores</SelectItem>
+                      {extrasSetores.map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {/* Filtro equipe */}
+                {extrasEquipes.length > 0 && (
+                  <Select
+                    value={extraEquipeFiltro ?? 'all'}
+                    onValueChange={v => {
+                      setExtraEquipeFiltro(v === 'all' ? null : v);
+                      setExtraOperadorFiltro(null);
+                    }}
+                  >
+                    <SelectTrigger className="w-40 h-8 text-xs rounded-xl border-border/50 bg-background/60">
+                      <Users2 className="w-3 h-3 mr-1 text-muted-foreground" />
+                      <SelectValue placeholder="Todas as equipes" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as equipes</SelectItem>
+                      {extrasEquipes.map(e => (
+                        <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {/* Filtro operador */}
+                {extrasOperadores.length > 0 && (
+                  <Select
+                    value={extraOperadorFiltro ?? 'all'}
+                    onValueChange={v => setExtraOperadorFiltro(v === 'all' ? null : v)}
+                  >
+                    <SelectTrigger className="w-40 h-8 text-xs rounded-xl border-border/50 bg-background/60">
+                      <User className="w-3 h-3 mr-1 text-muted-foreground" />
+                      <SelectValue placeholder="Todos os operadores" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os operadores</SelectItem>
+                      {extrasOperadores.map(o => (
+                        <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 space-y-4">
+              {loadingExtras ? (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+                </div>
+              ) : extrasAcordos.length === 0 ? (
+                <div className="py-10 text-center text-muted-foreground">
+                  <div className="w-12 h-12 rounded-2xl bg-muted/50 flex items-center justify-center mx-auto mb-3">
+                    <ArrowUpRight className="w-6 h-6 opacity-30" />
+                  </div>
+                  <p className="text-sm font-medium">Nenhum recebimento extra no mês</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">Dados aparecerão quando houver acordos do tipo extra</p>
+                </div>
+              ) : (
+                <>
+                  {/* KPIs */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="rounded-2xl border border-success/20 bg-success/5 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Total recebido</p>
+                      <p className="text-xl font-extrabold font-mono text-success leading-none">{formatBRL(extrasKpis.totalRecebido)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{extrasKpis.totalPagos} acordos pagos</p>
+                    </div>
+                    <div className="rounded-2xl border border-orange-500/20 bg-orange-500/5 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">H.O. recebido</p>
+                      <p className="text-xl font-extrabold font-mono text-orange-500 leading-none">{formatBRL(extrasKpis.hoRecebido)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">{(PP_HO_PERCENTUAL * 100).toFixed(2)}% do bruto</p>
+                    </div>
+                    <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Total agendado</p>
+                      <p className="text-xl font-extrabold font-mono text-primary leading-none">{formatBRL(extrasKpis.totalAgendado)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">H.O.: {formatBRL(extrasKpis.hoAgendado)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-1">Não pagos</p>
+                      <p className="text-xl font-extrabold font-mono text-destructive leading-none">{formatBRL(extrasKpis.totalNaoPago)}</p>
+                      <p className="text-[10px] text-muted-foreground mt-1">H.O.: {formatBRL(extrasKpis.hoNaoPago)}</p>
+                    </div>
+                  </div>
+
+                  {/* Resumo badge */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Badge variant="secondary" className="text-[11px]">
+                      {extrasKpis.totalAcordos} acordos extra
+                    </Badge>
+                    {(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro) && (
+                      <button
+                        onClick={() => { setExtraSetorFiltro(null); setExtraEquipeFiltro(null); setExtraOperadorFiltro(null); }}
+                        className="text-[11px] text-muted-foreground underline hover:text-foreground transition-colors"
+                      >
+                        Limpar filtros
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Tabela por operador */}
+                  {extrasPorOperador.length > 0 && (
+                    <div className="rounded-xl border border-border/40 overflow-hidden">
+                      <div className="px-4 py-2.5 border-b border-border/30 bg-muted/30">
+                        <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Breakdown por operador</p>
+                      </div>
+                      <div className="divide-y divide-border/30">
+                        {extrasPorOperador.map((op, i) => {
+                          const percRec = op.agendado > 0 ? Math.round((op.recebido / op.agendado) * 100) : 0;
+                          const maxRec = extrasPorOperador[0]?.recebido ?? 1;
+                          const barW = maxRec > 0 ? Math.round((op.recebido / maxRec) * 100) : 0;
+                          return (
+                            <motion.div
+                              key={op.id}
+                              initial={{ opacity: 0, x: -6 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: i * 0.04 }}
+                              className="flex items-center gap-3 px-4 py-3 hover:bg-accent/10 transition-colors"
+                            >
+                              <span className={cn(
+                                'w-6 h-6 rounded-md flex items-center justify-center text-[11px] font-extrabold flex-shrink-0 border',
+                                i === 0 ? 'bg-yellow-400/20 text-yellow-600 border-yellow-400/30'
+                                : i === 1 ? 'bg-slate-300/20 text-slate-500 border-slate-300/30'
+                                : i === 2 ? 'bg-amber-600/20 text-amber-700 border-amber-600/30'
+                                : 'bg-muted text-muted-foreground border-border/30'
+                              )}>
+                                {i + 1}
+                              </span>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2 mb-1">
+                                  <span className="text-xs font-semibold text-foreground truncate">{op.nome}</span>
+                                  <div className="flex items-center gap-3 flex-shrink-0 text-[11px]">
+                                    <span className="text-muted-foreground">{op.acordos} acordos</span>
+                                    <span className="font-mono font-bold text-success">{formatBRL(op.recebido)}</span>
+                                    <span className="font-mono text-orange-500 hidden sm:inline">{formatBRL(op.recebido * PP_HO_PERCENTUAL)} H.O.</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                                    <motion.div
+                                      className="h-full rounded-full bg-violet-500"
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${barW}%` }}
+                                      transition={{ duration: 0.5, ease: 'easeOut', delay: i * 0.05 }}
+                                    />
+                                  </div>
+                                  <span className={cn(
+                                    'text-[10px] font-bold w-8 text-right tabular-nums flex-shrink-0',
+                                    percRec >= 80 ? 'text-success' : percRec >= 50 ? 'text-warning' : 'text-muted-foreground'
+                                  )}>{percRec}%</span>
+                                </div>
+                                <div className="flex gap-3 mt-0.5 text-[10px] text-muted-foreground">
+                                  <span>Agend.: <span className="font-mono font-semibold">{formatBRL(op.agendado)}</span></span>
+                                </div>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      )}
 
       {/* ── Comparativo mês anterior ─────────────────────────────────────────── */}
       {mesAnterior && !loading && (
