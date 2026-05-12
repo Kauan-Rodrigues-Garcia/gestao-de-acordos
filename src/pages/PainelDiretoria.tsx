@@ -577,7 +577,7 @@ export default function PainelDiretoria() {
       // acordos NÃO tem coluna equipe_id — equipe fica em perfis.equipe_id
       const { data: extrasData } = await supabase
         .from('acordos')
-        .select('id, valor, status, tipo, setor_id, operador_id, tipo_vinculo')
+        .select('id, valor, status, tipo, setor_id, operador_id, tipo_vinculo, vencimento')
         .eq('empresa_id', empresa.id)
         .eq('tipo_vinculo', 'extra')
         .gte('vencimento', inicio)
