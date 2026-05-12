@@ -486,8 +486,12 @@ export default function PainelDiretoria() {
   const [extraSetorFiltro, setExtraSetorFiltro] = useState<string | null>(null);
   const [extraEquipeFiltro, setExtraEquipeFiltro] = useState<string | null>(null);
   const [extraOperadorFiltro, setExtraOperadorFiltro] = useState<string | null>(null);
+  // rascunho (pickers) — só vira filtro quando o usuário clicar em Confirmar
   const [extraDataInicio, setExtraDataInicio] = useState('');
   const [extraDataFim, setExtraDataFim] = useState('');
+  // aplicado (usado pelo useMemo)
+  const [extraDataInicioAplicada, setExtraDataInicioAplicada] = useState('');
+  const [extraDataFimAplicada, setExtraDataFimAplicada] = useState('');
 
   const carregarSetoresDetalhes = useCallback(async () => {
     if (!empresa?.id) return;
@@ -792,11 +796,11 @@ export default function PainelDiretoria() {
         if (opEq !== extraEquipeFiltro) return false;
       }
       if (extraOperadorFiltro && a.operador_id !== extraOperadorFiltro) return false;
-      if (extraDataInicio && a.vencimento < extraDataInicio) return false;
-      if (extraDataFim   && a.vencimento > extraDataFim)    return false;
+      if (extraDataInicioAplicada && a.vencimento < extraDataInicioAplicada) return false;
+      if (extraDataFimAplicada   && a.vencimento > extraDataFimAplicada)    return false;
       return true;
     });
-  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro, extrasOpEquipeMap, extraDataInicio, extraDataFim]);
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro, extrasOpEquipeMap, extraDataInicioAplicada, extraDataFimAplicada]);
 
   const extrasKpis = useMemo(() => {
     const pagos = extrasFiltrados.filter(a => a.status === 'pago');
@@ -1815,10 +1819,26 @@ export default function PainelDiretoria() {
                       triggerClassName="h-8 text-xs rounded-xl border-border/50 bg-background/60"
                     />
                   </div>
-                  {(extraDataInicio || extraDataFim) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setExtraDataInicioAplicada(extraDataInicio);
+                      setExtraDataFimAplicada(extraDataFim);
+                    }}
+                    disabled={!extraDataInicio && !extraDataFim}
+                    className="h-8 px-3 flex items-center gap-1.5 rounded-xl border border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400 text-[11px] font-semibold hover:bg-violet-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+                  >
+                    Confirmar
+                  </button>
+                  {(extraDataInicioAplicada || extraDataFimAplicada) && (
                     <button
                       type="button"
-                      onClick={() => { setExtraDataInicio(''); setExtraDataFim(''); }}
+                      onClick={() => {
+                        setExtraDataInicio('');
+                        setExtraDataFim('');
+                        setExtraDataInicioAplicada('');
+                        setExtraDataFimAplicada('');
+                      }}
                       className="h-8 w-8 flex items-center justify-center rounded-xl border border-border/50 bg-background/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
                       title="Limpar filtro de data"
                     >
@@ -1873,7 +1893,7 @@ export default function PainelDiretoria() {
                     <Badge variant="secondary" className="text-[11px]">
                       {extrasKpis.totalAcordos} acordos extra
                     </Badge>
-                    {(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro || extraDataInicio || extraDataFim) && (
+                    {(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro || extraDataInicioAplicada || extraDataFimAplicada) && (
                       <button
                         onClick={() => {
                           setExtraSetorFiltro(null);
@@ -1881,6 +1901,8 @@ export default function PainelDiretoria() {
                           setExtraOperadorFiltro(null);
                           setExtraDataInicio('');
                           setExtraDataFim('');
+                          setExtraDataInicioAplicada('');
+                          setExtraDataFimAplicada('');
                         }}
                         className="text-[11px] text-muted-foreground underline hover:text-foreground transition-colors"
                       >
