@@ -21,8 +21,9 @@ import {
   TrendingDown, Target, Activity, PieChart,
   ChevronDown, ChevronUp, AlertCircle, CheckCircle2,
   ArrowUpRight, ArrowDownRight, Clock, Percent, Banknote, PiggyBank,
-  CalendarClock,
+  CalendarClock, X,
 } from 'lucide-react';
+import { DatePickerField } from '@/components/DatePickerField';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart, Bar, Cell,
@@ -485,6 +486,8 @@ export default function PainelDiretoria() {
   const [extraSetorFiltro, setExtraSetorFiltro] = useState<string | null>(null);
   const [extraEquipeFiltro, setExtraEquipeFiltro] = useState<string | null>(null);
   const [extraOperadorFiltro, setExtraOperadorFiltro] = useState<string | null>(null);
+  const [extraDataInicio, setExtraDataInicio] = useState('');
+  const [extraDataFim, setExtraDataFim] = useState('');
 
   const carregarSetoresDetalhes = useCallback(async () => {
     if (!empresa?.id) return;
@@ -789,9 +792,11 @@ export default function PainelDiretoria() {
         if (opEq !== extraEquipeFiltro) return false;
       }
       if (extraOperadorFiltro && a.operador_id !== extraOperadorFiltro) return false;
+      if (extraDataInicio && a.vencimento < extraDataInicio) return false;
+      if (extraDataFim   && a.vencimento > extraDataFim)    return false;
       return true;
     });
-  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro, extrasOpEquipeMap]);
+  }, [extrasAcordos, extraSetorFiltro, extraEquipeFiltro, extraOperadorFiltro, extrasOpEquipeMap, extraDataInicio, extraDataFim]);
 
   const extrasKpis = useMemo(() => {
     const pagos = extrasFiltrados.filter(a => a.status === 'pago');
@@ -1786,6 +1791,41 @@ export default function PainelDiretoria() {
                     </SelectContent>
                   </Select>
                 )}
+
+                {/* Filtro período — De / Até */}
+                <div className="flex items-center gap-1.5">
+                  <div className="w-36">
+                    <DatePickerField
+                      value={extraDataInicio}
+                      onChange={v => {
+                        setExtraDataInicio(v);
+                        if (extraDataFim && v > extraDataFim) setExtraDataFim('');
+                      }}
+                      placeholder="De"
+                      triggerClassName="h-8 text-xs rounded-xl border-border/50 bg-background/60"
+                    />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground font-medium select-none">–</span>
+                  <div className="w-36">
+                    <DatePickerField
+                      value={extraDataFim}
+                      onChange={setExtraDataFim}
+                      placeholder="Até"
+                      minDate={extraDataInicio || undefined}
+                      triggerClassName="h-8 text-xs rounded-xl border-border/50 bg-background/60"
+                    />
+                  </div>
+                  {(extraDataInicio || extraDataFim) && (
+                    <button
+                      type="button"
+                      onClick={() => { setExtraDataInicio(''); setExtraDataFim(''); }}
+                      className="h-8 w-8 flex items-center justify-center rounded-xl border border-border/50 bg-background/60 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors flex-shrink-0"
+                      title="Limpar filtro de data"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1833,9 +1873,15 @@ export default function PainelDiretoria() {
                     <Badge variant="secondary" className="text-[11px]">
                       {extrasKpis.totalAcordos} acordos extra
                     </Badge>
-                    {(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro) && (
+                    {(extraSetorFiltro || extraEquipeFiltro || extraOperadorFiltro || extraDataInicio || extraDataFim) && (
                       <button
-                        onClick={() => { setExtraSetorFiltro(null); setExtraEquipeFiltro(null); setExtraOperadorFiltro(null); }}
+                        onClick={() => {
+                          setExtraSetorFiltro(null);
+                          setExtraEquipeFiltro(null);
+                          setExtraOperadorFiltro(null);
+                          setExtraDataInicio('');
+                          setExtraDataFim('');
+                        }}
                         className="text-[11px] text-muted-foreground underline hover:text-foreground transition-colors"
                       >
                         Limpar filtros
