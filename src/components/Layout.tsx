@@ -85,6 +85,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
+  // ── Auto-hide / auto-show do sidebar ────────────────────────────────────────
+  const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function clearAutoTimers() {
+    if (autoHideTimer.current) { clearTimeout(autoHideTimer.current); autoHideTimer.current = null; }
+    if (autoShowTimer.current) { clearTimeout(autoShowTimer.current); autoShowTimer.current = null; }
+  }
+
+  function handleSidebarMouseEnter() {
+    if (autoHideTimer.current) { clearTimeout(autoHideTimer.current); autoHideTimer.current = null; }
+    if (!sidebarOpen) {
+      autoShowTimer.current = setTimeout(() => setSidebarOpen(true), 1000);
+    }
+  }
+
+  function handleSidebarMouseLeave() {
+    if (autoShowTimer.current) { clearTimeout(autoShowTimer.current); autoShowTimer.current = null; }
+    if (sidebarOpen) {
+      autoHideTimer.current = setTimeout(() => setSidebarOpen(false), 3000);
+    }
+  }
+
+  useEffect(() => () => clearAutoTimers(), []);
+
   // ── Realtime: escuta mudanças de foto_url na tabela perfis ──────────────
   // Garante que a foto atualiza em tempo real para TODOS os usuários conectados
   useEffect(() => {
@@ -288,6 +313,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         animate={{ width: sidebarOpen ? 240 : 64 }}
         transition={{ duration: 0.2, ease: 'easeInOut' }}
         className="hidden md:flex flex-col bg-sidebar border-r border-sidebar-border overflow-hidden flex-shrink-0"
+        onMouseEnter={handleSidebarMouseEnter}
+        onMouseLeave={handleSidebarMouseLeave}
       >
         <SidebarContent />
       </motion.aside>
@@ -313,6 +340,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <Button variant="ghost" size="icon" className="w-8 h-8"
             onClick={() => {
               if (window.innerWidth >= 768) {
+                clearAutoTimers();
                 setSidebarOpen(prev => !prev);
               } else {
                 setMobileOpen(prev => !prev);
@@ -441,7 +469,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Expand toggle */}
         <button
-          onClick={() => setSidebarOpen(!sidebarOpen)}
+          onClick={() => { clearAutoTimers(); setSidebarOpen(!sidebarOpen); }}
           className="hidden md:flex absolute top-1/2 -translate-y-1/2 w-5 h-5 bg-card border border-border rounded-full items-center justify-center shadow-sm z-10 hover:bg-accent transition-colors"
           style={{ left: sidebarOpen ? '228px' : '52px' }}
         >
