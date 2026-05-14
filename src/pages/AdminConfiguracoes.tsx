@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, Bot, ShieldCheck, ClipboardList, ArrowLeftRight, Tag } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, Bot, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import AdminCargos from '@/pages/AdminCargos';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
+import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -189,6 +190,12 @@ export default function AdminConfiguracoes() {
             >
               <ClipboardList className="w-4 h-4" /> Logs
             </TabsTrigger>
+            <TabsTrigger
+              value="documentacoes"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <FileText className="w-4 h-4" /> Documentações
+            </TabsTrigger>
           </TabsList>
         </div>
 
@@ -344,6 +351,11 @@ export default function AdminConfiguracoes() {
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
         <TabsContent value="logs" className="flex-1 overflow-y-auto mt-0">
           <AdminLogs />
+        </TabsContent>
+
+        {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
+        <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
+          <AdminDocumentacoes />
         </TabsContent>
 
       </Tabs>

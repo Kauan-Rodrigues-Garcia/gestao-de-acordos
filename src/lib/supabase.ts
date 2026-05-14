@@ -221,3 +221,41 @@ export interface AIConfig {
   empresa_id?: string;
   updated_at: string;
 }
+
+export type TipoDocumentoLgpd =
+  | 'politica_privacidade'
+  | 'ropa'
+  | 'aviso_privacidade_interno'
+  | 'politica_retencao_descarte'
+  | 'plano_resposta_incidentes'
+  | 'termo_responsabilidade_operador';
+
+export interface DocumentoLgpd {
+  id: string;
+  empresa_id: string | null;
+  tipo: TipoDocumentoLgpd;
+  titulo: string;
+  conteudo: string;
+  versao: string;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export interface TermoUso {
+  id: string;
+  empresa_id: string;
+  versao: string;
+  titulo: string;
+  conteudo: string;
+  ativo: boolean;
+  criado_em: string;
+}
+
+export interface AceiteTermo {
+  id: string;
+  usuario_id: string;
+  termo_id: string;
+  aceito_em: string;
+  ip: string | null;
+  user_agent: string | null;
+}
