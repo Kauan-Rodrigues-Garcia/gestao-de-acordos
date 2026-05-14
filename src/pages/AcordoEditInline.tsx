@@ -21,6 +21,7 @@ import {
 } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
+import { abrirChatplay } from '@/lib/chatplay';
 import { springPresets } from '@/lib/motion';
 
 interface AcordoEditInlineProps {
@@ -208,12 +209,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
                             ? 'border-violet-500/40 text-violet-500 hover:bg-violet-500/10 cursor-pointer'
                             : 'border-muted text-muted-foreground opacity-50 cursor-not-allowed',
                         )}
-                        onClick={() => {
-                          const tab = window.open('https://chatplay.com.br/panel/chatplay', 'chatplay_tab');
-                          setTimeout(() => {
-                            tab?.postMessage({ action: 'chatplay_open', phone: whatsapp }, 'https://chatplay.com.br');
-                          }, 2000);
-                        }}
+                        onClick={() => abrirChatplay(whatsapp)}
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
                       </button>

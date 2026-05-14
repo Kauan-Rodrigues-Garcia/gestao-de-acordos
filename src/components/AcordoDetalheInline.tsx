@@ -39,6 +39,7 @@ import {
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
   extractLinkAcordo, getEstadoFromAcordo, isAtrasado, formatarTelefonePP,
 } from '@/lib/index';
+import { abrirChatplay } from '@/lib/chatplay';
 
 // ── Labels locais (evita TDZ em bundles concatenados) ────────────────────────
 const _TIPO_LABELS_PP: Record<string, string> = {
@@ -716,12 +717,7 @@ export function AcordoDetalheInline({
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs gap-1.5 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 dark:text-violet-400"
-                        onClick={() => {
-                          const tab = window.open('https://chatplay.com.br/panel/chatplay', 'chatplay_tab');
-                          setTimeout(() => {
-                            tab?.postMessage({ action: 'chatplay_open', phone: acordoLocal.whatsapp }, 'https://chatplay.com.br');
-                          }, 2000);
-                        }}
+                        onClick={() => abrirChatplay(acordoLocal.whatsapp!)}
                       >
                         <MessageCircle className="w-3 h-3" />
                         Chatplay

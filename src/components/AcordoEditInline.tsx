@@ -24,6 +24,7 @@ import {
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
+import { abrirChatplay } from '@/lib/chatplay';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
@@ -270,12 +271,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                             ? 'border-violet-500/40 text-violet-500 hover:bg-violet-500/10 cursor-pointer'
                             : 'border-muted text-muted-foreground opacity-50 cursor-not-allowed',
                         )}
-                        onClick={() => {
-                          const tab = window.open('https://chatplay.com.br/panel/chatplay', 'chatplay_tab');
-                          setTimeout(() => {
-                            tab?.postMessage({ action: 'chatplay_open', phone: whatsapp }, 'https://chatplay.com.br');
-                          }, 2000);
-                        }}
+                        onClick={() => abrirChatplay(whatsapp)}
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
                       </button>
