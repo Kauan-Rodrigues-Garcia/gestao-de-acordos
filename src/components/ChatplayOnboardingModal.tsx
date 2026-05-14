@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Check, Copy, Download, Wrench } from 'lucide-react';
+import { Check, Copy, Wrench } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -75,29 +75,26 @@ export function ChatplayOnboardingModal({ open, onClose, onConfirmed }: Chatplay
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">2</span>
               <div className="flex-1 space-y-2">
-                <p>Baixe o script abaixo. O Tampermonkey irá abrir e solicitar a instalação — clique em <strong>Instalar</strong>.</p>
-                <a href={SCRIPT_URL} download="chatplay_opener.user.js">
-                  <Button size="sm" variant="outline" className="gap-2 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 dark:text-violet-400">
-                    <Download className="w-3.5 h-3.5" />
-                    Baixar Script
-                  </Button>
-                </a>
-                <p className="text-xs text-muted-foreground">
-                  Ou copie o código e cole em um novo script no painel do Tampermonkey:
-                </p>
-                <Button size="sm" variant="ghost" className="gap-2 h-7 text-xs" onClick={handleCopy}>
-                  {copied ? <><Check className="w-3 h-3 text-green-500" /> Copiado!</> : <><Copy className="w-3 h-3" /> Copiar código</>}
+                <p>Copie o código do script abaixo:</p>
+                <Button size="sm" variant="outline" className="gap-2 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 dark:text-violet-400" onClick={handleCopy}>
+                  {copied ? <><Check className="w-3.5 h-3.5 text-green-500" /> Copiado!</> : <><Copy className="w-3.5 h-3.5" /> Copiar código do script</>}
                 </Button>
               </div>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">3</span>
-              <div>
-                Após instalar, acesse o <strong>chatplay.com.br</strong> pelo mesmo navegador e mantenha a aba aberta ao usar o botão nos acordos.
+              <div className="space-y-1">
+                <p>No Tampermonkey, clique em <strong>Adicionar novo script</strong>, apague o conteúdo padrão, cole o código copiado e salve com <strong>Ctrl+S</strong>.</p>
               </div>
             </li>
             <li className="flex gap-3">
               <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">4</span>
+              <div>
+                Acesse o <strong>chatplay.com.br</strong> pelo mesmo navegador e mantenha a aba aberta ao usar o botão nos acordos.
+              </div>
+            </li>
+            <li className="flex gap-3">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold flex items-center justify-center mt-0.5">5</span>
               <div>Confirme a instalação clicando em <strong>Confirmei</strong> abaixo.</div>
             </li>
           </ol>

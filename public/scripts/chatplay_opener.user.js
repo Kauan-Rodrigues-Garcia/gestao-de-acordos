@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Chatplay Opener
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Abre conversa no Chatplay via postMessage do AcordosPRO
 // @author       AcordosPRO
 // @match        https://chatplay.com.br/*
@@ -56,11 +56,28 @@
     .catch(err => console.warn('[Chatplay Opener]', err));
   }
 
+  // Permite que window.open('...', 'chatplay_tab') encontre esta aba pelo nome,
+  // mesmo que o usuário a tenha aberto manualmente antes de clicar no botão.
+  window.name = 'chatplay_tab';
+
+  // Canal via hash: processa #chatplay_open=PHONE sem recarregar a página
+  function processarHash() {
+    const hash = decodeURIComponent(window.location.hash);
+    const match = hash.match(/[#&]?chatplay_open=([^&]+)/);
+    if (match) {
+      abrirConversa(match[1]);
+      history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+  }
+  window.addEventListener('hashchange', processarHash);
+  window.addEventListener('load', processarHash);
+
+  // Canal via postMessage (mesma sessão / fallback após 2s)
   window.addEventListener('message', (event) => {
     if (event.data && event.data.action === 'chatplay_open') {
       abrirConversa(event.data.phone);
     }
   });
 
-  console.log('[Chatplay Opener] Script ativo e aguardando mensagens.');
+  console.log('[Chatplay Opener] v1.2 ativo — postMessage + hash + window.name=chatplay_tab.');
 })();
