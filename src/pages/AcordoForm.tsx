@@ -22,7 +22,7 @@ import {
   ROUTE_PATHS, parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
-  INSTITUICOES_OPTIONS,
+  INSTITUICOES_OPTIONS, formatarTelefonePP,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { criarNotificacao }  from '@/services/notificacoes.service';
@@ -65,7 +65,12 @@ const schemaPP = z.object({
   }, 'Valor deve ser maior que zero'),
   tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
   parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
-  whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
+  whatsapp:    z.string().optional().refine(v => {
+    if (!v) return true;
+    let d = v.replace(/\D/g, '');
+    if (d.length === 13 && d.startsWith('55')) d = d.slice(2);
+    return d.length === 11;
+  }, 'Número deve ter DDD + 9 dígitos (11 no total)'),
   instituicao: z.string().min(1, 'Código é obrigatório').max(100, 'Código muito longo'),
   status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
   observacoes: z.string().max(500, 'Campo muito longo').optional(),
@@ -250,7 +255,7 @@ export default function AcordoForm() {
           : (['boleto', 'cartao_recorrente', 'pix_automatico'].includes(data.tipo))
             ? parseInt(data.parcelas || '1', 10)
             : 1,
-        whatsapp:      data.whatsapp?.trim() || null,
+        whatsapp:      isPP ? formatarTelefonePP(data.whatsapp || '') : (data.whatsapp?.trim() || null),
         status:        data.status,
         // For PaguePlay: combine [ESTADO:XX] prefix + link text in observacoes
         observacoes:   isPP
@@ -1034,17 +1039,18 @@ export default function AcordoForm() {
                     {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
                   </div>
 
-                  {/* WhatsApp — oculto visualmente, mas presente no formulário */}
-                  <div style={{ display: 'none' }}>
-                    <Label className="text-xs font-medium">WhatsApp</Label>
+                  {/* Número (WhatsApp) — exclusivo PaguePlay */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Número</Label>
                     <div className="relative">
                       <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
                       <Input
                         {...register('whatsapp')}
-                        placeholder="(11) 99999-9999"
-                        className="h-9 text-sm pl-8 font-mono"
+                        placeholder="(89) 99999-9999"
+                        className={cn('h-9 text-sm pl-8 font-mono', errors.whatsapp && 'border-destructive')}
                       />
                     </div>
+                    {errors.whatsapp && <p className="text-xs text-destructive">{errors.whatsapp.message}</p>}
                   </div>
 
 

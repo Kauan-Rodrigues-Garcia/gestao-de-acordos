@@ -28,7 +28,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Building2, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell,
+  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -46,6 +46,8 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
+import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
+import { ChatplayNewFeatureModal } from './ChatplayNewFeatureModal';
 
 interface NavItem {
   label: string;
@@ -182,6 +184,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { naoLidas, animarBadge } = useNotificacoesCount();
+
+  // ── Chatplay modals (PaguePlay only) ────────────────────────────────────────
+  const [chatplayOnboardingOpen, setChatplayOnboardingOpen] = useState(false);
+  const [chatplayNovaFuncOpen, setChatplayNovaFuncOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isPP || !perfil?.id) return;
+    if (!perfil.viu_notificacao_chatplay) {
+      setChatplayNovaFuncOpen(true);
+    }
+  }, [isPP, perfil?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filtra por role, visibilidade PaguePay e permissões configuráveis.
   //
@@ -352,6 +365,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
+            {/* Chatplay config — PaguePlay only */}
+            {isPP && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className={cn(
+                  'w-8 h-8 relative',
+                  perfil?.tampermonkey_configured
+                    ? 'text-violet-500 hover:text-violet-600'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+                title={perfil?.tampermonkey_configured ? 'Chatplay configurado' : 'Configurar Chatplay'}
+                onClick={() => setChatplayOnboardingOpen(true)}
+              >
+                <MessageCircle className="w-4 h-4" />
+                {!perfil?.tampermonkey_configured && (
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-violet-500" />
+                )}
+              </Button>
+            )}
             {/* Badge de notificações — indica novas sem abrir o painel */}
             <Button
               variant="ghost"
@@ -481,6 +514,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </main>
         <OnboardingTour />
       </div>
+
+      {isPP && (
+        <>
+          <ChatplayOnboardingModal
+            open={chatplayOnboardingOpen}
+            onClose={() => setChatplayOnboardingOpen(false)}
+            onConfirmed={() => setChatplayOnboardingOpen(false)}
+          />
+          <ChatplayNewFeatureModal
+            open={chatplayNovaFuncOpen}
+            onClose={() => setChatplayNovaFuncOpen(false)}
+          />
+        </>
+      )}
     </div>
   );
 }

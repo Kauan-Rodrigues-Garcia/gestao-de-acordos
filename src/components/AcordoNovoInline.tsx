@@ -54,7 +54,7 @@ import {
 } from 'lucide-react';
 import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
-  isPerfilAdminOuLider,
+  isPerfilAdminOuLider, formatarTelefonePP,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { criarNotificacao }     from '@/services/notificacoes.service';
@@ -642,7 +642,7 @@ export function AcordoNovoInline({
         valor:           valorNum,
         tipo:            tipoParaSalvar,
         parcelas:        temParcelas ? parcelas : 1,
-        whatsapp:        whatsapp.trim()    || null,
+        whatsapp:        isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
         instituicao:     instituicao.trim() || null,
         status,
         observacoes:     obsFinal,
@@ -1359,6 +1359,15 @@ export function AcordoNovoInline({
                       onChange={(e) => setNomeCliente(e.target.value)}
                       placeholder="Nome do profissional"
                       className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Número</Label>
+                    <Input
+                      value={whatsapp}
+                      onChange={(e) => setWhatsapp(e.target.value)}
+                      placeholder="(89) 99999-9999"
+                      className="h-8 text-xs font-mono"
                     />
                   </div>
                 </div>

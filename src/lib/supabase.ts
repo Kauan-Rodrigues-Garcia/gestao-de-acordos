@@ -63,6 +63,10 @@ export interface Perfil {
   empresa_id?: string;
   usuario?: string;
   foto_url?: string | null;
+  /** true após o usuário instalar e confirmar o userscript Tampermonkey (PaguePlay) */
+  tampermonkey_configured?: boolean | null;
+  /** true após o usuário dispensar a notificação da nova funcionalidade Chatplay */
+  viu_notificacao_chatplay?: boolean | null;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;
@@ -75,6 +79,11 @@ export interface Perfil {
  * ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS acordo_grupo_id UUID DEFAULT NULL;
  * ALTER TABLE public.acordos ADD COLUMN IF NOT EXISTS numero_parcela INTEGER DEFAULT 1;
  * CREATE INDEX IF NOT EXISTS idx_acordos_grupo ON public.acordos(acordo_grupo_id) WHERE acordo_grupo_id IS NOT NULL;
+ *
+ * SQL para integração Chatplay (PaguePlay):
+ *
+ * ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS tampermonkey_configured BOOLEAN DEFAULT FALSE;
+ * ALTER TABLE public.perfis ADD COLUMN IF NOT EXISTS viu_notificacao_chatplay BOOLEAN DEFAULT FALSE;
  */
 export interface Acordo {
   id: string;

@@ -13,7 +13,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock, Edit, Save,
-  ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon, CalendarClock,
+  ArrowLeftRight, Shield, AlertTriangle, Link as LinkIcon, CalendarClock, MessageCircle,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,7 @@ import {
   formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
-  extractLinkAcordo, getEstadoFromAcordo, isAtrasado,
+  extractLinkAcordo, getEstadoFromAcordo, isAtrasado, formatarTelefonePP,
 } from '@/lib/index';
 
 // ── Labels locais (evita TDZ em bundles concatenados) ────────────────────────
@@ -288,7 +288,7 @@ export function ModalEditarAcordoParcelado({
       const camposGerais: Record<string, unknown> = {
         nome_cliente: nomeCliente.trim(),
         nr_cliente:   nrCliente.trim(),
-        whatsapp:     whatsapp.trim() || null,
+        whatsapp:     isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
         tipo,
         observacoes:  observacoes.trim() || null,
         instituicao:  instituicao.trim() || null,
@@ -398,12 +398,10 @@ export function ModalEditarAcordoParcelado({
               <Label className="text-xs">{isPaguePlay ? 'CPF' : 'NR'}</Label>
               <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} className="h-8 text-xs font-mono" />
             </div>
-            {!isPaguePlay && (
-              <div className="space-y-1">
-                <Label className="text-xs">WhatsApp</Label>
-                <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} className="h-8 text-xs font-mono" />
-              </div>
-            )}
+            <div className="space-y-1">
+              <Label className="text-xs">{isPaguePlay ? 'Número' : 'WhatsApp'}</Label>
+              <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="(89) 99999-9999" className="h-8 text-xs font-mono" />
+            </div>
             <div className="space-y-1">
               <Label className="text-xs">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
               <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} className="h-8 text-xs" />
@@ -711,6 +709,36 @@ export function AcordoDetalheInline({
                 </div>
                 {/* Botões de ação no cabeçalho */}
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {/* Botão Chatplay — só aparece em PaguePlay quando o acordo tem número */}
+                  {isPaguePlay && acordoLocal.whatsapp && (
+                    perfil?.tampermonkey_configured ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 border-violet-500/40 text-violet-600 hover:bg-violet-500/10 dark:text-violet-400"
+                        onClick={() => {
+                          const tab = window.open('https://chatplay.com.br/panel/chatplay', 'chatplay_tab');
+                          setTimeout(() => {
+                            tab?.postMessage({ action: 'chatplay_open', phone: acordoLocal.whatsapp }, 'https://chatplay.com.br');
+                          }, 2000);
+                        }}
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                        Chatplay
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1.5 border-muted text-muted-foreground cursor-not-allowed opacity-60"
+                        disabled
+                        title="Configure a integração Chatplay pelo ícone no topo da página"
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                        Chatplay
+                      </Button>
+                    )
+                  )}
                   {/* Botão Acordo direto — só aparece se este acordo for Extra e o usuário for o dono do extra */}
                   {acordoLocal.tipo_vinculo === 'extra' && perfil?.id === acordoLocal.operador_id && (
                     <Button
@@ -791,8 +819,8 @@ export function AcordoDetalheInline({
                 {deveExibirParcelas && (
                   <Campo icon={Layers} label="Total de Parcelas" value={String(totalParcelas)} mono />
                 )}
-                {!isPaguePlay && acordoLocal.whatsapp && (
-                  <Campo icon={Smartphone} label="WhatsApp" value={acordoLocal.whatsapp} mono />
+                {acordoLocal.whatsapp && (
+                  <Campo icon={Smartphone} label={isPaguePlay ? 'Número' : 'WhatsApp'} value={acordoLocal.whatsapp} mono />
                 )}
                 {!isPaguePlay && acordoLocal.instituicao && (
                   <Campo icon={Building2} label="Instituição" value={acordoLocal.instituicao} />

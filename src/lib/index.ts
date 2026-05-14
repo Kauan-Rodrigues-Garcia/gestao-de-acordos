@@ -136,6 +136,15 @@ export function formatPhone(phone: string): string {
   return phone;
 }
 
+/** Normaliza e formata telefone para PaguePlay: aceita 11 dígitos ou 13 com prefixo +55. */
+export function formatarTelefonePP(raw: string): string | null {
+  if (!raw) return null;
+  let d = raw.replace(/\D/g, '');
+  if (d.length === 13 && d.startsWith('55')) d = d.slice(2);
+  if (d.length !== 11) return raw.trim() || null;
+  return `(${d.slice(0,2)}) ${d.slice(2,7)}-${d.slice(7)}`;
+}
+
 export function gerarLinkWhatsapp(whatsapp: string, mensagem: string): string {
   const numero = whatsapp.replace(/\D/g, '');
   const texto = encodeURIComponent(mensagem);

@@ -22,7 +22,7 @@ import { verificarNrRegistro, registrarNr } from '@/services/nr_registros.servic
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
+  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -130,7 +130,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
         valor:        valorNum,
         tipo,
         parcelas:     ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && !Number.isNaN(parcelasNum) ? parcelasNum : 1,
-        whatsapp:     whatsapp.trim() || null,
+        whatsapp:     isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
         status,
         observacoes:  isPaguePlay
           ? buildObservacoesComEstado(estado, observacoes)
@@ -246,21 +246,19 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                   </div>
                 </div>
 
-                {/* WhatsApp */}
-                {!isPaguePlay && (
-                  <div className="space-y-1">
-                    <Label className="text-xs font-medium">WhatsApp</Label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                      <Input
-                        value={whatsapp}
-                        onChange={e => setWhatsapp(e.target.value)}
-                        placeholder="(11) 99999-9999"
-                        className="h-8 text-xs pl-6 font-mono"
-                      />
-                    </div>
+                {/* WhatsApp / Número */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">{isPaguePlay ? 'Número' : 'WhatsApp'}</Label>
+                  <div className="relative">
+                    <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                    <Input
+                      value={whatsapp}
+                      onChange={e => setWhatsapp(e.target.value)}
+                      placeholder="(89) 99999-9999"
+                      className="h-8 text-xs pl-6 font-mono"
+                    />
                   </div>
-                )}
+                </div>
 
                 {isPaguePlay && (
                   <div className="space-y-1">
