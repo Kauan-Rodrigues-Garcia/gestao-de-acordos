@@ -5,7 +5,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, Hash, Calendar, DollarSign, Smartphone, MapPin, Link2, Building2 } from 'lucide-react';
+import { Save, X, Hash, Calendar, DollarSign, Smartphone, MapPin, Link2, Building2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,8 +17,10 @@ import { cn } from '@/lib/utils';
 import {
   parseCurrencyInput, formatCurrency,
   ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
-  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
+  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
+import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@/lib/utils';
 import { springPresets } from '@/lib/motion';
 
 interface AcordoEditInlineProps {
@@ -29,6 +31,7 @@ interface AcordoEditInlineProps {
 
 export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInlineProps) {
   const [saving, setSaving] = useState(false);
+  const { perfil } = useAuth();
 
   // Form state initialised from acordo
   const initialEstado = getEstadoFromAcordo(acordo);
@@ -63,7 +66,7 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
         valor:        valorNum,
         tipo,
         parcelas:     ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) ? parseInt(parcelas || '1', 10) : 1,
-        whatsapp:     whatsapp.trim() || null,
+        whatsapp:     formatarTelefonePP(whatsapp),
         status,
         observacoes:  buildObservacoesComEstado(estado, link),
       };
@@ -181,17 +184,40 @@ export function AcordoEditInline({ acordo, onSaved, onCancel }: AcordoEditInline
                   </Select>
                 </div>
 
-                {/* WhatsApp — oculto visualmente, mantém estado e lógica */}
-                <div className="hidden">
-                  <Label className="text-xs font-medium">WhatsApp</Label>
-                  <div className="relative">
-                    <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                    <Input
-                      value={whatsapp}
-                      onChange={e => setWhatsapp(e.target.value)}
-                      placeholder="(00) 00000-0000"
-                      className="h-8 text-xs pl-6"
-                    />
+                {/* Número (WhatsApp) — exclusivo PaguePlay */}
+                <div className="space-y-1">
+                  <Label className="text-xs font-medium">Número</Label>
+                  <div className="flex gap-1.5">
+                    <div className="relative flex-1">
+                      <Smartphone className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input
+                        value={whatsapp}
+                        onChange={e => setWhatsapp(e.target.value)}
+                        placeholder="(89) 99999-9999"
+                        className="h-8 text-xs pl-6 font-mono"
+                      />
+                    </div>
+                    {whatsapp.replace(/\D/g, '').length >= 10 && (
+                      <button
+                        type="button"
+                        title={perfil?.tampermonkey_configured ? 'Abrir no Chatplay' : 'Configure o Chatplay no topo da página'}
+                        disabled={!perfil?.tampermonkey_configured}
+                        className={cn(
+                          'h-8 w-8 flex items-center justify-center rounded-md border text-xs flex-shrink-0 transition-colors',
+                          perfil?.tampermonkey_configured
+                            ? 'border-violet-500/40 text-violet-500 hover:bg-violet-500/10 cursor-pointer'
+                            : 'border-muted text-muted-foreground opacity-50 cursor-not-allowed',
+                        )}
+                        onClick={() => {
+                          const tab = window.open('https://chatplay.com.br/panel/chatplay', 'chatplay_tab');
+                          setTimeout(() => {
+                            tab?.postMessage({ action: 'chatplay_open', phone: whatsapp }, 'https://chatplay.com.br');
+                          }, 2000);
+                        }}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
