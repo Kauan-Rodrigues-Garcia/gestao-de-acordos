@@ -1,9 +1,9 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         Chatplay Opener
 // @namespace    http://tampermonkey.net/
 // @version      1.2
-// @description  Abre conversa no Chatplay via postMessage do AcordosPRO
-// @author       AcordosPRO
+// @description  Abre conversa no Chatplay via postMessage do Gestão de Acordos
+// @author       Gestão de Acordos
 // @match        https://chatplay.com.br/*
 // @match        https://*.chatplay.com.br/*
 // @grant        none

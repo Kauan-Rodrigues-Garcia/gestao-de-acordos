@@ -1,5 +1,5 @@
--- ================================================
--- SEED: Setores Iniciais — AcordosPRO
+﻿-- ================================================
+-- SEED: Setores Iniciais — Gestão de Acordos
 -- ================================================
 -- Execute este SQL no Supabase Dashboard:
 -- Supabase → SQL Editor → New query → Cole este conteúdo → Run

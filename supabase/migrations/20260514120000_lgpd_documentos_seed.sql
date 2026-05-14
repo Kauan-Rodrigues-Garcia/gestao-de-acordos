@@ -162,12 +162,12 @@ CREATE POLICY "aceites_insert_own" ON public.aceites_termo
 INSERT INTO public.documentos_lgpd (tipo, titulo, conteudo, versao) VALUES
 
 -- ── Documento 1: Política de Privacidade ──
-('politica_privacidade', 'Política de Privacidade', $POL$POLÍTICA DE PRIVACIDADE — AcordosPRO
+('politica_privacidade', 'Política de Privacidade', $POL$POLÍTICA DE PRIVACIDADE — Gestão de Acordos
 Versão 1.0 | Vigência: Maio de 2026
 
 1. IDENTIFICAÇÃO DO CONTROLADOR
 
-O AcordosPRO é um sistema de gestão de acordos operado pela empresa contratante (Controlador). O contato para exercício de direitos dos titulares deve ser feito com o administrador do sistema ou com o Encarregado de Dados (DPO) designado pela empresa.
+O Gestão de Acordos é um sistema de gestão de acordos operado pela empresa contratante (Controlador). O contato para exercício de direitos dos titulares deve ser feito com o administrador do sistema ou com o Encarregado de Dados (DPO) designado pela empresa.
 
 2. DADOS PESSOAIS TRATADOS
 
@@ -274,7 +274,7 @@ Responsável pelo ROPA: Administrador do sistema / DPO designado pela empresa.$R
 -- ── Documento 3: Aviso de Privacidade Interno ──
 ('aviso_privacidade_interno', 'Aviso de Privacidade Interno — Operadores do Sistema', $AVISO$AVISO DE PRIVACIDADE INTERNO
 Destinado a: Operadores, Líderes, Administradores e Diretoria
-AcordosPRO | Versão 1.0
+Gestão de Acordos | Versão 1.0
 
 Este aviso é direcionado exclusivamente aos usuários internos do sistema. Leia com atenção.
 
@@ -317,11 +317,11 @@ Ao acessar o sistema, o usuário declara ter lido e compreendido este aviso.$AVI
 
 -- ── Documento 4: Política de Retenção e Descarte ──
 ('politica_retencao_descarte', 'Política de Retenção e Descarte de Dados', $RET$POLÍTICA DE RETENÇÃO E DESCARTE DE DADOS
-AcordosPRO | Versão 1.0
+Gestão de Acordos | Versão 1.0
 
 1. OBJETIVO
 
-Estabelecer prazos de guarda e procedimentos de descarte dos dados pessoais tratados no sistema AcordosPRO, em conformidade com os Arts. 15 e 16 da LGPD.
+Estabelecer prazos de guarda e procedimentos de descarte dos dados pessoais tratados no sistema Gestão de Acordos, em conformidade com os Arts. 15 e 16 da LGPD.
 
 2. PRAZOS DE RETENÇÃO
 
@@ -366,7 +366,7 @@ Esta política deve ser revisada anualmente ou sempre que houver mudança substa
 
 -- ── Documento 5: Plano de Resposta a Incidentes ──
 ('plano_resposta_incidentes', 'Plano de Resposta a Incidentes de Segurança', $INC$PLANO DE RESPOSTA A INCIDENTES DE SEGURANÇA (SIMPLIFICADO)
-AcordosPRO | Versão 1.0
+Gestão de Acordos | Versão 1.0
 
 1. OBJETIVO
 
@@ -408,7 +408,7 @@ Canal ANPD: https://www.gov.br/anpd/pt-br
 Quando o incidente puder causar risco ou dano relevante ao titular:
 
 Modelo de comunicação:
-"Prezado(a) [Nome], informamos que identificamos um incidente de segurança que pode ter envolvido seus dados no sistema AcordosPRO. Os dados potencialmente afetados são: [nome / WhatsApp]. Tomamos as seguintes medidas: [ações tomadas]. Para dúvidas, contate: [e-mail do controlador]."
+"Prezado(a) [Nome], informamos que identificamos um incidente de segurança que pode ter envolvido seus dados no sistema Gestão de Acordos. Os dados potencialmente afetados são: [nome / WhatsApp]. Tomamos as seguintes medidas: [ações tomadas]. Para dúvidas, contate: [e-mail do controlador]."
 
 7. AÇÕES IMEDIATAS (INCIDENTE ALTO/MÉDIO)
 
@@ -429,9 +429,9 @@ Todo incidente deve ser documentado com:
 
 -- ── Documento 6: Termo de Responsabilidade do Operador ──
 ('termo_responsabilidade_operador', 'Termo de Responsabilidade do Operador', $TRO$TERMO DE RESPONSABILIDADE DO OPERADOR
-AcordosPRO | Versão 1.0
+Gestão de Acordos | Versão 1.0
 
-Ao aceitar o Termo de Uso e acessar o sistema AcordosPRO, o usuário (Operador) declara ter lido, compreendido e concordado integralmente com as obrigações abaixo:
+Ao aceitar o Termo de Uso e acessar o sistema Gestão de Acordos, o usuário (Operador) declara ter lido, compreendido e concordado integralmente com as obrigações abaixo:
 
 1. FINALIDADE EXCLUSIVA
 
@@ -439,7 +439,7 @@ O Operador compromete-se a utilizar os dados pessoais acessados pelo sistema (no
 
 2. PROIBIÇÃO DE USO EXTERNO
 
-O Operador declara que NÃO utilizará, compartilhará, divulgará, copiará ou reproduzirá os dados pessoais acessados para finalidades pessoais, comerciais ou quaisquer outras que extrapolem as atividades do sistema AcordosPRO.
+O Operador declara que NÃO utilizará, compartilhará, divulgará, copiará ou reproduzirá os dados pessoais acessados para finalidades pessoais, comerciais ou quaisquer outras que extrapolem as atividades do sistema Gestão de Acordos.
 
 3. CONFIDENCIALIDADE
 
@@ -482,16 +482,16 @@ INSERT INTO public.termos_uso (empresa_id, versao, titulo, conteudo, ativo)
 SELECT
   e.id,
   '1.0',
-  'Termo de Uso e Política de Privacidade — AcordosPRO',
-  $TERMO$TERMO DE USO E POLÍTICA DE PRIVACIDADE — AcordosPRO
+  'Termo de Uso e Política de Privacidade — Gestão de Acordos',
+  $TERMO$TERMO DE USO E POLÍTICA DE PRIVACIDADE — Gestão de Acordos
 Versão 1.0
 
-Ao acessar o sistema AcordosPRO, você ("Usuário") concorda com este Termo e com a Política de Privacidade da empresa. Se não concordar, clique em "Recusar e sair".
+Ao acessar o sistema Gestão de Acordos, você ("Usuário") concorda com este Termo e com a Política de Privacidade da empresa. Se não concordar, clique em "Recusar e sair".
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 1. IDENTIFICAÇÃO DO SISTEMA E DO CONTROLADOR
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-O AcordosPRO é um sistema de gestão de acordos de pagamento para uso interno de empresas. O Controlador dos dados é a empresa contratante do sistema.
+O Gestão de Acordos é um sistema de gestão de acordos de pagamento para uso interno de empresas. O Controlador dos dados é a empresa contratante do sistema.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 2. DADOS PESSOAIS TRATADOS
@@ -552,7 +552,7 @@ Para exercer direitos de titular, reportar incidentes ou esclarecer dúvidas sob
 Ao clicar em "Aceitar e Continuar", o Usuário declara:
 - Que leu e compreendeu este Termo na íntegra;
 - Que aceita o tratamento dos dados conforme descrito;
-- Que está ciente de suas obrigações como usuário interno do sistema AcordosPRO;
+- Que está ciente de suas obrigações como usuário interno do sistema Gestão de Acordos;
 - Que o aceite é livre, informado e inequívoco.$TERMO$,
   TRUE
 FROM public.empresas e

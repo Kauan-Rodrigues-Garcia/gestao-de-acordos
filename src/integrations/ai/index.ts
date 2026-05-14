@@ -1,4 +1,4 @@
-/**
+﻿/**
  * src/integrations/ai/index.ts
  * ─────────────────────────────────────────────────────────────────────────
  * Ponto de entrada da camada de integração com APIs de IA.
@@ -111,7 +111,7 @@ export async function responderPergunta(
   contexto?: Record<string, unknown>
 ): Promise<string> {
   const result = await provider.complete({
-    systemPrompt: `Você é um assistente interno do sistema AcordosPRO, especializado em gestão de acordos financeiros. 
+    systemPrompt: `Você é um assistente interno do sistema Gestão de Acordos, especializado em gestão de acordos financeiros. 
 Contexto do usuário: ${JSON.stringify(contexto || {})}.
 Responda de forma direta, profissional e objetiva.`,
     messages: [{ role: 'user', content: pergunta }],

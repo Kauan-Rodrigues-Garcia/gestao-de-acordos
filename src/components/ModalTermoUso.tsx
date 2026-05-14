@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+﻿import { useRef, useState, useEffect } from 'react';
 import { Check, ChevronDown, ShieldCheck } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -115,7 +115,7 @@ export function ModalTermoUso({ open, termo, onAceitar, onRecusar }: ModalTermoU
               scrolledToEnd ? 'cursor-pointer' : 'cursor-not-allowed',
             )}
           >
-            Li e aceito integralmente o Termo de Uso e a Política de Privacidade acima. Declaro estar ciente das minhas obrigações como usuário interno do sistema AcordosPRO.
+            Li e aceito integralmente o Termo de Uso e a Política de Privacidade acima. Declaro estar ciente das minhas obrigações como usuário interno do sistema Gestão de Acordos.
           </label>
         </div>
 

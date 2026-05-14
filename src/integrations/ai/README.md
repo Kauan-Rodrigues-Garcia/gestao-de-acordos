@@ -1,7 +1,7 @@
-/**
+﻿/**
  * src/integrations/ai/README.md
  *
- * # Camada de IA — AcordosPRO
+ * # Camada de IA — Gestão de Acordos
  *
  * ## Estrutura
  * ```
