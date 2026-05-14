@@ -1,4 +1,4 @@
--- =============================================================
+﻿-- =============================================================
 -- LGPD: documentos_lgpd + termos_uso + aceites_termo + seeds
 -- =============================================================
 
@@ -269,7 +269,7 @@ O sistema NÃO coleta: CPF, RG, endereço, e-mail pessoal do devedor, dados banc
 
 O código de inscrição/NR não possui vínculo direto com pessoa física — é um identificador interno da empresa contratante.
 
-Responsável pelo ROPA: Administrador do sistema / DPO designado pela empresa.$ROPA$', '1.0'),
+Responsável pelo ROPA: Administrador do sistema / DPO designado pela empresa.$ROPA$, '1.0'),
 
 -- ── Documento 3: Aviso de Privacidade Interno ──
 ('aviso_privacidade_interno', 'Aviso de Privacidade Interno — Operadores do Sistema', $AVISO$AVISO DE PRIVACIDADE INTERNO
@@ -313,7 +313,7 @@ O descumprimento deste aviso pode acarretar:
 - Ação de reparação civil pelos danos causados;
 - Notificação à ANPD conforme Art. 48 da LGPD.
 
-Ao acessar o sistema, o usuário declara ter lido e compreendido este aviso.$AVISO$', '1.0'),
+Ao acessar o sistema, o usuário declara ter lido e compreendido este aviso.$AVISO$, '1.0'),
 
 -- ── Documento 4: Política de Retenção e Descarte ──
 ('politica_retencao_descarte', 'Política de Retenção e Descarte de Dados', $RET$POLÍTICA DE RETENÇÃO E DESCARTE DE DADOS
@@ -362,7 +362,7 @@ d) Registrar a solicitação e a ação nos logs do sistema.
 
 6. REVISÃO
 
-Esta política deve ser revisada anualmente ou sempre que houver mudança substancial nos processos de tratamento.$RET$', '1.0'),
+Esta política deve ser revisada anualmente ou sempre que houver mudança substancial nos processos de tratamento.$RET$, '1.0'),
 
 -- ── Documento 5: Plano de Resposta a Incidentes ──
 ('plano_resposta_incidentes', 'Plano de Resposta a Incidentes de Segurança', $INC$PLANO DE RESPOSTA A INCIDENTES DE SEGURANÇA (SIMPLIFICADO)
@@ -425,7 +425,7 @@ Todo incidente deve ser documentado com:
 - Descrição do incidente e dados afetados
 - Número estimado de titulares impactados
 - Medidas tomadas e resultado
-- Data de comunicação à ANPD (quando aplicável)$INC$', '1.0'),
+- Data de comunicação à ANPD (quando aplicável)$INC$, '1.0'),
 
 -- ── Documento 6: Termo de Responsabilidade do Operador ──
 ('termo_responsabilidade_operador', 'Termo de Responsabilidade do Operador', $TRO$TERMO DE RESPONSABILIDADE DO OPERADOR
@@ -471,7 +471,7 @@ Este Termo tem vigência a partir da data de aceite e permanece em vigor durante
 Ao clicar em "Aceitar e Continuar" no modal de Termos de Uso, o Operador confirma que:
 - Leu e compreendeu este Termo na íntegra;
 - O aceite é livre, informado e inequívoco;
-- Está de acordo com todas as obrigações aqui estabelecidas.$TRO$', '1.0')
+- Está de acordo com todas as obrigações aqui estabelecidas.$TRO$, '1.0')
 
 ON CONFLICT DO NOTHING;
 
