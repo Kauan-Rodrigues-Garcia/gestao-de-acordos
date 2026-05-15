@@ -40,6 +40,7 @@ import {
   extractLinkAcordo, getEstadoFromAcordo, isAtrasado, formatarTelefonePP,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
+import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
 
 // ── Labels locais (evita TDZ em bundles concatenados) ────────────────────────
 const _TIPO_LABELS_PP: Record<string, string> = {
@@ -564,6 +565,15 @@ export function AcordoDetalheInline({
         ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
         : 1;
 
+      // PaguePay: se valor_total preenchido, calcula o valor correto da próxima parcela
+      let valorProximaParcela = params.novoValor;
+      if (isPaguePlay && parcelaAtual.valor_total != null && parcelaAtual.parcelas) {
+        const usou40 = foiUsadoQuarentaPct(parcelaAtual);
+        const todas  = calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, usou40);
+        const idx    = (parcelaAtual.numero_parcela ?? 1); // índice 0-based da PRÓXIMA parcela
+        valorProximaParcela = todas[idx] ?? params.novoValor;
+      }
+
       const basePayload = {
         nome_cliente:          parcelaAtual.nome_cliente,
         nr_cliente:            parcelaAtual.nr_cliente,
@@ -580,18 +590,25 @@ export function AcordoDetalheInline({
         tipo_vinculo:          parcelaAtual.tipo_vinculo,
         vinculo_operador_id:   parcelaAtual.vinculo_operador_id,
         vinculo_operador_nome: parcelaAtual.vinculo_operador_nome,
+        valor_total:           parcelaAtual.valor_total ?? null,
         status:                'verificar_pendente' as const,
-        valor:                 params.novoValor,
+        valor:                 valorProximaParcela,
       };
+
+      // Precompute valores PP com valor_total para o loop (suporta aplicarTodas)
+      const todasPP = (isPaguePlay && parcelaAtual.valor_total != null && parcelaAtual.parcelas)
+        ? calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, foiUsadoQuarentaPct(parcelaAtual))
+        : null;
 
       // Criar parcelas para o usuário atual
       const novasParcelas: Acordo[] = [];
       for (let i = 0; i < quantToCreate; i++) {
         const numero      = proximaNumero + i;
         const vencCalc    = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
+        const valorI      = todasPP ? (todasPP[(parcelaAtual.numero_parcela ?? 1) + i] ?? valorProximaParcela) : valorProximaParcela;
         const { data: novo, error: errIns } = await supabase
           .from('acordos')
-          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc })
+          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc, valor: valorI })
           .select('*')
           .single();
         if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }
@@ -613,27 +630,44 @@ export function AcordoDetalheInline({
             .maybeSingle();
 
           if (parInstall) {
+            const parInst = parInstall as Acordo;
+            // Calcular valor correto da próxima parcela do parceiro (mesma lógica do acordo principal)
+            let valorParcelaParc = params.novoValor;
+            if (isPaguePlay && parInst.valor_total != null && parInst.parcelas) {
+              const usou40p = foiUsadoQuarentaPct(parInst);
+              const todasP  = calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p);
+              const idxP    = (parInst.numero_parcela ?? 1);
+              valorParcelaParc = todasP[idxP] ?? params.novoValor;
+            }
             for (let i = 0; i < quantToCreate; i++) {
               const numero   = proximaNumero + i;
               const vencCalc = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
+              // Para múltiplas parcelas a partir da 2ª, calcular o valor de cada índice
+              let valorI = valorParcelaParc;
+              if (isPaguePlay && parInst.valor_total != null && parInst.parcelas && i > 0) {
+                const usou40p = foiUsadoQuarentaPct(parInst);
+                const todasP  = calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p);
+                valorI = todasP[(parInst.numero_parcela ?? 1) + i] ?? valorParcelaParc;
+              }
               await supabase.from('acordos').insert({
-                nome_cliente:          (parInstall as Acordo).nome_cliente,
-                nr_cliente:            (parInstall as Acordo).nr_cliente,
-                tipo:                  (parInstall as Acordo).tipo,
-                parcelas:              (parInstall as Acordo).parcelas,
-                whatsapp:              (parInstall as Acordo).whatsapp,
-                instituicao:           (parInstall as Acordo).instituicao,
-                observacoes:           (parInstall as Acordo).observacoes,
-                operador_id:           (parInstall as Acordo).operador_id,
-                empresa_id:            (parInstall as Acordo).empresa_id,
-                setor_id:              (parInstall as Acordo).setor_id ?? null,
+                nome_cliente:          parInst.nome_cliente,
+                nr_cliente:            parInst.nr_cliente,
+                tipo:                  parInst.tipo,
+                parcelas:              parInst.parcelas,
+                whatsapp:              parInst.whatsapp,
+                instituicao:           parInst.instituicao,
+                observacoes:           parInst.observacoes,
+                operador_id:           parInst.operador_id,
+                empresa_id:            parInst.empresa_id,
+                setor_id:              parInst.setor_id ?? null,
                 data_cadastro:         new Date().toISOString().split('T')[0],
-                acordo_grupo_id:       (parInstall as Acordo).acordo_grupo_id,
-                tipo_vinculo:          (parInstall as Acordo).tipo_vinculo,
-                vinculo_operador_id:   (parInstall as Acordo).vinculo_operador_id,
-                vinculo_operador_nome: (parInstall as Acordo).vinculo_operador_nome,
+                acordo_grupo_id:       parInst.acordo_grupo_id,
+                tipo_vinculo:          parInst.tipo_vinculo,
+                vinculo_operador_id:   parInst.vinculo_operador_id,
+                vinculo_operador_nome: parInst.vinculo_operador_nome,
+                valor_total:           parInst.valor_total ?? null,
                 status:                'verificar_pendente',
-                valor:                 params.novoValor,
+                valor:                 valorI,
                 numero_parcela:        numero,
                 vencimento:            vencCalc,
               });

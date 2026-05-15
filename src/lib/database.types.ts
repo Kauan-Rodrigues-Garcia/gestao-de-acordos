@@ -39,6 +39,7 @@ export type Database = {
           tipo_receptivo: string | null
           tipo_vinculo: string
           valor: number
+          valor_total: number | null
           vencimento: string
           vinculo_operador_id: string | null
           vinculo_operador_nome: string | null
@@ -68,6 +69,7 @@ export type Database = {
           tipo_receptivo?: string | null
           tipo_vinculo?: string
           valor: number
+          valor_total?: number | null
           vencimento: string
           vinculo_operador_id?: string | null
           vinculo_operador_nome?: string | null
@@ -97,6 +99,7 @@ export type Database = {
           tipo_receptivo?: string | null
           tipo_vinculo?: string
           valor?: number
+          valor_total?: number | null
           vencimento?: string
           vinculo_operador_id?: string | null
           vinculo_operador_nome?: string | null

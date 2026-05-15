@@ -115,6 +115,8 @@ export interface Acordo {
   vinculo_operador_nome?: string | null;
   /** IDs das tags visuais aplicadas a este acordo */
   tag_ids?: string[] | null;
+  /** Valor total do acordo parcelado — PaguePay only. NULL = comportamento antigo/Bookplay. */
+  valor_total?: number | null;
   criado_em: string;
   atualizado_em: string;
   /** Timestamp de quando o acordo foi marcado como pago (preenchido automaticamente pelo trigger) */

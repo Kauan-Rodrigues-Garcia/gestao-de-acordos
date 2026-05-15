@@ -56,6 +56,7 @@ import {
   ESTADOS_BRASIL, parseCurrencyInput, buildObservacoesComEstado, INSTITUICOES_OPTIONS,
   isPerfilAdminOuLider, formatarTelefonePP,
 } from '@/lib/index';
+import { calcularParcelas, formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { criarNotificacao }     from '@/services/notificacoes.service';
 import { enviarParaLixeira }    from '@/services/lixeira.service';
@@ -458,6 +459,7 @@ export function AcordoNovoInline({
   const [salvando,     setSalvando]     = useState(false);
   const [isExtra,      setIsExtra]      = useState(false);
   const [tagIds,       setTagIds]       = useState<string[]>([]);
+  const [quarentaPct,  setQuarentaPct]  = useState(false);
 
   // Ref que impede o RAF de re-escrever o draft após limparDraft() ser chamado.
   // Sem isso, existe race condition: limparDraft remove do storage, mas um RAF
@@ -573,7 +575,10 @@ export function AcordoNovoInline({
 
   function handleChangeTipo(t: string) {
     setTipo(t);
-    if (!tipos.find((x) => x.value === t)?.parcelado) setParcelasStr('1');
+    if (!tipos.find((x) => x.value === t)?.parcelado) {
+      setParcelasStr('1');
+      setQuarentaPct(false);
+    }
   }
 
   function validar(): string | null {
@@ -601,7 +606,7 @@ export function AcordoNovoInline({
 
       if (isColErr) {
         // Fallback: remover colunas novas que possam não existir ainda
-        const { acordo_grupo_id: _g, numero_parcela: _n, ...payloadMin } = payload;
+        const { acordo_grupo_id: _g, numero_parcela: _n, valor_total: _vt, ...payloadMin } = payload;
         const { data: inseridoMin, error: e2 } = await supabase
           .from('acordos')
           .insert(payloadMin)
@@ -635,11 +640,18 @@ export function AcordoNovoInline({
         ? (buildObservacoesComEstado(estadoSel || '', link.trim() || '') || null)
         : (observacoes.trim() || null);
 
+      // Para PaguePay parcelado: valor = 1ª parcela calculada, valor_total = valor digitado
+      const usaValorTotal = isPaguePlay && temParcelas && parcelas > 1;
+      const valorPrimeiraParcela = usaValorTotal
+        ? calcularParcelas(valorNum, parcelas, quarentaPct)[0]
+        : valorNum;
+
       const payload: Record<string, unknown> = {
         nome_cliente:    nomeCliente.trim() || '',
         nr_cliente:      nrCliente.trim()   || '',
         vencimento,
-        valor:           valorNum,
+        valor:           valorPrimeiraParcela,
+        valor_total:     usaValorTotal ? valorNum : null,
         tipo:            tipoParaSalvar,
         parcelas:        temParcelas ? parcelas : 1,
         whatsapp:        isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
@@ -1225,7 +1237,7 @@ export function AcordoNovoInline({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">Valor *</Label>
+                    <Label className="text-xs">{temParcelas ? 'Valor total *' : 'Valor *'}</Label>
                     <Input
                       value={valorStr}
                       onChange={(e) => setValorStr(e.target.value)}
@@ -1279,7 +1291,7 @@ export function AcordoNovoInline({
                     </Label>
                     <Select
                       value={parcelasStr}
-                      onValueChange={setParcelasStr}
+                      onValueChange={(v) => { setParcelasStr(v); if (parseInt(v) <= 1) setQuarentaPct(false); }}
                       disabled={!temParcelas}
                     >
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -1314,6 +1326,30 @@ export function AcordoNovoInline({
                   )}
                 </div>
               </div>
+
+              {/* Opção 40% + preview de parcelas — PaguePay parcelado apenas */}
+              {temParcelas && parcelas > 1 && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs cursor-pointer select-none w-fit">
+                    <input
+                      type="checkbox"
+                      checked={quarentaPct}
+                      onChange={e => setQuarentaPct(e.target.checked)}
+                      className="accent-primary"
+                    />
+                    Primeira parcela com 40% do total
+                  </label>
+                  {parseCurrencyInput(valorStr) > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {calcularParcelas(parseCurrencyInput(valorStr), parcelas, quarentaPct).map((v, i) => (
+                        <span key={i} className="text-xs bg-muted rounded px-2 py-0.5 font-mono">
+                          {i + 1}ª {formatBRL(v)}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Tags visuais */}
               {empresaTags.length > 0 && (
