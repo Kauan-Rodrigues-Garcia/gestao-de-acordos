@@ -8,15 +8,26 @@ describe('calcularParcelas', () => {
     expect(result).toEqual([100, 100, 100]);
   });
 
-  it('ajuste de centavos vai para a parcela 0', () => {
-    // R$100 / 3 = 33.33... → parcela[0] = 33.34, demais = 33.33
+  it('fração < 0.5: round arredonda para baixo, parcela[0] fica maior', () => {
+    // 10000/3 = 3333.33 → round = 3333 → p1 = 10000-2*3333 = 3334 = 33.34
     const result = calcularParcelas(100, 3, false);
     expect(result).toHaveLength(3);
     expect(result[0]).toBeCloseTo(33.34, 2);
     expect(result[1]).toBeCloseTo(33.33, 2);
     expect(result[2]).toBeCloseTo(33.33, 2);
-    const soma = result.reduce((a, b) => a + b, 0);
-    expect(Math.round(soma * 100)).toBe(10000);
+    expect(Math.round(result.reduce((a, b) => a + b, 0) * 100)).toBe(10000);
+  });
+
+  it('fração >= 0.5: round arredonda para cima, parcela[0] fica menor (caso do print)', () => {
+    // 195883/5 = 39176.6 → round = 39177 → p1 = 195883-4*39177 = 39175 = 391.75
+    const result = calcularParcelas(1958.83, 5, false);
+    expect(result).toHaveLength(5);
+    expect(result[0]).toBeCloseTo(391.75, 2);
+    expect(result[1]).toBeCloseTo(391.77, 2);
+    expect(result[2]).toBeCloseTo(391.77, 2);
+    expect(result[3]).toBeCloseTo(391.77, 2);
+    expect(result[4]).toBeCloseTo(391.77, 2);
+    expect(Math.round(result.reduce((a, b) => a + b, 0) * 100)).toBe(195883);
   });
 
   it('40% exato quando divisão é limpa', () => {
@@ -28,14 +39,13 @@ describe('calcularParcelas', () => {
     expect(result[3]).toBeCloseTo(200, 2);
   });
 
-  it('40% com centavo de sobra vai para parcela 0', () => {
+  it('40% com divisão exata do restante', () => {
     // R$100 / 3: 40% = 40.00, restante = 60.00 / 2 = 30.00 cada
     const result = calcularParcelas(100, 3, true);
     expect(result[0]).toBeCloseTo(40, 2);
     expect(result[1]).toBeCloseTo(30, 2);
     expect(result[2]).toBeCloseTo(30, 2);
-    const soma = result.reduce((a, b) => a + b, 0);
-    expect(Math.round(soma * 100)).toBe(10000);
+    expect(Math.round(result.reduce((a, b) => a + b, 0) * 100)).toBe(10000);
   });
 
   it('1 parcela retorna o valor inteiro independente de quarentaPct', () => {

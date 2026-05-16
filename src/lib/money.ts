@@ -69,9 +69,11 @@ export const parseCurrencyInput = parseBRL;
 export const formatCurrency = formatBRL;
 
 /**
- * Divide valorTotal em numParcelas.
- * Se quarentaPct=true: parcela[0] = 40% do total, restantes dividem os 60% restantes igualmente.
- * Ajuste de centavos sempre vai para a parcela[0] (nunca para as demais).
+ * Divide valorTotal em numParcelas usando ROUND (arredondamento padrão, igual à planilha).
+ * As parcelas "regulares" usam Math.round; a parcela[0] absorve o ajuste residual
+ * (pode ser positivo ou negativo dependendo do arredondamento).
+ * Se quarentaPct=true: parcela[0] = exatamente 40%; parcela[1] absorve o ajuste
+ * do restante; parcelas[2..N] usam Math.round do restante/(N-1).
  * Retorna array de length === numParcelas, valores em reais com 2 casas decimais.
  */
 export function calcularParcelas(
@@ -87,17 +89,17 @@ export function calcularParcelas(
   if (quarentaPct) {
     const primeiraCents = Math.round(totalCents * 0.4);
     const restanteCents = totalCents - primeiraCents;
-    const demaisCents   = Math.floor(restanteCents / (numParcelas - 1));
-    const sobra         = restanteCents - demaisCents * (numParcelas - 1);
-    const result        = [primeiraCents + sobra];
-    for (let i = 1; i < numParcelas; i++) result.push(demaisCents);
+    const demaisCents   = Math.round(restanteCents / (numParcelas - 1));
+    const ajuste        = restanteCents - demaisCents * (numParcelas - 1);
+    const result        = [primeiraCents, demaisCents + ajuste];
+    for (let i = 2; i < numParcelas; i++) result.push(demaisCents);
     return result.map(c => c / 100);
   }
 
-  const baseCents = Math.floor(totalCents / numParcelas);
-  const sobra     = totalCents - baseCents * numParcelas;
-  const result    = [baseCents + sobra];
-  for (let i = 1; i < numParcelas; i++) result.push(baseCents);
+  const demaisCents = Math.round(totalCents / numParcelas);
+  const p1Cents     = totalCents - (numParcelas - 1) * demaisCents;
+  const result      = [p1Cents];
+  for (let i = 1; i < numParcelas; i++) result.push(demaisCents);
   return result.map(c => c / 100);
 }
 
