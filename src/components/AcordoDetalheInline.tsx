@@ -689,6 +689,12 @@ export function AcordoDetalheInline({
       setSalvandoReagendar(false);
     }
   }
+  // ── Valores calculados para exibição de parcelas virtuais (PP com valor_total) ──
+  const valoresParcelas: number[] | null =
+    isPaguePlay && acordo.valor_total != null && acordo.parcelas
+      ? calcularParcelas(acordo.valor_total, acordo.parcelas, foiUsadoQuarentaPct(acordo))
+      : null;
+
   // ── Montar lista mista: real ou virtual para cada índice 1..N ────────────
   type LinhaTabela = {
     index: number;           // 1-based
@@ -941,7 +947,9 @@ export function AcordoDetalheInline({
                                   {/* Valor */}
                                   <td className="px-3 py-2.5 text-right font-mono font-semibold text-xs">
                                     {real ? formatCurrency(real.valor) : (
-                                      <span className="text-muted-foreground/50">{formatCurrency(acordo.valor)}</span>
+                                      <span className="text-muted-foreground/50">
+                                        {formatCurrency(valoresParcelas ? (valoresParcelas[index - 1] ?? acordo.valor) : acordo.valor)}
+                                      </span>
                                     )}
                                   </td>
 
