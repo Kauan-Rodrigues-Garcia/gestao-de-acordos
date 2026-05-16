@@ -641,9 +641,11 @@ export function AcordoNovoInline({
         : (observacoes.trim() || null);
 
       // Para PaguePay parcelado: valor = 1ª parcela calculada, valor_total = valor digitado
-      const usaValorTotal = isPaguePlay && temParcelas && parcelas > 1;
+      // 40% só se aplica a 3+ parcelas (em 2x fica 40/60 — assimétrico demais para ser útil)
+      const usaValorTotal      = isPaguePlay && temParcelas && parcelas > 1;
+      const quarentaPctEfetivo = quarentaPct && parcelas > 2;
       const valorPrimeiraParcela = usaValorTotal
-        ? calcularParcelas(valorNum, parcelas, quarentaPct)[0]
+        ? calcularParcelas(valorNum, parcelas, quarentaPctEfetivo)[0]
         : valorNum;
 
       const payload: Record<string, unknown> = {
@@ -1291,7 +1293,7 @@ export function AcordoNovoInline({
                     </Label>
                     <Select
                       value={parcelasStr}
-                      onValueChange={(v) => { setParcelasStr(v); if (parseInt(v) <= 1) setQuarentaPct(false); }}
+                      onValueChange={(v) => { setParcelasStr(v); if (parseInt(v) <= 2) setQuarentaPct(false); }}
                       disabled={!temParcelas}
                     >
                       <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
@@ -1328,7 +1330,7 @@ export function AcordoNovoInline({
               </div>
 
               {/* Opção 40% + preview de parcelas — PaguePay parcelado apenas */}
-              {temParcelas && parcelas > 1 && (
+              {temParcelas && parcelas > 2 && (
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 text-xs cursor-pointer select-none w-fit">
                     <input
@@ -1341,7 +1343,7 @@ export function AcordoNovoInline({
                   </label>
                   {parseCurrencyInput(valorStr) > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                      {calcularParcelas(parseCurrencyInput(valorStr), parcelas, quarentaPct).map((v, i) => (
+                      {calcularParcelas(parseCurrencyInput(valorStr), parcelas, quarentaPct && parcelas > 2).map((v, i) => (
                         <span key={i} className="text-xs bg-muted rounded px-2 py-0.5 font-mono">
                           {i + 1}ª {formatBRL(v)}
                         </span>

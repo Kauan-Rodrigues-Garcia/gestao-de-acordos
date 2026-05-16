@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularParcelas, foiUsadoQuarentaPct } from '../money';
+import { calcularParcelas, foiUsadoQuarentaPct, parseBRL } from '../money';
 
 describe('calcularParcelas', () => {
   it('divide igualmente quando divisão é exata', () => {
@@ -55,6 +55,34 @@ describe('calcularParcelas', () => {
       const somaCents = result.reduce((a, b) => a + Math.round(b * 100), 0);
       expect(somaCents).toBe(Math.round(total * 100));
     }
+  });
+});
+
+describe('parseBRL', () => {
+  it('parseia formato BR com ponto de milhar e vírgula decimal', () => {
+    expect(parseBRL('1.200,00')).toBe(1200);
+    expect(parseBRL('1.234,56')).toBe(1234.56);
+    expect(parseBRL('10.000,50')).toBe(10000.5);
+  });
+
+  it('parseia sem ponto de milhar', () => {
+    expect(parseBRL('1200,00')).toBe(1200);
+    expect(parseBRL('99,99')).toBe(99.99);
+  });
+
+  it('parseia número sem separador decimal', () => {
+    expect(parseBRL('1200')).toBe(1200);
+    expect(parseBRL('1.200')).toBe(1200);
+  });
+
+  it('remove símbolo R$ e espaços', () => {
+    expect(parseBRL('R$ 1.200,00')).toBe(1200);
+    expect(parseBRL('R$500,00')).toBe(500);
+  });
+
+  it('retorna 0 para entrada vazia ou inválida', () => {
+    expect(parseBRL('')).toBe(0);
+    expect(parseBRL('abc')).toBe(0);
   });
 });
 

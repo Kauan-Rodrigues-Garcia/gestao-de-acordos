@@ -34,17 +34,20 @@ export function formatBRL(v: unknown): string {
 }
 
 /** Parse de campo de formulário para número.
- *  Aceita: "1.234,56" | "1234.56" | "1234,56" | "R$ 1.234,56" */
+ *  Aceita: "1.234,56" | "1234,56" | "R$ 1.234,56" | "1200" | "1.200"
+ *  NOTA: não passa por safeNum no branch com vírgula — safeNum removeria o
+ *  ponto decimal já convertido, transformando "1200.00" em 120000. */
 export function parseBRL(v: string): number {
   if (!v) return 0;
-  // Remove símbolo de moeda e espaços
   const s = v.replace(/[R$\s]/g, '').trim();
-  // Se tem vírgula como separador decimal (formato BR)
   if (s.includes(',')) {
-    // "1.234,56" → remove pontos → "1234,56" → troca vírgula → "1234.56"
-    return safeNum(s.replace(/\./g, '').replace(',', '.'));
+    // "1.234,56" → "1234,56" → "1234.56" → parseFloat diretamente
+    const n = parseFloat(s.replace(/\./g, '').replace(',', '.'));
+    return isFinite(n) ? n : 0;
   }
-  return safeNum(s);
+  // Sem vírgula: pontos são separadores de milhar (padrão BR) → remove e parseia
+  const n = parseFloat(s.replace(/\./g, ''));
+  return isFinite(n) ? n : 0;
 }
 
 /** Soma um array de valores com segurança. */
