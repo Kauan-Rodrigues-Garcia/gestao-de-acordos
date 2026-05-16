@@ -162,9 +162,7 @@ export function interpolarMensagem(
     .replace(/\{\{vencimento\}\}/g, formatDate(dados.vencimento));
 }
 
-export function parseCurrencyInput(v: string): number {
-  return Number(v.replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-}
+export { parseBRL as parseCurrencyInput } from '@/lib/money';
 
 export function isAtrasado(vencimento: string, status: string): boolean {
   if (['pago', 'nao_pago'].includes(status)) return false;
