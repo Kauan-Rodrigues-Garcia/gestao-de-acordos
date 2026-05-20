@@ -133,12 +133,10 @@ export default function App() {
                 <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
               } />
 
-              {/* Importar Excel — controlado pela permissão importar_excel */}
+              {/* Importar Excel — disponível para todos os usuários */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="importar_excel">
-                    <ImportarExcel />
-                  </ProtectedRoute>
+                  <ImportarExcel />
                 </LayoutWrapper>
               } />
 
