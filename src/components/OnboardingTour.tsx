@@ -219,7 +219,16 @@ function computeTooltipStyle(
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
-export function OnboardingTour() {
+interface OnboardingTourProps {
+  /** Indica que o usuário ainda não aceitou os termos de uso — bloqueia o início do tour */
+  precisaAceitar: boolean;
+  /** true enquanto o hook de termos ainda está carregando */
+  termoLoading: boolean;
+  /** Chamado quando o tour é concluído ou pulado */
+  onFinished?: () => void;
+}
+
+export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: OnboardingTourProps) {
   const { user }  = useAuth();
   const tenant    = useTenant();
   const navigate  = useNavigate();
@@ -233,21 +242,23 @@ export function OnboardingTour() {
   const isPP  = tenant.isPaguePlay;
   const STEPS = useMemo(() => (isPP ? STEPS_PP : STEPS_BOOKPLAY), [isPP]);
 
-  // ── Inicialização ──────────────────────────────────────────────────────────
+  // ── Inicialização — aguarda termos serem aceitos antes de iniciar ──────────
   useEffect(() => {
     if (!user?.id) return;
+    if (termoLoading || precisaAceitar) return;
     if (!localStorage.getItem(STORAGE_KEY(user.id))) {
       const t = setTimeout(() => setActive(true), 1000);
       return () => clearTimeout(t);
     }
-  }, [user?.id]);
+  }, [user?.id, precisaAceitar, termoLoading]);
 
   // ── Finalizar tour ─────────────────────────────────────────────────────────
   const finish = useCallback(() => {
     setActive(false);
     setConfirmSkip(false);
     if (user?.id) localStorage.setItem(STORAGE_KEY(user.id), '1');
-  }, [user?.id]);
+    onFinished?.();
+  }, [user?.id, onFinished]);
 
   // ── Navegar para o passo com mudança de rota se necessário ────────────────
   const goToStep = useCallback((nextIdx: number) => {
