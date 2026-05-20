@@ -3,7 +3,7 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ThemeProvider } from 'next-themes';
-import { AuthProvider } from '@/hooks/useAuth';
+import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
@@ -72,6 +72,12 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
       </TermoUsoGate>
     </ProtectedRoute>
   );
+}
+
+function DevToolsAdminOnly() {
+  const { perfil } = useAuth();
+  if (perfil?.perfil !== 'administrador' && perfil?.perfil !== 'super_admin') return null;
+  return <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />;
 }
 
 function VersionWatcher(): null {
@@ -214,9 +220,9 @@ export default function App() {
           </PresenceProvider>
           </RealtimeAcordosProvider>
         </EmpresaProvider>
+        <DevToolsAdminOnly />
       </AuthProvider>
     </ThemeProvider>
-    {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />}
     </QueryClientProvider>
     </ErrorBoundary>
   );
