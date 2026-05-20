@@ -1,4 +1,4 @@
-import { Moon, Sun, Monitor, Circle } from 'lucide-react';
+import { Moon, Sun, Monitor, Circle, Flower2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
@@ -8,10 +8,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { useTenant } from '@/lib/tenant-config';
 
-// Temas disponíveis
+// Temas disponíveis (rosa é carregado condicionalmente para PaguePLAY)
 const TEMAS = [
   { value: 'light',      label: 'Claro',              class: '' },
+  { value: 'rosa',       label: 'Rosa',               class: 'rosa' },
   { value: 'dark',       label: 'Escuro (Padrão)',     class: 'dark' },
   { value: 'dark-grey',  label: 'Cinza Escuro',        class: 'dark-grey' },
   { value: 'deep-blue',  label: 'Azul Profundo',       class: 'deep-blue' },
@@ -20,10 +22,11 @@ const TEMAS = [
 
 type ThemeValue = typeof TEMAS[number]['value'];
 
+const ALL_THEME_CLASSES = ['dark', 'dark-grey', 'deep-blue', 'rosa'] as const;
+
 function applyTheme(value: ThemeValue) {
   const html = document.documentElement;
-  // Remover todas as classes de tema
-  html.classList.remove('dark', 'dark-grey', 'deep-blue');
+  html.classList.remove(...ALL_THEME_CLASSES);
 
   if (value === 'system') {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -34,6 +37,8 @@ function applyTheme(value: ThemeValue) {
     html.classList.add('dark-grey');
   } else if (value === 'deep-blue') {
     html.classList.add('deep-blue');
+  } else if (value === 'rosa') {
+    html.classList.add('rosa');
   }
   // 'light' não adiciona classe
   localStorage.setItem('theme', value);
@@ -41,6 +46,7 @@ function applyTheme(value: ThemeValue) {
 
 export function ThemeToggle() {
   const [current, setCurrent] = useState<ThemeValue>('light');
+  const { isPaguePlay } = useTenant();
 
   // Inicializar tema salvo
   useEffect(() => {
@@ -61,6 +67,7 @@ export function ThemeToggle() {
   }
 
   const isDarkish = current === 'dark' || current === 'dark-grey' || current === 'deep-blue';
+  const isRosa = current === 'rosa';
 
   return (
     <DropdownMenu>
@@ -70,6 +77,8 @@ export function ThemeToggle() {
             <Monitor className="h-4 w-4" />
           ) : isDarkish ? (
             <Moon className="h-4 w-4" />
+          ) : isRosa ? (
+            <Flower2 className="h-4 w-4 text-pink-400" />
           ) : (
             <Sun className="h-4 w-4" />
           )}
@@ -83,6 +92,13 @@ export function ThemeToggle() {
           Claro
           {current === 'light' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {isPaguePlay && (
+          <DropdownMenuItem onClick={() => setTheme('rosa')} className="gap-2">
+            <Flower2 className="h-3.5 w-3.5 text-pink-400" />
+            Rosa
+            {current === 'rosa' && <span className="ml-auto text-primary">✓</span>}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Temas Escuros</div>
         <DropdownMenuItem onClick={() => setTheme('dark')} className="gap-2">

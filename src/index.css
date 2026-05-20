@@ -302,6 +302,88 @@
   --sidebar-ring:        oklch(0.65 0.20 220);
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+   TEMA ROSA — Blush Rose (exclusivo PaguePLAY)
+   Paleta blush/rose sofisticada. Tons quentes sem exagero.
+   Ativado via <html class="rosa">.
+   ────────────────────────────────────────────────────────────────────────── */
+
+.rosa {
+  /* Status semânticos mantidos — são funcionais e universais */
+  --success:             oklch(0.55 0.18 145);
+  --success-foreground:  oklch(0.98 0.005 145);
+  --warning:             oklch(0.62 0.18 75);
+  --warning-foreground:  oklch(0.15 0.02 75);
+  --info:                oklch(0.55 0.15 200);
+  --info-foreground:     oklch(0.98 0.005 200);
+
+  /* Paleta principal — blush rose elegante */
+  --background:          oklch(0.986 0.007 350);  /* branco blush, quase puro */
+  --foreground:          oklch(0.17 0.028 355);   /* carvão com subtom rose */
+  --card:                oklch(0.978 0.011 348);  /* card levemente rosado */
+  --card-foreground:     oklch(0.17 0.028 355);
+  --popover:             oklch(0.992 0.005 350);
+  --popover-foreground:  oklch(0.17 0.028 355);
+  --primary:             oklch(0.50 0.125 3);     /* rose empoeirado — CTA principal */
+  --primary-foreground:  oklch(0.99 0.003 3);
+  --secondary:           oklch(0.92 0.020 348);   /* rose suave secundário */
+  --secondary-foreground: oklch(0.22 0.030 355);
+  --muted:               oklch(0.945 0.016 348);  /* blush muted */
+  --muted-foreground:    oklch(0.50 0.032 350);
+  --accent:              oklch(0.935 0.019 348);  /* hover suave */
+  --accent-foreground:   oklch(0.22 0.030 355);
+  --destructive:         oklch(0.55 0.22 10);
+  --destructive-foreground: oklch(0.98 0.005 10);
+  --border:              oklch(0.875 0.023 348);  /* borda rose discreta */
+  --input:               oklch(0.875 0.023 348);
+  --ring:                oklch(0.50 0.125 3);
+
+  /* Charts */
+  --chart-1: oklch(0.50 0.125 3);    /* rose — cor principal */
+  --chart-2: oklch(0.58 0.20  145);  /* verde */
+  --chart-3: oklch(0.62 0.18  45);   /* âmbar */
+  --chart-4: oklch(0.55 0.16  280);  /* roxo */
+  --chart-5: oklch(0.55 0.155 320);  /* mauve */
+
+  /* Role badges — mantidos para consistência */
+  --role-operador:      oklch(0.45 0.15 220);
+  --role-operador-fg:   oklch(0.98 0.005 220);
+  --role-lider:         oklch(0.50 0.16 280);
+  --role-lider-fg:      oklch(0.98 0.005 280);
+  --role-elite:         oklch(0.40 0.22 15);
+  --role-elite-fg:      oklch(0.98 0.005 15);
+  --role-gerencia:      oklch(0.55 0.18 55);
+  --role-gerencia-fg:   oklch(0.15 0.02 55);
+  --role-diretoria:     oklch(0.48 0.18 300);
+  --role-diretoria-fg:  oklch(0.98 0.005 300);
+  --role-admin:         oklch(0.45 0.22 10);
+  --role-admin-fg:      oklch(0.98 0.005 10);
+  --role-super:         oklch(0.35 0.12 220);
+  --role-super-fg:      oklch(0.98 0.005 220);
+
+  /* Sidebar — rose mais presente, harmonioso */
+  --sidebar:                      oklch(0.962 0.021 347);
+  --sidebar-foreground:           oklch(0.22 0.035 355);
+  --sidebar-primary:              oklch(0.50 0.125 3);
+  --sidebar-primary-foreground:   oklch(0.99 0.003 3);
+  --sidebar-accent:               oklch(0.912 0.024 347);
+  --sidebar-accent-foreground:    oklch(0.25 0.032 355);
+  --sidebar-border:               oklch(0.875 0.023 348);
+  --sidebar-ring:                 oklch(0.50 0.125 3);
+}
+
+/* Garante que o override verde do PaguePLAY não sobrescreva o rose */
+.rosa[data-tenant="pagueplay"],
+.rosa [data-tenant="pagueplay"] {
+  --primary:                    oklch(0.50 0.125 3);
+  --primary-foreground:         oklch(0.99 0.003 3);
+  --ring:                       oklch(0.50 0.125 3);
+  --sidebar-primary:            oklch(0.50 0.125 3);
+  --sidebar-primary-foreground: oklch(0.99 0.003 3);
+  --sidebar-ring:               oklch(0.50 0.125 3);
+  --chart-1:                    oklch(0.52 0.135 3);
+}
+
 /* Suporte a PaguePay nos novos temas */
 .dark-grey[data-tenant="pagueplay"],
 .dark-grey [data-tenant="pagueplay"] {
