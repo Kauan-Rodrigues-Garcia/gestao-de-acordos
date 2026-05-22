@@ -162,7 +162,7 @@ export default function AcordoForm() {
           nome_cliente: data.nome_cliente,
           nr_cliente:   data.nr_cliente,
           vencimento:   data.vencimento,
-          valor:        String(data.valor),
+          valor:        Number(data.valor).toFixed(2).replace('.', ','),
           tipo:         data.tipo,
           parcelas:     String(data.parcelas || 1),
           whatsapp:     data.whatsapp || '',
