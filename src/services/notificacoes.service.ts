@@ -65,6 +65,7 @@ export async function criarNotificacao(params: {
   titulo: string;
   mensagem: string;
   empresa_id?: string;
+  acordo_id?: string;
 }): Promise<void> {
   const { error } = await supabase
     .from('notificacoes')

@@ -8,16 +8,18 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import {
   MessageCircle, X, Check, CheckCheck, Trash2, Bell,
   AlertTriangle, Info, ArrowLeft,
-  Clock, CheckCircle2,
+  Clock, CheckCircle2, ExternalLink,
   Maximize2, Minimize2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase, Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -60,9 +62,10 @@ interface ModalDetalheProps {
   onClose: () => void;
   onMarcarLida: (id: string) => Promise<void>;
   onExcluir: (id: string) => Promise<void>;
+  onNavigate?: () => void;
 }
 
-export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir }: ModalDetalheProps) {
+export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir, onNavigate }: ModalDetalheProps) {
   return (
     <motion.div
       key="modal-detalhe"
@@ -122,7 +125,18 @@ export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir 
       </ScrollArea>
 
       {/* Ações */}
-      <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center gap-2 shrink-0">
+      <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center gap-2 shrink-0 flex-wrap">
+        {onNavigate && (
+          <Button
+            size="sm"
+            variant="default"
+            className="flex-1 h-8 text-xs gap-1.5"
+            onClick={onNavigate}
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Ver acordo
+          </Button>
+        )}
         {!n.lida && (
           <Button
             size="sm"
@@ -152,6 +166,8 @@ export function ModalDetalhe({ notificacao: n, onClose, onMarcarLida, onExcluir 
 
 export function ChatNotificacoes() {
   const { user } = useAuth();
+  const navigate  = useNavigate();
+  const tenant    = useTenant();
   const [aberto, setAberto]             = useState(false);
   const [expandido, setExpandido]       = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
@@ -287,9 +303,23 @@ export function ChatNotificacoes() {
     await supabase.from('notificacoes').delete().eq('usuario_id', user.id);
   }
 
+  function navigateToAcordo(n: Notificacao) {
+    if (!n.acordo_id) return;
+    setAberto(false);
+    setDetalhe(null);
+    const path = tenant.isPaguePlay
+      ? `/?highlight=${n.acordo_id}`
+      : `/acordos?highlight=${n.acordo_id}`;
+    navigate(path);
+  }
+
   function abrirDetalhe(n: Notificacao) {
-    setDetalhe(n);
     if (!n.lida) marcarLida(n.id);
+    if (n.acordo_id) {
+      navigateToAcordo(n);
+      return;
+    }
+    setDetalhe(n);
   }
 
   if (!user) return null;
@@ -328,6 +358,7 @@ export function ChatNotificacoes() {
                   onClose={() => setDetalhe(null)}
                   onMarcarLida={marcarLida}
                   onExcluir={excluirNotificacao}
+                  onNavigate={detalhe.acordo_id ? () => navigateToAcordo(detalhe) : undefined}
                 />
               )}
             </AnimatePresence>
@@ -433,8 +464,8 @@ export function ChatNotificacoes() {
                                   <span className="text-[10px] text-primary/70 font-medium">Não lida</span>
                                 </span>
                               )}
-                              <span className="text-[10px] text-muted-foreground/50 hover:text-primary transition-colors">
-                                Toque para ver detalhes →
+                                  <span className="text-[10px] text-muted-foreground/50 hover:text-primary transition-colors">
+                                {n.acordo_id ? 'Toque para ver o acordo →' : 'Toque para ver detalhes →'}
                               </span>
                             </div>
                           </div>

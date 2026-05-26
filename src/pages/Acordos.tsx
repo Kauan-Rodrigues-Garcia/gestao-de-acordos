@@ -174,12 +174,31 @@ export default function Acordos() {
   // Novo acordo inline
   const [novoInlineAberto, setNovoInlineAberto] = useState(false);
   const novoInlineRef = useRef<HTMLDivElement>(null);
+  // Destaque temporário de acordo vindo de notificação
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Filtro de mês — ativo para Bookplay
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Destaque de acordo vindo do parâmetro ?highlight=UUID (clique em notificação)
+  const highlightParam = searchParams.get('highlight');
+  useEffect(() => {
+    if (!highlightParam) return;
+    setHighlightedId(highlightParam);
+    const params = new URLSearchParams(searchParams);
+    params.delete('highlight');
+    setSearchParams(params, { replace: true });
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 3000);
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightParam]);
 
   // Debounce para busca
   useEffect(() => {
@@ -289,9 +308,10 @@ export default function Acordos() {
         if (a.operador_id) {
           criarNotificacao({
             usuario_id: a.operador_id,
-            titulo: 'Acordo movido para Não Pago',
-            mensagem: `O acordo NR ${a.nr_cliente} foi movido para "Não Pago" por atraso.`,
+            titulo:     'Acordo movido para Não Pago',
+            mensagem:   `Acordo NR ${a.nr_cliente || '—'} foi movido para "Não Pago" por atraso de pagamento.\nValor: ${formatCurrency(a.valor)}\nVencimento: ${formatDate(a.vencimento)}`,
             empresa_id: empresa?.id,
+            acordo_id:  a.id,
           });
         }
         // Optimistic: sem refetch
@@ -941,7 +961,8 @@ export default function Acordos() {
                             venceHoje && a.status !== 'pago' && 'bg-warning/5',
                             sel && 'bg-primary/5 border-primary/20',
                             isEditingThis && 'bg-primary/5',
-                            isDetailThis && 'bg-accent/50'
+                            isDetailThis && 'bg-accent/50',
+                            highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
                           )}
                           onClick={(e) => {
                             const target = e.target as HTMLElement;

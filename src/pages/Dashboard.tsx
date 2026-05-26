@@ -235,6 +235,9 @@ export default function Dashboard() {
   const novoInlineRef = useRef<HTMLDivElement>(null);
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
+  // Destaque temporário de acordo vindo de notificação
+  const [highlightedId,           setHighlightedId]           = useState<string | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── hooks dependentes dos filtros (declarados ANTES dos useEffects para evitar TDZ) ─
   const statusFiltroComputed =
@@ -381,6 +384,24 @@ export default function Dashboard() {
     });
   }, [acordosDeHoje, acordos, isPP, temPermissao]);
 
+  // Destaque de acordo vindo do parâmetro ?highlight=UUID (clique em notificação)
+  const highlightParam = searchParams.get('highlight');
+  useEffect(() => {
+    if (!highlightParam) return;
+    setHighlightedId(highlightParam);
+    // Remove o param da URL sem adicionar entrada ao histórico
+    const params = new URLSearchParams(searchParams);
+    params.delete('highlight');
+    setSearchParams(params, { replace: true });
+    // Limpa o destaque após 3 segundos
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 3000);
+    return () => {
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [highlightParam]);
+
   // sync URL (apenas PaguePay)
   useEffect(() => {
     if (!isPP) return;
@@ -442,8 +463,9 @@ export default function Dashboard() {
           criarNotificacao({
             usuario_id: a.operador_id,
             titulo:     'Acordo movido para Não Pago',
-            mensagem:   `O acordo NR ${a.nr_cliente} foi movido para "Não Pago" por atraso.`,
+            mensagem:   `Acordo Código ${a.instituicao || '—'} foi movido para "Não Pago" por atraso de pagamento.\nValor: ${formatCurrency(a.valor)}\nVencimento: ${formatDate(a.vencimento)}`,
             empresa_id: empresa?.id,
+            acordo_id:  a.id,
           });
         }
         // Optimistic: atualiza localmente sem refetch
@@ -1286,6 +1308,7 @@ export default function Dashboard() {
                                   sel && 'bg-primary/5 border-primary/20',
                                   isEditingThis && 'bg-primary/5',
                                   isDetailThis && 'bg-accent/50',
+                                  highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
                                 )}
                                 onClick={(e) => {
                                   const t = e.target as HTMLElement;

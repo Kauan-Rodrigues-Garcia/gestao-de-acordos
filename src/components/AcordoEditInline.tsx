@@ -60,7 +60,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const [nomeCliente, setNomeCliente] = useState(acordo.nome_cliente);
   const [nrCliente,   setNrCliente]   = useState(acordo.nr_cliente);
   const [vencimento,  setVencimento]  = useState(acordo.vencimento);
-  const [valor,       setValor]       = useState(String(acordo.valor));
+  const [valor,       setValor]       = useState(Number(acordo.valor).toFixed(2).replace('.', ','));
   const [tipo,        setTipo]        = useState<Acordo['tipo']>(acordo.tipo);
   const [parcelas,    setParcelas]    = useState(String(acordo.parcelas || 1));
   const [whatsapp,    setWhatsapp]    = useState(acordo.whatsapp || '');

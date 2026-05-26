@@ -175,6 +175,7 @@ export interface Notificacao {
   mensagem: string;
   lida: boolean;
   empresa_id?: string;
+  acordo_id?: string | null;
   criado_em: string;
 }
 
