@@ -389,18 +389,19 @@ export default function Dashboard() {
   useEffect(() => {
     if (!highlightParam) return;
     setHighlightedId(highlightParam);
-    // Remove o param da URL sem adicionar entrada ao histórico
     const params = new URLSearchParams(searchParams);
     params.delete('highlight');
     setSearchParams(params, { replace: true });
-    // Limpa o destaque após 3 segundos
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 3000);
-    return () => {
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    };
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 800);
+    // Sem cleanup aqui: o setSearchParams muda highlightParam → null imediatamente,
+    // o que dispararia o cleanup e cancelaria o timer antes de ele executar.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightParam]);
+  // Cleanup do timer apenas no unmount
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
 
   // sync URL (apenas PaguePay)
   useEffect(() => {

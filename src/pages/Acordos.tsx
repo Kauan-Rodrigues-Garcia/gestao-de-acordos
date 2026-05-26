@@ -193,12 +193,15 @@ export default function Acordos() {
     params.delete('highlight');
     setSearchParams(params, { replace: true });
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 3000);
-    return () => {
-      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    };
+    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 800);
+    // Sem cleanup aqui: o setSearchParams muda highlightParam → null imediatamente,
+    // o que dispararia o cleanup e cancelaria o timer antes de ele executar.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightParam]);
+  // Cleanup do timer apenas no unmount
+  useEffect(() => () => {
+    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+  }, []);
 
   // Debounce para busca
   useEffect(() => {
