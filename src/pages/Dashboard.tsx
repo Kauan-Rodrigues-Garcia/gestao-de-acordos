@@ -236,8 +236,11 @@ export default function Dashboard() {
   // Mapa de nomes de operadores (carregado apenas para PaguePay + admin/lider)
   const [operadoresMap,           setOperadoresMap]           = useState<Record<string, string>>({});
   // Destaque temporário de acordo vindo de notificação
-  const [highlightedId,           setHighlightedId]           = useState<string | null>(null);
-  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [highlightedId,   setHighlightedId]   = useState<string | null>(null);
+  const highlightTimerRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const findingPageRef     = useRef(false);   // evita chamada dupla ao findAcordoPage
+  const highlightFoundRef  = useRef(false);   // timer só dispara 1× por highlight
+  const findAttemptsRef    = useRef(0);       // máximo 3 tentativas para evitar loop
 
   // ── hooks dependentes dos filtros (declarados ANTES dos useEffects para evitar TDZ) ─
   const statusFiltroComputed =
@@ -384,20 +387,35 @@ export default function Dashboard() {
     });
   }, [acordosDeHoje, acordos, isPP, temPermissao]);
 
-  // Destaque de acordo vindo do parâmetro ?highlight=UUID (clique em notificação)
+  // Destaque: lê o parâmetro ?highlight=UUID e armazena o ID alvo
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
     if (!highlightParam) return;
+    highlightFoundRef.current = false;
+    findAttemptsRef.current   = 0;
     setHighlightedId(highlightParam);
     const params = new URLSearchParams(searchParams);
     params.delete('highlight');
     setSearchParams(params, { replace: true });
-    if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
-    highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 800);
-    // Sem cleanup aqui: o setSearchParams muda highlightParam → null imediatamente,
-    // o que dispararia o cleanup e cancelaria o timer antes de ele executar.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightParam]);
+
+  // Destaque: quando acordos carrega, verifica se o alvo está na página atual;
+  // caso contrário, navega para a página correta via findAcordoPage.
+  useEffect(() => {
+    if (!highlightedId || loading || highlightFoundRef.current) return;
+    if (acordos.some(a => a.id === highlightedId)) {
+      highlightFoundRef.current = true;
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = setTimeout(() => setHighlightedId(null), 800);
+    } else if (!findingPageRef.current && findAttemptsRef.current < 3) {
+      findingPageRef.current = true;
+      findAttemptsRef.current++;
+      findAcordoPage(highlightedId).finally(() => { findingPageRef.current = false; });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [acordos, loading, highlightedId]);
+
   // Cleanup do timer apenas no unmount
   useEffect(() => () => {
     if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
@@ -476,6 +494,42 @@ export default function Dashboard() {
     }).catch(e => console.warn('[Dashboard] erro ao mover atrasados:', e));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [acordos, loading, isPP]);
+
+  // Navega para a página correta quando o acordo destacado não está na página atual
+  async function findAcordoPage(acordoId: string) {
+    if (!empresa?.id) return;
+    const { data: a } = await supabase
+      .from('acordos')
+      .select('id, vencimento, status')
+      .eq('id', acordoId)
+      .single();
+    if (!a) return;
+
+    const [ano, mes] = (a.vencimento as string).split('-');
+    const mesStr     = `${ano}-${mes}`;
+
+    const { count } = await supabase
+      .from('acordos')
+      .select('*', { count: 'exact', head: true })
+      .eq('empresa_id', empresa.id)
+      .eq('status', a.status)
+      .gte('vencimento', `${mesStr}-01`)
+      .lt('vencimento', a.vencimento);
+
+    const page = Math.floor((count ?? 0) / PER_PAGE) + 1;
+
+    setBusca('');
+    setFiltroStatus('');
+    setFiltroTipo('');
+    setFiltroData('');
+    setFiltroVinculo('todos');
+    setColFiltroEstado('');
+    setMesFiltro(mesStr);
+    if ((a.status as string) === 'nao_pago')      setActiveTab('nao_pagos');
+    else if ((a.status as string) === 'pago')     setActiveTab('pagos');
+    else                                           setActiveTab('todos');
+    setCurrentPage(page);
+  }
 
   // ── Atalhos de teclado: N = novo acordo, Esc = fechar inline ─────────────────
   useEffect(() => {
