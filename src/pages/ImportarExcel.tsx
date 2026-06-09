@@ -114,19 +114,25 @@ function normWhatsapp(v: unknown): string | null {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface RegistroImportado {
-  linha:         number;
-  instituicao:   string;
-  estado_uf:     string | null;
-  tipo:          string;
-  parcelas:      number;
-  valor_total:   number | null;
-  valor_parcela: number | null;
-  vencimento:    string | null;
-  status:        string;
-  nome_cliente:  string;
-  whatsapp:      string | null;
-  valido:        boolean;
-  erros:         string[];
+  linha:           number;
+  /** PaguePLAY: código/inscrição. Bookplay: campo livre (não usado como PK). */
+  instituicao:     string;
+  /** Bookplay: NR do cliente (chave única). PaguePLAY: '' */
+  nr_cliente:      string;
+  estado_uf:       string | null;
+  tipo:            string;
+  parcelas:        number;
+  /** PaguePLAY: valor total do acordo. Bookplay: null. */
+  valor_total:     number | null;
+  /** Valor da parcela (único campo de valor para Bookplay). */
+  valor_parcela:   number | null;
+  vencimento:      string | null;
+  status:          string;
+  nome_cliente:    string;
+  whatsapp:        string | null;
+  observacoes_raw: string | null;
+  valido:          boolean;
+  erros:           string[];
 }
 
 type Etapa      = 'upload' | 'preview' | 'resultado';
@@ -134,11 +140,11 @@ type AbaPreview = 'novos' | 'extra' | 'bloqueados';
 
 interface ResultadoImportacao { ok: number; erros: number; msgs: string[] }
 
-// ─── Parser (colunas fixas) ───────────────────────────────────────────────────
+// ─── Parsers (colunas fixas) ──────────────────────────────────────────────────
 
+/** PaguePLAY: A=Código B=UF C=Tipo D=Parc E=ValorTotal F=Vencto G=Status H=Nome I=WhatsApp */
 function parsearPlanilha(rawRows: unknown[][]): RegistroImportado[] {
   const result: RegistroImportado[] = [];
-  // Linhas 0 e 1 = cabeçalho da seção + cabeçalho das colunas → pular
   for (let i = 2; i < rawRows.length; i++) {
     const row = rawRows[i];
     if (!row.some(c => c !== null && c !== undefined && String(c).trim() !== '')) continue;
@@ -154,21 +160,50 @@ function parsearPlanilha(rawRows: unknown[][]): RegistroImportado[] {
     const whatsapp     = normWhatsapp(row[8]);
 
     const erros: string[] = [];
-    if (!instituicao)     erros.push('Código ausente');
+    if (!instituicao)         erros.push('Código ausente');
     if (valor_total === null) erros.push('Valor inválido');
-    if (!vencimento)      erros.push('Vencimento inválido');
+    if (!vencimento)          erros.push('Vencimento inválido');
 
     const valor_parcela = valor_total !== null && parcelas > 0
       ? parseFloat((valor_total / parcelas).toFixed(2))
       : null;
 
     result.push({
-      linha: i + 1,
-      instituicao, estado_uf, tipo, parcelas,
-      valor_total, valor_parcela, vencimento,
-      status, nome_cliente, whatsapp,
-      valido: erros.length === 0,
-      erros,
+      linha: i + 1, nr_cliente: '', instituicao, estado_uf, tipo, parcelas,
+      valor_total, valor_parcela, vencimento, status, nome_cliente, whatsapp,
+      observacoes_raw: null, valido: erros.length === 0, erros,
+    });
+  }
+  return result;
+}
+
+/** Bookplay: A=NR B=Nome C=WhatsApp D=Instituição E=Tipo F=Parc G=Valor H=Vencto I=Status J=Obs */
+function parsearPlanilhaBP(rawRows: unknown[][]): RegistroImportado[] {
+  const result: RegistroImportado[] = [];
+  for (let i = 2; i < rawRows.length; i++) {
+    const row = rawRows[i];
+    if (!row.some(c => c !== null && c !== undefined && String(c).trim() !== '')) continue;
+
+    const nr_cliente   = String(row[0] ?? '').trim();
+    const nome_cliente = String(row[1] ?? '').trim();
+    const whatsapp     = normWhatsapp(row[2]);
+    const instituicao  = String(row[3] ?? '').trim();
+    const tipo         = normTipo(row[4]);
+    const parcelas     = normParcelas(row[5]);
+    const valor_parcela = normValor(row[6]);
+    const vencimento   = normData(row[7]);
+    const status       = normStatus(row[8]);
+    const observacoes_raw = String(row[9] ?? '').trim() || null;
+
+    const erros: string[] = [];
+    if (!nr_cliente)              erros.push('NR ausente');
+    if (valor_parcela === null)   erros.push('Valor inválido');
+    if (!vencimento)              erros.push('Vencimento inválido');
+
+    result.push({
+      linha: i + 1, nr_cliente, instituicao, estado_uf: null, tipo, parcelas,
+      valor_total: null, valor_parcela, vencimento, status, nome_cliente, whatsapp,
+      observacoes_raw, valido: erros.length === 0, erros,
     });
   }
   return result;
@@ -199,6 +234,31 @@ function baixarModelo() {
   const a    = document.createElement('a');
   a.href     = url;
   a.download = 'modelo_importacao_pagueplay.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function baixarModeloBP() {
+  const wb = xlsxUtils.book_new();
+  const ws = xlsxUtils.aoa_to_sheet([
+    ['Planilha de Acordos — Bookplay'],
+    ['NR', 'Nome do Cliente', 'WhatsApp', 'Instituição', 'Forma de Pagamento', 'Qtd. Parcelas', 'Valor (Parcela)', 'Data de Venci.', 'Status', 'Observações'],
+    ['NR-001', 'João da Silva',  '(89) 99999-1111', 'Banco X', 'Boleto',  3, 500.00, '30/05/2026', 'Pendente',  ''],
+    ['NR-002', 'Maria Oliveira', '(89) 98888-2222', 'Banco Y', 'PIX',     1, 200.00, '15/06/2026', 'Pago',      ''],
+    ['NR-003', 'Carlos Pereira', '',                '',        'Cartão',  1, 350.00, '10/07/2026', 'Não Pago',  'Cliente em negociação'],
+  ]);
+  ws['!cols'] = [
+    { wch: 12 }, { wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 22 },
+    { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 28 },
+  ];
+  xlsxUtils.book_append_sheet(wb, ws, 'Acordos');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const buf  = xlsxWrite(wb, { type: 'array', bookType: 'xlsx' as any }) as ArrayBuffer;
+  const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = 'modelo_importacao_bookplay.xlsx';
   a.click();
   URL.revokeObjectURL(url);
 }
@@ -266,12 +326,13 @@ export default function ImportarExcel() {
     if (!empresa?.id || !perfil?.id) return;
     setCarregandoClassif(true);
     try {
-      const valids = regs.filter(r => r.valido && r.instituicao);
-      const inputs = valids.map(r => ({ linhaOriginal: r.linha, nr: r.instituicao }));
+      const campoChave = isPaguePlay ? 'instituicao' as const : 'nr_cliente' as const;
+      const valids = regs.filter(r => r.valido && (isPaguePlay ? r.instituicao : r.nr_cliente));
+      const inputs = valids.map(r => ({ linhaOriginal: r.linha, nr: isPaguePlay ? r.instituicao : r.nr_cliente }));
       const nrs    = inputs.map(i => i.nr);
 
       const duplicados = nrs.length > 0
-        ? await verificarNrsDuplicadosEmLote(nrs, empresa.id, 'instituicao')
+        ? await verificarNrsDuplicadosEmLote(nrs, empresa.id, campoChave)
         : new Map();
 
       const classif = await classificarNrsImportados({
@@ -307,7 +368,7 @@ export default function ImportarExcel() {
         const wb      = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
         const ws      = wb.Sheets[wb.SheetNames[0]];
         const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][];
-        const regs    = parsearPlanilha(rawRows);
+        const regs    = isPaguePlay ? parsearPlanilha(rawRows) : parsearPlanilhaBP(rawRows);
         if (regs.length === 0) {
           toast.warning('Nenhuma linha encontrada. Certifique-se de usar o modelo correto (dados a partir da linha 3).');
           return;
@@ -322,7 +383,7 @@ export default function ImportarExcel() {
         toast.success(`${regs.length} linha(s) lida(s) — ${regs.filter(r => r.valido).length} válida(s)`);
         void carregarClassificacao(regs);
       } catch {
-        toast.error('Erro ao ler o arquivo. Use o modelo padrão PaguePLAY.');
+        toast.error(`Erro ao ler o arquivo. Use o modelo padrão ${isPaguePlay ? 'PaguePLAY' : 'Bookplay'}.`);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -364,29 +425,51 @@ export default function ImportarExcel() {
     const hoje = getTodayISO();
     const errosMsgs: string[] = [];
 
-    // Detecta se a coluna `instituicao` existe no banco
-    const { error: colErr } = await supabase.from('acordos').select('instituicao').limit(0);
-    const temInstituicao = !colErr;
-
     const payloads = validos.map(r => {
-      const obs = r.estado_uf ? buildObservacoesComEstado('', r.estado_uf) : null;
-      const registro: Record<string, unknown> = {
-        nome_cliente:  r.nome_cliente,
-        nr_cliente:    '',
-        vencimento:    r.vencimento ?? hoje,
-        valor:         r.valor_parcela ?? 0,
-        whatsapp:      r.whatsapp ?? null,
-        status:        r.status,
-        tipo:          r.tipo,
-        parcelas:      r.parcelas,
-        observacoes:   obs || null,
-        data_cadastro: hoje,
-        operador_id:   perfil.id,
-        setor_id:      perfil.setor_id ?? null,
-        empresa_id:    empresa.id,
-      };
-      if (temInstituicao) registro.instituicao = r.instituicao;
-      return { linhaOriginal: r.linha, registro, nr: r.instituicao, nomeCliente: r.nome_cliente };
+      let registro: Record<string, unknown>;
+      let nr: string;
+
+      if (isPaguePlay) {
+        const obs = r.estado_uf ? buildObservacoesComEstado('', r.estado_uf) : null;
+        registro = {
+          nome_cliente:  r.nome_cliente,
+          nr_cliente:    '',
+          instituicao:   r.instituicao,
+          vencimento:    r.vencimento ?? hoje,
+          valor:         r.valor_parcela ?? 0,
+          valor_total:   r.valor_total,
+          whatsapp:      r.whatsapp ?? null,
+          status:        r.status,
+          tipo:          r.tipo,
+          parcelas:      r.parcelas,
+          observacoes:   obs || null,
+          data_cadastro: hoje,
+          operador_id:   perfil.id,
+          setor_id:      perfil.setor_id ?? null,
+          empresa_id:    empresa.id,
+        };
+        nr = r.instituicao;
+      } else {
+        registro = {
+          nome_cliente:  r.nome_cliente,
+          nr_cliente:    r.nr_cliente,
+          instituicao:   r.instituicao || null,
+          vencimento:    r.vencimento ?? hoje,
+          valor:         r.valor_parcela ?? 0,
+          whatsapp:      r.whatsapp ?? null,
+          status:        r.status,
+          tipo:          r.tipo,
+          parcelas:      r.parcelas,
+          observacoes:   r.observacoes_raw || null,
+          data_cadastro: hoje,
+          operador_id:   perfil.id,
+          setor_id:      perfil.setor_id ?? null,
+          empresa_id:    empresa.id,
+        };
+        nr = r.nr_cliente;
+      }
+
+      return { linhaOriginal: r.linha, registro, nr, nomeCliente: r.nome_cliente };
     });
 
     const lote = await processarImportacaoEmLote({
@@ -396,8 +479,8 @@ export default function ImportarExcel() {
       autorizador,
       operadorAtual: { id: perfil.id, nome: perfil.nome ?? 'Operador' },
       empresaId:     empresa.id,
-      labelNr:       'Inscrição',
-      isPaguePlay:   true,
+      labelNr:       isPaguePlay ? 'Inscrição' : 'NR',
+      isPaguePlay,
       batchSize:     50,
     });
 
@@ -421,30 +504,11 @@ export default function ImportarExcel() {
         void criarNotificacao({
           usuario_id: perfil.lider_id,
           titulo:     'Importação de acordos concluída',
-          mensagem:   `${perfil.nome} importou ${ok} acordo(s) via planilha PaguePLAY.`,
+          mensagem:   `${perfil.nome} importou ${ok} acordo(s) via planilha ${isPaguePlay ? 'PaguePLAY' : 'Bookplay'}.`,
           empresa_id: empresa.id,
         });
       }
     }
-  }
-
-  // ── Not PaguePLAY guard ────────────────────────────────────────────────────
-  if (!isPaguePlay) {
-    return (
-      <div className="p-6 max-w-2xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-          <h1 className="text-xl font-bold">Importar via Planilha</h1>
-        </div>
-        <Card className="border-muted">
-          <CardContent className="p-8 text-center text-muted-foreground">
-            Esta funcionalidade está disponível apenas para PaguePLAY.
-          </CardContent>
-        </Card>
-      </div>
-    );
   }
 
   const qtdNovos = carregandoClassif ? '…' : String(regNovos.length);
@@ -462,10 +526,12 @@ export default function ImportarExcel() {
           <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
             <FileSpreadsheet className="w-5 h-5 text-primary" /> Importar via Planilha
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">PaguePLAY — modelo fixo de colunas</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isPaguePlay ? 'PaguePLAY' : 'Bookplay'} — modelo fixo de colunas
+          </p>
         </div>
         {etapa === 'upload' && (
-          <Button variant="outline" size="sm" onClick={baixarModelo} className="gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={isPaguePlay ? baixarModelo : baixarModeloBP} className="gap-2 shrink-0">
             <Download className="w-4 h-4" /> Baixar modelo
           </Button>
         )}
@@ -520,7 +586,7 @@ export default function ImportarExcel() {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">
-                Use o modelo padrão PaguePLAY. Clique em "Baixar modelo" para obter um arquivo de exemplo pronto para preencher.
+                Use o modelo padrão {isPaguePlay ? 'PaguePLAY' : 'Bookplay'}. Clique em "Baixar modelo" para obter um arquivo de exemplo pronto para preencher.
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
@@ -532,7 +598,7 @@ export default function ImportarExcel() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {[
+                    {(isPaguePlay ? [
                       ['A', 'Código (Inscrição)', '12345  ·  qualquer texto ou número'],
                       ['B', 'Estado / UF',        'SP  ·  RJ  ·  MG  (2 letras)'],
                       ['C', 'Forma de Pagamento', 'Boleto  ·  Cartão  ·  Cartão Recorrente  ·  PIX'],
@@ -542,7 +608,18 @@ export default function ImportarExcel() {
                       ['G', 'Status',             'Pendente  ·  Pago  ·  Não Pago'],
                       ['H', 'Nome do Profissional','João da Silva'],
                       ['I', 'WhatsApp',           '(11) 98765-4321  ·  11987654321'],
-                    ].map(([col, campo, valores]) => (
+                    ] : [
+                      ['A', 'NR do Cliente *',    'NR-001  ·  qualquer texto ou número'],
+                      ['B', 'Nome do Cliente',    'João da Silva'],
+                      ['C', 'WhatsApp',           '(89) 99999-1111  ·  opcional'],
+                      ['D', 'Instituição',        'Banco X  ·  opcional'],
+                      ['E', 'Forma de Pagamento', 'Boleto  ·  PIX  ·  Cartão  ·  Cartão Recorrente  ·  Pix Automático'],
+                      ['F', 'Qtd. Parcelas',      '1  ·  3  ·  6  ·  12'],
+                      ['G', 'Valor (Parcela) *',  '500,00  ·  R$ 500,00  (valor de cada parcela)'],
+                      ['H', 'Data de Vencimento *','30/05/2026  ·  2026-05-30'],
+                      ['I', 'Status',             'Pendente  ·  Pago  ·  Não Pago'],
+                      ['J', 'Observações',        'Texto livre  ·  opcional'],
+                    ]).map(([col, campo, valores]) => (
                       <tr key={col} className="hover:bg-muted/20">
                         <td className="px-3 py-1.5 font-mono font-bold text-primary">{col}</td>
                         <td className="px-3 py-1.5 font-medium whitespace-nowrap">{campo}</td>
@@ -649,10 +726,10 @@ export default function ImportarExcel() {
             </div>
 
             {abaAtiva === 'novos' && (
-              <TabelaSimples registros={regNovos} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} />
+              <TabelaSimples registros={regNovos} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} />
             )}
             {abaAtiva === 'extra' && (
-              <TabelaSimples registros={regExtra} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} />
+              <TabelaSimples registros={regExtra} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} />
             )}
             {abaAtiva === 'bloqueados' && (
               <TabelaBloqueados
@@ -785,22 +862,29 @@ function TabelaSimples({
   registros,
   classifMap,
   linhasAutorizadas,
+  isPP,
 }: {
   registros: RegistroImportado[];
   classifMap: Map<number, ClassificacaoNR>;
   linhasAutorizadas: Set<number>;
+  isPP: boolean;
 }) {
   void classifMap; void linhasAutorizadas;
 
   if (registros.length === 0) {
     return <p className="p-6 text-center text-sm text-muted-foreground">Nenhum registro nesta categoria.</p>;
   }
+
+  const headers = isPP
+    ? ['Linha', 'Código', 'UF', 'Tipo', 'Parc.', 'Valor Total', 'Valor/Parc.', 'Vencimento', 'Status', 'Nome', 'WhatsApp']
+    : ['Linha', 'NR', 'Nome', 'Tipo', 'Parc.', 'Valor/Parc.', 'Vencimento', 'Status', 'Instituição', 'WhatsApp'];
+
   return (
     <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
       <table className="w-full text-xs">
         <thead className="sticky top-0 bg-muted/70 backdrop-blur-sm border-b border-border z-10">
           <tr>
-            {['Linha', 'Código', 'UF', 'Tipo', 'Parc.', 'Valor Total', 'Valor/Parc.', 'Vencimento', 'Status', 'Nome', 'WhatsApp'].map(h => (
+            {headers.map(h => (
               <th key={h} className="px-2 py-2 text-left font-semibold text-muted-foreground whitespace-nowrap">{h}</th>
             ))}
           </tr>
@@ -809,11 +893,19 @@ function TabelaSimples({
           {registros.map(r => (
             <tr key={r.linha} className="border-b border-border/50 hover:bg-muted/20">
               <td className="px-2 py-1.5 text-muted-foreground">{r.linha}</td>
-              <td className="px-2 py-1.5 font-mono font-medium text-primary">{r.instituicao || '—'}</td>
-              <td className="px-2 py-1.5 text-center text-muted-foreground">{r.estado_uf || '—'}</td>
+              <td className="px-2 py-1.5 font-mono font-medium text-primary">
+                {isPP ? (r.instituicao || '—') : (r.nr_cliente || '—')}
+              </td>
+              {isPP ? (
+                <td className="px-2 py-1.5 text-center text-muted-foreground">{r.estado_uf || '—'}</td>
+              ) : (
+                <td className="px-2 py-1.5 max-w-[120px] truncate">{r.nome_cliente || '—'}</td>
+              )}
               <td className="px-2 py-1.5 text-muted-foreground">{formatTipo(r.tipo)}</td>
               <td className="px-2 py-1.5 text-center">{r.parcelas}x</td>
-              <td className="px-2 py-1.5 text-right font-mono">{r.valor_total !== null ? formatCurrency(r.valor_total) : '—'}</td>
+              {isPP && (
+                <td className="px-2 py-1.5 text-right font-mono">{r.valor_total !== null ? formatCurrency(r.valor_total) : '—'}</td>
+              )}
               <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">
                 {r.valor_parcela !== null ? formatCurrency(r.valor_parcela) : '—'}
               </td>
@@ -821,7 +913,11 @@ function TabelaSimples({
               <td className="px-2 py-1.5">
                 <span className="px-1.5 py-0.5 rounded-full text-[10px] bg-muted text-muted-foreground">{r.status}</span>
               </td>
-              <td className="px-2 py-1.5 max-w-[120px] truncate">{r.nome_cliente || '—'}</td>
+              {isPP ? (
+                <td className="px-2 py-1.5 max-w-[120px] truncate">{r.nome_cliente || '—'}</td>
+              ) : (
+                <td className="px-2 py-1.5 text-muted-foreground">{r.instituicao || '—'}</td>
+              )}
               <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{r.whatsapp || '—'}</td>
             </tr>
           ))}
