@@ -2,27 +2,16 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
 import { motion } from 'framer-motion';
-import {
-  Save, ArrowLeft, User, Hash,
-  DollarSign, Smartphone, FileText, Info, AlertCircle, Building2, MapPin, Link2, ChevronDown,
-} from 'lucide-react';
-import { DatePickerField } from '@/components/DatePickerField';
+import { Save, ArrowLeft, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase, Perfil } from '@/lib/supabase';
 import {
   ROUTE_PATHS, parseCurrencyInput,
-  ESTADOS_BRASIL, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
-  INSTITUICOES_OPTIONS, formatarTelefonePP,
+  formatarTelefonePP,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { criarNotificacao }  from '@/services/notificacoes.service';
@@ -34,52 +23,9 @@ import { ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/com
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
-
-// ── Schema base (Bookplay / !isPP) ─────────────────────────────────────
-const schemaBase = z.object({
-  nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
-  nr_cliente:   z.string().optional().or(z.literal('')),
-  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
-  valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
-    const n = parseCurrencyInput(v);
-    return !isNaN(n) && n > 0;
-  }, 'Valor deve ser maior que zero'),
-  tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
-  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
-  whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
-  instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
-  status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
-  observacoes: z.string().max(500, 'Campo muito longo').optional(),
-});
-
-// ── Schema PaguePay (isPP) — nr_cliente opcional, instituicao obrigatória ──
-const schemaPP = z.object({
-  nome_cliente: z.string().max(100, 'Nome muito longo').optional().or(z.literal('')),
-  nr_cliente:   z.string().optional().or(z.literal('')),
-  vencimento:   z.string().min(1, 'Data de vencimento é obrigatória')
-    .refine(v => v >= '2026-01-01', 'A data não pode ser anterior a 01/01/2026'),
-  valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
-    const n = parseCurrencyInput(v);
-    return !isNaN(n) && n > 0;
-  }, 'Valor deve ser maior que zero'),
-  tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
-  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
-  whatsapp:    z.string().optional().refine(v => {
-    if (!v) return true;
-    let d = v.replace(/\D/g, '');
-    if (d.length === 13 && d.startsWith('55')) d = d.slice(2);
-    return d.length === 11;
-  }, 'Número deve ter DDD + 9 dígitos (11 no total)'),
-  instituicao: z.string().min(1, 'Código é obrigatório').max(100, 'Código muito longo'),
-  status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
-  observacoes: z.string().max(500, 'Campo muito longo').optional(),
-});
-
-// data_cadastro: opcional no form — preenchida automaticamente pelo sistema
-const schema = schemaBase; // usado como type base; resolvido condicionalmente no useForm
-
-type FormData = z.infer<typeof schemaBase>;
+import { schemaBase, schemaPP, type FormData } from './schemas';
+import { FormPP } from './FormPP';
+import { FormBP } from './FormBP';
 
 export default function AcordoForm() {
   const { id } = useParams<{ id: string }>();
@@ -127,8 +73,6 @@ export default function AcordoForm() {
     },
   });
 
-  const tipoAtual = watch('tipo');
-
   // ── Garantir perfil disponível ────────────────────────────────────────
   useEffect(() => {
     if (perfil) { setPerfilLocal(perfil); return; }
@@ -151,7 +95,6 @@ export default function AcordoForm() {
       if (error) { toast.error('Erro ao carregar acordo'); navigate(ROUTE_PATHS.ACORDOS); return; }
       if (data) {
         setNrOriginalEdit(data.nr_cliente);
-        // For PaguePlay, parse estado from observacoes prefix
         const obs    = data.observacoes || '';
         const estado = getEstadoFromAcordo(data);
         const link   = extractLinkAcordo(obs);
@@ -168,7 +111,6 @@ export default function AcordoForm() {
           whatsapp:     data.whatsapp || '',
           instituicao:  data.instituicao || '',
           status:       data.status,
-          // For PaguePlay show only the link part (strip [ESTADO:XX] prefix)
           observacoes:  tenant.isPaguePlay ? link : (data.observacoes || ''),
         });
       }
@@ -176,7 +118,7 @@ export default function AcordoForm() {
     });
   }, [id, isEdit, reset, navigate]);
 
-  // ── Helpers de sincronização ──────────────────────────────────────────
+  // ── Helpers ───────────────────────────────────────────────────────────
   function buildSyncPayload(p: Record<string, unknown>): Record<string, unknown> {
     return {
       valor:        p.valor,
@@ -242,7 +184,6 @@ export default function AcordoForm() {
 
       const nrTrimmed = (data.nr_cliente ?? '').trim();
 
-      // Payload base — colunas que EXISTEM no schema original (01_schema_completo.sql)
       const payload: Record<string, unknown> = {
         nome_cliente:  (data.nome_cliente ?? '').trim(),
         nr_cliente:    nrTrimmed,
@@ -257,7 +198,6 @@ export default function AcordoForm() {
             : 1,
         whatsapp:      isPP ? formatarTelefonePP(data.whatsapp || '') : (data.whatsapp?.trim() || null),
         status:        data.status,
-        // For PaguePlay: combine [ESTADO:XX] prefix + link text in observacoes
         observacoes:   isPP
           ? buildObservacoesComEstado(estadoSelecionado, data.observacoes || '')
           : (data.observacoes?.trim() || null),
@@ -265,14 +205,10 @@ export default function AcordoForm() {
         empresa_id:    empresa.id,
       };
 
-      // Adicionar colunas extras APENAS se houver valor, e tentar tratar erro se a coluna não existir
       if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
       if (p?.setor_id) payload.setor_id = p.setor_id;
 
-      // ── VERIFICAÇÃO DE NR ÚNICO ────────────────────────────────────────────
-      // PaguePay: NR único = "Inscrição" (instituicao) | Bookplay: NR único = "NR" (nr_cliente)
-      // FONTE DE VERDADE: sempre query direta ao banco (nr_registros).
-      // O cache local (Realtime) complementa como fallback extra.
+      // ── Verificação de NR único ───────────────────────────────────────
       const campoCampo: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPP
         ? (data.instituicao ?? '').trim()
@@ -283,7 +219,6 @@ export default function AcordoForm() {
       const nrMudou = nrParaVerificar && (!isEdit || nrParaVerificar !== nrOriginal);
 
       if (nrMudou && empresa?.id) {
-        // 1. Query direta ao banco (fonte de verdade garantida)
         const conflitoDb = await verificarNrRegistro(
           nrParaVerificar,
           empresa.id,
@@ -291,7 +226,6 @@ export default function AcordoForm() {
           isEdit ? id : undefined,
         );
 
-        // 2. Fallback: se banco não encontrou, checar cache local (lag do trigger)
         const conflitoFinal = conflitoDb ??
           verificarConflito(nrParaVerificar, campoCampo, isEdit ? id : undefined);
 
@@ -302,7 +236,6 @@ export default function AcordoForm() {
             return;
           }
 
-          // Buscar estado atual do acordo DIRETO para saber se já há um EXTRA
           const { data: acordoDireto } = await supabase
             .from('acordos')
             .select('id, tipo_vinculo, vinculo_operador_id, vinculo_operador_nome')
@@ -311,7 +244,6 @@ export default function AcordoForm() {
 
           const jaTemExtra = Boolean(acordoDireto?.vinculo_operador_id);
 
-          // REGRA: NR já tem 2 vínculos → exige autorização para trocar o EXTRA
           if (jaTemExtra) {
             const campoCampo2: 'nr_cliente' | 'instituicao' = isPP ? 'instituicao' : 'nr_cliente';
             const { data: acordoExtraAtual } = await supabase
@@ -336,7 +268,6 @@ export default function AcordoForm() {
             return;
           }
 
-          // DIRETO sem EXTRA — verifica lógicas de ambos os operadores
           const euTemLogica = isAtivoParaUsuario(
             uid,
             p?.setor_id ?? null,
@@ -370,7 +301,6 @@ export default function AcordoForm() {
             const resultErr = await salvarAcordo(payloadExtra, uid);
             if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); setLoading(false); return; }
 
-            // Vincular EXTRA ao DIRETO via RPC (bypassa RLS)
             const { error: rpcErr } = await supabase.rpc('fn_vincular_extra_ao_direto', {
               p_direto_id:     conflitoFinal.acordoId,
               p_extra_op_id:   uid,
@@ -435,7 +365,6 @@ export default function AcordoForm() {
           return;
         }
       }
-      // Suprimir lint: nrLoading/nrRefetch mantidos para refetch futuro
       void nrLoading; void nrRefetch;
 
       const resultError = await salvarAcordo(payload, uid);
@@ -446,10 +375,7 @@ export default function AcordoForm() {
         return;
       }
 
-      // ⚠ O trigger trg_sync_nr_registros (v2) registra/atualiza o NR em nr_registros
-      // automaticamente via INSERT/UPDATE — não precisamos chamar registrarNr() aqui.
-
-      // ── Auto-criar parcelas ao salvar novo acordo ───────────────────────
+      // ── Auto-criar parcelas ao salvar novo acordo ─────────────────────
       const TIPOS_PARCELADOS_BOOKPLAY = ['boleto', 'cartao_recorrente', 'pix_automatico'];
       const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
       const tiposParcelados = isPP ? TIPOS_PARCELADOS_PAGUEPLAY : TIPOS_PARCELADOS_BOOKPLAY;
@@ -461,8 +387,6 @@ export default function AcordoForm() {
 
       if (deveCriarParcelas) {
         const grupoId = crypto.randomUUID();
-        // Atualizar o acordo recém-criado com grupo_id e numero_parcela = 1
-        // (buscar pelo nr_cliente + empresa_id + vencimento para encontrar o id)
         const { data: acordoCriado } = await supabase
           .from('acordos')
           .select('id')
@@ -480,7 +404,6 @@ export default function AcordoForm() {
             .eq('id', acordoCriado.id);
         }
 
-        // Criar parcelas 2..N
         const baseVencimento = payload.vencimento as string;
         const [baseYear, baseMonth, baseDay] = baseVencimento.split('-').map(Number);
         const parcelasParaCriar = [];
@@ -528,7 +451,6 @@ export default function AcordoForm() {
           empresa_id: empresa?.id,
         });
       }
-      // FIX: PaguePay não tem rota /acordos — redirecionar para Dashboard
       navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       console.error('[AcordoForm] unexpected:', e);
@@ -579,7 +501,7 @@ export default function AcordoForm() {
       const nrLogLabel = ((isPP ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
       const nomeNovoOp = (perfilLocal ?? perfil)?.nome ?? 'Operador';
 
-      // ── MODO troca_extra: transfere apenas o EXTRA, DIRETO não é afetado ──
+      // ── MODO troca_extra ──────────────────────────────────────────────
       if (conflito.modo === 'troca_extra') {
         const { extraAtualId, extraAtualOpId, extraAtualOpNome } = conflito;
 
@@ -663,7 +585,7 @@ export default function AcordoForm() {
         return;
       }
 
-      // ── MODO transferencia_completa: remove o DIRETO e cria novo ────────────
+      // ── MODO transferencia_completa ───────────────────────────────────
       const { data: acordoAntData, error: errBusca } = await supabase
         .from('acordos')
         .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
@@ -738,14 +660,12 @@ export default function AcordoForm() {
       const { payload, acordoAnteriorId, operadorAntId, operadorAntNome, nrLabel: nrL, labelCampo } = avisoDiretoExtra;
       const p = perfilLocal ?? perfil;
 
-      // Re-validar que o operador ainda tem lógica ativa
       const logicaAindaAtiva = await fetchIsDiretoExtraAtivo({ userId: operadorAntId, empresaId: empresa.id });
       if (!logicaAindaAtiva) {
         toast.error('A lógica Direto/Extra do operador foi desativada. Atualize e tente novamente.');
         return;
       }
 
-      // 1. Converter DIRETO → EXTRA via RPC (bypassa RLS; também remove nr_registros)
       const { error: rpcErr } = await supabase.rpc('fn_converter_para_extra', {
         p_acordo_id:           acordoAnteriorId,
         p_novo_direto_op_id:   uid,
@@ -771,7 +691,6 @@ export default function AcordoForm() {
         if (errReb) { toast.error(`Erro ao converter acordo: ${errReb.message}`); return; }
       }
 
-      // 3. Inserir novo como DIRETO (com vínculo para o EXTRA)
       const payloadDireto = {
         ...payload,
         tipo_vinculo:          'direto',
@@ -781,7 +700,6 @@ export default function AcordoForm() {
       const resultErr = await salvarAcordo(payloadDireto, uid);
       if (resultErr) { toast.error(`Erro ao salvar: ${resultErr.message}`); return; }
 
-      // 4. Notificar o operador anterior (agora EXTRA)
       await criarNotificacao({
         usuario_id: operadorAntId,
         titulo:     'Seu acordo foi convertido em EXTRA',
@@ -868,424 +786,28 @@ export default function AcordoForm() {
         <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
 
           {isPP ? (
-            /* ══════════════════════════════════════════════════════════════
-               LAYOUT PAGUEPLAY
-               Ordem: 1) Dados Principais  2) Tipo e Status  3) Dados do Profissional  4) Link do Acordo
-            ══════════════════════════════════════════════════════════════ */
-            <>
-              {/* ── PP BLOCO 1: Dados Principais (Inscrição, Vencimento, Valor, Estado) ── */}
-              <Card className="border-primary/30 bg-primary/3">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
-                    <Hash className="w-4 h-4" /> Dados Principais
-                    <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                  {/* Inscrição — obrigatório no PP */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Código *</Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                      <Input
-                        {...register('instituicao')}
-                        placeholder="Código"
-                        className={cn(
-                          'h-10 text-sm pl-8 border-primary/40 focus:border-primary',
-                          errors.instituicao && 'border-destructive'
-                        )}
-                      />
-                    </div>
-                    {errors.instituicao && <p className="text-xs text-destructive">{errors.instituicao.message}</p>}
-                  </div>
-
-                  {/* Vencimento — calendário visual (mesmo componente do Inline) */}
-                  <div className="space-y-1.5">
-                    <DatePickerField
-                      value={watch('vencimento') || ''}
-                      onChange={(v) => setValue('vencimento', v, { shouldValidate: true })}
-                      label="Vencimento"
-                      required
-                      size="md"
-                      minDate="2026-01-01"
-                      triggerClassName={cn(
-                        'border-primary/40',
-                        errors.vencimento && 'border-destructive',
-                      )}
-                      labelClassName="font-semibold text-primary"
-                    />
-                    {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
-                  </div>
-
-                  {/* Valor */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Valor *</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                      <Input
-                        {...register('valor')}
-                        placeholder="0.00"
-                        className={cn(
-                          'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
-                          errors.valor && 'border-destructive'
-                        )}
-                      />
-                    </div>
-                    {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
-                  </div>
-
-                  {/* Estado — obrigatório no PP */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Estado *</Label>
-                    <Select value={estadoSelecionado} onValueChange={setEstadoSelecionado}>
-                      <SelectTrigger className="h-10 text-sm border-primary/40 focus:border-primary">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="w-3.5 h-3.5 text-primary/60" />
-                          <SelectValue placeholder="Selecione o estado" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {ESTADOS_BRASIL.map(uf => (
-                          <SelectItem key={uf} value={uf}>{uf}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              {/* ── PP BLOCO 2: Tipo e Status ── */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" /> Tipo e Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-                  {/* Forma de Pagamento — apenas boleto e cartao para PP */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Forma de Pagamento *</Label>
-                    <Select
-                      value={watch('tipo')}
-                      onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="boleto">Boleto / PIX</SelectItem>
-                        <SelectItem value="cartao">Cartão de Crédito</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Parcelas — Select 1-12 para PP (sempre visível para boleto e cartao) */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Parcelas</Label>
-                    <Select
-                      value={watch('parcelas') || '1'}
-                      onValueChange={v => setValue('parcelas', v, { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
-                          <SelectItem key={n} value={String(n)}>{n}x</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {/* Status — apenas em modo edição */}
-                  {isEdit && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Status *</Label>
-                      <Select
-                        value={watch('status')}
-                        onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
-                      >
-                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="verificar_pendente">{STATUS_LABELS_PAGUEPLAY.verificar_pendente}</SelectItem>
-                          <SelectItem value="pago">{STATUS_LABELS_PAGUEPLAY.pago}</SelectItem>
-                          <SelectItem value="nao_pago">{STATUS_LABELS_PAGUEPLAY.nao_pago}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                </CardContent>
-              </Card>
-
-              {/* ── PP BLOCO 3: Dados do Profissional (opcional) ── */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground" />
-                    Dados do Profissional{' '}
-                    <span className="text-xs font-normal text-muted-foreground">(opcional)</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                  {/* Nome do Cliente — opcional, sem asterisco */}
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Nome do Cliente</Label>
-                    <Input
-                      {...register('nome_cliente')}
-                      placeholder="Nome completo"
-                      className={cn('h-9 text-sm', errors.nome_cliente && 'border-destructive')}
-                    />
-                    {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
-                  </div>
-
-                  {/* Número (WhatsApp) — exclusivo PaguePlay */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Número</Label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input
-                        {...register('whatsapp')}
-                        placeholder="(89) 99999-9999"
-                        className={cn('h-9 text-sm pl-8 font-mono', errors.whatsapp && 'border-destructive')}
-                      />
-                    </div>
-                    {errors.whatsapp && <p className="text-xs text-destructive">{errors.whatsapp.message}</p>}
-                  </div>
-
-
-                </CardContent>
-              </Card>
-
-              {/* ── PP BLOCO 4: Link do Acordo (colapsável) ── */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowObs(v => !v)}
-                    className="w-full flex items-center justify-between text-left"
-                  >
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                      <Link2 className="w-4 h-4" />
-                      Link do Acordo
-                      <span className="text-xs font-normal">(opcional)</span>
-                    </CardTitle>
-                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', showObs && 'rotate-180')} />
-                  </button>
-                </CardHeader>
-                {showObs && (
-                  <CardContent>
-                    <Textarea
-                      {...register('observacoes')}
-                      placeholder="Cole aqui o link do acordo..."
-                      className="text-sm resize-none"
-                      rows={2}
-                    />
-                    <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                      Data de cadastro registrada automaticamente pelo sistema
-                    </p>
-                  </CardContent>
-                )}
-              </Card>
-            </>
+            <FormPP
+              register={register}
+              errors={errors}
+              watch={watch}
+              setValue={setValue}
+              isEdit={isEdit}
+              showObs={showObs}
+              setShowObs={setShowObs}
+              estadoSelecionado={estadoSelecionado}
+              setEstadoSelecionado={setEstadoSelecionado}
+            />
           ) : (
-            /* ══════════════════════════════════════════════════════════════
-               LAYOUT BOOKPLAY (!isPP) — IDÊNTICO AO ORIGINAL, SEM ALTERAÇÕES
-            ══════════════════════════════════════════════════════════════ */
-            <>
-              {/* ══ BLOCO 1: NR + Vencimento + Valor — campos operacionais prioritários ══ */}
-              <Card className="border-primary/30 bg-primary/3">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
-                    <Hash className="w-4 h-4" /> Dados Principais
-                    <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-
-                  {/* Vencimento — campo prioritário */}
-                  <div className="space-y-1.5">
-                    <DatePickerField
-                      value={watch('vencimento') || ''}
-                      onChange={(v) => setValue('vencimento', v, { shouldValidate: true })}
-                      label="Vencimento"
-                      required
-                      size="md"
-                      minDate="2026-01-01"
-                      triggerClassName={cn(
-                        'border-primary/40',
-                        errors.vencimento && 'border-destructive',
-                      )}
-                      labelClassName="font-semibold text-primary"
-                    />
-                    {errors.vencimento && <p className="text-xs text-destructive">{errors.vencimento.message}</p>}
-                  </div>
-
-                  {/* Valor */}
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-semibold text-primary">Valor *</Label>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
-                      <Input
-                        {...register('valor')}
-                        placeholder="0.00"
-                        className={cn(
-                          'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
-                          errors.valor && 'border-destructive'
-                        )}
-                      />
-                    </div>
-                    {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              {/* ══ BLOCO 2: Dados do cliente ══ */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <User className="w-4 h-4 text-muted-foreground" /> Dados do Cliente
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label className="text-xs font-medium">Nome do Cliente *</Label>
-                    <Input
-                      {...register('nome_cliente')}
-                      placeholder="Nome completo"
-                      className={cn('h-9 text-sm', errors.nome_cliente && 'border-destructive')}
-                    />
-                    {errors.nome_cliente && <p className="text-xs text-destructive">{errors.nome_cliente.message}</p>}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">WhatsApp</Label>
-                    <div className="relative">
-                      <Smartphone className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-                      <Input
-                        {...register('whatsapp')}
-                        placeholder="(11) 99999-9999"
-                        className="h-9 text-sm pl-8 font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Instituição</Label>
-                    <Select
-                      value={watch('instituicao') || ''}
-                      onValueChange={v => setValue('instituicao', v, { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                          <SelectValue placeholder="Selecione a instituição" />
-                        </div>
-                      </SelectTrigger>
-                      <SelectContent>
-                        {INSTITUICOES_OPTIONS.map(inst => (
-                          <SelectItem key={inst} value={inst}>{inst}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                </CardContent>
-              </Card>
-
-              {/* ══ BLOCO 3: Tipo, parcelas e status ══ */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-muted-foreground" /> Tipo e Status
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Tipo *</Label>
-                    <Select
-                      value={watch('tipo')}
-                      onValueChange={v => setValue('tipo', v as FormData['tipo'], { shouldValidate: true })}
-                    >
-                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="boleto">Boleto</SelectItem>
-                        <SelectItem value="cartao_recorrente">Cartão Recorrente</SelectItem>
-                        <SelectItem value="pix_automatico">Pix automático</SelectItem>
-                        <SelectItem value="cartao">Cartão</SelectItem>
-                        <SelectItem value="pix">Pix</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Parcelas</Label>
-                      <Input
-                        type="number" min="1" max={maxParcelas}
-                        {...register('parcelas')}
-                        placeholder="1"
-                        className="h-9 text-sm font-mono"
-                      />
-                    </div>
-                  )}
-
-                  {/* Status — apenas em modo edição */}
-                  {isEdit && (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-medium">Status *</Label>
-                      <Select
-                        value={watch('status')}
-                        onValueChange={v => setValue('status', v as FormData['status'], { shouldValidate: true })}
-                      >
-                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="verificar_pendente">Verificar</SelectItem>
-                          <SelectItem value="pago">Pago</SelectItem>
-                          <SelectItem value="nao_pago">Não Pago</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
-
-                </CardContent>
-              </Card>
-
-              {/* ══ BLOCO 4: Observações (colapsável) ══ */}
-              <Card className="border-border">
-                <CardHeader className="pb-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowObs(v => !v)}
-                    className="w-full flex items-center justify-between text-left"
-                  >
-                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-muted-foreground">
-                      <Info className="w-4 h-4" />
-                      Observações
-                      <span className="text-xs font-normal">(opcional)</span>
-                    </CardTitle>
-                    <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', showObs && 'rotate-180')} />
-                  </button>
-                </CardHeader>
-                {showObs && (
-                  <CardContent>
-                    <Textarea
-                      {...register('observacoes')}
-                      placeholder="Informações adicionais..."
-                      className="text-sm resize-none"
-                      rows={2}
-                    />
-                    <p className="text-[10px] text-muted-foreground/60 mt-1.5">
-                      Data de cadastro registrada automaticamente pelo sistema
-                    </p>
-                  </CardContent>
-                )}
-              </Card>
-            </>
+            <FormBP
+              register={register}
+              errors={errors}
+              watch={watch}
+              setValue={setValue}
+              isEdit={isEdit}
+              showObs={showObs}
+              setShowObs={setShowObs}
+              maxParcelas={maxParcelas}
+            />
           )}
 
           {/* Ações */}
