@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 
-Plataforma web para gerenciamento de acordos financeiros com controle de acesso por perfis (RBAC), dashboard analítico, importação via planilha Excel e integração com IA (OpenAI) para normalização de dados.
+Plataforma web para gerenciamento de acordos financeiros com controle de acesso por perfis (RBAC), dashboard analítico e importação via planilha Excel.
 
 ---
 
@@ -23,7 +23,6 @@ Plataforma web para gerenciamento de acordos financeiros com controle de acesso 
 | **Gráficos** | Recharts |
 | **Planilhas** | @e965/xlsx (fork mantido do SheetJS) |
 | **Backend/BaaS** | Supabase (Auth, PostgreSQL, Edge Functions) |
-| **IA** | OpenAI API via Supabase Edge Function (Deno) |
 
 ---
 
@@ -77,7 +76,7 @@ VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
 VITE_SUPABASE_ANON_KEY=<sua-anon-key>
 ```
 
-> As chaves `SUPABASE_SERVICE_ROLE_KEY` e `OPENAI_API_KEY` são configuradas diretamente nos **Secrets** do Supabase (usadas pelas Edge Functions — nunca devem ser expostas no frontend).
+> A chave `SUPABASE_SERVICE_ROLE_KEY` é configurada diretamente nos **Secrets** do Supabase (usada pelas Edge Functions — nunca deve ser exposta no frontend).
 
 ---
 
@@ -99,9 +98,7 @@ gestao-de-acordos/
 │   │   └── useAcordos.ts           # Acordos + métricas do dashboard
 │   ├── services/
 │   │   ├── acordos.service.ts      # Lógica de negócio de acordos
-│   │   ├── setores.service.ts      # Lógica de setores
-│   │   └── aiImport.service.ts     # Integração com IA para importação
-│   ├── integrations/ai/            # Camada de IA (OpenAI)
+│   │   └── setores.service.ts      # Lógica de setores
 │   ├── lib/
 │   │   ├── supabase.ts             # Cliente Supabase + tipos TypeScript
 │   │   ├── money.ts                # Utilitários monetários (BRL)
@@ -134,16 +131,6 @@ O sistema implementa **7 perfis** com níveis crescentes de acesso, protegidos p
 > Para detalhes completos de cada perfil, consulte a seção **Perfis de Acesso (RBAC)** no [ARQUITETURA.md](./ARQUITETURA.md).
 
 ---
-
-## 🤖 Integração com IA
-
-A funcionalidade de **Organizar com IA** na tela de importação de planilhas utiliza uma **Supabase Edge Function** (`ai-normalize-import`) que:
-
-1. Recebe as linhas brutas da planilha
-2. Envia para a OpenAI API (modelo configurável via Admin → IA)
-3. Retorna os dados normalizados nos campos corretos do sistema
-
-A chave da OpenAI é armazenada nos Secrets do Supabase e nunca é exposta no frontend.
 
 ---
 

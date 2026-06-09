@@ -1,4 +1,4 @@
-# AcordosPRO — Arquitetura e Documentação
+# Gestão de Acordos — Arquitetura e Documentação
 
 ## Estrutura do Projeto
 
@@ -36,19 +36,10 @@ src/
 ├── services/             # Camada de serviços (lógica de negócio)
 │   ├── acordos.service.ts    # Queries, cálculos e métricas de acordos
 │   ├── setores.service.ts    # Queries e seed de setores
-│   ├── aiImport.service.ts   # Integração com IA para importação
-│   ├── aiConfig.service.ts   # Configuração do modelo de IA
 │   ├── lixeira.service.ts    # Soft delete + retenção 3 dias
 │   ├── notificacoes.service.ts # Notificações do sistema
 │   ├── nr_registros.service.ts # Controle de NR únicos
 │   └── empresas.service.ts   # Dados de empresas
-│
-├── integrations/         # Integrações externas
-│   └── ai/               # Camada de IA (pronta para expansão)
-│       ├── index.ts          # Factory, tipos, funções de domínio
-│       ├── providers/
-│       │   └── openai.ts     # Adapter OpenAI
-│       └── README.md         # Como ativar a IA
 │
 ├── lib/                  # Utilitários e configurações
 │   ├── supabase.ts       # Cliente Supabase + tipos TypeScript
@@ -64,16 +55,13 @@ src/
 │   ├── Acordos.tsx           # Lista + fila WhatsApp
 │   ├── AcordoForm.tsx        # Cadastro/edição
 │   ├── AcordoDetalhe.tsx     # Detalhes + histórico
-│   ├── ImportarExcel.tsx     # Importação via planilha + IA
+│   ├── ImportarExcel.tsx     # Importação via planilha (Bookplay + PaguePLAY)
 │   ├── Lixeira.tsx           # Acordos excluídos (soft delete, 3 dias)
 │   ├── PainelLider.tsx       # Gestão da equipe + analítico
-│   ├── PainelDiretoria.tsx   # KPIs estratégicos para diretoria
+│   ├── PainelDiretoria/      # KPIs estratégicos para diretoria (subfolder)
 │   ├── AdminUsuarios.tsx     # CRUD usuários + status online
-│   ├── AdminCargos.tsx       # Gestão de cargos e permissões
 │   ├── AdminSetores.tsx      # CRUD setores
-│   ├── AdminEquipes.tsx      # CRUD equipes
 │   ├── AdminConfiguracoes.tsx
-│   ├── AdminIA.tsx           # Configuração do modelo OpenAI
 │   └── AdminLogs.tsx         # Auditoria completa
 │
 ├── App.tsx               # Roteamento com lazy loading
@@ -182,7 +170,7 @@ controlado via PostgreSQL RLS e pelo componente `ProtectedRoute`.
 #### `administrador`
 - Acesso total a todos os recursos da empresa
 - Gerencia usuários, setores, equipes, configurações e logs
-- Configura o modelo de IA e parâmetros do sistema
+- Configura parâmetros do sistema
 
 #### `diretoria`
 - Acessa o `PainelDiretoria` com KPIs estratégicos
@@ -296,22 +284,7 @@ parseBRL("1.234,56"); // 1234.56
 
 ---
 
-## Integração de IA
-
-Ver `src/integrations/ai/README.md` para instruções completas.
-
-### Edge Function: `ai-normalize-import`
-
-Localização: `supabase/functions/ai-normalize-import/index.ts`
-
-Fluxo:
-1. Frontend faz upload da planilha (xlsx)
-2. `aiImport.service.ts` extrai as linhas brutas
-3. Chama a Edge Function via `supabase.functions.invoke('ai-normalize-import')`
-4. A Edge Function envia para a OpenAI API (modelo configurável via Admin → IA)
-5. Retorna os dados normalizados nos campos corretos do sistema
-
-A chave `OPENAI_API_KEY` é armazenada nos Secrets do Supabase (nunca exposta no frontend).
+## Edge Functions
 
 ### Edge Function: `admin-change-password`
 
@@ -352,13 +325,6 @@ VITE_SUPABASE_ANON_KEY=<anon-key>
 # Multi-tenant (opcional — identifica a empresa pelo slug)
 VITE_TENANT_SLUG=bookplay
 
-# IA (opcional — ativar quando pronto)
-VITE_AI_ENABLED=true
-VITE_AI_PROVIDER=openai
-VITE_AI_API_KEY=sk-...
-VITE_AI_MODEL=gpt-4o-mini
-VITE_AI_ENDPOINT=https://api.openai.com/v1/chat/completions
-
 # Build CDN (opcional — reescreve imagens para CDN no build de produção)
 CDN_IMG_PREFIX=https://cdn.example.com
 CDN_IMG_DEBUG=1
@@ -367,5 +333,4 @@ CDN_IMG_DEBUG=1
 VITE_ENABLE_ROUTE_MESSAGING=true  # Habilita mensagens na troca de rota
 ```
 
-> **Segurança:** As chaves `SUPABASE_SERVICE_ROLE_KEY` e `OPENAI_API_KEY` são
-> configuradas nos **Secrets** do Supabase e nunca devem aparecer no frontend.
+> **Segurança:** A chave `SUPABASE_SERVICE_ROLE_KEY` é configurada nos **Secrets** do Supabase e nunca deve aparecer no frontend.
