@@ -151,10 +151,10 @@ export function AcordoDetalheInline({
         ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
         : 1;
 
+      const usou40Base = parcelaAtual.usou_quarenta_pct ?? foiUsadoQuarentaPct(parcelaAtual);
       let valorProximaParcela = params.novoValor;
       if (isPaguePlay && parcelaAtual.valor_total != null && parcelaAtual.parcelas) {
-        const usou40 = foiUsadoQuarentaPct(parcelaAtual);
-        const todas  = calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, usou40);
+        const todas  = calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, usou40Base);
         const idx    = (parcelaAtual.numero_parcela ?? 1);
         valorProximaParcela = todas[idx] ?? params.novoValor;
       }
@@ -176,12 +176,13 @@ export function AcordoDetalheInline({
         vinculo_operador_id:   parcelaAtual.vinculo_operador_id,
         vinculo_operador_nome: parcelaAtual.vinculo_operador_nome,
         valor_total:           parcelaAtual.valor_total ?? null,
+        usou_quarenta_pct:     usou40Base,
         status:                'verificar_pendente' as const,
         valor:                 valorProximaParcela,
       };
 
       const todasPP = (isPaguePlay && parcelaAtual.valor_total != null && parcelaAtual.parcelas)
-        ? calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, foiUsadoQuarentaPct(parcelaAtual))
+        ? calcularParcelas(parcelaAtual.valor_total, parcelaAtual.parcelas, usou40Base)
         : null;
 
       const novasParcelas: Acordo[] = [];
@@ -213,22 +214,22 @@ export function AcordoDetalheInline({
 
           if (parInstall) {
             const parInst = parInstall as Acordo;
+            const usou40p = parInst.usou_quarenta_pct ?? foiUsadoQuarentaPct(parInst);
             let valorParcelaParc = params.novoValor;
             if (isPaguePlay && parInst.valor_total != null && parInst.parcelas) {
-              const usou40p = foiUsadoQuarentaPct(parInst);
               const todasP  = calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p);
               const idxP    = (parInst.numero_parcela ?? 1);
               valorParcelaParc = todasP[idxP] ?? params.novoValor;
             }
+            const todasPInst = (isPaguePlay && parInst.valor_total != null && parInst.parcelas)
+              ? calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p)
+              : null;
             for (let i = 0; i < quantToCreate; i++) {
               const numero   = proximaNumero + i;
               const vencCalc = i === 0 ? params.novoVencimento : addMonths(params.novoVencimento, i);
-              let valorI = valorParcelaParc;
-              if (isPaguePlay && parInst.valor_total != null && parInst.parcelas && i > 0) {
-                const usou40p = foiUsadoQuarentaPct(parInst);
-                const todasP  = calcularParcelas(parInst.valor_total, parInst.parcelas, usou40p);
-                valorI = todasP[(parInst.numero_parcela ?? 1) + i] ?? valorParcelaParc;
-              }
+              const valorI   = (todasPInst && i > 0)
+                ? (todasPInst[(parInst.numero_parcela ?? 1) + i] ?? valorParcelaParc)
+                : valorParcelaParc;
               await supabase.from('acordos').insert({
                 nome_cliente:          parInst.nome_cliente,
                 nr_cliente:            parInst.nr_cliente,
@@ -246,6 +247,7 @@ export function AcordoDetalheInline({
                 vinculo_operador_id:   parInst.vinculo_operador_id,
                 vinculo_operador_nome: parInst.vinculo_operador_nome,
                 valor_total:           parInst.valor_total ?? null,
+                usou_quarenta_pct:     usou40p,
                 status:                'verificar_pendente',
                 valor:                 valorI,
                 numero_parcela:        numero,
@@ -419,7 +421,7 @@ export function AcordoDetalheInline({
   // ── Valores calculados para parcelas virtuais ─────────────────────────────
   const valoresParcelas: number[] | null =
     isPaguePlay && acordo.valor_total != null && acordo.parcelas
-      ? calcularParcelas(acordo.valor_total, acordo.parcelas, foiUsadoQuarentaPct(acordo))
+      ? calcularParcelas(acordo.valor_total, acordo.parcelas, acordo.usou_quarenta_pct ?? foiUsadoQuarentaPct(acordo))
       : null;
 
   type LinhaTabela = { index: number; real: Acordo | null; dataCalc: string; };
@@ -730,6 +732,11 @@ export function AcordoDetalheInline({
           proximaNumero={(reagendarParcela.numero_parcela ?? 1) + 1}
           totalParcelas={totalParcelas}
           salvando={salvandoReagendar}
+          valorProxima={(() => {
+            if (!reagendarParcela.valor_total || !reagendarParcela.parcelas) return undefined;
+            const usou40 = reagendarParcela.usou_quarenta_pct ?? foiUsadoQuarentaPct(reagendarParcela);
+            return calcularParcelas(reagendarParcela.valor_total, reagendarParcela.parcelas, usou40)[reagendarParcela.numero_parcela ?? 1];
+          })()}
           onConfirm={handleReagendar}
           onClose={() => setReagendarParcela(null)}
         />

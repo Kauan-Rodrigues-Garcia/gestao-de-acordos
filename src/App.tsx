@@ -8,6 +8,7 @@ import { EmpresaProvider } from '@/hooks/useEmpresa';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { ProtectedRoute, PublicRoute } from '@/components/ProtectedRoute';
 import { TermoUsoGate } from '@/components/TermoUsoGate';
+import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
 import { Toaster } from '@/components/ui/sonner';
@@ -61,15 +62,17 @@ function PageLoader() {
 function LayoutWrapper({ children }: { children: React.ReactNode }) {
   return (
     <ProtectedRoute>
-      <TermoUsoGate>
-        <Layout>
-          {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
-          <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
-            {children}
-          </ErrorBoundary>
-        </Layout>
-        <ChatNotificacoes />
-      </TermoUsoGate>
+      <TermoUsoProvider>
+        <TermoUsoGate>
+          <Layout>
+            {/* ErrorBoundary por página — evita que o erro de uma rota quebre o layout inteiro */}
+            <ErrorBoundary scope="Page" fallbackMessage="Ocorreu um erro ao carregar esta página. Tente novamente.">
+              {children}
+            </ErrorBoundary>
+          </Layout>
+          <ChatNotificacoes />
+        </TermoUsoGate>
+      </TermoUsoProvider>
     </ProtectedRoute>
   );
 }

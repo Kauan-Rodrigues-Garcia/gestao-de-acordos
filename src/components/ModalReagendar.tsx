@@ -36,6 +36,8 @@ export interface ModalReagendarProps {
   proximaNumero: number;
   totalParcelas: number;
   salvando: boolean;
+  /** Valor pré-calculado da próxima parcela (corrige regra dos 40%). */
+  valorProxima?: number;
   onConfirm: (params: ReagendarParams) => Promise<void>;
   onClose: () => void;
 }
@@ -46,24 +48,24 @@ export function ModalReagendar({
   proximaNumero,
   totalParcelas,
   salvando,
+  valorProxima,
   onConfirm,
   onClose,
 }: ModalReagendarProps) {
   const defaultVencimento = addMesesReagendar(parcelaAtual.vencimento, 1);
+  const defaultValor = (valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ',');
 
   const [novoVencimento, setNovoVencimento] = useState(defaultVencimento);
-  const [novoValorStr,   setNovoValorStr]   = useState(
-    parcelaAtual.valor.toFixed(2).replace('.', ','),
-  );
+  const [novoValorStr,   setNovoValorStr]   = useState(defaultValor);
   const [aplicarTodas, setAplicarTodas] = useState(false);
 
   // Reset a cada abertura
   useEffect(() => {
     if (!aberto) return;
     setNovoVencimento(addMesesReagendar(parcelaAtual.vencimento, 1));
-    setNovoValorStr(parcelaAtual.valor.toFixed(2).replace('.', ','));
+    setNovoValorStr((valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ','));
     setAplicarTodas(false);
-  }, [aberto, parcelaAtual.id, parcelaAtual.vencimento, parcelaAtual.valor]);
+  }, [aberto, parcelaAtual.id, parcelaAtual.vencimento, parcelaAtual.valor, valorProxima]);
 
   async function handleConfirm() {
     const novoValor = parseCurrencyInput(novoValorStr);

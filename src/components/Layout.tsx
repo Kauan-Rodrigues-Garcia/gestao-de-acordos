@@ -48,7 +48,6 @@ import { OnboardingTour } from './OnboardingTour';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
-import { ChatplayNewFeatureModal } from './ChatplayNewFeatureModal';
 
 interface NavItem {
   label: string;
@@ -187,28 +186,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoesCount();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
 
-  // ── Chatplay modals (PaguePlay only) ────────────────────────────────────────
+  // ── Chatplay modal (PaguePlay only) ─────────────────────────────────────────
   const [chatplayOnboardingOpen, setChatplayOnboardingOpen] = useState(false);
-  const [chatplayNovaFuncOpen, setChatplayNovaFuncOpen] = useState(false);
-
-  // Rastreia quando o tour foi concluído/pulado nesta sessão ou em sessões anteriores
-  const [tourConcluido, setTourConcluido] = useState(false);
-  useEffect(() => {
-    if (!perfil?.id) return;
-    if (localStorage.getItem(`onboarding_v3_${perfil.id}`)) {
-      setTourConcluido(true);
-    }
-  }, [perfil?.id]);
-
-  // Só abre o modal de Chatplay após: termos aceitos → tour concluído/pulado
-  useEffect(() => {
-    if (!isPP || !perfil?.id) return;
-    if (termoLoading || precisaAceitar) return;
-    if (!tourConcluido) return;
-    if (!perfil.viu_notificacao_chatplay) {
-      setChatplayNovaFuncOpen(true);
-    }
-  }, [isPP, perfil?.id, precisaAceitar, termoLoading, tourConcluido]);
 
   // Filtra por role, visibilidade PaguePay e permissões configuráveis.
   //
@@ -529,22 +508,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
-          onFinished={() => setTourConcluido(true)}
+          onFinished={() => {}}
         />
       </div>
 
       {isPP && (
-        <>
-          <ChatplayOnboardingModal
-            open={chatplayOnboardingOpen}
-            onClose={() => setChatplayOnboardingOpen(false)}
-            onConfirmed={() => setChatplayOnboardingOpen(false)}
-          />
-          <ChatplayNewFeatureModal
-            open={chatplayNovaFuncOpen}
-            onClose={() => setChatplayNovaFuncOpen(false)}
-          />
-        </>
+        <ChatplayOnboardingModal
+          open={chatplayOnboardingOpen}
+          onClose={() => setChatplayOnboardingOpen(false)}
+          onConfirmed={() => setChatplayOnboardingOpen(false)}
+        />
       )}
     </div>
   );

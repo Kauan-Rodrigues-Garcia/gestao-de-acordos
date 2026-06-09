@@ -117,6 +117,8 @@ export interface Acordo {
   tag_ids?: string[] | null;
   /** Valor total do acordo parcelado — PaguePay only. NULL = comportamento antigo/Bookplay. */
   valor_total?: number | null;
+  /** true quando a 1ª parcela usou a regra dos 40% (PaguePLAY parcelado). */
+  usou_quarenta_pct?: boolean;
   criado_em: string;
   atualizado_em: string;
   /** Timestamp de quando o acordo foi marcado como pago (preenchido automaticamente pelo trigger) */
