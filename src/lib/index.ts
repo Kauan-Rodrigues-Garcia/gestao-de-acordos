@@ -17,7 +17,6 @@ export const ROUTE_PATHS = {
   ADMIN_LIXEIRA: '/admin/lixeira',
   ADMIN_CONFIGURACOES: '/admin/configuracoes',
   ADMIN_LOGS: '/admin/logs',
-  ADMIN_IA: '/admin/ia',
   ADMIN_CARGOS: '/admin/cargos',
 } as const;
 

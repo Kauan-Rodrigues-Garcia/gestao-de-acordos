@@ -187,9 +187,6 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              {/* /admin/ia agora é aba dentro de /admin/configuracoes */}
-              <Route path={ROUTE_PATHS.ADMIN_IA} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=ia'} replace />} />
-
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
                   <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">

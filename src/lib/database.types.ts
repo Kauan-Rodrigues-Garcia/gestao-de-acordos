@@ -129,50 +129,6 @@ export type Database = {
           },
         ]
       }
-      ai_config: {
-        Row: {
-          empresa_id: string | null
-          enabled: boolean
-          id: string
-          max_cols: number
-          max_rows: number
-          model: string
-          prompt_system: string
-          temperature: number
-          updated_at: string
-        }
-        Insert: {
-          empresa_id?: string | null
-          enabled?: boolean
-          id?: string
-          max_cols?: number
-          max_rows?: number
-          model?: string
-          prompt_system?: string
-          temperature?: number
-          updated_at?: string
-        }
-        Update: {
-          empresa_id?: string | null
-          enabled?: boolean
-          id?: string
-          max_cols?: number
-          max_rows?: number
-          model?: string
-          prompt_system?: string
-          temperature?: number
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ai_config_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       cargos_permissoes: {
         Row: {
           atualizado_em: string

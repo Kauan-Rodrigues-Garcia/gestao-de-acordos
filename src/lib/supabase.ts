@@ -213,18 +213,6 @@ export interface AcordoTag {
   criado_em: string;
 }
 
-export interface AIConfig {
-  id: string;
-  enabled: boolean;
-  model: string;
-  temperature: number;
-  max_rows: number;
-  max_cols: number;
-  prompt_system: string;
-  empresa_id?: string;
-  updated_at: string;
-}
-
 export type TipoDocumentoLgpd =
   | 'politica_privacidade'
   | 'ropa'

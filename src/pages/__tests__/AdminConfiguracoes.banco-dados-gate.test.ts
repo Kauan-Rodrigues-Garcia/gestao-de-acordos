@@ -11,7 +11,7 @@
  *
  * O teste usa inspeção estática do fonte (AST-like via regex) porque
  * renderizar AdminConfiguracoes completo exige supabase/auth/motion +
- * sub-páginas AdminIA/AdminCargos/AdminLogs/AdminDiretoExtra lazy-loaded.
+ * sub-páginas AdminCargos/AdminLogs/AdminDiretoExtra lazy-loaded.
  * A checagem estática garante que:
  *   1. `useAuth` é importado e usado.
  *   2. `isPerfilAdmin` é importado de `@/lib/index`.

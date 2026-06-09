@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, Bot, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,6 @@ import { useAuth } from '@/hooks/useAuth';
 import { isPerfilAdmin } from '@/lib/index';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import AdminIA from '@/pages/AdminIA';
 import AdminCargos from '@/pages/AdminCargos';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
@@ -139,7 +138,7 @@ export default function AdminConfiguracoes() {
             <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
               <Settings className="w-5 h-5 text-primary" /> Configurações
             </h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Configurações do sistema, IA, permissões e logs</p>
+            <p className="text-sm text-muted-foreground mt-0.5">Configurações do sistema, permissões e logs</p>
             {empresa && (
               <p className="text-xs text-muted-foreground/70 mt-1 flex items-center gap-1">
                 <Building2 className="w-3 h-3" />
@@ -159,12 +158,6 @@ export default function AdminConfiguracoes() {
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Settings className="w-4 h-4" /> Geral
-            </TabsTrigger>
-            <TabsTrigger
-              value="ia"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <Bot className="w-4 h-4" /> IA
             </TabsTrigger>
             <TabsTrigger
               value="permissoes"
@@ -326,11 +319,6 @@ export default function AdminConfiguracoes() {
           </Card>
 
           </div>
-        </TabsContent>
-
-        {/* ─── Aba: IA ─────────────────────────────────────────────────── */}
-        <TabsContent value="ia" className="flex-1 overflow-y-auto mt-0">
-          <AdminIA />
         </TabsContent>
 
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
