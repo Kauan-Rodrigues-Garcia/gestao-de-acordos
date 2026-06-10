@@ -7,6 +7,7 @@ import {
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { formatCurrency, formatDate } from '@/lib/index';
+import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
 import type { Acordo } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
 
@@ -135,6 +136,11 @@ export function PPModals({
           proximaNumero={(reagendarAcordo.numero_parcela ?? 1) + 1}
           totalParcelas={reagendarAcordo.parcelas ?? 1}
           salvando={salvandoReagendar}
+          valorProxima={(() => {
+            if (!reagendarAcordo.valor_total || !reagendarAcordo.parcelas) return undefined;
+            const usou40 = reagendarAcordo.usou_quarenta_pct ?? foiUsadoQuarentaPct(reagendarAcordo);
+            return calcularParcelas(reagendarAcordo.valor_total, reagendarAcordo.parcelas, usou40)[reagendarAcordo.numero_parcela ?? 1];
+          })()}
           onConfirm={onConfirmReagendar}
           onClose={onCloseReagendar}
         />
