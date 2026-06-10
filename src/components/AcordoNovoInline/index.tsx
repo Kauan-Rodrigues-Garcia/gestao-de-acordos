@@ -189,7 +189,7 @@ export function AcordoNovoInline({
       const isColErr = String(error.code) === '42703' || String(error.code) === '400' ||
         error.message?.toLowerCase().includes('column') || error.message?.toLowerCase().includes('unknown');
       if (isColErr) {
-        const { acordo_grupo_id: _g, numero_parcela: _n, valor_total: _vt, ...payloadMin } = payload;
+        const { acordo_grupo_id: _g, numero_parcela: _n, valor_total: _vt, usou_quarenta_pct: _qp, ...payloadMin } = payload;
         const { data: inseridoMin, error: e2 } = await supabase
           .from('acordos').insert(payloadMin).select('*, perfis(id, nome, email, perfil, setor_id)').single();
         if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return null; }
