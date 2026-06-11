@@ -102,58 +102,60 @@ RETURNS TABLE (
   status         TEXT,
   data_pagamento DATE,
   criado_em      TIMESTAMPTZ,
-  evento         TEXT,       -- null para linhas de acordo, descrição para eventos de historico
-  evento_em      TIMESTAMPTZ -- null para linhas de acordo, timestamp do evento
+  evento         TEXT,
+  evento_em      TIMESTAMPTZ
 )
 LANGUAGE sql
 STABLE
-SECURITY INVOKER  -- respeita RLS do usuário chamador
+SECURITY INVOKER
 AS $$
-  -- Linhas: acordos do código
-  SELECT
-    a.id,
-    a.numero_parcela,
-    a.tipo::TEXT,
-    a.valor,
-    a.vencimento,
-    a.status::TEXT,
-    a.data_pagamento,
-    a.criado_em,
-    NULL::TEXT,
-    NULL::TIMESTAMPTZ
-  FROM public.acordos a
-  WHERE a.empresa_id = p_empresa_id
-    AND (
-      (p_campo = 'instituicao' AND a.instituicao = p_nr_value)
-      OR
-      (p_campo = 'nr_cliente'  AND a.nr_cliente  = p_nr_value)
-    )
+  SELECT * FROM (
+    -- Linhas: acordos do código
+    SELECT
+      a.id                   AS acordo_id,
+      a.numero_parcela       AS numero_parcela,
+      a.tipo::TEXT           AS tipo,
+      a.valor                AS valor,
+      a.vencimento           AS vencimento,
+      a.status::TEXT         AS status,
+      a.data_pagamento       AS data_pagamento,
+      a.criado_em            AS criado_em,
+      NULL::TEXT             AS evento,
+      NULL::TIMESTAMPTZ      AS evento_em
+    FROM public.acordos a
+    WHERE a.empresa_id = p_empresa_id
+      AND (
+        (p_campo = 'instituicao' AND a.instituicao = p_nr_value)
+        OR
+        (p_campo = 'nr_cliente'  AND a.nr_cliente  = p_nr_value)
+      )
 
-  UNION ALL
+    UNION ALL
 
-  -- Linhas: eventos de mudança de status (historico_acordos)
-  SELECT
-    h.acordo_id,
-    NULL::INTEGER,
-    NULL::TEXT,
-    NULL::NUMERIC,
-    NULL::DATE,
-    NULL::TEXT,
-    NULL::DATE,
-    NULL::TIMESTAMPTZ,
-    'status: ' || COALESCE(h.valor_anterior, '?') || ' → ' || COALESCE(h.valor_novo, '?'),
-    h.criado_em
-  FROM public.historico_acordos h
-  JOIN public.acordos a ON h.acordo_id = a.id
-  WHERE a.empresa_id = p_empresa_id
-    AND h.campo_alterado = 'status'
-    AND (
-      (p_campo = 'instituicao' AND a.instituicao = p_nr_value)
-      OR
-      (p_campo = 'nr_cliente'  AND a.nr_cliente  = p_nr_value)
-    )
-
-  ORDER BY COALESCE(evento_em, criado_em) DESC NULLS LAST;
+    -- Linhas: eventos de mudança de status (historico_acordos)
+    SELECT
+      h.acordo_id            AS acordo_id,
+      NULL::INTEGER          AS numero_parcela,
+      NULL::TEXT             AS tipo,
+      NULL::NUMERIC          AS valor,
+      NULL::DATE             AS vencimento,
+      NULL::TEXT             AS status,
+      NULL::DATE             AS data_pagamento,
+      NULL::TIMESTAMPTZ      AS criado_em,
+      ('status: ' || COALESCE(h.valor_anterior, '?') || ' → ' || COALESCE(h.valor_novo, '?'))
+                             AS evento,
+      h.criado_em            AS evento_em
+    FROM public.historico_acordos h
+    JOIN public.acordos a ON h.acordo_id = a.id
+    WHERE a.empresa_id = p_empresa_id
+      AND h.campo_alterado = 'status'
+      AND (
+        (p_campo = 'instituicao' AND a.instituicao = p_nr_value)
+        OR
+        (p_campo = 'nr_cliente'  AND a.nr_cliente  = p_nr_value)
+      )
+  ) sub
+  ORDER BY COALESCE(sub.evento_em, sub.criado_em) DESC NULLS LAST;
 $$;
 
 COMMENT ON FUNCTION public.fn_historico_codigo IS
