@@ -6,6 +6,7 @@ import {
 } from '@/components/ui/dialog';
 import { ModalFilaWhatsApp, type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
+import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
 import type { Acordo } from '@/lib/supabase';
@@ -28,6 +29,10 @@ interface PPModalsProps {
   salvandoReagendar: boolean;
   onConfirmReagendar: (params: ReagendarParams) => void;
   onCloseReagendar: () => void;
+  confirmarPgtoAcordo: AcordoComVinculo | null;
+  salvandoConfirmarPgto: boolean;
+  onConfirmarPgto: (dataPagamento: string) => Promise<void>;
+  onCancelarConfirmarPgto: () => void;
   temPermissaoExcluirLote: boolean;
   onAbrirExclusaoLote: () => void;
   onLimparSelecao: () => void;
@@ -39,6 +44,7 @@ export function PPModals({
   confirmandoExclusao, onCancelExclusao, onConfirmExclusao,
   confirmandoExclusaoLote, selecionados, onCancelExclusaoLote, onConfirmExclusaoLote,
   reagendarAcordo, salvandoReagendar, onConfirmReagendar, onCloseReagendar,
+  confirmarPgtoAcordo, salvandoConfirmarPgto, onConfirmarPgto, onCancelarConfirmarPgto,
   temPermissaoExcluirLote, onAbrirExclusaoLote, onLimparSelecao,
   isPP,
 }: PPModalsProps) {
@@ -127,6 +133,15 @@ export function PPModals({
             </div>
           </DialogContent>
         </Dialog>
+      )}
+
+      {confirmarPgtoAcordo && (
+        <ModalConfirmarPagamento
+          aberto={!!confirmarPgtoAcordo}
+          salvando={salvandoConfirmarPgto}
+          onConfirm={onConfirmarPgto}
+          onClose={onCancelarConfirmarPgto}
+        />
       )}
 
       {reagendarAcordo && (

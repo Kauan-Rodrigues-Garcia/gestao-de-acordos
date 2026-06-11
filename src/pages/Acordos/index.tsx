@@ -11,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase, Acordo } from '@/lib/supabase';
+import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
@@ -86,7 +87,9 @@ export default function Acordos() {
 
   const [operadoresMap, setOperadoresMap] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados]   = useState<string[]>([]);
-  const [atualizandoStatus, setAtualizandoStatus] = useState<string | null>(null);
+  const [atualizandoStatus, setAtualizandoStatus]         = useState<string | null>(null);
+  const [confirmarPgtoAcordo, setConfirmarPgtoAcordo]     = useState<Acordo | null>(null);
+  const [salvandoConfirmarPgto, setSalvandoConfirmarPgto] = useState(false);
   const [filaAberta, setFilaAberta]       = useState(false);
   const [filaWhatsApp, setFilaWhatsApp]   = useState<ItemFila[]>([]);
   const [excluindoId, setExcluindoId]     = useState<string | null>(null);
@@ -290,11 +293,24 @@ export default function Acordos() {
     else setSelecionados(acordos.map(a => a.id));
   }
 
-  async function marcarComoPago(id: string) {
-    const statusAnterior = acordos.find(a => a.id === id)?.status ?? 'verificar_pendente';
+  function marcarComoPago(a: Acordo) {
+    if (a.status === 'nao_pago') {
+      setConfirmarPgtoAcordo(a);
+    } else {
+      void executarMarcarPago(a, new Date().toISOString().split('T')[0]);
+    }
+  }
+
+  async function executarMarcarPago(a: Acordo, dataPagamento: string) {
+    const id = a.id;
+    const statusAnterior = a.status;
     setAtualizandoStatus(id);
     patchAcordo(id, { status: 'pago' });
-    const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
+    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    let { error } = await supabase.from('acordos').update(updatePayload).eq('id', id);
+    if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
+      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id));
+    }
     if (error) {
       patchAcordo(id, { status: statusAnterior });
       toast.error('Erro ao atualizar status');
@@ -625,6 +641,20 @@ export default function Acordos() {
           </div>
         )}
       </div>
+
+      {confirmarPgtoAcordo && (
+        <ModalConfirmarPagamento
+          aberto={!!confirmarPgtoAcordo}
+          salvando={salvandoConfirmarPgto}
+          onConfirm={async (data) => {
+            setSalvandoConfirmarPgto(true);
+            await executarMarcarPago(confirmarPgtoAcordo, data);
+            setSalvandoConfirmarPgto(false);
+            setConfirmarPgtoAcordo(null);
+          }}
+          onClose={() => setConfirmarPgtoAcordo(null)}
+        />
+      )}
 
       <AcordosModals
         confirmandoExclusao={confirmandoExclusao} setConfirmandoExclusao={setConfirmandoExclusao}

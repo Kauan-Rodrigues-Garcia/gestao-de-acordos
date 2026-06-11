@@ -43,7 +43,7 @@ export interface AcordosTableBodyProps {
   patchAcordo: (id: string, data: Partial<Acordo>) => void;
   setEditandoInlineId: (id: string | null) => void;
   setDetalheInlineId: (id: string | null) => void;
-  marcarComoPago: (id: string) => void;
+  marcarComoPago: (a: Acordo) => void;
   enviarUmWhatsapp: (a: Acordo) => void;
   setConfirmandoExclusao: (a: Acordo | null) => void;
   limparFiltros: () => void;
@@ -270,12 +270,12 @@ export function AcordosTableBody({
                 )}
                 <td className="px-3 py-2.5">
                   <div className="flex items-center justify-end gap-0.5">
-                    {a.status !== 'pago' && a.status !== 'nao_pago' && (
+                    {a.status !== 'pago' && (
                       <Button
                         variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                         title="Marcar como Pago"
                         disabled={atualizandoStatus === a.id}
-                        onClick={() => marcarComoPago(a.id)}
+                        onClick={() => marcarComoPago(a)}
                       >
                         <CheckCircle className="w-4 h-4" />
                       </Button>

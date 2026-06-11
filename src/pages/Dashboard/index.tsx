@@ -100,8 +100,10 @@ export default function Dashboard() {
   const [excluindoId,             setExcluindoId]             = useState<string | null>(null);
   const [confirmandoExclusao,     setConfirmandoExclusao]     = useState<Acordo | null>(null);
   const [confirmandoExclusaoLote, setConfirmandoExclusaoLote] = useState(false);
-  const [reagendarAcordo,    setReagendarAcordo]    = useState<AcordoComVinculo | null>(null);
-  const [salvandoReagendar,  setSalvandoReagendar]  = useState(false);
+  const [reagendarAcordo,         setReagendarAcordo]         = useState<AcordoComVinculo | null>(null);
+  const [salvandoReagendar,       setSalvandoReagendar]       = useState(false);
+  const [confirmarPgtoAcordo,     setConfirmarPgtoAcordo]     = useState<AcordoComVinculo | null>(null);
+  const [salvandoConfirmarPgto,   setSalvandoConfirmarPgto]   = useState(false);
   const [gruposReagendadosBD, setGruposReagendadosBD] = useState<Set<string>>(new Set());
   const [editandoInlineIdHoje,    setEditandoInlineIdHoje]    = useState<string | null>(null);
   const [editandoInlineIdTabela,  setEditandoInlineIdTabela]  = useState<string | null>(null);
@@ -366,29 +368,41 @@ export default function Dashboard() {
     else setSelecionados(acordos.map(a => a.id));
   }
 
-  async function marcarComoPago(id: string) {
-    const statusAnterior = (acordos.find(a => a.id === id) ?? acordosOrdenados.find(a => a.id === id))?.status ?? 'verificar_pendente';
+  function marcarComoPago(acordo: AcordoComVinculo) {
+    if (acordo.status === 'nao_pago') {
+      setConfirmarPgtoAcordo(acordo);
+    } else {
+      void executarMarcarPago(acordo, new Date().toISOString().split('T')[0]);
+    }
+  }
+
+  async function executarMarcarPago(acordo: AcordoComVinculo, dataPagamento: string) {
+    const id = acordo.id;
+    const statusAnterior = acordo.status;
     setAtualizandoStatus(id);
     patchAcordo(id, { status: 'pago' });
-    const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id);
+    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    let { error } = await supabase.from('acordos').update(updatePayload).eq('id', id);
+    if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
+      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id));
+    }
     if (error) {
       patchAcordo(id, { status: statusAnterior });
       toast.error('Erro ao atualizar status');
     } else {
-      const acordoObj = acordos.find(a => a.id === id) ?? acordosOrdenados.find(a => a.id === id);
-      if (acordoObj && (acordoObj.vinculo_operador_id || acordoObj.tipo_vinculo === 'extra')) {
+      if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
         supabase.rpc('fn_sync_par_vinculo', {
-          p_acordo_id: id, p_valor: acordoObj.valor, p_vencimento: acordoObj.vencimento,
-          p_nome_cliente: acordoObj.nome_cliente, p_tipo: acordoObj.tipo,
-          p_whatsapp: acordoObj.whatsapp ?? null, p_parcelas: acordoObj.parcelas, p_status: 'pago',
+          p_acordo_id: id, p_valor: acordo.valor, p_vencimento: acordo.vencimento,
+          p_nome_cliente: acordo.nome_cliente, p_tipo: acordo.tipo,
+          p_whatsapp: acordo.whatsapp ?? null, p_parcelas: acordo.parcelas, p_status: 'pago',
         }).then(({ error: rpcErr }) => {
           if (rpcErr) console.warn('[marcarComoPago] sync par falhou:', rpcErr.message);
         });
       }
-      const numParcela = acordoObj?.numero_parcela ?? 1;
-      const deveReagendar = isPP && acordoObj && (acordoObj.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordoObj.tipo) && numParcela < (acordoObj.parcelas ?? 1);
-      if (deveReagendar && acordoObj) {
-        setReagendarAcordo(acordoObj);
+      const numParcela = acordo.numero_parcela ?? 1;
+      const deveReagendar = isPP && (acordo.parcelas ?? 1) > 1 && TIPOS_PARCELADOS_PP.includes(acordo.tipo) && numParcela < (acordo.parcelas ?? 1);
+      if (deveReagendar) {
+        setReagendarAcordo(acordo);
       } else {
         toast.success('Acordo marcado como Pago!', {
           duration: 5000,
@@ -412,7 +426,7 @@ export default function Dashboard() {
       const parcelaAtual  = reagendarAcordo;
       const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
       const totalParcelas = parcelaAtual.parcelas ?? 1;
-      const quantToCreate = params.aplicarTodas ? totalParcelas - (parcelaAtual.numero_parcela ?? 1) : 1;
+      const quantToCreate = 1;
 
       if (parcelaAtual.acordo_grupo_id) {
         const { data: jaExiste } = await supabase
@@ -499,10 +513,7 @@ export default function Dashboard() {
 
       if (ultimoInserido) addAcordo(ultimoInserido);
       setReagendarAcordo(null);
-      const msg = quantToCreate > 1
-        ? `${quantToCreate} parcelas agendadas a partir de ${formatDate(params.novoVencimento)}!`
-        : `Parcela ${proximaNumero}/${totalParcelas} reagendada para ${formatDate(params.novoVencimento)}!`;
-      toast.success(msg);
+      toast.success(`Parcela ${proximaNumero}/${totalParcelas} reagendada para ${formatDate(params.novoVencimento)}!`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
     } finally {
@@ -825,6 +836,16 @@ export default function Dashboard() {
             salvandoReagendar={salvandoReagendar}
             onConfirmReagendar={handleReagendarDashboard}
             onCloseReagendar={() => setReagendarAcordo(null)}
+            confirmarPgtoAcordo={confirmarPgtoAcordo}
+            salvandoConfirmarPgto={salvandoConfirmarPgto}
+            onConfirmarPgto={async (data) => {
+              if (!confirmarPgtoAcordo) return;
+              setSalvandoConfirmarPgto(true);
+              await executarMarcarPago(confirmarPgtoAcordo, data);
+              setSalvandoConfirmarPgto(false);
+              setConfirmarPgtoAcordo(null);
+            }}
+            onCancelarConfirmarPgto={() => setConfirmarPgtoAcordo(null)}
             temPermissaoExcluirLote={temPermissao('excluir_em_lote')}
             onAbrirExclusaoLote={() => setConfirmandoExclusaoLote(true)}
             onLimparSelecao={() => setSelecionados([])}

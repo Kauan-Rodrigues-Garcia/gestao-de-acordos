@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
+import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
   formatCurrency, formatDate,
@@ -76,15 +77,17 @@ export function AcordoDetalheInline({
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [registrosReais,      setRegistrosReais]      = useState<Acordo[]>([]);
-  const [loadingParc,         setLoadingParc]          = useState(false);
-  const [marcandoPago,        setMarcandoPago]         = useState<string | null>(null);
-  const [modalEditParcOpen,   setModalEditParcOpen]    = useState(false);
-  const [modalExtraDiretoOpen,setModalExtraDiretoOpen] = useState(false);
-  const [executandoExtraDireto, setExecutandoExtraDireto] = useState(false);
-  const [reagendarParcela,    setReagendarParcela]     = useState<Acordo | null>(null);
-  const [salvandoReagendar,   setSalvandoReagendar]    = useState(false);
-  const [acordoLocal,         setAcordoLocal]          = useState<Acordo>(acordo);
+  const [registrosReais,        setRegistrosReais]        = useState<Acordo[]>([]);
+  const [loadingParc,           setLoadingParc]            = useState(false);
+  const [marcandoPago,          setMarcandoPago]           = useState<string | null>(null);
+  const [confirmarPgtoParc,     setConfirmarPgtoParc]      = useState<Acordo | null>(null);
+  const [salvandoConfirmarPgto, setSalvandoConfirmarPgto]  = useState(false);
+  const [modalEditParcOpen,     setModalEditParcOpen]      = useState(false);
+  const [modalExtraDiretoOpen,  setModalExtraDiretoOpen]   = useState(false);
+  const [executandoExtraDireto, setExecutandoExtraDireto]  = useState(false);
+  const [reagendarParcela,      setReagendarParcela]       = useState<Acordo | null>(null);
+  const [salvandoReagendar,     setSalvandoReagendar]      = useState(false);
+  const [acordoLocal,           setAcordoLocal]            = useState<Acordo>(acordo);
 
   const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
   const totalParcelas = acordoLocal.parcelas ?? 1;
@@ -112,14 +115,26 @@ export function AcordoDetalheInline({
   }, [deveExibirParcelas, acordoLocal.acordo_grupo_id]);
 
   // ── Marcar como pago ──────────────────────────────────────────────────────
-  async function marcarPago(p: Acordo) {
+  function marcarPago(p: Acordo) {
+    if (p.status === 'nao_pago') {
+      setConfirmarPgtoParc(p);
+    } else {
+      void executarMarcarPago(p, new Date().toISOString().split('T')[0]);
+    }
+  }
+
+  async function executarMarcarPago(p: Acordo, dataPagamento: string) {
     setMarcandoPago(p.id);
-    const { error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id);
+    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    let { error } = await supabase.from('acordos').update(updatePayload).eq('id', p.id);
+    if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
+      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id));
+    }
     if (error) {
       toast.error(`Erro: ${error.message}`);
     } else {
       toast.success('Parcela marcada como paga!');
-      const parcelaAtualizada = { ...p, status: 'pago' as const };
+      const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento };
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));
       if (acordoLocal.tipo_vinculo === 'extra' || acordoLocal.vinculo_operador_id) {
         await supabase.rpc('fn_sync_par_vinculo', {
@@ -147,9 +162,7 @@ export function AcordoDetalheInline({
     try {
       const parcelaAtual  = reagendarParcela;
       const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
-      const quantToCreate = params.aplicarTodas
-        ? totalParcelas - (parcelaAtual.numero_parcela ?? 1)
-        : 1;
+      const quantToCreate = 1;
 
       const usou40Base = parcelaAtual.usou_quarenta_pct ?? foiUsadoQuarentaPct(parcelaAtual);
       let valorProximaParcela = params.novoValor;
@@ -260,11 +273,7 @@ export function AcordoDetalheInline({
 
       setRegistrosReais(prev => [...prev, ...novasParcelas]);
       setReagendarParcela(null);
-
-      const msg = quantToCreate > 1
-        ? `${quantToCreate} parcelas agendadas a partir de ${formatDate(params.novoVencimento)}!`
-        : `Parcela ${proximaNumero}/${totalParcelas} agendada para ${formatDate(params.novoVencimento)}!`;
-      toast.success(msg);
+      toast.success(`Parcela ${proximaNumero}/${totalParcelas} agendada para ${formatDate(params.novoVencimento)}!`);
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
     } finally {
@@ -722,6 +731,20 @@ export function AcordoDetalheInline({
             setRegistrosReais(todasAtualizadas);
             onSaved?.(principal);
           }}
+        />
+      )}
+
+      {confirmarPgtoParc && (
+        <ModalConfirmarPagamento
+          aberto={!!confirmarPgtoParc}
+          salvando={salvandoConfirmarPgto}
+          onConfirm={async (data) => {
+            setSalvandoConfirmarPgto(true);
+            await executarMarcarPago(confirmarPgtoParc, data);
+            setSalvandoConfirmarPgto(false);
+            setConfirmarPgtoParc(null);
+          }}
+          onClose={() => setConfirmarPgtoParc(null)}
         />
       )}
 

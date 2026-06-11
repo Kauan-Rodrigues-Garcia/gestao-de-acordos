@@ -1,9 +1,3 @@
-/**
- * ModalReagendar.tsx
- * Modal de confirmação para reagendar a próxima parcela de um acordo parcelado.
- * Exclusivo para PaguePLAY. Permite editar data e valor da próxima parcela,
- * e opcionalmente aplicar às demais restantes.
- */
 import { useState, useEffect } from 'react';
 import { CalendarClock, RefreshCw } from 'lucide-react';
 import {
@@ -17,17 +11,19 @@ import { Acordo } from '@/lib/supabase';
 import { parseCurrencyInput, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 
-/** Soma N meses a uma string YYYY-MM-DD */
-function addMesesReagendar(dateStr: string, months: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const total = m - 1 + months;
-  return `${y + Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+/** Retorna a data no último dia do mês seguinte ao mês de dateStr (YYYY-MM-DD). */
+function ultimoDiaProxMes(dateStr: string): string {
+  const [y, m] = dateStr.split('-').map(Number);
+  const nextM = m === 12 ? 1 : m + 1;
+  const nextY = m === 12 ? y + 1 : y;
+  // new Date(year, month, 0) em mês 1-indexado = último dia do mês anterior ao indexado 0
+  const lastDay = new Date(nextY, nextM, 0).getDate();
+  return `${nextY}-${String(nextM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 }
 
 export interface ReagendarParams {
   novoVencimento: string;
   novoValor: number;
-  aplicarTodas: boolean;
 }
 
 export interface ModalReagendarProps {
@@ -52,19 +48,16 @@ export function ModalReagendar({
   onConfirm,
   onClose,
 }: ModalReagendarProps) {
-  const defaultVencimento = addMesesReagendar(parcelaAtual.vencimento, 1);
+  const defaultVencimento = ultimoDiaProxMes(parcelaAtual.vencimento);
   const defaultValor = (valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ',');
 
   const [novoVencimento, setNovoVencimento] = useState(defaultVencimento);
   const [novoValorStr,   setNovoValorStr]   = useState(defaultValor);
-  const [aplicarTodas, setAplicarTodas] = useState(false);
 
-  // Reset a cada abertura
   useEffect(() => {
     if (!aberto) return;
-    setNovoVencimento(addMesesReagendar(parcelaAtual.vencimento, 1));
+    setNovoVencimento(ultimoDiaProxMes(parcelaAtual.vencimento));
     setNovoValorStr((valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ','));
-    setAplicarTodas(false);
   }, [aberto, parcelaAtual.id, parcelaAtual.vencimento, parcelaAtual.valor, valorProxima]);
 
   async function handleConfirm() {
@@ -77,10 +70,8 @@ export function ModalReagendar({
       toast.error('Informe a data de vencimento da próxima parcela');
       return;
     }
-    await onConfirm({ novoVencimento, novoValor, aplicarTodas });
+    await onConfirm({ novoVencimento, novoValor });
   }
-
-  const restantes = totalParcelas - (parcelaAtual.numero_parcela ?? 1);
 
   return (
     <Dialog open={aberto} onOpenChange={(open) => { if (!open && !salvando) onClose(); }}>
@@ -123,25 +114,6 @@ export function ModalReagendar({
               disabled={salvando}
             />
           </div>
-
-          {restantes > 1 && (
-            <label className="flex items-start gap-2.5 cursor-pointer group">
-              <input
-                type="checkbox"
-                checked={aplicarTodas}
-                onChange={(e) => setAplicarTodas(e.target.checked)}
-                disabled={salvando}
-                className="mt-0.5 rounded border-border"
-              />
-              <span className="text-sm leading-snug group-hover:text-foreground transition-colors">
-                Reagendar todas as{' '}
-                <strong>{restantes}</strong> parcelas restantes
-                <span className="block text-xs text-muted-foreground mt-0.5">
-                  Usa esta data como base (+1 mês por parcela)
-                </span>
-              </span>
-            </label>
-          )}
         </div>
 
         <DialogFooter className="gap-2 pt-1">

@@ -38,7 +38,7 @@ interface PPTableBodyProps {
   selecionados: string[];
   toggleSelecionado: (id: string) => void;
   atualizandoStatus: string | null;
-  marcarComoPago: (id: string) => Promise<void>;
+  marcarComoPago: (a: AcordoComVinculo) => void;
   gruposJaReagendados: Set<string>;
   setReagendarAcordo: (a: AcordoComVinculo | null) => void;
   excluindoId: string | null;
@@ -218,13 +218,13 @@ export function PPTableBody({
               )}
               <td className="px-3 py-2.5">
                 <div className="flex items-center justify-end gap-0.5">
-                  {a.status !== 'pago' && a.status !== 'nao_pago' && (
+                  {a.status !== 'pago' && (
                     <Button
                       variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                       title="Marcar como Pago"
                       aria-label={`Marcar acordo de ${a.nome_cliente || a.instituicao || a.nr_cliente} como Pago`}
                       disabled={atualizandoStatus === a.id}
-                      onClick={() => marcarComoPago(a.id)}
+                      onClick={() => marcarComoPago(a)}
                     >
                       <CheckCircle className="w-4 h-4" />
                     </Button>

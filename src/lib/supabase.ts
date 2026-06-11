@@ -123,6 +123,8 @@ export interface Acordo {
   atualizado_em: string;
   /** Timestamp de quando o acordo foi marcado como pago (preenchido automaticamente pelo trigger) */
   pago_em?: string | null;
+  /** Data real em que o pagamento foi recebido (preenchida manualmente pelo operador) */
+  data_pagamento?: string | null;
   perfis?: Perfil;
   setores?: Setor;
   empresas?: Empresa;
