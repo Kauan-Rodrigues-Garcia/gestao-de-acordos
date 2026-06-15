@@ -34,6 +34,7 @@ import {
 import { PPTableFilters } from './PPTableFilters';
 import { PPTableBody } from './PPTableBody';
 import { PPModals } from './PPModals';
+import { PainelDesempenhoDiario } from '@/components/PainelDesempenhoDiario';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
@@ -852,6 +853,14 @@ export default function Dashboard() {
             isPP={isPP}
           />
         </div>
+      )}
+
+      {/* PaguePLAY — Painel de Desempenho Diário (floating) */}
+      {isPP && (
+        <PainelDesempenhoDiario
+          temLogicaDiretoExtra={isPP && usuarioTemLogicaDiretoExtra}
+          operadorFiltroExterno={operadorFiltroAtivo}
+        />
       )}
 
       {/* Bookplay — link para acordos */}

@@ -27,20 +27,22 @@ const EMPTY: ResumoDiaData = {
   qtdPagos: 0, totalHoje: 0, taxaEficiencia: 0, porTag: [],
 };
 
-function getTomorrowISO(): string {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  return new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Sao_Paulo' }).format(d);
+function getNextDayISO(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const next = new Date(y, m - 1, d + 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
 }
 
 export function useResumoDia({
   selectedOperadorId,
   temLogicaDiretoExtra = false,
   tags,
+  selectedDate,
 }: {
   selectedOperadorId?: string | null;
   temLogicaDiretoExtra?: boolean;
   tags: AcordoTag[];
+  selectedDate?: string;
 }) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
@@ -52,8 +54,8 @@ export function useResumoDia({
     if (!perfil || !empresa?.id) { setLoading(false); return; }
     setLoading(true);
 
-    const hoje = getTodayISO();
-    const amanha = getTomorrowISO();
+    const hoje = selectedDate ?? getTodayISO();
+    const amanha = getNextDayISO(hoje);
     const _isAdmin = isPerfilAdmin(perfil.perfil);
     const _isLider = isPerfilLider(perfil.perfil);
     const _isDiretoria = perfil.perfil === 'diretoria';
@@ -197,7 +199,7 @@ export function useResumoDia({
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa?.id, selectedOperadorId, temLogicaDiretoExtra, tags]);
+  }, [perfil, empresa?.id, selectedOperadorId, temLogicaDiretoExtra, tags, selectedDate]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

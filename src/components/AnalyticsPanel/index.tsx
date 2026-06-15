@@ -11,14 +11,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, RefreshCw, XCircle,
-  Clock, Award, Percent, Target, CalendarDays,
+  Clock, Award, Percent, Target,
 } from 'lucide-react';
-import { ResumoDiario } from '@/components/ResumoDiario';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
-  formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  getTodayISO, PP_HO_PERCENTUAL,
+  formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,7 +50,6 @@ export function AnalyticsPanel({
   const mostraAgendadoRestante = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
   const alwaysOpen = !isPP;
   const [open, setOpen] = useState(() => !isPP);
-  const [resumoDiaOpen, setResumoDiaOpen] = useState(false);
 
   const {
     valorRecebidoMes,
@@ -492,34 +489,6 @@ export function AnalyticsPanel({
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>
                   </motion.div>
-                </motion.div>
-              )}
-
-              {/* ROW 4 — Resumo do Dia (PaguePLAY only) */}
-              {!loading && isPP && (
-                <motion.div variants={itemVariants} className="space-y-2">
-                  <div className="flex items-center">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs gap-1.5 rounded-lg border-border/70 text-violet-500 border-violet-500/30 hover:bg-violet-500/10"
-                      onClick={() => setResumoDiaOpen(v => !v)}
-                    >
-                      <CalendarDays className="w-3.5 h-3.5" />
-                      {resumoDiaOpen ? 'Fechar Resumo do Dia' : 'Resumo do Dia'}
-                      <ChevronDown
-                        className={cn('w-3 h-3 transition-transform duration-200', resumoDiaOpen && 'rotate-180')}
-                      />
-                    </Button>
-                  </div>
-                  <AnimatePresence>
-                    {resumoDiaOpen && (
-                      <ResumoDiario
-                        temLogicaDiretoExtra={temLogicaDiretoExtra}
-                        operadorFiltroExterno={operadorFiltroExterno}
-                      />
-                    )}
-                  </AnimatePresence>
                 </motion.div>
               )}
 
