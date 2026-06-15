@@ -48,6 +48,7 @@ import { OnboardingTour } from './OnboardingTour';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
+import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 
 interface NavItem {
@@ -187,6 +188,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { naoLidas, animarBadge } = useNotificacoesCount();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
+  useMarcarAtrasados();
 
   // ── Chatplay modal (PaguePlay only) ─────────────────────────────────────────
   const [chatplayOnboardingOpen, setChatplayOnboardingOpen] = useState(false);

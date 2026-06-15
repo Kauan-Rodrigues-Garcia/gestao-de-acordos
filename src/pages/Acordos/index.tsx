@@ -20,7 +20,6 @@ import {
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
-import { criarNotificacao }      from '@/services/notificacoes.service';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
@@ -245,39 +244,6 @@ export default function Acordos() {
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
   ].filter(Boolean).length;
 
-  const atrasadosProcessadosRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (loading || acordos.length === 0) return;
-    const atrasados = acordos.filter(a =>
-      a.status === 'verificar_pendente' &&
-      a.vencimento < hoje &&
-      !atrasadosProcessadosRef.current.has(a.id),
-    );
-    if (atrasados.length === 0) return;
-    atrasados.forEach(a => atrasadosProcessadosRef.current.add(a.id));
-    Promise.all(
-      atrasados.map(a =>
-        supabase.from('acordos').update({ status: 'nao_pago' }).eq('id', a.id),
-      ),
-    ).then(() => {
-      toast.info(`${atrasados.length} acordo(s) atrasado(s) movido(s) para "Não Pago"`);
-      atrasados.forEach(a => {
-        if (a.operador_id) {
-          criarNotificacao({
-            usuario_id: a.operador_id,
-            titulo:     'Acordo movido para Não Pago',
-            mensagem:   `Acordo NR ${a.nr_cliente || '—'} foi movido para "Não Pago" por atraso de pagamento.\nValor: ${formatCurrency(a.valor)}\nVencimento: ${formatDate(a.vencimento)}`,
-            empresa_id: empresa?.id,
-            acordo_id:  a.id,
-          });
-        }
-        patchAcordo(a.id, { status: 'nao_pago' });
-      });
-    }).catch(e => {
-      console.warn('[Acordos] erro ao mover atrasados:', e);
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [acordos, loading]);
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo('');
