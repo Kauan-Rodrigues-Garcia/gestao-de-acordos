@@ -28,7 +28,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Building2, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle,
+  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -45,6 +45,7 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour } from './OnboardingTour';
+import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -81,6 +82,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [painelDiaAberto, setPainelDiaAberto] = useState(false);
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
@@ -281,6 +283,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </nav>
 
       <Separator className="bg-sidebar-border" />
+
+      {/* Desempenho Diário (PaguePLAY only) */}
+      {isPP && (
+        <div className="px-2 pt-2">
+          <button
+            onClick={() => setPainelDiaAberto(v => !v)}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              painelDiaAberto
+                ? 'bg-violet-500/15 text-violet-500'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+            )}
+            title="Desempenho do Dia"
+          >
+            <BarChart2 className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="flex-1 truncate text-left"
+                >
+                  📊 Desempenho do Dia
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        </div>
+      )}
 
       {/* User info */}
       <div className="p-3">
@@ -511,6 +543,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onFinished={() => {}}
         />
       </div>
+
+      {isPP && (
+        <PainelDesempenhoDiario
+          aberto={painelDiaAberto}
+          onClose={() => setPainelDiaAberto(false)}
+        />
+      )}
 
       {isPP && (
         <ChatplayOnboardingModal
