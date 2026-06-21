@@ -217,6 +217,18 @@ export interface AcordoTag {
   criado_em: string;
 }
 
+export interface Profissional {
+  id: string;
+  empresa_id: string;
+  codigo: string;
+  nome: string;
+  cpf: string | null;
+  telefone: string | null;
+  estado_uf: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export type TipoDocumentoLgpd =
   | 'politica_privacidade'
   | 'ropa'

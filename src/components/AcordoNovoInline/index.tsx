@@ -25,6 +25,7 @@ import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
+import { useProfissional }          from '@/hooks/useProfissional';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -100,6 +101,22 @@ export function AcordoNovoInline({
   const [isExtra,      setIsExtra]      = useState(false);
   const [tagIds,       setTagIds]       = useState<string[]>([]);
   const [quarentaPct,  setQuarentaPct]  = useState(false);
+
+  const { profissional, loading: profissionalLoading } = useProfissional(
+    isPaguePlay ? instituicao : '',
+    empresa?.id,
+  );
+
+  useEffect(() => {
+    if (!profissional) return;
+    if (!nomeCliente.trim()) setNomeCliente(profissional.nome);
+    if (!estadoSel.trim())   setEstadoSel(profissional.estado_uf ?? '');
+    if (!whatsapp.trim()) {
+      const tel = formatarTelefonePP(profissional.telefone ?? '');
+      if (tel) setWhatsapp(tel);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profissional]);
 
   const draftClearedRef = useRef(false);
   const persistRafRef = useRef<number | null>(null);
@@ -590,6 +607,8 @@ export function AcordoNovoInline({
       ? { operadorAntNome: avisoDiretoExtra.operadorAntNome, operadorAntSetor: avisoDiretoExtra.operadorAntSetor, nrLabel: avisoDiretoExtra.nrLabel, labelCampo: avisoDiretoExtra.labelCampo }
       : null,
     confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
+    profissionalLoading,
+    profissionalEncontrado: !!profissional,
   };
 
   if (isPaguePlay) return <FormPP state={formState} />;

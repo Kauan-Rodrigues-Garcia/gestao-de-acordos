@@ -90,4 +90,7 @@ export interface SharedFormState {
   confirmandoDiretoExtra: boolean;
   confirmarDiretoExtra: () => Promise<void>;
   cancelarAvisoDiretoExtra: () => void;
+  // Autocomplete profissional (PP only)
+  profissionalLoading: boolean;
+  profissionalEncontrado: boolean;
 }

@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { DollarSign, FileText, Link2, Save, User, X } from 'lucide-react';
+import { CheckCircle2, DollarSign, FileText, Link2, Loader2, Save, User, X } from 'lucide-react';
 import { ESTADOS_BRASIL, parseCurrencyInput } from '@/lib/index';
 import { calcularParcelas, formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
@@ -36,6 +36,7 @@ export function FormPP({ state }: { state: SharedFormState }) {
     conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
     autorizando, autorizarTransferencia, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
+    profissionalLoading, profissionalEncontrado,
   } = state;
 
   return (
@@ -59,7 +60,15 @@ export function FormPP({ state }: { state: SharedFormState }) {
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="space-y-1">
                   <Label className="text-xs">Código *</Label>
-                  <Input value={instituicao} onChange={(e) => setInstituicao(e.target.value)} placeholder="Código" className="h-8 text-xs" />
+                  <div className="relative">
+                    <Input value={instituicao} onChange={(e) => setInstituicao(e.target.value)} placeholder="Código" className="h-8 text-xs pr-7" />
+                    {profissionalLoading && (
+                      <Loader2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground animate-spin" />
+                    )}
+                    {!profissionalLoading && profissionalEncontrado && (
+                      <CheckCircle2 className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-emerald-500" />
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">{temParcelas ? 'Valor total *' : 'Valor *'}</Label>
