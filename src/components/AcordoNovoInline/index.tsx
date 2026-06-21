@@ -109,7 +109,7 @@ export function AcordoNovoInline({
 
   useEffect(() => {
     if (!profissional) return;
-    if (!nomeCliente.trim()) setNomeCliente(profissional.nome);
+    setNomeCliente(profissional.nome);
     if (!estadoSel.trim())   setEstadoSel(profissional.estado_uf ?? '');
     if (!whatsapp.trim()) {
       const tel = formatarTelefonePP(profissional.telefone ?? '');

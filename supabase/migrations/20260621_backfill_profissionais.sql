@@ -8,11 +8,7 @@
 
 UPDATE public.acordos a
 SET
-  nome_cliente = CASE
-    WHEN a.nome_cliente IS NULL OR a.nome_cliente = ''
-    THEN p.nome
-    ELSE a.nome_cliente
-  END,
+  nome_cliente = p.nome,
   whatsapp = CASE
     WHEN a.whatsapp IS NULL OR a.whatsapp = ''
     THEN p.telefone
