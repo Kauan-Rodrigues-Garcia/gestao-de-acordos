@@ -102,16 +102,15 @@ export function useResumoDia({
         return q.eq('operador_id', perfil.id);
       }
 
-      // ── Acordos pagos hoje via pago_em (independe do vencimento) ───────────
-      // pago_em é TIMESTAMPTZ em UTC; usamos range para cobrir o dia Brasil (UTC-3)
+      // ── Acordos pagos no dia selecionado via data_pagamento ─────────────────
+      // data_pagamento é DATE preenchida pelo operador — reflete a data real do recebimento
       const { data: pagosHojeData } = await applyScope(
         supabase
           .from('acordos')
           .select('*')
           .eq('empresa_id', empresa.id)
           .eq('status', 'pago')
-          .gte('pago_em', `${hoje}T00:00:00`)
-          .lt('pago_em', `${amanha}T00:00:00`) as unknown as AnyBuilder
+          .eq('data_pagamento', hoje) as unknown as AnyBuilder
       );
 
       // ── Acordos com vencimento hoje (para taxa de eficiência) ────────────
