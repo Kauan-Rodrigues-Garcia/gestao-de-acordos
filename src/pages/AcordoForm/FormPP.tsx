@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { STATUS_LABELS_PAGUEPLAY, ESTADOS_BRASIL } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { BotaoCapturaErpPP } from '@/components/pagueplay/BotaoCapturaErpPP';
 import type { FormData } from './schemas';
 
 interface FormPPProps {
@@ -34,10 +35,22 @@ export function FormPP({
       {/* PP BLOCO 1: Dados Principais */}
       <Card className="border-primary/30 bg-primary/3">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
-            <Hash className="w-4 h-4" /> Dados Principais
-            <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
-          </CardTitle>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+              <Hash className="w-4 h-4" /> Dados Principais
+              <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
+            </CardTitle>
+            <BotaoCapturaErpPP
+              onDados={(d) => {
+                if (d.instituicao) setValue('instituicao', d.instituicao, { shouldValidate: true });
+                if (d.tipo) setValue('tipo', d.tipo, { shouldValidate: true });
+                if (d.tipo === 'boleto' && d.parcelas) setValue('parcelas', d.parcelas, { shouldValidate: true });
+                if (d.vencimento) setValue('vencimento', d.vencimento, { shouldValidate: true });
+                if (d.valor) setValue('valor', d.valor, { shouldValidate: true });
+                if (d.nome_cliente) setValue('nome_cliente', d.nome_cliente, { shouldValidate: true });
+              }}
+            />
+          </div>
         </CardHeader>
         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 

@@ -10,6 +10,7 @@ import { ESTADOS_BRASIL, parseCurrencyInput } from '@/lib/index';
 import { calcularParcelas, formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { TagsSelector } from '@/components/TagsSelector';
+import { BotaoCapturaErpPP } from '@/components/pagueplay/BotaoCapturaErpPP';
 import { TIPOS_PAGUEPLAY, PARCELAS_PP, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
 import { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
@@ -48,9 +49,21 @@ export function FormPP({ state }: { state: SharedFormState }) {
               <p className="text-sm font-semibold text-primary flex items-center gap-2">
                 <Save className="w-4 h-4" /> Novo Acordo — PaguePay
               </p>
-              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive" onClick={cancelar} disabled={salvando}>
-                <X className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <BotaoCapturaErpPP
+                  onDados={(d) => {
+                    if (d.instituicao) setInstituicao(d.instituicao);
+                    if (d.tipo) handleChangeTipo(d.tipo === 'boleto' ? 'boleto_pix' : 'cartao');
+                    if (d.tipo === 'boleto' && d.parcelas) setParcelasStr(d.parcelas);
+                    if (d.vencimento) setVencimento(d.vencimento);
+                    if (d.valor) setValorStr(d.valor);
+                    if (d.nome_cliente) setNomeCliente(d.nome_cliente);
+                  }}
+                />
+                <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive" onClick={cancelar} disabled={salvando}>
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
 
             <div>
