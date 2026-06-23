@@ -40,8 +40,16 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
     if (!modeloPronto) {
       toast.info('Carregando modelo de OCR pela primeira vez (~20s)…', { id: 'ocr-init', duration: 20000 });
     }
+    // Orienta o usuário antes do seletor do Chrome abrir
+    if (!ativo) {
+      toast.info(
+        'Na janela do Chrome: escolha a aba "Tela inteira" — o ERP pode aparecer em preto na aba "Janela".',
+        { id: 'ocr-hint', duration: 8000 },
+      );
+    }
     try {
       const canvas = await capturarFrame();
+      toast.dismiss('ocr-hint');
       if (!canvas) return;
 
       const dados = await lerPrintMundialErp(canvas, true);
