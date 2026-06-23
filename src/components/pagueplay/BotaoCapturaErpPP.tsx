@@ -44,7 +44,7 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
       const canvas = await capturarFrame();
       if (!canvas) return;
 
-      const dados = await lerPrintMundialErp(canvas);
+      const dados = await lerPrintMundialErp(canvas, true);
       toast.dismiss('ocr-init');
       setModeloPronto(true);
 
@@ -58,7 +58,16 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
       ].filter(Boolean).length;
 
       if (n === 0) {
-        toast.warning('Não consegui ler os dados do print. Reposicione a janela do ERP e tente de novo.');
+        // Modo debug: exibe o texto bruto para diagnóstico (admin only)
+        if (dados._textoOcr) {
+          console.warn('[OCR-DEBUG] Texto bruto capturado:\n', dados._textoOcr);
+          toast.warning(
+            `Nenhum campo reconhecido. Texto capturado pelo OCR (primeiros 300 chars):\n"${dados._textoOcr.slice(0, 300)}"`,
+            { duration: 15000 },
+          );
+        } else {
+          toast.warning('Não consegui ler os dados do print. Reposicione a janela do ERP e tente de novo.');
+        }
         return;
       }
 

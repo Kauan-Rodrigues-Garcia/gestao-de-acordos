@@ -40,12 +40,17 @@ export async function encerrarOcr(): Promise<void> {
 /**
  * Roda OCR no frame capturado da janela do Mundial ERP e extrai os campos
  * do acordo Pagueplay.
+ *
+ * @param debug Quando true, retorna também o texto bruto do OCR (uso interno/admin)
  */
 export async function lerPrintMundialErp(
   canvas: HTMLCanvasElement,
-): Promise<DadosExtraidosPP> {
+  debug = false,
+): Promise<DadosExtraidosPP & { _textoOcr?: string }> {
   const worker = await obterWorker();
   const imagem = preprocessarParaOcr(canvas);
   const { data } = await worker.recognize(imagem);
-  return extrairDadosPrintPP(data.text);
+  const resultado = extrairDadosPrintPP(data.text);
+  if (debug) resultado._textoOcr = data.text;
+  return resultado;
 }

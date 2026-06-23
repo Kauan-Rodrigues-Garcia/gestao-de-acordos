@@ -20,7 +20,8 @@ export interface DadosExtraidosPP {
 }
 
 // Valor monetário BR: "1.422,81", "355,71" (com ou sem separador de milhar)
-const RE_MOEDA = /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g;
+// R[S$]? cobre tanto "R$" quanto "RS" (OCR frequentemente troca $ por S)
+const RE_MOEDA = /R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g;
 
 /**
  * Extrai os campos do acordo a partir do texto bruto do OCR.
@@ -36,8 +37,11 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   // normaliza espaços não-quebráveis
   const t = textoOcr.replace(/ /g, ' ');
 
-  // ── Código ────────────────────────────────────────────────────────────
-  const mCod = t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
+  // ── Código / Inscrição ────────────────────────────────────────────────
+  // O modal do ERP usa "Inscrição XXXXXX"; a ficha do cliente usa "Código: XXXXXX"
+  const mCod =
+    t.match(/inscri[cç][aã]o\s*[:#-]?\s*(\d{3,})/i) ||
+    t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
   if (mCod) out.instituicao = mCod[1];
 
   // ── Forma de pagamento ────────────────────────────────────────────────
@@ -47,6 +51,7 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   // ── Parcelas (apenas boleto/pix) ──────────────────────────────────────
   if (out.tipo === 'boleto') {
     const mParc =
+      t.match(/(\d{1,2})\s*parcelas?\b/i) ||   // "06 parcelas" (ERP Mundial)
       t.match(/parcelas?\s*[:\-]?\s*(\d{1,2})/i) ||
       t.match(/(\d{1,2})\s*x\b/i) ||
       t.match(/em\s+(\d{1,2})\s+vezes/i);
@@ -69,7 +74,7 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   // ── Valor total ───────────────────────────────────────────────────────
   // Preferência: valor rotulado como "total"/"do acordo". Fallback: maior valor.
   const mTotal = t.match(
-    /valor\s*(?:total|do\s+acordo)\s*[:\-]?\s*R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i,
+    /valor\s*(?:total|do\s+acordo)\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i,
   );
   if (mTotal) {
     out.valor = mTotal[1];
