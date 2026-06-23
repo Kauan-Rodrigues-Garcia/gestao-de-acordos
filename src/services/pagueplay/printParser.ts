@@ -17,6 +17,11 @@ export interface DadosExtraidosPP {
   valor?: string;
   /** Nome completo do cliente/profissional. */
   nome_cliente?: string;
+  /**
+   * true quando a primeira parcela é significativamente maior que as demais
+   * (indica uso do modelo 40% na 1ª parcela do Mundial ERP).
+   */
+  quarentaPct?: boolean;
 }
 
 // Valor monetário BR: "1.422,81", "355,71" (com ou sem separador de milhar)
@@ -35,23 +40,21 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   if (!textoOcr) return out;
 
   // normaliza espaços não-quebráveis
-  const t = textoOcr.replace(/ /g, ' ');
+  const t = textoOcr.replace(/ /g, ' ');
 
-  // ── Código / Inscrição ────────────────────────────────────────────────
-  // O modal do ERP usa "Inscrição XXXXXX"; a ficha do cliente usa "Código: XXXXXX"
-  const mCod =
-    t.match(/inscri[cç][aã]o\s*[:#-]?\s*(\d{3,})/i) ||
-    t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
+  // ── Código ────────────────────────────────────────────────────────────
+  // Usa apenas o campo "Código:" da ficha do cliente — não usa "Inscrição"
+  const mCod = t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
   if (mCod) out.instituicao = mCod[1];
 
   // ── Forma de pagamento ────────────────────────────────────────────────
-  if (/\b(boleto|pix)\b/i.test(t)) out.tipo = 'boleto';
+  if (/\b(boleto|pix|bolepix)\b/i.test(t)) out.tipo = 'boleto';
   else if (/\bcart[aã]o\b/i.test(t)) out.tipo = 'cartao';
 
   // ── Parcelas (apenas boleto/pix) ──────────────────────────────────────
   if (out.tipo === 'boleto') {
     const mParc =
-      t.match(/(\d{1,2})\s*parcelas?\b/i) ||   // "06 parcelas" (ERP Mundial)
+      t.match(/(\d{1,2})\s*parcelas?\b/i) ||   // "06 parcelas" (Mundial ERP)
       t.match(/parcelas?\s*[:\-]?\s*(\d{1,2})/i) ||
       t.match(/(\d{1,2})\s*x\b/i) ||
       t.match(/em\s+(\d{1,2})\s+vezes/i);
@@ -59,20 +62,33 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
       const n = parseInt(mParc[1], 10);
       if (n >= 1 && n <= 12) out.parcelas = String(n);
     }
+
+    // ── Detecção do 40% na primeira parcela ──────────────────────────────
+    // Mundial ERP exibe: "06 parcelas - primeira: R$ 636,16 - demais: R$ 190,85"
+    // Se primeira >= 1.3× as demais, provavelmente é o modelo 40%
+    const mPrimeira = t.match(/primeira\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i);
+    const mDemais   = t.match(/demais\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i);
+    if (mPrimeira && mDemais) {
+      const primeira = parseBRL(mPrimeira[1]);
+      const demais   = parseBRL(mDemais[1]);
+      if (primeira > 0 && demais > 0 && primeira >= demais * 1.3) {
+        out.quarentaPct = true;
+      }
+    }
   }
 
   // ── Data (vencimento / data de pagamento) ─────────────────────────────
-  // Tenta primeiro uma data rotulada; senão, a primeira data dd/mm/aaaa do texto.
+  // Prioridade: "Primeiro vencimento" > "Vencimento" > "Data de pagamento" > primeira data do texto
   const mVenc =
-    t.match(
-      /(?:primeiro\s+vencimento|data\s+de\s+pagamento|vencimento|pagamento)\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i,
-    ) || t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    t.match(/primeiro\s+vencimento\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
+    t.match(/(?:data\s+de\s+pagamento|vencimento|pagamento)\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
+    t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (mVenc) {
     out.vencimento = `${mVenc[3]}-${mVenc[2]}-${mVenc[1]}`;
   }
 
   // ── Valor total ───────────────────────────────────────────────────────
-  // Preferência: valor rotulado como "total"/"do acordo". Fallback: maior valor.
+  // Preferência: "Valor do acordo" / "Valor total". Fallback: maior valor no texto.
   const mTotal = t.match(
     /valor\s*(?:total|do\s+acordo)\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i,
   );

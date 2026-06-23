@@ -58,6 +58,7 @@ export function FormPP({ state }: { state: SharedFormState }) {
                     if (d.vencimento) setVencimento(d.vencimento);
                     if (d.valor) setValorStr(d.valor);
                     if (d.nome_cliente) setNomeCliente(d.nome_cliente);
+                    if (d.quarentaPct) setQuarentaPct(() => true);
                   }}
                 />
                 <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive" onClick={cancelar} disabled={salvando}>
