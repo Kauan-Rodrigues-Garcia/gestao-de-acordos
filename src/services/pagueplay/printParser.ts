@@ -15,6 +15,8 @@ export interface DadosExtraidosPP {
   vencimento?: string;
   /** Valor total como string BR (ex.: `1.422,81`). */
   valor?: string;
+  /** Nome completo do cliente/profissional. */
+  nome_cliente?: string;
 }
 
 // Valor monetário BR: "1.422,81", "355,71" (com ou sem separador de milhar)
@@ -76,6 +78,12 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
     if (valores.length) {
       out.valor = valores.reduce((a, b) => (parseBRL(b) > parseBRL(a) ? b : a));
     }
+  }
+
+  // ── Nome do cliente ───────────────────────────────────────────────────
+  const mNome = t.match(/(?:cliente|nome)\s*[:\-]?\s*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú\s]{3,60})/i);
+  if (mNome) {
+    out.nome_cliente = mNome[1].trim().replace(/\s{2,}/g, ' ');
   }
 
   return out;

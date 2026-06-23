@@ -16,6 +16,14 @@ async function obterWorker(): Promise<Worker> {
   return workerPromise;
 }
 
+/**
+ * Inicia o download do modelo OCR em segundo plano.
+ * Chame no mount do componente para que a primeira captura seja imediata.
+ */
+export function preaquecerOcr(): void {
+  obterWorker().catch(() => {/* falha silenciosa no pré-aquecimento */});
+}
+
 /** Encerra o worker do Tesseract e libera memória. */
 export async function encerrarOcr(): Promise<void> {
   if (!workerPromise) return;

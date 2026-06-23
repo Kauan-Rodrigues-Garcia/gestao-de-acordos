@@ -66,6 +66,16 @@ describe('extrairDadosPrintPP', () => {
     expect(dados.parcelas).toBeUndefined();
   });
 
+  it('extrai nome do cliente', () => {
+    const texto = `
+      Código: 5375194
+      Cliente: SIMONE MARIA CAVALCANTI DE LIRA
+      Boleto R$ 1.422,81
+    `;
+    const dados = extrairDadosPrintPP(texto);
+    expect(dados.nome_cliente).toBe('SIMONE MARIA CAVALCANTI DE LIRA');
+  });
+
   it('retorna objeto vazio para texto irreconhecível', () => {
     expect(extrairDadosPrintPP('texto qualquer sem dados')).toEqual({});
     expect(extrairDadosPrintPP('')).toEqual({});

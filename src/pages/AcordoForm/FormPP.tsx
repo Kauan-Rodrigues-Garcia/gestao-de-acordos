@@ -47,6 +47,7 @@ export function FormPP({
                 if (d.tipo === 'boleto' && d.parcelas) setValue('parcelas', d.parcelas, { shouldValidate: true });
                 if (d.vencimento) setValue('vencimento', d.vencimento, { shouldValidate: true });
                 if (d.valor) setValue('valor', d.valor, { shouldValidate: true });
+                if (d.nome_cliente) setValue('nome_cliente', d.nome_cliente, { shouldValidate: true });
               }}
             />
           </div>
