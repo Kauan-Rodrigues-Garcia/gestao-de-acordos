@@ -56,6 +56,20 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
       toast.dismiss('ocr-init');
       setModeloPronto(true);
 
+      // Sempre loga o texto bruto para facilitar diagnóstico (visível no console do navegador)
+      if (dados._textoOcr) {
+        console.log('[OCR-DEBUG] Texto capturado:\n', dados._textoOcr);
+        console.log('[OCR-DEBUG] Campos extraídos:', {
+          instituicao: dados.instituicao,
+          tipo: dados.tipo,
+          parcelas: dados.parcelas,
+          vencimento: dados.vencimento,
+          valor: dados.valor,
+          nome_cliente: dados.nome_cliente,
+          quarentaPct: dados.quarentaPct,
+        });
+      }
+
       const n = [
         dados.instituicao,
         dados.tipo,
@@ -66,16 +80,7 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
       ].filter(Boolean).length;
 
       if (n === 0) {
-        // Modo debug: exibe o texto bruto para diagnóstico (admin only)
-        if (dados._textoOcr) {
-          console.warn('[OCR-DEBUG] Texto bruto capturado:\n', dados._textoOcr);
-          toast.warning(
-            `Nenhum campo reconhecido. Texto capturado pelo OCR (primeiros 300 chars):\n"${dados._textoOcr.slice(0, 300)}"`,
-            { duration: 15000 },
-          );
-        } else {
-          toast.warning('Não consegui ler os dados do print. Reposicione a janela do ERP e tente de novo.');
-        }
+        toast.warning('Não consegui ler os dados do print. Reposicione a janela do ERP e tente de novo.');
         return;
       }
 

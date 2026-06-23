@@ -24,9 +24,16 @@ export interface DadosExtraidosPP {
   quarentaPct?: boolean;
 }
 
-// Valor monetário BR: "1.422,81", "355,71" (com ou sem separador de milhar)
-// R[S$]? cobre tanto "R$" quanto "RS" (OCR frequentemente troca $ por S)
-const RE_MOEDA = /R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g;
+// OCR frequentemente lê "." (separador de milhar) como " " (espaço): "1.590,40" → "1 590,40"
+// Este regex aceita tanto "." quanto " " como separador de milhar.
+// R[S$]? cobre "R$" e "RS" (OCR troca $ por S).
+const RE_MOEDA = /R[S$]?\s*(\d{1,3}(?:[.\s]\d{3})*,\d{2}|\d+,\d{2})/g;
+const RE_VALOR_BARE = /(\d{1,3}(?:[.\s]\d{3})*,\d{2}|\d+,\d{2})/;
+
+/** Normaliza valor monetário OCR para formato BR padrão: "1 590,40" → "1.590,40" */
+function normalizarValor(s: string): string {
+  return s.replace(/(\d)\s(\d{3}),/, '$1.$2,');
+}
 
 /**
  * Extrai os campos do acordo a partir do texto bruto do OCR.
@@ -43,8 +50,9 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   const t = textoOcr.replace(/ /g, ' ');
 
   // ── Código ────────────────────────────────────────────────────────────
-  // Usa apenas o campo "Código:" da ficha do cliente — não usa "Inscrição"
-  const mCod = t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
+  // OCR pode perder o acento: "Código" → "Codigo" ou "C6digo"
+  const mCod = t.match(/c[o0][o6]?d[i1]g[o0]\s*[:#-]?\s*(\d{3,})/i) ||
+               t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
   if (mCod) out.instituicao = mCod[1];
 
   // ── Forma de pagamento ────────────────────────────────────────────────
@@ -54,8 +62,9 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   // ── Parcelas (apenas boleto/pix) ──────────────────────────────────────
   if (out.tipo === 'boleto') {
     const mParc =
-      t.match(/(\d{1,2})\s*parcelas?\b/i) ||   // "06 parcelas" (Mundial ERP)
+      t.match(/(\d{1,2})\s*parcelas?\b/i) ||       // "06 parcelas" (Mundial ERP)
       t.match(/parcelas?\s*[:\-]?\s*(\d{1,2})/i) ||
+      t.match(/\b1\s+de\s+(\d{1,2})\b/i) ||        // "1 de 6" (paginação da tabela)
       t.match(/(\d{1,2})\s*x\b/i) ||
       t.match(/em\s+(\d{1,2})\s+vezes/i);
     if (mParc) {
@@ -65,12 +74,17 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
 
     // ── Detecção do 40% na primeira parcela ──────────────────────────────
     // Mundial ERP exibe: "06 parcelas - primeira: R$ 636,16 - demais: R$ 190,85"
-    // Se primeira >= 1.3× as demais, provavelmente é o modelo 40%
-    const mPrimeira = t.match(/primeira\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i);
-    const mDemais   = t.match(/demais\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i);
+    const rePrimeira = new RegExp(
+      'primeira\\s*[:\\-]?\\s*R[S$]?\\s*' + RE_VALOR_BARE.source, 'i',
+    );
+    const reDemais = new RegExp(
+      'demais\\s*[:\\-]?\\s*R[S$]?\\s*' + RE_VALOR_BARE.source, 'i',
+    );
+    const mPrimeira = t.match(rePrimeira);
+    const mDemais   = t.match(reDemais);
     if (mPrimeira && mDemais) {
-      const primeira = parseBRL(mPrimeira[1]);
-      const demais   = parseBRL(mDemais[1]);
+      const primeira = parseBRL(normalizarValor(mPrimeira[1]));
+      const demais   = parseBRL(normalizarValor(mDemais[1]));
       if (primeira > 0 && demais > 0 && primeira >= demais * 1.3) {
         out.quarentaPct = true;
       }
@@ -78,7 +92,7 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   }
 
   // ── Data (vencimento / data de pagamento) ─────────────────────────────
-  // Prioridade: "Primeiro vencimento" > "Vencimento" > "Data de pagamento" > primeira data do texto
+  // Prioridade: "Primeiro vencimento" > "Vencimento/Pagamento" > primeira data dd/mm/aaaa
   const mVenc =
     t.match(/primeiro\s+vencimento\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
     t.match(/(?:data\s+de\s+pagamento|vencimento|pagamento)\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
@@ -89,13 +103,14 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
 
   // ── Valor total ───────────────────────────────────────────────────────
   // Preferência: "Valor do acordo" / "Valor total". Fallback: maior valor no texto.
-  const mTotal = t.match(
-    /valor\s*(?:total|do\s+acordo)\s*[:\-]?\s*R[S$]?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i,
+  const reTotal = new RegExp(
+    'valor\\s*(?:total|do\\s+acordo)\\s*[:\\-]?\\s*R[S$]?\\s*' + RE_VALOR_BARE.source, 'i',
   );
+  const mTotal = t.match(reTotal);
   if (mTotal) {
-    out.valor = mTotal[1];
+    out.valor = normalizarValor(mTotal[1]);
   } else {
-    const valores = [...t.matchAll(RE_MOEDA)].map((m) => m[1]);
+    const valores = [...t.matchAll(RE_MOEDA)].map((m) => normalizarValor(m[1]));
     if (valores.length) {
       out.valor = valores.reduce((a, b) => (parseBRL(b) > parseBRL(a) ? b : a));
     }
