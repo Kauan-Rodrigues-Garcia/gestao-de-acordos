@@ -45,16 +45,22 @@ export async function resolverOperadores(
   usuarios: string[],
 ): Promise<OperadorResolvidoMap> {
   if (!usuarios.length) return {};
+
+  // Busca todos os perfis da empresa — comparação case-insensitive no cliente
   const { data } = await supabase
     .from('perfis')
     .select('id, usuario')
-    .eq('empresa_id', empresaId)
-    .in('usuario', usuarios);
+    .eq('empresa_id', empresaId);
+
+  // Índice lowercase → id para comparação case-insensitive
+  const dbIndex: Record<string, string> = {};
+  for (const p of data ?? []) {
+    if (p.usuario) dbIndex[p.usuario.toLowerCase()] = p.id;
+  }
 
   const map: OperadorResolvidoMap = {};
-  for (const u of usuarios) map[u] = null;
-  for (const p of data ?? []) {
-    if (p.usuario) map[p.usuario] = p.id;
+  for (const u of usuarios) {
+    map[u] = dbIndex[u.toLowerCase()] ?? null;
   }
   return map;
 }
