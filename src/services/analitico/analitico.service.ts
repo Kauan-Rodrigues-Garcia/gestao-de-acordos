@@ -286,6 +286,51 @@ export async function removerLinhasSemOperador(
   return { removidos: count ?? 0, error: error?.message ?? null };
 }
 
+/** Remove todos os órfãos (sem operador) de um mês específico. */
+export async function removerOrfaosDoMes(
+  empresaId: string,
+  mes: string,
+): Promise<{ error: string | null }> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const ultimo   = new Date(y, m, 0);
+  const fim      = `${mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
+
+  const { error } = await supabase
+    .from('analitico_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .is('operador_id', null)
+    .gte('data_pagamento', primeiro)
+    .lte('data_pagamento', fim);
+
+  return { error: error?.message ?? null };
+}
+
+// ── Destaques do dia ──────────────────────────────────────────────────────────
+
+export interface DestaqueDiaAnalitico {
+  dia: string;             // 'yyyy-MM-dd'
+  operador_id: string;
+  operador_usuario: string;
+  operador_nome: string | null;
+  total_recebido: number;
+  total_pagamentos: number;
+}
+
+/** Retorna o operador com maior total recebido por dia do mês (RPC). */
+export async function buscarDestaquesDoMes(
+  empresaId: string,
+  mes: string,
+): Promise<{ data: DestaqueDiaAnalitico[]; error: string | null }> {
+  const { data, error } = await supabase
+    .rpc('fn_analitico_destaques_dia', {
+      p_empresa_id: empresaId,
+      p_mes:        mes,
+    });
+  return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
+}
+
 // ── Verificar e atualizar status de tabulação ─────────────────────────────────
 
 /**

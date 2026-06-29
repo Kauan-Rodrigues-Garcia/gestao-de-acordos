@@ -7,7 +7,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight, Trash2, Loader2 } from 'lucide-react';
+import {
+  Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
+  Trash2, Loader2, Star,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,13 +20,18 @@ import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
   buscarResumoOperadoresAnalitico,
   buscarAnalitico,
+  buscarDestaquesDoMes,
   removerLinhaAnalitico,
+  removerOrfaosDoMes,
   type ResumoOperadorAnalitico,
+  type DestaqueDiaAnalitico,
 } from '@/services/analitico/analitico.service';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
+
+const ORFAOS_PAGE = 100;
 
 interface AnaliticoLiderProps {
   empresaId: string;
@@ -49,24 +57,29 @@ export function AnaliticoLider({
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
 
-  const [modalImportar,   setModalImportar]   = useState(false);
-  const [abaAtiva,        setAbaAtiva]        = useState<'operadores' | 'ranking' | 'orfaos'>('operadores');
+  const [modalImportar, setModalImportar] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'orfaos'>('operadores');
 
   // ── Resumos ───────────────────────────────────────────────────────────────
-  const [resumos,         setResumos]         = useState<ResumoOperadorAnalitico[]>([]);
-  const [loadingResumos,  setLoadingResumos]  = useState(true);
+  const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
+  const [loadingResumos, setLoadingResumos] = useState(true);
 
   // ── Linhas expandidas (lazy) ──────────────────────────────────────────────
-  const [expandidos,      setExpandidos]      = useState<Set<string>>(new Set());
-  const [linhasMap,       setLinhasMap]       = useState<Map<string, AnaliticoRecebimento[]>>(new Map());
-  const [loadingLinhas,   setLoadingLinhas]   = useState<Set<string>>(new Set());
+  const [expandidos,    setExpandidos]    = useState<Set<string>>(new Set());
+  const [linhasMap,     setLinhasMap]     = useState<Map<string, AnaliticoRecebimento[]>>(new Map());
+  const [loadingLinhas, setLoadingLinhas] = useState<Set<string>>(new Set());
 
   // ── Órfãos ────────────────────────────────────────────────────────────────
   const [orfaos,          setOrfaos]          = useState<AnaliticoRecebimento[]>([]);
   const [loadingOrfaos,   setLoadingOrfaos]   = useState(false);
+  const [orfaosVisiveis,  setOrfaosVisiveis]  = useState(ORFAOS_PAGE);
   const [removendoId,     setRemovendoId]     = useState<string | null>(null);
+  const [removendoTodos,  setRemovendoTodos]  = useState(false);
 
-  // Busca resumos + órfãos sempre que empresa ou mês mudar
+  // ── Destaques do dia ──────────────────────────────────────────────────────
+  const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
+  const [loadingDestaques, setLoadingDestaques] = useState(false);
+
   const carregarResumos = useCallback(async () => {
     if (!empresaId || !mes) return;
     setLoadingResumos(true);
@@ -82,20 +95,28 @@ export function AnaliticoLider({
   const carregarOrfaos = useCallback(async () => {
     if (!empresaId || !mes) return;
     setLoadingOrfaos(true);
+    setOrfaosVisiveis(ORFAOS_PAGE);
     const { data } = await buscarAnalitico({ empresaId, mes, operadorId: null });
     setOrfaos(data);
     setLoadingOrfaos(false);
   }, [empresaId, mes]);
 
-  useEffect(() => {
-    void carregarResumos();
-  }, [carregarResumos]);
+  const carregarDestaques = useCallback(async () => {
+    if (!empresaId || !mes) return;
+    setLoadingDestaques(true);
+    const { data, error } = await buscarDestaquesDoMes(empresaId, mes);
+    if (error) toast.error(`Erro ao carregar destaques: ${error}`);
+    setDestaques(data);
+    setLoadingDestaques(false);
+  }, [empresaId, mes]);
+
+  useEffect(() => { void carregarResumos(); }, [carregarResumos]);
 
   useEffect(() => {
-    if (abaAtiva === 'orfaos') void carregarOrfaos();
-  }, [abaAtiva, carregarOrfaos]);
+    if (abaAtiva === 'orfaos')     void carregarOrfaos();
+    if (abaAtiva === 'destaques')  void carregarDestaques();
+  }, [abaAtiva, carregarOrfaos, carregarDestaques]);
 
-  // Expande/colapsa card; carrega linhas na primeira abertura
   async function toggleExpandido(opId: string) {
     const jáAberto = expandidos.has(opId);
     setExpandidos(prev => {
@@ -116,8 +137,24 @@ export function AnaliticoLider({
     setRemovendoId(id);
     const { error } = await removerLinhaAnalitico(id);
     if (error) toast.error(`Erro ao remover: ${error}`);
-    else { toast.success('Linha removida.'); void carregarOrfaos(); onRefetch(); }
+    else {
+      toast.success('Linha removida.');
+      setOrfaos(prev => prev.filter(o => o.id !== id));
+      onRefetch();
+    }
     setRemovendoId(null);
+  }
+
+  async function removerTodosOrfaos() {
+    setRemovendoTodos(true);
+    const { error } = await removerOrfaosDoMes(empresaId, mes);
+    if (error) toast.error(`Erro ao remover: ${error}`);
+    else {
+      toast.success('Todos os registros sem operador foram removidos.');
+      setOrfaos([]);
+      onRefetch();
+    }
+    setRemovendoTodos(false);
   }
 
   function handlePosImport() {
@@ -125,8 +162,28 @@ export function AnaliticoLider({
     if (importHook.estado === 'done') {
       void carregarResumos();
       void carregarOrfaos();
+      void carregarDestaques();
       onRefetch();
     }
+  }
+
+  // ── Helpers de exibição dos destaques ─────────────────────────────────────
+  const [mesAnoStr, mesNumStr] = mes.split('-');
+  const diasNoMes = new Date(Number(mesAnoStr), Number(mesNumStr), 0).getDate();
+  const hojeISO = new Date().toISOString().split('T')[0];
+
+  // Mapa dia → destaque para lookup rápido
+  const destaquesMap = new Map(destaques.map(d => [d.dia, d]));
+
+  const DIAS_PT = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+  const MESES_PT = [
+    'Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro',
+  ];
+
+  function diaLabel(diaStr: string) {
+    const d = new Date(diaStr + 'T12:00:00');
+    return DIAS_PT[d.getDay()];
   }
 
   return (
@@ -135,9 +192,10 @@ export function AnaliticoLider({
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1 border-b border-border">
           {([
-            { key: 'operadores', label: 'Por operador',                     Icon: Users },
-            { key: 'ranking',    label: 'Ranking',                          Icon: Trophy },
-            { key: 'orfaos',     label: `Sem operador (${orfaos.length})`,  Icon: AlertCircle },
+            { key: 'operadores', label: 'Por operador',    Icon: Users },
+            { key: 'ranking',    label: 'Ranking',         Icon: Trophy },
+            { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
+            { key: 'orfaos',     label: 'Sem operador',    Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button
               key={key}
@@ -179,9 +237,9 @@ export function AnaliticoLider({
           )}
 
           {!loadingResumos && resumos.map(r => {
-            const aberto       = expandidos.has(r.operador_id);
-            const carregando   = loadingLinhas.has(r.operador_id);
-            const linhas       = linhasMap.get(r.operador_id) ?? [];
+            const aberto     = expandidos.has(r.operador_id);
+            const carregando = loadingLinhas.has(r.operador_id);
+            const linhas     = linhasMap.get(r.operador_id) ?? [];
 
             return (
               <Card key={r.operador_id} className="border-border">
@@ -343,6 +401,99 @@ export function AnaliticoLider({
         </Card>
       )}
 
+      {/* ── Aba: Destaques do dia ─────────────────────────────────────────── */}
+      {abaAtiva === 'destaques' && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">
+              {MESES_PT[Number(mesNumStr) - 1]} de {mesAnoStr}
+            </p>
+            <p className="text-xs text-muted-foreground">Destaque de recebimento por dia</p>
+          </div>
+
+          {loadingDestaques && (
+            <div className="space-y-2 animate-pulse">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="h-14 bg-muted rounded-lg" />
+              ))}
+            </div>
+          )}
+
+          {!loadingDestaques && (
+            <div className="space-y-2">
+              {Array.from({ length: diasNoMes }, (_, i) => {
+                const d = i + 1;
+                const diaStr = `${mes}-${String(d).padStart(2, '0')}`;
+                const destaque = destaquesMap.get(diaStr);
+                const isHoje = diaStr === hojeISO;
+                const isFuturo = diaStr > hojeISO;
+
+                return (
+                  <div
+                    key={diaStr}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg border px-4 py-3',
+                      isHoje && 'border-primary/40 bg-primary/5',
+                      !isHoje && !isFuturo && destaque && 'border-border bg-card',
+                      isFuturo && 'border-border/50 bg-muted/20 opacity-50',
+                      !destaque && !isFuturo && 'border-border/50 bg-muted/10',
+                    )}
+                  >
+                    {/* Data */}
+                    <div className="text-center shrink-0 w-10">
+                      <p className={cn(
+                        'text-lg font-bold leading-none',
+                        isHoje ? 'text-primary' : 'text-foreground',
+                      )}>
+                        {String(d).padStart(2, '0')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {diaLabel(diaStr)}
+                      </p>
+                    </div>
+
+                    {/* Separador */}
+                    <div className={cn(
+                      'w-px self-stretch',
+                      isHoje ? 'bg-primary/30' : 'bg-border',
+                    )} />
+
+                    {/* Destaque ou vazio */}
+                    {destaque ? (
+                      <>
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <Star className="w-3.5 h-3.5 text-amber-500 shrink-0 fill-amber-400" />
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold truncate">
+                              {destaque.operador_nome ?? destaque.operador_usuario}
+                            </p>
+                            <p className="text-xs text-muted-foreground font-mono">
+                              destaque do dia
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold text-primary font-mono">
+                            {formatBRL(destaque.total_recebido)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {destaque.total_pagamentos} pgto{destaque.total_pagamentos !== 1 ? 's' : ''}.
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic flex-1">
+                        {isFuturo ? '—' : 'Sem recebimentos'}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Aba: Sem operador (órfãos) ───────────────────────────────────── */}
       {abaAtiva === 'orfaos' && (
         <div className="space-y-3">
@@ -362,10 +513,24 @@ export function AnaliticoLider({
 
           {!loadingOrfaos && orfaos.length > 0 && (
             <>
-              <p className="text-xs text-muted-foreground">
-                Estas linhas não foram vinculadas a nenhum operador do sistema.
-                Você pode removê-las individualmente.
-              </p>
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">
+                  {orfaos.length} linha{orfaos.length !== 1 ? 's' : ''} não vinculada{orfaos.length !== 1 ? 's' : ''} a nenhum operador.
+                </p>
+                <Button
+                  size="sm" variant="destructive"
+                  className="gap-1.5 h-7 text-xs"
+                  onClick={() => void removerTodosOrfaos()}
+                  disabled={removendoTodos}
+                >
+                  {removendoTodos
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Trash2 className="w-3 h-3" />
+                  }
+                  Remover todos
+                </Button>
+              </div>
+
               <Card className="border-border">
                 <CardContent className="p-0">
                   <table className="w-full text-xs">
@@ -380,7 +545,7 @@ export function AnaliticoLider({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {orfaos.map(linha => (
+                      {orfaos.slice(0, orfaosVisiveis).map(linha => (
                         <tr key={linha.id} className="hover:bg-muted/20">
                           <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                           <td className="px-3 py-2 font-semibold">{linha.codigo}</td>
@@ -404,7 +569,10 @@ export function AnaliticoLider({
                               onClick={() => void removerOrfao(linha.id)}
                               disabled={removendoId === linha.id}
                             >
-                              <Trash2 className="w-3.5 h-3.5" />
+                              {removendoId === linha.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Trash2 className="w-3.5 h-3.5" />
+                              }
                             </Button>
                           </td>
                         </tr>
@@ -413,6 +581,18 @@ export function AnaliticoLider({
                   </table>
                 </CardContent>
               </Card>
+
+              {orfaosVisiveis < orfaos.length && (
+                <div className="flex justify-center pt-1">
+                  <Button
+                    variant="outline" size="sm"
+                    className="gap-1.5 text-xs"
+                    onClick={() => setOrfaosVisiveis(prev => prev + ORFAOS_PAGE)}
+                  >
+                    Carregar mais ({orfaos.length - orfaosVisiveis} restantes)
+                  </Button>
+                </div>
+              )}
             </>
           )}
         </div>
