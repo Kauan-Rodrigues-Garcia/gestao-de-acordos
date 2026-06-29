@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,7 +30,8 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   const [loading,     setLoading]     = useState(true);
   const [error,       setError]       = useState<string | null>(null);
   const [novosCount,  setNovosCount]  = useState(0);
-  const marcouRef = useRef(false);
+  const marcouRef     = useRef(false);
+  const hasLoadedOnce = useRef(false);
 
   const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
 
@@ -40,11 +42,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
 
     let operadorId: string | null | undefined = undefined;
     if (options.apenasOrfaos) {
-      operadorId = null; // RPC: IS NULL
+      operadorId = null;
     } else if (options.operadorFiltro !== undefined) {
       operadorId = options.operadorFiltro;
     } else if (!isLiderMais) {
-      operadorId = perfil.id; // operador vê só os próprios
+      operadorId = perfil.id;
     }
 
     const { data, error: err } = await buscarAnalitico({
@@ -59,6 +61,7 @@ export function useAnalitico(options: UseAnaliticoOptions) {
     const naoVistos = data.filter(d => !d.visto && d.operador_id === perfil.id).length;
     setNovosCount(naoVistos);
     setLoading(false);
+    hasLoadedOnce.current = true;
   }, [empresa?.id, perfil?.id, options.mes, options.operadorFiltro, options.apenasOrfaos, isLiderMais]);
 
   // Marcar como visto ao abrir (uma vez por mount)
@@ -72,7 +75,7 @@ export function useAnalitico(options: UseAnaliticoOptions) {
     void fetchDados();
   }, [fetchDados]);
 
-  // Realtime subscription
+  // Realtime: mostra toast de atualização após a primeira carga
   useEffect(() => {
     if (!empresa?.id) return;
     const channel = supabase
@@ -85,7 +88,15 @@ export function useAnalitico(options: UseAnaliticoOptions) {
           table:  'analitico_recebimentos',
           filter: `empresa_id=eq.${empresa.id}`,
         },
-        () => { void fetchDados(); },
+        () => {
+          if (hasLoadedOnce.current) {
+            toast.info('Analítico atualizado!', {
+              description: 'Novos recebimentos foram importados.',
+              duration: 4000,
+            });
+          }
+          void fetchDados();
+        },
       )
       .subscribe();
 

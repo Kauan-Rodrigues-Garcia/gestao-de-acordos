@@ -322,13 +322,54 @@ export interface DestaqueDiaAnalitico {
 export async function buscarDestaquesDoMes(
   empresaId: string,
   mes: string,
+  equipeId?: string | null,
 ): Promise<{ data: DestaqueDiaAnalitico[]; error: string | null }> {
-  const { data, error } = await supabase
-    .rpc('fn_analitico_destaques_dia', {
-      p_empresa_id: empresaId,
-      p_mes:        mes,
-    });
+  const params: Record<string, unknown> = { p_empresa_id: empresaId, p_mes: mes };
+  if (equipeId) params['p_equipe_id'] = equipeId;
+  const { data, error } = await supabase.rpc('fn_analitico_destaques_dia', params);
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
+}
+
+// ── Equipes e mapa operador→equipe ────────────────────────────────────────────
+
+export interface EquipeAnalitico {
+  id: string;
+  nome: string;
+}
+
+export interface OperadorEquipeInfo {
+  equipe_id: string | null;
+  equipe_nome: string;
+}
+
+/** Busca equipes da empresa e gera mapa operadorId → equipe. */
+export async function buscarEquipesComOperadores(empresaId: string): Promise<{
+  equipes: EquipeAnalitico[];
+  operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+}> {
+  const { data } = await supabase
+    .from('perfis')
+    .select('id, equipe_id, equipes(id, nome)')
+    .eq('empresa_id', empresaId)
+    .eq('ativo', true);
+
+  const equipeSet = new Map<string, string>();
+  const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
+
+  for (const p of (data ?? []) as { id: string; equipe_id: string | null; equipes: { id: string; nome: string } | null }[]) {
+    const eq = p.equipes;
+    operadorEquipeMap[p.id] = {
+      equipe_id:   p.equipe_id ?? null,
+      equipe_nome: eq?.nome ?? 'Sem equipe',
+    };
+    if (p.equipe_id && eq?.nome) equipeSet.set(p.equipe_id, eq.nome);
+  }
+
+  const equipes: EquipeAnalitico[] = Array.from(equipeSet.entries())
+    .map(([id, nome]) => ({ id, nome }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+
+  return { equipes, operadorEquipeMap };
 }
 
 // ── Verificar e atualizar status de tabulação ─────────────────────────────────
