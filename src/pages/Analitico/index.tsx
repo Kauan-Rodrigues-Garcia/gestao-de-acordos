@@ -7,60 +7,32 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { isPerfilAdminOuLider } from '@/lib/index';
-import { ROUTE_PATHS } from '@/lib/index';
+import { isPerfilAdminOuLider, ROUTE_PATHS } from '@/lib/index';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
 
 export default function PaginaAnalitico() {
+  // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   const { perfil }       = useAuth();
   const { empresa }      = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant           = useTenant();
   const navigate         = useNavigate();
 
-  // Gate: somente PaguePlay
-  if (!tenant.isPaguePlay) {
-    return (
-      <div className="p-6 text-center text-muted-foreground">
-        Esta seção está disponível apenas para PaguePlay.
-      </div>
-    );
-  }
-
   const isElite     = perfil?.perfil === 'elite';
   const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
   const isOperador  = !isLiderMais;
 
   const [visaoElite, setVisaoElite] = useState<'individual' | 'geral'>('geral');
-
-  const mostrarVisaoGeral      = (isLiderMais && !isElite) || (isElite && visaoElite === 'geral');
-  const mostrarVisaoIndividual = isOperador || (isElite && visaoElite === 'individual');
-
   const [filtroOperadorId, setFiltroOperadorId] = useState<string | null>(null);
-
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
 
-  function mesAnterior() {
-    const [y, m] = mesFiltro.split('-').map(Number);
-    const prev = new Date(y, m - 2, 1);
-    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
-  }
-
-  function mesProximo() {
-    const [y, m] = mesFiltro.split('-').map(Number);
-    const next = new Date(y, m, 1);
-    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
-  }
-
-  function mesAtual() {
-    const d = new Date();
-    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
-  }
+  const mostrarVisaoGeral      = (isLiderMais && !isElite) || (isElite && visaoElite === 'geral');
+  const mostrarVisaoIndividual = isOperador || (isElite && visaoElite === 'individual');
 
   const { dados: dadosProprios, loading: loadingProprios, novosCount, refetch: refetchProprios } = useAnalitico({
     mes: mesFiltro,
@@ -82,6 +54,15 @@ export default function PaginaAnalitico() {
     void refetchGerais();
     void refetchOrfaos();
   }, [refetchProprios, refetchGerais, refetchOrfaos]);
+
+  // ── Guards (após todos os hooks) ─────────────────────────────────────────
+  if (!tenant.isPaguePlay) {
+    return (
+      <div className="p-6 text-center text-muted-foreground">
+        Esta seção está disponível apenas para PaguePlay.
+      </div>
+    );
+  }
 
   if (!empresa?.id || !perfil?.id) return null;
 
@@ -105,7 +86,24 @@ export default function PaginaAnalitico() {
   }
 
   function onVerAcordo(acordoId: string) {
-    navigate(`${ROUTE_PATHS.ACORDO_DETALHE.replace(':id', acordoId)}`);
+    navigate(ROUTE_PATHS.ACORDO_DETALHE.replace(':id', acordoId));
+  }
+
+  function mesAnterior() {
+    const [y, m] = mesFiltro.split('-').map(Number);
+    const prev = new Date(y, m - 2, 1);
+    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  function mesProximo() {
+    const [y, m] = mesFiltro.split('-').map(Number);
+    const next = new Date(y, m, 1);
+    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  function mesAtual() {
+    const d = new Date();
+    setMesFiltro(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
   return (

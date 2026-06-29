@@ -186,7 +186,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const isPP = tenant.isPaguePlay;
+  // isPP: usa tanto o tenant config quanto o slug da empresa no banco como fallback.
+  // Isso garante que o menu funcione mesmo sem VITE_TENANT_SLUG configurado.
+  const isPP = tenant.isPaguePlay || empresa?.slug?.toLowerCase() === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { naoLidas, animarBadge } = useNotificacoesCount();
