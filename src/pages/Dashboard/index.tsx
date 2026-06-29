@@ -33,7 +33,6 @@ import {
 import { PPTableFilters } from './PPTableFilters';
 import { PPTableBody } from './PPTableBody';
 import { PPModals } from './PPModals';
-import { AbaAnalitico } from './Analitico';
 
 export default function Dashboard() {
   const { perfil } = useAuth();
@@ -88,8 +87,8 @@ export default function Dashboard() {
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
   const { tags: empresaTags } = useEmpresaTags();
 
-  const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos' | 'analitico'>(
-    (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos' | 'analitico') || 'todos',
+  const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos'>(
+    (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
 
   const [selecionados,            setSelecionados]            = useState<string[]>([]);
@@ -252,6 +251,17 @@ export default function Dashboard() {
     setSearchParams(params, { replace: true });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [highlightParam]);
+
+  // Abre o formulário inline quando navegado a partir da aba Analítico
+  const novoInlineParam = searchParams.get('novoInline');
+  useEffect(() => {
+    if (!novoInlineParam) return;
+    setNovoInlineAbertoTabela(true);
+    const params = new URLSearchParams(searchParams);
+    params.delete('novoInline');
+    setSearchParams(params, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [novoInlineParam]);
 
   useEffect(() => {
     if (!highlightedId || loading || highlightFoundRef.current) return;
@@ -711,33 +721,9 @@ export default function Dashboard() {
               temFiltros={temFiltros} limparFiltros={limparFiltros}
             />
 
-            {/* Aba Analítico — substitui a tabela quando ativa */}
-            {activeTab === 'analitico' && (
-              <AbaAnalitico
-                mes={mesFiltro}
-                onAbrirNovoAcordo={(dados) => {
-                  const storageKey = `acordo-inline-draft::${empresa?.id ?? 'noemp'}::${perfil?.id ?? 'nouser'}::pp`;
-                  const draft = {
-                    instituicao: dados.instituicao,
-                    nomeCliente: dados.nomeCliente,
-                    tipo:        dados.forma === 'cartao' ? 'cartao' : 'boleto_pix',
-                    valorStr:    dados.valor.toFixed(2).replace('.', ','),
-                  };
-                  try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* noop */ }
-                  setActiveTab('todos');
-                  setNovoInlineAbertoTabela(true);
-                }}
-                onVerAcordo={(acordoId) => {
-                  setActiveTab('todos');
-                  void findAcordoPage(acordoId);
-                  setHighlightedId(acordoId);
-                }}
-              />
-            )}
-
             <div ref={novoInlineRef} />
 
-            {activeTab !== 'analitico' && <Card className="border-border" data-tour="tabela-acordos">
+            <Card className="border-border" data-tour="tabela-acordos">
               <CardContent className="p-0">
                 {loading ? <TableSkeleton /> : (
                   <div className="overflow-x-auto">
@@ -793,10 +779,10 @@ export default function Dashboard() {
                   </div>
                 )}
               </CardContent>
-            </Card>}
+            </Card>
 
             {/* Paginação */}
-            {activeTab !== 'analitico' && !loading && totalPages > 1 && (
+            {!loading && totalPages > 1 && (
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
                 <p className="text-xs text-muted-foreground order-2 sm:order-1">
                   Exibindo {((currentPage - 1) * PER_PAGE) + 1}–{Math.min(currentPage * PER_PAGE, totalCount)} de {totalCount} acordos

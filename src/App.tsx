@@ -45,6 +45,7 @@ const NotFound          = lazy(() => import('@/pages/not-found/Index'));
 const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
+const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 
 function PageLoader() {
   return (
@@ -205,6 +206,11 @@ export default function App() {
                     <PainelDiretoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
+              } />
+
+              {/* Analítico (PaguePlay exclusivo — gate dentro da página) */}
+              <Route path={ROUTE_PATHS.ANALITICO} element={
+                <LayoutWrapper><PaginaAnalitico /></LayoutWrapper>
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
