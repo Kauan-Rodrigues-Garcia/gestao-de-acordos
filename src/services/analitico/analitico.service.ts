@@ -1,0 +1,388 @@
+/**
+ * analitico.service.ts
+ * CRUD e lógica de negócio para analitico_recebimentos (PaguePlay).
+ *
+ * Responsabilidades:
+ *  • Merge incremental ao confirmar importação
+ *  • Busca com filtros (mes, operador)
+ *  • Marcar visto
+ *  • Verificar status de tabulação (nao_tabulado | tabulado | divergente)
+ *  • Tabular caso divergente (remove do outro operador, notifica, loga)
+ *  • Remover linhas individuais ou em lote (operadores não encontrados)
+ */
+
+import { supabase } from '@/lib/supabase';
+import type { Acordo, AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
+import { criarNotificacao } from '@/services/notificacoes.service';
+import { enviarParaLixeira } from '@/services/lixeira.service';
+import { mesReferencia } from './analiticoParser';
+import type { LinhaRelatorio } from './analiticoParser';
+
+// ── Helpers internos ──────────────────────────────────────────────────────────
+
+/** Formata Date para 'yyyy-MM-dd' */
+function toISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
+/** Normaliza código (remove zeros à esquerda? Não — PaguePlay usa código como veio) */
+function normCodigo(c: string): string {
+  return c.trim();
+}
+
+// ── Resolução de operadores ───────────────────────────────────────────────────
+
+export interface OperadorResolvidoMap {
+  [usuario: string]: string | null; // usuario → perfil.id ou null se não encontrado
+}
+
+/** Busca IDs de perfis cujo campo `usuario` consta na lista de cobradoras */
+export async function resolverOperadores(
+  empresaId: string,
+  usuarios: string[],
+): Promise<OperadorResolvidoMap> {
+  if (!usuarios.length) return {};
+  const { data } = await supabase
+    .from('perfis')
+    .select('id, usuario')
+    .eq('empresa_id', empresaId)
+    .in('usuario', usuarios);
+
+  const map: OperadorResolvidoMap = {};
+  for (const u of usuarios) map[u] = null;
+  for (const p of data ?? []) {
+    if (p.usuario) map[p.usuario] = p.id;
+  }
+  return map;
+}
+
+// ── Importação (merge incremental) ────────────────────────────────────────────
+
+export interface ResultadoImportacao {
+  inseridos: number;
+  duplicados: number;
+  erros: string[];
+}
+
+/**
+ * Persiste linhas no banco usando INSERT ... ON CONFLICT DO NOTHING.
+ * Chave de unicidade: (empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario).
+ * Operadores não encontrados têm operador_id = null (visíveis só para líder+).
+ */
+export async function importarLoteAnalitico(
+  empresaId: string,
+  importadoPorId: string,
+  loteId: string,
+  linhas: LinhaRelatorio[],
+  operadoresMap: OperadorResolvidoMap,
+): Promise<ResultadoImportacao> {
+  if (!linhas.length) return { inseridos: 0, duplicados: 0, erros: [] };
+
+  const rows = linhas.map(l => ({
+    empresa_id:      empresaId,
+    operador_id:     operadoresMap[l.operador_usuario] ?? null,
+    operador_usuario: l.operador_usuario,
+    codigo:          normCodigo(l.codigo),
+    nome_cliente:    l.nome_cliente || null,
+    forma_pagamento: l.forma_pagamento,
+    valor_recebido:  l.valor_recebido,
+    total_ho:        l.total_ho,
+    data_pagamento:  toISO(l.data_pagamento),
+    mes_referencia:  toISO(mesReferencia(l.data_pagamento)),
+    status_tabulacao: 'nao_tabulado' as StatusTabulacaoAnalitico,
+    visto:           false,
+    importado_por_id: importadoPorId,
+    lote_id:         loteId,
+  }));
+
+  const CHUNK = 200;
+  let inseridos = 0;
+  let duplicados = 0;
+  const erros: string[] = [];
+
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const chunk = rows.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from('analitico_recebimentos')
+      .upsert(chunk, {
+        onConflict: 'empresa_id,codigo,data_pagamento,forma_pagamento,operador_usuario',
+        ignoreDuplicates: true,
+      })
+      .select('id');
+
+    if (error) {
+      erros.push(`Chunk ${i / CHUNK + 1}: ${error.message}`);
+    } else {
+      inseridos += (data?.length ?? 0);
+      duplicados += chunk.length - (data?.length ?? 0);
+    }
+  }
+
+  return { inseridos, duplicados, erros };
+}
+
+// ── Busca ────────────────────────────────────────────────────────────────────
+
+export interface FiltrosAnalitico {
+  empresaId: string;
+  mes?: string;       // 'yyyy-MM'
+  operadorId?: string | null;
+  apenasNaoVistos?: boolean;
+}
+
+export async function buscarAnalitico(
+  filtros: FiltrosAnalitico,
+): Promise<{ data: AnaliticoRecebimento[]; error: string | null }> {
+  let q = supabase
+    .from('analitico_recebimentos')
+    .select('*, perfis(id, nome, usuario)')
+    .eq('empresa_id', filtros.empresaId)
+    .order('data_pagamento', { ascending: false });
+
+  if (filtros.mes) {
+    const [y, m] = filtros.mes.split('-').map(Number);
+    const primeiro = `${filtros.mes}-01`;
+    const ultimo = new Date(y, m, 0);
+    const fim = `${filtros.mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
+    q = q.gte('data_pagamento', primeiro).lte('data_pagamento', fim);
+  }
+  if (filtros.operadorId !== undefined) {
+    if (filtros.operadorId === null) {
+      q = q.is('operador_id', null);
+    } else {
+      q = q.eq('operador_id', filtros.operadorId);
+    }
+  }
+  if (filtros.apenasNaoVistos) {
+    q = q.eq('visto', false);
+  }
+
+  const { data, error } = await q;
+  return { data: (data ?? []) as AnaliticoRecebimento[], error: error?.message ?? null };
+}
+
+// ── Marcar como visto ─────────────────────────────────────────────────────────
+
+export async function marcarVistoAnalitico(
+  empresaId: string,
+  operadorId: string,
+  mes?: string,
+): Promise<void> {
+  let q = supabase
+    .from('analitico_recebimentos')
+    .update({ visto: true })
+    .eq('empresa_id', empresaId)
+    .eq('operador_id', operadorId)
+    .eq('visto', false);
+
+  if (mes) {
+    q = q.eq('mes_referencia', `${mes}-01`);
+  }
+  await q;
+}
+
+// ── Remover linhas ────────────────────────────────────────────────────────────
+
+export async function removerLinhaAnalitico(id: string): Promise<{ error: string | null }> {
+  const { error } = await supabase.from('analitico_recebimentos').delete().eq('id', id);
+  return { error: error?.message ?? null };
+}
+
+export async function removerLinhasSemOperador(
+  empresaId: string,
+  loteId?: string,
+): Promise<{ removidos: number; error: string | null }> {
+  let q = supabase
+    .from('analitico_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .is('operador_id', null);
+  if (loteId) q = q.eq('lote_id', loteId);
+  const { count, error } = await (q as ReturnType<typeof q.select>);
+  return { removidos: count ?? 0, error: error?.message ?? null };
+}
+
+// ── Verificar e atualizar status de tabulação ─────────────────────────────────
+
+/**
+ * Verifica o status de tabulação de uma linha de recebimento.
+ * Cruza com a tabela `acordos` usando campo `instituicao == codigo`.
+ * Retorna:
+ *   - 'nao_tabulado': nenhum acordo com esse código
+ *   - 'tabulado': há acordo do mesmo operador
+ *   - 'divergente': há acordo de outro operador
+ */
+export async function verificarStatusTabulacao(
+  empresaId: string,
+  codigo: string,
+  operadorId: string,
+): Promise<{ status: StatusTabulacaoAnalitico; acordoId: string | null; outroOperadorId: string | null; outroOperadorNome: string | null }> {
+  const { data } = await supabase
+    .from('acordos')
+    .select('id, operador_id, tipo_vinculo, perfis(nome)')
+    .eq('empresa_id', empresaId)
+    .eq('instituicao', normCodigo(codigo))
+    .in('tipo_vinculo', ['direto'])
+    .limit(1)
+    .maybeSingle();
+
+  if (!data) return { status: 'nao_tabulado', acordoId: null, outroOperadorId: null, outroOperadorNome: null };
+
+  if (data.operador_id === operadorId) {
+    return { status: 'tabulado', acordoId: data.id, outroOperadorId: null, outroOperadorNome: null };
+  }
+
+  const nomeOutro = (data.perfis as { nome?: string } | null)?.nome ?? null;
+  return {
+    status:           'divergente',
+    acordoId:         data.id,
+    outroOperadorId:  data.operador_id,
+    outroOperadorNome: nomeOutro,
+  };
+}
+
+/** Atualiza status_tabulacao e accord_id de uma linha */
+export async function atualizarTabulacao(
+  id: string,
+  status: StatusTabulacaoAnalitico,
+  acordoId: string | null,
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from('analitico_recebimentos')
+    .update({ status_tabulacao: status, acordo_id: acordoId })
+    .eq('id', id);
+  return { error: error?.message ?? null };
+}
+
+// ── Caso divergente: transferir sem autorização do líder ─────────────────────
+
+export interface TabularDivergenteParams {
+  linhaId: string;
+  empresaId: string;
+  codigo: string;
+  acordoExistenteId: string;
+  outroOperadorId: string;
+  outroOperadorNome: string;
+  novoOperadorId: string;
+  novoOperadorNome: string;
+  liderId?: string | null;
+}
+
+/**
+ * Remove o acordo existente do outro operador (para lixeira, motivo transferencia_nr)
+ * e atualiza a linha analítica para status 'tabulado'.
+ * NÃO exige autorização do líder — diferença vs. fluxo normal.
+ * Notifica o outro operador e o líder. Registra em logs_sistema.
+ */
+export async function tabularDivergente(
+  params: TabularDivergenteParams,
+): Promise<{ error: string | null }> {
+  const {
+    linhaId, empresaId, codigo, acordoExistenteId,
+    outroOperadorId, outroOperadorNome,
+    novoOperadorId, novoOperadorNome, liderId,
+  } = params;
+
+  // 1. Buscar o acordo completo para enviar à lixeira
+  const { data: acordo, error: errAcordo } = await supabase
+    .from('acordos')
+    .select('*')
+    .eq('id', acordoExistenteId)
+    .maybeSingle();
+
+  if (errAcordo || !acordo) {
+    return { error: errAcordo?.message ?? 'Acordo não encontrado.' };
+  }
+
+  // 2. Enviar para a lixeira (transferência sem autorização)
+  const resultLixeira = await enviarParaLixeira({
+    acordo: acordo as unknown as Acordo,
+    motivo: 'transferencia_nr',
+    operadorNome:        outroOperadorNome,
+    transferidoParaId:   novoOperadorId,
+    transferidoParaNome: novoOperadorNome,
+  });
+
+  if (!resultLixeira.ok) {
+    return { error: resultLixeira.error ?? 'Falha ao enviar acordo para lixeira.' };
+  }
+
+  // 3. Deletar o acordo do outro operador
+  await supabase.from('acordos').delete().eq('id', acordoExistenteId);
+
+  // 4. Atualizar a linha analítica para 'nao_tabulado' (operador tabula na sequência)
+  await atualizarTabulacao(linhaId, 'nao_tabulado', null);
+
+  // 5. Notificar o outro operador
+  await criarNotificacao({
+    usuario_id: outroOperadorId,
+    empresa_id: empresaId,
+    titulo:     'Acordo transferido — Analítico',
+    mensagem:
+      `Seu acordo do código ${codigo} foi transferido para ${novoOperadorNome} ` +
+      `via lançamento no Analítico. Verifique a Lixeira para detalhes.`,
+  });
+
+  // 6. Notificar o líder (impacto em comissão)
+  if (liderId) {
+    await criarNotificacao({
+      usuario_id: liderId,
+      empresa_id: empresaId,
+      titulo:     `Transferência automática — cód. ${codigo}`,
+      mensagem:
+        `O operador ${novoOperadorNome} reivindicou o código ${codigo} via Analítico. ` +
+        `O acordo foi removido de ${outroOperadorNome} e transferido. Verifique o impacto em comissão.`,
+    });
+  }
+
+  // 7. Registrar em logs_sistema
+  await supabase.from('logs_sistema').insert({
+    usuario_id:  novoOperadorId,
+    acao:        'TRANSFERENCIA_ANALITICO',
+    tabela:      'acordos',
+    registro_id: acordoExistenteId,
+    empresa_id:  empresaId,
+    detalhes: {
+      codigo,
+      de_operador_id:   outroOperadorId,
+      de_operador_nome: outroOperadorNome,
+      para_operador_id:   novoOperadorId,
+      para_operador_nome: novoOperadorNome,
+    },
+  });
+
+  return { error: null };
+}
+
+// ── Notificar todos os usuários após importação ───────────────────────────────
+
+export async function notificarImportacaoAnalitico(
+  empresaId: string,
+  mes: string,
+  importadorNome: string,
+): Promise<void> {
+  const { data: perfis } = await supabase
+    .from('perfis')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .eq('ativo', true);
+
+  if (!perfis?.length) return;
+
+  const notifs = perfis.map(p => ({
+    usuario_id: p.id,
+    empresa_id: empresaId,
+    titulo:     'Analítico atualizado',
+    mensagem:   `${importadorNome} importou os recebimentos de ${mes}. Acesse a aba Analítico para ver seus pagamentos.`,
+    lida:       false,
+  }));
+
+  // Inserir em chunks para não exceder limites
+  const CHUNK = 100;
+  for (let i = 0; i < notifs.length; i += CHUNK) {
+    await supabase.from('notificacoes').insert(notifs.slice(i, i + CHUNK));
+  }
+}

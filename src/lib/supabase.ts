@@ -229,6 +229,31 @@ export interface Profissional {
   atualizado_em: string;
 }
 
+export type StatusTabulacaoAnalitico = 'nao_tabulado' | 'tabulado' | 'divergente';
+export type FormaPagementoAnalitico  = 'boleto_pix' | 'cartao';
+
+export interface AnaliticoRecebimento {
+  id: string;
+  empresa_id: string;
+  operador_id: string | null;
+  operador_usuario: string;
+  codigo: string;
+  nome_cliente: string | null;
+  forma_pagamento: FormaPagementoAnalitico;
+  valor_recebido: number;
+  total_ho: number;
+  data_pagamento: string;   // DATE → 'yyyy-MM-dd'
+  mes_referencia: string;   // DATE → 'yyyy-MM-01'
+  acordo_id: string | null;
+  status_tabulacao: StatusTabulacaoAnalitico;
+  visto: boolean;
+  importado_por_id: string | null;
+  importado_em: string;
+  lote_id: string;
+  /** Join opcional: nome do perfil do operador */
+  perfis?: Pick<Perfil, 'id' | 'nome' | 'usuario'> | null;
+}
+
 export type TipoDocumentoLgpd =
   | 'politica_privacidade'
   | 'ropa'

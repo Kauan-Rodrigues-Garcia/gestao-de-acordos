@@ -5,13 +5,13 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { DatePickerField } from '@/components/DatePickerField';
-import { ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
+import { BarChart3, ChevronLeft, ChevronRight, Search, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { ESTADOS_BRASIL } from '@/lib/index';
 
 interface PPTableFiltersProps {
-  activeTab: 'todos' | 'pagos' | 'nao_pagos';
-  setActiveTab: (tab: 'todos' | 'pagos' | 'nao_pagos') => void;
+  activeTab: 'todos' | 'pagos' | 'nao_pagos' | 'analitico';
+  setActiveTab: (tab: 'todos' | 'pagos' | 'nao_pagos' | 'analitico') => void;
   mesFiltro: string;
   setMesFiltro: (mes: string) => void;
   busca: string;
@@ -58,20 +58,22 @@ export function PPTableFilters({
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
-          { key: 'todos',     label: 'Todos' },
-          { key: 'pagos',     label: 'Pagos / Quitados' },
-          { key: 'nao_pagos', label: 'Não Pagos' },
+          { key: 'todos',      label: 'Todos',             icon: null },
+          { key: 'pagos',      label: 'Pagos / Quitados',  icon: null },
+          { key: 'nao_pagos',  label: 'Não Pagos',         icon: null },
+          { key: 'analitico',  label: 'Analítico',         icon: BarChart3 },
         ] as const).map(tab => (
           <button
             key={tab.key}
             onClick={() => { setActiveTab(tab.key); setCurrentPage(1); }}
             className={cn(
-              'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
               activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
+            {tab.icon && <tab.icon className="w-3.5 h-3.5" />}
             {tab.label}
           </button>
         ))}
@@ -119,8 +121,8 @@ export function PPTableFilters({
         </div>
       </div>
 
-      {/* Filtros */}
-      <Card className="border-border mb-4" data-tour="filtros">
+      {/* Filtros — ocultos na aba Analítico */}
+      {activeTab !== 'analitico' && <Card className="border-border mb-4" data-tour="filtros">
         <CardContent className="p-3">
           <div className="flex flex-wrap gap-2 items-center">
             <div className="relative flex-1 min-w-[160px]">
@@ -222,7 +224,7 @@ export function PPTableFilters({
             )}
           </div>
         </CardContent>
-      </Card>
+      </Card>}
     </>
   );
 }

@@ -88,6 +88,7 @@ src/
 | `public.logs_sistema` | Log geral do sistema |
 | `public.notificacoes` | Notificações internas |
 | `public.nr_registros` | Controle de NR únicos por empresa |
+| `public.analitico_recebimentos` | Recebimentos do ERP (PaguePlay) — vide seção Analítico |
 
 ### Migrations — Ordem de Execução
 
@@ -116,6 +117,7 @@ Execute as migrations na ordem numérica abaixo:
 17_fix_signup_login_tenant.sql  # Correções de signup multi-tenant
 18_fix_novos_cargos_completo.sql# Suporte a novos perfis (elite, gerencia, diretoria)
 19_pagination_indexes.sql       # Índices para paginação
+20260629_analitico_recebimentos.sql  # Tabela analítico + RLS + permissão importar_analitico
 ```
 
 > **Nota sobre sufixos (a/b):** arquivos com o mesmo número base e sufixo `a`/`b`
@@ -334,3 +336,120 @@ VITE_ENABLE_ROUTE_MESSAGING=true  # Habilita mensagens na troca de rota
 ```
 
 > **Segurança:** A chave `SUPABASE_SERVICE_ROLE_KEY` é configurada nos **Secrets** do Supabase e nunca deve aparecer no frontend.
+
+---
+
+## Aba Analítico (PaguePlay exclusivo)
+
+Feature adicionada em 2026-06-29, branch `claude/acordos-analytics-import-r57x43`.
+**Todo o código é gatado por `isPaguePlay` — Bookplay não é afetado.**
+
+### Visão Geral
+
+Recebimentos pagos no ERP são importados por um líder via relatório Excel.
+Cada linha representa um pagamento de um cliente (cartão consolidado por código,
+boleto/pix = 1 linha por pagamento). O operador vê seus recebimentos e pode
+"tabular" cada um criando o acordo correspondente.
+
+### Tabela `analitico_recebimentos`
+
+```
+id                UUID  PK
+empresa_id        UUID  FK empresas (gate de isolamento)
+operador_id       UUID  FK auth.users — null quando cobradora não encontrada
+operador_usuario  TEXT  username bruto do relatório (coluna "Cobradora")
+codigo            TEXT  código do cliente (ex: "1994034")
+nome_cliente      TEXT  nome extraído da coluna Cliente
+forma_pagamento   TEXT  'boleto_pix' | 'cartao'
+valor_recebido    NUMERIC
+total_ho          NUMERIC
+data_pagamento    DATE
+mes_referencia    DATE  truncado ao 1º do mês (indexado)
+acordo_id         UUID  FK acordos — preenchido após tabulação
+status_tabulacao  TEXT  'nao_tabulado' | 'tabulado' | 'divergente'
+visto             BOOL  false = tag "novo" para o operador
+importado_por_id  UUID
+importado_em      TIMESTAMPTZ
+lote_id           UUID  UUID gerado no browser por importação
+```
+
+**Chave de unicidade (merge incremental):**
+`(empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario)`
+— re-upload do mesmo arquivo ignora duplicatas.
+
+**RLS:**
+- `SELECT`: operador vê só `operador_id = auth.uid()`; linhas com `operador_id IS NULL` só para líder+; líder/admin vêem tudo da empresa.
+- `INSERT`: só líder+.
+- `UPDATE`: operador atualiza suas próprias linhas (visto, status_tabulacao); líder+ atualiza tudo.
+- `DELETE`: só líder+.
+
+### Fluxo de Importação
+
+```
+Líder → upload Excel (browser) → parse local (analiticoParser.ts)
+      → resolverOperadores (cruza "Cobradora" com perfis.usuario)
+      → preview: delta (novos / já existiam / sem operador)
+      → [Confirmar dados] → importarLoteAnalitico (INSERT ON CONFLICT DO NOTHING)
+      → notificarImportacaoAnalitico (notificação para todos da empresa)
+```
+
+Chaves de serviço: `src/services/analitico/analitico.service.ts`
+Hook de estado: `src/hooks/useAnaliticoImport.ts`
+Parser: `src/services/analitico/analiticoParser.ts`
+
+### Máquina de Estados da Tabulação
+
+Por linha (campo `status_tabulacao`):
+
+| Estado | Condição | Botão | Ação |
+|--------|----------|-------|------|
+| `nao_tabulado` | Nenhum acordo `tipo_vinculo='direto'` com esse código | "Tabular acordo" | Abre `AcordoNovoInline` pré-preenchido via sessionStorage draft |
+| `tabulado` | Acordo direto existe **do mesmo operador** | "Ver acordo" | Navega até o acordo no Dashboard |
+| `divergente` | Acordo direto existe **de outro operador** | "Tabular" + modal | Remove acordo do outro operador (lixeira, sem auth do líder), notifica ambos, loga em `logs_sistema` |
+
+**Tabulação automática de cartão:**
+Se `profissionais` tem o código com `estado_uf` preenchido, o acordo é criado automaticamente (sem abrir o formulário). Caso contrário, o formulário abre pré-preenchido com todos os dados disponíveis.
+
+### Permissão `importar_analitico`
+
+Adicionada em `cargos_permissoes` via migration `20260629_analitico_recebimentos.sql`.
+- `operador`: `false` (só recebe dados)
+- `lider`, `elite`, `gerencia`, `diretoria`, `administrador`, `super_admin`: `true` (padrão)
+- Ajustável em tempo real pelo admin sem deploy.
+
+### Visões por Cargo
+
+| Cargo | Visão |
+|-------|-------|
+| `operador` | Próprios recebimentos + botão de tabulação |
+| `lider`, `gerencia`, `administrador` | Por operador + Ranking + bucket de órfãos + importar |
+| `elite` | Toggle entre visão individual (próprios) e geral (como líder) |
+
+### Arquivos Novos
+
+```
+supabase/migrations/20260629_analitico_recebimentos.sql
+src/services/analitico/
+  ├── analiticoParser.ts        # parse Excel, consolidação cartão, toDate, resolveCols
+  ├── analitico.service.ts      # CRUD, importarLote, tabularDivergente, notificar
+  └── analiticoParser.test.ts   # testes do parser e resolveCols
+src/hooks/
+  ├── useAnalitico.ts           # fetch + realtime + marcarVisto
+  └── useAnaliticoImport.ts     # máquina de estados upload→preview→confirmar
+src/pages/Dashboard/Analitico/
+  ├── index.tsx                 # raiz da aba (roteia por cargo)
+  ├── AnaliticoOperador.tsx     # visão operador
+  ├── AnaliticoLider.tsx        # visão líder/admin (por operador + ranking + órfãos)
+  ├── ImportarModal.tsx         # modal upload → preview delta → confirmar
+  ├── TabulacaoCell.tsx         # botão de tabulação (máquina de estados)
+  └── types.ts                  # tipos locais
+```
+
+### Arquivos Modificados
+
+```
+src/lib/supabase.ts             # + interfaces AnaliticoRecebimento, StatusTabulacaoAnalitico
+src/pages/Dashboard/PPTableFilters.tsx  # + aba "Analítico" no union type e array
+src/pages/Dashboard/index.tsx          # + AbaAnalitico, condicional de render
+ARQUITETURA.md                         # esta seção
+```
