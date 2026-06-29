@@ -1,0 +1,576 @@
+From 75c133d5729f3ceadeafb2617a4158643e275b40 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 23 Jun 2026 12:37:07 +0000
+Subject: [PATCH] feat(pagueplay): captura do Mundial ERP com OCR para
+ preencher acordo
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Adiciona um botão "Capturar do Mundial ERP" (exclusivo Pagueplay) nas duas
+telas de novo acordo: a página /acordos/novo e o inline do Dashboard.
+
+Fluxo: o usuário seleciona a janela do ERP 1x por sessão (Screen Capture API),
+o stream fica ativo e as capturas seguintes são instantâneas; o frame passa
+por OCR (Tesseract.js, idioma por) e os campos código, forma de pagamento,
+parcelas (apenas boleto/pix), data de pagamento e valor total são preenchidos.
+
+Os campos continuam editáveis e o salvar permanece manual.
+
+- printParser.ts: parser puro (regex) texto OCR -> dados, com testes
+- printOcr.ts: worker Tesseract reutilizado entre capturas (lazy)
+- preprocessImage.ts: upscale + cinza/contraste para melhorar o OCR
+- useCapturaMundialErp.ts: ciclo de vida do stream getDisplayMedia
+- BotaoCapturaErpPP.tsx: botão + toast, mapeamento por tela
+
+Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01YRs6Sa9BmEVFXLFTW3YUmS
+---
+ package.json                                  |  1 +
+ src/components/AcordoNovoInline/FormPP.tsx    | 18 +++-
+ .../pagueplay/BotaoCapturaErpPP.tsx           | 75 +++++++++++++++
+ src/hooks/useCapturaMundialErp.ts             | 92 +++++++++++++++++++
+ src/lib/ocr/preprocessImage.ts                | 41 +++++++++
+ src/pages/AcordoForm/FormPP.tsx               | 20 +++-
+ src/services/pagueplay/printOcr.ts            | 43 +++++++++
+ src/services/pagueplay/printParser.test.ts    | 73 +++++++++++++++
+ src/services/pagueplay/printParser.ts         | 82 +++++++++++++++++
+ 9 files changed, 438 insertions(+), 7 deletions(-)
+ create mode 100644 src/components/pagueplay/BotaoCapturaErpPP.tsx
+ create mode 100644 src/hooks/useCapturaMundialErp.ts
+ create mode 100644 src/lib/ocr/preprocessImage.ts
+ create mode 100644 src/services/pagueplay/printOcr.ts
+ create mode 100644 src/services/pagueplay/printParser.test.ts
+ create mode 100644 src/services/pagueplay/printParser.ts
+
+diff --git a/package.json b/package.json
+index c58a4e7..f6e744f 100644
+--- a/package.json
++++ b/package.json
+@@ -70,6 +70,7 @@
+     "recharts": "^2.12.7",
+     "sonner": "^1.5.0",
+     "tailwind-merge": "^2.5.2",
++    "tesseract.js": "^5.1.1",
+     "tw-animate-css": "^1.4.0",
+     "zod": "^3.23.8",
+     "zustand": "^5.0.9"
+diff --git a/src/components/AcordoNovoInline/FormPP.tsx b/src/components/AcordoNovoInline/FormPP.tsx
+index 561dc08..2c67982 100644
+--- a/src/components/AcordoNovoInline/FormPP.tsx
++++ b/src/components/AcordoNovoInline/FormPP.tsx
+@@ -10,6 +10,7 @@ import { ESTADOS_BRASIL, parseCurrencyInput } from '@/lib/index';
+ import { calcularParcelas, formatBRL } from '@/lib/money';
+ import { cn } from '@/lib/utils';
+ import { TagsSelector } from '@/components/TagsSelector';
++import { BotaoCapturaErpPP } from '@/components/pagueplay/BotaoCapturaErpPP';
+ import { TIPOS_PAGUEPLAY, PARCELAS_PP, DatePickerField } from './constants';
+ import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
+ import { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
+@@ -48,9 +49,20 @@ export function FormPP({ state }: { state: SharedFormState }) {
+               <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                 <Save className="w-4 h-4" /> Novo Acordo — PaguePay
+               </p>
+-              <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive" onClick={cancelar} disabled={salvando}>
+-                <X className="w-4 h-4" />
+-              </Button>
++              <div className="flex items-center gap-1">
++                <BotaoCapturaErpPP
++                  onDados={(d) => {
++                    if (d.instituicao) setInstituicao(d.instituicao);
++                    if (d.tipo) handleChangeTipo(d.tipo === 'boleto' ? 'boleto_pix' : 'cartao');
++                    if (d.tipo === 'boleto' && d.parcelas) setParcelasStr(d.parcelas);
++                    if (d.vencimento) setVencimento(d.vencimento);
++                    if (d.valor) setValorStr(d.valor);
++                  }}
++                />
++                <Button variant="ghost" size="icon" className="w-7 h-7 hover:bg-destructive/10 hover:text-destructive" onClick={cancelar} disabled={salvando}>
++                  <X className="w-4 h-4" />
++                </Button>
++              </div>
+             </div>
+ 
+             <div>
+diff --git a/src/components/pagueplay/BotaoCapturaErpPP.tsx b/src/components/pagueplay/BotaoCapturaErpPP.tsx
+new file mode 100644
+index 0000000..dcaf31f
+--- /dev/null
++++ b/src/components/pagueplay/BotaoCapturaErpPP.tsx
+@@ -0,0 +1,75 @@
++import { useState } from 'react';
++import { toast } from 'sonner';
++import { Camera, Loader2, MonitorCheck } from 'lucide-react';
++import { Button } from '@/components/ui/button';
++import { useCapturaMundialErp } from '@/hooks/useCapturaMundialErp';
++import { lerPrintMundialErp } from '@/services/pagueplay/printOcr';
++import type { DadosExtraidosPP } from '@/services/pagueplay/printParser';
++
++interface BotaoCapturaErpPPProps {
++  /**
++   * Aplica os dados lidos aos campos do formulário. Cada tela faz seu próprio
++   * mapeamento (a página usa react-hook-form; o inline usa estado próprio).
++   */
++  onDados: (dados: DadosExtraidosPP) => void;
++  className?: string;
++}
++
++/**
++ * Botão exclusivo da Pagueplay: captura a janela do Mundial ERP, roda OCR
++ * (Tesseract.js) e preenche os campos do acordo. Os campos continuam
++ * editáveis e o salvar permanece manual.
++ */
++export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps) {
++  const { ativo, capturarFrame } = useCapturaMundialErp();
++  const [processando, setProcessando] = useState(false);
++
++  async function handleCapturar() {
++    setProcessando(true);
++    try {
++      const canvas = await capturarFrame();
++      if (!canvas) return; // usuário cancelou o seletor
++
++      const dados = await lerPrintMundialErp(canvas);
++      const n = [
++        dados.instituicao,
++        dados.tipo,
++        dados.parcelas,
++        dados.vencimento,
++        dados.valor,
++      ].filter(Boolean).length;
++
++      if (n === 0) {
++        toast.warning(
++          'Não consegui ler os dados do print. Reposicione a janela do ERP e tente de novo.',
++        );
++        return;
++      }
++
++      onDados(dados);
++      toast.success(`${n} campo(s) preenchido(s) pelo print. Confira antes de salvar.`);
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : 'Falha ao capturar/ler o print.';
++      toast.error(msg);
++    } finally {
++      setProcessando(false);
++    }
++  }
++
++  const Icone = processando ? Loader2 : ativo ? MonitorCheck : Camera;
++
++  return (
++    <Button
++      type="button"
++      variant="outline"
++      size="sm"
++      onClick={handleCapturar}
++      disabled={processando}
++      className={className}
++      title="Captura a janela do Mundial ERP e preenche os campos automaticamente"
++    >
++      <Icone className={`w-4 h-4 ${processando ? 'animate-spin' : ''}`} />
++      {processando ? 'Lendo print…' : ativo ? 'Capturar do ERP' : 'Capturar do Mundial ERP'}
++    </Button>
++  );
++}
+diff --git a/src/hooks/useCapturaMundialErp.ts b/src/hooks/useCapturaMundialErp.ts
+new file mode 100644
+index 0000000..072461d
+--- /dev/null
++++ b/src/hooks/useCapturaMundialErp.ts
+@@ -0,0 +1,92 @@
++import { useCallback, useEffect, useRef, useState } from 'react';
++
++/**
++ * Gerencia a captura da janela do Mundial ERP via Screen Capture API.
++ *
++ * Importante: o navegador NÃO permite escolher uma janela específica por
++ * código — o seletor nativo sempre aparece e o usuário escolhe a janela.
++ * Aqui, o usuário seleciona a janela do ERP UMA vez por sessão; o stream
++ * permanece ativo e as capturas seguintes são instantâneas (sem reabrir o
++ * seletor).
++ */
++export function useCapturaMundialErp() {
++  const streamRef = useRef<MediaStream | null>(null);
++  const videoRef = useRef<HTMLVideoElement | null>(null);
++  const [ativo, setAtivo] = useState(false);
++  const [iniciando, setIniciando] = useState(false);
++
++  const pararCaptura = useCallback(() => {
++    streamRef.current?.getTracks().forEach((t) => t.stop());
++    streamRef.current = null;
++    if (videoRef.current) {
++      videoRef.current.srcObject = null;
++      videoRef.current = null;
++    }
++    setAtivo(false);
++  }, []);
++
++  /** Abre o seletor do navegador e ativa o stream. Retorna false se cancelado. */
++  const iniciarCaptura = useCallback(async (): Promise<boolean> => {
++    if (!navigator.mediaDevices?.getDisplayMedia) {
++      throw new Error('Captura de tela não é suportada neste navegador.');
++    }
++    setIniciando(true);
++    try {
++      const stream = await navigator.mediaDevices.getDisplayMedia({
++        video: { frameRate: 1 },
++        audio: false,
++      });
++
++      const video = document.createElement('video');
++      video.srcObject = stream;
++      video.muted = true;
++      await video.play();
++
++      // Usuário pode encerrar o compartilhamento pela UI do navegador.
++      stream.getVideoTracks()[0]?.addEventListener('ended', () => pararCaptura());
++
++      streamRef.current = stream;
++      videoRef.current = video;
++      setAtivo(true);
++      return true;
++    } catch (err) {
++      // Cancelar o seletor não é um erro fatal.
++      if (
++        err instanceof DOMException &&
++        (err.name === 'NotAllowedError' || err.name === 'AbortError')
++      ) {
++        return false;
++      }
++      throw err;
++    } finally {
++      setIniciando(false);
++    }
++  }, [pararCaptura]);
++
++  /** Captura um frame do stream ativo. Inicia a captura se ainda não houver. */
++  const capturarFrame = useCallback(async (): Promise<HTMLCanvasElement | null> => {
++    if (!streamRef.current || !videoRef.current) {
++      const ok = await iniciarCaptura();
++      if (!ok) return null;
++    }
++    const video = videoRef.current;
++    if (!video) return null;
++
++    const w = video.videoWidth;
++    const h = video.videoHeight;
++    if (!w || !h) return null;
++
++    const canvas = document.createElement('canvas');
++    canvas.width = w;
++    canvas.height = h;
++    const ctx = canvas.getContext('2d');
++    if (!ctx) return null;
++    ctx.drawImage(video, 0, 0, w, h);
++    return canvas;
++  }, [iniciarCaptura]);
++
++  // Encerra o stream ao desmontar.
++  useEffect(() => () => pararCaptura(), [pararCaptura]);
++
++  return { ativo, iniciando, iniciarCaptura, capturarFrame, pararCaptura };
++}
+diff --git a/src/lib/ocr/preprocessImage.ts b/src/lib/ocr/preprocessImage.ts
+new file mode 100644
+index 0000000..73597dc
+--- /dev/null
++++ b/src/lib/ocr/preprocessImage.ts
+@@ -0,0 +1,41 @@
++/**
++ * Pré-processa um frame capturado para melhorar a leitura do OCR.
++ *
++ * - Faz upscale (texto de UI costuma ser pequeno para o Tesseract).
++ * - Converte para tons de cinza com leve aumento de contraste.
++ *
++ * Evita binarização agressiva (threshold puro), que pode apagar texto
++ * com anti-aliasing dependendo do tema do ERP.
++ */
++export function preprocessarParaOcr(
++  src: HTMLCanvasElement,
++  escala = 2,
++): HTMLCanvasElement {
++  const largura = Math.round(src.width * escala);
++  const altura = Math.round(src.height * escala);
++
++  const out = document.createElement('canvas');
++  out.width = largura;
++  out.height = altura;
++
++  const ctx = out.getContext('2d');
++  if (!ctx) return src;
++
++  ctx.imageSmoothingEnabled = true;
++  ctx.imageSmoothingQuality = 'high';
++  ctx.drawImage(src, 0, 0, largura, altura);
++
++  const img = ctx.getImageData(0, 0, largura, altura);
++  const d = img.data;
++  for (let i = 0; i < d.length; i += 4) {
++    const cinza = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
++    // aumento de contraste em torno do meio-tom (128)
++    const contraste = Math.min(255, Math.max(0, (cinza - 128) * 1.25 + 128));
++    d[i] = contraste;
++    d[i + 1] = contraste;
++    d[i + 2] = contraste;
++  }
++  ctx.putImageData(img, 0, 0);
++
++  return out;
++}
+diff --git a/src/pages/AcordoForm/FormPP.tsx b/src/pages/AcordoForm/FormPP.tsx
+index f577762..a7e1352 100644
+--- a/src/pages/AcordoForm/FormPP.tsx
++++ b/src/pages/AcordoForm/FormPP.tsx
+@@ -10,6 +10,7 @@ import {
+ } from 'lucide-react';
+ import { STATUS_LABELS_PAGUEPLAY, ESTADOS_BRASIL } from '@/lib/index';
+ import { cn } from '@/lib/utils';
++import { BotaoCapturaErpPP } from '@/components/pagueplay/BotaoCapturaErpPP';
+ import type { FormData } from './schemas';
+ 
+ interface FormPPProps {
+@@ -34,10 +35,21 @@ export function FormPP({
+       {/* PP BLOCO 1: Dados Principais */}
+       <Card className="border-primary/30 bg-primary/3">
+         <CardHeader className="pb-3">
+-          <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+-            <Hash className="w-4 h-4" /> Dados Principais
+-            <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
+-          </CardTitle>
++          <div className="flex items-center justify-between gap-2 flex-wrap">
++            <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
++              <Hash className="w-4 h-4" /> Dados Principais
++              <span className="text-xs font-normal text-muted-foreground ml-1">campos mais importantes</span>
++            </CardTitle>
++            <BotaoCapturaErpPP
++              onDados={(d) => {
++                if (d.instituicao) setValue('instituicao', d.instituicao, { shouldValidate: true });
++                if (d.tipo) setValue('tipo', d.tipo, { shouldValidate: true });
++                if (d.tipo === 'boleto' && d.parcelas) setValue('parcelas', d.parcelas, { shouldValidate: true });
++                if (d.vencimento) setValue('vencimento', d.vencimento, { shouldValidate: true });
++                if (d.valor) setValue('valor', d.valor, { shouldValidate: true });
++              }}
++            />
++          </div>
+         </CardHeader>
+         <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+ 
+diff --git a/src/services/pagueplay/printOcr.ts b/src/services/pagueplay/printOcr.ts
+new file mode 100644
+index 0000000..1348c9c
+--- /dev/null
++++ b/src/services/pagueplay/printOcr.ts
+@@ -0,0 +1,43 @@
++import type { Worker } from 'tesseract.js';
++import { preprocessarParaOcr } from '@/lib/ocr/preprocessImage';
++import { extrairDadosPrintPP, type DadosExtraidosPP } from './printParser';
++
++// O Tesseract é pesado (~MB de wasm + traineddata). Carregamos sob demanda
++// e reutilizamos o mesmo worker entre capturas (importante para alto volume).
++let workerPromise: Promise<Worker> | null = null;
++
++async function obterWorker(): Promise<Worker> {
++  if (!workerPromise) {
++    workerPromise = (async () => {
++      const { createWorker } = await import('tesseract.js');
++      return createWorker('por');
++    })();
++  }
++  return workerPromise;
++}
++
++/** Encerra o worker do Tesseract e libera memória. */
++export async function encerrarOcr(): Promise<void> {
++  if (!workerPromise) return;
++  const pendente = workerPromise;
++  workerPromise = null;
++  try {
++    const worker = await pendente;
++    await worker.terminate();
++  } catch {
++    // worker já encerrado ou nunca inicializado — nada a fazer
++  }
++}
++
++/**
++ * Roda OCR no frame capturado da janela do Mundial ERP e extrai os campos
++ * do acordo Pagueplay.
++ */
++export async function lerPrintMundialErp(
++  canvas: HTMLCanvasElement,
++): Promise<DadosExtraidosPP> {
++  const worker = await obterWorker();
++  const imagem = preprocessarParaOcr(canvas);
++  const { data } = await worker.recognize(imagem);
++  return extrairDadosPrintPP(data.text);
++}
+diff --git a/src/services/pagueplay/printParser.test.ts b/src/services/pagueplay/printParser.test.ts
+new file mode 100644
+index 0000000..27e8f30
+--- /dev/null
++++ b/src/services/pagueplay/printParser.test.ts
+@@ -0,0 +1,73 @@
++import { describe, it, expect } from 'vitest';
++import { extrairDadosPrintPP } from './printParser';
++
++describe('extrairDadosPrintPP', () => {
++  it('extrai todos os campos de um boleto parcelado', () => {
++    const texto = `
++      Código: 5375194
++      Cliente: SIMONE MARIA CAVALCANTI DE LIRA
++      Forma de pagamento: Boleto
++      Parcelas: 4
++      Valor total: R$ 1.422,81
++      1ª parcela R$ 355,71
++      Primeiro vencimento: 23/06/2026
++    `;
++    const dados = extrairDadosPrintPP(texto);
++    expect(dados.instituicao).toBe('5375194');
++    expect(dados.tipo).toBe('boleto');
++    expect(dados.parcelas).toBe('4');
++    expect(dados.vencimento).toBe('2026-06-23');
++    expect(dados.valor).toBe('1.422,81');
++  });
++
++  it('mapeia PIX como tipo boleto', () => {
++    const dados = extrairDadosPrintPP('Forma de pagamento: PIX\nValor: R$ 200,00');
++    expect(dados.tipo).toBe('boleto');
++  });
++
++  it('não extrai parcelas quando é cartão', () => {
++    const texto = `
++      Código: 9988776
++      Forma de pagamento: Cartão de Crédito
++      Parcelas: 6
++      Valor total: R$ 600,00
++      Vencimento: 10/07/2026
++    `;
++    const dados = extrairDadosPrintPP(texto);
++    expect(dados.tipo).toBe('cartao');
++    expect(dados.parcelas).toBeUndefined();
++    expect(dados.vencimento).toBe('2026-07-10');
++    expect(dados.valor).toBe('600,00');
++  });
++
++  it('reconhece formato "4x" para parcelas', () => {
++    const dados = extrairDadosPrintPP('Boleto em 4x de R$ 355,70\nValor total R$ 1.422,80');
++    expect(dados.parcelas).toBe('4');
++  });
++
++  it('usa o maior valor quando não há rótulo "total"', () => {
++    const texto = 'Boleto\nParcela: R$ 355,71\nR$ 355,70\nR$ 1.422,81\n02/02/2026';
++    const dados = extrairDadosPrintPP(texto);
++    expect(dados.valor).toBe('1.422,81');
++  });
++
++  it('prefere a data rotulada quando há mais de uma data', () => {
++    const texto = `
++      Data de cadastro: 01/01/2026
++      Data de pagamento: 23/06/2026
++      Boleto R$ 100,00
++    `;
++    const dados = extrairDadosPrintPP(texto);
++    expect(dados.vencimento).toBe('2026-06-23');
++  });
++
++  it('ignora parcelas fora do intervalo válido (1..12)', () => {
++    const dados = extrairDadosPrintPP('Boleto\nParcelas: 99\nR$ 100,00');
++    expect(dados.parcelas).toBeUndefined();
++  });
++
++  it('retorna objeto vazio para texto irreconhecível', () => {
++    expect(extrairDadosPrintPP('texto qualquer sem dados')).toEqual({});
++    expect(extrairDadosPrintPP('')).toEqual({});
++  });
++});
+diff --git a/src/services/pagueplay/printParser.ts b/src/services/pagueplay/printParser.ts
+new file mode 100644
+index 0000000..4db791e
+--- /dev/null
++++ b/src/services/pagueplay/printParser.ts
+@@ -0,0 +1,82 @@
++import { parseBRL } from '@/lib/money';
++
++/**
++ * Dados extraídos do print do Mundial ERP (apenas Pagueplay).
++ * Formato neutro — cada tela faz seu próprio mapeamento para os campos do form.
++ */
++export interface DadosExtraidosPP {
++  /** Código do cliente/acordo (campo `instituicao`). */
++  instituicao?: string;
++  /** Forma de pagamento normalizada. `boleto` cobre Boleto e PIX. */
++  tipo?: 'boleto' | 'cartao';
++  /** Quantidade de parcelas (1..12) — só faz sentido quando `tipo === 'boleto'`. */
++  parcelas?: string;
++  /** Data de pagamento/vencimento no formato `yyyy-MM-dd`. */
++  vencimento?: string;
++  /** Valor total como string BR (ex.: `1.422,81`). */
++  valor?: string;
++}
++
++// Valor monetário BR: "1.422,81", "355,71" (com ou sem separador de milhar)
++const RE_MOEDA = /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/g;
++
++/**
++ * Extrai os campos do acordo a partir do texto bruto do OCR.
++ * Função pura (sem dependência de DOM/OCR) — fácil de testar.
++ *
++ * ⚠️ Os regex assumem o layout atual do Mundial ERP. Se a tela do ERP mudar,
++ * estes padrões precisam ser ajustados.
++ */
++export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
++  const out: DadosExtraidosPP = {};
++  if (!textoOcr) return out;
++
++  // normaliza espaços não-quebráveis
++  const t = textoOcr.replace(/ /g, ' ');
++
++  // ── Código ────────────────────────────────────────────────────────────
++  const mCod = t.match(/c[oó]digo\s*[:#-]?\s*(\d{3,})/i);
++  if (mCod) out.instituicao = mCod[1];
++
++  // ── Forma de pagamento ────────────────────────────────────────────────
++  if (/\b(boleto|pix)\b/i.test(t)) out.tipo = 'boleto';
++  else if (/\bcart[aã]o\b/i.test(t)) out.tipo = 'cartao';
++
++  // ── Parcelas (apenas boleto/pix) ──────────────────────────────────────
++  if (out.tipo === 'boleto') {
++    const mParc =
++      t.match(/parcelas?\s*[:\-]?\s*(\d{1,2})/i) ||
++      t.match(/(\d{1,2})\s*x\b/i) ||
++      t.match(/em\s+(\d{1,2})\s+vezes/i);
++    if (mParc) {
++      const n = parseInt(mParc[1], 10);
++      if (n >= 1 && n <= 12) out.parcelas = String(n);
++    }
++  }
++
++  // ── Data (vencimento / data de pagamento) ─────────────────────────────
++  // Tenta primeiro uma data rotulada; senão, a primeira data dd/mm/aaaa do texto.
++  const mVenc =
++    t.match(
++      /(?:primeiro\s+vencimento|data\s+de\s+pagamento|vencimento|pagamento)\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i,
++    ) || t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
++  if (mVenc) {
++    out.vencimento = `${mVenc[3]}-${mVenc[2]}-${mVenc[1]}`;
++  }
++
++  // ── Valor total ───────────────────────────────────────────────────────
++  // Preferência: valor rotulado como "total"/"do acordo". Fallback: maior valor.
++  const mTotal = t.match(
++    /valor\s*(?:total|do\s+acordo)\s*[:\-]?\s*R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})/i,
++  );
++  if (mTotal) {
++    out.valor = mTotal[1];
++  } else {
++    const valores = [...t.matchAll(RE_MOEDA)].map((m) => m[1]);
++    if (valores.length) {
++      out.valor = valores.reduce((a, b) => (parseBRL(b) > parseBRL(a) ? b : a));
++    }
++  }
++
++  return out;
++}
+-- 
+2.43.0
+

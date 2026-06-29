@@ -323,9 +323,11 @@ export async function buscarDestaquesDoMes(
   empresaId: string,
   mes: string,
   equipeId?: string | null,
+  setorId?: string | null,
 ): Promise<{ data: DestaqueDiaAnalitico[]; error: string | null }> {
   const params: Record<string, unknown> = { p_empresa_id: empresaId, p_mes: mes };
   if (equipeId) params['p_equipe_id'] = equipeId;
+  if (setorId)  params['p_setor_id']  = setorId;
   const { data, error } = await supabase.rpc('fn_analitico_destaques_dia', params);
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
 }
@@ -335,41 +337,86 @@ export async function buscarDestaquesDoMes(
 export interface EquipeAnalitico {
   id: string;
   nome: string;
+  setor_id: string | null;
 }
 
 export interface OperadorEquipeInfo {
-  equipe_id: string | null;
+  equipe_id:   string | null;
   equipe_nome: string;
+  setor_id:    string | null;
 }
 
-/** Busca equipes da empresa e gera mapa operadorId → equipe. */
+/** Busca equipes da empresa e gera mapa operadorId → equipe (inclui setor_id). */
 export async function buscarEquipesComOperadores(empresaId: string): Promise<{
   equipes: EquipeAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
 }> {
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, equipes(id, nome)')
+    .select('id, equipe_id, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
 
-  const equipeSet = new Map<string, string>();
+  const equipeMap = new Map<string, { nome: string; setor_id: string | null }>();
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
 
-  for (const p of (data ?? []) as { id: string; equipe_id: string | null; equipes: { id: string; nome: string } | null }[]) {
+  for (const p of (data ?? []) as {
+    id: string;
+    equipe_id: string | null;
+    equipes: { id: string; nome: string; setor_id: string | null } | null;
+  }[]) {
     const eq = p.equipes;
     operadorEquipeMap[p.id] = {
       equipe_id:   p.equipe_id ?? null,
       equipe_nome: eq?.nome ?? 'Sem equipe',
+      setor_id:    eq?.setor_id ?? null,
     };
-    if (p.equipe_id && eq?.nome) equipeSet.set(p.equipe_id, eq.nome);
+    if (p.equipe_id && eq?.nome) {
+      equipeMap.set(p.equipe_id, { nome: eq.nome, setor_id: eq.setor_id ?? null });
+    }
   }
 
-  const equipes: EquipeAnalitico[] = Array.from(equipeSet.entries())
-    .map(([id, nome]) => ({ id, nome }))
+  const equipes: EquipeAnalitico[] = Array.from(equipeMap.entries())
+    .map(([id, v]) => ({ id, nome: v.nome, setor_id: v.setor_id }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   return { equipes, operadorEquipeMap };
+}
+
+// ── Resumo mensal (snapshot salvo na importação) ──────────────────────────────
+
+export interface ResumoMensalAnalitico {
+  total_recebido:   number;
+  total_ho:         number;
+  total_operadores: number;
+  total_pagamentos: number;
+  periodo_inicio:   string | null;
+  periodo_fim:      string | null;
+  atualizado_em:    string | null;
+}
+
+export async function buscarResumoMensal(
+  empresaId: string,
+  mes: string,
+): Promise<{ data: ResumoMensalAnalitico | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from('analitico_resumo_mensal')
+    .select('total_recebido, total_ho, total_operadores, total_pagamentos, periodo_inicio, periodo_fim, atualizado_em')
+    .eq('empresa_id', empresaId)
+    .eq('mes', mes)
+    .maybeSingle();
+  return { data: data as ResumoMensalAnalitico | null, error: error?.message ?? null };
+}
+
+/** Agrega totais do mês diretamente no banco via RPC e salva o snapshot. */
+export async function atualizarResumoMensal(
+  empresaId: string,
+  mes: string,
+): Promise<void> {
+  await supabase.rpc('fn_analitico_atualizar_resumo', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+  });
 }
 
 // ── Verificar e atualizar status de tabulação ─────────────────────────────────

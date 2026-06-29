@@ -263,6 +263,17 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoInlineParam]);
 
+  // Abre o detalhe inline quando navegado a partir da aba Analítico (ver acordo)
+  const verAcordoParam = searchParams.get('verAcordo');
+  useEffect(() => {
+    if (!verAcordoParam) return;
+    setDetalheInlineIdTabela(verAcordoParam);
+    const params = new URLSearchParams(searchParams);
+    params.delete('verAcordo');
+    setSearchParams(params, { replace: true });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [verAcordoParam]);
+
   useEffect(() => {
     if (!highlightedId || loading || highlightFoundRef.current) return;
     if (acordos.some(a => a.id === highlightedId)) {

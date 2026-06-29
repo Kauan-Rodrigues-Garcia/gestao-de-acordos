@@ -9,6 +9,7 @@ import {
   resolverOperadores,
   importarLoteAnalitico,
   notificarImportacaoAnalitico,
+  atualizarResumoMensal,
   type OperadorResolvidoMap,
   type OperadorMatchDetalhe,
   type PerfilResumido,
@@ -121,6 +122,9 @@ export function useAnaliticoImport() {
     );
 
     setResultado(res);
+
+    // Salva snapshot de totais imediatamente após inserção (antes de qualquer deleção)
+    await atualizarResumoMensal(empresa.id, preview.mes);
 
     await notificarImportacaoAnalitico(
       empresa.id,

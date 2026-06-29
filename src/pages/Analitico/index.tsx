@@ -1,6 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, User, Users, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -8,6 +8,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { isPerfilAdminOuLider, ROUTE_PATHS } from '@/lib/index';
+import { supabase } from '@/lib/supabase';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
@@ -24,7 +25,10 @@ export default function PaginaAnalitico() {
   const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
   const isOperador  = !isLiderMais;
 
-  const [visaoElite, setVisaoElite] = useState<'individual' | 'geral'>('geral');
+  const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
+  const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
+  const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
+
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -42,6 +46,16 @@ export default function PaginaAnalitico() {
   const refetchOperador = useCallback(() => {
     void refetchProprios();
   }, [refetchProprios]);
+
+  useEffect(() => {
+    if (!empresa?.id) return;
+    supabase
+      .from('setores')
+      .select('id, nome')
+      .eq('empresa_id', empresa.id)
+      .order('nome')
+      .then(({ data }) => setSetores((data as { id: string; nome: string }[]) ?? []));
+  }, [empresa?.id]);
 
   // ── Guards (após todos os hooks) ─────────────────────────────────────────
   if (!tenant.isPaguePlay) {
@@ -74,7 +88,7 @@ export default function PaginaAnalitico() {
   }
 
   function onVerAcordo(acordoId: string) {
-    navigate(ROUTE_PATHS.ACORDO_DETALHE.replace(':id', acordoId));
+    navigate(ROUTE_PATHS.DASHBOARD + '?verAcordo=' + acordoId);
   }
 
   function mesAnterior() {
@@ -144,23 +158,51 @@ export default function PaginaAnalitico() {
         )}
       </div>
 
-      {/* Seletor de mês */}
-      <div className="flex items-center gap-2">
-        <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesAnterior}>
-            <ChevronLeft className="w-3.5 h-3.5" />
-          </Button>
-          <span className="text-sm font-semibold min-w-[130px] text-center">
-            {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-          </span>
-          <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesProximo}>
-            <ChevronRight className="w-3.5 h-3.5" />
-          </Button>
-          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={mesAtual}>
-            Mês atual
-          </Button>
+      {/* Seletor de mês + filtro de setor */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesAnterior}>
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </Button>
+            <span className="text-sm font-semibold min-w-[130px] text-center">
+              {new Date(mesFiltro + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+            </span>
+            <Button variant="outline" size="icon" className="h-7 w-7" onClick={mesProximo}>
+              <ChevronRight className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground" onClick={mesAtual}>
+              Mês atual
+            </Button>
+          </div>
         </div>
+
+        {/* Filtro de setor — só aparece para líderes+ com setores cadastrados */}
+        {isLiderMais && setores.length > 0 && (
+          <div className="flex items-center gap-2">
+            <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <span className="text-xs text-muted-foreground font-medium shrink-0">Setor:</span>
+            <select
+              value={filtroSetorId ?? ''}
+              onChange={e => setFiltroSetorId(e.target.value || null)}
+              className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
+            >
+              <option value="">Todos os setores</option>
+              {setores.map(s => (
+                <option key={s.id} value={s.id}>{s.nome}</option>
+              ))}
+            </select>
+            {filtroSetorId && (
+              <button
+                onClick={() => setFiltroSetorId(null)}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Conteúdo por cargo */}
@@ -182,6 +224,7 @@ export default function PaginaAnalitico() {
         <AnaliticoLider
           empresaId={empresa.id}
           mes={mesFiltro}
+          setorId={filtroSetorId}
           temPermissaoImportar={temPermissao('importar_analitico')}
           operadorId={perfil.id}
           operadorNome={perfil.nome}

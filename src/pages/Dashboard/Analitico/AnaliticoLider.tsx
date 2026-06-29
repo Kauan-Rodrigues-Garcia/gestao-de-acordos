@@ -1,17 +1,19 @@
 /**
  * AnaliticoLider — visão líder/gerência/admin
  *
- * Lazy loading: resumos via RPC na abertura; linhas individuais só ao expandir.
- * Agrupamento por equipe em "Por operador".
- * Ranking com pódio (top 3 + faixas 4-10 + demais).
- * Filtro de equipe em Ranking e Destaques do dia.
- * Filtro de data por operador expandido.
+ * • Cards de resumo mensal (snapshot salvo na importação — não distorcido por deleções)
+ * • Agrupamento por equipe em "Por operador" (respeita filtro de setor)
+ * • Ranking com pódio (top 3 + faixas 4-10 + demais), filtrável por equipe/setor
+ * • Destaques do dia filtráveis por equipe/setor
+ * • Filtro de equipe nos tabs Ranking e Destaques (só equipes do setor selecionado)
+ * • Filtro de data por operador expandido (client-side)
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter,
+  TrendingUp, CreditCard, Calendar, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -24,10 +26,12 @@ import {
   buscarAnalitico,
   buscarDestaquesDoMes,
   buscarEquipesComOperadores,
+  buscarResumoMensal,
   removerLinhaAnalitico,
   removerOrfaosDoMes,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
+  type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
@@ -37,13 +41,14 @@ import { ImportarModal } from './ImportarModal';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
-const DIAS_PT    = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-const MESES_PT   = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
-                    'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MESES_PT    = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho',
+                     'Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 interface AnaliticoLiderProps {
   empresaId: string;
   mes: string;
+  setorId?: string | null;
   temPermissaoImportar: boolean;
   operadorId: string;
   operadorNome: string;
@@ -59,24 +64,27 @@ interface AnaliticoLiderProps {
 interface FiltroData { inicio: string; fim: string }
 
 export function AnaliticoLider({
-  empresaId, mes, temPermissaoImportar,
-  operadorId, operadorNome, liderId,
+  empresaId, mes, setorId,
+  temPermissaoImportar, operadorId, operadorNome, liderId,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
 
-  const [modalImportar,  setModalImportar]  = useState(false);
+  const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'orfaos'>('operadores');
 
-  // ── Resumos ───────────────────────────────────────────────────────────────
+  // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
   const [loadingResumos, setLoadingResumos] = useState(true);
+
+  // ── Snapshot mensal (cards de resumo) ────────────────────────────────────
+  const [snapshot,        setSnapshot]        = useState<ResumoMensalAnalitico | null>(null);
+  const [loadingSnapshot, setLoadingSnapshot] = useState(true);
 
   // ── Linhas expandidas (lazy) ──────────────────────────────────────────────
   const [expandidos,    setExpandidos]    = useState<Set<string>>(new Set());
   const [linhasMap,     setLinhasMap]     = useState<Map<string, AnaliticoRecebimento[]>>(new Map());
   const [loadingLinhas, setLoadingLinhas] = useState<Set<string>>(new Set());
-  // Filtro de data por operador expandido
   const [filtrosDatas,  setFiltrosDatas]  = useState<Map<string, FiltroData>>(new Map());
 
   // ── Órfãos ────────────────────────────────────────────────────────────────
@@ -91,9 +99,9 @@ export function AnaliticoLider({
   const [loadingDestaques, setLoadingDestaques] = useState(false);
 
   // ── Equipes ───────────────────────────────────────────────────────────────
-  const [equipes,            setEquipes]            = useState<EquipeAnalitico[]>([]);
-  const [operadorEquipeMap,  setOperadorEquipeMap]  = useState<Record<string, OperadorEquipeInfo>>({});
-  const [filtroEquipeId,     setFiltroEquipeId]     = useState<string | null>(null);
+  const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
+  const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, OperadorEquipeInfo>>({});
+  const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
 
   // ── Cargas ────────────────────────────────────────────────────────────────
   const carregarResumos = useCallback(async () => {
@@ -108,6 +116,14 @@ export function AnaliticoLider({
     setLoadingResumos(false);
   }, [empresaId, mes]);
 
+  const carregarSnapshot = useCallback(async () => {
+    if (!empresaId || !mes) return;
+    setLoadingSnapshot(true);
+    const { data } = await buscarResumoMensal(empresaId, mes);
+    setSnapshot(data);
+    setLoadingSnapshot(false);
+  }, [empresaId, mes]);
+
   const carregarOrfaos = useCallback(async () => {
     if (!empresaId || !mes) return;
     setLoadingOrfaos(true);
@@ -117,24 +133,26 @@ export function AnaliticoLider({
     setLoadingOrfaos(false);
   }, [empresaId, mes]);
 
-  const carregarDestaques = useCallback(async (equipeId?: string | null) => {
+  const carregarDestaques = useCallback(async (equipeId?: string | null, sId?: string | null) => {
     if (!empresaId || !mes) return;
     setLoadingDestaques(true);
-    const { data, error } = await buscarDestaquesDoMes(empresaId, mes, equipeId);
+    const { data, error } = await buscarDestaquesDoMes(empresaId, mes, equipeId, sId);
     if (error) toast.error(`Erro ao carregar destaques: ${error}`);
     setDestaques(data);
     setLoadingDestaques(false);
   }, [empresaId, mes]);
 
-  useEffect(() => { void carregarResumos(); }, [carregarResumos]);
+  useEffect(() => {
+    void carregarResumos();
+    void carregarSnapshot();
+  }, [carregarResumos, carregarSnapshot]);
 
   useEffect(() => {
     if (abaAtiva === 'orfaos')    void carregarOrfaos();
-    if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId);
+    if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [abaAtiva]);
 
-  // Carrega equipes uma vez por empresa
   useEffect(() => {
     buscarEquipesComOperadores(empresaId).then(({ equipes: eq, operadorEquipeMap: oem }) => {
       setEquipes(eq);
@@ -142,21 +160,34 @@ export function AnaliticoLider({
     });
   }, [empresaId]);
 
+  // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
+  useEffect(() => {
+    setFiltroEquipeId(null);
+    if (abaAtiva === 'destaques') void carregarDestaques(null, setorId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setorId]);
+
+  // ── Equipes filtradas pelo setor selecionado (para dropdowns internos) ────
+  const equipesFiltradas = useMemo(() => {
+    if (!setorId) return equipes;
+    return equipes.filter(e => e.setor_id === setorId);
+  }, [equipes, setorId]);
+
   // ── Filtro de equipe ──────────────────────────────────────────────────────
   function mudarFiltroEquipe(equipeId: string | null) {
     setFiltroEquipeId(equipeId);
-    if (abaAtiva === 'destaques') void carregarDestaques(equipeId);
+    if (abaAtiva === 'destaques') void carregarDestaques(equipeId, setorId);
   }
 
   // ── Toggle card de operador ───────────────────────────────────────────────
   async function toggleExpandido(opId: string) {
-    const jáAberto = expandidos.has(opId);
+    const jaAberto = expandidos.has(opId);
     setExpandidos(prev => {
       const next = new Set(prev);
-      jáAberto ? next.delete(opId) : next.add(opId);
+      jaAberto ? next.delete(opId) : next.add(opId);
       return next;
     });
-    if (!jáAberto && !linhasMap.has(opId)) {
+    if (!jaAberto && !linhasMap.has(opId)) {
       setLoadingLinhas(prev => new Set(prev).add(opId));
       const { data } = await buscarAnalitico({ empresaId, mes, operadorId: opId });
       setLinhasMap(prev => new Map(prev).set(opId, data));
@@ -164,7 +195,6 @@ export function AnaliticoLider({
     }
   }
 
-  // Filtra linhas por data (client-side)
   function getLinhasOp(opId: string): AnaliticoRecebimento[] {
     const linhas = linhasMap.get(opId) ?? [];
     const f = filtrosDatas.get(opId);
@@ -178,7 +208,7 @@ export function AnaliticoLider({
 
   function setFiltroData(opId: string, campo: 'inicio' | 'fim', valor: string) {
     setFiltrosDatas(prev => {
-      const next = new Map(prev);
+      const next  = new Map(prev);
       const atual = next.get(opId) ?? { inicio: '', fim: '' };
       next.set(opId, { ...atual, [campo]: valor });
       return next;
@@ -210,39 +240,78 @@ export function AnaliticoLider({
     setModalImportar(false);
     if (importHook.estado === 'done') {
       void carregarResumos();
-      void carregarOrfaos();
-      void carregarDestaques(filtroEquipeId);
+      void carregarSnapshot();
+      if (abaAtiva === 'orfaos')    void carregarOrfaos();
+      if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
     }
   }
 
-  // ── Agrupamento por equipe (Por operador) ──────────────────────────────────
+  // ── Resumos filtrados (ranking / métricas por setor ou equipe) ────────────
+  const resumosFiltrados = useMemo(() => {
+    let base = resumos;
+    if (setorId) {
+      base = base.filter(r => operadorEquipeMap[r.operador_id]?.setor_id === setorId);
+    }
+    if (filtroEquipeId) {
+      base = base.filter(r => operadorEquipeMap[r.operador_id]?.equipe_id === filtroEquipeId);
+    }
+    return base;
+  }, [resumos, operadorEquipeMap, setorId, filtroEquipeId]);
+
+  // ── Agrupamento por equipe (Por operador) ─────────────────────────────────
   const resumosPorEquipe = useMemo(() => {
-    const groups = new Map<string, { equipeId: string | null; equipeNome: string; resumos: ResumoOperadorAnalitico[] }>();
-    for (const r of resumos) {
+    const baseResumos = setorId
+      ? resumos.filter(r => operadorEquipeMap[r.operador_id]?.setor_id === setorId)
+      : resumos;
+    const groups = new Map<string, {
+      equipeId: string | null;
+      equipeNome: string;
+      items: ResumoOperadorAnalitico[];
+    }>();
+    for (const r of baseResumos) {
       const info = operadorEquipeMap[r.operador_id];
       const key  = info?.equipe_id ?? '__sem__';
       const nome = info?.equipe_nome ?? 'Sem equipe';
-      if (!groups.has(key)) groups.set(key, { equipeId: info?.equipe_id ?? null, equipeNome: nome, resumos: [] });
-      groups.get(key)!.resumos.push(r);
+      if (!groups.has(key)) groups.set(key, { equipeId: info?.equipe_id ?? null, equipeNome: nome, items: [] });
+      groups.get(key)!.items.push(r);
     }
-    return Array.from(groups.values()).filter(g => g.resumos.length > 0);
-  }, [resumos, operadorEquipeMap]);
+    return Array.from(groups.values()).filter(g => g.items.length > 0);
+  }, [resumos, operadorEquipeMap, setorId]);
 
-  // ── Ranking filtrado ───────────────────────────────────────────────────────
-  const resumosFiltrados = useMemo(() => {
-    if (!filtroEquipeId) return resumos;
-    return resumos.filter(r => operadorEquipeMap[r.operador_id]?.equipe_id === filtroEquipeId);
-  }, [resumos, operadorEquipeMap, filtroEquipeId]);
+  // ── Métricas dos cards ────────────────────────────────────────────────────
+  const metricas = useMemo(() => {
+    if (!setorId && !filtroEquipeId) {
+      // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
+      if (!snapshot) return null;
+      return {
+        totalRecebido:   snapshot.total_recebido,
+        totalHo:         snapshot.total_ho,
+        totalOperadores: snapshot.total_operadores,
+        totalPagamentos: snapshot.total_pagamentos,
+        periodoInicio:   snapshot.periodo_inicio,
+        periodoFim:      snapshot.periodo_fim,
+      };
+    }
+    // Computa a partir dos resumos filtrados (operadores com dados no período)
+    return {
+      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0),
+      totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
+      totalOperadores: resumosFiltrados.length,
+      totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0),
+      periodoInicio:   snapshot?.periodo_inicio ?? null,
+      periodoFim:      snapshot?.periodo_fim ?? null,
+    };
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
-  const diasNoMes  = new Date(Number(mesAnoStr), Number(mesNumStr), 0).getDate();
-  const hojeISO    = new Date().toISOString().split('T')[0];
+  const diasNoMes    = new Date(Number(mesAnoStr), Number(mesNumStr), 0).getDate();
+  const hojeISO      = new Date().toISOString().split('T')[0];
   const destaquesMap = useMemo(() => new Map(destaques.map(d => [d.dia, d])), [destaques]);
 
-  // ── Componente de filtro de equipe (reutilizável) ──────────────────────────
-  const seletorEquipe = equipes.length > 0 && (
+  // ── Seletor de equipe reutilizável ────────────────────────────────────────
+  const seletorEquipe = equipesFiltradas.length > 0 && (
     <div className="flex items-center gap-2">
       <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       <select
@@ -251,7 +320,7 @@ export function AnaliticoLider({
         className="h-7 px-2 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary"
       >
         <option value="">Todas as equipes</option>
-        {equipes.map(eq => (
+        {equipesFiltradas.map(eq => (
           <option key={eq.id} value={eq.id}>{eq.nome}</option>
         ))}
       </select>
@@ -266,14 +335,100 @@ export function AnaliticoLider({
 
   return (
     <div className="space-y-4">
+
+      {/* ── Cards de resumo mensal ─────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {loadingSnapshot ? (
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
+          ))
+        ) : metricas ? (
+          <>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total recebido</p>
+                    <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
+                      {formatBRL(metricas.totalRecebido)}
+                    </p>
+                  </div>
+                  <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total HO</p>
+                    <p className="text-base font-bold font-mono leading-tight mt-1 truncate">
+                      {formatBRL(metricas.totalHo)}
+                    </p>
+                  </div>
+                  <CreditCard className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Operadores</p>
+                    <p className="text-xl font-bold leading-tight mt-1">{metricas.totalOperadores}</p>
+                  </div>
+                  <Users className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Acordos pagos</p>
+                    <p className="text-xl font-bold leading-tight mt-1">
+                      {metricas.totalPagamentos.toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <BarChart3 className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="border-border">
+              <CardContent className="p-4">
+                <div className="flex items-start justify-between gap-1">
+                  <div className="min-w-0">
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Período</p>
+                    {metricas.periodoInicio && metricas.periodoFim ? (
+                      <p className="text-xs font-semibold leading-tight mt-1">
+                        {new Date(metricas.periodoInicio + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        <span className="text-muted-foreground"> a </span>
+                        {new Date(metricas.periodoFim + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground mt-1">—</p>
+                    )}
+                  </div>
+                  <Calendar className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
+                </div>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <div className="col-span-full text-center py-4 text-xs text-muted-foreground">
+            Nenhum dado importado para este mês.
+          </div>
+        )}
+      </div>
+
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1 border-b border-border">
           {([
-            { key: 'operadores', label: 'Por operador',    Icon: Users },
-            { key: 'ranking',    label: 'Ranking',         Icon: Trophy },
+            { key: 'operadores', label: 'Por operador',     Icon: Users },
+            { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            { key: 'orfaos',     label: 'Sem operador',    Icon: AlertCircle },
+            { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
@@ -294,7 +449,7 @@ export function AnaliticoLider({
         )}
       </div>
 
-      {/* ── Aba: Por operador (agrupado por equipe) ───────────────────────── */}
+      {/* ── Aba: Por operador ─────────────────────────────────────────────── */}
       {abaAtiva === 'operadores' && (
         <div className="space-y-5">
           {loadingResumos && (
@@ -302,14 +457,13 @@ export function AnaliticoLider({
               {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-16 bg-muted rounded-lg" />)}
             </div>
           )}
-          {!loadingResumos && resumos.length === 0 && (
+          {!loadingResumos && resumosPorEquipe.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">Nenhum dado para este mês.</p>
             </div>
           )}
           {!loadingResumos && resumosPorEquipe.map(grupo => (
             <div key={grupo.equipeId ?? '__sem__'} className="space-y-2">
-              {/* Cabeçalho de equipe */}
               <div className="flex items-center gap-2 px-1">
                 <div className="h-px flex-1 bg-border" />
                 <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2">
@@ -318,13 +472,13 @@ export function AnaliticoLider({
                 <div className="h-px flex-1 bg-border" />
               </div>
 
-              {grupo.resumos.map(r => {
-                const aberto     = expandidos.has(r.operador_id);
-                const carregando = loadingLinhas.has(r.operador_id);
-                const linhas     = getLinhasOp(r.operador_id);
+              {grupo.items.map(r => {
+                const aberto      = expandidos.has(r.operador_id);
+                const carregando  = loadingLinhas.has(r.operador_id);
+                const linhas      = getLinhasOp(r.operador_id);
                 const todasLinhas = linhasMap.get(r.operador_id) ?? [];
-                const filtro     = filtrosDatas.get(r.operador_id);
-                const temFiltro  = !!(filtro?.inicio || filtro?.fim);
+                const filtro      = filtrosDatas.get(r.operador_id);
+                const temFiltro   = !!(filtro?.inicio || filtro?.fim);
 
                 return (
                   <Card key={r.operador_id} className="border-border">
@@ -336,8 +490,7 @@ export function AnaliticoLider({
                             ? <Loader2 className="w-4 h-4 text-muted-foreground animate-spin" />
                             : aberto
                               ? <ChevronDown  className="w-4 h-4 text-muted-foreground" />
-                              : <ChevronRight className="w-4 h-4 text-muted-foreground" />
-                          }
+                              : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                           <div>
                             <CardTitle className="text-sm">{r.operador_nome ?? r.operador_usuario}</CardTitle>
                             <p className="text-xs text-muted-foreground font-mono">{r.operador_usuario}</p>
@@ -361,11 +514,10 @@ export function AnaliticoLider({
                       <CardContent className="p-0 border-t">
                         {carregando ? (
                           <div className="flex items-center justify-center py-8 gap-2 text-muted-foreground text-sm">
-                            <Loader2 className="w-4 h-4 animate-spin" /> Carregando pagamentos…
+                            <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
                           </div>
                         ) : (
                           <>
-                            {/* Filtro de data do operador */}
                             <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-muted/20 flex-wrap">
                               <CalendarDays className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                               <span className="text-xs text-muted-foreground">Filtrar:</span>
@@ -380,12 +532,13 @@ export function AnaliticoLider({
                               />
                               {temFiltro && (
                                 <>
-                                  <Button size="sm" variant="ghost" className="h-6 px-1.5 gap-1 text-xs text-muted-foreground"
+                                  <Button size="sm" variant="ghost"
+                                    className="h-6 px-1.5 gap-1 text-xs text-muted-foreground"
                                     onClick={() => limparFiltroData(r.operador_id)}>
                                     <X className="w-3 h-3" /> Limpar
                                   </Button>
                                   <span className="text-xs text-muted-foreground">
-                                    {linhas.length}/{todasLinhas.length} registros
+                                    {linhas.length}/{todasLinhas.length}
                                   </span>
                                 </>
                               )}
@@ -406,7 +559,7 @@ export function AnaliticoLider({
                                 {linhas.length === 0 ? (
                                   <tr>
                                     <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground text-xs">
-                                      Nenhum registro no período selecionado.
+                                      {temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
                                     </td>
                                   </tr>
                                 ) : linhas.map(linha => (
@@ -414,7 +567,9 @@ export function AnaliticoLider({
                                     <td className="px-3 py-2">
                                       <span className="font-semibold">{linha.codigo}</span>
                                       {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
+                                        <span className="block text-muted-foreground truncate max-w-[120px]">
+                                          {linha.nome_cliente}
+                                        </span>
                                       )}
                                     </td>
                                     <td className="px-3 py-2">
@@ -427,7 +582,9 @@ export function AnaliticoLider({
                                       </Badge>
                                     </td>
                                     <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
+                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
+                                      {formatBRL(linha.total_ho)}
+                                    </td>
                                     <td className="px-3 py-2 tabular-nums">
                                       {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
                                     </td>
@@ -458,13 +615,12 @@ export function AnaliticoLider({
         </div>
       )}
 
-      {/* ── Aba: Ranking (pódio top 3 + faixas) ──────────────────────────── */}
+      {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}
       {abaAtiva === 'ranking' && (
         <div className="space-y-4">
-          {equipes.length > 0 && (
+          {equipesFiltradas.length > 0 && (
             <div className="flex items-center gap-2">{seletorEquipe}</div>
           )}
-
           {loadingResumos ? (
             <div className="space-y-2 animate-pulse">
               {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-12 bg-muted rounded-lg" />)}
@@ -487,7 +643,7 @@ export function AnaliticoLider({
               <p className="text-sm font-semibold">{MESES_PT[Number(mesNumStr) - 1]} de {mesAnoStr}</p>
               <p className="text-xs text-muted-foreground">Destaque de recebimento por dia</p>
             </div>
-            {equipes.length > 0 && seletorEquipe}
+            {equipesFiltradas.length > 0 && seletorEquipe}
           </div>
 
           {loadingDestaques ? (
@@ -507,7 +663,7 @@ export function AnaliticoLider({
                   <div key={diaStr} className={cn(
                     'flex items-center gap-3 rounded-lg border px-4 py-3',
                     isHoje  && 'border-primary/40 bg-primary/5',
-                    !isHoje && !isFut && dest  && 'border-border bg-card',
+                    !isHoje && !isFut && dest && 'border-border bg-card',
                     isFut   && 'border-border/50 bg-muted/20 opacity-50',
                     !dest   && !isFut && 'border-border/50 bg-muted/10',
                   )}>
@@ -570,7 +726,9 @@ export function AnaliticoLider({
                 </p>
                 <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
                   onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
-                  {removendoTodos ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  {removendoTodos
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <Trash2 className="w-3 h-3" />}
                   Remover todos
                 </Button>
               </div>
@@ -644,15 +802,24 @@ export function AnaliticoLider({
 interface RankingViewProps { resumos: ResumoOperadorAnalitico[] }
 
 function RankingView({ resumos }: RankingViewProps) {
-  const max    = resumos[0]?.total_recebido || 1;
-  const top3   = resumos.slice(0, 3);
-  const meio   = resumos.slice(3, 10);
-  const resto  = resumos.slice(10);
+  const max   = resumos[0]?.total_recebido || 1;
+  const top3  = resumos.slice(0, 3);
+  const meio  = resumos.slice(3, 10);
+  const resto = resumos.slice(10);
 
   const PODIO_STYLE = [
-    { border: 'border-yellow-400/60', bg: 'bg-yellow-50/60 dark:bg-yellow-950/20', medal: '🥇', text: 'text-yellow-700 dark:text-yellow-400' },
-    { border: 'border-slate-400/60',  bg: 'bg-slate-50/60 dark:bg-slate-900/20',   medal: '🥈', text: 'text-slate-600 dark:text-slate-400' },
-    { border: 'border-amber-700/40',  bg: 'bg-orange-50/40 dark:bg-orange-950/10', medal: '🥉', text: 'text-amber-700 dark:text-amber-500' },
+    {
+      border: 'border-yellow-400/60', bg: 'bg-yellow-50/60 dark:bg-yellow-950/20',
+      medal: '🥇', text: 'text-yellow-700 dark:text-yellow-400',
+    },
+    {
+      border: 'border-slate-400/60',  bg: 'bg-slate-50/60 dark:bg-slate-900/20',
+      medal: '🥈', text: 'text-slate-600 dark:text-slate-400',
+    },
+    {
+      border: 'border-amber-700/40',  bg: 'bg-orange-50/40 dark:bg-orange-950/10',
+      medal: '🥉', text: 'text-amber-700 dark:text-amber-500',
+    },
   ];
 
   return (
@@ -666,7 +833,6 @@ function RankingView({ resumos }: RankingViewProps) {
             ? Math.min(100, Math.round((r.total_recebido / acima.total_recebido) * 100))
             : 100;
           const s = PODIO_STYLE[i];
-
           return (
             <Card key={r.operador_id} className={cn('border-2', s.border, s.bg)}>
               <CardContent className="p-4 space-y-2">
@@ -692,7 +858,8 @@ function RankingView({ resumos }: RankingViewProps) {
                       Faltam <strong>{formatBRL(gap)}</strong> p/ ultrapassar
                     </p>
                     <div className="h-1.5 rounded-full bg-border overflow-hidden">
-                      <div className="h-full rounded-full bg-primary/50 transition-all" style={{ width: `${prox}%` }} />
+                      <div className="h-full rounded-full bg-primary/50 transition-all"
+                        style={{ width: `${prox}%` }} />
                     </div>
                   </div>
                 ) : null}
@@ -723,9 +890,7 @@ function RankingView({ resumos }: RankingViewProps) {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium truncate">{r.operador_nome ?? r.operador_usuario}</span>
                         {gap > 0 && (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            faltam {formatBRL(gap)}
-                          </span>
+                          <span className="text-xs text-muted-foreground shrink-0">faltam {formatBRL(gap)}</span>
                         )}
                       </div>
                       <div className="mt-1 h-1 rounded-full bg-border overflow-hidden">
