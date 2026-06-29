@@ -107,7 +107,8 @@ export function getTenantBranding(slug: string, empresa?: Empresa | null): Tenan
 }
 
 export function getTenantRuntimeConfig(empresa?: Empresa | null): TenantRuntimeConfig {
-  const slug = getConfiguredTenantSlug();
+  // Prioridade: env var → hostname → slug da empresa no banco
+  const slug = getConfiguredTenantSlug() || normalizeSlug(empresa?.slug);
 
   return {
     slug,
