@@ -419,6 +419,22 @@ export async function atualizarResumoMensal(
   });
 }
 
+/**
+ * Para acordos de cartão com mesmo operador e código, marca como 'pago'
+ * sincronizando valor e data de pagamento (analítico tem prioridade).
+ * Também atualiza status_tabulacao das linhas correspondentes.
+ */
+export async function sincronizarCartoesPagos(
+  empresaId: string,
+  mes: string,
+): Promise<{ atualizados: number; error: string | null }> {
+  const { data, error } = await supabase.rpc('fn_sincronizar_cartoes_pagos', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+  });
+  return { atualizados: (data as number) ?? 0, error: error?.message ?? null };
+}
+
 // ── Verificar e atualizar status de tabulação ─────────────────────────────────
 
 /**

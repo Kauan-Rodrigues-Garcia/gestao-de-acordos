@@ -263,11 +263,15 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoInlineParam]);
 
-  // Abre o detalhe inline quando navegado a partir da aba Analítico (ver acordo)
+  // Abre o detalhe inline e foca na linha da lista quando vindo do Analítico
   const verAcordoParam = searchParams.get('verAcordo');
   useEffect(() => {
     if (!verAcordoParam) return;
     setDetalheInlineIdTabela(verAcordoParam);
+    // Reutiliza o mecanismo de highlight+findPage já existente para navegar até a linha
+    highlightFoundRef.current = false;
+    findAttemptsRef.current   = 0;
+    setHighlightedId(verAcordoParam);
     const params = new URLSearchParams(searchParams);
     params.delete('verAcordo');
     setSearchParams(params, { replace: true });

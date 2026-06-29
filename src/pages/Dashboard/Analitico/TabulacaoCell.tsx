@@ -37,6 +37,7 @@ interface TabulacaoCellProps {
     nomeCliente: string;
     forma: 'boleto_pix' | 'cartao';
     valor: number;
+    dataPagamento?: string;
   }) => void;
   /** Chamado para navegar até o acordo existente no Dashboard */
   onVerAcordo: (acordoId: string) => void;
@@ -116,10 +117,11 @@ export function TabulacaoCell({
     setStatusLocal('nao_tabulado');
     setCarregando(false);
     onAbrirNovoAcordo({
-      instituicao: linha.codigo,
-      nomeCliente: linha.nome_cliente ?? '',
-      forma:       linha.forma_pagamento,
-      valor:       linha.valor_recebido,
+      instituicao:    linha.codigo,
+      nomeCliente:    linha.nome_cliente ?? '',
+      forma:          linha.forma_pagamento,
+      valor:          linha.valor_recebido,
+      dataPagamento:  linha.data_pagamento,
     });
   }
 

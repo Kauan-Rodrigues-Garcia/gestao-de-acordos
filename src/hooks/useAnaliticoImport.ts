@@ -5,11 +5,13 @@ import {
   parseRelatorioExcel,
   type LinhaRelatorio,
 } from '@/services/analitico/analiticoParser';
+import { toast } from 'sonner';
 import {
   resolverOperadores,
   importarLoteAnalitico,
   notificarImportacaoAnalitico,
   atualizarResumoMensal,
+  sincronizarCartoesPagos,
   type OperadorResolvidoMap,
   type OperadorMatchDetalhe,
   type PerfilResumido,
@@ -125,6 +127,15 @@ export function useAnaliticoImport() {
 
     // Salva snapshot de totais imediatamente após inserção (antes de qualquer deleção)
     await atualizarResumoMensal(empresa.id, preview.mes);
+
+    // Sincroniza acordos de cartão com mesmo operador: marca como pago + atualiza valor/data
+    const { atualizados } = await sincronizarCartoesPagos(empresa.id, preview.mes);
+    if (atualizados > 0) {
+      toast.success(
+        `${atualizados} acordo${atualizados !== 1 ? 's' : ''} de cartão ${atualizados !== 1 ? 'foram marcados' : 'foi marcado'} como pago automaticamente.`,
+        { duration: 6000 },
+      );
+    }
 
     await notificarImportacaoAnalitico(
       empresa.id,

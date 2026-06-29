@@ -75,14 +75,16 @@ export default function PaginaAnalitico() {
     nomeCliente: string;
     forma: 'boleto_pix' | 'cartao';
     valor: number;
+    dataPagamento?: string;
   }) {
     const storageKey = `acordo-inline-draft::${empresa!.id}::${perfil!.id}::pp`;
-    const draft = {
+    const draft: Record<string, string> = {
       instituicao: dados.instituicao,
       nomeCliente: dados.nomeCliente,
       tipo:        dados.forma === 'cartao' ? 'cartao' : 'boleto_pix',
       valorStr:    dados.valor.toFixed(2).replace('.', ','),
     };
+    if (dados.dataPagamento) draft['vencimento'] = dados.dataPagamento;
     try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* noop */ }
     navigate(ROUTE_PATHS.DASHBOARD + '?novoInline=1');
   }
