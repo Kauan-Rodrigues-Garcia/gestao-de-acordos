@@ -178,10 +178,12 @@ export async function buscarResumoOperadoresAnalitico(
   empresaId: string,
   mes: string,
 ): Promise<{ data: ResumoOperadorAnalitico[]; error: string | null }> {
-  const { data, error } = await supabase.rpc('fn_analitico_resumo_por_operador', {
-    p_empresa_id: empresaId,
-    p_mes:        mes,
-  });
+  const { data, error } = await supabase
+    .rpc('fn_analitico_resumo_por_operador', {
+      p_empresa_id: empresaId,
+      p_mes:        mes,
+    })
+    .order('total_recebido', { ascending: false });
   return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error?.message ?? null };
 }
 
