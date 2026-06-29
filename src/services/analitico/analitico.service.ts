@@ -174,32 +174,50 @@ export interface FiltrosAnalitico {
 export async function buscarAnalitico(
   filtros: FiltrosAnalitico,
 ): Promise<{ data: AnaliticoRecebimento[]; error: string | null }> {
-  let q = supabase
-    .from('analitico_recebimentos')
-    .select('*, perfis(id, nome, usuario)')
-    .eq('empresa_id', filtros.empresaId)
-    .order('data_pagamento', { ascending: false });
+  function buildQuery(from: number, to: number) {
+    let q = supabase
+      .from('analitico_recebimentos')
+      .select('*, perfis(id, nome, usuario)')
+      .eq('empresa_id', filtros.empresaId)
+      .order('data_pagamento', { ascending: false })
+      .range(from, to);
 
-  if (filtros.mes) {
-    const [y, m] = filtros.mes.split('-').map(Number);
-    const primeiro = `${filtros.mes}-01`;
-    const ultimo = new Date(y, m, 0);
-    const fim = `${filtros.mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
-    q = q.gte('data_pagamento', primeiro).lte('data_pagamento', fim);
-  }
-  if (filtros.operadorId !== undefined) {
-    if (filtros.operadorId === null) {
-      q = q.is('operador_id', null);
-    } else {
-      q = q.eq('operador_id', filtros.operadorId);
+    if (filtros.mes) {
+      const [y, m] = filtros.mes.split('-').map(Number);
+      const primeiro = `${filtros.mes}-01`;
+      const ultimo   = new Date(y, m, 0);
+      const fim = `${filtros.mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
+      q = q.gte('data_pagamento', primeiro).lte('data_pagamento', fim);
     }
-  }
-  if (filtros.apenasNaoVistos) {
-    q = q.eq('visto', false);
+    if (filtros.operadorId !== undefined) {
+      if (filtros.operadorId === null) {
+        q = q.is('operador_id', null);
+      } else {
+        q = q.eq('operador_id', filtros.operadorId);
+      }
+    }
+    if (filtros.apenasNaoVistos) {
+      q = q.eq('visto', false);
+    }
+    return q;
   }
 
-  const { data, error } = await q;
-  return { data: (data ?? []) as AnaliticoRecebimento[], error: error?.message ?? null };
+  // Pagina em blocos de 1000 para superar o limite padrão do PostgREST (max_rows=1000).
+  // Sem isso, queries sem filtro de operador retornam apenas as primeiras 1000 linhas,
+  // causando totais incorretos na visão do líder.
+  const PAGE = 1000;
+  let allData: AnaliticoRecebimento[] = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await buildQuery(offset, offset + PAGE - 1);
+    if (error) return { data: [], error: error.message };
+    if (data?.length) allData = allData.concat(data as AnaliticoRecebimento[]);
+    if (!data?.length || data.length < PAGE) break;
+    offset += PAGE;
+  }
+
+  return { data: allData, error: null };
 }
 
 // ── Marcar como visto ─────────────────────────────────────────────────────────

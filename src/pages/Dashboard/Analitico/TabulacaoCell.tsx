@@ -7,7 +7,7 @@
  *   DIVERGENTE   → botão "Tabular" com alerta do outro operador
  */
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CheckCircle2, AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -52,6 +52,38 @@ export function TabulacaoCell({
   const [acordoIdLocal,    setAcordoIdLocal]    = useState<string | null>(linha.acordo_id);
   const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; outroId: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
+
+  // Ref para evitar usar status stale dentro do setTimeout
+  const statusRef = useRef(statusLocal);
+  statusRef.current = statusLocal;
+
+  // Auto-verifica tabulação ao montar, sem exigir clique manual.
+  // Stagger aleatório de até 600 ms para não sobrecarregar o banco com
+  // centenas de queries simultâneas quando muitas linhas renderizam juntas.
+  useEffect(() => {
+    if (linha.status_tabulacao !== 'nao_tabulado') return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      if (cancelled || statusRef.current !== 'nao_tabulado') return;
+      const { status, acordoId, outroOperadorId, outroOperadorNome } =
+        await verificarStatusTabulacao(empresaId, linha.codigo, operadorId);
+      if (cancelled) return;
+
+      if (status === 'tabulado' && acordoId) {
+        await atualizarTabulacao(linha.id, 'tabulado', acordoId);
+        if (!cancelled) { setStatusLocal('tabulado'); setAcordoIdLocal(acordoId); }
+      } else if (status === 'divergente' && acordoId && outroOperadorId && outroOperadorNome) {
+        await atualizarTabulacao(linha.id, 'divergente', acordoId);
+        if (!cancelled) {
+          setStatusLocal('divergente');
+          setAcordoIdLocal(acordoId);
+          setDivergenteInfo({ outroNome: outroOperadorNome, outroId: outroOperadorId, acordoId });
+        }
+      }
+    }, Math.random() * 600);
+    return () => { cancelled = true; clearTimeout(timer); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [linha.id, operadorId, empresaId]);
 
   async function handleTabular() {
     setCarregando(true);
