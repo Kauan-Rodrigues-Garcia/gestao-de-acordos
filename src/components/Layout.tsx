@@ -58,8 +58,6 @@ interface NavItem {
   roles?: string[];
   /** Se true, o item fica oculto quando o tenant for PaguePay */
   hiddenForPaguePay?: boolean;
-  /** Se true, o item só aparece quando o tenant for PaguePay */
-  onlyForPaguePay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
 }
@@ -68,7 +66,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           roles: ['operador','lider','administrador','elite','gerencia'], onlyForPaguePay: true },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
@@ -186,9 +183,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }
 
-  // isPP: usa tanto o tenant config quanto o slug da empresa no banco como fallback.
-  // Isso garante que o menu funcione mesmo sem VITE_TENANT_SLUG configurado.
-  const isPP = tenant.isPaguePlay || empresa?.slug?.toLowerCase() === 'pagueplay';
+  const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { naoLidas, animarBadge } = useNotificacoesCount();
@@ -208,7 +203,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
   const navItems = NAV_ITEMS.filter(item => {
     if (item.hiddenForPaguePay && isPP) return false;
-    if (item.onlyForPaguePay && !isPP) return false;
 
     if (item.permissaoKey) {
       return !permLoading && temPermissao(item.permissaoKey);
@@ -267,6 +261,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </NavLink>
         ))}
+
+        {/* Analítico — exclusivo PaguePlay, verificado direto no slug da empresa */}
+        {empresa?.slug === 'pagueplay' && (
+          <NavLink
+            to={ROUTE_PATHS.ANALITICO}
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) => cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              isActive
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            )}
+          >
+            <BarChart2 className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                  Analítico
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </NavLink>
+        )}
 
         {/* Importar Excel */}
         <NavLink
