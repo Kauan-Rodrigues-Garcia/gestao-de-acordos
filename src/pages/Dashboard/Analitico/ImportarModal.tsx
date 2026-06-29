@@ -1,15 +1,16 @@
-/**
- * ImportarModal — upload → parse local → preview delta → confirmar → gravar
- * PaguePlay exclusivo. Visível somente para quem tem permissão importar_analitico.
- */
-
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { AlertCircle, CheckCircle2, Upload, Loader2, Users, FileSpreadsheet } from 'lucide-react';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import {
+  AlertCircle, CheckCircle2, Upload, Loader2, Users, FileSpreadsheet,
+  ChevronDown, ChevronUp, ArrowRight,
+} from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import type { UseAnaliticoImport } from './types';
 
@@ -22,10 +23,12 @@ interface ImportarModalProps {
 export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
   const {
     estado, preview, resultado, erroGeral,
-    carregarArquivo, confirmarImportacao, cancelar,
+    vinculosManuais,
+    carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
   } = hook;
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const [detectadosExpandido, setDetectadosExpandido] = useState(false);
 
   function handleFechar() {
     cancelar();
@@ -103,9 +106,13 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
   // ── Preview ───────────────────────────────────────────────────────────────
   if (estado === 'preview' && preview) {
+    const detectados = Object.entries(preview.matches).filter(([, m]) => m !== null);
+    const naoDetectados = preview.operadoresNaoEncontrados;
+    const vinculadosManuaisCount = Object.keys(vinculosManuais).length;
+
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
@@ -114,7 +121,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto flex-1 pr-1">
-            {/* Delta */}
+            {/* Contadores */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border bg-primary/5 p-3 text-center">
                 <p className="text-xl font-bold text-primary">{preview.linhasNovas}</p>
@@ -125,31 +132,108 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <p className="text-xs text-muted-foreground">no arquivo</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
-                <p className="text-xl font-bold text-amber-500">
-                  {preview.operadoresNaoEncontrados.length}
+                <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
+                  {naoDetectados.length - vinculadosManuaisCount}
                 </p>
                 <p className="text-xs text-muted-foreground">sem operador</p>
               </div>
             </div>
 
-            {/* Operadores não encontrados */}
-            {preview.operadoresNaoEncontrados.length > 0 && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3">
-                <p className="text-xs font-semibold text-amber-700 flex items-center gap-1 mb-2">
-                  <Users className="w-3.5 h-3.5" />
-                  Cobradoras não encontradas no sistema ({preview.operadoresNaoEncontrados.length}):
-                </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {preview.operadoresNaoEncontrados.map(u => (
-                    <Badge key={u} variant="outline" className="text-xs border-amber-300 text-amber-700">
-                      {u}
-                    </Badge>
-                  ))}
+            {/* Operadores detectados automaticamente */}
+            {detectados.length > 0 && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20">
+                <button
+                  type="button"
+                  onClick={() => setDetectadosExpandido(v => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                >
+                  <span className="text-xs font-semibold text-emerald-700 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Operadores detectados ({detectados.length})
+                  </span>
+                  {detectadosExpandido
+                    ? <ChevronUp className="w-3.5 h-3.5 text-emerald-600" />
+                    : <ChevronDown className="w-3.5 h-3.5 text-emerald-600" />
+                  }
+                </button>
+
+                {detectadosExpandido && (
+                  <div className="px-3 pb-3 space-y-1 border-t border-emerald-200">
+                    <p className="text-[10px] text-emerald-600 py-1.5">
+                      Nome no arquivo → usuário vinculado no sistema
+                    </p>
+                    <div className="max-h-48 overflow-y-auto space-y-1">
+                      {detectados.map(([usuarioArquivo, match]) => (
+                        <div
+                          key={usuarioArquivo}
+                          className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-emerald-100/60 dark:bg-emerald-900/20"
+                        >
+                          <span className="font-mono text-emerald-800 dark:text-emerald-300 shrink-0">
+                            {usuarioArquivo}
+                          </span>
+                          <ArrowRight className="w-3 h-3 text-emerald-500 shrink-0" />
+                          <span className="font-mono text-emerald-700 dark:text-emerald-400 shrink-0">
+                            {match!.usuarioDB}
+                          </span>
+                          <span className="text-muted-foreground truncate">
+                            ({match!.nome})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Operadores não detectados — com seleção manual */}
+            {naoDetectados.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20">
+                <div className="px-3 py-2.5 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-amber-600" />
+                  <p className="text-xs font-semibold text-amber-700">
+                    Não detectados ({naoDetectados.length}) — vincule manualmente ou deixe em branco
+                  </p>
                 </div>
-                <p className="text-xs text-amber-600 mt-2">
-                  As linhas dessas cobradoras serão importadas sem operador vinculado
-                  e ficarão visíveis apenas para líderes.
-                </p>
+
+                <div className="px-3 pb-3 border-t border-amber-200 space-y-2 max-h-64 overflow-y-auto">
+                  {naoDetectados.map(u => {
+                    const vinculoAtual = vinculosManuais[u] ?? '';
+                    return (
+                      <div key={u} className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-amber-800 dark:text-amber-300 w-44 shrink-0 truncate">
+                          {u}
+                        </span>
+                        <ArrowRight className="w-3 h-3 text-amber-400 shrink-0" />
+                        <Select
+                          value={vinculoAtual || '__nenhum__'}
+                          onValueChange={val => definirVinculo(u, val === '__nenhum__' ? null : val)}
+                        >
+                          <SelectTrigger className="h-7 text-xs flex-1 bg-white dark:bg-background">
+                            <SelectValue placeholder="Sem vínculo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__nenhum__">
+                              <span className="text-muted-foreground">Sem vínculo (órfão)</span>
+                            </SelectItem>
+                            {preview.todosPerfis.map(p => (
+                              <SelectItem key={p.id} value={p.id}>
+                                <span className="font-mono">{p.usuario}</span>
+                                <span className="text-muted-foreground ml-1.5">— {p.nome}</span>
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {vinculadosManuaisCount < naoDetectados.length && (
+                  <p className="text-[10px] text-amber-600 px-3 pb-2.5">
+                    {naoDetectados.length - vinculadosManuaisCount} sem vínculo serão importados como órfãos (visíveis apenas para líderes).
+                  </p>
+                )}
               </div>
             )}
 
@@ -167,7 +251,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {/* Tabela de preview (primeiras 20 linhas) */}
+            {/* Tabela de preview */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-2">
                 Primeiros {Math.min(preview.linhas.length, 20)} de {preview.linhas.length} registros:
@@ -187,7 +271,9 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   </thead>
                   <tbody className="divide-y divide-border">
                     {preview.linhas.slice(0, 20).map((l, i) => {
-                      const vinculado = preview.operadoresMap[l.operador_usuario] !== null;
+                      const vinculadoAuto = preview.operadoresMap[l.operador_usuario] !== null;
+                      const vinculadoManual = !!vinculosManuais[l.operador_usuario];
+                      const vinculado = vinculadoAuto || vinculadoManual;
                       return (
                         <tr key={i} className="hover:bg-muted/30">
                           <td className="px-3 py-1.5 font-mono">{l.operador_usuario}</td>
@@ -228,8 +314,11 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
           <DialogFooter className="mt-4 border-t pt-4">
             <Button variant="outline" onClick={cancelar}>Cancelar</Button>
-            <Button onClick={() => void confirmarImportacao()}>
-              Confirmar dados ({preview.linhasNovas} registro{preview.linhasNovas !== 1 ? 's' : ''})
+            <Button onClick={() => void confirmarImportacao()} disabled={estado === 'confirming'}>
+              {estado === 'confirming'
+                ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Importando…</>
+                : `Confirmar (${preview.linhasNovas} registro${preview.linhasNovas !== 1 ? 's' : ''})`
+              }
             </Button>
           </DialogFooter>
         </DialogContent>

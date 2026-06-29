@@ -39,30 +39,62 @@ export interface OperadorResolvidoMap {
   [usuario: string]: string | null; // usuario → perfil.id ou null se não encontrado
 }
 
-/** Busca IDs de perfis cujo campo `usuario` consta na lista de cobradoras */
+export interface PerfilResumido {
+  id: string;
+  usuario: string;
+  nome: string;
+}
+
+export interface OperadorMatchDetalhe {
+  id: string;
+  usuarioDB: string;  // username exato como está no banco
+  nome: string;
+}
+
+export interface ResultadoResolucao {
+  map: OperadorResolvidoMap;
+  matches: Record<string, OperadorMatchDetalhe | null>;
+  todosPerfis: PerfilResumido[];
+}
+
+/**
+ * Busca perfis da empresa e resolve os operadores do arquivo de forma case-insensitive.
+ * Retorna o mapa de ids, os detalhes de cada match (para exibição) e todos os perfis
+ * ativos da empresa (para seleção manual dos não encontrados).
+ */
 export async function resolverOperadores(
   empresaId: string,
   usuarios: string[],
-): Promise<OperadorResolvidoMap> {
-  if (!usuarios.length) return {};
-
-  // Busca todos os perfis da empresa — comparação case-insensitive no cliente
+): Promise<ResultadoResolucao> {
   const { data } = await supabase
     .from('perfis')
-    .select('id, usuario')
-    .eq('empresa_id', empresaId);
+    .select('id, usuario, nome')
+    .eq('empresa_id', empresaId)
+    .eq('ativo', true)
+    .order('nome');
 
-  // Índice lowercase → id para comparação case-insensitive
-  const dbIndex: Record<string, string> = {};
-  for (const p of data ?? []) {
-    if (p.usuario) dbIndex[p.usuario.toLowerCase()] = p.id;
+  const todosPerfis: PerfilResumido[] = (data ?? []).map(p => ({
+    id:      p.id,
+    usuario: p.usuario ?? '',
+    nome:    p.nome ?? '',
+  }));
+
+  // Índice lowercase → perfil completo para comparação case-insensitive
+  const dbIndex: Record<string, PerfilResumido> = {};
+  for (const p of todosPerfis) {
+    if (p.usuario) dbIndex[p.usuario.toLowerCase()] = p;
   }
 
   const map: OperadorResolvidoMap = {};
+  const matches: Record<string, OperadorMatchDetalhe | null> = {};
+
   for (const u of usuarios) {
-    map[u] = dbIndex[u.toLowerCase()] ?? null;
+    const found = dbIndex[u.toLowerCase()] ?? null;
+    map[u]     = found?.id ?? null;
+    matches[u] = found ? { id: found.id, usuarioDB: found.usuario, nome: found.nome } : null;
   }
-  return map;
+
+  return { map, matches, todosPerfis };
 }
 
 // ── Importação (merge incremental) ────────────────────────────────────────────
