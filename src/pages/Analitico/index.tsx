@@ -89,8 +89,10 @@ export default function PaginaAnalitico() {
     navigate(ROUTE_PATHS.DASHBOARD + '?novoInline=1');
   }
 
-  function onVerAcordo(acordoId: string) {
-    navigate(ROUTE_PATHS.DASHBOARD + '?verAcordo=' + acordoId);
+  function onVerAcordo(acordoId: string, codigo?: string) {
+    const qs = new URLSearchParams({ verAcordo: acordoId });
+    if (codigo) qs.set('busca', codigo);
+    navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
   }
 
   function mesAnterior() {

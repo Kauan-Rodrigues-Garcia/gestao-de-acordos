@@ -40,7 +40,7 @@ interface TabulacaoCellProps {
     dataPagamento?: string;
   }) => void;
   /** Chamado para navegar até o acordo existente no Dashboard */
-  onVerAcordo: (acordoId: string) => void;
+  onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
 }
 
@@ -167,7 +167,7 @@ export function TabulacaoCell({
       <Button
         size="sm" variant="outline"
         className="h-7 gap-1.5 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950"
-        onClick={() => onVerAcordo(acordoIdLocal)}
+        onClick={() => onVerAcordo(acordoIdLocal, linha.codigo)}
       >
         <CheckCircle2 className="w-3 h-3" /> Ver acordo
       </Button>

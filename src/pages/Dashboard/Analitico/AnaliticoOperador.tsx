@@ -27,7 +27,7 @@ interface AnaliticoOperadorProps {
     valor: number;
     dataPagamento?: string;
   }) => void;
-  onVerAcordo: (acordoId: string) => void;
+  onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
 }
 

@@ -263,15 +263,14 @@ export default function Dashboard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [novoInlineParam]);
 
-  // Abre o detalhe inline e foca na linha da lista quando vindo do Analítico
+  // Abre o detalhe inline e cola o código na busca (vindo do Analítico)
   const verAcordoParam = searchParams.get('verAcordo');
   useEffect(() => {
     if (!verAcordoParam) return;
     setDetalheInlineIdTabela(verAcordoParam);
-    // Reutiliza o mecanismo de highlight+findPage já existente para navegar até a linha
-    highlightFoundRef.current = false;
-    findAttemptsRef.current   = 0;
-    setHighlightedId(verAcordoParam);
+    // Cola o código na caixa de busca para filtrar a lista sem mudar de aba
+    const codigoBusca = searchParams.get('busca');
+    if (codigoBusca) setBusca(codigoBusca);
     const params = new URLSearchParams(searchParams);
     params.delete('verAcordo');
     setSearchParams(params, { replace: true });

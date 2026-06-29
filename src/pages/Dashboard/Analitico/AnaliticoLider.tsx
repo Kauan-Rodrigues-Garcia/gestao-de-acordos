@@ -57,7 +57,7 @@ interface AnaliticoLiderProps {
     instituicao: string; nomeCliente: string;
     forma: 'boleto_pix' | 'cartao'; valor: number; dataPagamento?: string;
   }) => void;
-  onVerAcordo: (acordoId: string) => void;
+  onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
 }
 
