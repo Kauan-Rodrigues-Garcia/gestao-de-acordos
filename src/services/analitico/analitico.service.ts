@@ -162,6 +162,29 @@ export async function importarLoteAnalitico(
   return { inseridos, duplicados, erros };
 }
 
+// ── Resumo agregado por operador (visão líder) ────────────────────────────────
+
+export interface ResumoOperadorAnalitico {
+  operador_id: string;
+  operador_usuario: string;
+  operador_nome: string | null;
+  total_recebido: number;
+  total_ho: number;
+  total_pagamentos: number;
+}
+
+/** Retorna totais por operador via RPC (sem varrer linhas individuais). */
+export async function buscarResumoOperadoresAnalitico(
+  empresaId: string,
+  mes: string,
+): Promise<{ data: ResumoOperadorAnalitico[]; error: string | null }> {
+  const { data, error } = await supabase.rpc('fn_analitico_resumo_por_operador', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+  });
+  return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error?.message ?? null };
+}
+
 // ── Busca ────────────────────────────────────────────────────────────────────
 
 export interface FiltrosAnalitico {

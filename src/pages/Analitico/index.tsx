@@ -25,7 +25,6 @@ export default function PaginaAnalitico() {
   const isOperador  = !isLiderMais;
 
   const [visaoElite, setVisaoElite] = useState<'individual' | 'geral'>('geral');
-  const [filtroOperadorId, setFiltroOperadorId] = useState<string | null>(null);
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -34,26 +33,15 @@ export default function PaginaAnalitico() {
   const mostrarVisaoGeral      = (isLiderMais && !isElite) || (isElite && visaoElite === 'geral');
   const mostrarVisaoIndividual = isOperador || (isElite && visaoElite === 'individual');
 
+  // Somente operadores e elite-individual carregam seus próprios dados upfront
   const { dados: dadosProprios, loading: loadingProprios, novosCount, refetch: refetchProprios } = useAnalitico({
     mes: mesFiltro,
     operadorFiltro: perfil?.id ?? undefined,
   });
 
-  const { dados: dadosGerais, loading: loadingGerais, refetch: refetchGerais } = useAnalitico({
-    mes: mesFiltro,
-    operadorFiltro: filtroOperadorId ?? undefined,
-  });
-
-  const { dados: orfaos, loading: loadingOrfaos, refetch: refetchOrfaos } = useAnalitico({
-    mes: mesFiltro,
-    apenasOrfaos: true,
-  });
-
-  const refetchTudo = useCallback(() => {
+  const refetchOperador = useCallback(() => {
     void refetchProprios();
-    void refetchGerais();
-    void refetchOrfaos();
-  }, [refetchProprios, refetchGerais, refetchOrfaos]);
+  }, [refetchProprios]);
 
   // ── Guards (após todos os hooks) ─────────────────────────────────────────
   if (!tenant.isPaguePlay) {
@@ -186,26 +174,21 @@ export default function PaginaAnalitico() {
           liderId={liderId}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
-          onRefetch={refetchTudo}
+          onRefetch={refetchOperador}
         />
       )}
 
       {mostrarVisaoGeral && (
         <AnaliticoLider
-          dados={dadosGerais}
-          loading={loadingGerais}
           empresaId={empresa.id}
-          orfaos={orfaos}
-          loadingOrfaos={loadingOrfaos}
+          mes={mesFiltro}
           temPermissaoImportar={temPermissao('importar_analitico')}
           operadorId={perfil.id}
           operadorNome={perfil.nome}
           liderId={liderId}
-          filtroOperadorId={filtroOperadorId}
-          setFiltroOperadorId={setFiltroOperadorId}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
-          onRefetch={refetchTudo}
+          onRefetch={refetchOperador}
         />
       )}
     </div>
