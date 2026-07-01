@@ -38,6 +38,14 @@ export function useNotificacoes(): UseNotificacoesResult {
     }
   }, [user?.id]);
 
+  // Pede permissão de notificação do SO na primeira vez que o usuário loga
+  useEffect(() => {
+    if (!user?.id) return;
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission();
+    }
+  }, [user?.id]);
+
   // Polling a cada 30s
   useEffect(() => {
     load();
@@ -59,6 +67,19 @@ export function useNotificacoes(): UseNotificacoesResult {
             if (prev.find(n => n.id === nova.id)) return prev;
             return [nova, ...prev];
           });
+
+          // Notificação nativa do SO somente para imports analíticos
+          if (
+            nova.titulo?.toLowerCase().includes('analítico') &&
+            'Notification' in window &&
+            Notification.permission === 'granted'
+          ) {
+            new Notification(nova.titulo, {
+              body: nova.mensagem ?? '',
+              icon: '/favicon.ico',
+              tag:  `analitico-${nova.id}`,
+            });
+          }
         }
       )
       .on(

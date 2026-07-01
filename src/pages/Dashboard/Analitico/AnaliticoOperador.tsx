@@ -169,73 +169,89 @@ export function AnaliticoOperador({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {dadosFiltrados.map(linha => (
-                    <tr
-                      key={linha.id}
-                      className={cn(
-                        'hover:bg-muted/30 transition-colors',
-                        !linha.visto && 'bg-primary/3',
-                      )}
-                    >
-                      <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-1.5">
-                          {!linha.visto && (
-                            <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
-                          )}
-                          <div>
-                            <span className="font-semibold">{linha.codigo}</span>
-                            {linha.nome_cliente && (
-                              <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
-                                {linha.nome_cliente}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-medium">
-                        {linha.pagamentos_detalhados && linha.pagamentos_detalhados.length > 1 ? (
-                          <div>
-                            <span className="block text-[10px] font-normal text-muted-foreground mb-0.5">
-                              {linha.pagamentos_detalhados.length} pagamentos
-                            </span>
-                            {linha.pagamentos_detalhados.map((p, i) => (
-                              <div key={i} className="flex items-center justify-between gap-2 text-xs text-muted-foreground leading-snug">
-                                <span className="text-left font-normal">
-                                  {p.tpdoc.split(' ')[0]}
-                                  <span className="ml-1 text-[10px]">
-                                    {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                  {dadosFiltrados.flatMap(linha => {
+                    const rowClass = cn('hover:bg-muted/30 transition-colors', !linha.visto && 'bg-primary/3');
+                    const pagamentos = linha.pagamentos_detalhados;
+
+                    if (!pagamentos || pagamentos.length <= 1) {
+                      return [
+                        <tr key={linha.id} className={rowClass}>
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1.5">
+                              {!linha.visto && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
+                              )}
+                              <div>
+                                <span className="font-semibold">{linha.codigo}</span>
+                                {linha.nome_cliente && (
+                                  <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
+                                    {linha.nome_cliente}
                                   </span>
-                                </span>
-                                <span className="tabular-nums">{formatBRL(p.valor)}</span>
+                                )}
                               </div>
-                            ))}
-                            <div className="border-t border-border mt-0.5 pt-0.5 tabular-nums font-semibold">
-                              {formatBRL(linha.valor_recebido)}
                             </div>
-                          </div>
-                        ) : (
-                          formatBRL(linha.valor_recebido)
+                          </td>
+                          <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
+                          <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
+                          <td className="px-3 py-2.5 tabular-nums">
+                            {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                          </td>
+                          <td className="px-3 py-2.5 text-right">
+                            <TabulacaoCell
+                              linha={linha} empresaId={empresaId}
+                              operadorId={operadorId} operadorNome={operadorNome}
+                              liderId={liderId}
+                              onAbrirNovoAcordo={onAbrirNovoAcordo}
+                              onVerAcordo={onVerAcordo}
+                              onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
+                            />
+                          </td>
+                        </tr>,
+                      ];
+                    }
+
+                    // Múltiplos pagamentos: uma linha por pagamento, código e ação com rowSpan
+                    return pagamentos.map((p, idx) => (
+                      <tr key={`${linha.id}::${idx}`} className={rowClass}>
+                        {idx === 0 && (
+                          <td rowSpan={pagamentos.length} className="px-3 py-2.5 align-top">
+                            <div className="flex items-center gap-1.5">
+                              {!linha.visto && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
+                              )}
+                              <div>
+                                <span className="font-semibold">{linha.codigo}</span>
+                                {linha.nome_cliente && (
+                                  <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
+                                    {linha.nome_cliente}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
                         )}
-                      </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
-                      <td className="px-3 py-2.5 tabular-nums">
-                        {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                      </td>
-                      <td className="px-3 py-2.5 text-right">
-                        <TabulacaoCell
-                          linha={linha}
-                          empresaId={empresaId}
-                          operadorId={operadorId}
-                          operadorNome={operadorNome}
-                          liderId={liderId}
-                          onAbrirNovoAcordo={onAbrirNovoAcordo}
-                          onVerAcordo={onVerAcordo}
-                          onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
-                        />
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(p.valor)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>
+                        <td className="px-3 py-2.5 tabular-nums">
+                          {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                        </td>
+                        {idx === 0 && (
+                          <td rowSpan={pagamentos.length} className="px-3 py-2.5 text-right align-top">
+                            <TabulacaoCell
+                              linha={linha} empresaId={empresaId}
+                              operadorId={operadorId} operadorNome={operadorNome}
+                              liderId={liderId}
+                              onAbrirNovoAcordo={onAbrirNovoAcordo}
+                              onVerAcordo={onVerAcordo}
+                              onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
+                            />
+                          </td>
+                        )}
+                      </tr>
+                    ));
+                  })}
                 </tbody>
               </table>
             </div>

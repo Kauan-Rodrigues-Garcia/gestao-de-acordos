@@ -596,45 +596,80 @@ export function AnaliticoLider({
                                       {temFiltro ? 'Nenhum registro no período.' : 'Sem registros.'}
                                     </td>
                                   </tr>
-                                ) : linhas.map(linha => (
-                                  <tr key={linha.id} className="hover:bg-muted/20">
-                                    <td className="px-3 py-2">
-                                      <span className="font-semibold">{linha.codigo}</span>
-                                      {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground truncate max-w-[120px]">
-                                          {linha.nome_cliente}
-                                        </span>
+                                ) : linhas.flatMap(linha => {
+                                  const pagamentos = linha.pagamentos_detalhados;
+                                  const formaBadge = (
+                                    <Badge variant="outline" className={
+                                      linha.forma_pagamento === 'cartao'
+                                        ? 'text-xs border-purple-300 text-purple-700'
+                                        : 'text-xs border-blue-300 text-blue-700'
+                                    }>
+                                      {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
+                                    </Badge>
+                                  );
+
+                                  if (!pagamentos || pagamentos.length <= 1) {
+                                    return [
+                                      <tr key={linha.id} className="hover:bg-muted/20">
+                                        <td className="px-3 py-2">
+                                          <span className="font-semibold">{linha.codigo}</span>
+                                          {linha.nome_cliente && (
+                                            <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
+                                          )}
+                                        </td>
+                                        <td className="px-3 py-2">{formaBadge}</td>
+                                        <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
+                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
+                                        <td className="px-3 py-2 tabular-nums">
+                                          {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                        </td>
+                                        <td className="px-3 py-2 text-right">
+                                          <TabulacaoCell
+                                            linha={linha} empresaId={empresaId}
+                                            operadorId={r.operador_id}
+                                            operadorNome={r.operador_nome ?? r.operador_usuario}
+                                            liderId={liderId}
+                                            onAbrirNovoAcordo={onAbrirNovoAcordo}
+                                            onVerAcordo={onVerAcordo}
+                                            onRefetch={onRefetch}
+                                          />
+                                        </td>
+                                      </tr>,
+                                    ];
+                                  }
+
+                                  return pagamentos.map((p, idx) => (
+                                    <tr key={`${linha.id}::${idx}`} className="hover:bg-muted/20">
+                                      {idx === 0 && (
+                                        <td rowSpan={pagamentos.length} className="px-3 py-2 align-top">
+                                          <span className="font-semibold">{linha.codigo}</span>
+                                          {linha.nome_cliente && (
+                                            <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
+                                          )}
+                                        </td>
                                       )}
-                                    </td>
-                                    <td className="px-3 py-2">
-                                      <Badge variant="outline" className={
-                                        linha.forma_pagamento === 'cartao'
-                                          ? 'text-xs border-purple-300 text-purple-700'
-                                          : 'text-xs border-blue-300 text-blue-700'
-                                      }>
-                                        {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
-                                      </Badge>
-                                    </td>
-                                    <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                                    <td className="px-3 py-2 text-right font-mono text-muted-foreground">
-                                      {formatBRL(linha.total_ho)}
-                                    </td>
-                                    <td className="px-3 py-2 tabular-nums">
-                                      {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
-                                    </td>
-                                    <td className="px-3 py-2 text-right">
-                                      <TabulacaoCell
-                                        linha={linha} empresaId={empresaId}
-                                        operadorId={r.operador_id}
-                                        operadorNome={r.operador_nome ?? r.operador_usuario}
-                                        liderId={liderId}
-                                        onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                        onVerAcordo={onVerAcordo}
-                                        onRefetch={onRefetch}
-                                      />
-                                    </td>
-                                  </tr>
-                                ))}
+                                      <td className="px-3 py-2">{formaBadge}</td>
+                                      <td className="px-3 py-2 text-right font-mono">{formatBRL(p.valor)}</td>
+                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>
+                                      <td className="px-3 py-2 tabular-nums">
+                                        {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                      </td>
+                                      {idx === 0 && (
+                                        <td rowSpan={pagamentos.length} className="px-3 py-2 text-right align-top">
+                                          <TabulacaoCell
+                                            linha={linha} empresaId={empresaId}
+                                            operadorId={r.operador_id}
+                                            operadorNome={r.operador_nome ?? r.operador_usuario}
+                                            liderId={liderId}
+                                            onAbrirNovoAcordo={onAbrirNovoAcordo}
+                                            onVerAcordo={onVerAcordo}
+                                            onRefetch={onRefetch}
+                                          />
+                                        </td>
+                                      )}
+                                    </tr>
+                                  ));
+                                })}
                               </tbody>
                             </table>
                           </>
