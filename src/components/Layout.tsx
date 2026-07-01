@@ -241,7 +241,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           !isPP && 'rounded-lg overflow-hidden bg-background',
         )}>
           {isPP
-            ? <img src="/logo-pagueplay.svg" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
+            ? <img src="/logo-pagueplay.png" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
             : <img src="/images/Logo_Clebs.png" alt="Logo" className="w-8 h-8 object-contain" />
           }
         </div>
