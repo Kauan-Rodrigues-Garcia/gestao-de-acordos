@@ -68,16 +68,18 @@ export function useNotificacoes(): UseNotificacoesResult {
             return [nova, ...prev];
           });
 
-          // Notificação nativa do SO somente para imports analíticos
+          // Notificação nativa do SO somente para imports de recebimentos
+          // (analítico e recebimento diário)
+          const tituloLower = nova.titulo?.toLowerCase() ?? '';
           if (
-            nova.titulo?.toLowerCase().includes('analítico') &&
+            (tituloLower.includes('analítico') || tituloLower.includes('recebimento diário')) &&
             'Notification' in window &&
             Notification.permission === 'granted'
           ) {
             new Notification(nova.titulo, {
               body: nova.mensagem ?? '',
               icon: '/favicon.ico',
-              tag:  `analitico-${nova.id}`,
+              tag:  `recebimentos-${nova.id}`,
             });
           }
         }

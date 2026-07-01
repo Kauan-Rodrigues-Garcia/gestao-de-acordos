@@ -59,6 +59,8 @@ const PERMISSOES_META: {
   { key: 'ver_analiticos_global',  label: 'Analíticos globais',       descricao: 'Ver métricas e KPIs de toda a empresa (todos os setores)',                    grupo: 'Painéis' },
   { key: 'ver_todos_setores',      label: 'Ver todos os setores',     descricao: 'Acesso a dados de todos os setores da empresa',                               grupo: 'Painéis' },
   { key: 'gerenciar_metas',        label: 'Gerenciar metas',          descricao: 'Criar, editar e acompanhar metas do setor/empresa',                           grupo: 'Painéis' },
+  { key: 'importar_analitico',     label: 'Importar analítico',       descricao: 'Importar o relatório analítico de recebimentos do ERP (aba Analítico)',      grupo: 'Painéis' },
+  { key: 'importar_diario',        label: 'Importar recebimento diário', descricao: 'Importar o relatório de recebimento diário do ERP (aba Analítico)',       grupo: 'Painéis' },
   // ── Filtros ───────────────────────────────────────────────────────────────
   { key: 'filtrar_por_setor',      label: 'Filtrar por setor',        descricao: 'Aplicar filtro de setor nos relatórios e listagens',                         grupo: 'Filtros' },
   { key: 'filtrar_por_equipe',     label: 'Filtrar por equipe',       descricao: 'Aplicar filtro de equipe nos relatórios e listagens',                        grupo: 'Filtros' },

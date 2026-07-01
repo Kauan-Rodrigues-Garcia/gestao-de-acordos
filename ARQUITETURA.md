@@ -453,3 +453,93 @@ src/pages/Dashboard/PPTableFilters.tsx  # + aba "Analítico" no union type e arr
 src/pages/Dashboard/index.tsx          # + AbaAnalitico, condicional de render
 ARQUITETURA.md                         # esta seção
 ```
+
+---
+
+## Aba Recebimento Diário (PaguePlay exclusivo)
+
+Feature adicionada em 2026-07-01, aba interna da página Analítico (`/analitico`).
+Diferente do Analítico, é **apenas informativa**: não há vínculo com acordos
+tabulados nem máquina de estados de tabulação. O líder importa o relatório de
+recebimento diário do ERP e cada operador recebe a lista dos próprios pagamentos.
+
+### Tabela `diario_recebimentos`
+
+```
+id                UUID  PK
+empresa_id        UUID  FK empresas (gate de isolamento)
+operador_id       UUID  FK perfis — null quando operador não encontrado (órfão)
+operador_usuario  TEXT  username bruto do relatório (coluna "Operador")
+cpf               TEXT  somente dígitos
+nome_cliente      TEXT  coluna "Profissional"
+acordo_codigo     TEXT  coluna "Cód.Acordo" (consolida parcelas de cartão na exibição)
+forma_pagamento   TEXT  texto bruto (Pix, Boleto, Cartão Padrão…)
+valor_recebido    NUMERIC
+data_pagamento    DATE
+dia_referencia    DATE  dia do relatório (moda das datas de pagamento)
+prox_contato      DATE  ≤ hoje → acordo "ignorado" (fora dos totais e listas)
+tabulacao         TEXT  coluna "Tabulação" do ERP (informativa)
+id_baixa          TEXT  identificador do pagamento no ERP
+chave_unica       TEXT  id_baixa ou composta cpf|acordo|forma|valor|data
+import_index      INT   nº da importação do dia que adicionou a linha
+visto             BOOL  false = "novo" para o operador
+importado_por_id / importado_em / lote_id
+```
+
+**Chave de unicidade:** `(empresa_id, dia_referencia, chave_unica)` —
+importações sucessivas do mesmo dia adicionam apenas pagamentos novos, marcados
+com `import_index` incremental (base da tag "+N novos" na visão líder).
+
+**RLS:** igual ao analítico (operador vê só as próprias linhas; órfãos e
+importação/exclusão só líder+; operador atualiza as próprias — marcar visto).
+
+### Regras herdadas do protótipo HTML
+
+- Cartão consolida por `acordo_codigo` na exibição (parcelas somadas, badge "Nx");
+  Pix/Boleto = 1 item por pagamento.
+- `prox_contato ≤ hoje` → acordo ignorado: fora dos totais e das listas dos
+  operadores; visível só no card "Acordos ignorados" da visão líder.
+- Linhas do arquivo sem a coluna Operador são descartadas no parse (contadas).
+
+### Lógica de "novos" do operador
+
+Um pagamento só é considerado lido quando o operador **abre a aba** após a
+importação (`visto = true` em `marcarVistoDiario`). Os ids não vistos na carga
+ficam congelados na sessão (`useDiario.novosIds`) — a lista continua separando
+"Anteriores" × "Novos" até o próximo acesso. Se o operador não abrir a aba entre
+duas importações, os pagamentos das duas aparecem como novos.
+
+### Notificações
+
+Ao confirmar a importação, apenas os operadores **vinculados** que receberam
+algum valor na importação são notificados (in-app via `notificacoes` +
+notificação nativa do SO disparada em `useNotificacoes` — títulos contendo
+"analítico" ou "recebimento diário").
+
+### Permissão `importar_diario`
+
+Adicionada em `cargos_permissoes` via migration `20260701b_diario_recebimentos.sql`
+(mesmo padrão de `importar_analitico`; ambas agora expostas em Admin → Cargos).
+
+### Arquivos
+
+```
+supabase/migrations/20260701b_diario_recebimentos.sql   # tabela + RLS + realtime + RPC fn_diario_resumo_mes + permissão
+src/services/diario/
+  ├── diarioParser.ts           # parse Excel, resolveCols, formaKind, fmtCPF, diaReferencia
+  ├── diario.service.ts         # importarLote, buscas, marcarVisto, notificar, limparDia
+  └── diarioParser.test.ts      # testes do parser (headers reais do ERP)
+src/hooks/
+  ├── useDiario.ts              # fetch + realtime + novosIds/marcarVisto
+  └── useDiarioImport.ts        # máquina de estados upload→preview→confirmar
+src/pages/Analitico/Diario/
+  ├── index.tsx                 # raiz da aba (seletor de dia + roteia por cargo)
+  ├── DiarioLider.tsx           # cards do dia/mês, lista por operador, órfãos, ignorados
+  ├── DiarioOperador.tsx        # lista própria (CPF/nome, forma, valor, data, total)
+  ├── ImportarDiarioModal.tsx   # modal upload → preview (vínculo manual) → confirmar
+  ├── FormaChip.tsx             # badge Pix/Boleto/Cartão
+  └── helpers.ts                # consolidação, ignorados, agregação por operador
+src/pages/Analitico/index.tsx   # + abas internas Analítico × Recebimento diário
+src/hooks/useNotificacoes.ts    # notificação nativa também para o diário
+src/lib/supabase.ts             # + interface DiarioRecebimento
+```

@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2 } from 'lucide-react';
+import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
+import { AbaDiario } from './Diario';
 
 export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
@@ -28,6 +29,7 @@ export default function PaginaAnalitico() {
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
   const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
+  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario'>('analitico');
 
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
@@ -162,7 +164,27 @@ export default function PaginaAnalitico() {
         )}
       </div>
 
-      {/* Seletor de mês + filtro de setor */}
+      {/* Abas internas: Analítico × Recebimento diário */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {([
+          { key: 'analitico', label: 'Analítico',          Icon: BarChart2 },
+          { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins },
+        ] as const).map(({ key, label, Icon }) => (
+          <button key={key} onClick={() => setAbaPrincipal(key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+              abaPrincipal === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Seletor de mês + filtro de setor (somente aba Analítico) */}
+      {abaPrincipal === 'analitico' && (
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
@@ -208,9 +230,10 @@ export default function PaginaAnalitico() {
           </div>
         )}
       </div>
+      )}
 
-      {/* Conteúdo por cargo */}
-      {mostrarVisaoIndividual && (
+      {/* Conteúdo por cargo — aba Analítico */}
+      {abaPrincipal === 'analitico' && mostrarVisaoIndividual && (
         <AnaliticoOperador
           dados={dadosProprios}
           loading={loadingProprios}
@@ -224,7 +247,7 @@ export default function PaginaAnalitico() {
         />
       )}
 
-      {mostrarVisaoGeral && (
+      {abaPrincipal === 'analitico' && mostrarVisaoGeral && (
         <AnaliticoLider
           empresaId={empresa.id}
           mes={mesFiltro}
@@ -236,6 +259,16 @@ export default function PaginaAnalitico() {
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}
+        />
+      )}
+
+      {/* Conteúdo por cargo — aba Recebimento diário */}
+      {abaPrincipal === 'diario' && (
+        <AbaDiario
+          empresaId={empresa.id}
+          operadorId={perfil.id}
+          visaoGeral={mostrarVisaoGeral}
+          temPermissaoImportar={temPermissao('importar_diario')}
         />
       )}
     </div>

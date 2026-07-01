@@ -191,7 +191,8 @@ export function AnaliticoLider({
     const jaAberto = expandidos.has(opId);
     setExpandidos(prev => {
       const next = new Set(prev);
-      jaAberto ? next.delete(opId) : next.add(opId);
+      if (jaAberto) next.delete(opId);
+      else next.add(opId);
       return next;
     });
     if (!jaAberto && !linhasMap.has(opId)) {

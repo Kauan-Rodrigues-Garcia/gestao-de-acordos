@@ -1,9 +1,16 @@
+/**
+ * ImportarDiarioModal — importação do relatório de recebimento diário.
+ *
+ * Fluxo idêntico ao ImportarModal do analítico:
+ *   selecionar arquivo → preview (operadores detectados / vínculo manual) →
+ *   confirmar → resumo da importação.
+ */
+
 import { useRef, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -12,15 +19,18 @@ import {
   ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
-import type { UseAnaliticoImport } from './types';
+import { fmtCPF } from '@/services/diario/diarioParser';
+import { fmtDataISO } from './helpers';
+import { FormaChip } from './FormaChip';
+import type { useDiarioImport } from '@/hooks/useDiarioImport';
 
-interface ImportarModalProps {
+interface ImportarDiarioModalProps {
   aberto: boolean;
   onFechar: () => void;
-  hook: ReturnType<UseAnaliticoImport>;
+  hook: ReturnType<typeof useDiarioImport>;
 }
 
-export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
+export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioModalProps) {
   const {
     estado, preview, resultado, erroGeral,
     vinculosManuais,
@@ -43,6 +53,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
   // ── Done ─────────────────────────────────────────────────────────────────
   if (estado === 'done' && resultado) {
+    const notificados = resultado.novosPorOperador.filter(n => n.totalNovo > 0).length;
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
         <DialogContent className="max-w-md">
@@ -71,7 +82,10 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
             <p className="text-xs text-muted-foreground">
-              Todos os operadores foram notificados sobre a atualização.
+              Importação nº {resultado.importIndex} do dia.{' '}
+              {notificados > 0
+                ? `${notificados} operador${notificados !== 1 ? 'es' : ''} com novos pagamentos ${notificados !== 1 ? 'foram notificados' : 'foi notificado'}.`
+                : 'Nenhum operador vinculado com pagamentos novos para notificar.'}
             </p>
           </div>
           <DialogFooter>
@@ -116,7 +130,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
-              Preview — {preview.mes ? new Date(preview.mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' }) : 'Relatório'}
+              Preview — recebimentos de {fmtDataISO(preview.dia)}
             </DialogTitle>
           </DialogHeader>
 
@@ -124,18 +138,18 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             {/* Contadores */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border bg-primary/5 p-3 text-center">
-                <p className="text-xl font-bold text-primary">{preview.linhasNovas}</p>
-                <p className="text-xs text-muted-foreground">a inserir</p>
+                <p className="text-xl font-bold text-primary">{preview.linhasTotais}</p>
+                <p className="text-xs text-muted-foreground">pagamentos no arquivo</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
-                <p className="text-xl font-bold">{preview.linhasTotais}</p>
-                <p className="text-xs text-muted-foreground">no arquivo</p>
+                <p className="text-xl font-bold">{preview.descartadasSemOperador}</p>
+                <p className="text-xs text-muted-foreground">sem operador (descartadas)</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
                 <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
                   {naoDetectados.length - vinculadosManuaisCount}
                 </p>
-                <p className="text-xs text-muted-foreground">sem operador</p>
+                <p className="text-xs text-muted-foreground">não identificados</p>
               </div>
             </div>
 
@@ -192,7 +206,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <div className="px-3 py-2.5 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-amber-600" />
                   <p className="text-xs font-semibold text-amber-700">
-                    Não detectados ({naoDetectados.length}) — vincule manualmente ou deixe em branco
+                    Não identificados ({naoDetectados.length}) — vincule manualmente ou deixe em branco
                   </p>
                 </div>
 
@@ -254,17 +268,16 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             {/* Tabela de preview */}
             <div>
               <p className="text-xs font-semibold text-muted-foreground mb-2">
-                Primeiros {Math.min(preview.linhas.length, 20)} de {preview.linhas.length} registros:
+                Primeiros {Math.min(preview.linhas.length, 20)} de {preview.linhas.length} pagamentos:
               </p>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Cobradora</th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Código</th>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Operador</th>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / Profissional</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Forma</th>
                       <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Recebido</th>
-                      <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Total HO</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Data</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Vinc.</th>
                     </tr>
@@ -278,25 +291,18 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                         <tr key={i} className="hover:bg-muted/30">
                           <td className="px-3 py-1.5 font-mono">{l.operador_usuario}</td>
                           <td className="px-3 py-1.5">
-                            <span className="font-medium">{l.codigo}</span>
+                            <span className="font-medium tabular-nums">{fmtCPF(l.cpf) || '—'}</span>
                             {l.nome_cliente && (
-                              <span className="block text-muted-foreground truncate max-w-[120px]">
+                              <span className="block text-muted-foreground truncate max-w-[140px]">
                                 {l.nome_cliente}
                               </span>
                             )}
                           </td>
-                          <td className="px-3 py-1.5">
-                            <Badge variant="outline" className={
-                              l.forma_pagamento === 'cartao'
-                                ? 'border-purple-300 text-purple-700'
-                                : 'border-blue-300 text-blue-700'
-                            }>
-                              {l.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
-                            </Badge>
-                          </td>
+                          <td className="px-3 py-1.5"><FormaChip forma={l.forma_pagamento} /></td>
                           <td className="px-3 py-1.5 text-right font-mono">{formatBRL(l.valor_recebido)}</td>
-                          <td className="px-3 py-1.5 text-right font-mono text-muted-foreground">{formatBRL(l.total_ho)}</td>
-                          <td className="px-3 py-1.5">{l.data_pagamento.toLocaleDateString('pt-BR')}</td>
+                          <td className="px-3 py-1.5 tabular-nums">
+                            {l.data_pagamento ? l.data_pagamento.toLocaleDateString('pt-BR') : '—'}
+                          </td>
                           <td className="px-3 py-1.5">
                             {vinculado
                               ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
@@ -317,7 +323,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             <Button onClick={() => void confirmarImportacao()} disabled={estado === 'confirming'}>
               {estado === 'confirming'
                 ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Importando…</>
-                : `Confirmar (${preview.linhasNovas} registro${preview.linhasNovas !== 1 ? 's' : ''})`
+                : `Confirmar (${preview.linhasTotais} pagamento${preview.linhasTotais !== 1 ? 's' : ''})`
               }
             </Button>
           </DialogFooter>
@@ -332,14 +338,15 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Upload className="w-5 h-5 text-primary" /> Importar relatório de recebimentos
+            <Upload className="w-5 h-5 text-primary" /> Importar relatório diário
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <p className="text-sm text-muted-foreground">
-            Selecione o arquivo Excel exportado do ERP (relatório analítico de recebimentos).
-            Os dados serão mesclados com os existentes — registros duplicados são ignorados.
+            Selecione o arquivo Excel do relatório de recebimento diário do ERP.
+            Importações repetidas do mesmo dia adicionam apenas os pagamentos novos —
+            duplicados são ignorados.
           </p>
 
           <label
