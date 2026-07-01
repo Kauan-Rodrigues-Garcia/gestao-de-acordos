@@ -294,6 +294,25 @@ export async function removerLinhasSemOperador(
   return { removidos: count ?? 0, error: error?.message ?? null };
 }
 
+/** Remove TODOS os registros analíticos de um mês (usado pelo líder para reimportar do zero). */
+export async function limparDadosDoMes(
+  empresaId: string,
+  mes: string,
+): Promise<{ error: string | null }> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  const { error } = await supabase
+    .from('analitico_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .gte('data_pagamento', primeiro)
+    .lte('data_pagamento', fim);
+
+  return { error: error?.message ?? null };
+}
+
 /** Remove todos os órfãos (sem operador) de um mês específico. */
 export async function removerOrfaosDoMes(
   empresaId: string,

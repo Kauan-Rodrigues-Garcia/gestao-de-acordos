@@ -18,6 +18,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
@@ -29,6 +33,7 @@ import {
   buscarResumoMensal,
   removerLinhaAnalitico,
   removerOrfaosDoMes,
+  limparDadosDoMes,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
@@ -91,8 +96,10 @@ export function AnaliticoLider({
   const [orfaos,         setOrfaos]         = useState<AnaliticoRecebimento[]>([]);
   const [loadingOrfaos,  setLoadingOrfaos]  = useState(false);
   const [orfaosVisiveis, setOrfaosVisiveis] = useState(ORFAOS_PAGE);
-  const [removendoId,    setRemovendoId]    = useState<string | null>(null);
-  const [removendoTodos, setRemovendoTodos] = useState(false);
+  const [removendoId,       setRemovendoId]       = useState<string | null>(null);
+  const [removendoTodos,    setRemovendoTodos]    = useState(false);
+  const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
+  const [limpando,           setLimpando]           = useState(false);
 
   // ── Destaques ─────────────────────────────────────────────────────────────
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
@@ -234,6 +241,24 @@ export function AnaliticoLider({
     if (error) toast.error(`Erro ao remover: ${error}`);
     else { toast.success('Todos os registros sem operador foram removidos.'); setOrfaos([]); onRefetch(); }
     setRemovendoTodos(false);
+  }
+
+  async function limparMes() {
+    setLimpando(true);
+    const { error } = await limparDadosDoMes(empresaId, mes);
+    if (error) {
+      toast.error(`Erro ao limpar: ${error}`);
+    } else {
+      const mesLabel = new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      toast.success(`Dados de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`);
+      setConfirmandoLimpeza(false);
+      void carregarResumos();
+      void carregarSnapshot();
+      if (abaAtiva === 'orfaos')    void carregarOrfaos();
+      if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
+      onRefetch();
+    }
+    setLimpando(false);
   }
 
   function handlePosImport() {
@@ -443,9 +468,18 @@ export function AnaliticoLider({
           ))}
         </div>
         {temPermissaoImportar && (
-          <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
-            <Upload className="w-4 h-4" /> Importar relatório
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm" variant="outline"
+              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setConfirmandoLimpeza(true)}
+            >
+              <Trash2 className="w-4 h-4" /> Limpar mês
+            </Button>
+            <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
+              <Upload className="w-4 h-4" /> Importar relatório
+            </Button>
+          </div>
         )}
       </div>
 
@@ -791,6 +825,39 @@ export function AnaliticoLider({
           )}
         </div>
       )}
+
+      <AlertDialog open={confirmandoLimpeza} onOpenChange={setConfirmandoLimpeza}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" /> Limpar dados do mês
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <p>
+                Todos os registros importados de{' '}
+                <strong>
+                  {new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+                </strong>{' '}
+                serão excluídos permanentemente, incluindo todas as tabulações registradas no período.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Esta ação não pode ser desfeita. Após a exclusão, reimporte o relatório para restaurar os dados.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={limpando}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void limparMes()}
+              disabled={limpando}
+              className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
+            >
+              {limpando && <Loader2 className="w-4 h-4 animate-spin" />}
+              {limpando ? 'Excluindo…' : 'Confirmar exclusão'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
     </div>
