@@ -17,6 +17,13 @@ import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 // ── Tipos de saída ───────────────────────────────────────────────────────────
 
+export interface PagamentoDetalhe {
+  tpdoc: string;
+  valor: number;
+  total_ho: number;
+  data: Date;
+}
+
 export interface LinhaRelatorio {
   operador_usuario: string;
   equipe: string;
@@ -27,6 +34,8 @@ export interface LinhaRelatorio {
   valor_recebido: number;
   total_ho: number;
   data_pagamento: Date;
+  /** Preenchido apenas quando 2+ pagamentos foram consolidados numa única linha (ex: BOLETO + PIX no mesmo dia) */
+  pagamentos_detalhados?: PagamentoDetalhe[];
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -129,29 +138,66 @@ function parsearValor(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-// ── Consolidação de cartão ───────────────────────────────────────────────────
+// ── Consolidação ─────────────────────────────────────────────────────────────
+
+function dateKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 /**
- * Agrupa linhas de cartão por (operador_usuario + codigo), somando recebido e HO.
- * Linhas de boleto/pix passam diretamente sem agrupamento.
+ * Agrupa linhas pelo resultado de `chave`, somando valor_recebido e total_ho.
+ * Quando `trackDetalhes=true`, preenche `pagamentos_detalhados` ao mesclar
+ * 2+ linhas — permite exibir os pagamentos individuais na UI.
  */
-function consolidar(linhas: LinhaRelatorio[]): LinhaRelatorio[] {
-  const boleto = linhas.filter(l => l.forma_pagamento !== 'cartao');
-  const cartao  = linhas.filter(l => l.forma_pagamento === 'cartao');
-
+function agrupar(
+  items: LinhaRelatorio[],
+  chave: (l: LinhaRelatorio) => string,
+  trackDetalhes = false,
+): LinhaRelatorio[] {
   const grupos = new Map<string, LinhaRelatorio>();
-  for (const l of cartao) {
-    const chave = `${l.operador_usuario}::${l.codigo}`;
-    const existe = grupos.get(chave);
+  for (const l of items) {
+    const k = chave(l);
+    const existe = grupos.get(k);
     if (existe) {
+      if (trackDetalhes) {
+        if (!existe.pagamentos_detalhados) {
+          // Primeira mesclagem: registra o lançamento original como primeiro detalhe
+          existe.pagamentos_detalhados = [
+            { tpdoc: existe.tpdoc_original, valor: existe.valor_recebido, total_ho: existe.total_ho, data: existe.data_pagamento },
+          ];
+        }
+        existe.pagamentos_detalhados.push({
+          tpdoc:    l.tpdoc_original,
+          valor:    l.valor_recebido,
+          total_ho: l.total_ho,
+          data:     l.data_pagamento,
+        });
+      }
       existe.valor_recebido += l.valor_recebido;
       existe.total_ho       += l.total_ho;
     } else {
-      grupos.set(chave, { ...l });
+      grupos.set(k, { ...l });
     }
   }
+  return [...grupos.values()];
+}
 
-  return [...boleto, ...grupos.values()];
+/**
+ * Consolida linhas do relatório:
+ *   - Boleto/PIX: mesmo cliente pode ter pagado via BOLETO e via PIX no mesmo dia
+ *     para o mesmo operador. Agrupa por (operator + codigo + data), soma os valores
+ *     e registra cada pagamento individual em `pagamentos_detalhados` para exibição na UI.
+ *   - Cartão: ERP repete a mesma venda N vezes (uma por parcela). Agrupa por
+ *     (operator + codigo) e soma — detalhes não são rastreados pois são parcelas iguais.
+ */
+function consolidar(linhas: LinhaRelatorio[]): LinhaRelatorio[] {
+  const boleto = linhas.filter(l => l.forma_pagamento !== 'cartao');
+  const cartao = linhas.filter(l => l.forma_pagamento === 'cartao');
+
+  return [
+    ...agrupar(boleto, l => `${l.operador_usuario}::${l.codigo}::${dateKey(l.data_pagamento)}`, true),
+    ...agrupar(cartao, l => `${l.operador_usuario}::${l.codigo}`),
+  ];
 }
 
 // ── Parse principal ──────────────────────────────────────────────────────────

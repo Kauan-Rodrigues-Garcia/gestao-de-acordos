@@ -193,7 +193,31 @@ export function AnaliticoOperador({
                         </div>
                       </td>
                       <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
-                      <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-medium">
+                        {linha.pagamentos_detalhados && linha.pagamentos_detalhados.length > 1 ? (
+                          <div>
+                            <span className="block text-[10px] font-normal text-muted-foreground mb-0.5">
+                              {linha.pagamentos_detalhados.length} pagamentos
+                            </span>
+                            {linha.pagamentos_detalhados.map((p, i) => (
+                              <div key={i} className="flex items-center justify-between gap-2 text-xs text-muted-foreground leading-snug">
+                                <span className="text-left font-normal">
+                                  {p.tpdoc.split(' ')[0]}
+                                  <span className="ml-1 text-[10px]">
+                                    {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
+                                  </span>
+                                </span>
+                                <span className="tabular-nums">{formatBRL(p.valor)}</span>
+                              </div>
+                            ))}
+                            <div className="border-t border-border mt-0.5 pt-0.5 tabular-nums font-semibold">
+                              {formatBRL(linha.valor_recebido)}
+                            </div>
+                          </div>
+                        ) : (
+                          formatBRL(linha.valor_recebido)
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
                       <td className="px-3 py-2.5 tabular-nums">
                         {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}

@@ -232,6 +232,13 @@ export interface Profissional {
 export type StatusTabulacaoAnalitico = 'nao_tabulado' | 'tabulado' | 'divergente';
 export type FormaPagementoAnalitico  = 'boleto_pix' | 'cartao';
 
+export interface PagamentoDetalheAnalitico {
+  tpdoc: string;
+  valor: number;
+  total_ho: number;
+  data: string; // 'yyyy-MM-dd'
+}
+
 export interface AnaliticoRecebimento {
   id: string;
   empresa_id: string;
@@ -250,6 +257,8 @@ export interface AnaliticoRecebimento {
   importado_por_id: string | null;
   importado_em: string;
   lote_id: string;
+  /** Preenchido quando 2+ pagamentos (ex: BOLETO + PIX) foram consolidados nesta linha */
+  pagamentos_detalhados?: PagamentoDetalheAnalitico[] | null;
   /** Join opcional: nome do perfil do operador */
   perfis?: Pick<Perfil, 'id' | 'nome' | 'usuario'> | null;
 }

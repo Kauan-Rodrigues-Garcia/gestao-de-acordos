@@ -134,6 +134,14 @@ export async function importarLoteAnalitico(
     visto:           false,
     importado_por_id: importadoPorId,
     lote_id:         loteId,
+    pagamentos_detalhados: (l.pagamentos_detalhados && l.pagamentos_detalhados.length > 1)
+      ? l.pagamentos_detalhados.map(p => ({
+          tpdoc:    p.tpdoc,
+          valor:    p.valor,
+          total_ho: p.total_ho,
+          data:     toISO(p.data),
+        }))
+      : null,
   }));
 
   const CHUNK = 200;
