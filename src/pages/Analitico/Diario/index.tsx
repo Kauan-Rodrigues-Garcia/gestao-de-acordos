@@ -10,7 +10,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getTodayISO } from '@/lib/index';
-import { buscarUltimoDia, buscarResumoMesDiario } from '@/services/diario/diario.service';
+import { buscarUltimoDia } from '@/services/diario/diario.service';
 import { DiarioLider } from './DiarioLider';
 import { DiarioOperador } from './DiarioOperador';
 
@@ -31,8 +31,7 @@ function somarDias(iso: string, delta: number): string {
 export function AbaDiario({
   empresaId, operadorId, visaoGeral, temPermissaoImportar,
 }: AbaDiarioProps) {
-  const [dia, setDia]           = useState<string | null>(null);
-  const [totalMes, setTotalMes] = useState<number | null>(null);
+  const [dia, setDia] = useState<string | null>(null);
 
   // Dia inicial: último dia com dados (RLS limita à visão do usuário); senão hoje
   useEffect(() => {
@@ -43,23 +42,9 @@ export function AbaDiario({
     return () => { ativo = false; };
   }, [empresaId]);
 
-  // Total do mês (só faz sentido na visão líder)
-  const carregarTotalMes = useCallback((diaBase: string | null) => {
-    if (!visaoGeral || !diaBase) return;
-    const mes = diaBase.slice(0, 7);
-    buscarResumoMesDiario(empresaId, mes).then(({ data }) => {
-      setTotalMes(data?.total_recebido ?? 0);
-    });
-  }, [empresaId, visaoGeral]);
-
-  useEffect(() => {
-    carregarTotalMes(dia);
-  }, [dia, carregarTotalMes]);
-
   const handleDadosImportados = useCallback((diaImportado: string) => {
     setDia(diaImportado);
-    carregarTotalMes(diaImportado);
-  }, [carregarTotalMes]);
+  }, []);
 
   const hoje = getTodayISO();
 
@@ -103,7 +88,6 @@ export function AbaDiario({
           empresaId={empresaId}
           dia={dia}
           temPermissaoImportar={temPermissaoImportar}
-          totalMes={totalMes}
           onDadosImportados={handleDadosImportados}
         />
       ) : (

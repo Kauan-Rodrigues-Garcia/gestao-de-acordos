@@ -261,30 +261,6 @@ export async function buscarUltimoDia(
   return { dia: (data?.dia_referencia as string | undefined) ?? null, error: error?.message ?? null };
 }
 
-// ── Resumo do mês (card do líder) ─────────────────────────────────────────────
-
-export interface ResumoMesDiario {
-  total_recebido: number;
-  total_dias: number;
-}
-
-export async function buscarResumoMesDiario(
-  empresaId: string,
-  mes: string,               // 'yyyy-MM'
-): Promise<{ data: ResumoMesDiario | null; error: string | null }> {
-  const { data, error } = await supabase.rpc('fn_diario_resumo_mes', {
-    p_empresa_id: empresaId,
-    p_mes:        mes,
-  });
-  const row = Array.isArray(data) ? data[0] : data;
-  return {
-    data: row
-      ? { total_recebido: Number(row.total_recebido) || 0, total_dias: Number(row.total_dias) || 0 }
-      : null,
-    error: error?.message ?? null,
-  };
-}
-
 // ── Marcar como visto ─────────────────────────────────────────────────────────
 
 /**
@@ -336,6 +312,23 @@ export async function limparDadosDoDia(
     .eq('empresa_id', empresaId)
     .eq('dia_referencia', dia);
   return { error: error?.message ?? null };
+}
+
+/**
+ * Remove TODOS os registros de recebimento diário da empresa.
+ * Usado na limpeza automática de fim de dia (reset diário): a partir das 23h,
+ * o primeiro líder/admin que entra zera a tabela para o dia seguinte começar
+ * limpo. Retorna quantas linhas foram apagadas.
+ */
+export async function limparTodoDiario(
+  empresaId: string,
+): Promise<{ removidos: number; error: string | null }> {
+  const { data, error } = await supabase
+    .from('diario_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .select('id');
+  return { removidos: data?.length ?? 0, error: error?.message ?? null };
 }
 
 // ── Notificar operadores após importação ─────────────────────────────────────

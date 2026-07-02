@@ -2,7 +2,6 @@
  * DiarioLider — visão líder/elite/gerência/admin da aba Recebimento diário.
  *
  * • Cards de resumo do dia (total, operadores, acordos, pagamentos, data)
- *   + total acumulado do mês
  * • Lista de operadores ordenada por recebido, com subtotais Pix/Boleto/Cartão
  *   e tag "+N novos" após a 2ª importação do dia — detalhe expande ao clicar
  * • Aba "Sem operador": pagamentos importados sem vínculo (órfãos)
@@ -13,7 +12,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Upload, Users, AlertCircle, ChevronDown, ChevronRight, Trash2, Loader2,
-  TrendingUp, Calendar, BarChart3, Search, Wallet, CalendarRange, X,
+  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,14 +43,12 @@ interface DiarioLiderProps {
   empresaId: string;
   dia: string | null;
   temPermissaoImportar: boolean;
-  /** Total acumulado do mês (RPC) — atualizado pelo componente pai */
-  totalMes: number | null;
-  /** Recarrega dados externos (último dia com dados + total do mês) */
+  /** Recarrega dados externos (último dia com dados) */
   onDadosImportados: (dia: string) => void;
 }
 
 export function DiarioLider({
-  empresaId, dia, temPermissaoImportar, totalMes, onDadosImportados,
+  empresaId, dia, temPermissaoImportar, onDadosImportados,
 }: DiarioLiderProps) {
   const importHook = useDiarioImport();
   const { dados, loading, refetch } = useDiario({ dia });
@@ -162,13 +159,13 @@ export function DiarioLider({
 
       {/* Cards de resumo do dia */}
       {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {Array.from({ length: 6 }).map((_, i) => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
           ))}
         </div>
       ) : dados.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <Card className="border-border">
             <CardContent className="p-4">
               <div className="flex items-start justify-between gap-1">
@@ -179,19 +176,6 @@ export function DiarioLider({
                   </p>
                 </div>
                 <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card className="border-border">
-            <CardContent className="p-4">
-              <div className="flex items-start justify-between gap-1">
-                <div className="min-w-0">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total do mês</p>
-                  <p className="text-base font-bold font-mono leading-tight mt-1 truncate">
-                    {totalMes != null ? formatBRL(totalMes) : '—'}
-                  </p>
-                </div>
-                <Wallet className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
               </div>
             </CardContent>
           </Card>
