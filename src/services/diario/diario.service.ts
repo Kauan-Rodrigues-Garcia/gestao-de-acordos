@@ -146,6 +146,61 @@ export async function importarLoteDiario(
   };
 }
 
+// ── Revínculo de órfãos (operador criado após importação anterior) ────────────
+
+export interface ResultadoRevinculoDiario {
+  revinculados: number;
+  novosPorOperador: NovoPorOperador[];
+}
+
+/**
+ * Preenche o operador_id de linhas órfãs (operador_id = null) do dia cujo
+ * operador já existe no sistema agora.
+ *
+ * Mesma causa do analítico: a dedupe usa (empresa_id, dia_referencia,
+ * chave_unica), sem o operador_id. Se o relatório foi importado antes de o
+ * operador ser criado, as linhas ficam órfãs e reimportar não corrige o
+ * vínculo (ignoreDuplicates). Esta função reconcilia essas linhas e as marca
+ * como não vistas, para que o operador seja notificado e as veja como novas.
+ *
+ * Retorna os totais por operador revinculado (para alimentar a notificação,
+ * já que essas linhas não entram no `novosPorOperador` da importação, que só
+ * conta as linhas efetivamente inseridas nesta chamada).
+ */
+export async function revincularOrfaosDiario(
+  empresaId: string,
+  dia: string,               // 'yyyy-MM-dd'
+  operadoresMap: OperadorResolvidoMap,
+): Promise<ResultadoRevinculoDiario> {
+  const porOperador = new Map<string, NovoPorOperador>();
+  let revinculados = 0;
+
+  for (const [usuario, operadorId] of Object.entries(operadoresMap)) {
+    if (!operadorId) continue;
+    const { data, error } = await supabase
+      .from('diario_recebimentos')
+      .update({ operador_id: operadorId, visto: false })
+      .eq('empresa_id', empresaId)
+      .eq('dia_referencia', dia)
+      .eq('operador_usuario', usuario)
+      .is('operador_id', null)
+      .select('id, valor_recebido');
+    if (error || !data?.length) continue;
+
+    revinculados += data.length;
+    const atual = porOperador.get(operadorId) ?? {
+      operadorId, novosPagamentos: 0, totalNovo: 0,
+    };
+    for (const r of data as { valor_recebido: number }[]) {
+      atual.novosPagamentos += 1;
+      atual.totalNovo       += Number(r.valor_recebido) || 0;
+    }
+    porOperador.set(operadorId, atual);
+  }
+
+  return { revinculados, novosPorOperador: [...porOperador.values()] };
+}
+
 // ── Busca ────────────────────────────────────────────────────────────────────
 
 export interface FiltrosDiario {

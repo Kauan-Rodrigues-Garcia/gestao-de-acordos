@@ -15,7 +15,9 @@ import {
 import {
   resolverOperadores,
   importarLoteDiario,
+  revincularOrfaosDiario,
   notificarImportacaoDiario,
+  type NovoPorOperador,
   type OperadorResolvidoMap,
   type OperadorMatchDetalhe,
   type PerfilResumido,
@@ -35,6 +37,24 @@ export interface PreviewImportDiario {
   todosPerfis:              PerfilResumido[];
   loteId:                   string;
   dia:                      string;    // 'yyyy-MM-dd'
+}
+
+/** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
+function mesclarNovosPorOperador(
+  ...listas: NovoPorOperador[][]
+): NovoPorOperador[] {
+  const map = new Map<string, NovoPorOperador>();
+  for (const lista of listas) {
+    for (const n of lista) {
+      const atual = map.get(n.operadorId) ?? {
+        operadorId: n.operadorId, novosPagamentos: 0, totalNovo: 0,
+      };
+      atual.novosPagamentos += n.novosPagamentos;
+      atual.totalNovo       += n.totalNovo;
+      map.set(n.operadorId, atual);
+    }
+  }
+  return [...map.values()];
 }
 
 export function useDiarioImport() {
@@ -117,10 +137,17 @@ export function useDiarioImport() {
       mapFinal,
     );
 
+    // Revincula linhas órfãs de operadores criados após uma importação anterior.
+    // Sem isto, reimportar o mesmo relatório não atribui os pagamentos ao novo
+    // usuário (linhas já existem, dedupe as ignora, operador_id continua null).
+    const revinc = await revincularOrfaosDiario(empresa.id, preview.dia, mapFinal);
+
     setResultado(res);
 
-    // Notifica somente operadores vinculados que receberam algo nesta importação
-    await notificarImportacaoDiario(empresa.id, preview.dia, res.novosPorOperador);
+    // Notifica operadores vinculados que receberam algo — tanto os inseridos
+    // nesta importação quanto os revinculados agora (operador recém-criado).
+    const notificacoes = mesclarNovosPorOperador(res.novosPorOperador, revinc.novosPorOperador);
+    await notificarImportacaoDiario(empresa.id, preview.dia, notificacoes);
 
     setEstado('done');
   }, [preview, vinculosManuais, empresa?.id, perfil?.id]);

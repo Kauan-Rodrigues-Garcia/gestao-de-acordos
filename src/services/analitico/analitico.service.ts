@@ -170,6 +170,52 @@ export async function importarLoteAnalitico(
   return { inseridos, duplicados, erros };
 }
 
+// ── Revínculo de órfãos (operador criado após importação anterior) ────────────
+
+export interface ResultadoRevinculo {
+  revinculados: number;
+  operadoresAfetados: string[]; // perfil.id dos operadores que ganharam linhas
+}
+
+/**
+ * Preenche o operador_id de linhas órfãs (operador_id = null) cujo operador
+ * já existe no sistema agora.
+ *
+ * Por que é necessário: a dedupe de `importarLoteAnalitico` usa a chave
+ * (empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario), que
+ * inclui o *username* mas não o operador_id. Se o relatório for importado antes
+ * de o operador ser criado, as linhas ficam órfãs; reimportar o mesmo relatório
+ * as trata como duplicadas (ignoreDuplicates) e o vínculo nunca é corrigido.
+ * Esta função reconcilia essas linhas a partir do mapa de operadores resolvido.
+ *
+ * Escopo: toda a empresa (não filtra por mês) — qualquer linha órfã do username
+ * passa a apontar para o operador recém-criado.
+ */
+export async function revincularOrfaosAnalitico(
+  empresaId: string,
+  operadoresMap: OperadorResolvidoMap,
+): Promise<ResultadoRevinculo> {
+  const operadoresAfetados = new Set<string>();
+  let revinculados = 0;
+
+  for (const [usuario, operadorId] of Object.entries(operadoresMap)) {
+    if (!operadorId) continue;
+    const { data, error } = await supabase
+      .from('analitico_recebimentos')
+      .update({ operador_id: operadorId })
+      .eq('empresa_id', empresaId)
+      .eq('operador_usuario', usuario)
+      .is('operador_id', null)
+      .select('id');
+    if (!error && data?.length) {
+      revinculados += data.length;
+      operadoresAfetados.add(operadorId);
+    }
+  }
+
+  return { revinculados, operadoresAfetados: [...operadoresAfetados] };
+}
+
 // ── Resumo agregado por operador (visão líder) ────────────────────────────────
 
 export interface ResumoOperadorAnalitico {

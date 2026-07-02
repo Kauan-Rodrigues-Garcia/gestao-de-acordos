@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import {
   resolverOperadores,
   importarLoteAnalitico,
+  revincularOrfaosAnalitico,
   notificarImportacaoAnalitico,
   atualizarResumoMensal,
   sincronizarCartoesPagos,
@@ -123,9 +124,22 @@ export function useAnaliticoImport() {
       mapFinal,
     );
 
+    // Revincula linhas órfãs de operadores criados após uma importação anterior.
+    // Sem isto, reimportar o mesmo relatório não atribui os dados ao novo usuário
+    // (as linhas já existem e a dedupe as ignora, mantendo operador_id = null).
+    const revinc = await revincularOrfaosAnalitico(empresa.id, mapFinal);
+    if (revinc.revinculados > 0) {
+      toast.success(
+        `${revinc.revinculados} recebimento${revinc.revinculados !== 1 ? 's' : ''} ` +
+        `vinculado${revinc.revinculados !== 1 ? 's' : ''} a operador${revinc.operadoresAfetados.length !== 1 ? 'es' : ''} recém-criado${revinc.operadoresAfetados.length !== 1 ? 's' : ''}.`,
+        { duration: 6000 },
+      );
+    }
+
     setResultado(res);
 
-    // Salva snapshot de totais imediatamente após inserção (antes de qualquer deleção)
+    // Salva snapshot de totais imediatamente após inserção + revínculo
+    // (o revínculo altera a contagem de operadores distintos do mês)
     await atualizarResumoMensal(empresa.id, preview.mes);
 
     // Sincroniza acordos de cartão com mesmo operador: marca como pago + atualiza valor/data
