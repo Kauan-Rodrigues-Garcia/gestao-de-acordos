@@ -3,6 +3,7 @@ import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { supabase, Acordo, AcordoTag } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
+import { useCargoPermissoes } from './useCargoPermissoes';
 import { getTodayISO, PP_HO_PERCENTUAL, isPerfilAdmin, isPerfilLider } from '@/lib/index';
 
 export interface ResumoDiaData {
@@ -46,6 +47,9 @@ export function useResumoDia({
 }) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  // Permissão configurável: líder com 'ver_todos_setores' vê a empresa toda
+  const verTodosSetores = temPermissao('ver_todos_setores');
   const [data, setData] = useState<ResumoDiaData>(EMPTY);
   const [operadores, setOperadores] = useState<OperadorItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -72,7 +76,8 @@ export function useResumoDia({
           .order('nome');
 
         // Líder/Elite/Gerencia: apenas operadores do seu setor
-        if (_isLider && !_isAdmin && !_isDiretoria && perfil.setor_id) {
+        // (exceto com a permissão 'ver_todos_setores' ativa)
+        if (_isLider && !_isAdmin && !_isDiretoria && perfil.setor_id && !verTodosSetores) {
           const { data: eqs } = await supabase
             .from('equipes')
             .select('id')
@@ -96,6 +101,7 @@ export function useResumoDia({
         }
         if (_isLider) {
           if (selectedOperadorId) return q.eq('operador_id', selectedOperadorId);
+          if (verTodosSetores) return q; // empresa toda
           if (perfil.setor_id) return q.eq('setor_id', perfil.setor_id);
           return q.eq('operador_id', perfil.id);
         }
@@ -202,7 +208,7 @@ export function useResumoDia({
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa?.id, selectedOperadorId, temLogicaDiretoExtra, tags, selectedDate]);
+  }, [perfil, empresa?.id, selectedOperadorId, temLogicaDiretoExtra, tags, selectedDate, verTodosSetores]);
 
   useEffect(() => { fetch(); }, [fetch]);
 

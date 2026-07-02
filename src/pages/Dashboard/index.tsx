@@ -652,7 +652,7 @@ export default function Dashboard() {
 
       {/* Analytics + setor filter */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {isAdmin && setoresList.length > 0 && (
+        {(isAdmin || (isLiderOuElite && temPermissao('ver_todos_setores'))) && setoresList.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
             <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>

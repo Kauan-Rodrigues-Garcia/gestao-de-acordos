@@ -53,18 +53,24 @@ export default function Acordos() {
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
 
+  // Com 'ver_todos_setores' o líder vê equipes de toda a empresa no filtro
+  const verTodosSetores = temPermissao('ver_todos_setores');
+
   useEffect(() => {
-    if (!(isLider || isElite) || !perfil?.setor_id || !empresa?.id) return;
-    supabase
+    if (!(isLider || isElite) || !empresa?.id) return;
+    if (!perfil?.setor_id && !verTodosSetores) return;
+    let q = supabase
       .from('equipes')
       .select('id, nome')
-      .eq('empresa_id', empresa.id)
-      .eq('setor_id', perfil.setor_id)
-      .order('nome')
+      .eq('empresa_id', empresa.id);
+    if (!verTodosSetores && perfil?.setor_id) {
+      q = q.eq('setor_id', perfil.setor_id);
+    }
+    q.order('nome')
       .then(({ data }) => {
         setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
       });
-  }, [isLider, isElite, perfil?.setor_id, empresa?.id]);
+  }, [isLider, isElite, perfil?.setor_id, empresa?.id, verTodosSetores]);
 
   const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
     ? visaoFiltroAcordos.replace('equipe:', '')

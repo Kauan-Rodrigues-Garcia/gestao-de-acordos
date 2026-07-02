@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { formatBRL, safeNum, sumSafe, pct } from '@/lib/money';
 import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -418,6 +419,9 @@ interface OperadorInfo { id: string; nome: string; perfil: Perfil; }
 export default function PainelLider() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  // Permissão configurável: líder com 'ver_todos_setores' vê a empresa toda
+  const verTodosSetores = temPermissao('ver_todos_setores');
   const tenant = useTenant();
   const statusLabels = tenant.statusLabels;
 
@@ -451,7 +455,8 @@ export default function PainelLider() {
           .eq('empresa_id', empresa.id);   // ← sempre filtrar por empresa
 
         // Líder, Elite e Gerência vêem apenas equipes do seu setor
-        if (!isAdmin && isLiderOuSimilar && perfil.setor_id) {
+        // (exceto com a permissão 'ver_todos_setores' ativa)
+        if (!isAdmin && isLiderOuSimilar && perfil.setor_id && !verTodosSetores) {
           eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
         }
 
@@ -469,11 +474,11 @@ export default function PainelLider() {
         .in('perfil', ['operador', 'elite'])
         .eq('ativo', true);
 
-      if (!isAdmin && isLiderOuSimilar && perfil.setor_id) {
+      if (!isAdmin && isLiderOuSimilar && perfil.setor_id && !verTodosSetores) {
         // Líder/Elite/Gerência: apenas operadores do seu próprio setor
         q = q.eq('setor_id', perfil.setor_id);
       }
-      // Admin: sem filtro adicional de setor — vê todos da empresa
+      // Admin (ou líder com 'ver_todos_setores'): vê todos da empresa
 
       const { data: ops, error: opsErr } = await q.order('nome');
       if (opsErr) throw new Error(`Operadores: ${opsErr.message}`);
@@ -512,7 +517,7 @@ export default function PainelLider() {
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin]);
+  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin, verTodosSetores]);
 
   useEffect(() => {
     carregarDados();

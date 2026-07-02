@@ -7,6 +7,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
+import { useCargoPermissoes } from './useCargoPermissoes';
 import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 
@@ -113,6 +114,10 @@ function calcPerc(realizado: number, meta: number): number {
 export function useAnalytics(): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  // Permissão configurável (Admin → Cargos): líder/elite/gerência com
+  // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
+  const verTodosSetores = temPermissao('ver_todos_setores');
   const isPP = useTenant().isPaguePlay;
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   // ID estável por instância
@@ -148,7 +153,8 @@ export function useAnalytics(): AnalyticsData {
 
     try {
       // ── Carregar setores para o filtro do admin/diretoria ────────────────────
-      if (isAdmin || isDiretoria) {
+      // Líder/Elite/Gerência com 'ver_todos_setores' também ganha o filtro
+      if (isAdmin || isDiretoria || (isLider && verTodosSetores)) {
         const { data: setoresData } = await supabase
           .from('setores')
           .select('id, nome')
@@ -159,13 +165,16 @@ export function useAnalytics(): AnalyticsData {
 
       // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
       let equipesDoSetorAtual: { id: string; nome: string }[] = [];
-      if (isLider && perfil.setor_id) {
-        const { data: eqData } = await supabase
+      if (isLider && (perfil.setor_id || verTodosSetores)) {
+        let eqQuery = supabase
           .from('equipes')
           .select('id, nome')
-          .eq('empresa_id', empresa.id)
-          .eq('setor_id', perfil.setor_id)
-          .order('nome');
+          .eq('empresa_id', empresa.id);
+        // Sem 'ver_todos_setores': apenas equipes do próprio setor
+        if (!verTodosSetores && perfil.setor_id) {
+          eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
+        }
+        const { data: eqData } = await eqQuery.order('nome');
         equipesDoSetorAtual = (eqData as { id: string; nome: string }[]) ?? [];
         setEquipesDoSetor(equipesDoSetorAtual);
       }
@@ -190,11 +199,12 @@ export function useAnalytics(): AnalyticsData {
         .eq('empresa_id', empresa.id);
 
       if (!isAdmin && !isDiretoria) {
-        if (isLider && perfil.setor_id) {
+        if (isLider && (perfil.setor_id || verTodosSetores)) {
           // Líder/Elite: hierarquia de filtros
           // 1. visão individual → filtra pelo próprio operador_id
           // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
           // 3. visão geral      → filtra pelo setor_id
+          //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
           if (operadorFiltro) {
             q = q.eq('operador_id', operadorFiltro);
           } else if (operadoresDaEquipe !== null) {
@@ -204,6 +214,8 @@ export function useAnalytics(): AnalyticsData {
             } else {
               q = q.in('operador_id', operadoresDaEquipe);
             }
+          } else if (verTodosSetores) {
+            if (setorFiltro) q = q.eq('setor_id', setorFiltro);
           } else {
             q = q.eq('setor_id', perfil.setor_id);
           }
@@ -235,6 +247,10 @@ export function useAnalytics(): AnalyticsData {
         } else if (equipeFiltro && isLider) {
           tipoMeta = 'equipe';
           refId    = equipeFiltro;
+        } else if (isLider && verTodosSetores && setorFiltro) {
+          // Com 'ver_todos_setores' e um setor filtrado → meta do setor filtrado
+          tipoMeta = 'setor';
+          refId    = setorFiltro;
         } else if (isLider && perfil.setor_id) {
           tipoMeta = 'setor';
           refId    = perfil.setor_id;
@@ -311,7 +327,7 @@ export function useAnalytics(): AnalyticsData {
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
