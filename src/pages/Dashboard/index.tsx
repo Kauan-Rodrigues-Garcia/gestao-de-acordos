@@ -365,27 +365,32 @@ export default function Dashboard() {
     if (acordo.status === 'nao_pago') {
       setConfirmarPgtoAcordo(acordo);
     } else {
-      void executarMarcarPago(acordo, new Date().toISOString().split('T')[0]);
+      // Pendente → pago sem caixa: mantém o vencimento tabulado do acordo
+      void executarMarcarPago(acordo, acordo.vencimento);
     }
   }
 
   async function executarMarcarPago(acordo: AcordoComVinculo, dataPagamento: string) {
     const id = acordo.id;
     const statusAnterior = acordo.status;
+    const vencimentoAnterior = acordo.vencimento;
     setAtualizandoStatus(id);
-    patchAcordo(id, { status: 'pago' });
-    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    // Recebimento é atribuído ao vencimento → grava a data escolhida no vencimento
+    patchAcordo(id, { status: 'pago', vencimento: dataPagamento });
+    const updatePayload: Record<string, unknown> = {
+      status: 'pago', data_pagamento: dataPagamento, vencimento: dataPagamento,
+    };
     let { error } = await supabase.from('acordos').update(updatePayload).eq('id', id);
     if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
-      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id));
+      ({ error } = await supabase.from('acordos').update({ status: 'pago', vencimento: dataPagamento }).eq('id', id));
     }
     if (error) {
-      patchAcordo(id, { status: statusAnterior });
+      patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
       if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
         supabase.rpc('fn_sync_par_vinculo', {
-          p_acordo_id: id, p_valor: acordo.valor, p_vencimento: acordo.vencimento,
+          p_acordo_id: id, p_valor: acordo.valor, p_vencimento: dataPagamento,
           p_nome_cliente: acordo.nome_cliente, p_tipo: acordo.tipo,
           p_whatsapp: acordo.whatsapp ?? null, p_parcelas: acordo.parcelas, p_status: 'pago',
         }).then(({ error: rpcErr }) => {
@@ -402,8 +407,10 @@ export default function Dashboard() {
           action: {
             label: 'Desfazer',
             onClick: async () => {
-              patchAcordo(id, { status: statusAnterior });
-              await supabase.from('acordos').update({ status: statusAnterior }).eq('id', id);
+              patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
+              await supabase.from('acordos')
+                .update({ status: statusAnterior, vencimento: vencimentoAnterior })
+                .eq('id', id);
             },
           },
         });

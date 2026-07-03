@@ -139,6 +139,7 @@ export function PPModals({
         <ModalConfirmarPagamento
           aberto={!!confirmarPgtoAcordo}
           salvando={salvandoConfirmarPgto}
+          dataInicial={confirmarPgtoAcordo.vencimento}
           onConfirm={onConfirmarPgto}
           onClose={onCancelarConfirmarPgto}
         />

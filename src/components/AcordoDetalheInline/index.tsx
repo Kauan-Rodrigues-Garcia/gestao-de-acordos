@@ -119,28 +119,32 @@ export function AcordoDetalheInline({
     if (p.status === 'nao_pago') {
       setConfirmarPgtoParc(p);
     } else {
-      void executarMarcarPago(p, new Date().toISOString().split('T')[0]);
+      // Pendente → pago sem caixa: mantém o vencimento tabulado do acordo
+      void executarMarcarPago(p, p.vencimento);
     }
   }
 
   async function executarMarcarPago(p: Acordo, dataPagamento: string) {
     setMarcandoPago(p.id);
-    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    // Recebimento é atribuído ao vencimento → grava a data escolhida no vencimento
+    const updatePayload: Record<string, unknown> = {
+      status: 'pago', data_pagamento: dataPagamento, vencimento: dataPagamento,
+    };
     let { error } = await supabase.from('acordos').update(updatePayload).eq('id', p.id);
     if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
-      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', p.id));
+      ({ error } = await supabase.from('acordos').update({ status: 'pago', vencimento: dataPagamento }).eq('id', p.id));
     }
     if (error) {
       toast.error(`Erro: ${error.message}`);
     } else {
       toast.success('Parcela marcada como paga!');
-      const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento };
+      const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento, vencimento: dataPagamento };
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));
       if (acordoLocal.tipo_vinculo === 'extra' || acordoLocal.vinculo_operador_id) {
         await supabase.rpc('fn_sync_par_vinculo', {
           p_acordo_id:    p.id,
           p_valor:        p.valor,
-          p_vencimento:   p.vencimento,
+          p_vencimento:   dataPagamento,
           p_nome_cliente: p.nome_cliente,
           p_tipo:         p.tipo,
           p_whatsapp:     p.whatsapp,
@@ -738,6 +742,7 @@ export function AcordoDetalheInline({
         <ModalConfirmarPagamento
           aberto={!!confirmarPgtoParc}
           salvando={salvandoConfirmarPgto}
+          dataInicial={confirmarPgtoParc.vencimento}
           onConfirm={async (data) => {
             setSalvandoConfirmarPgto(true);
             await executarMarcarPago(confirmarPgtoParc, data);

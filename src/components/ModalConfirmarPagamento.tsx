@@ -9,19 +9,24 @@ import { DatePickerField } from '@/components/DatePickerField';
 export interface ModalConfirmarPagamentoProps {
   aberto: boolean;
   salvando: boolean;
+  /** Data que pré-preenche o campo — normalmente o vencimento do acordo.
+   *  A data confirmada é gravada no vencimento, alinhando o recebimento ao dia. */
+  dataInicial?: string;
   onConfirm: (dataPagamento: string) => Promise<void>;
   onClose: () => void;
 }
 
+const hojeISO = () => new Date().toISOString().split('T')[0];
+
 export function ModalConfirmarPagamento({
-  aberto, salvando, onConfirm, onClose,
+  aberto, salvando, dataInicial, onConfirm, onClose,
 }: ModalConfirmarPagamentoProps) {
-  const [dataPagamento, setDataPagamento] = useState(new Date().toISOString().split('T')[0]);
+  const [dataPagamento, setDataPagamento] = useState(dataInicial ?? hojeISO());
 
   useEffect(() => {
     if (!aberto) return;
-    setDataPagamento(new Date().toISOString().split('T')[0]);
-  }, [aberto]);
+    setDataPagamento(dataInicial ?? hojeISO());
+  }, [aberto, dataInicial]);
 
   return (
     <Dialog open={aberto} onOpenChange={(open) => { if (!open && !salvando) onClose(); }}>

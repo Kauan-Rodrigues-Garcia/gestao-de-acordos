@@ -108,19 +108,17 @@ export function useResumoDia({
         return q.eq('operador_id', perfil.id);
       }
 
-      // ── Acordos pagos no dia selecionado ────────────────────────────────────
-      // Prioriza data_pagamento (data informada pelo operador).
-      // Para acordos antigos sem data_pagamento, usa pago_em (TIMESTAMPTZ UTC).
+      // ── Acordos pagos atribuídos a este dia ─────────────────────────────────
+      // O recebimento é atribuído ao VENCIMENTO do acordo (a data tabulada do
+      // pagamento), não à data em que foi marcado como pago. Assim, tabular
+      // hoje um acordo que pagou num dia anterior conta no dia correto.
       const { data: pagosHojeData } = await applyScope(
         supabase
           .from('acordos')
           .select('*')
           .eq('empresa_id', empresa.id)
           .eq('status', 'pago')
-          .or(
-            `data_pagamento.eq.${hoje},` +
-            `and(data_pagamento.is.null,pago_em.gte.${hoje}T00:00:00,pago_em.lt.${amanha}T00:00:00)`
-          ) as unknown as AnyBuilder
+          .eq('vencimento', hoje) as unknown as AnyBuilder
       );
 
       // ── Acordos com vencimento hoje (para taxa de eficiência) ────────────
@@ -139,7 +137,7 @@ export function useResumoDia({
       );
 
       // ── Métricas ─────────────────────────────────────────────────────────
-      // pagos hoje = acordos com pago_em hoje (qualquer vencimento)
+      // pagos hoje = acordos pagos com vencimento no dia (atribuição por vencimento)
       const pagos = (pagosHojeData as Acordo[]) || [];
       // agendados hoje = acordos com vencimento hoje (para cálculo de eficiência)
       const agendadosHoje = (agendadosHojeData as { id: string; status: string }[]) || [];

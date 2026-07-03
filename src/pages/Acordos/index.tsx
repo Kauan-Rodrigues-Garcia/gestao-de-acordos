@@ -269,22 +269,27 @@ export default function Acordos() {
     if (a.status === 'nao_pago') {
       setConfirmarPgtoAcordo(a);
     } else {
-      void executarMarcarPago(a, new Date().toISOString().split('T')[0]);
+      // Pendente → pago sem caixa: mantém o vencimento tabulado do acordo
+      void executarMarcarPago(a, a.vencimento);
     }
   }
 
   async function executarMarcarPago(a: Acordo, dataPagamento: string) {
     const id = a.id;
     const statusAnterior = a.status;
+    const vencimentoAnterior = a.vencimento;
     setAtualizandoStatus(id);
-    patchAcordo(id, { status: 'pago' });
-    const updatePayload: Record<string, unknown> = { status: 'pago', data_pagamento: dataPagamento };
+    // Recebimento é atribuído ao vencimento → grava a data escolhida no vencimento
+    patchAcordo(id, { status: 'pago', vencimento: dataPagamento });
+    const updatePayload: Record<string, unknown> = {
+      status: 'pago', data_pagamento: dataPagamento, vencimento: dataPagamento,
+    };
     let { error } = await supabase.from('acordos').update(updatePayload).eq('id', id);
     if (error && (String(error.code) === '42703' || String(error.code) === '400' || error.message?.toLowerCase().includes('column'))) {
-      ({ error } = await supabase.from('acordos').update({ status: 'pago' }).eq('id', id));
+      ({ error } = await supabase.from('acordos').update({ status: 'pago', vencimento: dataPagamento }).eq('id', id));
     }
     if (error) {
-      patchAcordo(id, { status: statusAnterior });
+      patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
       toast.success('Acordo marcado como Pago!', {
@@ -292,8 +297,10 @@ export default function Acordos() {
         action: {
           label: 'Desfazer',
           onClick: async () => {
-            patchAcordo(id, { status: statusAnterior });
-            await supabase.from('acordos').update({ status: statusAnterior }).eq('id', id);
+            patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
+            await supabase.from('acordos')
+              .update({ status: statusAnterior, vencimento: vencimentoAnterior })
+              .eq('id', id);
           },
         },
       });
@@ -618,6 +625,7 @@ export default function Acordos() {
         <ModalConfirmarPagamento
           aberto={!!confirmarPgtoAcordo}
           salvando={salvandoConfirmarPgto}
+          dataInicial={confirmarPgtoAcordo.vencimento}
           onConfirm={async (data) => {
             setSalvandoConfirmarPgto(true);
             await executarMarcarPago(confirmarPgtoAcordo, data);
