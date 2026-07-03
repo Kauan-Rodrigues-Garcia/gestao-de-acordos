@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
-import { fmtCPF } from '@/services/diario/diarioParser';
+import { fmtCPF, dayKeyDiario } from '@/services/diario/diarioParser';
 import { fmtDataISO } from './helpers';
 import { FormaChip } from './FormaChip';
 import type { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -124,17 +124,41 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
     const naoDetectados = preview.operadoresNaoEncontrados;
     const vinculadosManuaisCount = Object.keys(vinculosManuais).length;
 
+    // Dias distintos presentes no arquivo (cada pagamento vai para a aba do seu dia)
+    const diasNoArquivo = [...new Set(
+      preview.linhas
+        .filter(l => l.data_pagamento)
+        .map(l => dayKeyDiario(l.data_pagamento as Date)),
+    )].sort();
+    const multiplosDias = diasNoArquivo.length > 1;
+
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
         <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
-              Preview — recebimentos de {fmtDataISO(preview.dia)}
+              {multiplosDias
+                ? `Preview — recebimentos de ${diasNoArquivo.length} dias`
+                : `Preview — recebimentos de ${fmtDataISO(preview.dia)}`}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+            {/* Aviso: relatório com vários dias */}
+            {multiplosDias && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                <p className="font-semibold text-primary flex items-center gap-1.5">
+                  <AlertCircle className="w-3.5 h-3.5" />
+                  Relatório com {diasNoArquivo.length} dias
+                </p>
+                <p className="mt-1">
+                  Cada pagamento será importado na aba do seu próprio dia:{' '}
+                  {diasNoArquivo.map(d => fmtDataISO(d)).join(', ')}.
+                </p>
+              </div>
+            )}
+
             {/* Contadores */}
             <div className="grid grid-cols-3 gap-3">
               <div className="rounded-lg border bg-primary/5 p-3 text-center">

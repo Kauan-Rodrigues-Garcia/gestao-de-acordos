@@ -49,7 +49,6 @@ import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
-import { useLimparDiarioFimDoDia } from '@/hooks/useLimparDiarioFimDoDia';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 
 interface NavItem {
@@ -190,7 +189,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoesCount();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
-  useLimparDiarioFimDoDia();
 
   // Favicon dinâmico: PaguePlay usa SVG com borda verde arredondada
   useEffect(() => {

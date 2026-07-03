@@ -1,16 +1,15 @@
 /**
  * AbaDiario — raiz da aba interna "Recebimento diário" (página Analítico).
  *
- * Controla o dia exibido (padrão: último dia com dados importados) e roteia
+ * Controla o dia exibido (padrão: o dia de hoje) e roteia
  * por cargo: líder+ (visão geral com importação) × operador (lista própria).
  * O operador não tem acesso a dados de outros operadores (RLS + visão própria).
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { getTodayISO } from '@/lib/index';
-import { buscarUltimoDia } from '@/services/diario/diario.service';
 import { DiarioLider } from './DiarioLider';
 import { DiarioOperador } from './DiarioOperador';
 
@@ -31,16 +30,8 @@ function somarDias(iso: string, delta: number): string {
 export function AbaDiario({
   empresaId, operadorId, visaoGeral, temPermissaoImportar,
 }: AbaDiarioProps) {
-  const [dia, setDia] = useState<string | null>(null);
-
-  // Dia inicial: último dia com dados (RLS limita à visão do usuário); senão hoje
-  useEffect(() => {
-    let ativo = true;
-    buscarUltimoDia(empresaId).then(({ dia: ultimo }) => {
-      if (ativo) setDia(ultimo ?? getTodayISO());
-    });
-    return () => { ativo = false; };
-  }, [empresaId]);
+  // Dia inicial: sempre o dia de hoje ao abrir a aba
+  const [dia, setDia] = useState<string>(() => getTodayISO());
 
   const handleDadosImportados = useCallback((diaImportado: string) => {
     setDia(diaImportado);
@@ -55,19 +46,18 @@ export function AbaDiario({
         <span className="text-xs text-muted-foreground font-medium shrink-0">Dia:</span>
         <div className="flex items-center gap-1">
           <Button variant="outline" size="icon" className="h-7 w-7"
-            disabled={!dia}
-            onClick={() => dia && setDia(somarDias(dia, -1))}>
+            onClick={() => setDia(somarDias(dia, -1))}>
             <ChevronLeft className="w-3.5 h-3.5" />
           </Button>
           <input
             type="date"
-            value={dia ?? ''}
+            value={dia}
             onChange={e => e.target.value && setDia(e.target.value)}
             className="h-7 px-2 text-xs font-semibold border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary tabular-nums"
           />
           <Button variant="outline" size="icon" className="h-7 w-7"
-            disabled={!dia || dia >= hoje}
-            onClick={() => dia && setDia(somarDias(dia, 1))}>
+            disabled={dia >= hoje}
+            onClick={() => setDia(somarDias(dia, 1))}>
             <ChevronRight className="w-3.5 h-3.5" />
           </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-muted-foreground"
@@ -77,13 +67,7 @@ export function AbaDiario({
         </div>
       </div>
 
-      {dia === null ? (
-        <div className="space-y-2 animate-pulse">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-16 bg-muted rounded-lg" />
-          ))}
-        </div>
-      ) : visaoGeral ? (
+      {visaoGeral ? (
         <DiarioLider
           empresaId={empresaId}
           dia={dia}

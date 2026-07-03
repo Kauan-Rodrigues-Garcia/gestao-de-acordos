@@ -56,14 +56,20 @@ export interface ResultadoImportacaoDiario {
 /**
  * Persiste linhas no banco usando INSERT ... ON CONFLICT DO NOTHING.
  * Chave de unicidade: (empresa_id, dia_referencia, chave_unica).
- * Importações sucessivas do mesmo dia adicionam apenas os pagamentos novos,
- * marcados com import_index incremental (base do aviso "+N novos").
+ *
+ * Cada linha é gravada no SEU próprio dia (dia_referencia = data de pagamento
+ * da linha), então um relatório que contém recebimentos de vários dias é
+ * distribuído corretamente entre as abas de cada dia. Linhas sem data caem no
+ * `dia` informado (moda do relatório).
+ *
+ * O import_index (base do aviso "+N novos") é incremental POR DIA: importações
+ * sucessivas do mesmo dia adicionam apenas os pagamentos novos.
  */
 export async function importarLoteDiario(
   empresaId: string,
   importadoPorId: string,
   loteId: string,
-  dia: string,               // 'yyyy-MM-dd'
+  dia: string,               // 'yyyy-MM-dd' — dia de referência padrão (moda)
   linhas: LinhaDiario[],
   operadoresMap: OperadorResolvidoMap,
 ): Promise<ResultadoImportacaoDiario> {
@@ -71,38 +77,49 @@ export async function importarLoteDiario(
     return { inseridos: 0, duplicados: 0, erros: [], importIndex: 0, novosPorOperador: [] };
   }
 
-  // Próximo índice de importação do dia
-  const { data: maxRow } = await supabase
-    .from('diario_recebimentos')
-    .select('import_index')
-    .eq('empresa_id', empresaId)
-    .eq('dia_referencia', dia)
-    .order('import_index', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  // Dia de referência de cada linha: a própria data de pagamento; sem data,
+  // usa o dia informado (moda do relatório).
+  const diaDaLinha = (l: LinhaDiario): string =>
+    l.data_pagamento ? toISO(l.data_pagamento) : dia;
 
-  const importIndex = ((maxRow?.import_index as number | undefined) ?? 0) + 1;
+  // Próximo índice de importação POR DIA presente no lote
+  const diasNoLote = [...new Set(linhas.map(diaDaLinha))];
+  const importIndexPorDia: Record<string, number> = {};
+  for (const d of diasNoLote) {
+    const { data: maxRow } = await supabase
+      .from('diario_recebimentos')
+      .select('import_index')
+      .eq('empresa_id', empresaId)
+      .eq('dia_referencia', d)
+      .order('import_index', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    importIndexPorDia[d] = ((maxRow?.import_index as number | undefined) ?? 0) + 1;
+  }
 
-  const rows = linhas.map(l => ({
-    empresa_id:       empresaId,
-    operador_id:      operadoresMap[l.operador_usuario] ?? null,
-    operador_usuario: l.operador_usuario,
-    cpf:              l.cpf || null,
-    nome_cliente:     l.nome_cliente || null,
-    acordo_codigo:    l.acordo_codigo || null,
-    forma_pagamento:  l.forma_pagamento,
-    valor_recebido:   l.valor_recebido,
-    data_pagamento:   l.data_pagamento ? toISO(l.data_pagamento) : null,
-    dia_referencia:   dia,
-    prox_contato:     l.prox_contato ? toISO(l.prox_contato) : null,
-    tabulacao:        l.tabulacao || null,
-    id_baixa:         l.id_baixa || null,
-    chave_unica:      l.chave_unica,
-    import_index:     importIndex,
-    visto:            false,
-    importado_por_id: importadoPorId,
-    lote_id:          loteId,
-  }));
+  const rows = linhas.map(l => {
+    const diaRef = diaDaLinha(l);
+    return {
+      empresa_id:       empresaId,
+      operador_id:      operadoresMap[l.operador_usuario] ?? null,
+      operador_usuario: l.operador_usuario,
+      cpf:              l.cpf || null,
+      nome_cliente:     l.nome_cliente || null,
+      acordo_codigo:    l.acordo_codigo || null,
+      forma_pagamento:  l.forma_pagamento,
+      valor_recebido:   l.valor_recebido,
+      data_pagamento:   l.data_pagamento ? toISO(l.data_pagamento) : null,
+      dia_referencia:   diaRef,
+      prox_contato:     l.prox_contato ? toISO(l.prox_contato) : null,
+      tabulacao:        l.tabulacao || null,
+      id_baixa:         l.id_baixa || null,
+      chave_unica:      l.chave_unica,
+      import_index:     importIndexPorDia[diaRef],
+      visto:            false,
+      importado_por_id: importadoPorId,
+      lote_id:          loteId,
+    };
+  });
 
   const CHUNK = 200;
   let inseridos = 0;
@@ -141,7 +158,8 @@ export async function importarLoteDiario(
     inseridos,
     duplicados,
     erros,
-    importIndex,
+    // Índice do dia de referência (moda) — usado só como informação no modal
+    importIndex: importIndexPorDia[dia] ?? Math.max(...Object.values(importIndexPorDia)),
     novosPorOperador: [...porOperador.values()],
   };
 }
@@ -245,20 +263,6 @@ export async function buscarDiario(
   }
 
   return { data: allData, error: null };
-}
-
-/** Dia mais recente com dados importados (para abrir a aba já no último relatório) */
-export async function buscarUltimoDia(
-  empresaId: string,
-): Promise<{ dia: string | null; error: string | null }> {
-  const { data, error } = await supabase
-    .from('diario_recebimentos')
-    .select('dia_referencia')
-    .eq('empresa_id', empresaId)
-    .order('dia_referencia', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  return { dia: (data?.dia_referencia as string | undefined) ?? null, error: error?.message ?? null };
 }
 
 // ── Marcar como visto ─────────────────────────────────────────────────────────
