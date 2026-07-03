@@ -3,7 +3,7 @@
  *
  * Reestruturado como painel de gestão por período:
  *  - Seletor de mês no topo (vale para todo o painel)
- *  - Faixa de KPIs do time no mês (recebido, a receber, vencidos, conversão)
+ *  - Faixa de KPIs do time no mês (recebido, H.O., a receber, não pagos, conversão)
  *  - Lista de operadores ordenável com métricas do mês + barra de conversão
  *  - Detalhe do operador alinhado ao mês selecionado
  *  - Atualização em tempo real (realtime de acordos) — sem precisar recarregar
@@ -30,8 +30,9 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { formatBRL, sumSafe } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
+import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -41,16 +42,17 @@ interface MesRef { ano: number; mes: number }   // mes: 0-11
 interface OpMetric {
   perfil:       Perfil;
   recebido:     number;   // R$ pago no mês
+  ho:           number;   // H.O. sobre o recebido
   pagos:        number;
   aReceber:     number;   // R$ em aberto no mês
   abertos:      number;
-  vencidos:     number;
-  valorVencido: number;
-  totalAcordos: number;   // pagos + abertos (base da conversão)
+  naoPagos:     number;   // acordos marcados como não pago
+  valorNaoPago: number;
+  totalAcordos: number;   // pagos + abertos + não pagos (base da conversão)
   conversao:    number;   // 0-100 (pagos / totalAcordos)
 }
 
-type SortKey = 'recebido' | 'conversao' | 'vencidos' | 'aReceber' | 'nome';
+type SortKey = 'recebido' | 'conversao' | 'naoPagos' | 'aReceber' | 'nome';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -65,21 +67,22 @@ function periodoDoMes(m: MesRef) {
   return { inicio, fim, label: nome.charAt(0).toUpperCase() + nome.slice(1) };
 }
 
-function metricasOperador(perfil: Perfil, acordos: Acordo[], hoje: string): OpMetric {
+function metricasOperador(perfil: Perfil, acordos: Acordo[]): OpMetric {
   const pagos    = acordos.filter(a => a.status === 'pago');
   const abertos  = acordos.filter(a => !['pago', 'nao_pago'].includes(a.status));
-  const vencidos = abertos.filter(a => a.vencimento < hoje);
+  const naoPagos = acordos.filter(a => a.status === 'nao_pago');
   const recebido = sumSafe(pagos.map(a => a.valor));
   const aReceber = sumSafe(abertos.map(a => a.valor));
-  const totalAcordos = pagos.length + abertos.length;
+  const totalAcordos = pagos.length + abertos.length + naoPagos.length;
   return {
     perfil,
     recebido,
+    ho:           recebido * PP_HO_PERCENTUAL,
     pagos:        pagos.length,
     aReceber,
     abertos:      abertos.length,
-    vencidos:     vencidos.length,
-    valorVencido: sumSafe(vencidos.map(a => a.valor)),
+    naoPagos:     naoPagos.length,
+    valorNaoPago: sumSafe(naoPagos.map(a => a.valor)),
     totalAcordos,
     conversao:    totalAcordos > 0 ? Math.round((pagos.length / totalAcordos) * 100) : 0,
   };
@@ -125,12 +128,12 @@ export default function PainelLider() {
   const { temPermissao } = useCargoPermissoes();
   const verTodosSetores = temPermissao('ver_todos_setores');
   const { subscribe, unsubscribe } = useRealtimeAcordos();
+  const isPP = useTenant().isPaguePlay;
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
   const isLiderOuSimilar = isPerfilLider(perfil?.perfil ?? '') && !isAdmin;
 
-  const hoje = getTodayISO();
   const [mesRef, setMesRef] = useState<MesRef>(() => {
     const d = new Date();
     return { ano: d.getFullYear(), mes: d.getMonth() };
@@ -224,19 +227,20 @@ export default function PainelLider() {
       arr.push(a);
       porOp.set(a.operador_id, arr);
     }
-    return operadores.map(op => metricasOperador(op, porOp.get(op.id) ?? [], hoje));
-  }, [operadores, acordosMes, hoje]);
+    return operadores.map(op => metricasOperador(op, porOp.get(op.id) ?? []));
+  }, [operadores, acordosMes]);
 
   const time = useMemo(() => {
     const recebido = sumSafe(metricas.map(m => m.recebido));
+    const ho       = sumSafe(metricas.map(m => m.ho));
     const aReceber = sumSafe(metricas.map(m => m.aReceber));
     const pagos    = metricas.reduce((s, m) => s + m.pagos, 0);
     const abertos  = metricas.reduce((s, m) => s + m.abertos, 0);
-    const vencidos = metricas.reduce((s, m) => s + m.vencidos, 0);
-    const valorVencido = sumSafe(metricas.map(m => m.valorVencido));
-    const totalAcordos = pagos + abertos;
+    const naoPagos = metricas.reduce((s, m) => s + m.naoPagos, 0);
+    const valorNaoPago = sumSafe(metricas.map(m => m.valorNaoPago));
+    const totalAcordos = pagos + abertos + naoPagos;
     return {
-      recebido, aReceber, pagos, abertos, vencidos, valorVencido,
+      recebido, ho, aReceber, pagos, abertos, naoPagos, valorNaoPago,
       conversao: totalAcordos > 0 ? Math.round((pagos / totalAcordos) * 100) : 0,
       nOperadores: operadores.length,
     };
@@ -249,7 +253,7 @@ export default function PainelLider() {
     arr.sort((a, b) => {
       switch (sortKey) {
         case 'conversao': return b.conversao - a.conversao;
-        case 'vencidos':  return b.vencidos - a.vencidos || b.valorVencido - a.valorVencido;
+        case 'naoPagos':  return b.naoPagos - a.naoPagos || b.valorNaoPago - a.valorNaoPago;
         case 'aReceber':  return b.aReceber - a.aReceber;
         case 'nome':      return a.perfil.nome.localeCompare(b.perfil.nome, 'pt-BR');
         case 'recebido':
@@ -332,16 +336,18 @@ export default function PainelLider() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           <KpiCard label="Recebido no mês" accent="#10b981" icon={<TrendingUp className="w-4 h-4" />}
             value={<span className="text-emerald-500">{formatBRL(time.recebido)}</span>}
-            sub={`${time.pagos} acordo${time.pagos !== 1 ? 's' : ''} pago${time.pagos !== 1 ? 's' : ''}`} />
+            sub={isPP
+              ? `H.O. ${formatBRL(time.ho)} · ${time.pagos} pago${time.pagos !== 1 ? 's' : ''}`
+              : `${time.pagos} acordo${time.pagos !== 1 ? 's' : ''} pago${time.pagos !== 1 ? 's' : ''}`} />
           <KpiCard label="A receber" accent="#6366f1" icon={<Wallet className="w-4 h-4" />}
             value={<span className="text-primary">{formatBRL(time.aReceber)}</span>}
             sub={`${time.abertos} em aberto`} />
-          <KpiCard label="Vencidos" accent="#ef4444" icon={<AlertTriangle className="w-4 h-4" />}
-            value={<span className={time.vencidos > 0 ? 'text-destructive' : 'text-foreground'}>{time.vencidos}</span>}
-            sub={`${formatBRL(time.valorVencido)} em atraso`} />
+          <KpiCard label="Não pagos" accent="#ef4444" icon={<AlertTriangle className="w-4 h-4" />}
+            value={<span className={time.naoPagos > 0 ? 'text-destructive' : 'text-foreground'}>{time.naoPagos}</span>}
+            sub={`${formatBRL(time.valorNaoPago)} não pago`} />
           <KpiCard label="Conversão do time" accent="#f59e0b" icon={<Percent className="w-4 h-4" />}
             value={`${time.conversao}%`}
-            sub={`${time.pagos}/${time.pagos + time.abertos} acordos`} />
+            sub={`${time.pagos}/${time.pagos + time.abertos + time.naoPagos} acordos`} />
           <KpiCard label="Operadores" accent="#8b5cf6" icon={<Users className="w-4 h-4" />}
             value={String(time.nOperadores)}
             sub="na equipe" />
@@ -370,7 +376,7 @@ export default function PainelLider() {
                 <SelectContent>
                   <SelectItem value="recebido">Maior recebido</SelectItem>
                   <SelectItem value="conversao">Maior conversão</SelectItem>
-                  <SelectItem value="vencidos">Mais vencidos</SelectItem>
+                  <SelectItem value="naoPagos">Mais não pagos</SelectItem>
                   <SelectItem value="aReceber">Maior a receber</SelectItem>
                   <SelectItem value="nome">Nome (A-Z)</SelectItem>
                 </SelectContent>
@@ -394,9 +400,10 @@ export default function PainelLider() {
                   <tr className="border-b border-border bg-muted/30 text-muted-foreground">
                     <th className="text-left px-4 py-2.5 font-semibold">OPERADOR</th>
                     <th className="text-right px-3 py-2.5 font-semibold">RECEBIDO</th>
+                    {isPP && <th className="text-right px-3 py-2.5 font-semibold">H.O.</th>}
                     <th className="text-right px-3 py-2.5 font-semibold">A RECEBER</th>
                     <th className="text-center px-3 py-2.5 font-semibold">ABERTOS</th>
-                    <th className="text-center px-3 py-2.5 font-semibold">VENCIDOS</th>
+                    <th className="text-center px-3 py-2.5 font-semibold">NÃO PAGOS</th>
                     <th className="text-left px-3 py-2.5 font-semibold min-w-[120px]">CONVERSÃO</th>
                     <th className="px-2 py-2.5" />
                   </tr>
@@ -411,7 +418,7 @@ export default function PainelLider() {
                           className={cn(
                             'border-b border-border/50 cursor-pointer transition-colors',
                             sel ? 'bg-primary/5' : 'hover:bg-muted/20',
-                            m.vencidos > 0 && !sel && 'bg-destructive/[0.03]',
+                            m.naoPagos > 0 && !sel && 'bg-destructive/[0.03]',
                           )}>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center gap-2.5">
@@ -429,12 +436,13 @@ export default function PainelLider() {
                             </div>
                           </td>
                           <td className="px-3 py-2.5 text-right font-mono font-semibold text-success">{formatBRL(m.recebido)}</td>
+                          {isPP && <td className="px-3 py-2.5 text-right font-mono text-emerald-600/80">{formatBRL(m.ho)}</td>}
                           <td className="px-3 py-2.5 text-right font-mono text-primary">{formatBRL(m.aReceber)}</td>
                           <td className="px-3 py-2.5 text-center font-mono text-warning">{m.abertos}</td>
                           <td className="px-3 py-2.5 text-center">
-                            {m.vencidos > 0 ? (
+                            {m.naoPagos > 0 ? (
                               <span className="inline-flex items-center gap-1 font-mono font-semibold text-destructive">
-                                <AlertTriangle className="w-3 h-3" /> {m.vencidos}
+                                <AlertTriangle className="w-3 h-3" /> {m.naoPagos}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -447,7 +455,7 @@ export default function PainelLider() {
                         </tr>
                         {sel && (
                           <tr>
-                            <td colSpan={7} className="p-0 bg-muted/10 border-b border-border">
+                            <td colSpan={isPP ? 8 : 7} className="p-0 bg-muted/10 border-b border-border">
                               <div className="p-3 md:p-4">
                                 <DetalheOperador
                                   operadorId={m.perfil.id}
@@ -492,13 +500,17 @@ function DetalheOperador({
 }: DetalheOperadorProps) {
   const tenant = useTenant();
   const statusLabels = tenant.statusLabels;
+  const isPP = tenant.isPaguePlay;
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   const instanceId = useRef(`detalhe-op-${Math.random().toString(36).slice(2, 9)}`).current;
 
+  const PAGE = 50;
   const [acordos, setAcordos]     = useState<Acordo[]>([]);
   const [loading, setLoading]     = useState(true);
   const [erro, setErro]           = useState<string | null>(null);
   const [filtroStatus, setFiltroStatus] = useState<string>('all');
+  const [filtroData, setFiltroData]      = useState<string>('');   // '' = sem filtro
+  const [limite, setLimite]              = useState(PAGE);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -530,13 +542,21 @@ function DetalheOperador({
   const hoje = getTodayISO();
   const pagos    = acordos.filter(a => a.status === 'pago');
   const abertos  = acordos.filter(a => !['pago', 'nao_pago'].includes(a.status));
-  const vencidos = abertos.filter(a => a.vencimento < hoje);
+  const naoPagos = acordos.filter(a => a.status === 'nao_pago');
   const recebido = sumSafe(pagos.map(a => a.valor));
+  const ho       = recebido * PP_HO_PERCENTUAL;
   const aReceber = sumSafe(abertos.map(a => a.valor));
+  const totalConv = pagos.length + abertos.length + naoPagos.length;
 
   const acordosFiltrados = acordos
     .filter(a => filtroStatus === 'all' || a.status === filtroStatus)
+    .filter(a => !filtroData || a.vencimento === filtroData)
     .sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const acordosVisiveis = acordosFiltrados.slice(0, limite);
+
+  // Reset da paginação quando os filtros mudam
+  function mudarFiltroStatus(v: string) { setFiltroStatus(v); setLimite(PAGE); }
+  function mudarFiltroData(v: string)   { setFiltroData(v);   setLimite(PAGE); }
 
   const initials = operadorNome.split(' ').map(n => n[0]).slice(0, 2).join('');
 
@@ -581,12 +601,13 @@ function DetalheOperador({
               </Button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className={cn('grid grid-cols-2 gap-3', isPP ? 'sm:grid-cols-3 lg:grid-cols-5' : 'sm:grid-cols-4')}>
               {[
                 { label: 'Recebido/mês', value: formatBRL(recebido),          cls: 'text-success',     sub: `${pagos.length} pago(s)` },
+                ...(isPP ? [{ label: 'H.O./mês', value: formatBRL(ho), cls: 'text-emerald-600', sub: `${(PP_HO_PERCENTUAL * 100).toFixed(2)}% do recebido` }] : []),
                 { label: 'A receber/mês', value: formatBRL(aReceber),          cls: 'text-primary',     sub: `${abertos.length} aberto(s)` },
-                { label: 'Vencidos',     value: String(vencidos.length),       cls: 'text-destructive', sub: `${formatBRL(sumSafe(vencidos.map(a => a.valor)))} em atraso` },
-                { label: 'Conversão',    value: `${abertos.length + pagos.length > 0 ? Math.round((pagos.length / (pagos.length + abertos.length)) * 100) : 0}%`, cls: 'text-warning', sub: `${pagos.length}/${pagos.length + abertos.length}` },
+                { label: 'Não pagos',    value: String(naoPagos.length),       cls: 'text-destructive', sub: `${formatBRL(sumSafe(naoPagos.map(a => a.valor)))} não pago` },
+                { label: 'Conversão',    value: `${totalConv > 0 ? Math.round((pagos.length / totalConv) * 100) : 0}%`, cls: 'text-warning', sub: `${pagos.length}/${totalConv}` },
               ].map(({ label, value, cls, sub }) => (
                 <div key={label} className="p-3 bg-background rounded-lg border border-border">
                   <p className="text-[10px] text-muted-foreground">{label}</p>
@@ -604,15 +625,30 @@ function DetalheOperador({
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <CardTitle className="text-sm font-semibold">Acordos de {operadorNome.split(' ')[0]} · {labelMes}</CardTitle>
-              <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-                <SelectTrigger className="h-7 w-36 text-xs"><SelectValue placeholder="Todos status" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos</SelectItem>
-                  {Object.entries(statusLabels).filter(([k]) => !!k).map(([k, v]) => (
-                    <SelectItem key={k} value={k}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select value={filtroStatus} onValueChange={mudarFiltroStatus}>
+                  <SelectTrigger className="h-8 w-32 text-xs"><SelectValue placeholder="Todos status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    {Object.entries(statusLabels).filter(([k]) => !!k).map(([k, v]) => (
+                      <SelectItem key={k} value={k}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <DatePickerField
+                  value={filtroData}
+                  onChange={mudarFiltroData}
+                  size="sm"
+                  placeholder="Filtrar data"
+                  triggerClassName="w-36"
+                />
+                {filtroData && (
+                  <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 text-xs text-muted-foreground"
+                    onClick={() => mudarFiltroData('')}>
+                    <X className="w-3 h-3" /> Limpar data
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -631,7 +667,7 @@ function DetalheOperador({
                     </tr>
                   </thead>
                   <tbody>
-                    {acordosFiltrados.map(a => {
+                    {acordosVisiveis.map(a => {
                       const venceHoje = a.vencimento === hoje;
                       const atrasado  = a.vencimento < hoje && !['pago', 'nao_pago'].includes(a.status);
                       return (
@@ -658,6 +694,17 @@ function DetalheOperador({
                     })}
                   </tbody>
                 </table>
+                {acordosVisiveis.length < acordosFiltrados.length && (
+                  <div className="flex items-center justify-center gap-3 py-3 border-t border-border">
+                    <span className="text-[11px] text-muted-foreground">
+                      Mostrando {acordosVisiveis.length} de {acordosFiltrados.length}
+                    </span>
+                    <Button variant="outline" size="sm" className="h-7 text-xs"
+                      onClick={() => setLimite(l => l + PAGE)}>
+                      Carregar mais {Math.min(PAGE, acordosFiltrados.length - acordosVisiveis.length)}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
