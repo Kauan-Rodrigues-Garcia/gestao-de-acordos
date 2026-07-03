@@ -96,14 +96,15 @@ function TenantThemeApplier(): null {
 
     // Favicon por empresa (vale em todas as páginas, inclusive login):
     // BookPlay = handshake azul; PaguePlay/padrão = handshake verde.
-    const href = tenantSlug === 'bookplay' ? '/favicon-bookplay.svg' : '/favicon.svg';
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon'][type='image/svg+xml']");
+    // PNGs com fundo transparente (sem o fundo preto do SVG antigo).
+    const href = tenantSlug === 'bookplay' ? '/logo-bookplay.png' : '/logo-pagueplay.png';
+    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
     if (!link) {
       link = document.createElement('link');
       link.rel = 'icon';
-      link.type = 'image/svg+xml';
       document.head.appendChild(link);
     }
+    link.type = 'image/png';
     link.href = href;
 
     return () => {

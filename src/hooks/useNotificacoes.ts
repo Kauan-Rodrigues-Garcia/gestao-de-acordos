@@ -78,7 +78,7 @@ export function useNotificacoes(): UseNotificacoesResult {
           ) {
             new Notification(nova.titulo, {
               body: nova.mensagem ?? '',
-              icon: '/favicon.svg',
+              icon: '/logo-pagueplay.png',
               tag:  `recebimentos-${nova.id}`,
             });
           }
