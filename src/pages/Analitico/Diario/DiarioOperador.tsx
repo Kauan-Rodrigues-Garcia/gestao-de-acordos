@@ -4,8 +4,9 @@
  * Lista informativa dos próprios pagamentos do dia (CPF, nome, forma,
  * valor e data), com total ao final. Sem vínculo com acordos tabulados.
  *
- * "Novos": pagamentos que o operador ainda não tinha visto ao abrir a aba —
- * a lista separa "Anteriores" × "Novos" enquanto a sessão durar.
+ * "Novos": acordos que apareceram pela primeira vez na última importação do
+ * dia (a partir do 2º relatório). A lista separa "Anteriores" × "Novos" e os
+ * "novos" só deixam de ser destacados quando o próximo relatório é importado.
  */
 
 import { useMemo } from 'react';
@@ -62,7 +63,7 @@ function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boo
 }
 
 export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
-  const { dados, loading, novosIds } = useDiario({
+  const { dados, loading } = useDiario({
     dia,
     operadorFiltro: operadorId,
     marcarVisto: true,
@@ -72,7 +73,9 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
 
   const { itens, novos, anteriores, totais } = useMemo(() => {
     const vivas = linhasVivas(dados, hojeISO);
-    const consolidados = consolidarItens(vivas, novosIds);
+    // Última importação do dia (entre os pagamentos do próprio operador)
+    const maxImportIndex = dados.reduce((m, r) => Math.max(m, r.import_index), 0);
+    const consolidados = consolidarItens(vivas, maxImportIndex);
     const nv  = consolidados.filter(i => i.novo);
     const ant = consolidados.filter(i => !i.novo);
     return {
@@ -86,7 +89,7 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
         cartao: vivas.filter(v => formaKindDiario(v.forma_pagamento) === 'cartao').reduce((s, v) => s + v.valor_recebido, 0),
       },
     };
-  }, [dados, novosIds, hojeISO]);
+  }, [dados, hojeISO]);
 
   if (loading) {
     return (

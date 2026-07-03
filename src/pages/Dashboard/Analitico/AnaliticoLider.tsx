@@ -12,7 +12,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
-  Trash2, Loader2, Star, CalendarDays, X, Filter,
+  Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
   TrendingUp, CreditCard, Calendar, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { copiarTexto } from '@/lib/clipboard';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
   buscarResumoOperadoresAnalitico,
@@ -578,6 +579,15 @@ export function AnaliticoLider({
                                   </span>
                                 </>
                               )}
+                              <Button size="sm" variant="outline"
+                                className="h-6 px-2 gap-1 text-xs ml-auto"
+                                disabled={linhas.length === 0}
+                                onClick={() => void copiarTexto(
+                                  montarTextoListaAnalitico(r.operador_nome ?? r.operador_usuario, linhas),
+                                  'Lista de acordos copiada',
+                                )}>
+                                <Copy className="w-3 h-3" /> Copiar lista
+                              </Button>
                             </div>
 
                             <table className="w-full text-xs">
@@ -899,4 +909,40 @@ export function AnaliticoLider({
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
     </div>
   );
+}
+
+// ── Copiar lista (formato do protótipo HTML) ──────────────────────────────────
+
+/** Formata 'yyyy-MM-dd' → 'dd/mm/yyyy'. */
+function fmtDataAnalitico(iso: string | null): string {
+  if (!iso) return '—';
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Monta o texto de "Copiar lista" dos acordos analíticos de um operador,
+ * no mesmo formato do protótipo HTML:
+ *   *Nome* — acordos pagos (período)
+ *   CÓDIGO - Forma - Valor recebido - Total HO - Data
+ *   Total: R$ x | HO: R$ y
+ */
+function montarTextoListaAnalitico(nome: string, linhas: AnaliticoRecebimento[]): string {
+  const totRec = linhas.reduce((s, l) => s + l.valor_recebido, 0);
+  const totHo  = linhas.reduce((s, l) => s + l.total_ho, 0);
+
+  const datas = linhas.map(l => l.data_pagamento).filter(Boolean).sort();
+  const ini = datas[0] ?? null;
+  const fim = datas[datas.length - 1] ?? null;
+  const periodo = !ini ? '' : (ini === fim ? fmtDataAnalitico(ini) : `${fmtDataAnalitico(ini)} a ${fmtDataAnalitico(fim)}`);
+
+  const formaLabel = (f: AnaliticoRecebimento['forma_pagamento']) =>
+    f === 'cartao' ? 'Cartão' : 'Boleto/Pix';
+
+  const head = `*${nome}* — acordos pagos${periodo ? ` (${periodo})` : ''}`;
+  const lines = linhas.map(l =>
+    `${l.codigo} - ${formaLabel(l.forma_pagamento)} - ${formatBRL(l.valor_recebido)} - ${formatBRL(l.total_ho)} - ${fmtDataAnalitico(l.data_pagamento)}`,
+  );
+
+  return [head, '', ...lines, '', `Total: ${formatBRL(totRec)} | HO: ${formatBRL(totHo)}`].join('\n');
 }

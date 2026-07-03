@@ -12,7 +12,7 @@
 import { useState, useMemo, useCallback } from 'react';
 import {
   Upload, Users, AlertCircle, ChevronDown, ChevronRight, Trash2, Loader2,
-  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X,
+  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X, Copy,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,12 +28,13 @@ import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { fmtCPF } from '@/services/diario/diarioParser';
+import { copiarTexto } from '@/lib/clipboard';
 import {
   removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia, limparTodoDiario,
 } from '@/services/diario/diario.service';
 import {
   linhasVivas, consolidarItens, consolidarIgnorados, agregarPorOperador,
-  acordoKey, dataLabel, fmtDataISO,
+  acordoKey, dataLabel, fmtDataISO, montarTextoListaDiario,
   type ResumoOperadorDiario,
 } from './helpers';
 import { FormaChip } from './FormaChip';
@@ -364,6 +365,8 @@ export function DiarioLider({
                     aberto={expandidos.has(r.operadorId)}
                     onToggle={() => toggleExpandido(r.operadorId)}
                     linhas={vinculadas.filter(v => v.operador_id === r.operadorId)}
+                    dia={dia}
+                    maxImportIndex={maxImportIndex}
                   />
                 ))}
               </div>
@@ -596,18 +599,25 @@ interface OperadorCardDiarioProps {
   aberto: boolean;
   onToggle: () => void;
   linhas: DiarioRecebimento[];
+  dia: string | null;
+  maxImportIndex: number;
 }
 
 function OperadorCardDiario({
-  resumo, posicao, maxTotal, aberto, onToggle, linhas,
+  resumo, posicao, maxTotal, aberto, onToggle, linhas, dia, maxImportIndex,
 }: OperadorCardDiarioProps) {
   // Detalhe consolidado apenas quando expandido (lazy render)
   const itens = useMemo(
-    () => (aberto ? consolidarItens(linhas, new Set()) : []),
-    [aberto, linhas],
+    () => (aberto ? consolidarItens(linhas, maxImportIndex) : []),
+    [aberto, linhas, maxImportIndex],
   );
 
   const barra = Math.max(4, Math.round((resumo.total / maxTotal) * 100));
+
+  function copiarLista() {
+    const texto = montarTextoListaDiario(resumo.nome ?? resumo.usuario, dia, itens, maxImportIndex);
+    void copiarTexto(texto, 'Lista de recebimentos copiada');
+  }
 
   return (
     <Card className="border-border">
@@ -666,6 +676,12 @@ function OperadorCardDiario({
 
       {aberto && (
         <CardContent className="p-0 border-t">
+          <div className="flex items-center justify-end px-3 py-2 border-b border-border bg-muted/10">
+            <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs"
+              onClick={copiarLista}>
+              <Copy className="w-3.5 h-3.5" /> Copiar lista
+            </Button>
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -678,13 +694,18 @@ function OperadorCardDiario({
               </thead>
               <tbody className="divide-y divide-border">
                 {itens.map(item => (
-                  <tr key={item.key} className="hover:bg-muted/20">
+                  <tr key={item.key} className={cn('hover:bg-muted/20', item.novo && 'bg-primary/5')}>
                     <td className="px-3 py-2">
-                      <span className="font-semibold tabular-nums">
-                        {fmtCPF(item.cpf) || '—'}
-                        {item.n > 1 && (
-                          <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{item.n}x</span>
+                      <span className="font-semibold tabular-nums inline-flex items-center gap-1.5">
+                        {item.novo && (
+                          <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo (último relatório)" />
                         )}
+                        <span>
+                          {fmtCPF(item.cpf) || '—'}
+                          {item.n > 1 && (
+                            <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{item.n}x</span>
+                          )}
+                        </span>
                       </span>
                       {item.nome_cliente && (
                         <span className="block text-muted-foreground truncate max-w-[200px]">{item.nome_cliente}</span>

@@ -8,7 +8,8 @@
  */
 
 import type { DiarioRecebimento } from '@/lib/supabase';
-import { formaKindDiario, isCartaoDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario, isCartaoDiario, fmtCPF, normDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
+import { formatBRL } from '@/lib/money';
 
 // ── Ignorados (próximo contato ≤ hoje) ───────────────────────────────────────
 
@@ -44,7 +45,7 @@ export interface ItemDiario {
   minData: string | null;   // 'yyyy-MM-dd'
   maxData: string | null;
   tabulacao: string;
-  /** true quando o item ainda não foi visto pelo operador nesta sessão */
+  /** true quando o acordo apareceu pela primeira vez na última importação do dia */
   novo: boolean;
 }
 
@@ -64,25 +65,31 @@ export function dataLabel(item: Pick<ItemDiario, 'minData' | 'maxData'>): string
 
 /**
  * Consolida linhas em itens de exibição.
- * Um item consolidado é "novo" apenas se TODOS os pagamentos são novos —
- * se alguma parcela já era conhecida, o acordo permanece em "anteriores".
+ *
+ * "Novo" segue a ordem das importações do dia (igual ao protótipo HTML):
+ *  - 1º relatório (maxImportIndex < 2): nenhum item é "novo" — lista normal.
+ *  - A partir do 2º: um acordo é "novo" se sua PRIMEIRA aparição foi na última
+ *    importação (menor import_index do acordo === maxImportIndex). Se alguma
+ *    parcela já existia em importação anterior, o acordo fica em "anteriores".
+ *    Assim, ao importar o próximo relatório, os "novos" do relatório atual
+ *    passam a "anteriores" e só os do novo relatório ficam marcados.
  */
 export function consolidarItens(
   rows: DiarioRecebimento[],
-  novosIds: Set<string>,
+  maxImportIndex: number,
 ): ItemDiario[] {
-  const grupos = new Map<string, ItemDiario>();
+  const grupos  = new Map<string, ItemDiario>();
+  const minIdx  = new Map<string, number>();   // menor import_index por acordo
   const itens: ItemDiario[] = [];
 
   for (const r of rows) {
-    const key  = acordoKey(r);
-    const novo = novosIds.has(r.id) || !r.visto;
+    const key = acordoKey(r);
+    minIdx.set(key, Math.min(minIdx.get(key) ?? r.import_index, r.import_index));
 
     const existente = grupos.get(key);
     if (existente) {
       existente.valor += r.valor_recebido;
       existente.n     += 1;
-      existente.novo   = existente.novo && novo;
       if (!existente.cpf && r.cpf) existente.cpf = r.cpf;
       if (!existente.nome_cliente && r.nome_cliente) existente.nome_cliente = r.nome_cliente;
       if (r.data_pagamento) {
@@ -103,15 +110,51 @@ export function consolidarItens(
       minData:         r.data_pagamento,
       maxData:         r.data_pagamento,
       tabulacao:       r.tabulacao ?? '',
-      novo,
+      novo:            false,
     };
     grupos.set(key, item);
     itens.push(item);
   }
 
+  for (const it of itens) {
+    it.novo = maxImportIndex >= 2 && minIdx.get(it.key) === maxImportIndex;
+  }
+
   itens.sort((a, b) =>
     (a.minData ?? '').localeCompare(b.minData ?? '') || a.cpf.localeCompare(b.cpf));
   return itens;
+}
+
+/**
+ * Monta o texto de "Copiar lista" do recebimento diário de um operador,
+ * no mesmo formato do protótipo HTML. A partir do 2º relatório do dia,
+ * separa em blocos "Anteriores" e "Novos pagamentos".
+ */
+export function montarTextoListaDiario(
+  nome: string,
+  diaISO: string | null,
+  itens: ItemDiario[],
+  maxImportIndex: number,
+): string {
+  const totRec  = itens.reduce((s, i) => s + i.valor, 0);
+  const aviso   = (it: ItemDiario) =>
+    normDiario(it.tabulacao) === 'acordofechado' ? '' : ' (Tabular Acordo Fechado)';
+  const fmtLine = (it: ItemDiario) =>
+    `${fmtCPF(it.cpf) || '—'} - ${it.forma_pagamento} - ${formatBRL(it.valor)}${aviso(it)}`;
+
+  const head = `*${nome}* — recebimentos${diaISO ? ` (${fmtDataISO(diaISO)})` : ''}`;
+  const blocks: string[] = [];
+
+  if (maxImportIndex >= 2) {
+    const ant = itens.filter(i => !i.novo);
+    const nw  = itens.filter(i => i.novo);
+    if (ant.length) blocks.push('— Anteriores —', ...ant.map(fmtLine));
+    if (nw.length)  blocks.push('', '— Novos pagamentos —', ...nw.map(fmtLine));
+  } else {
+    blocks.push(...itens.map(fmtLine));
+  }
+
+  return [head, '', ...blocks, '', `Total: ${formatBRL(totRec)}`].join('\n');
 }
 
 // ── Agregação por operador (visão líder) ─────────────────────────────────────
