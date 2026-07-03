@@ -29,7 +29,7 @@ import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { fmtCPF } from '@/services/diario/diarioParser';
 import {
-  removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia,
+  removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia, limparTodoDiario,
 } from '@/services/diario/diario.service';
 import {
   linhasVivas, consolidarItens, consolidarIgnorados, agregarPorOperador,
@@ -61,6 +61,8 @@ export function DiarioLider({
   const [removendoOrfaos, setRemovendoOrfaos]     = useState(false);
   const [confirmandoLimpeza, setConfirmandoLimpeza] = useState(false);
   const [limpando, setLimpando]            = useState(false);
+  const [confirmandoLimpezaTudo, setConfirmandoLimpezaTudo] = useState(false);
+  const [limpandoTudo, setLimpandoTudo]    = useState(false);
 
   const hojeISO = getTodayISO();
 
@@ -143,6 +145,22 @@ export function DiarioLider({
       void refetch();
     }
     setLimpando(false);
+  }
+
+  async function limparTudo() {
+    setLimpandoTudo(true);
+    const { removidos, error } = await limparTodoDiario(empresaId);
+    if (error) {
+      toast.error(`Erro ao limpar: ${error}`);
+    } else {
+      toast.success(
+        `Todos os dados do recebimento diário foram excluídos` +
+        `${removidos > 0 ? ` (${removidos} registro${removidos !== 1 ? 's' : ''})` : ''}.`,
+      );
+      setConfirmandoLimpezaTudo(false);
+      void refetch();
+    }
+    setLimpandoTudo(false);
   }
 
   const handlePosImport = useCallback(() => {
@@ -276,6 +294,13 @@ export function DiarioLider({
                 <Trash2 className="w-4 h-4" /> Limpar dia
               </Button>
             )}
+            <Button
+              size="sm" variant="outline"
+              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setConfirmandoLimpezaTudo(true)}
+            >
+              <Trash2 className="w-4 h-4" /> Limpar tudo
+            </Button>
             <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
               <Upload className="w-4 h-4" /> Importar relatório
             </Button>
@@ -520,6 +545,38 @@ export function DiarioLider({
             >
               {limpando && <Loader2 className="w-4 h-4 animate-spin" />}
               {limpando ? 'Excluindo…' : 'Confirmar exclusão'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmação de limpeza de TODOS os dias */}
+      <AlertDialog open={confirmandoLimpezaTudo} onOpenChange={setConfirmandoLimpezaTudo}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="w-5 h-5" /> Limpar TODO o recebimento diário
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <p>
+                <strong>Todos</strong> os pagamentos importados no recebimento diário —
+                de <strong>todos os dias</strong> — serão excluídos permanentemente.
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Esta ação não pode ser desfeita. Após a exclusão, reimporte os relatórios
+                para restaurar os dados.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={limpandoTudo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => void limparTudo()}
+              disabled={limpandoTudo}
+              className="bg-destructive hover:bg-destructive/90 text-white gap-1.5"
+            >
+              {limpandoTudo && <Loader2 className="w-4 h-4 animate-spin" />}
+              {limpandoTudo ? 'Excluindo…' : 'Confirmar exclusão total'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
