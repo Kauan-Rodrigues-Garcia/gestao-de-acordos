@@ -190,18 +190,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
 
-  // Favicon dinâmico: PaguePlay usa SVG com borda verde arredondada
-  useEffect(() => {
-    if (!isPP) return;
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon'][type='image/svg+xml']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      link.type = 'image/svg+xml';
-      document.head.appendChild(link);
-    }
-    link.href = '/favicon.svg';
-  }, [isPP]);
+  // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
+  //  todas as páginas, inclusive a de login.)
 
   // ── Chatplay modal (PaguePlay only) ─────────────────────────────────────────
   const [chatplayOnboardingOpen, setChatplayOnboardingOpen] = useState(false);
@@ -236,13 +226,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className={cn(
-          'w-8 h-8 flex-shrink-0 flex items-center justify-center',
-          !isPP && 'rounded-lg overflow-hidden bg-background',
-        )}>
+        <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
           {isPP
             ? <img src="/logo-pagueplay.png" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
-            : <img src="/images/Logo_Clebs.png" alt="Logo" className="w-8 h-8 object-contain" />
+            : <img src="/favicon-bookplay.svg" alt="Logo BookPlay" className="w-8 h-8 object-contain" />
           }
         </div>
         <AnimatePresence>

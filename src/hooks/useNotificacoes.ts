@@ -78,7 +78,7 @@ export function useNotificacoes(): UseNotificacoesResult {
           ) {
             new Notification(nova.titulo, {
               body: nova.mensagem ?? '',
-              icon: '/favicon.ico',
+              icon: '/favicon.svg',
               tag:  `recebimentos-${nova.id}`,
             });
           }
