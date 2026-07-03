@@ -240,6 +240,7 @@ export default function PaginaAnalitico() {
           operadorId={perfil.id}
           operadorNome={perfil.nome}
           empresaId={empresa.id}
+          mes={mesFiltro}
           liderId={liderId}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
