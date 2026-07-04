@@ -12,6 +12,8 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
+import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
+import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
@@ -94,6 +96,8 @@ export default function Acordos() {
   const [selecionados, setSelecionados]   = useState<string[]>([]);
   const [atualizandoStatus, setAtualizandoStatus]         = useState<string | null>(null);
   const [confirmarPgtoAcordo, setConfirmarPgtoAcordo]     = useState<Acordo | null>(null);
+  const [reagendarAcordo, setReagendarAcordo]             = useState<Acordo | null>(null);
+  const [salvandoReagendar, setSalvandoReagendar]         = useState(false);
   const [salvandoConfirmarPgto, setSalvandoConfirmarPgto] = useState(false);
   const [filaAberta, setFilaAberta]       = useState(false);
   const [filaWhatsApp, setFilaWhatsApp]   = useState<ItemFila[]>([]);
@@ -304,8 +308,78 @@ export default function Acordos() {
           },
         },
       });
+
+      // Parcelado (incremental): se ainda falta criar a próxima parcela,
+      // abre o modal de reagendamento para confirmar data + valor.
+      const numParcela = a.numero_parcela ?? 1;
+      const totalP     = a.parcelas ?? 1;
+      const empId      = empresa?.id;
+      if (empId && isTipoParcelado(a.tipo, false) && numParcela < totalP && a.acordo_grupo_id) {
+        const { data: proxima } = await supabase
+          .from('acordos').select('id')
+          .eq('empresa_id', empId)
+          .eq('acordo_grupo_id', a.acordo_grupo_id)
+          .eq('numero_parcela', numParcela + 1)
+          .maybeSingle();
+        if (!proxima) setReagendarAcordo({ ...a, status: 'pago' });
+      }
     }
     setAtualizandoStatus(null);
+  }
+
+  async function handleReagendarAcordos(params: ReagendarParams) {
+    if (!reagendarAcordo || !empresa?.id) return;
+    setSalvandoReagendar(true);
+    try {
+      const parcelaAtual  = reagendarAcordo;
+      const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
+      const totalP        = parcelaAtual.parcelas ?? 1;
+
+      if (parcelaAtual.acordo_grupo_id) {
+        const { data: jaExiste } = await supabase
+          .from('acordos').select('id')
+          .eq('empresa_id', empresa.id)
+          .eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
+          .eq('numero_parcela', proximaNumero)
+          .maybeSingle();
+        if (jaExiste) {
+          toast.info(`Parcela ${proximaNumero}/${totalP} já foi reagendada.`);
+          setReagendarAcordo(null);
+          return;
+        }
+      }
+
+      const { data: novo, error } = await supabase.from('acordos').insert({
+        nome_cliente:          parcelaAtual.nome_cliente,
+        nr_cliente:            parcelaAtual.nr_cliente,
+        tipo:                  parcelaAtual.tipo,
+        parcelas:              parcelaAtual.parcelas,
+        whatsapp:              parcelaAtual.whatsapp ?? null,
+        instituicao:           parcelaAtual.instituicao ?? null,
+        observacoes:           parcelaAtual.observacoes ?? null,
+        operador_id:           parcelaAtual.operador_id,
+        empresa_id:            parcelaAtual.empresa_id,
+        setor_id:              parcelaAtual.setor_id ?? null,
+        data_cadastro:         new Date().toISOString().split('T')[0],
+        acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
+        tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
+        vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
+        vinculo_operador_nome: parcelaAtual.vinculo_operador_nome ?? null,
+        status:                'verificar_pendente',
+        valor:                 params.novoValor,
+        numero_parcela:        proximaNumero,
+        vencimento:            params.novoVencimento,
+      }).select('*, perfis(id, nome, email, perfil, setor_id)').single();
+
+      if (error) { toast.error(`Erro ao criar parcela ${proximaNumero}: ${error.message}`); return; }
+      addAcordo(novo as Acordo);
+      setReagendarAcordo(null);
+      toast.success(`Parcela ${proximaNumero}/${totalP} agendada para ${formatDate(params.novoVencimento)}!`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
+    } finally {
+      setSalvandoReagendar(false);
+    }
   }
 
   function prepararFila(listaAcordos: Acordo[]) {
@@ -637,6 +711,18 @@ export default function Acordos() {
             setConfirmarPgtoAcordo(null);
           }}
           onClose={() => setConfirmarPgtoAcordo(null)}
+        />
+      )}
+
+      {reagendarAcordo && (
+        <ModalReagendar
+          aberto={!!reagendarAcordo}
+          parcelaAtual={reagendarAcordo}
+          proximaNumero={(reagendarAcordo.numero_parcela ?? 1) + 1}
+          totalParcelas={reagendarAcordo.parcelas ?? 1}
+          salvando={salvandoReagendar}
+          onConfirm={handleReagendarAcordos}
+          onClose={() => setReagendarAcordo(null)}
         />
       )}
 

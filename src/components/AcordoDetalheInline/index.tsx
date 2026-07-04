@@ -651,7 +651,7 @@ export function AcordoDetalheInline({
                               <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Vencimento</th>
                               <th className="px-3 py-2.5 text-right font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Valor</th>
                               <th className="px-3 py-2.5 text-left font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Status</th>
-                              <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Ação</th>
+                              <th className="px-3 py-2.5 text-center font-semibold text-muted-foreground tracking-wide uppercase text-[10px]">Próxima</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -689,27 +689,18 @@ export function AcordoDetalheInline({
                                     )}
                                   </td>
                                   <td className="px-3 py-2.5 text-center">
-                                    {real && real.status !== 'pago' ? (
-                                      <Button variant="ghost" size="sm"
-                                        className="h-6 text-[10px] px-2.5 text-success hover:bg-success/15 hover:text-success border border-success/20 font-semibold"
-                                        disabled={marcandoPago === real.id}
-                                        onClick={() => marcarPago(real)}>
-                                        {marcandoPago === real.id ? (
-                                          <span className="flex items-center gap-1"><RefreshCw className="w-2 h-2 animate-spin" /> Aguarde</span>
-                                        ) : (
-                                          <span className="flex items-center gap-1"><CheckCircle2 className="w-2.5 h-2.5" /> Pago</span>
-                                        )}
-                                      </Button>
-                                    ) : isPaguePlay && real && real.status === 'pago' && index < totalParcelas && !linhas[index]?.real ? (
-                                      <Button variant="ghost" size="sm"
-                                        className="h-6 text-[10px] px-2.5 text-primary hover:bg-primary/10 hover:text-primary border border-primary/20 font-semibold"
-                                        onClick={() => setReagendarParcela(real)}
-                                        title="Reagendar próxima parcela"
-                                      >
-                                        <span className="flex items-center gap-1">
-                                          <CalendarClock className="w-2.5 h-2.5" /> Reagendar
+                                    {index >= totalParcelas ? (
+                                      <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
+                                    ) : real && real.status === 'pago' ? (
+                                      linhas[index]?.real ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-success/20">
+                                          <CheckCircle2 className="w-2.5 h-2.5" /> Agendada
                                         </span>
-                                      </Button>
+                                      ) : (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-warning bg-warning/10 px-2 py-0.5 rounded-full border border-warning/30">
+                                          <Clock className="w-2.5 h-2.5" /> Não agendada
+                                        </span>
+                                      )
                                     ) : (
                                       <span className="text-muted-foreground/30 text-[10px] font-mono">—</span>
                                     )}
