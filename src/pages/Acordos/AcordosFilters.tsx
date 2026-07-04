@@ -56,8 +56,8 @@ export function AcordosFilters({
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
-          { key: 'analitico', label: 'Analítico' },
           { key: 'todos',     label: 'Todos' },
+          { key: 'analitico', label: 'Pendentes' },
           { key: 'pagos',     label: 'Pagos / Quitados' },
           { key: 'nao_pagos', label: 'Não Pagos' },
         ] as const).map(tab => (

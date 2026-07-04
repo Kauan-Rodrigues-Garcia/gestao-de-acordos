@@ -435,7 +435,10 @@ export default function Acordos() {
 
   if (isPP) return <Navigate to="/" replace />;
 
-  const colSpanFull = isPP ? 11 : 10;
+  // Coluna "Operador" só para cargos que veem todos os acordos (líder/elite+);
+  // para operador (só vê os próprios) a coluna é removida.
+  const mostrarColunaOperador = temPermissao('ver_acordos_gerais');
+  const colSpanFull = (isPP ? 11 : 10) - (mostrarColunaOperador ? 0 : 1);
 
   return (
     <div className="p-6">
@@ -564,6 +567,7 @@ export default function Acordos() {
                     acordosCount={acordos.length}
                     isPP={isPP}
                     colSpanFull={colSpanFull}
+                    mostrarColunaOperador={mostrarColunaOperador}
                     novoInlineAberto={novoInlineAberto}
                     hoje={hoje}
                     highlightedId={highlightedId}

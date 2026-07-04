@@ -25,6 +25,7 @@ export interface AcordosTableBodyProps {
   acordosCount: number;
   isPP: boolean;
   colSpanFull: number;
+  mostrarColunaOperador: boolean;
   novoInlineAberto: boolean;
   hoje: string;
   highlightedId: string | null;
@@ -50,7 +51,7 @@ export interface AcordosTableBodyProps {
 }
 
 export function AcordosTableBody({
-  acordosParaExibir, acordosCount, isPP, colSpanFull, novoInlineAberto,
+  acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, novoInlineAberto,
   hoje, highlightedId, selecionados, editandoInlineId, detalheInlineId,
   atualizandoStatus, excluindoId, operadoresMap, temFiltros,
   selecionarTodos, toggleSelecionado, setNovoInlineAberto,
@@ -80,7 +81,7 @@ export function AcordosTableBody({
               <th className="text-left px-3 py-3 font-semibold text-muted-foreground">PAGAMENTO</th>
               <th className="text-left px-3 py-3 font-semibold text-muted-foreground">LINK</th>
               <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
-              <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
+              {mostrarColunaOperador && <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>}
             </>
           ) : (
             <>
@@ -91,7 +92,7 @@ export function AcordosTableBody({
               <th className="text-left px-3 py-3 font-semibold text-muted-foreground">TIPO</th>
               <th className="text-center px-3 py-3 font-semibold text-muted-foreground">PARCELAS</th>
               <th className="text-left px-3 py-3 font-semibold text-muted-foreground">STATUS</th>
-              <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>
+              {mostrarColunaOperador && <th className="text-left px-3 py-3 font-semibold text-muted-foreground">OPERADOR</th>}
             </>
           )}
           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÕES</th>
@@ -214,9 +215,11 @@ export function AcordosTableBody({
                         {STATUS_LABELS_PAGUEPLAY[a.status] || STATUS_LABELS[a.status]}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-muted-foreground">
-                      <OperadorCell acordo={a} operadoresMap={operadoresMap} />
-                    </td>
+                    {mostrarColunaOperador && (
+                      <td className="px-3 py-2.5 text-xs text-muted-foreground">
+                        <OperadorCell acordo={a} operadoresMap={operadoresMap} />
+                      </td>
+                    )}
                   </>
                 ) : (
                   <>
@@ -263,9 +266,11 @@ export function AcordosTableBody({
                         {STATUS_LABELS[a.status]}
                       </span>
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                      {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
-                    </td>
+                    {mostrarColunaOperador && (
+                      <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
+                        {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
+                      </td>
+                    )}
                   </>
                 )}
                 <td className="px-3 py-2.5">

@@ -530,16 +530,6 @@ export function AcordoDetalheInline({
                       Acordo direto
                     </Button>
                   )}
-                  {deveExibirParcelas && !isPaguePlay && (
-                    <Button
-                      variant="outline" size="sm"
-                      className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                      onClick={() => setModalEditParcOpen(true)}
-                    >
-                      <CalendarClock className="w-3 h-3" />
-                      Editar
-                    </Button>
-                  )}
                   <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
                     <X className="w-4 h-4" />
                   </Button>
