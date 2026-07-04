@@ -152,7 +152,9 @@ export function AcordoDetalheInline({
           p_status:       'pago',
         });
       }
-      if (isPaguePlay && (p.numero_parcela ?? 1) < totalParcelas) {
+      // Reagenda a próxima parcela de acordos parcelados — vale para os dois
+      // tenants (PaguePlay e BookPlay usam a mesma lógica em handleReagendar).
+      if (deveExibirParcelas && (p.numero_parcela ?? 1) < totalParcelas) {
         setReagendarParcela(parcelaAtualizada);
       }
     }
@@ -167,6 +169,21 @@ export function AcordoDetalheInline({
       const parcelaAtual  = reagendarParcela;
       const proximaNumero = (parcelaAtual.numero_parcela ?? 1) + 1;
       const quantToCreate = 1;
+
+      // Evita criar a próxima parcela em duplicado (ex.: reagendar duas vezes)
+      if (parcelaAtual.acordo_grupo_id) {
+        const { data: jaExiste } = await supabase
+          .from('acordos').select('id')
+          .eq('empresa_id', empresa.id)
+          .eq('acordo_grupo_id', parcelaAtual.acordo_grupo_id)
+          .eq('numero_parcela', proximaNumero)
+          .maybeSingle();
+        if (jaExiste) {
+          toast.info(`Parcela ${proximaNumero}/${totalParcelas} já foi reagendada.`);
+          setReagendarParcela(null);
+          return;
+        }
+      }
 
       const usou40Base = parcelaAtual.usou_quarenta_pct ?? foiUsadoQuarentaPct(parcelaAtual);
       let valorProximaParcela = params.novoValor;
