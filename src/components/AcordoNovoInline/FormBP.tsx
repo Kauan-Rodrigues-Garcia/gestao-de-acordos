@@ -50,6 +50,10 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 <Hash className="w-3 h-3" /> Dados Principais
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">NR *</Label>
+                  <Input value={nrCliente} onChange={(e) => setNrCliente(e.target.value)} placeholder="Código do acordo" className="h-8 text-xs font-mono" />
+                </div>
                 <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
                 <div className="space-y-1">
                   <Label className="text-xs">Valor *</Label>

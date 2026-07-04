@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export const schemaBase = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
-  nr_cliente:   z.string().optional().or(z.literal('')),
+  nr_cliente:   z.string().trim().min(1, 'NR é obrigatório').max(100, 'NR muito longo'),
   vencimento:   z.string().min(1, 'Data de vencimento é obrigatória'),
   valor: z.string().min(1, 'Valor é obrigatório').refine(v => {
     const n = parseCurrencyInput(v);

@@ -98,7 +98,7 @@ export default function PainelDiretoria() {
 
   const distribuicaoPorTipo = useMemo(() => {
     const map: Record<string, { agendado: number; recebido: number; qtd: number }> = {};
-    const base = isPP ? acordosMes.filter(a => (a as any).tipo_vinculo !== 'extra') : acordosMes;
+    const base = acordosMes.filter(a => (a as any).tipo_vinculo !== 'extra');
     base.forEach(a => {
       const tipo = (a as any).tipo ?? 'outros';
       if (!map[tipo]) map[tipo] = { agendado: 0, recebido: 0, qtd: 0 };

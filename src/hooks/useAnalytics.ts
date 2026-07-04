@@ -351,8 +351,9 @@ export function useAnalytics(): AnalyticsData {
     );
     const acordosHoje = acordosMes.filter(a => a.vencimento === hoje);
 
-    // Para métricas de valor: exclui extras na visão ampla (evita dupla contagem)
-    const acordosMesMetricas = isPP && isWideView
+    // Para métricas de valor: exclui extras na visão ampla (evita dupla contagem).
+    // Vale para PaguePlay e BookPlay (ambos usam vínculo direto/extra).
+    const acordosMesMetricas = isWideView
       ? acordosMes.filter(a => a.tipo_vinculo !== 'extra')
       : acordosMes;
 

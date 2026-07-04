@@ -42,6 +42,22 @@ export function FormBP({
         <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
 
           <div className="space-y-1.5">
+            <Label className="text-xs font-semibold text-primary">NR *</Label>
+            <div className="relative">
+              <Hash className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+              <Input
+                {...register('nr_cliente')}
+                placeholder="Código do acordo"
+                className={cn(
+                  'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
+                  errors.nr_cliente && 'border-destructive',
+                )}
+              />
+            </div>
+            {errors.nr_cliente && <p className="text-xs text-destructive">{errors.nr_cliente.message}</p>}
+          </div>
+
+          <div className="space-y-1.5">
             <DatePickerField
               value={watch('vencimento') || ''}
               onChange={(v) => setValue('vencimento', v, { shouldValidate: true })}

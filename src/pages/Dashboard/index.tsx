@@ -210,7 +210,7 @@ export default function Dashboard() {
       base = base.filter(a => (a.tipo_vinculo ?? 'direto') === filtroVinculo);
     }
     if (visaoAmpla && filtroVinculo === 'todos') {
-      base = deduplicarVinculados(base, true);
+      base = deduplicarVinculados(base, isPP);
     }
     return [...base].sort((a, b) => {
       const aHoje = a.vencimento === hoje;

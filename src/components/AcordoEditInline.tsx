@@ -45,7 +45,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const { empresa } = useEmpresa();
   const { perfil }  = useAuth();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
-  const usuarioTemLogicaDiretoExtra = isPaguePlay && isAtivoParaUsuario(
+  const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
     (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
@@ -136,7 +136,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
         observacoes:  isPaguePlay
           ? buildObservacoesComEstado(estado, observacoes)
           : (observacoes.trim() || null),
-        ...(isPaguePlay ? { tipo_vinculo: isExtra ? 'extra' : 'direto' } : {}),
+        tipo_vinculo: isExtra ? 'extra' : 'direto',
         tag_ids: tagIds.length > 0 ? tagIds : null,
       };
 

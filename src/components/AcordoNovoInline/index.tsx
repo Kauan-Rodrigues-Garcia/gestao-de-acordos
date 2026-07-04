@@ -59,7 +59,7 @@ export function AcordoNovoInline({
   const { verificarConflito, loading: nrLoading, refetch: nrRefetch } = useNrRegistros();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const { tags: empresaTags }  = useEmpresaTags();
-  const usuarioTemLogicaDiretoExtra = isPaguePlay && isAtivoParaUsuario(
+  const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
     perfil?.id ?? '',
     perfil?.setor_id ?? null,
     (perfil as (typeof perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
@@ -192,6 +192,7 @@ export function AcordoNovoInline({
     const v = parseCurrencyInput(valorStr);
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
+    if (!isPaguePlay && !nrCliente.trim())  return 'NR é obrigatório';
     return null;
   }
 
@@ -264,7 +265,7 @@ export function AcordoNovoInline({
         data_cadastro:   new Date().toISOString().split('T')[0],
         acordo_grupo_id: grupoId,
         numero_parcela:  1,
-        ...(isPaguePlay && isExtra ? { tipo_vinculo: 'extra' } : {}),
+        ...(isExtra ? { tipo_vinculo: 'extra' } : {}),
         tag_ids: tagIds.length > 0 ? tagIds : null,
       };
 
