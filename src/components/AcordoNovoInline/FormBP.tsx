@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Save, User, X } from 'lucide-react';
+import { FileText, Hash, Save, User, X, Info } from 'lucide-react';
 import { INSTITUICOES_OPTIONS } from '@/lib/index';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -60,34 +60,12 @@ export function FormBP({ state }: { state: SharedFormState }) {
                   <Input value={valorStr} onChange={(e) => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
               </div>
-            </div>
-
-            <div>
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-                <User className="w-3 h-3" /> Dados do Cliente
-                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Nome do Cliente</Label>
-                  <Input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} placeholder="Nome completo" className="h-8 text-xs" />
+              {temParcelas && (
+                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-md px-2.5 py-1.5">
+                  <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>Preencha o <strong>Valor</strong> com o valor de <strong>cada parcela</strong>, não o valor total do acordo.</span>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">WhatsApp</Label>
-                  <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Instituição</Label>
-                  <Select value={instituicao} onValueChange={setInstituicao}>
-                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
-                    <SelectContent>
-                      {INSTITUICOES_OPTIONS.map((inst) => (
-                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              )}
             </div>
 
             <div>
@@ -123,6 +101,34 @@ export function FormBP({ state }: { state: SharedFormState }) {
                     <SelectContent>
                       {STATUS_OPTIONS.map((s) => (
                         <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                <User className="w-3 h-3" /> Dados do Cliente
+                <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Nome do Cliente</Label>
+                  <Input value={nomeCliente} onChange={(e) => setNomeCliente(e.target.value)} placeholder="Nome completo" className="h-8 text-xs" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">WhatsApp</Label>
+                  <Input value={whatsapp} onChange={(e) => setWhatsapp(e.target.value)} placeholder="(11) 99999-9999" className="h-8 text-xs font-mono" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Instituição</Label>
+                  <Select value={instituicao} onValueChange={setInstituicao}>
+                    <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                    <SelectContent>
+                      {INSTITUICOES_OPTIONS.map((inst) => (
+                        <SelectItem key={inst} value={inst}>{inst}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
