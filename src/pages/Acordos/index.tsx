@@ -79,7 +79,7 @@ export default function Acordos() {
     : null;
   const isVisaoIndividual  = visaoFiltroAcordos === 'individual';
   const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
-    (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'analitico',
+    (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
 
   const { isAtivoParaUsuario } = useDiretoExtraConfig();

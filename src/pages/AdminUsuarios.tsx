@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2 } from 'lucide-react';
@@ -148,7 +148,10 @@ export default function AdminUsuarios() {
     setSetores(setoresData);
     setEmpresas(emps);
     if (setoresData.length > 0 && !form.setor_id) {
-      setForm(f => ({ ...f, setor_id: setoresData[0].id }));
+      setForm(f => ({
+        ...f,
+        setor_id: setoresData.find(s => s.empresa_id === (f.empresa_id || empresaAtual?.id))?.id ?? setoresData[0].id,
+      }));
     }
     setLoading(false);
   }
@@ -163,7 +166,7 @@ export default function AdminUsuarios() {
       usuario: '',
       senha: '',
       perfil: 'operador',
-      setor_id: setores[0]?.id ?? '',
+      setor_id: setores.find(s => s.empresa_id === (empresaAtual?.id ?? ''))?.id ?? '',
       empresa_id: empresaAtual?.id ?? '',
     });
     setDialogOpen(true);
@@ -353,6 +356,14 @@ export default function AdminUsuarios() {
       setExcluindoUsuario(false);
     }
   }
+
+  // Setores disponíveis no formulário: só os da empresa selecionada (evita
+  // vincular um usuário a um setor de outra empresa). Super Admin pode trocar
+  // a empresa e a lista de setores acompanha.
+  const setoresDoForm = useMemo(
+    () => (form.empresa_id ? setores.filter(s => s.empresa_id === form.empresa_id) : setores),
+    [setores, form.empresa_id],
+  );
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
@@ -703,7 +714,9 @@ export default function AdminUsuarios() {
               <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
                 <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
                 <SelectContent>
-                  {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                  {setoresDoForm.length === 0
+                    ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
+                    : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
               {editando && form.setor_id !== (editando.setor_id ?? '') && (
@@ -716,7 +729,7 @@ export default function AdminUsuarios() {
              <div className="space-y-1.5">
                <Label className="text-xs">Empresa</Label>
                {isSuperAdmin ? (
-                 <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v }))}>
+                 <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v, setor_id: setores.find(s => s.empresa_id === v)?.id ?? '' }))}>
                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
                    <SelectContent>
                      {empresas.map(e => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
