@@ -18,7 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Switch } from '@/components/ui/switch';
-import { supabase, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
+import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib/index';
@@ -218,7 +218,11 @@ export default function AdminUsuarios() {
         const resolvedEmail = form.email.trim().toLowerCase().includes('@')
           ? form.email.trim().toLowerCase()
           : `${(form.usuario.trim() || form.email.trim()).toLowerCase()}@interno.sistema`;
-        const { data: signUpData, error } = await supabase.auth.signUp({
+        // Usa um client isolado (sem persistência de sessão): mesmo que o
+        // Supabase crie sessão automática ao cadastrar, ela fica nesse client
+        // descartável e NÃO substitui/derruba a sessão do admin logado.
+        const signupClient = createIsolatedAuthClient();
+        const { data: signUpData, error } = await signupClient.auth.signUp({
           email: resolvedEmail,
           password: form.senha,
           options: {
@@ -233,22 +237,17 @@ export default function AdminUsuarios() {
             }
           }
         });
+        // Descarta a sessão em memória do client isolado (defensivo).
+        await signupClient.auth.signOut().catch(() => {});
         if (error) {
           if (error.message.toLowerCase().includes('database error')) {
             throw new Error('Erro interno ao criar conta. Tente novamente em alguns instantes ou entre em contato com o suporte.');
           }
           throw error;
         }
-        // FIX: Se o Supabase criou uma sessão automática (email confirmation desabilitado),
-        // fazer signOut imediatamente para não substituir a sessão do admin logado.
-        if (signUpData?.session) {
-          await supabase.auth.signOut();
-          toast.success('Usuário criado com sucesso!');
-          setDialogOpen(false);
-          fetchDados();
-          return;
-        }
-        toast.success('Usuário criado! Ele receberá um e-mail de confirmação.');
+        toast.success(signUpData?.session
+          ? 'Usuário criado com sucesso!'
+          : 'Usuário criado! Ele receberá um e-mail de confirmação.');
       }
       setDialogOpen(false);
       fetchDados();

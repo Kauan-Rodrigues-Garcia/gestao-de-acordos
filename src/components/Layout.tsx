@@ -27,7 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
-  BarChart3, Building2, Upload, Target,
+  BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -69,7 +69,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
-  { label: 'Setores',          icon: Building2,       to: ROUTE_PATHS.ADMIN_SETORES,       roles: ['administrador'] },
   { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas' },
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
   { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
@@ -236,7 +235,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">
               <p className="font-bold text-sm text-sidebar-foreground leading-none">{branding.appName}</p>
-              <p className="text-xs text-sidebar-foreground/50 mt-0.5">{empresa?.nome ?? branding.shortName}</p>
             </motion.div>
           )}
         </AnimatePresence>

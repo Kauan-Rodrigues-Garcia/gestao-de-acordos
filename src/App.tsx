@@ -37,7 +37,6 @@ const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
 const PainelLider       = lazy(() => import('@/pages/PainelLider'));
 const AdminUsuarios     = lazy(() => import('@/pages/AdminUsuarios'));
-const AdminSetores      = lazy(() => import('@/pages/AdminSetores'));
 const AdminConfiguracoes= lazy(() => import('@/pages/AdminConfiguracoes'));
 const MetasConfig       = lazy(() => import('@/pages/MetasConfig'));
 const ImportarExcel     = lazy(() => import('@/pages/ImportarExcel'));
@@ -179,14 +178,8 @@ export default function App() {
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
-              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={
-                <LayoutWrapper>
-                  {/* Setores é admin-only por design — sem permissão configurável */}
-                  <ProtectedRoute allowedProfiles={['administrador']}>
-                    <AdminSetores />
-                  </ProtectedRoute>
-                </LayoutWrapper>
-              } />
+              {/* /admin/setores agora é aba dentro de /admin/usuarios */}
+              <Route path={ROUTE_PATHS.ADMIN_SETORES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=setores'} replace />} />
               {/* /admin/equipes agora é aba dentro de /admin/usuarios */}
               <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={

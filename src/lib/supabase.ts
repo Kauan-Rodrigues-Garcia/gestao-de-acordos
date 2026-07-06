@@ -22,6 +22,21 @@ function getSupabase(): SupabaseClient<Database> {
 
 export const supabase = getSupabase();
 
+/**
+ * Cria um client isolado (sem persistência de sessão) para operações de
+ * signUp administrativo. Criar um novo usuário com este client NÃO substitui
+ * nem derruba a sessão do admin logado no client principal.
+ */
+export function createIsolatedAuthClient(): SupabaseClient<Database> {
+  return createClient<Database>(supabaseUrl, supabaseAnonKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  });
+}
+
 // Aliases de conveniência para operações de banco puras (sem campos de join)
 export type AcordoRow    = Database['public']['Tables']['acordos']['Row'];
 export type AcordoInsert = Database['public']['Tables']['acordos']['Insert'];
