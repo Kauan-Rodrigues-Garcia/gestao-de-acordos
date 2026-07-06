@@ -54,6 +54,7 @@ const STEPS_PP: TourStep[] = [
   WELCOME,
   {
     target: '[data-tour="metricas"]', placement: 'bottom', Icon: BarChart3, route: '/',
+    spotMaxH: 210,
     title: 'Métricas do dia',
     body:  'Resumo em tempo real: acordos de hoje, pagos, pendentes e vencidos — com os valores previstos e já recebidos.',
   },
@@ -81,6 +82,7 @@ const STEPS_BOOKPLAY: TourStep[] = [
   WELCOME,
   {
     target: '[data-tour="metricas"]', placement: 'bottom', Icon: BarChart3, route: '/',
+    spotMaxH: 210,
     title: 'Métricas do dia',
     body:  'Resumo em tempo real: acordos de hoje, pagos, pendentes e vencidos — com os valores previstos e já recebidos.',
   },
@@ -205,10 +207,12 @@ function computeTooltipStyle(
   const cx = spot.x + spot.w / 2;
 
   if (step.placement === 'bottom') {
-    return { ...base, top: spot.y + spot.h + GAP, left: clamp(cx - TW / 2, 16, vw - TW - 16) };
+    // Clampa o topo para o card caber inteiro na viewport — se o elemento
+    // destacado for muito alto, o tooltip (e o botão Próximo) não some embaixo.
+    return { ...base, top: clamp(spot.y + spot.h + GAP, 16, Math.max(16, vh - CARD_H - 16)), left: clamp(cx - TW / 2, 16, vw - TW - 16) };
   }
   if (step.placement === 'top') {
-    return { ...base, bottom: vh - spot.y + GAP, left: clamp(cx - TW / 2, 16, vw - TW - 16) };
+    return { ...base, bottom: clamp(vh - spot.y + GAP, 16, Math.max(16, vh - CARD_H - 16)), left: clamp(cx - TW / 2, 16, vw - TW - 16) };
   }
   if (step.placement === 'left') {
     return { ...base, top: clamp(spot.y + spot.h / 2 - 110, 16, vh - 260), left: clamp(spot.x - TW - GAP, 16, vw - TW - 16) };
