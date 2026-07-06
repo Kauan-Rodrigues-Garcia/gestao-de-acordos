@@ -333,19 +333,21 @@ export default function AdminUsuarios() {
     }
     setExcluindoUsuario(true);
     try {
-      // Tenta Edge Function primeiro (remove também do auth.users)
-      const ef = await supabase.functions.invoke('admin-delete-user', {
-        body: { p_user_id: editando.id },
+      // Estratégia principal: RPC fn_admin_delete_user, que apaga o registro em
+      // auth.users (a FK perfis.id -> auth.users ON DELETE CASCADE remove o
+      // perfil junto). Isso evita deixar o auth.user órfão, que fazia o signUp
+      // acusar "usuário já existe" ao recriar (ex.: troca de empresa).
+      const { error: rpcErro } = await supabase.rpc('fn_admin_delete_user', {
+        p_user_id: editando.id,
       });
-      const efErro = ef.error || (ef.data as { error?: string } | null)?.error;
-      if (efErro) {
-        // Fallback: deleta apenas o perfil
+      if (rpcErro) {
+        // Fallback: deleta apenas o perfil (auth.user pode ficar órfão)
         const { error } = await supabase.from('perfis').delete().eq('id', editando.id);
         if (error) {
           toast.error(`Erro ao excluir usuário: ${error.message}`);
           return;
         }
-        toast.success(`Perfil de ${editando.nome} removido. (auth.user pode permanecer órfão — rode admin-delete-user no Supabase)`);
+        toast.success(`Perfil de ${editando.nome} removido. (auth.user pode permanecer órfão — aplique a migração fn_admin_delete_user no Supabase)`);
       } else {
         toast.success(`Usuário ${editando.nome} excluído com sucesso!`);
       }

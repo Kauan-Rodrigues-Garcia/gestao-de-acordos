@@ -911,6 +911,10 @@ export type Database = {
         Args: { p_empresa_slug?: string; p_usuario: string }
         Returns: string
       }
+      fn_admin_delete_user: {
+        Args: { p_user_id: string }
+        Returns: undefined
+      }
       fn_can_access_empresa: {
         Args: { target_empresa_id: string }
         Returns: boolean
