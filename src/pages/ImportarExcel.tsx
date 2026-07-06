@@ -45,169 +45,26 @@ import {
 import { processarImportacaoEmLote } from '@/services/importar_excel_batch.service';
 import { autenticarLider, type AutorizadorInfo } from '@/services/autorizacao_lider.service';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import {
+  parsearPlanilha,
+  classificarLinha,
+  validarColunasObrigatorias,
+  type RegistroImportado,
+  type ModoParse,
+} from '@/lib/importar_excel_parser';
 
-// ─── Normalizers ──────────────────────────────────────────────────────────────
-
-function normUF(v: unknown): string | null {
-  const s = String(v ?? '').trim().toUpperCase();
-  return /^[A-Z]{2}$/.test(s) ? s : null;
-}
-
-function normTipo(v: unknown): string {
-  const s = String(v ?? '').toLowerCase().trim();
-  if (s.includes('recorr')) return 'cartao_recorrente';
-  if (s.includes('auto'))  return 'pix_automatico';
-  if (s.includes('pix'))   return 'pix';
-  if (s.includes('cart'))  return 'cartao';
-  return 'boleto';
-}
-
-function normParcelas(v: unknown): number {
-  if (typeof v === 'number' && Number.isFinite(v)) return Math.max(1, Math.round(v));
-  const m = String(v ?? '').match(/(\d+)/);
-  const n = m ? parseInt(m[1], 10) : 1;
-  return n >= 1 ? n : 1;
-}
-
-function normValor(v: unknown): number | null {
-  if (typeof v === 'number') return v > 0 ? v : null;
-  const s = String(v ?? '').replace(/[^\d,.-]/g, '');
-  if (!s) return null;
-  const clean = s.includes(',') && s.includes('.')
-    ? s.replace(/\./g, '').replace(',', '.')
-    : s.replace(',', '.');
-  const n = parseFloat(clean);
-  return isNaN(n) || n <= 0 ? null : n;
-}
-
-function normData(v: unknown): string | null {
-  if (!v || v === '') return null;
-  if (typeof v === 'number' && v > 36526 && v < 47848) {
-    const dt = new Date(Math.round((v - 25569) * 86400 * 1000));
-    if (!isNaN(dt.getTime())) return dt.toISOString().split('T')[0];
-  }
-  const s = String(v).trim();
-  const m1 = s.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/);
-  if (m1) {
-    const year = m1[3].length === 2 ? `20${m1[3]}` : m1[3];
-    const iso  = `${year}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`;
-    if (!isNaN(new Date(iso).getTime())) return iso;
-  }
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  return null;
-}
-
-function normStatus(v: unknown): string {
-  const s = String(v ?? '').toLowerCase().trim();
-  if (s.includes('pago') || s.includes('quitado') || s.includes('liquidado')) return 'pago';
-  if (s.includes('não pago') || s.includes('nao pago') || s.includes('cancelado') || s.includes('inadimplente')) return 'nao_pago';
-  return 'verificar_pendente';
-}
-
-function normWhatsapp(v: unknown): string | null {
-  if (!v) return null;
-  const raw    = typeof v === 'number' ? String(Math.round(v)) : String(v);
-  const digits = raw.replace(/\D/g, '');
-  return digits.length >= 10 && digits.length <= 13 ? digits : null;
-}
+// Re-exporta o motor adaptativo — a suíte de testes importa estas funções
+// diretamente de `@/pages/ImportarExcel`. (A lógica pura vive em
+// `@/lib/importar_excel_parser`; isto é apenas uma ponte para os testes.)
+// eslint-disable-next-line react-refresh/only-export-components
+export { parsearPlanilha, classificarLinha };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-interface RegistroImportado {
-  linha:           number;
-  /** PaguePLAY: código/inscrição. Bookplay: campo livre (não usado como PK). */
-  instituicao:     string;
-  /** Bookplay: NR do cliente (chave única). PaguePLAY: '' */
-  nr_cliente:      string;
-  estado_uf:       string | null;
-  tipo:            string;
-  parcelas:        number;
-  /** PaguePLAY: valor total do acordo. Bookplay: null. */
-  valor_total:     number | null;
-  /** Valor da parcela (único campo de valor para Bookplay). */
-  valor_parcela:   number | null;
-  vencimento:      string | null;
-  status:          string;
-  nome_cliente:    string;
-  whatsapp:        string | null;
-  observacoes_raw: string | null;
-  valido:          boolean;
-  erros:           string[];
-}
 
 type Etapa      = 'upload' | 'preview' | 'resultado';
 type AbaPreview = 'novos' | 'extra' | 'bloqueados';
 
 interface ResultadoImportacao { ok: number; erros: number; msgs: string[] }
-
-// ─── Parsers (colunas fixas) ──────────────────────────────────────────────────
-
-/** PaguePLAY: A=Código B=UF C=Tipo D=Parc E=ValorTotal F=Vencto G=Status H=Nome I=WhatsApp */
-function parsearPlanilha(rawRows: unknown[][]): RegistroImportado[] {
-  const result: RegistroImportado[] = [];
-  for (let i = 2; i < rawRows.length; i++) {
-    const row = rawRows[i];
-    if (!row.some(c => c !== null && c !== undefined && String(c).trim() !== '')) continue;
-
-    const instituicao  = String(row[0] ?? '').trim();
-    const estado_uf    = normUF(row[1]);
-    const tipo         = normTipo(row[2]);
-    const parcelas     = normParcelas(row[3]);
-    const valor_total  = normValor(row[4]);
-    const vencimento   = normData(row[5]);
-    const status       = normStatus(row[6]);
-    const nome_cliente = String(row[7] ?? '').trim();
-    const whatsapp     = normWhatsapp(row[8]);
-
-    const erros: string[] = [];
-    if (!instituicao)         erros.push('Código ausente');
-    if (valor_total === null) erros.push('Valor inválido');
-    if (!vencimento)          erros.push('Vencimento inválido');
-
-    const valor_parcela = valor_total !== null && parcelas > 0
-      ? parseFloat((valor_total / parcelas).toFixed(2))
-      : null;
-
-    result.push({
-      linha: i + 1, nr_cliente: '', instituicao, estado_uf, tipo, parcelas,
-      valor_total, valor_parcela, vencimento, status, nome_cliente, whatsapp,
-      observacoes_raw: null, valido: erros.length === 0, erros,
-    });
-  }
-  return result;
-}
-
-/** Bookplay: A=NR B=Nome C=WhatsApp D=Instituição E=Tipo F=Parc G=Valor H=Vencto I=Status J=Obs */
-function parsearPlanilhaBP(rawRows: unknown[][]): RegistroImportado[] {
-  const result: RegistroImportado[] = [];
-  for (let i = 2; i < rawRows.length; i++) {
-    const row = rawRows[i];
-    if (!row.some(c => c !== null && c !== undefined && String(c).trim() !== '')) continue;
-
-    const nr_cliente   = String(row[0] ?? '').trim();
-    const nome_cliente = String(row[1] ?? '').trim();
-    const whatsapp     = normWhatsapp(row[2]);
-    const instituicao  = String(row[3] ?? '').trim();
-    const tipo         = normTipo(row[4]);
-    const parcelas     = normParcelas(row[5]);
-    const valor_parcela = normValor(row[6]);
-    const vencimento   = normData(row[7]);
-    const status       = normStatus(row[8]);
-    const observacoes_raw = String(row[9] ?? '').trim() || null;
-
-    const erros: string[] = [];
-    if (!nr_cliente)              erros.push('NR ausente');
-    if (valor_parcela === null)   erros.push('Valor inválido');
-    if (!vencimento)              erros.push('Vencimento inválido');
-
-    result.push({
-      linha: i + 1, nr_cliente, instituicao, estado_uf: null, tipo, parcelas,
-      valor_total: null, valor_parcela, vencimento, status, nome_cliente, whatsapp,
-      observacoes_raw, valido: erros.length === 0, erros,
-    });
-  }
-  return result;
-}
 
 // ─── Template download ────────────────────────────────────────────────────────
 
@@ -290,6 +147,7 @@ export default function ImportarExcel() {
   const [resultado,  setResultado]  = useState<ResultadoImportacao | null>(null);
   const [importando, setImportando] = useState(false);
   const [abaAtiva,   setAbaAtiva]   = useState<AbaPreview>('novos');
+  const [modoParse,  setModoParse]  = useState<ModoParse>('tabela');
 
   // Classificação
   const [classificacao,     setClassificacao]     = useState<ClassificacaoNR[]>([]);
@@ -319,7 +177,7 @@ export default function ImportarExcel() {
   const regExtra      = classifLoaded ? validos.filter(r => classifMap.get(r.linha)?.categoria === 'extra') : [];
   const regBloqueados = classifLoaded ? validos.filter(r => classifMap.get(r.linha)?.categoria === 'duplicado') : [];
 
-  const valorTotal = validos.reduce((s, r) => s + (r.valor_total ?? 0), 0);
+  const valorTotal = validos.reduce((s, r) => s + (r.valor ?? 0), 0);
 
   // ── Classification loader ──────────────────────────────────────────────────
   async function carregarClassificacao(regs: RegistroImportado[]) {
@@ -368,22 +226,37 @@ export default function ImportarExcel() {
         const wb      = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
         const ws      = wb.Sheets[wb.SheetNames[0]];
         const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][];
-        const regs    = isPaguePlay ? parsearPlanilha(rawRows) : parsearPlanilhaBP(rawRows);
+
+        // Parsing adaptativo: reconhece as colunas pelo cabeçalho, em qualquer ordem.
+        const { registros: regs, modo, mapa } = parsearPlanilha(rawRows);
+
+        // Bloqueia e avisa quando faltam colunas obrigatórias (por tenant/modo).
+        const { ok, faltando } = validarColunasObrigatorias(mapa, isPaguePlay, modo);
+        if (!ok) {
+          toast.error(
+            `Não foi possível identificar as colunas obrigatórias: ${faltando.join(', ')}. ` +
+            `Verifique o cabeçalho da planilha (a ordem das colunas é livre, mas todas precisam existir).`,
+          );
+          return;
+        }
+
         if (regs.length === 0) {
-          toast.warning('Nenhuma linha encontrada. Certifique-se de usar o modelo correto (dados a partir da linha 3).');
+          toast.warning('Nenhuma linha de dados reconhecida. Confira se há um cabeçalho e ao menos uma linha preenchida.');
           return;
         }
         setArquivo(file);
         setRegistros(regs);
+        setModoParse(modo);
         setClassificacao([]);
         setLinhasAutorizadas(new Set());
         setAutorizador(null);
         setAbaAtiva('novos');
         setEtapa('preview');
-        toast.success(`${regs.length} linha(s) lida(s) — ${regs.filter(r => r.valido).length} válida(s)`);
+        const sufixoModo = modo === 'blocos' ? ' (blocos por data)' : '';
+        toast.success(`${regs.length} linha(s) lida(s)${sufixoModo} — ${regs.filter(r => r.valido).length} válida(s)`);
         void carregarClassificacao(regs);
       } catch {
-        toast.error(`Erro ao ler o arquivo. Use o modelo padrão ${isPaguePlay ? 'PaguePLAY' : 'Bookplay'}.`);
+        toast.error('Erro ao ler o arquivo. Envie uma planilha .xlsx/.xls com uma linha de cabeçalho.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -430,14 +303,19 @@ export default function ImportarExcel() {
       let nr: string;
 
       if (isPaguePlay) {
+        // PaguePLAY: a coluna "Valor" representa o TOTAL do acordo; a parcela é derivada.
+        const valorTotalPP  = r.valor;
+        const valorParcelaPP = valorTotalPP !== null && r.parcelas > 0
+          ? parseFloat((valorTotalPP / r.parcelas).toFixed(2))
+          : 0;
         const obs = r.estado_uf ? buildObservacoesComEstado('', r.estado_uf) : null;
         registro = {
           nome_cliente:  r.nome_cliente,
           nr_cliente:    '',
           instituicao:   r.instituicao,
           vencimento:    r.vencimento ?? hoje,
-          valor:         r.valor_parcela ?? 0,
-          valor_total:   r.valor_total,
+          valor:         valorParcelaPP,
+          valor_total:   valorTotalPP,
           whatsapp:      r.whatsapp ?? null,
           status:        r.status,
           tipo:          r.tipo,
@@ -450,12 +328,13 @@ export default function ImportarExcel() {
         };
         nr = r.instituicao;
       } else {
+        // Bookplay: a coluna "Valor" já é o valor da parcela.
         registro = {
           nome_cliente:  r.nome_cliente,
           nr_cliente:    r.nr_cliente,
           instituicao:   r.instituicao || null,
           vencimento:    r.vencimento ?? hoje,
-          valor:         r.valor_parcela ?? 0,
+          valor:         r.valor ?? 0,
           whatsapp:      r.whatsapp ?? null,
           status:        r.status,
           tipo:          r.tipo,
@@ -527,7 +406,7 @@ export default function ImportarExcel() {
             <FileSpreadsheet className="w-5 h-5 text-primary" /> Importar via Planilha
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isPaguePlay ? 'PaguePLAY' : 'Bookplay'} — modelo fixo de colunas
+            {isPaguePlay ? 'PaguePLAY — planilha padrão' : 'Bookplay — detecção automática de colunas'}
           </p>
         </div>
         {etapa === 'upload' && (
@@ -586,7 +465,9 @@ export default function ImportarExcel() {
             </CardHeader>
             <CardContent>
               <p className="text-xs text-muted-foreground mb-3">
-                Use o modelo padrão {isPaguePlay ? 'PaguePLAY' : 'Bookplay'}. Clique em "Baixar modelo" para obter um arquivo de exemplo pronto para preencher.
+                {isPaguePlay
+                  ? 'Use o modelo padrão PaguePLAY. Clique em "Baixar modelo" para obter um arquivo de exemplo pronto para preencher.'
+                  : 'A ordem das colunas é livre — o sistema reconhece cada campo pelo nome do cabeçalho. A planilha só precisa conter as colunas abaixo (o Status é opcional). Clique em "Baixar modelo" para um exemplo pronto.'}
               </p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs border border-border rounded-lg overflow-hidden">
@@ -630,7 +511,9 @@ export default function ImportarExcel() {
                 </table>
               </div>
               <p className="text-[11px] text-muted-foreground mt-2">
-                * Linha 1: título da seção (ignorada). Linha 2: nomes das colunas (ignorada). Dados a partir da linha 3.
+                {isPaguePlay
+                  ? '* Linha 1: título da seção (ignorada). Linha 2: nomes das colunas. Dados nas linhas seguintes.'
+                  : '* Colunas obrigatórias. A coluna "Col." abaixo é só um exemplo — a ordem pode ser qualquer uma e o cabeçalho pode estar em qualquer linha inicial. Nomes alternativos são reconhecidos (ex.: "Celular" = WhatsApp, "Contrato/Código" = NR). Também aceita planilhas divididas em blocos por data.'}
               </p>
             </CardContent>
           </Card>
@@ -726,10 +609,10 @@ export default function ImportarExcel() {
             </div>
 
             {abaAtiva === 'novos' && (
-              <TabelaSimples registros={regNovos} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} />
+              <TabelaSimples registros={regNovos} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} modo={modoParse} />
             )}
             {abaAtiva === 'extra' && (
-              <TabelaSimples registros={regExtra} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} />
+              <TabelaSimples registros={regExtra} classifMap={classifMap} linhasAutorizadas={linhasAutorizadas} isPP={isPaguePlay} modo={modoParse} />
             )}
             {abaAtiva === 'bloqueados' && (
               <TabelaBloqueados
@@ -863,11 +746,13 @@ function TabelaSimples({
   classifMap,
   linhasAutorizadas,
   isPP,
+  modo,
 }: {
   registros: RegistroImportado[];
   classifMap: Map<number, ClassificacaoNR>;
   linhasAutorizadas: Set<number>;
   isPP: boolean;
+  modo: ModoParse;
 }) {
   void classifMap; void linhasAutorizadas;
 
@@ -875,9 +760,14 @@ function TabelaSimples({
     return <p className="p-6 text-center text-sm text-muted-foreground">Nenhum registro nesta categoria.</p>;
   }
 
-  const headers = isPP
-    ? ['Linha', 'Código', 'UF', 'Tipo', 'Parc.', 'Valor Total', 'Valor/Parc.', 'Vencimento', 'Status', 'Nome', 'WhatsApp']
-    : ['Linha', 'NR', 'Nome', 'Tipo', 'Parc.', 'Valor/Parc.', 'Vencimento', 'Status', 'Instituição', 'WhatsApp'];
+  const emBlocos = modo === 'blocos';
+  const headers = [
+    'Linha',
+    ...(emBlocos ? ['Bloco'] : []),
+    ...(isPP
+      ? ['Código', 'UF', 'Tipo', 'Parc.', 'Valor Total', 'Valor/Parc.', 'Vencimento', 'Status', 'Nome', 'WhatsApp']
+      : ['NR', 'Nome', 'Tipo', 'Parc.', 'Valor/Parc.', 'Vencimento', 'Status', 'Instituição', 'WhatsApp']),
+  ];
 
   return (
     <div className="overflow-x-auto max-h-[380px] overflow-y-auto">
@@ -890,9 +780,16 @@ function TabelaSimples({
           </tr>
         </thead>
         <tbody>
-          {registros.map(r => (
+          {registros.map(r => {
+            const valorParcela = isPP
+              ? (r.valor !== null && r.parcelas > 0 ? r.valor / r.parcelas : null)
+              : r.valor;
+            return (
             <tr key={r.linha} className="border-b border-border/50 hover:bg-muted/20">
               <td className="px-2 py-1.5 text-muted-foreground">{r.linha}</td>
+              {emBlocos && (
+                <td className="px-2 py-1.5 text-center text-muted-foreground">{r.bloco ?? '—'}</td>
+              )}
               <td className="px-2 py-1.5 font-mono font-medium text-primary">
                 {isPP ? (r.instituicao || '—') : (r.nr_cliente || '—')}
               </td>
@@ -904,10 +801,10 @@ function TabelaSimples({
               <td className="px-2 py-1.5 text-muted-foreground">{formatTipo(r.tipo)}</td>
               <td className="px-2 py-1.5 text-center">{r.parcelas}x</td>
               {isPP && (
-                <td className="px-2 py-1.5 text-right font-mono">{r.valor_total !== null ? formatCurrency(r.valor_total) : '—'}</td>
+                <td className="px-2 py-1.5 text-right font-mono">{r.valor !== null ? formatCurrency(r.valor) : '—'}</td>
               )}
               <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">
-                {r.valor_parcela !== null ? formatCurrency(r.valor_parcela) : '—'}
+                {valorParcela !== null ? formatCurrency(valorParcela) : '—'}
               </td>
               <td className="px-2 py-1.5 font-mono">{r.vencimento ? formatDate(r.vencimento) : '—'}</td>
               <td className="px-2 py-1.5">
@@ -920,7 +817,8 @@ function TabelaSimples({
               )}
               <td className="px-2 py-1.5 font-mono text-[10px] text-muted-foreground">{r.whatsapp || '—'}</td>
             </tr>
-          ))}
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -1015,7 +913,7 @@ function TabelaBloqueados({
                   <td className="px-2 py-1.5 font-mono font-medium text-primary">{r.instituicao || '—'}</td>
                   <td className="px-2 py-1.5 text-center text-muted-foreground">{r.estado_uf || '—'}</td>
                   <td className="px-2 py-1.5 text-muted-foreground">{classif?.donoAtual?.operadorNome ?? '—'}</td>
-                  <td className="px-2 py-1.5 text-right font-mono">{r.valor_total !== null ? formatCurrency(r.valor_total) : '—'}</td>
+                  <td className="px-2 py-1.5 text-right font-mono">{r.valor !== null ? formatCurrency(r.valor) : '—'}</td>
                   <td className="px-2 py-1.5 font-mono">{r.vencimento ? formatDate(r.vencimento) : '—'}</td>
                   <td className="px-2 py-1.5 max-w-[110px] truncate">{r.nome_cliente || '—'}</td>
                   <td className="px-2 py-1.5">
