@@ -36,6 +36,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -143,8 +144,13 @@ function DropZone({ equipeId, onDrop, children, className = '' }: DropZoneProps)
 export default function AdminEquipes() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
 
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+  // Permissão configurável para criar/editar/excluir equipes e membros.
+  // Admin/super_admin sempre têm (temPermissao retorna true). Padrão = true
+  // (espelha o acesso atual); desligar na tela de Cargos passa a restringir.
+  const podeEditarEquipes = temPermissao('editar_equipes');
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [equipes, setEquipes] = useState<Equipe[]>([]);
@@ -246,7 +252,7 @@ export default function AdminEquipes() {
   const operadoresDaEquipe = (equipeId: string) =>
     operadores.filter(o => o.equipe_id === equipeId);
 
-  const podeGerenciarSetorSelecionado = isAdmin || setorSelecionado === perfil?.setor_id;
+  const podeGerenciarSetorSelecionado = podeEditarEquipes && (isAdmin || setorSelecionado === perfil?.setor_id);
 
   // Stats do setor selecionado
   const totalMembros = membrosDoSetor.length;
@@ -642,7 +648,7 @@ export default function AdminEquipes() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                   {equipesDoSetor.map((equipe, idx) => {
                     const membros = operadoresDaEquipe(equipe.id);
-                    const podeGerenciarEquipe = isAdmin || equipe.setor_id === perfil?.setor_id;
+                    const podeGerenciarEquipe = podeEditarEquipes && (isAdmin || equipe.setor_id === perfil?.setor_id);
                     return (
                       <motion.div
                         key={equipe.id}

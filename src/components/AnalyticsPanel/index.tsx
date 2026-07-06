@@ -115,7 +115,10 @@ export function AnalyticsPanel({
   }, [operadorFiltroExterno]);
 
   const isAdmin = temPermissao('ver_analiticos_global');
-  const isLider = temPermissao('ver_painel_lider');
+  // Visão de líder (métricas/KPIs do setor) exige ver_painel_lider E
+  // ver_analiticos_setor. Padrão = true (espelha o acesso atual); desligar
+  // ver_analiticos_setor reduz o usuário à visão individual.
+  const isLider = temPermissao('ver_painel_lider') && temPermissao('ver_analiticos_setor');
 
   const { mes, ano } = useMemo(() => {
     const d = new Date();

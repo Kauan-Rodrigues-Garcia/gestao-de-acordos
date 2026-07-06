@@ -289,7 +289,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
         )}
 
-        {/* Importar Excel */}
+        {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
+        {!permLoading && temPermissao('importar_excel') && (
         <NavLink
           to="/acordos/importar"
           onClick={() => setMobileOpen(false)}
@@ -309,6 +310,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             )}
           </AnimatePresence>
         </NavLink>
+        )}
       </nav>
 
       <Separator className="bg-sidebar-border" />

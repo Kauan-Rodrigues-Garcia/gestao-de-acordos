@@ -127,6 +127,9 @@ export default function PainelLider() {
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const verTodosSetores = temPermissao('ver_todos_setores');
+  // Drill-down com dados detalhados de cada operador (padrão true; desligar
+  // a permissão ver_operadores esconde a expansão da linha do operador).
+  const podeVerOperadores = temPermissao('ver_operadores');
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   const isPP = useTenant().isPaguePlay;
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
@@ -414,9 +417,10 @@ export default function PainelLider() {
                     return (
                       <Fragment key={m.perfil.id}>
                         <tr
-                          onClick={() => setOpSelId(sel ? null : m.perfil.id)}
+                          onClick={() => { if (podeVerOperadores) setOpSelId(sel ? null : m.perfil.id); }}
                           className={cn(
-                            'border-b border-border/50 cursor-pointer transition-colors',
+                            'border-b border-border/50 transition-colors',
+                            podeVerOperadores && 'cursor-pointer',
                             sel ? 'bg-primary/5' : 'hover:bg-muted/20',
                             m.naoPagos > 0 && !sel && 'bg-destructive/[0.03]',
                           )}>
@@ -450,7 +454,9 @@ export default function PainelLider() {
                           </td>
                           <td className="px-3 py-2.5"><BarraConversao perc={m.conversao} /></td>
                           <td className="px-2 py-2.5 text-right">
-                            <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', sel && 'rotate-180 text-primary')} />
+                            {podeVerOperadores && (
+                              <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', sel && 'rotate-180 text-primary')} />
+                            )}
                           </td>
                         </tr>
                         {sel && (

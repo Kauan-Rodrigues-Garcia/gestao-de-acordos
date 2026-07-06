@@ -26,6 +26,8 @@ export interface AcordosTableBodyProps {
   isPP: boolean;
   colSpanFull: number;
   mostrarColunaOperador: boolean;
+  podeEditar: boolean;
+  podeExcluir: boolean;
   novoInlineAberto: boolean;
   hoje: string;
   highlightedId: string | null;
@@ -51,7 +53,7 @@ export interface AcordosTableBodyProps {
 }
 
 export function AcordosTableBody({
-  acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, novoInlineAberto,
+  acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, podeEditar, podeExcluir, novoInlineAberto,
   hoje, highlightedId, selecionados, editandoInlineId, detalheInlineId,
   atualizandoStatus, excluindoId, operadoresMap, temFiltros,
   selecionarTodos, toggleSelecionado, setNovoInlineAberto,
@@ -297,6 +299,7 @@ export function AcordosTableBody({
                     >
                       <MessageSquare className="w-4 h-4" />
                     </Button>
+                    {podeEditar && (
                     <Button
                       variant="ghost" size="icon"
                       className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
@@ -305,6 +308,9 @@ export function AcordosTableBody({
                     >
                       <Edit className="w-4 h-4" />
                     </Button>
+                    )}
+                    {podeExcluir && (
+                    <>
                     <span className="w-px h-5 bg-border mx-1 shrink-0" />
                     <Button
                       variant="ghost" size="icon"
@@ -315,6 +321,8 @@ export function AcordosTableBody({
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
+                    </>
+                    )}
                   </div>
                 </td>
               </motion.tr>

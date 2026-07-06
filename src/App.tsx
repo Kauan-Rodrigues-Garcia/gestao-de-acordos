@@ -141,19 +141,29 @@ export default function App() {
                 <LayoutWrapper><Acordos /></LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
-                <LayoutWrapper><AcordoForm /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
+                    <AcordoForm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
-                <LayoutWrapper><AcordoForm /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
+                    <AcordoForm />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
                 <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
               } />
 
-              {/* Importar Excel — disponível para todos os usuários */}
+              {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ImportarExcel />
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
+                    <ImportarExcel />
+                  </ProtectedRoute>
                 </LayoutWrapper>
               } />
 

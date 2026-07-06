@@ -513,6 +513,8 @@ export default function Acordos() {
   // para operador (só vê os próprios) a coluna é removida.
   const mostrarColunaOperador = temPermissao('ver_acordos_gerais');
   const colSpanFull = (isPP ? 11 : 10) - (mostrarColunaOperador ? 0 : 1);
+  const podeEditarAcordos = temPermissao('editar_acordos');
+  const podeExcluirAcordos = temPermissao('excluir_acordos');
 
   return (
     <div className="p-6">
@@ -642,6 +644,8 @@ export default function Acordos() {
                     isPP={isPP}
                     colSpanFull={colSpanFull}
                     mostrarColunaOperador={mostrarColunaOperador}
+                    podeEditar={podeEditarAcordos}
+                    podeExcluir={podeExcluirAcordos}
                     novoInlineAberto={novoInlineAberto}
                     hoje={hoje}
                     highlightedId={highlightedId}

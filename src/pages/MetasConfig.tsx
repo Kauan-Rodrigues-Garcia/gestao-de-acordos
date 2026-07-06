@@ -9,6 +9,7 @@ import { Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowL
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
+import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import {
@@ -145,7 +146,11 @@ export default function MetasConfig() {
   const { perfil } = useAuth();
   const liderSetorId = perfil?.setor_id ?? null;
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const isAdmin = perfil?.perfil === "administrador" || perfil?.perfil === "super_admin";
+  // Editar/salvar metas exige a permissão gerenciar_metas (admin sempre tem;
+  // padrão = true, espelhando o acesso atual). Sem ela, a tela fica só leitura.
+  const podeGerenciarMetas = temPermissao("gerenciar_metas");
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
@@ -242,6 +247,7 @@ export default function MetasConfig() {
   // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
   async function handleSalvarTudo() {
     if (!empresa?.id || !setorSelecionado) return;
+    if (!podeGerenciarMetas) { toast.error("Sem permissão para editar metas."); return; }
     setSalvandoTudo(true);
 
     // Montar lista de todos os itens que têm valor preenchido
@@ -346,6 +352,7 @@ export default function MetasConfig() {
               <MetaRow label={setorNome || "Setor"} sublabel="Meta consolidada do setor"
                 icon={<Building2 className="h-4 w-4" />}
                 input={getInput(setorSelecionado)}
+                disabled={!podeGerenciarMetas}
                 onChangeValor={v => setInput(setorSelecionado, { meta_valor: v })} />
             )}
           </SectionCard>
@@ -364,6 +371,7 @@ export default function MetasConfig() {
                   <MetaRow key={eq.id} label={String(eq.nome ?? "")} sublabel="Equipe"
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
+                    disabled={!podeGerenciarMetas}
                     onChangeValor={v => setInput(eq.id, { meta_valor: v })} />
                 ))}
               </div>
@@ -384,6 +392,7 @@ export default function MetasConfig() {
                   <MetaRow key={op.id} label={String(op.nome ?? "")} sublabel="Operador"
                     icon={<User className="h-4 w-4" />}
                     input={getInput(op.id)}
+                    disabled={!podeGerenciarMetas}
                     onChangeValor={v => setInput(op.id, { meta_valor: v })} />
                 ))}
               </div>
@@ -401,7 +410,7 @@ export default function MetasConfig() {
               size="default"
               className="gap-2 min-w-[140px]"
               onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !temMetas}
+              disabled={salvandoTudo || !temMetas || !podeGerenciarMetas}
             >
               {salvandoTudo ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>

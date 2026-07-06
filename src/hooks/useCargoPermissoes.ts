@@ -21,6 +21,31 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 
 export type PermissoesMap = Record<string, boolean>;
 
+/**
+ * Permissões que antes eram "mortas" (nunca consultadas) e passaram a ser
+ * fiscalizadas no código. Para não regredir o acesso de ninguém, quando a
+ * chave estiver AUSENTE no banco (ex.: empresa nova ainda sem seed) o padrão
+ * é `true` — espelhando o acesso amplo que existia. Se o admin salvar a chave
+ * como `false` na tela de Cargos, o valor do banco prevalece e a restrição
+ * passa a valer. As demais permissões continuam com padrão `false` (ausente
+ * = negado), preservando a semântica original.
+ */
+const PERMISSOES_LEGADAS_PADRAO_TRUE = new Set<string>([
+  'ver_acordos_proprios',
+  'editar_acordos',
+  'excluir_acordos',
+  'importar_excel',
+  'ver_analiticos_setor',
+  'gerenciar_metas',
+  'filtrar_por_setor',
+  'filtrar_por_equipe',
+  'ver_equipes',
+  'ver_operadores',
+  'editar_usuarios',
+  'editar_equipes',
+  'ver_logs',
+]);
+
 export interface CargoPermissaoRow {
   id: string;
   empresa_id: string;
@@ -91,7 +116,11 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     (key: string): boolean => {
       // Admin e super_admin têm acesso total
       if (isAdmin) return true;
-      return !!permissoes[key];
+      // Se a chave existe no banco, o valor salvo prevalece (inclusive false).
+      if (key in permissoes) return !!permissoes[key];
+      // Chave ausente: permissões legadas espelham o acesso amplo (true);
+      // as demais permanecem negadas por padrão.
+      return PERMISSOES_LEGADAS_PADRAO_TRUE.has(key);
     },
     [isAdmin, permissoes]
   );

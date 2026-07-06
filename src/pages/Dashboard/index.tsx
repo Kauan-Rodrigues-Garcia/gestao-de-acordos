@@ -616,7 +616,7 @@ export default function Dashboard() {
           )}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {(isLider || isElite) && equipesDoSetor.length > 0 && (
+          {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
             <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
               <div className="flex flex-wrap gap-1">
@@ -659,7 +659,7 @@ export default function Dashboard() {
 
       {/* Analytics + setor filter */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {(isAdmin || (isLiderOuElite && temPermissao('ver_todos_setores'))) && setoresList.length > 0 && (
+        {(isAdmin || (isLiderOuElite && temPermissao('ver_todos_setores'))) && temPermissao('filtrar_por_setor') && setoresList.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
             <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
@@ -775,6 +775,8 @@ export default function Dashboard() {
                         setNovoInlineAbertoTabela={setNovoInlineAbertoTabela}
                         isPP={isPP}
                         visaoAmpla={visaoAmpla}
+                        podeEditar={temPermissao('editar_acordos')}
+                        podeExcluir={temPermissao('excluir_acordos')}
                         addAcordo={addAcordo}
                         patchAcordo={patchAcordo}
                         editandoInlineIdTabela={editandoInlineIdTabela}

@@ -27,6 +27,8 @@ interface PPTableBodyProps {
   setNovoInlineAbertoTabela: (v: boolean) => void;
   isPP: boolean;
   visaoAmpla: boolean;
+  podeEditar: boolean;
+  podeExcluir: boolean;
   addAcordo: (a: Acordo) => void;
   patchAcordo: (id: string, data: Partial<Acordo>) => void;
   editandoInlineIdTabela: string | null;
@@ -53,6 +55,7 @@ export function PPTableBody({
   acordos, acordosOrdenados,
   novoInlineAbertoTabela, setNovoInlineAbertoTabela,
   isPP, visaoAmpla,
+  podeEditar, podeExcluir,
   addAcordo, patchAcordo,
   editandoInlineIdTabela, setEditandoInlineIdTabela,
   detalheInlineIdTabela, setDetalheInlineIdTabela,
@@ -239,6 +242,7 @@ export function PPTableBody({
                       <CalendarClock className="w-4 h-4" />
                     </Button>
                   )}
+                  {podeEditar && (
                   <Button
                     variant="ghost" size="icon"
                     className={cn('w-8 h-8', isEditingThis && 'bg-primary/10 text-primary')}
@@ -248,6 +252,9 @@ export function PPTableBody({
                   >
                     <Edit className="w-4 h-4" />
                   </Button>
+                  )}
+                  {podeExcluir && (
+                  <>
                   <span className="w-px h-5 bg-border mx-1 shrink-0" aria-hidden="true" />
                   <Button
                     variant="ghost" size="icon"
@@ -259,6 +266,8 @@ export function PPTableBody({
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
+                  </>
+                  )}
                 </div>
               </td>
             </motion.tr>

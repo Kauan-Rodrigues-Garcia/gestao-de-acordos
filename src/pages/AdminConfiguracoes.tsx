@@ -13,6 +13,7 @@ import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { isPerfilAdmin } from '@/lib/index';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -40,6 +41,7 @@ export default function AdminConfiguracoes() {
   const [saving, setSaving] = useState(false);
   const { empresa } = useEmpresa();
   const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   // Gate defensivo: card "Banco de Dados / Migrations" só para Admin/Super Admin
   // (defesa em profundidade — além do ProtectedRoute da rota)
   const podeVerBancoDados = isPerfilAdmin(perfil?.perfil ?? '');
@@ -177,12 +179,14 @@ export default function AdminConfiguracoes() {
             >
               <Tag className="w-4 h-4" /> Tags
             </TabsTrigger>
+            {temPermissao('ver_logs') && (
             <TabsTrigger
               value="logs"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ClipboardList className="w-4 h-4" /> Logs
             </TabsTrigger>
+            )}
             <TabsTrigger
               value="documentacoes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -337,9 +341,11 @@ export default function AdminConfiguracoes() {
         </TabsContent>
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
+        {temPermissao('ver_logs') && (
         <TabsContent value="logs" className="flex-1 overflow-y-auto mt-0">
           <AdminLogs />
         </TabsContent>
+        )}
 
         {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
         <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">

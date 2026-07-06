@@ -8,6 +8,7 @@ import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { usePresence } from '@/hooks/usePresence';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -43,6 +44,7 @@ export default function AdminUsuarios() {
   const tabFromUrl = searchParams.get('tab') ?? 'usuarios';
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Gate para a aba Setores: visível apenas para Gerência ou superior
@@ -453,12 +455,14 @@ export default function AdminUsuarios() {
                 <Building2 className="w-4 h-4" /> Setores
               </TabsTrigger>
             )}
+            {temPermissao('ver_equipes') && (
             <TabsTrigger
               value="equipes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Users2 className="w-4 h-4" /> Equipes
             </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -483,7 +487,7 @@ export default function AdminUsuarios() {
           )}
           {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          {(isAdmin || isSuperAdmin) && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
+          {(isAdmin || isSuperAdmin) && temPermissao('editar_usuarios') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
 
       {/* ── Tabela agrupada por setor ── */}
@@ -581,7 +585,7 @@ export default function AdminUsuarios() {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">
-                                {((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin) ? (
+                                {temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -617,9 +621,11 @@ export default function AdminUsuarios() {
         )}
 
         {/* ─── Aba: Equipes ──────────────────────────────────────────── */}
+        {temPermissao('ver_equipes') && (
         <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
           <AdminEquipes />
         </TabsContent>
+        )}
 
       </Tabs>
 
