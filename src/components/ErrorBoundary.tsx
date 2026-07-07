@@ -63,7 +63,10 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   handleReset = () => {
-    this.setState({ hasError: false, error: null, errorInfo: null });
+    // Recarrega a página inteira (não apenas a subárvore React). Isso garante
+    // que uma versão nova da aplicação seja baixada quando o erro vem de o
+    // usuário estar numa build antiga.
+    window.location.reload();
   };
 
   handleGoHome = () => {
