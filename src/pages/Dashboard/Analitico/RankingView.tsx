@@ -29,15 +29,24 @@ function primeiroSegundoNome(r: ResumoOperadorAnalitico): string {
   return base.split(/\s+/).slice(0, 2).join(' ');
 }
 
+/** Saudação conforme o horário: manhã, tarde ou noite. */
+function saudacao(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
 /** Mensagem motivacional do ranking (mesmo formato do protótipo HTML). */
 function montarMensagemRanking(
   pos: number, nome: string, rec: number, acima: string, gap: number,
 ): string {
+  const ola = saudacao();
   if (pos === 1) {
-    return `${nome} – 1º lugar\nBom dia, ${nome}! Você está em 1º lugar, com ${formatBRL(rec)} de recebido geral. Continue nesse ritmo para manter a liderança.`;
+    return `${ola}, ${nome}! Você está em 1º lugar, com ${formatBRL(rec)} de recebido geral. Continue nesse ritmo para manter a liderança.`;
   }
   const sufixo = pos === 2 ? 'para assumir a liderança' : 'para ultrapassar o próximo lugar';
-  return `${nome} – ${pos}º lugar\nBom dia, ${nome}! Você está em ${pos}º lugar, com ${formatBRL(rec)} de recebido geral. À sua frente está ${acima}, e faltam ${formatBRL(gap)} ${sufixo}.`;
+  return `${ola}, ${nome}! Você está em ${pos}º lugar, com ${formatBRL(rec)} de recebido geral. À sua frente está ${acima}, e faltam ${formatBRL(gap)} ${sufixo}.`;
 }
 
 function CopiarMsgBtn({
