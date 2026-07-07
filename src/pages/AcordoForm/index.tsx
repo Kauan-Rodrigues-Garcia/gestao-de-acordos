@@ -19,7 +19,7 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
-import { ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/components/AcordoNovoInline';
+import { AcordoNovoInline, ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/components/AcordoNovoInline';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
@@ -727,6 +727,42 @@ export default function AcordoForm() {
   const hasErrors = Object.keys(errors).length > 0;
   const p = perfilLocal ?? perfil;
   const nomeSetor = (p?.setores as { nome?: string } | undefined)?.nome;
+
+  // ── Novo acordo: delega 100% ao MESMO componente do botão inline ────────
+  // A aba "Novo Acordo" deve fazer exatamente o que o botão inline faz.
+  // Renderizando o próprio AcordoNovoInline garantimos fonte única de verdade
+  // (mesma lógica de conflito NR, Direto/Extra CASO A/B/C, rascunho, tags e
+  // fallback de insert). A edição continua usando o formulário abaixo.
+  if (!isEdit) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <div className="flex items-center gap-3 mb-6">
+          <Button variant="ghost" size="icon" onClick={() => navigate(-1)} className="h-8 w-8">
+            <ArrowLeft className="w-4 h-4" />
+          </Button>
+          <div>
+            <h1 className="text-xl font-bold text-foreground">Novo Acordo</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              <span className="font-medium text-foreground">{p?.nome ?? user?.email}</span>
+              {nomeSetor && <span className="text-primary"> · {nomeSetor}</span>}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full">
+            <tbody>
+              <AcordoNovoInline
+                isPaguePlay={isPP}
+                colSpan={1}
+                onSaved={() => navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS)}
+                onCancel={() => navigate(-1)}
+              />
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 max-w-2xl mx-auto">
