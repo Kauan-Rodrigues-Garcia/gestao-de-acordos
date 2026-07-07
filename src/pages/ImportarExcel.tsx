@@ -196,13 +196,23 @@ export default function ImportarExcel() {
   const validos   = registros.filter(r => r.valido);
   const invalidos = registros.filter(r => !r.valido);
 
+  // Uma linha vinda da aba EXTRA (abaOrigem === 'extra') é SEMPRE extra: é um
+  // dado local e determinístico da planilha, que não pode depender da
+  // classificação assíncrona (Supabase). Se a classificação falhar/não carregar,
+  // essas linhas ainda assim aparecem na aba Extra — e nunca em Novos.
   const regNovos = validos.filter(r => {
+    if (r.abaOrigem === 'extra') return false;
     if (!classifLoaded) return true;
     const c = classifMap.get(r.linha);
     return !c || c.categoria === 'novo' || c.categoria === 'disponivel' || c.categoria === 'direto';
   });
-  const regExtra      = classifLoaded ? validos.filter(r => classifMap.get(r.linha)?.categoria === 'extra') : [];
-  const regBloqueados = classifLoaded ? validos.filter(r => classifMap.get(r.linha)?.categoria === 'duplicado') : [];
+  const regExtra = validos.filter(r =>
+    r.abaOrigem === 'extra' ||
+    (classifLoaded && classifMap.get(r.linha)?.categoria === 'extra'),
+  );
+  const regBloqueados = classifLoaded
+    ? validos.filter(r => r.abaOrigem !== 'extra' && classifMap.get(r.linha)?.categoria === 'duplicado')
+    : [];
 
   const valorTotal = validos.reduce((s, r) => s + (r.valor ?? 0), 0);
 
