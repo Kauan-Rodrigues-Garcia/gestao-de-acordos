@@ -225,7 +225,7 @@ export default function App() {
                 </LayoutWrapper>
               } />
 
-              {/* Analítico (PaguePlay exclusivo — gate dentro da página) */}
+              {/* Analítico (PaguePlay + BookPlay — gate por slug dentro da página) */}
               <Route path={ROUTE_PATHS.ANALITICO} element={
                 <LayoutWrapper><PaginaAnalitico /></LayoutWrapper>
               } />

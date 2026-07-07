@@ -60,10 +60,11 @@ export default function PaginaAnalitico() {
   }, [empresa?.id]);
 
   // ── Guards (após todos os hooks) ─────────────────────────────────────────
-  if (!tenant.isPaguePlay) {
+  // Disponível para PaguePlay e BookPlay (ambas usam a aba Analítico).
+  if (tenant.slug !== 'pagueplay' && tenant.slug !== 'bookplay') {
     return (
       <div className="p-6 text-center text-muted-foreground">
-        Esta seção está disponível apenas para PaguePlay.
+        Esta seção não está disponível para esta empresa.
       </div>
     );
   }
@@ -79,6 +80,21 @@ export default function PaginaAnalitico() {
     valor: number;
     dataPagamento?: string;
   }) {
+    if (!tenant.isPaguePlay) {
+      // BookPlay: o "código" do relatório é o NR; pré-preenche o rascunho BP
+      // e abre a aba Novo Acordo (que renderiza o mesmo AcordoNovoInline).
+      const storageKey = `acordo-inline-draft::${empresa!.id}::${perfil!.id}::bp`;
+      const draft: Record<string, string> = {
+        nrCliente:   dados.instituicao,
+        nomeCliente: dados.nomeCliente,
+        tipo:        dados.forma === 'cartao' ? 'cartao' : 'boleto',
+        valorStr:    dados.valor.toFixed(2).replace('.', ','),
+      };
+      if (dados.dataPagamento) draft['vencimento'] = dados.dataPagamento;
+      try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* noop */ }
+      navigate(ROUTE_PATHS.ACORDO_NOVO);
+      return;
+    }
     const storageKey = `acordo-inline-draft::${empresa!.id}::${perfil!.id}::pp`;
     const draft: Record<string, string> = {
       instituicao: dados.instituicao,
@@ -92,6 +108,11 @@ export default function PaginaAnalitico() {
   }
 
   function onVerAcordo(acordoId: string, codigo?: string) {
+    if (!tenant.isPaguePlay) {
+      // BookPlay: leva à lista de Acordos filtrando pelo NR
+      navigate(ROUTE_PATHS.ACORDOS + (codigo ? '?busca=' + encodeURIComponent(codigo) : ''));
+      return;
+    }
     const qs = new URLSearchParams({ verAcordo: acordoId });
     if (codigo) qs.set('busca', codigo);
     navigate(ROUTE_PATHS.DASHBOARD + '?' + qs.toString());
@@ -124,7 +145,7 @@ export default function PaginaAnalitico() {
           <div>
             <h1 className="text-2xl font-bold text-foreground">Analítico</h1>
             <p className="text-sm text-muted-foreground mt-0.5">
-              Recebimentos do ERP · PaguePlay
+              Recebimentos do ERP · {tenant.isPaguePlay ? 'PaguePlay' : 'BookPlay'}
               {novosCount > 0 && (
                 <span className="ml-2 inline-flex items-center gap-1 text-primary font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-primary inline-block" />

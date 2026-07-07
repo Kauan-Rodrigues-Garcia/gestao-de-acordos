@@ -106,6 +106,8 @@ export async function importarLoteDiario(
       cpf:              l.cpf || null,
       nome_cliente:     l.nome_cliente || null,
       acordo_codigo:    l.acordo_codigo || null,
+      // Só envia `instituicao` quando há valor (BookPlay) — ver analitico.service.
+      ...(l.instituicao ? { instituicao: l.instituicao } : {}),
       forma_pagamento:  l.forma_pagamento,
       valor_recebido:   l.valor_recebido,
       data_pagamento:   l.data_pagamento ? toISO(l.data_pagamento) : null,

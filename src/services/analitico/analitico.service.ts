@@ -125,6 +125,9 @@ export async function importarLoteAnalitico(
     operador_usuario: l.operador_usuario,
     codigo:          normCodigo(l.codigo),
     nome_cliente:    l.nome_cliente || null,
+    // Só envia `instituicao` quando há valor (BookPlay). Assim a PaguePlay não
+    // referencia a coluna — o import segue funcionando mesmo antes da migration.
+    ...(l.instituicao ? { instituicao: l.instituicao } : {}),
     forma_pagamento: l.forma_pagamento,
     valor_recebido:  l.valor_recebido,
     total_ho:        l.total_ho,
@@ -522,12 +525,15 @@ export async function verificarStatusTabulacao(
   empresaId: string,
   codigo: string,
   operadorId: string,
+  /** Campo do acordo que casa com o código do relatório.
+   *  PaguePlay usa 'instituicao'; BookPlay usa 'nr_cliente' (o NR). */
+  campo: 'instituicao' | 'nr_cliente' = 'instituicao',
 ): Promise<{ status: StatusTabulacaoAnalitico; acordoId: string | null; outroOperadorId: string | null; outroOperadorNome: string | null }> {
   const { data } = await supabase
     .from('acordos')
     .select('id, operador_id, tipo_vinculo, perfis(nome)')
     .eq('empresa_id', empresaId)
-    .eq('instituicao', normCodigo(codigo))
+    .eq(campo, normCodigo(codigo))
     .in('tipo_vinculo', ['direto'])
     .limit(1)
     .maybeSingle();

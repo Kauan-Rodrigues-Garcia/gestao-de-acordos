@@ -50,6 +50,11 @@ function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boo
                     {item.nome_cliente}
                   </span>
                 )}
+                {item.instituicao && (
+                  <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[200px]">
+                    {item.instituicao}
+                  </span>
+                )}
               </div>
             </div>
           </td>

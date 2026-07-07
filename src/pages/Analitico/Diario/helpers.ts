@@ -37,6 +37,8 @@ export interface ItemDiario {
   key: string;
   cpf: string;
   nome_cliente: string;
+  /** Coluna "Empresa" (BookPlay); '' na PaguePlay */
+  instituicao: string;
   forma_pagamento: string;
   kind: FormaKindDiario;
   valor: number;
@@ -92,6 +94,7 @@ export function consolidarItens(
       existente.n     += 1;
       if (!existente.cpf && r.cpf) existente.cpf = r.cpf;
       if (!existente.nome_cliente && r.nome_cliente) existente.nome_cliente = r.nome_cliente;
+      if (!existente.instituicao && r.instituicao) existente.instituicao = r.instituicao;
       if (r.data_pagamento) {
         if (!existente.minData || r.data_pagamento < existente.minData) existente.minData = r.data_pagamento;
         if (!existente.maxData || r.data_pagamento > existente.maxData) existente.maxData = r.data_pagamento;
@@ -103,6 +106,7 @@ export function consolidarItens(
       key,
       cpf:             r.cpf ?? '',
       nome_cliente:    r.nome_cliente ?? '',
+      instituicao:     r.instituicao ?? '',
       forma_pagamento: r.forma_pagamento,
       kind:            formaKindDiario(r.forma_pagamento),
       valor:           r.valor_recebido,

@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/tenant-config';
 import { copiarTexto } from '@/lib/clipboard';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
@@ -76,6 +77,8 @@ export function AnaliticoLider({
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
+  const tenant = useTenant();
+  const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'orfaos'>('operadores');
@@ -365,9 +368,9 @@ export function AnaliticoLider({
     <div className="space-y-4">
 
       {/* ── Cards de resumo mensal ─────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className={cn('grid grid-cols-2 sm:grid-cols-3 gap-3', mostrarHO ? 'lg:grid-cols-5' : 'lg:grid-cols-4')}>
         {loadingSnapshot ? (
-          Array.from({ length: 5 }).map((_, i) => (
+          Array.from({ length: mostrarHO ? 5 : 4 }).map((_, i) => (
             <div key={i} className="h-20 bg-muted rounded-xl animate-pulse" />
           ))
         ) : metricas ? (
@@ -385,19 +388,21 @@ export function AnaliticoLider({
                 </div>
               </CardContent>
             </Card>
-            <Card className="border-border">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between gap-1">
-                  <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total HO</p>
-                    <p className="text-base font-bold font-mono leading-tight mt-1 truncate">
-                      {formatBRL(metricas.totalHo)}
-                    </p>
+            {mostrarHO && (
+              <Card className="border-border">
+                <CardContent className="p-4">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total HO</p>
+                      <p className="text-base font-bold font-mono leading-tight mt-1 truncate">
+                        {formatBRL(metricas.totalHo)}
+                      </p>
+                    </div>
+                    <CreditCard className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
                   </div>
-                  <CreditCard className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
             <Card className="border-border">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-1">
@@ -538,10 +543,12 @@ export function AnaliticoLider({
                             <p className="text-sm font-bold text-primary">{formatBRL(r.total_recebido)}</p>
                             <p className="text-xs text-muted-foreground">recebido</p>
                           </div>
-                          <div>
-                            <p className="text-sm font-semibold">{formatBRL(r.total_ho)}</p>
-                            <p className="text-xs text-muted-foreground">HO</p>
-                          </div>
+                          {mostrarHO && (
+                            <div>
+                              <p className="text-sm font-semibold">{formatBRL(r.total_ho)}</p>
+                              <p className="text-xs text-muted-foreground">HO</p>
+                            </div>
+                          )}
                           <Badge variant="outline" className="shrink-0">{r.total_pagamentos} pgto.</Badge>
                         </div>
                       </div>
@@ -596,7 +603,7 @@ export function AnaliticoLider({
                                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CÓDIGO</th>
                                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                                   <th className="text-right px-3 py-2 font-semibold text-muted-foreground">RECEBIDO</th>
-                                  <th className="text-right px-3 py-2 font-semibold text-muted-foreground">HO</th>
+                                  {mostrarHO && <th className="text-right px-3 py-2 font-semibold text-muted-foreground">HO</th>}
                                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
                                   <th className="text-right px-3 py-2 font-semibold text-muted-foreground">AÇÃO</th>
                                 </tr>
@@ -628,10 +635,13 @@ export function AnaliticoLider({
                                           {linha.nome_cliente && (
                                             <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
                                           )}
+                                          {linha.instituicao && (
+                                            <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
+                                          )}
                                         </td>
                                         <td className="px-3 py-2">{formaBadge}</td>
                                         <td className="px-3 py-2 text-right font-mono">{formatBRL(linha.valor_recebido)}</td>
-                                        <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
+                                        {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
                                         <td className="px-3 py-2 tabular-nums">
                                           {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
                                         </td>
@@ -658,11 +668,14 @@ export function AnaliticoLider({
                                           {linha.nome_cliente && (
                                             <span className="block text-muted-foreground truncate max-w-[120px]">{linha.nome_cliente}</span>
                                           )}
+                                          {linha.instituicao && (
+                                            <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[120px]">{linha.instituicao}</span>
+                                          )}
                                         </td>
                                       )}
                                       <td className="px-3 py-2">{formaBadge}</td>
                                       <td className="px-3 py-2 text-right font-mono">{formatBRL(p.valor)}</td>
-                                      <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>
+                                      {mostrarHO && <td className="px-3 py-2 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
                                       <td className="px-3 py-2 tabular-nums">
                                         {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
                                       </td>

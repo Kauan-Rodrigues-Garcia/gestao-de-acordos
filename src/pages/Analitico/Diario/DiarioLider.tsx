@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/tenant-config';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -51,6 +52,7 @@ interface DiarioLiderProps {
 export function DiarioLider({
   empresaId, dia, temPermissaoImportar, onDadosImportados,
 }: DiarioLiderProps) {
+  const tenant = useTenant();
   const importHook = useDiarioImport();
   const { dados, loading, refetch } = useDiario({ dia });
 
@@ -302,9 +304,13 @@ export function DiarioLider({
             >
               <Trash2 className="w-4 h-4" /> Limpar tudo
             </Button>
-            <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
-              <Upload className="w-4 h-4" /> Importar relatório
-            </Button>
+            {/* Na BookPlay a importação é feita na aba Analítico (mesmo relatório
+                atualiza os dois); por isso não há botão de importar aqui. */}
+            {tenant.isPaguePlay && (
+              <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
+                <Upload className="w-4 h-4" /> Importar relatório
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -322,7 +328,11 @@ export function DiarioLider({
             <div className="text-center py-16 text-muted-foreground">
               <p className="text-sm">Nenhum relatório importado{dia ? ` para ${fmtDataISO(dia)}` : ''}.</p>
               {temPermissaoImportar && (
-                <p className="text-xs mt-1">Use o botão <strong>Importar relatório</strong> acima para começar.</p>
+                <p className="text-xs mt-1">
+                  {tenant.isPaguePlay
+                    ? <>Use o botão <strong>Importar relatório</strong> acima para começar.</>
+                    : <>Importe o relatório na aba <strong>Analítico</strong> — ele atualiza o Recebimento diário automaticamente.</>}
+                </p>
               )}
             </div>
           )}
@@ -709,6 +719,9 @@ function OperadorCardDiario({
                       </span>
                       {item.nome_cliente && (
                         <span className="block text-muted-foreground truncate max-w-[200px]">{item.nome_cliente}</span>
+                      )}
+                      {item.instituicao && (
+                        <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[200px]">{item.instituicao}</span>
                       )}
                     </td>
                     <td className="px-3 py-2"><FormaChip forma={item.forma_pagamento} /></td>

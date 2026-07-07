@@ -25,6 +25,8 @@ export interface LinhaDiario {
   cpf: string;                    // somente dígitos ('' quando ausente)
   nome_cliente: string;           // coluna Profissional
   acordo_codigo: string;
+  /** Coluna "Empresa" (BookPlay). Opcional — não usado na PaguePlay. */
+  instituicao?: string;
   forma_pagamento: string;        // texto bruto (Pix, Boleto, Cartão Padrão…)
   valor_recebido: number;
   data_pagamento: Date | null;
