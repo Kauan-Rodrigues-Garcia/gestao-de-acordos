@@ -724,7 +724,7 @@ export function AnaliticoLider({
               <p className="text-sm">Nenhum dado para exibir.</p>
             </div>
           ) : (
-            <RankingView resumos={resumosFiltrados} />
+            <RankingView resumos={resumosFiltrados} mostrarCopiar />
           )}
         </div>
       )}
