@@ -6,40 +6,54 @@
  * diferente da PaguePlay que usa dois relatórios distintos.
  *
  * Colunas do relatório BookPlay (por cabeçalho, ordem real):
- *   A Cobradora      → operador (username)
- *   B Equipe/SubGrupo→ (ignorada)
- *   C Cliente        → "<código PP> - NOME"; usamos SÓ o nome (código PP não se aplica)
- *   D Email          → (ignorada)
- *   E Título         → (ignorada)
- *   F Parcela        → (ignorada)
- *   G NrDocumento    → NR (código usado para tabular na BookPlay)
- *   H Empresa        → instituição (bookplay, mundial editora, faculdade bookplay…)
- *   I Tipo Venda     → (ignorada)
- *   J TpDoc          → forma de pagamento (PIX, BOLETO…, CARTÃO…)
- *   K DtLig          → (ignorada)
- *   L DtPgto         → data do pagamento
- *   M Dias em atraso → (ignorada)
- *   N Recebido       → valor recebido
+ *   A Cobradora   → operador (username)
+ *   C Cliente     → "<código PP> - NOME"; usamos SÓ o nome
+ *   G NrDocumento → NR (código usado para tabular na BookPlay)
+ *   H Empresa     → instituição (bookplay, mundial editora, faculdade bookplay…)
+ *   J TpDoc       → forma de pagamento (ver `labelPagamentoBookplay`)
+ *   L DtPgto      → data do pagamento
+ *   N Recebido    → valor recebido
  *
- * Regra de consolidação:
- *   - BOLETO/PIX: agrupa por (operador + NR + dia), SOMA o recebido. Assim as
- *     parcelas de boleto do mesmo NR pagas no mesmo dia viram um único valor
- *     (ex.: NR 1234 com 4 parcelas de R$200 → R$800). Guarda os pagamentos
- *     individuais em `pagamentos_detalhados` para exibição.
- *   - CARTÃO: agrupa por (operador + NR), SOMA (parcelas repetidas do ERP).
+ * Consolidação:
+ *   - Analítico  → 1 linha por (operador + NR): soma TODAS as parcelas do NR
+ *     (boleto/pix/cartão) num único valor. Lista enxuta, sem detalhamento.
+ *   - Diário     → 1 linha por (operador + NR + dia): soma o que aquele NR
+ *     recebeu naquele dia (mantém o filtro por dia correto).
+ *
+ * Forma de pagamento (BookPlay exibe o tipo real, não "Boleto/Pix"):
+ *   - Boleto Bancário / Boleto Negociação → "Boleto"
+ *   - Pix                                 → "Pix"
+ *   - Pix Automático                      → "Pix Automático"
+ *   - (contém "recorrente")               → "Cartão Recorrente"
+ *   - EM BRANCO                           → "Cartão de Crédito"
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
-import {
-  norm, toDate, extrairNome, mapearFormaPgto,
-  type LinhaRelatorio, type PagamentoDetalhe,
-} from '@/services/analitico/analiticoParser';
+import { norm, toDate, extrairNome, type LinhaRelatorio } from '@/services/analitico/analiticoParser';
 import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioParser';
+import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 export interface ResultadoParseBookplay {
   analitico: LinhaRelatorio[];
   diario:    LinhaDiario[];
   erros:     string[];
+}
+
+/** TpDoc bruto → rótulo exibido na BookPlay. */
+export function labelPagamentoBookplay(tpdoc: string): string {
+  const n = norm(tpdoc);
+  if (!n) return 'Cartão de Crédito';                                   // em branco
+  if (n.includes('pix') && n.includes('automatico')) return 'Pix Automático';
+  if (n.includes('recorrente')) return 'Cartão Recorrente';
+  if (n.includes('pix'))    return 'Pix';
+  if (n.includes('boleto')) return 'Boleto';
+  if (n.includes('cartao')) return 'Cartão de Crédito';
+  return 'Cartão de Crédito';
+}
+
+/** Enum de consolidação/badge a partir do rótulo. */
+function formaEnum(label: string): FormaPagementoAnalitico {
+  return label.startsWith('Cartão') ? 'cartao' : 'boleto_pix';
 }
 
 type ColKeys = 'op' | 'cli' | 'nr' | 'emp' | 'tp' | 'dt' | 'rec';
@@ -64,7 +78,6 @@ function resolveCols(headers: unknown[]): Partial<Record<ColKeys, number>> | nul
       }
     }
   });
-  // Obrigatórias: operador, NR, data e valor
   const required: ColKeys[] = ['op', 'nr', 'dt', 'rec'];
   if (required.every(k => k in map)) return map;
   return null;
@@ -77,89 +90,15 @@ function parsearValor(v: unknown): number {
   return isNaN(n) ? 0 : n;
 }
 
-/** Linha bruta antes da consolidação (mantém o TpDoc original). */
 interface LinhaBruta {
   operador_usuario: string;
   codigo: string;            // NR
   nome_cliente: string;
   instituicao: string;
-  forma_pagamento: LinhaRelatorio['forma_pagamento']; // 'boleto_pix' | 'cartao'
-  tpdoc_original: string;
+  label: string;             // rótulo detalhado (Boleto, Pix, …)
+  forma: FormaPagementoAnalitico;
   valor_recebido: number;
   data_pagamento: Date;
-}
-
-function dateKey(d: Date): string {
-  return dayKeyDiario(d);
-}
-
-/**
- * Consolida as linhas brutas:
- *   - boleto/pix → chave (operador + NR + dia)
- *   - cartão     → chave (operador + NR)
- * Soma o valor e registra os pagamentos individuais em `pagamentos_detalhados`
- * quando 2+ linhas se fundem.
- */
-function consolidar(linhas: LinhaBruta[]): LinhaRelatorio[] {
-  const grupos = new Map<string, LinhaRelatorio & { _det: PagamentoDetalhe[] }>();
-
-  for (const l of linhas) {
-    const chave = l.forma_pagamento === 'cartao'
-      ? `${l.operador_usuario}::cc::${l.codigo}`
-      : `${l.operador_usuario}::${l.codigo}::${dateKey(l.data_pagamento)}`;
-
-    const existe = grupos.get(chave);
-    const detalhe: PagamentoDetalhe = {
-      tpdoc:    l.tpdoc_original,
-      valor:    l.valor_recebido,
-      total_ho: 0,
-      data:     l.data_pagamento,
-    };
-
-    if (existe) {
-      existe.valor_recebido += l.valor_recebido;
-      existe._det.push(detalhe);
-    } else {
-      grupos.set(chave, {
-        operador_usuario: l.operador_usuario,
-        equipe:           '',
-        codigo:           l.codigo,
-        nome_cliente:     l.nome_cliente,
-        instituicao:      l.instituicao,
-        forma_pagamento:  l.forma_pagamento,
-        tpdoc_original:   l.tpdoc_original,
-        valor_recebido:   l.valor_recebido,
-        total_ho:         0,
-        data_pagamento:   l.data_pagamento,
-        _det:             [detalhe],
-      });
-    }
-  }
-
-  return [...grupos.values()].map(({ _det, ...linha }) => ({
-    ...linha,
-    pagamentos_detalhados: _det.length > 1 ? _det : undefined,
-  }));
-}
-
-/** Converte uma linha consolidada do analítico na linha equivalente do diário. */
-function paraDiario(l: LinhaRelatorio): LinhaDiario {
-  const dk = dayKeyDiario(l.data_pagamento);
-  return {
-    operador_usuario: l.operador_usuario,
-    cpf:              '',
-    nome_cliente:     l.nome_cliente,
-    acordo_codigo:    l.codigo,
-    instituicao:      l.instituicao,
-    forma_pagamento:  l.tpdoc_original || (l.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'),
-    valor_recebido:   l.valor_recebido,
-    data_pagamento:   l.data_pagamento,
-    prox_contato:     null,
-    tabulacao:        '',
-    id_baixa:         '',
-    // Único por dia: operador + NR + forma + valor
-    chave_unica:      `${l.operador_usuario}|${l.codigo}|${l.forma_pagamento}|${l.valor_recebido}|${dk}`,
-  };
 }
 
 /**
@@ -207,19 +146,68 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
       continue;
     }
 
+    const label = labelPagamentoBookplay(tp);
     brutas.push({
       operador_usuario: op,
       codigo:           nr,
       nome_cliente:     extrairNome(cli),
       instituicao:      emp,
-      forma_pagamento:  mapearFormaPgto(tp),
-      tpdoc_original:   tp,
+      label,
+      forma:            formaEnum(label),
       valor_recebido:   rec,
       data_pagamento:   dt,
     });
   }
 
-  const analitico = consolidar(brutas);
-  const diario    = analitico.map(paraDiario);
-  return { analitico, diario, erros };
+  // ── Analítico: 1 linha por (operador + NR), somando tudo ──────────────────
+  const mapA = new Map<string, LinhaRelatorio>();
+  for (const l of brutas) {
+    const chave = `${l.operador_usuario}::${l.codigo}`;
+    const existe = mapA.get(chave);
+    if (existe) {
+      existe.valor_recebido += l.valor_recebido;
+    } else {
+      mapA.set(chave, {
+        operador_usuario: l.operador_usuario,
+        equipe:           '',
+        codigo:           l.codigo,
+        nome_cliente:     l.nome_cliente,
+        instituicao:      l.instituicao,
+        forma_detalhe:    l.label,
+        forma_pagamento:  l.forma,
+        tpdoc_original:   l.label,
+        valor_recebido:   l.valor_recebido,
+        total_ho:         0,
+        data_pagamento:   l.data_pagamento,
+      });
+    }
+  }
+
+  // ── Diário: 1 linha por (operador + NR + dia) ─────────────────────────────
+  const mapD = new Map<string, LinhaDiario>();
+  for (const l of brutas) {
+    const dk = dayKeyDiario(l.data_pagamento);
+    const chave = `${l.operador_usuario}::${l.codigo}::${dk}`;
+    const existe = mapD.get(chave);
+    if (existe) {
+      existe.valor_recebido += l.valor_recebido;
+    } else {
+      mapD.set(chave, {
+        operador_usuario: l.operador_usuario,
+        cpf:              '',
+        nome_cliente:     l.nome_cliente,
+        acordo_codigo:    l.codigo,
+        instituicao:      l.instituicao,
+        forma_pagamento:  l.label,
+        valor_recebido:   l.valor_recebido,
+        data_pagamento:   l.data_pagamento,
+        prox_contato:     null,
+        tabulacao:        '',
+        id_baixa:         '',
+        chave_unica:      `${l.operador_usuario}|${l.codigo}|${dk}`,
+      });
+    }
+  }
+
+  return { analitico: [...mapA.values()], diario: [...mapD.values()], erros };
 }

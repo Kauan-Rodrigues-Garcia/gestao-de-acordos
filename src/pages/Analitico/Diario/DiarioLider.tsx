@@ -53,6 +53,7 @@ export function DiarioLider({
   empresaId, dia, temPermissaoImportar, onDadosImportados,
 }: DiarioLiderProps) {
   const tenant = useTenant();
+  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
   const importHook = useDiarioImport();
   const { dados, loading, refetch } = useDiario({ dia });
 
@@ -377,6 +378,7 @@ export function DiarioLider({
                     linhas={vinculadas.filter(v => v.operador_id === r.operadorId)}
                     dia={dia}
                     maxImportIndex={maxImportIndex}
+                    mostrarNR={mostrarNR}
                   />
                 ))}
               </div>
@@ -404,7 +406,7 @@ export function DiarioLider({
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">PRÓX. CONTATO</th>
@@ -416,7 +418,7 @@ export function DiarioLider({
                           <td className="px-3 py-2 font-medium">{it.operador}</td>
                           <td className="px-3 py-2">
                             <span className="font-semibold tabular-nums">
-                              {fmtCPF(it.cpf) || '—'}
+                              {mostrarNR ? (it.acordo_codigo || '—') : (fmtCPF(it.cpf) || '—')}
                               {it.n > 1 && (
                                 <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{it.n}x</span>
                               )}
@@ -485,7 +487,7 @@ export function DiarioLider({
                       <thead>
                         <tr className="border-b border-border bg-muted/30">
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR (ARQUIVO)</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                           <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
@@ -499,7 +501,7 @@ export function DiarioLider({
                           <tr key={linha.id} className="hover:bg-muted/20">
                             <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                             <td className="px-3 py-2">
-                              <span className="font-semibold tabular-nums">{fmtCPF(linha.cpf) || '—'}</span>
+                              <span className="font-semibold tabular-nums">{mostrarNR ? (linha.acordo_codigo || '—') : (fmtCPF(linha.cpf) || '—')}</span>
                               {linha.nome_cliente && (
                                 <span className="block text-muted-foreground truncate max-w-[160px]">{linha.nome_cliente}</span>
                               )}
@@ -611,10 +613,11 @@ interface OperadorCardDiarioProps {
   linhas: DiarioRecebimento[];
   dia: string | null;
   maxImportIndex: number;
+  mostrarNR: boolean;
 }
 
 function OperadorCardDiario({
-  resumo, posicao, maxTotal, aberto, onToggle, linhas, dia, maxImportIndex,
+  resumo, posicao, maxTotal, aberto, onToggle, linhas, dia, maxImportIndex, mostrarNR,
 }: OperadorCardDiarioProps) {
   // Detalhe consolidado apenas quando expandido (lazy render)
   const itens = useMemo(
@@ -696,7 +699,7 @@ function OperadorCardDiario({
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-muted/30">
-                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                   <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA PGT.</th>
@@ -711,7 +714,7 @@ function OperadorCardDiario({
                           <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo (último relatório)" />
                         )}
                         <span>
-                          {fmtCPF(item.cpf) || '—'}
+                          {mostrarNR ? (item.acordo_codigo || '—') : (fmtCPF(item.cpf) || '—')}
                           {item.n > 1 && (
                             <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{item.n}x</span>
                           )}

@@ -264,6 +264,9 @@ export interface AnaliticoRecebimento {
   /** Coluna "Empresa" do relatório BookPlay (bookplay, mundial editora...); null na PaguePlay */
   instituicao?: string | null;
   forma_pagamento: FormaPagementoAnalitico;
+  /** Rótulo real da forma de pagamento na BookPlay (Boleto, Pix, Pix Automático,
+   *  Cartão Recorrente, Cartão de Crédito); null na PaguePlay. */
+  forma_detalhe?: string | null;
   valor_recebido: number;
   total_ho: number;
   data_pagamento: string;   // DATE → 'yyyy-MM-dd'

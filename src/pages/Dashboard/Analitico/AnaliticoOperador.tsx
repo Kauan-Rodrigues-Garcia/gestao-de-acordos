@@ -43,17 +43,18 @@ interface AnaliticoOperadorProps {
   onRefetch: () => void;
 }
 
-function chipForma(forma: AnaliticoRecebimento['forma_pagamento']) {
-  if (forma === 'cartao') {
-    return (
-      <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 dark:text-purple-400">
-        Cartão
-      </Badge>
-    );
-  }
+function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
+  const isCartao = forma === 'cartao';
+  // BookPlay traz o rótulo real (Boleto, Pix, Pix Automático…); PaguePlay usa o genérico.
+  const texto = detalhe || (isCartao ? 'Cartão' : 'Boleto/Pix');
   return (
-    <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 dark:text-blue-400">
-      Boleto/Pix
+    <Badge variant="outline" className={cn(
+      'text-xs',
+      isCartao
+        ? 'border-purple-300 text-purple-700 dark:text-purple-400'
+        : 'border-blue-300 text-blue-700 dark:text-blue-400',
+    )}>
+      {texto}
     </Badge>
   );
 }
@@ -245,7 +246,7 @@ export function AnaliticoOperador({
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
                                 <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
                                 {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
                                 <td className="px-3 py-2.5 tabular-nums">
@@ -290,7 +291,7 @@ export function AnaliticoOperador({
                                   </div>
                                 </td>
                               )}
-                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
                               <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(p.valor)}</td>
                               {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
                               <td className="px-3 py-2.5 tabular-nums">

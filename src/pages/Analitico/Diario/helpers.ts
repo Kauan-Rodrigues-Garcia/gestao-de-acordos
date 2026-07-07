@@ -36,6 +36,8 @@ export function acordoKey(row: DiarioRecebimento): string {
 export interface ItemDiario {
   key: string;
   cpf: string;
+  /** Cód.Acordo (BookPlay: NR); usado no lugar do CPF na BookPlay */
+  acordo_codigo: string;
   nome_cliente: string;
   /** Coluna "Empresa" (BookPlay); '' na PaguePlay */
   instituicao: string;
@@ -105,6 +107,7 @@ export function consolidarItens(
     const item: ItemDiario = {
       key,
       cpf:             r.cpf ?? '',
+      acordo_codigo:   r.acordo_codigo ?? '',
       nome_cliente:    r.nome_cliente ?? '',
       instituicao:     r.instituicao ?? '',
       forma_pagamento: r.forma_pagamento,
@@ -144,7 +147,7 @@ export function montarTextoListaDiario(
   const aviso   = (it: ItemDiario) =>
     normDiario(it.tabulacao) === 'acordofechado' ? '' : ' (Tabular Acordo Fechado)';
   const fmtLine = (it: ItemDiario) =>
-    `${fmtCPF(it.cpf) || '—'} - ${it.forma_pagamento} - ${formatBRL(it.valor)}${aviso(it)}`;
+    `${fmtCPF(it.cpf) || it.acordo_codigo || '—'} - ${it.forma_pagamento} - ${formatBRL(it.valor)}${aviso(it)}`;
 
   const head = `*${nome}* — recebimentos${diaISO ? ` (${fmtDataISO(diaISO)})` : ''}`;
   const blocks: string[] = [];
@@ -241,6 +244,7 @@ export function agregarPorOperador(
 export interface ItemIgnorado {
   operador: string;
   cpf: string;
+  acordo_codigo: string;
   nome_cliente: string;
   forma_pagamento: string;
   kind: FormaKindDiario;
@@ -272,6 +276,7 @@ export function consolidarIgnorados(
     const item: ItemIgnorado = {
       operador:        r.perfis?.nome ?? r.operador_usuario,
       cpf:             r.cpf ?? '',
+      acordo_codigo:   r.acordo_codigo ?? '',
       nome_cliente:    r.nome_cliente ?? '',
       forma_pagamento: r.forma_pagamento,
       kind:            formaKindDiario(r.forma_pagamento),

@@ -125,9 +125,11 @@ export async function importarLoteAnalitico(
     operador_usuario: l.operador_usuario,
     codigo:          normCodigo(l.codigo),
     nome_cliente:    l.nome_cliente || null,
-    // Só envia `instituicao` quando há valor (BookPlay). Assim a PaguePlay não
-    // referencia a coluna — o import segue funcionando mesmo antes da migration.
+    // Só envia `instituicao`/`forma_detalhe` quando há valor (BookPlay). Assim a
+    // PaguePlay não referencia as colunas — o import segue funcionando mesmo
+    // antes da migration.
     ...(l.instituicao ? { instituicao: l.instituicao } : {}),
+    ...(l.forma_detalhe ? { forma_detalhe: l.forma_detalhe } : {}),
     forma_pagamento: l.forma_pagamento,
     valor_recebido:  l.valor_recebido,
     total_ho:        l.total_ho,

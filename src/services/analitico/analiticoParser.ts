@@ -31,6 +31,8 @@ export interface LinhaRelatorio {
   nome_cliente: string;
   /** Coluna "Empresa" (BookPlay). Opcional — não usado na PaguePlay. */
   instituicao?: string;
+  /** Rótulo detalhado da forma (BookPlay): Boleto, Pix, Pix Automático, etc. */
+  forma_detalhe?: string;
   forma_pagamento: FormaPagementoAnalitico;
   tpdoc_original: string;
   valor_recebido: number;

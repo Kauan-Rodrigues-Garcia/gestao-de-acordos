@@ -623,7 +623,7 @@ export function AnaliticoLider({
                                         ? 'text-xs border-purple-300 text-purple-700'
                                         : 'text-xs border-blue-300 text-blue-700'
                                     }>
-                                      {linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix'}
+                                      {linha.forma_detalhe || (linha.forma_pagamento === 'cartao' ? 'Cartão' : 'Boleto/Pix')}
                                     </Badge>
                                   );
 
