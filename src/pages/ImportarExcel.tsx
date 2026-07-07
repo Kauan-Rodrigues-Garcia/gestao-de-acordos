@@ -45,6 +45,7 @@ import {
 import { processarImportacaoEmLote } from '@/services/importar_excel_batch.service';
 import { autenticarLider, type AutorizadorInfo } from '@/services/autorizacao_lider.service';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { resolverDiretoExtraAtivo } from '@/services/direto_extra.service';
 import {
   parsearPlanilha,
   classificarLinha,
@@ -52,6 +53,11 @@ import {
   type RegistroImportado,
   type ModoParse,
 } from '@/lib/importar_excel_parser';
+import {
+  selecionarAbas,
+  marcarAba,
+  forcarClassificacaoExtra,
+} from '@/lib/importar_excel_extra';
 
 // Re-exporta o motor adaptativo — a suíte de testes importa estas funções
 // diretamente de `@/pages/ImportarExcel`. (A lógica pura vive em
@@ -83,7 +89,17 @@ function baixarModelo() {
     { wch: 12 }, { wch: 8 }, { wch: 22 }, { wch: 14 }, { wch: 13 },
     { wch: 16 }, { wch: 14 }, { wch: 28 }, { wch: 18 },
   ];
-  xlsxUtils.book_append_sheet(wb, ws, 'Acordos');
+  xlsxUtils.book_append_sheet(wb, ws, 'DIRETO');
+
+  // Aba EXTRA (opcional): mesmas colunas. Só é lida quando o setor tem a
+  // função Direto/Extra ativa — as linhas entram como acordos "extra".
+  const wsExtra = xlsxUtils.aoa_to_sheet([
+    ['Planilha de Acordos (EXTRA) — PaguePLAY'],
+    ['Código', 'Estado', 'Forma de Pagamento', 'Qtd. Parcelas', 'Valor Total', 'Data de Venci.', 'Status', 'Nome do Profissional', 'WhatsApp'],
+    ['12345',  'SP', 'Boleto', 2, 800.00, '30/05/2026', 'Pendente', 'João da Silva', '(11) 98765-4321'],
+  ]);
+  wsExtra['!cols'] = ws['!cols'];
+  xlsxUtils.book_append_sheet(wb, wsExtra, 'EXTRA');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buf  = xlsxWrite(wb, { type: 'array', bookType: 'xlsx' as any }) as ArrayBuffer;
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -108,7 +124,17 @@ function baixarModeloBP() {
     { wch: 12 }, { wch: 24 }, { wch: 18 }, { wch: 16 }, { wch: 22 },
     { wch: 14 }, { wch: 16 }, { wch: 16 }, { wch: 12 }, { wch: 28 },
   ];
-  xlsxUtils.book_append_sheet(wb, ws, 'Acordos');
+  xlsxUtils.book_append_sheet(wb, ws, 'DIRETO');
+
+  // Aba EXTRA (opcional): mesmas colunas. Só é lida quando o setor tem a
+  // função Direto/Extra ativa — as linhas entram como acordos "extra".
+  const wsExtra = xlsxUtils.aoa_to_sheet([
+    ['Planilha de Acordos (EXTRA) — Bookplay'],
+    ['NR', 'Nome do Cliente', 'WhatsApp', 'Instituição', 'Forma de Pagamento', 'Qtd. Parcelas', 'Valor (Parcela)', 'Data de Venci.', 'Status', 'Observações'],
+    ['NR-010', 'João da Silva', '(89) 99999-1111', 'Banco X', 'Boleto', 2, 250.00, '30/05/2026', 'Pendente', ''],
+  ]);
+  wsExtra['!cols'] = ws['!cols'];
+  xlsxUtils.book_append_sheet(wb, wsExtra, 'EXTRA');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const buf  = xlsxWrite(wb, { type: 'array', bookType: 'xlsx' as any }) as ArrayBuffer;
   const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -208,7 +234,15 @@ export default function ImportarExcel() {
           return { setorId: data.setor_id ?? null, equipeId: data.equipe_id ?? null };
         },
       });
-      setClassificacao(classif);
+
+      // Linhas vindas da aba EXTRA são forçadas para a categoria 'extra'
+      // (vinculadas ao direto de outro operador quando existir; senão órfãs).
+      const linhasExtra = new Set(regs.filter(r => r.abaOrigem === 'extra').map(r => r.linha));
+      const classifFinal = linhasExtra.size > 0
+        ? forcarClassificacaoExtra(classif, linhasExtra, perfil.id)
+        : classif;
+
+      setClassificacao(classifFinal);
       setLinhasAutorizadas(new Set());
       setAutorizador(null);
     } catch (err) {
@@ -223,21 +257,50 @@ export default function ImportarExcel() {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const wb      = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
-        const ws      = wb.Sheets[wb.SheetNames[0]];
-        const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][];
+        const wb = xlsxRead(e.target?.result, { type: 'array', cellDates: false, raw: true });
+        const { diretoIdx, extraIdx } = selecionarAbas(wb.SheetNames);
 
-        // Parsing adaptativo: reconhece as colunas pelo cabeçalho, em qualquer ordem.
-        const { registros: regs, modo, mapa } = parsearPlanilha(rawRows);
+        const lerAba = (idx: number) => {
+          const ws      = wb.Sheets[wb.SheetNames[idx]];
+          const rawRows = xlsxUtils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '' }) as unknown[][];
+          return parsearPlanilha(rawRows);
+        };
 
-        // Bloqueia e avisa quando faltam colunas obrigatórias (por tenant/modo).
-        const { ok, faltando } = validarColunasObrigatorias(mapa, isPaguePlay, modo);
-        if (!ok) {
+        // ── Aba principal (DIRETO) ──────────────────────────────────────────
+        const dir = lerAba(diretoIdx);
+        const valDir = validarColunasObrigatorias(dir.mapa, isPaguePlay, dir.modo);
+        if (!valDir.ok) {
           toast.error(
-            `Não foi possível identificar as colunas obrigatórias: ${faltando.join(', ')}. ` +
+            `Não foi possível identificar as colunas obrigatórias: ${valDir.faltando.join(', ')}. ` +
             `Verifique o cabeçalho da planilha (a ordem das colunas é livre, mas todas precisam existir).`,
           );
           return;
+        }
+        const modo = dir.modo;
+        let regs: RegistroImportado[] = marcarAba(dir.registros, 'direto');
+
+        // ── Aba EXTRA (opcional, gated pela função Direto/Extra) ────────────
+        let avisoExtra: string | null = null;
+        if (extraIdx >= 0) {
+          const temFuncao = resolverDiretoExtraAtivo({
+            userId:       perfil?.id ?? '',
+            userSetorId:  perfil?.setor_id  ?? null,
+            userEquipeId: perfil?.equipe_id ?? null,
+            configs:      configsDiretoExtra,
+          });
+          if (!temFuncao) {
+            avisoExtra = 'Aba EXTRA ignorada: seu setor não tem a função Direto/Extra ativa.';
+          } else {
+            const ext = lerAba(extraIdx);
+            const valExt = validarColunasObrigatorias(ext.mapa, isPaguePlay, ext.modo);
+            if (!valExt.ok) {
+              avisoExtra = `Aba EXTRA ignorada: colunas obrigatórias ausentes (${valExt.faltando.join(', ')}).`;
+            } else if (ext.registros.length === 0) {
+              avisoExtra = 'Aba EXTRA sem linhas de dados reconhecidas.';
+            } else {
+              regs = [...regs, ...marcarAba(ext.registros, 'extra')];
+            }
+          }
         }
 
         if (regs.length === 0) {
@@ -254,6 +317,7 @@ export default function ImportarExcel() {
         setEtapa('preview');
         const sufixoModo = modo === 'blocos' ? ' (blocos por data)' : '';
         toast.success(`${regs.length} linha(s) lida(s)${sufixoModo} — ${regs.filter(r => r.valido).length} válida(s)`);
+        if (avisoExtra) toast.warning(avisoExtra);
         void carregarClassificacao(regs);
       } catch {
         toast.error('Erro ao ler o arquivo. Envie uma planilha .xlsx/.xls com uma linha de cabeçalho.');
@@ -515,6 +579,11 @@ export default function ImportarExcel() {
                   ? '* Linha 1: título da seção (ignorada). Linha 2: nomes das colunas. Dados nas linhas seguintes.'
                   : '* Colunas obrigatórias. A coluna "Col." abaixo é só um exemplo — a ordem pode ser qualquer uma e o cabeçalho pode estar em qualquer linha inicial. Nomes alternativos são reconhecidos (ex.: "Celular" = WhatsApp, "Contrato/Código" = NR). Também aceita planilhas divididas em blocos por data.'}
               </p>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                Aba <span className="font-semibold text-primary">EXTRA</span> (opcional): se a planilha tiver uma segunda aba com esse nome exato,
+                suas linhas são importadas como acordos <span className="font-medium">extra</span> (mesmas colunas da aba principal).
+                Só é lida quando o seu setor tem a função <span className="font-medium">Direto/Extra</span> ativa — caso contrário, é ignorada.
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -572,7 +641,10 @@ export default function ImportarExcel() {
                 <p className="font-semibold mb-1">{invalidos.length} linha(s) com erros — serão ignoradas:</p>
                 <ul className="space-y-0.5 text-destructive/80">
                   {invalidos.slice(0, 5).map(r => (
-                    <li key={r.linha}>Linha {r.linha}: {r.erros.join(', ')}</li>
+                    <li key={r.linha}>
+                      Linha {r.linhaPlanilha ?? r.linha}
+                      {r.abaOrigem === 'extra' && ' (aba EXTRA)'}: {r.erros.join(', ')}
+                    </li>
                   ))}
                   {invalidos.length > 5 && <li>…e mais {invalidos.length - 5}</li>}
                 </ul>
@@ -786,7 +858,14 @@ function TabelaSimples({
               : r.valor;
             return (
             <tr key={r.linha} className="border-b border-border/50 hover:bg-muted/20">
-              <td className="px-2 py-1.5 text-muted-foreground">{r.linha}</td>
+              <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">
+                {r.linhaPlanilha ?? r.linha}
+                {r.abaOrigem === 'extra' && (
+                  <span className="ml-1 px-1 py-0.5 rounded bg-primary/10 text-primary text-[9px] font-semibold uppercase align-middle">
+                    Extra
+                  </span>
+                )}
+              </td>
               {emBlocos && (
                 <td className="px-2 py-1.5 text-center text-muted-foreground">{r.bloco ?? '—'}</td>
               )}
@@ -909,7 +988,7 @@ function TabelaBloqueados({
                       : <Checkbox checked={sel} onCheckedChange={() => toggle(r.linha)} />
                     }
                   </td>
-                  <td className="px-2 py-1.5 text-muted-foreground">{r.linha}</td>
+                  <td className="px-2 py-1.5 text-muted-foreground">{r.linhaPlanilha ?? r.linha}</td>
                   <td className="px-2 py-1.5 font-mono font-medium text-primary">{r.instituicao || '—'}</td>
                   <td className="px-2 py-1.5 text-center text-muted-foreground">{r.estado_uf || '—'}</td>
                   <td className="px-2 py-1.5 text-muted-foreground">{classif?.donoAtual?.operadorNome ?? '—'}</td>

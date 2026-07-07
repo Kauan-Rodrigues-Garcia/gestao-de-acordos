@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// SUT
+import { processarImportacaoEmLote } from './importar_excel_batch.service';
+import { criarNotificacao } from './notificacoes.service';
+import { enviarParaLixeira } from './lixeira.service';
+
 // ── Mock do Supabase (estilo builder thenable) ──────────────────────────
 const calls: any[] = [];
 let defaultResult: any = { data: null, error: null };
@@ -43,11 +48,6 @@ vi.mock('@/services/notificacoes.service', () => ({
 vi.mock('@/services/lixeira.service', () => ({
   enviarParaLixeira: vi.fn().mockResolvedValue({ ok: true })
 }));
-
-// SUT
-import { processarImportacaoEmLote } from './importar_excel_batch.service';
-import { criarNotificacao } from './notificacoes.service';
-import { enviarParaLixeira } from './lixeira.service';
 
 describe('processarImportacaoEmLote', () => {
   const opAtual = { id: 'op-1', nome: 'Operador 1' };
@@ -116,6 +116,35 @@ describe('processarImportacaoEmLote', () => {
     expect(callUpdate.payload.vinculo_operador_id).toBe(opAtual.id);
 
     expect(criarNotificacao).toHaveBeenCalled();
+  });
+
+  it('extra órfão (aba EXTRA sem dono): insere como extra com vínculo nulo, sem update/notificação', async () => {
+    resultsByTable['acordos'] = [
+      { data: null, error: null }, // insert novo (extra órfão)
+    ];
+
+    const params: any = {
+      payloads: [{ linhaOriginal: 1000001, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
+      classificacao: [{ linhaOriginal: 1000001, nr: 'NR1', categoria: 'extra' }], // sem donoAtual
+      linhasAutorizadas: new Set(),
+      operadorAtual: opAtual,
+      empresaId,
+      labelNr: 'NR',
+      isPaguePlay: false
+    };
+
+    const res = await processarImportacaoEmLote(params);
+
+    expect(res.inseridos).toBe(1);
+
+    const callInsert = calls.find(c => c.operation === 'insert' && c.table === 'acordos');
+    expect(callInsert.payload.tipo_vinculo).toBe('extra');
+    expect(callInsert.payload.vinculo_operador_id).toBeNull();
+    expect(callInsert.payload.vinculo_operador_nome).toBeNull();
+
+    // Não deve haver update (nada a vincular) nem notificação.
+    expect(calls.find(c => c.operation === 'update')).toBeUndefined();
+    expect(criarNotificacao).not.toHaveBeenCalled();
   });
 
   it('direto cruzado (Caso B): rebaixa antigo + delete nr + insert novo + notificação', async () => {

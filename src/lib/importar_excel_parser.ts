@@ -111,6 +111,12 @@ export interface RegistroImportado {
   linha:           number;
   /** Índice do bloco (1-based) no modo 'blocos'; null no modo 'tabela'. */
   bloco:           number | null;
+  /** Aba de origem quando a planilha tem múltiplas abas (DIRETO/EXTRA).
+   *  Preenchido pela página ao combinar as abas; ausente = 'direto'. */
+  abaOrigem?:      'direto' | 'extra';
+  /** Linha real na planilha de origem (para exibição) quando `linha` foi
+   *  deslocada para um namespace próprio (aba EXTRA). Ver OFFSET_ABA_EXTRA. */
+  linhaPlanilha?:  number;
   /** Bookplay: NR do cliente (chave). PaguePlay: ''. */
   nr_cliente:      string;
   /** Bookplay: instituição (livre). PaguePlay: código/Inscrição (chave). */

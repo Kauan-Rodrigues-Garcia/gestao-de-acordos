@@ -159,7 +159,11 @@ export async function processarImportacaoEmLote(
   return resultado;
 }
 
-/** ── CASO A: operador atual tem lógica. Insere como EXTRA. ──────────── */
+/** ── CASO A: insere como EXTRA. ──────────────────────────────────────
+ *  Com `donoAtual` → extra vinculado ao DIRETO do outro operador.
+ *  Sem `donoAtual` (extra órfão, vindo da aba EXTRA) → extra sem vínculo;
+ *  quando alguém tabular o direto correspondente, o fluxo padrão de
+ *  autorização por líder cuida da vinculação. */
 async function aplicarCasoA(
   p: PayloadAcordoImport,
   classif: ClassificacaoNR,
@@ -167,13 +171,12 @@ async function aplicarCasoA(
   erros: string[],
 ): Promise<boolean> {
   const dono = classif.donoAtual;
-  if (!dono) { erros.push(`Linha ${p.linhaOriginal}: dono ausente no Caso A`); return false; }
 
   const registro = {
     ...p.registro,
     tipo_vinculo:          'extra',
-    vinculo_operador_id:   dono.operadorId,
-    vinculo_operador_nome: dono.operadorNome,
+    vinculo_operador_id:   dono?.operadorId   ?? null,
+    vinculo_operador_nome: dono?.operadorNome ?? null,
   };
 
   const { error: errInsert } = await supabase.from('acordos').insert(registro);
@@ -181,6 +184,9 @@ async function aplicarCasoA(
     erros.push(`Linha ${p.linhaOriginal} (EXTRA): ${errInsert.message}`);
     return false;
   }
+
+  // Extra órfão: nada a vincular/notificar ainda.
+  if (!dono) return true;
 
   // Referencia o acordo EXTRA no DIRETO do outro operador.
   await supabase
