@@ -38,6 +38,16 @@ describe('selecionarAbas', () => {
     expect(selecionarAbas(['Plan1', 'EXTRA'])).toEqual({ diretoIdx: 0, extraIdx: 1 });
     expect(selecionarAbas(['EXTRA', 'Plan1'])).toEqual({ diretoIdx: 1, extraIdx: 0 });
   });
+
+  it('aceita aba cujo nome CONTÉM "EXTRA" quando não há nome exato', () => {
+    expect(selecionarAbas(['DIRETO', 'EXTRA BOOKPLAY'])).toEqual({ diretoIdx: 0, extraIdx: 1 });
+    expect(selecionarAbas(['Plan1', 'Aba Extra'])).toEqual({ diretoIdx: 0, extraIdx: 1 });
+  });
+
+  it('nome exato "EXTRA" tem prioridade sobre "contém EXTRA"', () => {
+    expect(selecionarAbas(['EXTRAS ANTIGAS', 'EXTRA', 'DIRETO']))
+      .toEqual({ diretoIdx: 2, extraIdx: 1 });
+  });
 });
 
 describe('marcarAba', () => {

@@ -29,13 +29,18 @@ const norm = (s: string) => s.trim().toUpperCase();
 
 /**
  * Localiza as abas na planilha:
- *  - EXTRA: aba cujo nome é exatamente "EXTRA" (case-insensitive) — opcional.
+ *  - EXTRA: aba cujo nome é "EXTRA" (case-insensitive) ou, na falta de um nome
+ *    exato, a primeira aba cujo nome contenha "EXTRA" — opcional.
  *  - DIRETO (principal): aba "DIRETO" se existir; senão a primeira aba que não
  *    seja a EXTRA; senão a primeira aba. Mantém compatibilidade com planilhas
  *    de aba única (o comportamento antigo).
  */
 export function selecionarAbas(sheetNames: string[]): { diretoIdx: number; extraIdx: number } {
-  const extraIdx = sheetNames.findIndex(n => norm(n) === 'EXTRA');
+  // EXTRA: primeiro tenta o nome exato "EXTRA"; se não houver, aceita qualquer
+  // aba cujo nome CONTENHA "EXTRA" (ex.: "EXTRA BOOKPLAY", "Aba Extra"), para
+  // não ignorar a aba em silêncio por uma pequena variação de nome.
+  let extraIdx = sheetNames.findIndex(n => norm(n) === 'EXTRA');
+  if (extraIdx === -1) extraIdx = sheetNames.findIndex(n => norm(n).includes('EXTRA'));
 
   let diretoIdx = sheetNames.findIndex(n => norm(n) === 'DIRETO');
   if (diretoIdx === -1) diretoIdx = sheetNames.findIndex((_, i) => i !== extraIdx);

@@ -174,6 +174,7 @@ export default function ImportarExcel() {
   const [importando, setImportando] = useState(false);
   const [abaAtiva,   setAbaAtiva]   = useState<AbaPreview>('novos');
   const [modoParse,  setModoParse]  = useState<ModoParse>('tabela');
+  const [avisoExtra, setAvisoExtra] = useState<string | null>(null);
 
   // Classificação
   const [classificacao,     setClassificacao]     = useState<ClassificacaoNR[]>([]);
@@ -281,14 +282,14 @@ export default function ImportarExcel() {
 
         // ── Aba EXTRA (opcional, gated pela função Direto/Extra) ────────────
         let avisoExtra: string | null = null;
+        const temFuncaoExtra = resolverDiretoExtraAtivo({
+          userId:       perfil?.id ?? '',
+          userSetorId:  perfil?.setor_id  ?? null,
+          userEquipeId: perfil?.equipe_id ?? null,
+          configs:      configsDiretoExtra,
+        });
         if (extraIdx >= 0) {
-          const temFuncao = resolverDiretoExtraAtivo({
-            userId:       perfil?.id ?? '',
-            userSetorId:  perfil?.setor_id  ?? null,
-            userEquipeId: perfil?.equipe_id ?? null,
-            configs:      configsDiretoExtra,
-          });
-          if (!temFuncao) {
+          if (!temFuncaoExtra) {
             avisoExtra = 'Aba EXTRA ignorada: seu setor não tem a função Direto/Extra ativa.';
           } else {
             const ext = lerAba(extraIdx);
@@ -301,6 +302,14 @@ export default function ImportarExcel() {
               regs = [...regs, ...marcarAba(ext.registros, 'extra')];
             }
           }
+        } else if (temFuncaoExtra) {
+          // Função Direto/Extra ATIVA, porém nenhuma aba EXTRA foi encontrada no
+          // arquivo. Antes isso falhava em silêncio (nenhum aviso). Agora
+          // listamos as abas achadas para o operador saber exatamente o que
+          // corrigir (adicionar/renomear a 2ª aba).
+          avisoExtra =
+            `Nenhuma aba "EXTRA" encontrada no arquivo. Abas do arquivo: ${wb.SheetNames.join(', ')}. ` +
+            'Para importar acordos extras, o arquivo precisa de uma 2ª aba cujo nome contenha "EXTRA".';
         }
 
         if (regs.length === 0) {
@@ -309,6 +318,7 @@ export default function ImportarExcel() {
         }
         setArquivo(file);
         setRegistros(regs);
+        setAvisoExtra(avisoExtra);
         setModoParse(modo);
         setClassificacao([]);
         setLinhasAutorizadas(new Set());
@@ -652,6 +662,14 @@ export default function ImportarExcel() {
             </div>
           )}
 
+          {/* Aviso da aba EXTRA (função ativa mas aba ausente/ignorada) */}
+          {avisoExtra && (
+            <div className="flex items-start gap-2 p-3 bg-amber-500/5 border border-amber-500/30 rounded-lg text-xs text-amber-600 dark:text-amber-400">
+              <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <p>{avisoExtra}</p>
+            </div>
+          )}
+
           {/* Tabs */}
           <Card className="border-border overflow-hidden">
             <div className="flex border-b border-border bg-muted/20 px-4">
@@ -698,7 +716,7 @@ export default function ImportarExcel() {
 
           {/* Actions */}
           <div className="flex justify-between">
-            <Button variant="outline" onClick={() => { setEtapa('upload'); setArquivo(null); setRegistros([]); }}>
+            <Button variant="outline" onClick={() => { setEtapa('upload'); setArquivo(null); setRegistros([]); setAvisoExtra(null); }}>
               <ArrowLeft className="w-4 h-4 mr-1.5" /> Novo arquivo
             </Button>
             <Button onClick={confirmarImportacao} disabled={importando || validos.length === 0} className="gap-2">
