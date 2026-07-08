@@ -38,6 +38,12 @@ vi.mock('@/services/lixeira.service', () => ({
   enviarParaLixeira: vi.fn().mockResolvedValue(undefined),
 }));
 
+// 2b) direto_extra.service — `fetchIsDiretoExtraAtivo` decide os CASOs A/B/C.
+const fetchIsDiretoExtraAtivoMock = vi.fn().mockResolvedValue(false);
+vi.mock('@/services/direto_extra.service', () => ({
+  fetchIsDiretoExtraAtivo: (...a: unknown[]) => fetchIsDiretoExtraAtivoMock(...a),
+}));
+
 // 3) hooks
 const verificarConflitoCache = vi.fn().mockReturnValue(null);
 vi.mock('@/hooks/useNrRegistros', () => ({
@@ -79,13 +85,15 @@ type R = { data: unknown; error: { message: string; code?: string } | null };
 const routes: {
   insertAcordo: R;
   updateAcordo: R;
+  acordosMaybeSingle: R;
   perfisMaybeSingle: R;
   logsSistemaInsert: R;
 } = {
-  insertAcordo:      { data: null, error: null },
-  updateAcordo:      { data: null, error: null },
-  perfisMaybeSingle: { data: null, error: null },
-  logsSistemaInsert: { data: null, error: null },
+  insertAcordo:       { data: null, error: null },
+  updateAcordo:       { data: null, error: null },
+  acordosMaybeSingle: { data: null, error: null },
+  perfisMaybeSingle:  { data: null, error: null },
+  logsSistemaInsert:  { data: null, error: null },
 };
 
 interface SupabaseCall { table: string; op: string; payload?: unknown; id?: unknown; }
@@ -98,6 +106,7 @@ vi.mock('@/lib/supabase', () => {
       supabaseCalls.push({ table, op: state.op ?? kind, payload: state.payload, id: state.id });
       if (table === 'acordos' && state.op === 'insert') return routes.insertAcordo;
       if (table === 'acordos' && state.op === 'update') return routes.updateAcordo;
+      if (table === 'acordos' && state.op === 'select' && kind === 'maybeSingle') return routes.acordosMaybeSingle;
       if (table === 'perfis'  && state.op === 'select') return routes.perfisMaybeSingle;
       if (table === 'logs_sistema' && state.op === 'insert') return routes.logsSistemaInsert;
       return { data: null, error: null };
@@ -116,7 +125,14 @@ vi.mock('@/lib/supabase', () => {
     };
     return builder;
   };
-  return { supabase: { from: vi.fn((t: string) => makeBuilder(t)) } };
+  return {
+    supabase: {
+      from: vi.fn((t: string) => makeBuilder(t)),
+      // RPCs falham por padrão → o código cai nos fallbacks de update direto,
+      // que são os caminhos assertados nos testes do CASO A.
+      rpc: vi.fn(async () => ({ data: null, error: { message: 'rpc indisponível no teste' } })),
+    },
+  };
 });
 
 // 5) toast
@@ -198,7 +214,7 @@ function preencherMinimoBookplay(nr = '777') {
   const nome = screen.getByPlaceholderText(/Nome completo/i);
   fireEvent.change(nome, { target: { value: 'Cliente Teste' } });
   // NR do cliente
-  const nrInput = screen.getByPlaceholderText(/Número NR/i);
+  const nrInput = screen.getByPlaceholderText(/Código do acordo/i);
   fireEvent.change(nrInput, { target: { value: nr } });
   // Vencimento: clicar no pick-date (nosso mock chama onSelect com data válida)
   fireEvent.click(screen.getByTestId('pick-date'));
@@ -217,12 +233,14 @@ beforeEach(() => {
   verificarConflitoCache.mockReset().mockReturnValue(null);
   criarNotificacaoMock.mockReset().mockResolvedValue(undefined);
   isAtivoParaUsuarioMock.mockReset().mockReturnValue(false);
+  fetchIsDiretoExtraAtivoMock.mockReset().mockResolvedValue(false);
   toastError.mockReset();
   toastSuccess.mockReset();
   supabaseCalls.length = 0;
-  routes.insertAcordo      = { data: null, error: null };
-  routes.updateAcordo      = { data: null, error: null };
-  routes.perfisMaybeSingle = { data: null, error: null };
+  routes.insertAcordo       = { data: null, error: null };
+  routes.updateAcordo       = { data: null, error: null };
+  routes.acordosMaybeSingle = { data: null, error: null };
+  routes.perfisMaybeSingle  = { data: null, error: null };
   perfilValue = { id: 'me-1', nome: 'Eu Operador', setor_id: 'setor-A', equipe_id: null };
   empresaValue = { id: 'emp-1' };
   // Limpa rascunho persistido em sessionStorage entre testes (ver persistência
@@ -310,7 +328,7 @@ describe('AcordoNovoInline — validações iniciais', () => {
     // Preencher tudo MENOS vencimento.
     const nome = screen.getByPlaceholderText(/Nome completo/i);
     fireEvent.change(nome, { target: { value: 'X' } });
-    const nrInput = screen.getByPlaceholderText(/Número NR/i);
+    const nrInput = screen.getByPlaceholderText(/Código do acordo/i);
     fireEvent.change(nrInput, { target: { value: '777' } });
     const valorInput = screen.getByPlaceholderText('0,00');
     fireEvent.change(valorInput, { target: { value: '100' } });
@@ -327,7 +345,7 @@ describe('AcordoNovoInline — validações iniciais', () => {
     renderInline();
     const nome = screen.getByPlaceholderText(/Nome completo/i);
     fireEvent.change(nome, { target: { value: 'X' } });
-    const nrInput = screen.getByPlaceholderText(/Número NR/i);
+    const nrInput = screen.getByPlaceholderText(/Código do acordo/i);
     fireEvent.change(nrInput, { target: { value: '777' } });
     fireEvent.click(screen.getByTestId('pick-date'));
 
@@ -357,7 +375,7 @@ describe('AcordoNovoInline — validações iniciais', () => {
     expect(verificarNrRegistroMock).not.toHaveBeenCalled();
   });
 
-  it('PaguePlay: "Inscrição é obrigatória" quando campo vazio', async () => {
+  it('PaguePlay: "Código é obrigatório" quando campo vazio', async () => {
     renderInline({ isPaguePlay: true });
     // No PaguePlay o placeholder do nome é "Nome do profissional".
     const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
@@ -370,7 +388,7 @@ describe('AcordoNovoInline — validações iniciais', () => {
     clickSalvarAcordo();
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith('Inscrição é obrigatória'),
+      expect(toastError).toHaveBeenCalledWith('Código é obrigatório'),
     );
   });
 });
@@ -409,11 +427,102 @@ describe('AcordoNovoInline — fluxo salvar() (caminho livre)', () => {
 });
 
 describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
-  it('NR já está na minha própria lista: toast e NÃO insere', async () => {
+  it('NR meu + acordo carregável: abre ModalAdicionarParcela sem inserir', async () => {
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
     });
+    routes.acordosMaybeSingle = {
+      data: {
+        id: 'a-meu', nome_cliente: 'Cliente Entrada', nr_cliente: '777',
+        vencimento: '2026-07-01', valor: 400, tipo: 'pix', status: 'pago',
+        parcelas: 1, numero_parcela: 1, acordo_grupo_id: 'grp-1',
+        operador_id: 'me-1', empresa_id: 'emp-1',
+        perfis: { id: 'me-1', nome: 'Eu Operador' },
+      } as Acordo,
+      error: null,
+    };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('777');
+    clickSalvarAcordo();
+
+    // Modal de adicionar parcela aparece com o contexto do NR bloqueado.
+    await waitFor(() => {
+      expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument();
+    });
+    expect(screen.getByText(/já está tabulado por você/i)).toBeInTheDocument();
+
+    // Nada foi inserido ainda — aguarda confirmação do operador.
+    expect(onSaved).not.toHaveBeenCalled();
+    const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
+    expect(insertCall).toBeUndefined();
+  });
+
+  it('confirmar no modal insere parcela no mesmo grupo e chama onSaved', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
+    });
+    routes.acordosMaybeSingle = {
+      data: {
+        id: 'a-meu', nome_cliente: 'Cliente Entrada', nr_cliente: '777',
+        vencimento: '2026-07-01', valor: 400, tipo: 'pix', status: 'pago',
+        parcelas: 1, numero_parcela: 1, acordo_grupo_id: 'grp-1',
+        operador_id: 'me-1', empresa_id: 'emp-1',
+        perfis: { id: 'me-1', nome: 'Eu Operador' },
+      } as Acordo,
+      error: null,
+    };
+    routes.insertAcordo = {
+      data: {
+        id: 'parc-2', nr_cliente: '777', numero_parcela: 2, parcelas: 2,
+        acordo_grupo_id: 'grp-1', vencimento: '2026-05-15', valor: 100,
+      } as Acordo,
+      error: null,
+    };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('777');
+    clickSalvarAcordo();
+
+    await waitFor(() => {
+      expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument();
+    });
+
+    // Campos já vêm preenchidos com o que foi digitado — basta confirmar.
+    fireEvent.click(screen.getByRole('button', { name: /^Adicionar parcela$/i }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    // Parcela inserida no MESMO grupo, com número e total incrementados.
+    const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
+    expect(insertCall?.payload).toMatchObject({
+      nr_cliente:      '777',
+      acordo_grupo_id: 'grp-1',
+      numero_parcela:  2,
+      parcelas:        2,
+      operador_id:     'me-1',
+      empresa_id:      'emp-1',
+      vencimento:      '2026-05-15',
+      valor:           100,
+    });
+
+    // Linhas antigas do grupo recebem o novo total (update parcelas=2).
+    const updateCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'update');
+    expect(updateCall?.payload).toMatchObject({ parcelas: 2 });
+
+    expect(toastSuccess).toHaveBeenCalled();
+    const okMsgs = toastSuccess.mock.calls.map(c => String(c[0]));
+    expect(okMsgs.some(m => /adicionada/i.test(m))).toBe(true);
+  });
+
+  it('NR meu mas acordo não carregável: mantém o toast de bloqueio', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
+    });
+    routes.acordosMaybeSingle = { data: null, error: null };
 
     renderInline({ onSaved });
     preencherMinimoBookplay('777');
@@ -485,6 +594,7 @@ describe('AcordoNovoInline — fluxo salvar() (CASO B — só o outro tem a lóg
   it('abre modal de aviso, não insere e não notifica', async () => {
     // Eu NÃO tenho a lógica, o outro TEM.
     isAtivoParaUsuarioMock.mockImplementation((userId: string) => userId === 'op-outro');
+    fetchIsDiretoExtraAtivoMock.mockResolvedValue(true); // dono tem a lógica ativa
 
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
@@ -580,7 +690,7 @@ describe('AcordoNovoInline — persistência de rascunho', () => {
 
     const nome = screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement;
     fireEvent.change(nome, { target: { value: 'João da Silva' } });
-    const nr = screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement;
+    const nr = screen.getByPlaceholderText(/Código do acordo/i) as HTMLInputElement;
     fireEvent.change(nr, { target: { value: '1234' } });
     const valor = screen.getByPlaceholderText('0,00') as HTMLInputElement;
     fireEvent.change(valor, { target: { value: '250,50' } });
@@ -600,7 +710,7 @@ describe('AcordoNovoInline — persistência de rascunho', () => {
     renderInline();
 
     expect((screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement).value).toBe('João da Silva');
-    expect((screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement).value).toBe('1234');
+    expect((screen.getByPlaceholderText(/Código do acordo/i) as HTMLInputElement).value).toBe('1234');
     expect((screen.getByPlaceholderText('0,00') as HTMLInputElement).value).toBe('250,50');
   });
 
@@ -608,7 +718,7 @@ describe('AcordoNovoInline — persistência de rascunho', () => {
     sessionStorage.clear();
     renderInline();
     expect((screen.getByPlaceholderText(/Nome completo/i) as HTMLInputElement).value).toBe('');
-    expect((screen.getByPlaceholderText(/Número NR/i) as HTMLInputElement).value).toBe('');
+    expect((screen.getByPlaceholderText(/Código do acordo/i) as HTMLInputElement).value).toBe('');
     expect((screen.getByPlaceholderText('0,00') as HTMLInputElement).value).toBe('');
   });
 });

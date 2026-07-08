@@ -26,6 +26,8 @@ import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
+import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
+import { adicionarParcelaAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -176,6 +178,9 @@ export function AcordoNovoInline({
   const [autorizando, setAutorizando] = useState(false);
   const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
   const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
+  // NR já tabulado pelo PRÓPRIO operador → oferta de adicionar parcela
+  const [acordoParaParcela, setAcordoParaParcela] = useState<Acordo | null>(null);
+  const [salvandoParcela,   setSalvandoParcela]   = useState(false);
 
   const tipos     = isPaguePlay ? TIPOS_PAGUEPLAY : TIPOS_BOOKPLAY;
   const tipoAtual = tipos.find((t) => t.value === tipo);
@@ -279,7 +284,19 @@ export function AcordoNovoInline({
 
         if (conflitoFinal) {
           if (conflitoFinal.operadorId === perfil.id) {
-            toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
+            // NR do próprio operador: em vez de bloquear sem saída, oferece
+            // adicionar os dados preenchidos como nova parcela do acordo
+            // existente (ex.: entrada no Pix + boleto do restante).
+            const { data: acordoMeu } = await supabase
+              .from('acordos')
+              .select('*, perfis(id, nome, email, perfil, setor_id)')
+              .eq('id', conflitoFinal.acordoId)
+              .maybeSingle();
+            if (acordoMeu) {
+              setAcordoParaParcela(acordoMeu as Acordo);
+            } else {
+              toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
+            }
             return;
           }
 
@@ -581,6 +598,22 @@ export function AcordoNovoInline({
 
   function cancelarAvisoDiretoExtra() { setAvisoDiretoExtra(null); }
 
+  // ── Adicionar parcela ao acordo existente (NR do próprio operador) ────────
+  async function confirmarAdicionarParcela(input: NovaParcelaInput) {
+    if (!acordoParaParcela) return;
+    setSalvandoParcela(true);
+    try {
+      const r = await adicionarParcelaAoGrupo(acordoParaParcela, input, { isPaguePlay });
+      if (!r.ok) { toast.error(r.erro); return; }
+      limparDraft();
+      setAcordoParaParcela(null);
+      onSaved(r.novaParcela);
+      toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`);
+    } finally {
+      setSalvandoParcela(false);
+    }
+  }
+
   const formState: SharedFormState = {
     colSpan, isPaguePlay,
     salvando, salvar, cancelar,
@@ -612,8 +645,29 @@ export function AcordoNovoInline({
     profissionalEncontrado: !!profissional,
   };
 
-  if (isPaguePlay) return <FormPP state={formState} />;
-  return <FormBP state={formState} />;
+  const labelCampoNr = isPaguePlay ? 'Código' : 'NR';
+  const valorCampoNr = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+
+  return (
+    <>
+      {isPaguePlay ? <FormPP state={formState} /> : <FormBP state={formState} />}
+      <ModalAdicionarParcela
+        aberto={!!acordoParaParcela}
+        acordo={acordoParaParcela}
+        isPaguePlay={isPaguePlay}
+        inicial={{
+          vencimento,
+          valor:  parseCurrencyInput(valorStr),
+          tipo:   tipo === 'boleto_pix' ? 'boleto' : tipo,
+          status,
+        }}
+        descricao={`O ${labelCampoNr} "${valorCampoNr}" já está tabulado por você. Revise os dados abaixo para adicioná-los como nova parcela do acordo existente.`}
+        salvando={salvandoParcela}
+        onConfirm={confirmarAdicionarParcela}
+        onClose={() => setAcordoParaParcela(null)}
+      />
+    </>
+  );
 }
 
 export default AcordoNovoInline;

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock,
-  ArrowLeftRight, Link as LinkIcon, CalendarClock, MessageCircle,
+  ArrowLeftRight, Link as LinkIcon, CalendarClock, MessageCircle, Plus,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,9 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
+import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
+import { adicionarParcelaAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
   formatCurrency, formatDate,
@@ -26,7 +29,7 @@ import {
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
-import { isTipoParcelado, addMonths } from './helpers';
+import { addMonths } from './helpers';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 import { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
 
@@ -87,13 +90,18 @@ export function AcordoDetalheInline({
   const [executandoExtraDireto, setExecutandoExtraDireto]  = useState(false);
   const [reagendarParcela,      setReagendarParcela]       = useState<Acordo | null>(null);
   const [salvandoReagendar,     setSalvandoReagendar]      = useState(false);
+  const [modalAddParcela,       setModalAddParcela]        = useState(false);
+  const [salvandoAddParcela,    setSalvandoAddParcela]     = useState(false);
   const [acordoLocal,           setAcordoLocal]            = useState<Acordo>(acordo);
 
   const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
   const totalParcelas = acordoLocal.parcelas ?? 1;
-  const deveExibirParcelas =
-    isTipoParcelado(acordoLocal.tipo, isPaguePlay) && totalParcelas > 1;
-  const isAcordoSimples = !deveExibirParcelas;
+  // Independe da forma de pagamento: parcelas adicionadas manualmente podem
+  // misturar formas (ex.: entrada no Pix + boleto do restante).
+  const deveExibirParcelas = totalParcelas > 1;
+  // Dono do acordo ou perfil de visão ampla pode adicionar parcela ao grupo.
+  const podeAdicionarParcela =
+    perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil);
 
   const link   = extractLinkAcordo(acordoLocal.observacoes);
   const estado = getEstadoFromAcordo(acordoLocal);
@@ -154,7 +162,11 @@ export function AcordoDetalheInline({
       }
       // Reagenda a próxima parcela de acordos parcelados — vale para os dois
       // tenants (PaguePlay e BookPlay usam a mesma lógica em handleReagendar).
-      if (deveExibirParcelas && (p.numero_parcela ?? 1) < totalParcelas) {
+      // Se a próxima parcela já existe (adicionada manualmente), não reabre.
+      const proximaJaExiste = registrosReais.some(
+        r => (r.numero_parcela ?? 1) === (p.numero_parcela ?? 1) + 1,
+      );
+      if (deveExibirParcelas && (p.numero_parcela ?? 1) < totalParcelas && !proximaJaExiste) {
         setReagendarParcela(parcelaAtualizada);
       }
     }
@@ -299,6 +311,39 @@ export function AcordoDetalheInline({
       toast.error(e instanceof Error ? e.message : 'Erro ao reagendar parcela');
     } finally {
       setSalvandoReagendar(false);
+    }
+  }
+
+  // ── Adicionar parcela manualmente (mesmo NR, formas podem variar) ─────────
+  async function confirmarAdicionarParcela(input: NovaParcelaInput) {
+    setSalvandoAddParcela(true);
+    try {
+      const r = await adicionarParcelaAoGrupo(acordoLocal, input, { isPaguePlay });
+      if (!r.ok) { toast.error(r.erro); return; }
+
+      const grupoId = r.novaParcela.acordo_grupo_id ?? acordoLocal.acordo_grupo_id ?? null;
+      const baseAtualizado: Acordo = {
+        ...acordoLocal,
+        parcelas:        r.novoTotal,
+        acordo_grupo_id: grupoId,
+        numero_parcela:  acordoLocal.numero_parcela ?? 1,
+      };
+      setAcordoLocal(baseAtualizado);
+      setRegistrosReais(prev => {
+        const antigas = prev
+          .filter(p => p.id !== r.novaParcela.id)
+          .map(p => ({ ...p, parcelas: r.novoTotal }));
+        const comBase = antigas.some(p => p.id === baseAtualizado.id)
+          ? antigas
+          : [baseAtualizado, ...antigas];
+        return [...comBase, r.novaParcela]
+          .sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1));
+      });
+      setModalAddParcela(false);
+      onSaved?.(baseAtualizado);
+      toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`);
+    } finally {
+      setSalvandoAddParcela(false);
     }
   }
 
@@ -528,6 +573,16 @@ export function AcordoDetalheInline({
                     >
                       <ArrowLeftRight className="w-3 h-3" />
                       Acordo direto
+                    </Button>
+                  )}
+                  {podeAdicionarParcela && (
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={() => setModalAddParcela(true)}
+                    >
+                      <Plus className="w-3 h-3" />
+                      Adicionar parcela
                     </Button>
                   )}
                   <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
@@ -767,6 +822,20 @@ export function AcordoDetalheInline({
           onClose={() => setReagendarParcela(null)}
         />
       )}
+
+      <ModalAdicionarParcela
+        aberto={modalAddParcela}
+        acordo={acordoLocal}
+        isPaguePlay={isPaguePlay}
+        inicial={{
+          valor:  acordoLocal.valor,
+          tipo:   acordoLocal.tipo,
+          status: 'verificar_pendente',
+        }}
+        salvando={salvandoAddParcela}
+        onConfirm={confirmarAdicionarParcela}
+        onClose={() => setModalAddParcela(false)}
+      />
 
       <ModalExtraParaDireto
         open={modalExtraDiretoOpen}
