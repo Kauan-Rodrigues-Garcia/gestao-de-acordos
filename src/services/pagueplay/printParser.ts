@@ -66,7 +66,7 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
     if (!out.parcelas) {
       const mParc =
         t.match(/([0O\d][0-9]|[1-9])\s+parcelas?\b/i) ||
-        t.match(/parcelas?\s*[:\-]?\s*(\d{1,2})/i) ||
+        t.match(/parcelas?\s*[:-]?\s*(\d{1,2})/i) ||
         t.match(/\b1\s*de\s*(\d{1,2})\b/i);
       if (mParc) {
         const n = parseInt(mParc[1].replace(/O/gi, '0'), 10);
@@ -77,8 +77,8 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
 
   // ── Data (primeiro vencimento) ─────────────────────────────────────────
   const mVenc =
-    t.match(/primeiro\s+vencimento\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
-    t.match(/(?:data\s+de\s+pagamento|vencimento|pagamento)\s*[:\-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
+    t.match(/primeiro\s+vencimento\s*[:-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
+    t.match(/(?:data\s+de\s+pagamento|vencimento|pagamento)\s*[:-]?\s*(\d{2})\/(\d{2})\/(\d{4})/i) ||
     t.match(/(\d{2})\/(\d{2})\/(\d{4})/);
   if (mVenc) {
     out.vencimento = `${mVenc[3]}-${mVenc[2]}-${mVenc[1]}`;
@@ -95,7 +95,7 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
   }
 
   // ── Nome do cliente ───────────────────────────────────────────────────
-  const mNome = t.match(/(?:cliente|nome)\s*[:\-]?\s*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú\s]{3,60})/i);
+  const mNome = t.match(/(?:cliente|nome)\s*[:-]?\s*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú\s]{3,60})/i);
   if (mNome) {
     out.nome_cliente = mNome[1].trim().replace(/\s{2,}/g, ' ');
   }

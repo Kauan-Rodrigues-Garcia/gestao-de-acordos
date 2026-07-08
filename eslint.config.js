@@ -35,6 +35,15 @@ export default tseslint.config(
       "import-x/first": "error",
     },
   },
+  // Arquivos de teste usam o padrão vitest de declarar mocks (`vi.mock` +
+  // consts) ANTES do import do SUT — o import no corpo do módulo é
+  // intencional e necessário (mover para o topo quebraria os mocks por TDZ).
+  {
+    files: ["**/*.{test,spec}.{ts,tsx}", "src/test/**"],
+    rules: {
+      "import-x/first": "off",
+    },
+  },
   // Arquivos core (fronteiras Supabase) — exigência de tipagem estrita, sem `any`.
   // Este override foi adicionado após o sweep de remoção de `any`;
   // novo `any` aqui deve ser rejeitado pelo CI até refatoração explícita.
