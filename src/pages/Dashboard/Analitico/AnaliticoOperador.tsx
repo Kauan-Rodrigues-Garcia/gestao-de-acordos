@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
 import { RankingView } from './RankingView';
@@ -42,17 +43,18 @@ interface AnaliticoOperadorProps {
   onRefetch: () => void;
 }
 
-function chipForma(forma: AnaliticoRecebimento['forma_pagamento']) {
-  if (forma === 'cartao') {
-    return (
-      <Badge variant="outline" className="text-xs border-purple-300 text-purple-700 dark:text-purple-400">
-        Cartão
-      </Badge>
-    );
-  }
+function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
+  const isCartao = forma === 'cartao';
+  // BookPlay traz o rótulo real (Boleto, Pix, Pix Automático…); PaguePlay usa o genérico.
+  const texto = detalhe || (isCartao ? 'Cartão' : 'Boleto/Pix');
   return (
-    <Badge variant="outline" className="text-xs border-blue-300 text-blue-700 dark:text-blue-400">
-      Boleto/Pix
+    <Badge variant="outline" className={cn(
+      'text-xs',
+      isCartao
+        ? 'border-purple-300 text-purple-700 dark:text-purple-400'
+        : 'border-blue-300 text-blue-700 dark:text-blue-400',
+    )}>
+      {texto}
     </Badge>
   );
 }
@@ -61,6 +63,8 @@ export function AnaliticoOperador({
   dados, loading, operadorId, operadorNome, empresaId, mes, liderId,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoOperadorProps) {
+  const tenant = useTenant();
+  const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
   const [, setForceRender] = useState(0);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
@@ -167,19 +171,21 @@ export function AnaliticoOperador({
             </div>
 
             {/* Resumo */}
-            <div className="grid grid-cols-3 gap-3">
+            <div className={cn('grid gap-3', mostrarHO ? 'grid-cols-3' : 'grid-cols-2')}>
               <Card className="border-border">
                 <CardContent className="p-3 text-center">
                   <p className="text-lg font-bold text-primary">{formatBRL(totalRecebido)}</p>
                   <p className="text-xs text-muted-foreground">Total recebido</p>
                 </CardContent>
               </Card>
-              <Card className="border-border">
-                <CardContent className="p-3 text-center">
-                  <p className="text-lg font-bold">{formatBRL(totalHO)}</p>
-                  <p className="text-xs text-muted-foreground">Total HO</p>
-                </CardContent>
-              </Card>
+              {mostrarHO && (
+                <Card className="border-border">
+                  <CardContent className="p-3 text-center">
+                    <p className="text-lg font-bold">{formatBRL(totalHO)}</p>
+                    <p className="text-xs text-muted-foreground">Total HO</p>
+                  </CardContent>
+                </Card>
+              )}
               <Card className="border-border">
                 <CardContent className="p-3 text-center">
                   <p className="text-lg font-bold text-emerald-600">
@@ -207,7 +213,7 @@ export function AnaliticoOperador({
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">RECEBIDO</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">TOTAL HO</th>
+                          {mostrarHO && <th className="text-right px-3 py-3 font-semibold text-muted-foreground">TOTAL HO</th>}
                           <th className="text-left px-3 py-3 font-semibold text-muted-foreground">DATA PGT.</th>
                           <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÃO</th>
                         </tr>
@@ -232,12 +238,17 @@ export function AnaliticoOperador({
                                           {linha.nome_cliente}
                                         </span>
                                       )}
+                                      {linha.instituicao && (
+                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
+                                          {linha.instituicao}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
-                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
                                 <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
-                                <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>
+                                {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
                                 <td className="px-3 py-2.5 tabular-nums">
                                   {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
                                 </td>
@@ -271,13 +282,18 @@ export function AnaliticoOperador({
                                           {linha.nome_cliente}
                                         </span>
                                       )}
+                                      {linha.instituicao && (
+                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
+                                          {linha.instituicao}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                 </td>
                               )}
-                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento)}</td>
+                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
                               <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(p.valor)}</td>
-                              <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>
+                              {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
                               <td className="px-3 py-2.5 tabular-nums">
                                 {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </td>

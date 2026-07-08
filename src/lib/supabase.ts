@@ -261,7 +261,12 @@ export interface AnaliticoRecebimento {
   operador_usuario: string;
   codigo: string;
   nome_cliente: string | null;
+  /** Coluna "Empresa" do relatório BookPlay (bookplay, mundial editora...); null na PaguePlay */
+  instituicao?: string | null;
   forma_pagamento: FormaPagementoAnalitico;
+  /** Rótulo real da forma de pagamento na BookPlay (Boleto, Pix, Pix Automático,
+   *  Cartão Recorrente, Cartão de Crédito); null na PaguePlay. */
+  forma_detalhe?: string | null;
   valor_recebido: number;
   total_ho: number;
   data_pagamento: string;   // DATE → 'yyyy-MM-dd'
@@ -286,6 +291,8 @@ export interface DiarioRecebimento {
   cpf: string | null;
   nome_cliente: string | null;
   acordo_codigo: string | null;
+  /** Coluna "Empresa" do relatório BookPlay (bookplay, mundial editora...); null na PaguePlay */
+  instituicao?: string | null;
   forma_pagamento: string;    // texto bruto (Pix, Boleto, Cartão Padrão…)
   valor_recebido: number;
   data_pagamento: string | null; // DATE → 'yyyy-MM-dd'

@@ -5,7 +5,8 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Save, User, X, Info } from 'lucide-react';
+import { FileText, Hash, Link2, Save, User, X, Info } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { INSTITUICOES_OPTIONS } from '@/lib/index';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
@@ -24,6 +25,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
     tipo, handleChangeTipo,
     parcelasStr, setParcelasStr,
     temParcelas,
+    usuarioTemLogicaDiretoExtra,
+    isExtra, setIsExtra,
     status, setStatus,
     observacoes, setObservacoes,
     conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
@@ -105,6 +108,24 @@ export function FormBP({ state }: { state: SharedFormState }) {
                     </SelectContent>
                   </Select>
                 </div>
+                {usuarioTemLogicaDiretoExtra && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Vínculo</Label>
+                    <button
+                      type="button" onClick={() => setIsExtra(v => !v)} disabled={salvando}
+                      title={isExtra ? 'Clique para marcar como Direto' : 'Clique para marcar como Extra'}
+                      className={cn(
+                        'h-8 w-full flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
+                        isExtra
+                          ? 'bg-amber-500/15 text-amber-700 border-amber-500/30 hover:bg-amber-500/25 dark:text-amber-400'
+                          : 'bg-background text-foreground border-input hover:bg-accent/50',
+                      )}
+                    >
+                      <Link2 className="w-3 h-3 shrink-0" />
+                      {isExtra ? 'Extra' : 'Direto'}
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

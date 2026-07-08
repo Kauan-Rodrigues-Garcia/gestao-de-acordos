@@ -14,6 +14,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/tenant-config';
 import { useDiario } from '@/hooks/useDiario';
 import { fmtCPF, formaKindDiario } from '@/services/diario/diarioParser';
 import {
@@ -26,7 +27,7 @@ interface DiarioOperadorProps {
   operadorId: string;
 }
 
-function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boolean }) {
+function LinhasTabela({ itens, destaque, mostrarNR }: { itens: ItemDiario[]; destaque?: boolean; mostrarNR?: boolean }) {
   return (
     <>
       {itens.map(item => (
@@ -38,7 +39,7 @@ function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boo
               )}
               <div>
                 <span className="font-semibold tabular-nums">
-                  {fmtCPF(item.cpf) || '—'}
+                  {mostrarNR ? (item.acordo_codigo || '—') : (fmtCPF(item.cpf) || '—')}
                   {item.n > 1 && (
                     <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">
                       {item.n}x
@@ -48,6 +49,11 @@ function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boo
                 {item.nome_cliente && (
                   <span className="block text-muted-foreground leading-tight truncate max-w-[200px]">
                     {item.nome_cliente}
+                  </span>
+                )}
+                {item.instituicao && (
+                  <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[200px]">
+                    {item.instituicao}
                   </span>
                 )}
               </div>
@@ -63,6 +69,8 @@ function LinhasTabela({ itens, destaque }: { itens: ItemDiario[]; destaque?: boo
 }
 
 export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
+  const tenant = useTenant();
+  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
   const { dados, loading } = useDiario({
     dia,
     operadorFiltro: operadorId,
@@ -163,7 +171,7 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CPF / NOME</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
                   <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR RECEBIDO</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">DATA PGT.</th>
@@ -180,7 +188,7 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
                         </span>
                       </td>
                     </tr>
-                    <LinhasTabela itens={anteriores} />
+                    <LinhasTabela itens={anteriores} mostrarNR={mostrarNR} />
                     <tr className="bg-primary/5">
                       <td colSpan={4} className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-primary">
                         Novos pagamentos
@@ -189,10 +197,10 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
                         </span>
                       </td>
                     </tr>
-                    <LinhasTabela itens={novos} destaque />
+                    <LinhasTabela itens={novos} destaque mostrarNR={mostrarNR} />
                   </>
                 ) : (
-                  <LinhasTabela itens={itens} destaque={novos.length === itens.length && novos.length > 0} />
+                  <LinhasTabela itens={itens} destaque={novos.length === itens.length && novos.length > 0} mostrarNR={mostrarNR} />
                 )}
               </tbody>
               <tfoot>

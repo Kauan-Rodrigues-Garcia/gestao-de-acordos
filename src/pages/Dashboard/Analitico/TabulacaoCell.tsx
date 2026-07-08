@@ -18,6 +18,7 @@ import {
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import { useTenant } from '@/lib/tenant-config';
 import type { AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import {
   verificarStatusTabulacao,
@@ -54,6 +55,11 @@ export function TabulacaoCell({
   const [divergenteInfo,   setDivergenteInfo]   = useState<{ outroNome: string; outroId: string; acordoId: string } | null>(null);
   const [confirmandoDiv,   setConfirmandoDiv]   = useState(false);
 
+  // PaguePlay casa o código do relatório com acordos.instituicao;
+  // BookPlay casa o NR (código do relatório) com acordos.nr_cliente.
+  const tenant = useTenant();
+  const campoTabulacao: 'instituicao' | 'nr_cliente' = tenant.isPaguePlay ? 'instituicao' : 'nr_cliente';
+
   // Ref para evitar usar status stale dentro do setTimeout
   const statusRef = useRef(statusLocal);
   statusRef.current = statusLocal;
@@ -67,7 +73,7 @@ export function TabulacaoCell({
     const timer = setTimeout(async () => {
       if (cancelled || statusRef.current !== 'nao_tabulado') return;
       const { status, acordoId, outroOperadorId, outroOperadorNome } =
-        await verificarStatusTabulacao(empresaId, linha.codigo, operadorId);
+        await verificarStatusTabulacao(empresaId, linha.codigo, operadorId, campoTabulacao);
       if (cancelled) return;
 
       if (status === 'tabulado' && acordoId) {
@@ -89,7 +95,7 @@ export function TabulacaoCell({
   async function handleTabular() {
     setCarregando(true);
     const { status, acordoId, outroOperadorId, outroOperadorNome } = await verificarStatusTabulacao(
-      empresaId, linha.codigo, operadorId,
+      empresaId, linha.codigo, operadorId, campoTabulacao,
     );
 
     if (status === 'tabulado' && acordoId) {

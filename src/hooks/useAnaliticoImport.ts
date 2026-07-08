@@ -1,10 +1,15 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useTenant } from '@/lib/tenant-config';
 import {
   parseRelatorioExcel,
   type LinhaRelatorio,
 } from '@/services/analitico/analiticoParser';
+import { parseRelatorioBookplay } from '@/services/bookplay/bookplayRecebimentoParser';
+import {
+  diaReferencia, dayKeyDiario, type LinhaDiario,
+} from '@/services/diario/diarioParser';
 import { toast } from 'sonner';
 import {
   resolverOperadores,
@@ -18,6 +23,12 @@ import {
   type PerfilResumido,
   type ResultadoImportacao,
 } from '@/services/analitico/analitico.service';
+import {
+  importarLoteDiario,
+  revincularOrfaosDiario,
+  notificarImportacaoDiario,
+  type NovoPorOperador,
+} from '@/services/diario/diario.service';
 
 export type EstadoImport = 'idle' | 'parsing' | 'preview' | 'confirming' | 'done' | 'error';
 
@@ -33,11 +44,30 @@ export interface PreviewImport {
   todosPerfis:      PerfilResumido[];
   loteId:           string;
   mes:              string;
+  /** BookPlay: linhas do MESMO relatório para a aba Recebimento diário */
+  linhasDiario?:    LinhaDiario[];
+  /** BookPlay: dia de referência (moda) para o recebimento diário */
+  dia?:             string;
+}
+
+/** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
+function mesclarNovosPorOperador(...listas: NovoPorOperador[][]): NovoPorOperador[] {
+  const map = new Map<string, NovoPorOperador>();
+  for (const lista of listas) {
+    for (const n of lista) {
+      const atual = map.get(n.operadorId) ?? { operadorId: n.operadorId, novosPagamentos: 0, totalNovo: 0 };
+      atual.novosPagamentos += n.novosPagamentos;
+      atual.totalNovo       += n.totalNovo;
+      map.set(n.operadorId, atual);
+    }
+  }
+  return [...map.values()];
 }
 
 export function useAnaliticoImport() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const tenant      = useTenant();
 
   const [estado,      setEstado]    = useState<EstadoImport>('idle');
   const [preview,     setPreview]   = useState<PreviewImport | null>(null);
@@ -53,6 +83,45 @@ export function useAnaliticoImport() {
     setErroGeral(null);
     setVinculosManuais({});
 
+    // ── BookPlay: um único relatório alimenta Analítico + Recebimento diário ──
+    if (!tenant.isPaguePlay) {
+      const { analitico, diario, erros: errosBP } = await parseRelatorioBookplay(file);
+      if (!analitico.length) {
+        setErroGeral(errosBP.length ? errosBP.join('\n') : 'Nenhuma linha válida encontrada no arquivo.');
+        setEstado('error');
+        return;
+      }
+      const usuariosBP = [...new Set(analitico.map(l => l.operador_usuario))];
+      const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuariosBP);
+      const naoEncontradosBP = usuariosBP.filter(u => map[u] === null);
+
+      const mesesBP = analitico.map(l => {
+        const d = l.data_pagamento;
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      });
+      const mesCountBP = mesesBP.reduce<Record<string, number>>((acc, m) => { acc[m] = (acc[m] ?? 0) + 1; return acc; }, {});
+      const mesBP = Object.entries(mesCountBP).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
+
+      setPreview({
+        linhasTotais:     analitico.length,
+        linhasNovas:      analitico.length,
+        duplicadasEst:    0,
+        operadoresNaoEncontrados: naoEncontradosBP,
+        errosParse:       errosBP,
+        linhas:           analitico,
+        linhasDiario:     diario,
+        dia:              diaReferencia(diario) ?? dayKeyDiario(new Date()),
+        operadoresMap:    map,
+        matches,
+        todosPerfis,
+        loteId:           crypto.randomUUID(),
+        mes:              mesBP,
+      });
+      setEstado('preview');
+      return;
+    }
+
+    // ── PaguePlay: fluxo original (relatório analítico dedicado) ──
     const { linhas, erros } = await parseRelatorioExcel(file);
 
     if (!linhas.length) {
@@ -92,7 +161,7 @@ export function useAnaliticoImport() {
       mes,
     });
     setEstado('preview');
-  }, [empresa?.id]);
+  }, [empresa?.id, tenant.isPaguePlay]);
 
   const definirVinculo = useCallback((usuarioArquivo: string, perfilId: string | null) => {
     setVinculosManuais(prev => {
@@ -142,13 +211,23 @@ export function useAnaliticoImport() {
     // (o revínculo altera a contagem de operadores distintos do mês)
     await atualizarResumoMensal(empresa.id, preview.mes);
 
-    // Sincroniza acordos de cartão com mesmo operador: marca como pago + atualiza valor/data
-    const { atualizados } = await sincronizarCartoesPagos(empresa.id, preview.mes);
-    if (atualizados > 0) {
-      toast.success(
-        `${atualizados} acordo${atualizados !== 1 ? 's' : ''} de cartão ${atualizados !== 1 ? 'foram marcados' : 'foi marcado'} como pago automaticamente.`,
-        { duration: 6000 },
+    if (!tenant.isPaguePlay && preview.linhasDiario && preview.dia) {
+      // ── BookPlay: o MESMO relatório também alimenta o Recebimento diário ──
+      const resDiario = await importarLoteDiario(
+        empresa.id, perfil.id, preview.loteId, preview.dia, preview.linhasDiario, mapFinal,
       );
+      const revDiario = await revincularOrfaosDiario(empresa.id, preview.dia, mapFinal);
+      const notifsDiario = mesclarNovosPorOperador(resDiario.novosPorOperador, revDiario.novosPorOperador);
+      await notificarImportacaoDiario(empresa.id, preview.dia, notifsDiario);
+    } else {
+      // ── PaguePlay: sincroniza acordos de cartão com mesmo operador ──
+      const { atualizados } = await sincronizarCartoesPagos(empresa.id, preview.mes);
+      if (atualizados > 0) {
+        toast.success(
+          `${atualizados} acordo${atualizados !== 1 ? 's' : ''} de cartão ${atualizados !== 1 ? 'foram marcados' : 'foi marcado'} como pago automaticamente.`,
+          { duration: 6000 },
+        );
+      }
     }
 
     await notificarImportacaoAnalitico(
@@ -158,7 +237,7 @@ export function useAnaliticoImport() {
     );
 
     setEstado('done');
-  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome]);
+  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, tenant.isPaguePlay]);
 
   const cancelar = useCallback(() => {
     setEstado('idle');

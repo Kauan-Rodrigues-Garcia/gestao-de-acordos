@@ -266,8 +266,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
         ))}
 
-        {/* Analítico — exclusivo PaguePlay, verificado direto no slug da empresa */}
-        {empresa?.slug === 'pagueplay' && (
+        {/* Analítico — PaguePlay e BookPlay, verificado direto no slug da empresa */}
+        {(empresa?.slug === 'pagueplay' || empresa?.slug === 'bookplay') && (
           <NavLink
             to={ROUTE_PATHS.ANALITICO}
             onClick={() => setMobileOpen(false)}

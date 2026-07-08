@@ -24,6 +24,7 @@ import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { useTenant } from '@/lib/tenant-config';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -51,6 +52,8 @@ interface DiarioLiderProps {
 export function DiarioLider({
   empresaId, dia, temPermissaoImportar, onDadosImportados,
 }: DiarioLiderProps) {
+  const tenant = useTenant();
+  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
   const importHook = useDiarioImport();
   const { dados, loading, refetch } = useDiario({ dia });
 
@@ -302,9 +305,13 @@ export function DiarioLider({
             >
               <Trash2 className="w-4 h-4" /> Limpar tudo
             </Button>
-            <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
-              <Upload className="w-4 h-4" /> Importar relatório
-            </Button>
+            {/* Na BookPlay a importação é feita na aba Analítico (mesmo relatório
+                atualiza os dois); por isso não há botão de importar aqui. */}
+            {tenant.isPaguePlay && (
+              <Button size="sm" className="gap-1.5" onClick={() => setModalImportar(true)}>
+                <Upload className="w-4 h-4" /> Importar relatório
+              </Button>
+            )}
           </div>
         )}
       </div>
@@ -322,7 +329,11 @@ export function DiarioLider({
             <div className="text-center py-16 text-muted-foreground">
               <p className="text-sm">Nenhum relatório importado{dia ? ` para ${fmtDataISO(dia)}` : ''}.</p>
               {temPermissaoImportar && (
-                <p className="text-xs mt-1">Use o botão <strong>Importar relatório</strong> acima para começar.</p>
+                <p className="text-xs mt-1">
+                  {tenant.isPaguePlay
+                    ? <>Use o botão <strong>Importar relatório</strong> acima para começar.</>
+                    : <>Importe o relatório na aba <strong>Analítico</strong> — ele atualiza o Recebimento diário automaticamente.</>}
+                </p>
               )}
             </div>
           )}
@@ -367,6 +378,7 @@ export function DiarioLider({
                     linhas={vinculadas.filter(v => v.operador_id === r.operadorId)}
                     dia={dia}
                     maxImportIndex={maxImportIndex}
+                    mostrarNR={mostrarNR}
                   />
                 ))}
               </div>
@@ -394,7 +406,7 @@ export function DiarioLider({
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">PRÓX. CONTATO</th>
@@ -406,7 +418,7 @@ export function DiarioLider({
                           <td className="px-3 py-2 font-medium">{it.operador}</td>
                           <td className="px-3 py-2">
                             <span className="font-semibold tabular-nums">
-                              {fmtCPF(it.cpf) || '—'}
+                              {mostrarNR ? (it.acordo_codigo || '—') : (fmtCPF(it.cpf) || '—')}
                               {it.n > 1 && (
                                 <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{it.n}x</span>
                               )}
@@ -475,7 +487,7 @@ export function DiarioLider({
                       <thead>
                         <tr className="border-b border-border bg-muted/30">
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR (ARQUIVO)</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                           <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
@@ -489,7 +501,7 @@ export function DiarioLider({
                           <tr key={linha.id} className="hover:bg-muted/20">
                             <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                             <td className="px-3 py-2">
-                              <span className="font-semibold tabular-nums">{fmtCPF(linha.cpf) || '—'}</span>
+                              <span className="font-semibold tabular-nums">{mostrarNR ? (linha.acordo_codigo || '—') : (fmtCPF(linha.cpf) || '—')}</span>
                               {linha.nome_cliente && (
                                 <span className="block text-muted-foreground truncate max-w-[160px]">{linha.nome_cliente}</span>
                               )}
@@ -601,10 +613,11 @@ interface OperadorCardDiarioProps {
   linhas: DiarioRecebimento[];
   dia: string | null;
   maxImportIndex: number;
+  mostrarNR: boolean;
 }
 
 function OperadorCardDiario({
-  resumo, posicao, maxTotal, aberto, onToggle, linhas, dia, maxImportIndex,
+  resumo, posicao, maxTotal, aberto, onToggle, linhas, dia, maxImportIndex, mostrarNR,
 }: OperadorCardDiarioProps) {
   // Detalhe consolidado apenas quando expandido (lazy render)
   const itens = useMemo(
@@ -686,7 +699,7 @@ function OperadorCardDiario({
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-muted/30">
-                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / NOME</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                   <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA PGT.</th>
@@ -701,7 +714,7 @@ function OperadorCardDiario({
                           <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo (último relatório)" />
                         )}
                         <span>
-                          {fmtCPF(item.cpf) || '—'}
+                          {mostrarNR ? (item.acordo_codigo || '—') : (fmtCPF(item.cpf) || '—')}
                           {item.n > 1 && (
                             <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{item.n}x</span>
                           )}
@@ -709,6 +722,9 @@ function OperadorCardDiario({
                       </span>
                       {item.nome_cliente && (
                         <span className="block text-muted-foreground truncate max-w-[200px]">{item.nome_cliente}</span>
+                      )}
+                      {item.instituicao && (
+                        <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[200px]">{item.instituicao}</span>
                       )}
                     </td>
                     <td className="px-3 py-2"><FormaChip forma={item.forma_pagamento} /></td>

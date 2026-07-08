@@ -8,18 +8,76 @@
  * útil na visão do operador para ele se localizar no ranking.
  */
 
+import { Copy } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { formatBRL } from '@/lib/money';
+import { copiarTexto } from '@/lib/clipboard';
 import { cn } from '@/lib/utils';
 import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
 
 interface RankingViewProps {
   resumos: ResumoOperadorAnalitico[];
   destaqueOperadorId?: string | null;
+  /** Exibe o botão "Copiar mensagem" em cada posição (visão líder+). */
+  mostrarCopiar?: boolean;
 }
 
-export function RankingView({ resumos, destaqueOperadorId }: RankingViewProps) {
+/** Nome completo do operador reduzido ao primeiro e segundo nome. */
+function primeiroSegundoNome(r: ResumoOperadorAnalitico): string {
+  const base = (r.operador_nome ?? r.operador_usuario ?? '').trim();
+  return base.split(/\s+/).slice(0, 2).join(' ');
+}
+
+/** Saudação conforme o horário: manhã, tarde ou noite. */
+function saudacao(): string {
+  const h = new Date().getHours();
+  if (h < 12) return 'Bom dia';
+  if (h < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+/** Mensagem motivacional do ranking (mesmo formato do protótipo HTML). */
+function montarMensagemRanking(
+  pos: number, nome: string, rec: number, acima: string, gap: number,
+): string {
+  const ola = saudacao();
+  if (pos === 1) {
+    return `${ola}, ${nome}! Você está em 1º lugar, com ${formatBRL(rec)} de recebido geral. Continue nesse ritmo para manter a liderança.`;
+  }
+  const sufixo = pos === 2 ? 'para assumir a liderança' : 'para ultrapassar o próximo lugar';
+  return `${ola}, ${nome}! Você está em ${pos}º lugar, com ${formatBRL(rec)} de recebido geral. À sua frente está ${acima}, e faltam ${formatBRL(gap)} ${sufixo}.`;
+}
+
+function CopiarMsgBtn({
+  pos, r, acima, className,
+}: {
+  pos: number;
+  r: ResumoOperadorAnalitico;
+  acima: ResumoOperadorAnalitico | null;
+  className?: string;
+}) {
+  const gap = acima ? acima.total_recebido - r.total_recebido : 0;
+  const msg = montarMensagemRanking(
+    pos, primeiroSegundoNome(r), r.total_recebido,
+    acima ? primeiroSegundoNome(acima) : '', gap,
+  );
+  return (
+    <button
+      type="button"
+      onClick={(e) => { e.stopPropagation(); void copiarTexto(msg, 'Mensagem copiada'); }}
+      className={cn(
+        'inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground',
+        'hover:text-foreground hover:bg-muted/60 border border-border rounded-md px-2 py-1 transition-colors',
+        className,
+      )}
+    >
+      <Copy className="w-3 h-3 shrink-0" /> Copiar mensagem
+    </button>
+  );
+}
+
+export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar }: RankingViewProps) {
   const max   = resumos[0]?.total_recebido || 1;
   const top3  = resumos.slice(0, 3);
   const meio  = resumos.slice(3, 10);
@@ -87,6 +145,9 @@ export function RankingView({ resumos, destaqueOperadorId }: RankingViewProps) {
                     </div>
                   </div>
                 ) : null}
+                {mostrarCopiar && (
+                  <CopiarMsgBtn pos={i + 1} r={r} acima={acima} className="w-full justify-center mt-1" />
+                )}
               </CardContent>
             </Card>
           );
@@ -128,6 +189,7 @@ export function RankingView({ resumos, destaqueOperadorId }: RankingViewProps) {
                       <p className="text-sm font-mono font-bold text-primary">{formatBRL(r.total_recebido)}</p>
                       <p className="text-xs text-muted-foreground">{r.total_pagamentos} pgtos.</p>
                     </div>
+                    {mostrarCopiar && <CopiarMsgBtn pos={pos} r={r} acima={acima ?? null} className="shrink-0" />}
                   </div>
                 );
               })}
@@ -143,20 +205,23 @@ export function RankingView({ resumos, destaqueOperadorId }: RankingViewProps) {
           <Card className="border-border">
             <CardContent className="p-0">
               {resto.map((r, i) => {
-                const voce = ehVoce(r.operador_id);
+                const pos   = i + 11;
+                const acima = resumos[pos - 2] ?? null;
+                const voce  = ehVoce(r.operador_id);
                 return (
                   <div key={r.operador_id} className={cn(
                     'flex items-center gap-3 px-3 py-2 transition-colors text-xs',
                     voce ? 'bg-primary/10' : 'hover:bg-muted/20',
                     i > 0 && 'border-t border-border',
                   )}>
-                    <span className="font-bold text-muted-foreground w-8 text-right shrink-0">{i + 11}º</span>
+                    <span className="font-bold text-muted-foreground w-8 text-right shrink-0">{pos}º</span>
                     <span className="flex-1 truncate font-medium flex items-center gap-1.5">
                       {r.operador_nome ?? r.operador_usuario}
                       {voce && <span className="text-[10px] font-bold uppercase text-primary bg-primary/10 rounded-full px-1.5 py-0.5 shrink-0">Você</span>}
                     </span>
                     <span className="font-mono font-semibold text-primary shrink-0">{formatBRL(r.total_recebido)}</span>
                     <span className="text-muted-foreground shrink-0">{r.total_pagamentos} pgtos.</span>
+                    {mostrarCopiar && <CopiarMsgBtn pos={pos} r={r} acima={acima} className="shrink-0" />}
                   </div>
                 );
               })}

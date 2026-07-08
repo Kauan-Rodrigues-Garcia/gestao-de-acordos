@@ -17,6 +17,8 @@ import {
   GripVertical,
   Building2,
   Trash2,
+  Pencil,
+  Check,
   ChevronDown,
   UserCheck,
   Layers,
@@ -168,6 +170,11 @@ export default function AdminEquipes() {
   const [showNovaEquipe, setShowNovaEquipe] = useState(false);
   const [criandoEquipe, setCriandoEquipe] = useState(false);
 
+  // Estado para renomear equipe (edição inline no card)
+  const [editandoEquipeId, setEditandoEquipeId] = useState<string | null>(null);
+  const [editNome, setEditNome] = useState('');
+  const [salvandoNome, setSalvandoNome] = useState(false);
+
   const empresaId = empresa?.id;
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -309,6 +316,40 @@ export default function AdminEquipes() {
       await loadData();
     } catch (err: any) {
       toast.error('Erro ao excluir equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    }
+  }
+
+  // ─── Renomear equipe ─────────────────────────────────────────────────────────
+
+  function iniciarEdicaoNome(equipe: Equipe) {
+    setEditandoEquipeId(equipe.id);
+    setEditNome(equipe.nome);
+  }
+
+  function cancelarEdicaoNome() {
+    setEditandoEquipeId(null);
+    setEditNome('');
+  }
+
+  async function handleRenomearEquipe(equipe: Equipe) {
+    if (!isAdmin && equipe.setor_id !== perfil?.setor_id) {
+      toast.error('Você só pode editar equipes do seu próprio setor.');
+      return;
+    }
+    const nome = editNome.trim();
+    if (!nome) { toast.error('Informe o nome da equipe.'); return; }
+    if (nome === equipe.nome) { cancelarEdicaoNome(); return; }
+    setSalvandoNome(true);
+    try {
+      const { error } = await supabase.from('equipes').update({ nome }).eq('id', equipe.id);
+      if (error) throw error;
+      toast.success('Nome da equipe atualizado.');
+      cancelarEdicaoNome();
+      await loadData();
+    } catch (err: any) {
+      toast.error('Erro ao renomear equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } finally {
+      setSalvandoNome(false);
     }
   }
 
@@ -660,23 +701,69 @@ export default function AdminEquipes() {
                           <div className="border border-border rounded-xl bg-card h-full flex flex-col overflow-hidden hover:border-primary/30 transition-colors">
                             {/* Header da equipe */}
                             <div className="flex items-center justify-between px-3 py-2.5 bg-muted/30 border-b border-border">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className="text-sm font-semibold text-foreground truncate">
-                                  {equipe.nome}
-                                </span>
-                                <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
-                                  {membros.length}
-                                </Badge>
-                              </div>
-                              {podeGerenciarEquipe && (
-                                <button
-                                  type="button"
-                                  title="Excluir equipe (somente se vazia)"
-                                  onClick={() => handleExcluirEquipe(equipe)}
-                                  className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
+                              {editandoEquipeId === equipe.id ? (
+                                <div className="flex items-center gap-1 min-w-0 flex-1">
+                                  <Input
+                                    autoFocus
+                                    value={editNome}
+                                    onChange={(e) => setEditNome(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleRenomearEquipe(equipe);
+                                      if (e.key === 'Escape') cancelarEdicaoNome();
+                                    }}
+                                    disabled={salvandoNome}
+                                    className="h-7 text-sm"
+                                  />
+                                  <button
+                                    type="button"
+                                    title="Salvar nome"
+                                    onClick={() => handleRenomearEquipe(equipe)}
+                                    disabled={salvandoNome}
+                                    className="p-1 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors shrink-0"
+                                  >
+                                    <Check className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="Cancelar"
+                                    onClick={cancelarEdicaoNome}
+                                    disabled={salvandoNome}
+                                    className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors shrink-0"
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-semibold text-foreground truncate">
+                                      {equipe.nome}
+                                    </span>
+                                    <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
+                                      {membros.length}
+                                    </Badge>
+                                  </div>
+                                  {podeGerenciarEquipe && (
+                                    <div className="flex items-center gap-0.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        title="Editar nome da equipe"
+                                        onClick={() => iniciarEdicaoNome(equipe)}
+                                        className="p-1 rounded text-muted-foreground/50 hover:text-primary hover:bg-primary/10 transition-colors"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        type="button"
+                                        title="Excluir equipe (somente se vazia)"
+                                        onClick={() => handleExcluirEquipe(equipe)}
+                                        className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
 
