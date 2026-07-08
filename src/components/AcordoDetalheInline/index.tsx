@@ -29,7 +29,7 @@ import {
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
-import { addMonths } from './helpers';
+import { isTipoParcelado, addMonths } from './helpers';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 import { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
 
@@ -96,12 +96,15 @@ export function AcordoDetalheInline({
 
   const atrasado      = isAtrasado(acordoLocal.vencimento, acordoLocal.status);
   const totalParcelas = acordoLocal.parcelas ?? 1;
-  // Independe da forma de pagamento: parcelas adicionadas manualmente podem
-  // misturar formas (ex.: entrada no Pix + boleto do restante).
-  const deveExibirParcelas = totalParcelas > 1;
-  // Dono do acordo ou perfil de visão ampla pode adicionar parcela ao grupo.
-  const podeAdicionarParcela =
-    perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil);
+  // BookPlay: independe da forma de pagamento — parcelas adicionadas
+  // manualmente podem misturar formas (ex.: entrada no Pix + boleto do
+  // restante). PaguePlay mantém a regra original por tipo parcelado.
+  const deveExibirParcelas = isPaguePlay
+    ? isTipoParcelado(acordoLocal.tipo, true) && totalParcelas > 1
+    : totalParcelas > 1;
+  // Adicionar parcela manual é recurso BookPlay (dono ou visão ampla).
+  const podeAdicionarParcela = !isPaguePlay &&
+    (perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil));
 
   const link   = extractLinkAcordo(acordoLocal.observacoes);
   const estado = getEstadoFromAcordo(acordoLocal);

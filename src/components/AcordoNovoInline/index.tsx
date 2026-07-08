@@ -284,19 +284,22 @@ export function AcordoNovoInline({
 
         if (conflitoFinal) {
           if (conflitoFinal.operadorId === perfil.id) {
-            // NR do próprio operador: em vez de bloquear sem saída, oferece
-            // adicionar os dados preenchidos como nova parcela do acordo
-            // existente (ex.: entrada no Pix + boleto do restante).
-            const { data: acordoMeu } = await supabase
-              .from('acordos')
-              .select('*, perfis(id, nome, email, perfil, setor_id)')
-              .eq('id', conflitoFinal.acordoId)
-              .maybeSingle();
-            if (acordoMeu) {
-              setAcordoParaParcela(acordoMeu as Acordo);
-            } else {
-              toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
+            // BookPlay: NR do próprio operador abre a oferta de adicionar os
+            // dados preenchidos como nova parcela do acordo existente
+            // (ex.: entrada no Pix + boleto do restante).
+            // PaguePlay mantém o bloqueio original.
+            if (!isPaguePlay) {
+              const { data: acordoMeu } = await supabase
+                .from('acordos')
+                .select('*, perfis(id, nome, email, perfil, setor_id)')
+                .eq('id', conflitoFinal.acordoId)
+                .maybeSingle();
+              if (acordoMeu) {
+                setAcordoParaParcela(acordoMeu as Acordo);
+                return;
+              }
             }
+            toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             return;
           }
 

@@ -517,6 +517,34 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     expect(okMsgs.some(m => /adicionada/i.test(m))).toBe(true);
   });
 
+  it('PaguePlay: mantém o bloqueio original (toast, sem modal de parcela)', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'a-meu', operadorId: 'me-1', operadorNome: 'Eu Operador',
+    });
+    // Mesmo com o acordo carregável, PP não deve abrir o modal.
+    routes.acordosMaybeSingle = {
+      data: { id: 'a-meu', instituicao: 'INS-1', operador_id: 'me-1', empresa_id: 'emp-1' } as Acordo,
+      error: null,
+    };
+
+    renderInline({ onSaved, isPaguePlay: true });
+    const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
+    fireEvent.change(nomeCampo, { target: { value: 'Profissional X' } });
+    const codigo = screen.getByPlaceholderText(/^Código$/);
+    fireEvent.change(codigo, { target: { value: 'INS-1' } });
+    fireEvent.click(screen.getByTestId('pick-date'));
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '100' } });
+
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    const msgs = toastError.mock.calls.map(c => String(c[0]));
+    expect(msgs.some(m => /já existe na sua lista/i.test(m))).toBe(true);
+    expect(screen.queryByText(/Adicionar parcela ao acordo/i)).toBeNull();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
   it('NR meu mas acordo não carregável: mantém o toast de bloqueio', async () => {
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
