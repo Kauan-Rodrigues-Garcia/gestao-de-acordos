@@ -8,7 +8,9 @@
 import { useAuth } from '@/hooks/useAuth';
 
 export type PetHumor = 'idle' | 'feliz' | 'dormindo' | 'jogando';
-export type PetRoupa = 'nenhuma' | 'chapeu' | 'cachecol';
+export type PetRoupa =
+  | 'nenhuma' | 'chapeu' | 'cachecol'
+  | 'abobora' | 'marinheiro' | 'morango' | 'celestial' | 'sueter' | 'pijama';
 
 export interface RoupaCatalogo {
   id: PetRoupa;
@@ -18,8 +20,14 @@ export interface RoupaCatalogo {
 
 /** Catálogo de roupas do esboço — igual para os dois tenants. */
 export const ROUPAS_CATALOGO: RoupaCatalogo[] = [
-  { id: 'chapeu',   nome: 'Chapéu de festa', emoji: '🥳' },
-  { id: 'cachecol', nome: 'Cachecol',        emoji: '🧣' },
+  { id: 'abobora',    nome: 'Fantasia de Abóbora',  emoji: '🎃' },
+  { id: 'marinheiro', nome: 'Marinheira',           emoji: '⚓' },
+  { id: 'morango',    nome: 'Look Morango',         emoji: '🍓' },
+  { id: 'celestial',  nome: 'Vestido Celestial',    emoji: '🌙' },
+  { id: 'sueter',     nome: 'Suéter de Tricô',      emoji: '🧶' },
+  { id: 'pijama',     nome: 'Pijaminha dos Sonhos', emoji: '💤' },
+  { id: 'chapeu',     nome: 'Chapéu de Festa',      emoji: '🥳' },
+  { id: 'cachecol',   nome: 'Cachecol',             emoji: '🧣' },
 ];
 
 /** Comidas placeholder (loja entra junto com o sistema de moedas). */
