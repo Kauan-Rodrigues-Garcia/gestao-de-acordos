@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { isPerfilAdminOuLider, ROUTE_PATHS } from '@/lib/index';
+import { isPerfilAdminOuLider, getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
@@ -111,13 +111,32 @@ export default function PaginaAnalitico() {
     // valor DA PARCELA) e pode faltar o estado. Verifica o profissional e,
     // se necessário, abre a janela de perguntas antes de montar o rascunho.
     void (async () => {
-      const { data: prof } = await supabase
+      const codigo = dados.instituicao.trim();
+      // 1) Cadastro de profissionais (limit(1) — maybeSingle erra com duplicatas)
+      const { data: profs } = await supabase
         .from('profissionais')
         .select('id, estado_uf')
         .eq('empresa_id', empresa!.id)
-        .eq('codigo', dados.instituicao.trim())
-        .maybeSingle();
-      const estadoConhecido = (prof?.estado_uf ?? '').trim() || null;
+        .eq('codigo', codigo)
+        .limit(1);
+      const prof = profs?.[0] ?? null;
+      let estadoConhecido = (prof?.estado_uf ?? '').trim() || null;
+
+      // 2) Fallback: estado registrado em acordos anteriores deste código
+      //    (coluna estado_uf ou o prefixo [ESTADO:XX] em observações)
+      if (!estadoConhecido) {
+        const { data: acs } = await supabase
+          .from('acordos')
+          .select('estado_uf, observacoes')
+          .eq('empresa_id', empresa!.id)
+          .eq('instituicao', codigo)
+          .order('criado_em', { ascending: false })
+          .limit(5);
+        for (const a of (acs ?? []) as { estado_uf?: string | null; observacoes?: string | null }[]) {
+          const uf = (getEstadoFromAcordo(a) ?? '').trim();
+          if (uf) { estadoConhecido = uf; break; }
+        }
+      }
 
       // Cartão com estado conhecido: nada a perguntar — vai direto, já pago.
       if (dados.forma === 'cartao' && estadoConhecido) {
