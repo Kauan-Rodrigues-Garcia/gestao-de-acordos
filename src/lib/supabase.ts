@@ -310,6 +310,23 @@ export interface DiarioRecebimento {
   perfis?: Pick<Perfil, 'id' | 'nome' | 'usuario'> | null;
 }
 
+/** Estado do pet Aura no banco — 1 linha por usuário (ver 20260709a_pet_economia.sql). */
+export interface PetEstado {
+  usuario_id: string;
+  moedas: number;
+  moedas_ganhas_total: number;
+  moedas_gastas_total: number;
+  xp: number;
+  nivel: number;
+  streak: number;
+  ultimo_dia_ativo: string | null;
+  roupa_equipada: string;
+  itens_desbloqueados: string[];
+  dormindo: boolean;
+  criado_em: string;
+  atualizado_em: string;
+}
+
 export type TipoDocumentoLgpd =
   | 'politica_privacidade'
   | 'ropa'

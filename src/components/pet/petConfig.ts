@@ -1,8 +1,10 @@
 /**
  * petConfig — configuração central do joguinho do pet.
  *
- * Fase atual (esboço): sem sistema financeiro, sem itens no banco.
- * Estado local (roupa equipada) persiste em localStorage por usuário/empresa.
+ * Economia (Fase 1): estado por usuário no banco (pet_estado) — moedas ganhas
+ * a partir do recebimento diário, roupa equipada, gasto etc. (ver usePetEstado
+ * e 20260709a_pet_economia.sql). O localStorage (petStorageKey) fica só como
+ * cache/fallback quando a migration ainda não foi aplicada.
  * Liberado apenas para administrador/super_admin enquanto está em teste.
  */
 import { useAuth } from '@/hooks/useAuth';

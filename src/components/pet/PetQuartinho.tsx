@@ -8,6 +8,7 @@ import { motion } from 'framer-motion';
 import { X, UtensilsCrossed, Moon, Sun, Shirt, Store, Home } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { formatBRL } from '@/lib/money';
 import type { PetSvgProps } from './PetAura';
 import {
   ROUPAS_CATALOGO, COMIDAS_CATALOGO,
@@ -21,6 +22,12 @@ interface PetQuartinhoProps {
   roupa:          PetRoupa;
   /** Cargos sem interação ainda: pet dormindo + mensagem "Em breve". */
   modoTeaser?:    boolean;
+  /** Saldo atual de moedas (0 quando o banco ainda não tem a economia). */
+  moedas?:          number;
+  /** Recompensa do recebimento do dia ainda não resgatada. */
+  recompensaMoedas?: number;
+  recompensaValor?:  number;
+  onResgatar?:       () => void;
   onAlimentar:    () => void;
   onAlternarSono: () => void;
   onSetRoupa:     (r: PetRoupa) => void;
@@ -31,6 +38,7 @@ type Aba = 'quarto' | 'comidas' | 'roupas';
 
 export function PetQuartinho({
   petNome, PetSvg, humor, roupa, modoTeaser = false,
+  moedas = 0, recompensaMoedas = 0, recompensaValor = 0, onResgatar,
   onAlimentar, onAlternarSono, onSetRoupa, onClose,
 }: PetQuartinhoProps) {
   const [aba, setAba] = useState<Aba>('quarto');
@@ -63,9 +71,19 @@ export function PetQuartinho({
               : 'de boa'}
           </span>
         </p>
-        <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1.5">
+          {!modoTeaser && (
+            <span
+              className="inline-flex items-center gap-1 rounded-full bg-amber-400/15 text-amber-700 dark:text-amber-400 text-[11px] font-bold px-2 py-0.5"
+              title="Suas moedas"
+            >
+              🪙 {moedas.toLocaleString('pt-BR')}
+            </span>
+          )}
+          <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Cenário do quartinho */}
@@ -125,6 +143,27 @@ export function PetQuartinho({
 
       {/* Ações rápidas + lojas (modo completo) */}
       {!modoTeaser && (<>
+      {/* Recompensa do recebimento do dia — converte em moedas */}
+      {recompensaMoedas > 0 && (
+        <button
+          type="button"
+          onClick={onResgatar}
+          className="w-full flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-amber-400/10 hover:bg-amber-400/20 transition-colors text-left"
+        >
+          <span className="text-xl shrink-0">🪙</span>
+          <span className="flex-1 min-w-0">
+            <span className="block text-xs font-bold text-foreground">
+              Pegar recompensa do dia
+            </span>
+            <span className="block text-[11px] text-muted-foreground">
+              {formatBRL(recompensaValor)} recebido{recompensaValor > 0 ? '' : 's'} · +{recompensaMoedas} moedas
+            </span>
+          </span>
+          <span className="shrink-0 rounded-full bg-amber-500 text-amber-950 text-[11px] font-bold px-2.5 py-1">
+            +{recompensaMoedas}
+          </span>
+        </button>
+      )}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
         <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={alimentar}>
           <UtensilsCrossed className="w-3.5 h-3.5" /> Alimentar
@@ -156,11 +195,17 @@ export function PetQuartinho({
       {/* Conteúdo da aba */}
       <div className="p-3 min-h-[96px]">
         {aba === 'quarto' && (
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Este é o cantinho de <strong className="text-foreground">{petNome}</strong>.
-            Em breve: moedas por recebimento 💰, comidas de verdade, colecionáveis
-            para a prateleira e muito mais.
-          </p>
+          <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
+            <p>
+              Este é o cantinho de <strong className="text-foreground">{petNome}</strong>.
+              Você tem <strong className="text-amber-600 dark:text-amber-400">🪙 {moedas.toLocaleString('pt-BR')} moedas</strong>.
+            </p>
+            <p>
+              Ganhe moedas a cada recebimento do dia 💰 — clique em
+              <strong className="text-foreground"> Pegar recompensa</strong> quando
+              aparecer. Em breve: comidas de verdade e colecionáveis para gastá-las.
+            </p>
+          </div>
         )}
 
         {aba === 'comidas' && (

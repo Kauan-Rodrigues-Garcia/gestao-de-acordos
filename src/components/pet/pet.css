@@ -126,6 +126,13 @@
   50%      { transform: scale(0.9); opacity: 0.10; }
 }
 
+/* Pílula de recompensa chamando atenção (pulinho + brilho suave) */
+@keyframes pet-recompensa {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 6px 14px rgba(217,119,6,.35); }
+  50%      { transform: translateY(-3px) scale(1.04); box-shadow: 0 10px 20px rgba(217,119,6,.5); }
+}
+.pet-anim-recompensa { animation: pet-recompensa 1.6s ease-in-out infinite; }
+
 /* Apertando botões do controle (videogame) */
 @keyframes pet-controle {
   0%, 100% { transform: rotate(0deg); }

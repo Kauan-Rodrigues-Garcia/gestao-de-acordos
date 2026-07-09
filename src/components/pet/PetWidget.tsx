@@ -14,20 +14,17 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
-import { useEmpresa } from '@/hooks/useEmpresa';
 import { cn } from '@/lib/utils';
 import './pet.css';
 import {
-  usePetHabilitado, usePetInterativo, usePetDoTenant, petStorageKey,
+  usePetHabilitado, usePetInterativo, usePetDoTenant,
   type PetHumor, type PetRoupa, type PetCena, type PetMicro,
 } from './petConfig';
-import { PET_EVENTO_COMEMORAR } from './petEvents';
+import { PET_EVENTO_COMEMORAR, celebrarPetAcordoPago } from './petEvents';
+import { usePetEstado } from './usePetEstado';
 import { PetAura } from './PetAura';
 import { PetRolo } from './PetRolo';
 import { PetQuartinho } from './PetQuartinho';
-
-interface PetEstadoLocal { roupa?: PetRoupa; dormindo?: boolean }
 
 type PetEvento = 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica' | 'escada';
 type EscadaFase = 'nenhuma' | 'subindo' | 'topo' | 'descendo';
@@ -71,10 +68,8 @@ function faseAcordadaAgora(): boolean {
 export function PetWidget() {
   const habilitado  = usePetHabilitado();
   const interativo  = usePetInterativo();
-  const { perfil }  = useAuth();
-  const { empresa } = useEmpresa();
   const pet         = usePetDoTenant();
-  const storageKey  = petStorageKey(empresa?.id, perfil?.id);
+  const estado      = usePetEstado(interativo);
 
   const [aberto, setAberto] = useState(false);
   const [humor,  setHumor]  = useState<PetHumor>('idle');   // modo interativo
@@ -82,6 +77,7 @@ export function PetWidget() {
   const [roupa,  setRoupa]  = useState<PetRoupa>('nenhuma');
   const [evento, setEvento] = useState<PetEvento>('nenhum');
   const [comemorando, setComemorando] = useState(false);
+  const [moedaGanha, setMoedaGanha]   = useState<number | null>(null);
   const [acordadoTeaser, setAcordadoTeaser] = useState(faseAcordadaAgora);
 
   // ── Passeio pelo rodapé ────────────────────────────────────────────────
@@ -118,21 +114,15 @@ export function PetWidget() {
     humorEfetivo === 'idle' && evento === 'espreguica' ? 'espreguica' : micro;
   const emEvento = evento !== 'nenhum' || comemorando;
 
-  // Restaura roupa/sono persistidos (só no modo interativo)
+  // Semeia roupa/sono a partir do estado carregado (banco ou localStorage),
+  // uma única vez, sem sobrescrever ações do usuário depois.
+  const seededRef = useRef(false);
   useEffect(() => {
-    if (!interativo) return;
-    try {
-      const raw = localStorage.getItem(storageKey);
-      if (!raw) return;
-      const s = JSON.parse(raw) as PetEstadoLocal;
-      if (s.roupa)    setRoupa(s.roupa);
-      if (s.dormindo) setHumor('dormindo');
-    } catch { /* noop */ }
-  }, [storageKey, interativo]);
-
-  function persistir(estado: PetEstadoLocal) {
-    try { localStorage.setItem(storageKey, JSON.stringify(estado)); } catch { /* noop */ }
-  }
+    if (!interativo || !estado.carregado || seededRef.current) return;
+    seededRef.current = true;
+    setRoupa(estado.roupaInicial);
+    if (estado.dormindoInicial) setHumor('dormindo');
+  }, [interativo, estado.carregado, estado.roupaInicial, estado.dormindoInicial]);
 
   // Ciclo 5/5 do teaser — checa a fase do relógio a cada 10s
   useEffect(() => {
@@ -268,14 +258,24 @@ export function PetWidget() {
   function alternarSono() {
     setHumor(h => {
       const novo: PetHumor = h === 'dormindo' ? 'idle' : 'dormindo';
-      persistir({ roupa, dormindo: novo === 'dormindo' });
+      estado.salvarVisual(roupa, novo === 'dormindo');
       return novo;
     });
   }
 
   function trocarRoupa(r: PetRoupa) {
     setRoupa(r);
-    persistir({ roupa: r, dormindo: humor === 'dormindo' });
+    estado.salvarVisual(r, humor === 'dormindo');
+  }
+
+  // Pega a recompensa do recebimento diário: converte em moedas e comemora.
+  async function pegarRecompensa() {
+    const r = await estado.resgatar();
+    if (r && r.moedasCreditadas > 0) {
+      setMoedaGanha(r.moedasCreditadas);
+      celebrarPetAcordoPago();  // reaproveita a animação de comemoração
+      setTimeout(() => setMoedaGanha(null), COMEMORACAO_MS);
+    }
   }
 
   function alternarPainel() {
@@ -286,6 +286,7 @@ export function PetWidget() {
         setMovendo(false);
         setX(0);
         xRef.current = 0;
+        estado.refetchDisponivel();
       }
       return !v;
     });
@@ -305,6 +306,10 @@ export function PetWidget() {
             humor={humorEfetivo}
             roupa={roupa}
             modoTeaser={!interativo}
+            moedas={estado.moedas}
+            recompensaMoedas={estado.disponivel.moedas}
+            recompensaValor={estado.disponivel.valor}
+            onResgatar={pegarRecompensa}
             onAlimentar={alimentar}
             onAlternarSono={alternarSono}
             onSetRoupa={trocarRoupa}
@@ -312,6 +317,18 @@ export function PetWidget() {
           />
         )}
       </AnimatePresence>
+
+      {/* notificaçãozinha de recompensa: recebimento do dia p/ pegar */}
+      {interativo && !aberto && moedaGanha == null && !comemorando && estado.disponivel.moedas > 0 && (
+        <button
+          type="button"
+          onClick={pegarRecompensa}
+          className="pet-anim-recompensa mb-1 mr-1 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-b from-amber-400 to-amber-500 text-amber-950 text-[11px] font-bold pl-2 pr-2.5 py-1 shadow-lg border border-amber-300/70 cursor-pointer hover:brightness-105"
+          title="Recompensa do recebimento do dia — clique para pegar"
+        >
+          🪙 Pegar +{estado.disponivel.moedas}
+        </button>
+      )}
 
       {/* escadinha de madeira encostada no cantinho */}
       {evento === 'escada' && (
@@ -340,8 +357,12 @@ export function PetWidget() {
             transition: `transform ${durY}s linear`,
           }}
         >
-          {/* balãozinho da comemoração */}
-          {comemorando && !aberto && (
+          {/* balãozinho: +moedas ao pegar recompensa, senão comemoração de pago */}
+          {moedaGanha != null && !aberto ? (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-amber-400 border border-amber-300 text-amber-950 text-[11px] font-bold px-2.5 py-1 rounded-full shadow-md">
+              +{moedaGanha} 🪙
+            </div>
+          ) : comemorando && !aberto && (
             <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
               Acordo pago! 🎉
             </div>
