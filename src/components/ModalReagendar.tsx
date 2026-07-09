@@ -12,7 +12,7 @@ import { parseCurrencyInput, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 
 /** Retorna a data no último dia do mês seguinte ao mês de dateStr (YYYY-MM-DD). */
-function ultimoDiaProxMes(dateStr: string): string {
+export function ultimoDiaProxMes(dateStr: string): string {
   const [y, m] = dateStr.split('-').map(Number);
   const nextM = m === 12 ? 1 : m + 1;
   const nextY = m === 12 ? y + 1 : y;

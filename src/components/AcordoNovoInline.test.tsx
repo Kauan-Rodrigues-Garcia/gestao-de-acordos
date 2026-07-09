@@ -750,3 +750,70 @@ describe('AcordoNovoInline — persistência de rascunho', () => {
     expect((screen.getByPlaceholderText('0,00') as HTMLInputElement).value).toBe('');
   });
 });
+
+// ── Fluxo analítico PP: acordo nasce no meio do plano ───────────────────────
+describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
+  it('salva a parcela atual como paga e agenda a próxima automaticamente', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = {
+      data: {
+        id: 'a1', nome_cliente: 'Cliente X', nr_cliente: '', instituicao: 'INS-9',
+        operador_id: 'me-1', empresa_id: 'emp-1', acordo_grupo_id: 'g1',
+        tipo: 'boleto', parcelas: 12, valor_total: 2988, numero_parcela: 4,
+      } as Acordo,
+      error: null,
+    };
+    // Draft montado pelo ModalTabularAnalitico (valor TOTAL já calculado)
+    sessionStorage.setItem('acordo-inline-draft::emp-1::me-1::pp', JSON.stringify({
+      instituicao: 'INS-9', nomeCliente: 'Cliente X', tipo: 'boleto_pix',
+      valorStr: '2988,00', vencimento: '2026-07-05', estadoSel: 'SP',
+      status: 'pago', parcelasStr: '12', parcelaAtualStr: '4',
+      quarentaPct: '', analitico: '1',
+    }));
+
+    renderInline({ onSaved, isPaguePlay: true });
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
+    expect(inserts.length).toBe(2);
+
+    // Parcela atual: 4ª de 12, valor da parcela (2988/12), paga no dia do analítico
+    expect(inserts[0].payload).toMatchObject({
+      instituicao: 'INS-9', numero_parcela: 4, parcelas: 12,
+      valor: 249, valor_total: 2988, status: 'pago',
+      vencimento: '2026-07-05', data_pagamento: '2026-07-05',
+    });
+    // Próxima parcela: 5ª, pendente, último dia do mês seguinte
+    expect(inserts[1].payload).toMatchObject({
+      numero_parcela: 5, valor: 249, status: 'verificar_pendente',
+      vencimento: '2026-08-31', acordo_grupo_id: 'g1',
+    });
+
+    const okMsgs = toastSuccess.mock.calls.map(c => String(c[0]));
+    expect(okMsgs.some(m => /Próxima agendada/i.test(m))).toBe(true);
+  });
+
+  it('fluxo manual PP (sem draft do analítico) continua criando só a parcela 1', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'a2' } as Acordo, error: null };
+
+    renderInline({ onSaved, isPaguePlay: true });
+    const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
+    fireEvent.change(nomeCampo, { target: { value: 'Prof Y' } });
+    const codigo = screen.getByPlaceholderText(/^Código$/);
+    fireEvent.change(codigo, { target: { value: 'INS-2' } });
+    fireEvent.click(screen.getByTestId('pick-date'));
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '1200' } });
+
+    clickSalvarAcordo();
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
+    expect(inserts.length).toBe(1);
+    expect(inserts[0].payload).toMatchObject({ numero_parcela: 1 });
+  });
+});

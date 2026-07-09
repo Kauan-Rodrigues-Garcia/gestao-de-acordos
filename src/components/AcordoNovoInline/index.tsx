@@ -18,6 +18,7 @@ import {
   parseCurrencyInput,
 } from '@/lib/index';
 import { calcularParcelas } from '@/lib/money';
+import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
@@ -73,6 +74,9 @@ export function AcordoNovoInline({
     nomeCliente: string; nrCliente: string; vencimento: string; valorStr: string;
     tipo: string; parcelasStr: string; whatsapp: string; instituicao: string;
     status: string; observacoes: string; estadoSel: string; link: string;
+    // Fluxo "Tabular acordo" do analítico PP: parcela sendo paga, regra 40%
+    // e flag de origem (habilita nascer no meio do plano + agendar a próxima).
+    parcelaAtualStr?: string; quarentaPct?: string; analitico?: string;
   }
 
   function loadDraft(): Partial<DraftAcordoInline> {
@@ -102,7 +106,10 @@ export function AcordoNovoInline({
   const [salvando,     setSalvando]     = useState(false);
   const [isExtra,      setIsExtra]      = useState(false);
   const [tagIds,       setTagIds]       = useState<string[]>([]);
-  const [quarentaPct,  setQuarentaPct]  = useState(false);
+  const [quarentaPct,  setQuarentaPct]  = useState(draftInicial.quarentaPct === '1');
+  // Fluxo analítico PP: qual parcela está sendo paga (1 = fluxo normal)
+  const [parcelaAtualStr] = useState(draftInicial.parcelaAtualStr ?? '1');
+  const [veioDoAnalitico] = useState(draftInicial.analitico === '1');
 
   const { profissional, loading: profissionalLoading } = useProfissional(
     isPaguePlay ? instituicao : '',
@@ -132,6 +139,9 @@ export function AcordoNovoInline({
         const draft: DraftAcordoInline = {
           nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr,
           whatsapp, instituicao, status, observacoes, estadoSel, link,
+          parcelaAtualStr,
+          quarentaPct: quarentaPct ? '1' : '',
+          analitico:   veioDoAnalitico ? '1' : '',
         };
         const temConteudo = Object.values(draft).some(v => typeof v === 'string' && v.trim() !== '' && v !== '1' && v !== 'boleto' && v !== 'boleto_pix' && v !== 'verificar_pendente');
         if (temConteudo) sessionStorage.setItem(storageKey, JSON.stringify(draft));
@@ -141,7 +151,7 @@ export function AcordoNovoInline({
     return () => {
       if (persistRafRef.current !== null) { cancelAnimationFrame(persistRafRef.current); persistRafRef.current = null; }
     };
-  }, [storageKey, nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr, whatsapp, instituicao, status, observacoes, estadoSel, link]);
+  }, [storageKey, nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr, whatsapp, instituicao, status, observacoes, estadoSel, link, quarentaPct, parcelaAtualStr, veioDoAnalitico]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -248,15 +258,19 @@ export function AcordoNovoInline({
 
       const usaValorTotal       = isPaguePlay && temParcelas && parcelas > 1;
       const quarentaPctEfetivo  = quarentaPct && parcelas > 2;
-      const valorPrimeiraParcela = usaValorTotal
-        ? calcularParcelas(valorNum, parcelas, quarentaPctEfetivo)[0]
+      // Fluxo analítico PP: o acordo pode nascer no meio do plano (ex.: 4ª de 12)
+      const parcelaInicial = usaValorTotal && veioDoAnalitico
+        ? Math.min(Math.max(1, parseInt(parcelaAtualStr) || 1), parcelas)
+        : 1;
+      const valorParcelaInicial = usaValorTotal
+        ? calcularParcelas(valorNum, parcelas, quarentaPctEfetivo)[parcelaInicial - 1]
         : valorNum;
 
       const payload: Record<string, unknown> = {
         nome_cliente:    nomeCliente.trim() || '',
         nr_cliente:      nrCliente.trim()   || '',
         vencimento,
-        valor:           valorPrimeiraParcela,
+        valor:           valorParcelaInicial,
         valor_total:      usaValorTotal ? valorNum : null,
         usou_quarenta_pct: usaValorTotal ? quarentaPctEfetivo : false,
         tipo:             tipoParaSalvar,
@@ -264,15 +278,50 @@ export function AcordoNovoInline({
         whatsapp:        isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
         instituicao:     instituicao.trim() || null,
         status,
+        // Recebimento é atribuído ao vencimento (acordo já nasce pago no analítico)
+        ...(status === 'pago' ? { data_pagamento: vencimento } : {}),
         observacoes:     obsFinal,
         operador_id:     perfil.id,
         empresa_id:      empresa.id,
         data_cadastro:   new Date().toISOString().split('T')[0],
         acordo_grupo_id: grupoId,
-        numero_parcela:  1,
+        numero_parcela:  parcelaInicial,
         ...(isExtra ? { tipo_vinculo: 'extra' } : {}),
         tag_ids: tagIds.length > 0 ? tagIds : null,
       };
+
+      // Fluxo analítico: parcela paga agora → próxima já nasce agendada para
+      // o último dia do mês seguinte (as anteriores NÃO são criadas — o
+      // detalhe as exibe como pagas sem inflar o recebido).
+      const agendarProxima = veioDoAnalitico && usaValorTotal
+        && status === 'pago' && parcelaInicial < parcelas;
+      async function criarProximaParcela(base: Acordo) {
+        const todas = calcularParcelas(valorNum, parcelas, quarentaPctEfetivo);
+        const { error: errProx } = await supabase.from('acordos').insert({
+          nome_cliente:          base.nome_cliente,
+          nr_cliente:            base.nr_cliente,
+          instituicao:           base.instituicao,
+          whatsapp:              base.whatsapp,
+          observacoes:           base.observacoes,
+          operador_id:           base.operador_id,
+          empresa_id:            base.empresa_id,
+          setor_id:              base.setor_id ?? null,
+          data_cadastro:         new Date().toISOString().split('T')[0],
+          acordo_grupo_id:       base.acordo_grupo_id ?? grupoId,
+          tipo:                  base.tipo,
+          parcelas:              base.parcelas,
+          valor_total:           base.valor_total ?? (usaValorTotal ? valorNum : null),
+          usou_quarenta_pct:     quarentaPctEfetivo,
+          tipo_vinculo:          base.tipo_vinculo,
+          vinculo_operador_id:   base.vinculo_operador_id,
+          vinculo_operador_nome: base.vinculo_operador_nome,
+          numero_parcela:        parcelaInicial + 1,
+          vencimento:            ultimoDiaProxMes(vencimento),
+          valor:                 todas[parcelaInicial] ?? todas[todas.length - 1],
+          status:                'verificar_pendente',
+        });
+        if (errProx) console.warn('[analitico] falha ao agendar próxima parcela:', errProx.message);
+      }
 
       const campoCampo: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
       const nrParaVerificar = isPaguePlay ? instituicao.trim() : nrCliente.trim();
@@ -388,9 +437,14 @@ export function AcordoNovoInline({
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
         onSaved(inserido);
-        toast.success(parcelas > 1 ? `Acordo criado! ${parcelas} parcelas negociadas.` : 'Acordo criado com sucesso!');
+        toast.success(
+          agendarProxima
+            ? `Parcela ${parcelaInicial}/${parcelas} registrada como paga. Próxima agendada para ${format(parseISO(ultimoDiaProxMes(vencimento)), 'dd/MM/yyyy', { locale: ptBR })}.`
+            : parcelas > 1 ? `Acordo criado! ${parcelas} parcelas negociadas.` : 'Acordo criado com sucesso!',
+        );
       }
     } finally {
       setSalvando(false);
@@ -633,6 +687,8 @@ export function AcordoNovoInline({
     estadoSel, setEstadoSel,
     link, setLink,
     temParcelas, parcelas,
+    parcelaInicial: Math.min(Math.max(1, parseInt(parcelaAtualStr) || 1), parcelas),
+    veioDoAnalitico,
     isExtra, setIsExtra: (fn) => setIsExtra(fn),
     usuarioTemLogicaDiretoExtra,
     tagIds, setTagIds,

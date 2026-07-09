@@ -503,10 +503,14 @@ export function AcordoDetalheInline({
       : null;
 
   type LinhaTabela = { index: number; real: Acordo | null; dataCalc: string; };
+  // Âncora: primeira parcela REAL do grupo (acordos vindos do analítico podem
+  // nascer no meio do plano — ex.: 4ª de 12; as anteriores são virtuais pagas).
+  const numeroBase = registrosReais[0]?.numero_parcela ?? acordoLocal.numero_parcela ?? 1;
+  const vencBase   = registrosReais[0]?.vencimento ?? acordoLocal.vencimento;
   const linhas: LinhaTabela[] = Array.from({ length: totalParcelas }, (_, i) => {
     const index = i + 1;
     const real  = registrosReais.find(r => (r.numero_parcela ?? 1) === index) ?? null;
-    const dataCalc = addMonths(registrosReais[0]?.vencimento ?? acordo.vencimento, i);
+    const dataCalc = addMonths(vencBase, index - numeroBase);
     return { index, real, dataCalc };
   });
 
@@ -739,6 +743,12 @@ export function AcordoDetalheInline({
                                     {real ? (
                                       <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border shadow-sm', STATUS_COLORS[real.status])}>
                                         {statusLabels[real.status] ?? real.status}
+                                      </span>
+                                    ) : index < numeroBase ? (
+                                      // Parcela anterior à 1ª real: paga antes da tabulação
+                                      // via analítico (não existe no banco de propósito).
+                                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-success bg-success/10 px-2 py-0.5 rounded-full border border-dashed border-success/30">
+                                        <CheckCircle2 className="w-2.5 h-2.5" /> Paga
                                       </span>
                                     ) : (
                                       <span className="inline-flex items-center gap-1 text-[10px] text-muted-foreground/50 bg-muted/40 px-2 py-0.5 rounded-full border border-dashed border-border">

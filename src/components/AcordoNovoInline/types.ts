@@ -72,6 +72,9 @@ export interface SharedFormState {
   // Derived
   temParcelas: boolean;
   parcelas: number;
+  /** Fluxo analítico PP: qual parcela está sendo paga (1 = fluxo normal) */
+  parcelaInicial: number;
+  veioDoAnalitico: boolean;
   // Extra logic
   isExtra: boolean; setIsExtra: (fn: (v: boolean) => boolean) => void;
   usuarioTemLogicaDiretoExtra: boolean;

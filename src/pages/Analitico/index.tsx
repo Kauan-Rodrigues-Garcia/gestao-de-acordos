@@ -12,6 +12,11 @@ import { supabase } from '@/lib/supabase';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
+import {
+  ModalTabularAnalitico,
+  type DadosTabulacaoAnalitico,
+  type RespostaTabulacaoAnalitico,
+} from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
 import { AbaDiario } from './Diario';
 
 export default function PaginaAnalitico() {
@@ -35,6 +40,13 @@ export default function PaginaAnalitico() {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // PP: janela que completa parcelamento/estado antes de abrir o Novo Acordo
+  const [tabularPendente, setTabularPendente] = useState<{
+    dados: DadosTabulacaoAnalitico;
+    profissionalId: string | null;
+    estadoConhecido: string | null;
+  } | null>(null);
 
   const mostrarVisaoGeral      = (isLiderMais && !isElite) || (isElite && visaoElite === 'geral');
   const mostrarVisaoIndividual = isOperador || (isElite && visaoElite === 'individual');
@@ -95,16 +107,71 @@ export default function PaginaAnalitico() {
       navigate(ROUTE_PATHS.ACORDO_NOVO);
       return;
     }
+    // PaguePlay: o relatório não traz o parcelamento (boleto/Pix vem com o
+    // valor DA PARCELA) e pode faltar o estado. Verifica o profissional e,
+    // se necessário, abre a janela de perguntas antes de montar o rascunho.
+    void (async () => {
+      const { data: prof } = await supabase
+        .from('profissionais')
+        .select('id, estado_uf')
+        .eq('empresa_id', empresa!.id)
+        .eq('codigo', dados.instituicao.trim())
+        .maybeSingle();
+      const estadoConhecido = (prof?.estado_uf ?? '').trim() || null;
+
+      // Cartão com estado conhecido: nada a perguntar — vai direto, já pago.
+      if (dados.forma === 'cartao' && estadoConhecido) {
+        montarDraftPP(dados, {
+          totalParcelas: 1, parcelaAtual: 1, quarentaPct: false,
+          estado: estadoConhecido, valorTotal: dados.valor,
+        });
+        return;
+      }
+      setTabularPendente({ dados, profissionalId: prof?.id ?? null, estadoConhecido });
+    })();
+  }
+
+  /** Monta o rascunho PP (já pago, vencimento na data do analítico) e navega. */
+  function montarDraftPP(dados: DadosTabulacaoAnalitico, r: RespostaTabulacaoAnalitico) {
     const storageKey = `acordo-inline-draft::${empresa!.id}::${perfil!.id}::pp`;
     const draft: Record<string, string> = {
-      instituicao: dados.instituicao,
-      nomeCliente: dados.nomeCliente,
-      tipo:        dados.forma === 'cartao' ? 'cartao' : 'boleto_pix',
-      valorStr:    dados.valor.toFixed(2).replace('.', ','),
+      instituicao:     dados.instituicao,
+      nomeCliente:     dados.nomeCliente,
+      tipo:            dados.forma === 'cartao' ? 'cartao' : 'boleto_pix',
+      valorStr:        r.valorTotal.toFixed(2).replace('.', ','),
+      parcelasStr:     String(r.totalParcelas),
+      parcelaAtualStr: String(r.parcelaAtual),
+      quarentaPct:     r.quarentaPct ? '1' : '0',
+      status:          'pago',
+      analitico:       '1',
     };
+    if (r.estado) draft['estadoSel'] = r.estado;
     if (dados.dataPagamento) draft['vencimento'] = dados.dataPagamento;
     try { sessionStorage.setItem(storageKey, JSON.stringify(draft)); } catch { /* noop */ }
     navigate(ROUTE_PATHS.DASHBOARD + '?novoInline=1');
+  }
+
+  async function confirmarTabularAnalitico(r: RespostaTabulacaoAnalitico) {
+    if (!tabularPendente) return;
+    const { dados, profissionalId, estadoConhecido } = tabularPendente;
+    const estadoFinal = r.estado || estadoConhecido || '';
+
+    // Salva a UF respondida no cadastro do código (próximas tabulações já vêm completas)
+    if (r.estado && !estadoConhecido) {
+      if (profissionalId) {
+        await supabase.from('profissionais').update({ estado_uf: r.estado }).eq('id', profissionalId);
+      } else {
+        await supabase.from('profissionais').insert({
+          empresa_id: empresa!.id,
+          codigo:     dados.instituicao.trim(),
+          nome:       dados.nomeCliente || dados.instituicao.trim(),
+          estado_uf:  r.estado,
+        });
+      }
+    }
+
+    setTabularPendente(null);
+    montarDraftPP(dados, { ...r, estado: estadoFinal });
   }
 
   function onVerAcordo(acordoId: string, codigo?: string) {
@@ -293,6 +360,14 @@ export default function PaginaAnalitico() {
           temPermissaoImportar={temPermissao('importar_diario')}
         />
       )}
+
+      <ModalTabularAnalitico
+        aberto={!!tabularPendente}
+        dados={tabularPendente?.dados ?? null}
+        estadoConhecido={tabularPendente?.estadoConhecido ?? null}
+        onConfirm={confirmarTabularAnalitico}
+        onClose={() => setTabularPendente(null)}
+      />
     </div>
   );
 }

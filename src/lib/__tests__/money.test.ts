@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calcularParcelas, foiUsadoQuarentaPct, parseBRL } from '../money';
+import { calcularParcelas, foiUsadoQuarentaPct, parseBRL, calcularTotalAnalitico } from '../money';
 
 describe('calcularParcelas', () => {
   it('divide igualmente quando divisão é exata', () => {
@@ -111,5 +111,34 @@ describe('foiUsadoQuarentaPct', () => {
 
   it('retorna false quando parcelas é 1 (sem sentido usar 40%)', () => {
     expect(foiUsadoQuarentaPct({ valor: 400, valor_total: 1000, parcelas: 1 })).toBe(false);
+  });
+});
+
+describe('calcularTotalAnalitico', () => {
+  it('à vista: total = valor da parcela', () => {
+    expect(calcularTotalAnalitico(500, 1, 1, false)).toBe(500);
+  });
+
+  it('sem 40%: total = parcela × N (249 × 12 = 2988)', () => {
+    expect(calcularTotalAnalitico(249, 12, 4, false)).toBe(2988);
+  });
+
+  it('40% na 1ª parcela: total = parcela ÷ 0,4 (400 → 1000)', () => {
+    expect(calcularTotalAnalitico(400, 3, 1, true)).toBe(1000);
+  });
+
+  it('40% mas parcela paga é 2ª+: parcela é uma das demais (60% ÷ (N−1))', () => {
+    // total 1000, 3x com 40%: demais = 300 → 300 × 2 / 0,6 = 1000
+    expect(calcularTotalAnalitico(300, 3, 2, true)).toBe(1000);
+  });
+
+  it('40% ignorado quando N ≤ 2 (mesma regra do formulário)', () => {
+    expect(calcularTotalAnalitico(500, 2, 1, true)).toBe(1000);
+  });
+
+  it('coerência: parcela derivada de calcularParcelas devolve o mesmo total', () => {
+    const total = 2988;
+    const parcelas = calcularParcelas(total, 12, false);
+    expect(calcularTotalAnalitico(parcelas[3], 12, 4, false)).toBe(total);
   });
 });

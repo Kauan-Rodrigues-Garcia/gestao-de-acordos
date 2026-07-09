@@ -104,6 +104,30 @@ export function calcularParcelas(
 }
 
 /**
+ * Deriva o VALOR TOTAL do acordo a partir do valor de UMA parcela vinda do
+ * relatório analítico (PaguePlay), onde boleto/Pix informam só a parcela.
+ *
+ * - Sem 40%: total = parcela × N.
+ * - Com 40% e a parcela paga é a 1ª: a parcela é 40% do total → total = v/0,4.
+ * - Com 40% e a parcela paga é 2ª+: a parcela é uma das demais (60% ÷ (N−1))
+ *   → total = v×(N−1)/0,6.
+ * A regra dos 40% só vale para N ≥ 3 (mesma regra do formulário).
+ */
+export function calcularTotalAnalitico(
+  valorParcela: number,
+  totalParcelas: number,
+  parcelaAtual: number,
+  quarentaPct: boolean,
+): number {
+  const round2 = (v: number) => Math.round(v * 100) / 100;
+  if (totalParcelas <= 1) return round2(valorParcela);
+  const q40 = quarentaPct && totalParcelas > 2;
+  if (!q40) return round2(valorParcela * totalParcelas);
+  if (parcelaAtual <= 1) return round2(valorParcela / 0.4);
+  return round2((valorParcela * (totalParcelas - 1)) / 0.6);
+}
+
+/**
  * Detecta se a 1ª parcela usou a regra dos 40%.
  * Só faz sentido chamar quando acordo.valor_total != null e numero_parcela === 1.
  */

@@ -33,9 +33,10 @@ export function isTipoParcelado(tipo: string, isPP: boolean): boolean {
     : TIPOS_PARCELADOS_BOOKPLAY.includes(tipo);
 }
 
-/** Somar N meses a uma data YYYY-MM-DD */
+/** Somar N meses a uma data YYYY-MM-DD (aceita N negativo) */
 export function addMonths(dateStr: string, months: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   const total = m - 1 + months;
-  return `${y + Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  const mes   = ((total % 12) + 12) % 12;
+  return `${y + Math.floor(total / 12)}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }

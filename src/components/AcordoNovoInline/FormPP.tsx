@@ -27,6 +27,7 @@ export function FormPP({ state }: { state: SharedFormState }) {
     parcelasStr, setParcelasStr,
     quarentaPct, setQuarentaPct,
     temParcelas, parcelas,
+    parcelaInicial, veioDoAnalitico,
     usuarioTemLogicaDiretoExtra,
     isExtra, setIsExtra,
     nomeCliente, setNomeCliente,
@@ -157,6 +158,17 @@ export function FormPP({ state }: { state: SharedFormState }) {
                 )}
               </div>
             </div>
+
+            {veioDoAnalitico && temParcelas && parcelaInicial > 1 && (
+              <div className="flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-md px-2.5 py-1.5">
+                <FileText className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                <span>
+                  Tabulando a <strong>{parcelaInicial}ª de {parcelas} parcelas</strong> (via analítico).
+                  As anteriores aparecem como pagas no detalhe sem serem recriadas, e a próxima
+                  será agendada automaticamente ao salvar.
+                </span>
+              </div>
+            )}
 
             {temParcelas && parcelas > 2 && (
               <div className="space-y-2">
