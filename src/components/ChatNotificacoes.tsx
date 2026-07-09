@@ -20,6 +20,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase, Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/lib/tenant-config';
+import { usePetHabilitado } from '@/components/pet/petConfig';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -168,6 +169,7 @@ export function ChatNotificacoes() {
   const { user } = useAuth();
   const navigate  = useNavigate();
   const tenant    = useTenant();
+  const petAtivo  = usePetHabilitado();
   const [aberto, setAberto]             = useState(false);
   const [expandido, setExpandido]       = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
@@ -325,7 +327,14 @@ export function ChatNotificacoes() {
   if (!user) return null;
 
   return (
-    <div ref={containerRef} className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div
+      ref={containerRef}
+      className={cn(
+        'fixed right-5 z-50 flex flex-col items-end gap-2',
+        // O pet ocupa o canto inferior direito — o sino sobe para não brigar.
+        petAtivo ? 'bottom-32' : 'bottom-5',
+      )}
+    >
 
       {/* ── Janela de chat ── */}
       {/* Wrapper com pointer-events:none durante exit para não bloquear cliques */}

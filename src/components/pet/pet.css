@@ -1,0 +1,68 @@
+/* pet.css — animações do mascote (CSS puro, GPU, pausa em aba oculta) */
+
+/* Flutuar (Aura — ela levita) */
+@keyframes pet-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+/* Respirar (Rolo — sentadinho) */
+@keyframes pet-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(1.01, 1.04); }
+}
+/* Piscar (grupo dos olhos) */
+@keyframes pet-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  95%, 97%      { transform: scaleY(0.08); }
+}
+/* Pulinho ocasional (micro-animação alternada do widget) */
+@keyframes pet-pulinho {
+  0%, 100% { transform: translateY(0); }
+  30%      { transform: translateY(-9px); }
+  55%      { transform: translateY(0); }
+  72%      { transform: translateY(-4px); }
+  86%      { transform: translateY(0); }
+}
+/* Feliz (após alimentar) */
+@keyframes pet-feliz {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  20%      { transform: translateY(-10px) rotate(-4deg); }
+  40%      { transform: translateY(0) rotate(0deg); }
+  60%      { transform: translateY(-7px) rotate(4deg); }
+  80%      { transform: translateY(0) rotate(0deg); }
+}
+/* Zzz subindo (dormindo) */
+@keyframes pet-zzz {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.7); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(10px, -16px) scale(1.15); }
+}
+/* Orelha/rabinho balançando de vez em quando */
+@keyframes pet-wiggle {
+  0%, 86%, 100% { transform: rotate(0deg); }
+  90%           { transform: rotate(-8deg); }
+  95%           { transform: rotate(5deg); }
+}
+/* Sombra acompanhando o flutuar */
+@keyframes pet-sombra {
+  0%, 100% { transform: scale(1);   opacity: 0.16; }
+  50%      { transform: scale(0.9); opacity: 0.10; }
+}
+
+.pet-anim-float    { animation: pet-float 3.2s ease-in-out infinite; }
+.pet-anim-breathe  { animation: pet-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-blink    { animation: pet-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-pulinho  { animation: pet-pulinho 0.9s ease-in-out; }
+.pet-anim-feliz    { animation: pet-feliz 0.8s ease-in-out 2; }
+.pet-anim-zzz      { animation: pet-zzz 2.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-zzz-2    { animation: pet-zzz 2.4s ease-out 1.2s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-wiggle   { animation: pet-wiggle 5.5s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-sombra   { animation: pet-sombra 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+/* Dormindo: respiração mais lenta e profunda */
+.pet-anim-dormindo { animation: pet-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pet-anim-float, .pet-anim-breathe, .pet-anim-blink, .pet-anim-pulinho,
+  .pet-anim-feliz, .pet-anim-zzz, .pet-anim-zzz-2, .pet-anim-wiggle,
+  .pet-anim-sombra, .pet-anim-dormindo { animation: none; }
+}
