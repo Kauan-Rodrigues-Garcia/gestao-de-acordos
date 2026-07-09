@@ -61,8 +61,6 @@
 /* Dormindo: respiração mais lenta e profunda */
 .pet-anim-dormindo { animation: pet-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
 
-@media (prefers-reduced-motion: reduce) {
-  .pet-anim-float, .pet-anim-breathe, .pet-anim-blink, .pet-anim-pulinho,
-  .pet-anim-feliz, .pet-anim-zzz, .pet-anim-zzz-2, .pet-anim-wiggle,
-  .pet-anim-sombra, .pet-anim-dormindo { animation: none; }
-}
+/* Nota: NÃO honramos prefers-reduced-motion aqui de propósito — máquinas
+ * Windows do time costumam ter "Efeitos de animação" desativado no sistema,
+ * o que congelava o pet inteiro. As animações são suaves e localizadas. */
