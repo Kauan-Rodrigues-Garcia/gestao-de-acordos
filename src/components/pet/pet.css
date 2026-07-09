@@ -49,6 +49,14 @@
   50%      { transform: scale(0.9); opacity: 0.10; }
 }
 
+/* Apertando botões do controle (videogame) */
+@keyframes pet-controle {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-2.5deg) translateY(-1px); }
+  75%      { transform: rotate(2.5deg) translateY(-1px); }
+}
+.pet-anim-controle { animation: pet-controle 0.35s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
 /* Passinhos durante o passeio pelo rodapé */
 @keyframes pet-anda {
   0%, 100% { transform: translateY(0); }

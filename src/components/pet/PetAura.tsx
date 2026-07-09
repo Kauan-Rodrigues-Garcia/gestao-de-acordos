@@ -17,6 +17,7 @@ export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps
   const animCorpo =
     humor === 'feliz'    ? 'pet-anim-feliz'
     : humor === 'dormindo' ? 'pet-anim-dormindo'
+    : humor === 'jogando'  ? 'pet-anim-breathe' // sentadinha, concentrada
     : micro === 'pulinho' ? 'pet-anim-pulinho'
     : 'pet-anim-float';
 
@@ -96,6 +97,31 @@ export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps
           <g fill="#8f86d8" fontFamily="inherit" fontWeight="700">
             <text className="pet-anim-zzz" x="146" y="60" fontSize="18">z</text>
             <text className="pet-anim-zzz-2" x="158" y="46" fontSize="13">z</text>
+          </g>
+        )}
+
+        {/* videogame: controle nas patinhas + consolinho no chão */}
+        {humor === 'jogando' && (
+          <g>
+            <path d="M100 146 C 94 158 74 156 62 164" stroke="#4a4458" strokeWidth="2.5" fill="none" />
+            <rect x="42" y="160" width="28" height="13" rx="3" fill="#4a4458" />
+            <rect x="46" y="163.5" width="9" height="3.5" rx="1.7" fill="#8f86d8" />
+            <circle cx="64" cy="166.5" r="2.2" fill="#e5734f" />
+            <g className="pet-anim-controle">
+              <rect x="79" y="128" width="44" height="19" rx="9.5" fill="#4a4458" />
+              <rect x="86" y="135" width="9" height="3.2" rx="1.6" fill="#cfc9f2" />
+              <rect x="88.9" y="132.1" width="3.2" height="9" rx="1.6" fill="#cfc9f2" />
+              <circle cx="112" cy="134" r="2.7" fill="#e5734f" />
+              <circle cx="117.5" cy="139.5" r="2.7" fill="#f2c14e" />
+            </g>
+            {/* patinhas segurando */}
+            <ellipse cx="82" cy="140" rx="8" ry="6.5" fill="#b7b0e8" />
+            <ellipse cx="120" cy="140" rx="8" ry="6.5" fill="#b7b0e8" />
+            {/* efeitos do jogo */}
+            <g fontFamily="inherit" fontWeight="700">
+              <text className="pet-anim-zzz" x="140" y="70" fontSize="13" fill="#8f86d8">★</text>
+              <text className="pet-anim-zzz-2" x="152" y="56" fontSize="11" fill="#e5734f">♪</text>
+            </g>
           </g>
         )}
       </g>

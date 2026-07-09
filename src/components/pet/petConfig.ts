@@ -7,7 +7,7 @@
  */
 import { useAuth } from '@/hooks/useAuth';
 
-export type PetHumor = 'idle' | 'feliz' | 'dormindo';
+export type PetHumor = 'idle' | 'feliz' | 'dormindo' | 'jogando';
 export type PetRoupa = 'nenhuma' | 'chapeu' | 'cachecol';
 
 export interface RoupaCatalogo {
