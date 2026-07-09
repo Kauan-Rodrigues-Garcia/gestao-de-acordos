@@ -1,8 +1,9 @@
 /**
  * ChatNotificacoes.tsx
  * ─────────────────────────────────────────────────────────────────────────
- * Botão flutuante de notificações no canto inferior direito da tela.
- * Ao clicar no botão, abre janela estilo chat com as notificações.
+ * Painel de notificações ancorado no canto superior direito, logo abaixo do
+ * cabeçalho. Quem abre/fecha é o sino do header (Layout.tsx), que dispara um
+ * clique no gatilho oculto `[data-notif-trigger]` desta janela.
  * Ao clicar em uma notificação, abre modal com detalhes completos.
  * Atualiza em tempo real via Supabase Realtime (REPLICA IDENTITY FULL).
  */
@@ -10,7 +11,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import {
-  MessageCircle, X, Check, CheckCheck, Trash2, Bell,
+  X, Check, CheckCheck, Trash2, Bell,
   AlertTriangle, Info, ArrowLeft,
   Clock, CheckCircle2, ExternalLink,
   Maximize2, Minimize2,
@@ -20,7 +21,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { supabase, Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/lib/tenant-config';
-import { usePetHabilitado } from '@/components/pet/petConfig';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -169,12 +169,11 @@ export function ChatNotificacoes() {
   const { user } = useAuth();
   const navigate  = useNavigate();
   const tenant    = useTenant();
-  const petAtivo  = usePetHabilitado();
   const [aberto, setAberto]             = useState(false);
   const [expandido, setExpandido]       = useState(false);
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading]           = useState(false);
-  const [animarBadge, setAnimarBadge]   = useState(false);
+  const [, setAnimarBadge]              = useState(false);
   const [detalhe, setDetalhe]           = useState<Notificacao | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -329,11 +328,7 @@ export function ChatNotificacoes() {
   return (
     <div
       ref={containerRef}
-      className={cn(
-        'fixed right-5 z-50 flex flex-col items-end gap-2',
-        // O pet ocupa o canto inferior direito — o sino sobe para não brigar.
-        petAtivo ? 'bottom-32' : 'bottom-5',
-      )}
+      className="fixed right-4 top-[60px] z-50 flex flex-col items-end gap-2"
     >
 
       {/* ── Janela de chat ── */}
@@ -343,9 +338,9 @@ export function ChatNotificacoes() {
         {aberto && (
           <motion.div
             key="chat-window"
-            initial={{ opacity: 0, y: 14, scale: 0.97 }}
+            initial={{ opacity: 0, y: -12, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 14, scale: 0.97 }}
+            exit={{ opacity: 0, y: -12, scale: 0.97 }}
             transition={{ type: 'tween', duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
             className={cn(
               'bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col relative transition-[width,height] duration-200',
@@ -525,46 +520,21 @@ export function ChatNotificacoes() {
       </AnimatePresence>
       </div>
 
-      {/* ── Botão flutuante ── */}
-      <motion.button
+      {/* ── Gatilho oculto ──
+          Quem abre/fecha é o sino do header (Layout.tsx), que dispara um
+          clique aqui via document.querySelector('[data-notif-trigger]'). */}
+      <button
         data-notif-trigger
-        whileHover={{ scale: 1.07 }}
-        whileTap={{ scale: 0.95 }}
+        type="button"
+        aria-hidden
+        tabIndex={-1}
+        className="hidden"
         onClick={() => {
           const abrindo = !aberto;
           setAberto(abrindo);
           if (abrindo) { carregar(); setDetalhe(null); }
         }}
-        className={cn(
-          'relative w-14 h-14 rounded-full shadow-xl flex items-center justify-center transition-colors',
-          aberto
-            ? 'bg-primary text-primary-foreground'
-            : 'bg-card border-2 border-border text-foreground hover:bg-primary hover:text-primary-foreground hover:border-primary'
-        )}
-        aria-label="Notificações"
-      >
-        {aberto ? (
-          <X className="w-6 h-6" />
-        ) : (
-          <MessageCircle className="w-6 h-6" />
-        )}
-
-        {/* Badge de não lidas */}
-        <AnimatePresence>
-          {naoLidas > 0 && !aberto && (
-            <motion.span
-              key="badge"
-              initial={{ scale: 0 }}
-              animate={{ scale: animarBadge ? [1, 1.35, 1] : 1 }}
-              exit={{ scale: 0 }}
-              transition={{ duration: animarBadge ? 0.4 : 0.15 }}
-              className="absolute -top-1 -right-1 min-w-[22px] h-[22px] bg-destructive text-destructive-foreground text-[10px] font-bold rounded-full flex items-center justify-center px-1 shadow-md border-2 border-background"
-            >
-              {naoLidas > 99 ? '99+' : naoLidas}
-            </motion.span>
-          )}
-        </AnimatePresence>
-      </motion.button>
+      />
     </div>
   );
 }
