@@ -29,7 +29,8 @@ import { PetQuartinho } from './PetQuartinho';
 
 interface PetEstadoLocal { roupa?: PetRoupa; dormindo?: boolean }
 
-type PetEvento = 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica';
+type PetEvento = 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica' | 'escada';
+type EscadaFase = 'nenhuma' | 'subindo' | 'topo' | 'descendo';
 
 /** Área do passeio: até ALCANCE px à esquerda do canto. */
 const ALCANCE = 190;
@@ -39,6 +40,10 @@ const VELOCIDADE = 45;
 const FASE_MS = 5 * 60_000;
 /** Comemoração de acordo pago (confete + balãozinho). */
 const COMEMORACAO_MS = 4_500;
+/** Escada: altura da subida (px) e deriva pra acompanhar a inclinação. */
+const ESCADA_ALTURA = 230;
+const ESCADA_DERIVA_X = -16;
+const ESCADA_SUBIDA_S = 7;
 
 /** Eventos aleatórios: duração e peso do sorteio (peso maior = mais comum). */
 const EVENTOS: { tipo: Exclude<PetEvento, 'nenhum'>; duracaoMs: number; peso: number }[] = [
@@ -46,6 +51,7 @@ const EVENTOS: { tipo: Exclude<PetEvento, 'nenhum'>; duracaoMs: number; peso: nu
   { tipo: 'borboleta',  duracaoMs: 14_000, peso: 2 },
   { tipo: 'moeda',      duracaoMs: 8_000,  peso: 2 },
   { tipo: 'espreguica', duracaoMs: 2_600,  peso: 2 },
+  { tipo: 'escada',     duracaoMs: 18_500, peso: 2 },
 ];
 
 function sortearEvento() {
@@ -87,6 +93,11 @@ export function PetWidget() {
   const movendoRef = useRef(false);
   movendoRef.current = movendo;
 
+  // ── Escada (evento): subida vertical no cantinho ───────────────────────
+  const [y,          setY]          = useState(0);   // deslocamento vertical (negativo = sobe)
+  const [durY,       setDurY]       = useState(0);
+  const [escadaFase, setEscadaFase] = useState<EscadaFase>('nenhuma');
+
   // Humor efetivo: interativo usa o humor manual; teaser segue o ciclo 5/5.
   // A comemoração passa por cima de tudo (até do sono — boa notícia acorda!).
   const humorBase: PetHumor = interativo
@@ -101,6 +112,7 @@ export function PetWidget() {
     : humorBase !== 'idle' ? 'nenhuma'
     : evento === 'borboleta' ? 'borboleta'
     : evento === 'moeda' ? 'moeda'
+    : escadaFase === 'topo' ? 'aceno'
     : 'nenhuma';
   const microEfetivo: PetMicro =
     humorEfetivo === 'idle' && evento === 'espreguica' ? 'espreguica' : micro;
@@ -208,6 +220,46 @@ export function PetWidget() {
     return () => { vivo = false; ids.forEach(clearTimeout); };
   }, [aberto, humorBase, comemorando]);
 
+  // Coreografia da escada: vai pro canto → sobe devagarinho → oizinho → desce
+  useEffect(() => {
+    if (evento !== 'escada') {
+      // evento acabou/cancelado: desce rapidinho se estiver lá em cima
+      setEscadaFase('nenhuma');
+      setDurY(0.4);
+      setY(0);
+      return;
+    }
+    let vivo = true;
+    const ids: number[] = [];
+    const agendar = (fn: () => void, ms: number) => {
+      ids.push(window.setTimeout(() => { if (vivo) fn(); }, ms));
+    };
+
+    // primeiro volta pro cantinho onde a escada encosta
+    setDurMove(0.4);
+    setMovendo(false);
+    setX(0);
+    xRef.current = 0;
+    setDir(1);
+
+    agendar(() => {                       // começa a subir
+      setEscadaFase('subindo');
+      setDurY(ESCADA_SUBIDA_S);
+      setY(-ESCADA_ALTURA);
+    }, 700);
+    agendar(() => setEscadaFase('topo'),  // chegou: oizinho 👋
+      700 + ESCADA_SUBIDA_S * 1000 + 100);
+    agendar(() => {                       // desce devagarinho
+      setEscadaFase('descendo');
+      setDurY(ESCADA_SUBIDA_S);
+      setY(0);
+    }, 700 + ESCADA_SUBIDA_S * 1000 + 2_800);
+    agendar(() => setEscadaFase('nenhuma'),
+      700 + ESCADA_SUBIDA_S * 2000 + 3_000);
+
+    return () => { vivo = false; ids.forEach(clearTimeout); };
+  }, [evento]);
+
   function alimentar() {
     setHumor('feliz');
     setTimeout(() => setHumor('idle'), 1900);
@@ -261,31 +313,67 @@ export function PetWidget() {
         )}
       </AnimatePresence>
 
-      <div className="relative" style={{ transform: `translateX(${x}px)`, transition: `transform ${durMove}s linear` }}>
-        {/* balãozinho da comemoração */}
-        {comemorando && !aberto && (
-          <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
-            Acordo pago! 🎉
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={alternarPainel}
-          title={`${pet.nome} — clique para abrir`}
-          aria-label={`Abrir o quartinho de ${pet.nome}`}
-          className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
+      {/* escadinha de madeira encostada no cantinho */}
+      {evento === 'escada' && (
+        <svg
+          className="pet-anim-escada-in absolute bottom-1 pointer-events-none"
+          style={{ right: 18, transform: 'rotate(-3.5deg)', transformOrigin: 'bottom right' }}
+          width="46"
+          height={ESCADA_ALTURA + 86}
+          viewBox={`0 0 46 ${ESCADA_ALTURA + 86}`}
+          aria-hidden="true"
         >
-          {/* flip na direção da caminhada; passinhos no svg */}
-          <div className="w-full h-full" style={{ transform: `scaleX(${dir})`, transition: 'transform .2s' }}>
-            <PetSvg
-              humor={humorEfetivo}
-              roupa={roupa}
-              micro={microEfetivo}
-              cena={cena}
-              className={cn('w-full h-full drop-shadow-sm', movendo && 'pet-anim-anda')}
-            />
-          </div>
-        </button>
+          <line x1="9"  y1="6" x2="9"  y2={ESCADA_ALTURA + 82} stroke="#a8815c" strokeWidth="6" strokeLinecap="round" />
+          <line x1="37" y1="6" x2="37" y2={ESCADA_ALTURA + 82} stroke="#a8815c" strokeWidth="6" strokeLinecap="round" />
+          {Array.from({ length: Math.floor((ESCADA_ALTURA + 60) / 26) }, (_, i) => (
+            <line key={i} x1="9" x2="37" y1={20 + i * 26} y2={20 + i * 26} stroke="#c9a97b" strokeWidth="5" strokeLinecap="round" />
+          ))}
+        </svg>
+      )}
+
+      <div style={{ transform: `translateX(${x}px)`, transition: `transform ${durMove}s linear` }}>
+        {/* camada vertical: usada só pela escada (sobe/desce com deriva) */}
+        <div
+          className="relative"
+          style={{
+            transform: `translate(${y !== 0 ? ESCADA_DERIVA_X : 0}px, ${y}px)`,
+            transition: `transform ${durY}s linear`,
+          }}
+        >
+          {/* balãozinho da comemoração */}
+          {comemorando && !aberto && (
+            <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
+              Acordo pago! 🎉
+            </div>
+          )}
+          {/* oizinho lá do alto da escada */}
+          {escadaFase === 'topo' && !aberto && (
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
+              oiii! 👋
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={alternarPainel}
+            title={`${pet.nome} — clique para abrir`}
+            aria-label={`Abrir o quartinho de ${pet.nome}`}
+            className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
+          >
+            {/* flip na direção da caminhada; passinhos no svg */}
+            <div className="w-full h-full" style={{ transform: `scaleX(${dir})`, transition: 'transform .2s' }}>
+              <PetSvg
+                humor={humorEfetivo}
+                roupa={roupa}
+                micro={microEfetivo}
+                cena={cena}
+                className={cn(
+                  'w-full h-full drop-shadow-sm',
+                  (movendo || escadaFase === 'subindo' || escadaFase === 'descendo') && 'pet-anim-anda',
+                )}
+              />
+            </div>
+          </button>
+        </div>
       </div>
     </div>
   );

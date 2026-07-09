@@ -80,6 +80,16 @@
   0%, 100% { transform: scaleX(1); }
   50%      { transform: scaleX(0.35); }
 }
+/* Patinha acenando (oizinho no topo da escada) */
+@keyframes pet-acena {
+  0%, 100% { transform: rotate(-18deg); }
+  50%      { transform: rotate(18deg); }
+}
+/* Escada surgindo/sumindo suave */
+@keyframes pet-escada-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
 /* Moedinha caindo e quicando */
 @keyframes pet-moeda {
   0%   { opacity: 0; transform: translateY(-90px); }
@@ -145,6 +155,8 @@
 .pet-anim-asas       { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: right center; }
 .pet-anim-asas-2     { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
 .pet-anim-moeda      { animation: pet-moeda 1.6s ease-out forwards; }
+.pet-anim-acena      { animation: pet-acena 0.55s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-escada-in  { animation: pet-escada-in 0.4s ease-out; }
 .pet-anim-breathe  { animation: pet-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
 .pet-anim-blink    { animation: pet-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
 .pet-anim-pulinho  { animation: pet-pulinho 0.9s ease-in-out; }

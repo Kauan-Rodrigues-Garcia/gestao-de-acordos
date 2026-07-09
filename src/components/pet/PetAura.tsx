@@ -230,6 +230,14 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
         </g>
       )}
 
+      {/* oizinho: patinha acenando (topo da escada) */}
+      {cena === 'aceno' && (
+        <g className="pet-anim-acena">
+          <ellipse cx="150" cy="98" rx="8" ry="11" fill="#b7b0e8" />
+          <ellipse cx="150" cy="93" rx="6" ry="5" fill="#c8c1f0" />
+        </g>
+      )}
+
       {/* moedinha dourada quicando na frente dela */}
       {cena === 'moeda' && (
         <g>

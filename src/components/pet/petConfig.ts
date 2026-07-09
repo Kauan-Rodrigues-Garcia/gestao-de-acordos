@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 
 export type PetHumor = 'idle' | 'feliz' | 'dormindo' | 'jogando' | 'comemorando';
 /** Cenas extras desenhadas junto do pet (eventos aleatórios / comemoração). */
-export type PetCena = 'nenhuma' | 'confete' | 'borboleta' | 'moeda';
+export type PetCena = 'nenhuma' | 'confete' | 'borboleta' | 'moeda' | 'aceno';
 /** Micro-animações ocasionais do corpo. */
 export type PetMicro = 'none' | 'pulinho' | 'espreguica';
 export type PetRoupa = 'nenhuma' | 'chapeu' | 'cachecol';
