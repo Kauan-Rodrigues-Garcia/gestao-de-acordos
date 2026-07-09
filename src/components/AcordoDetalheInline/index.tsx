@@ -6,6 +6,7 @@ import {
   ArrowLeftRight, Link as LinkIcon, CalendarClock, MessageCircle, Plus,
 } from 'lucide-react';
 import { DatePickerField } from '@/components/DatePickerField';
+import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -148,6 +149,7 @@ export function AcordoDetalheInline({
     if (error) {
       toast.error(`Erro: ${error.message}`);
     } else {
+      celebrarPetAcordoPago();
       toast.success('Parcela marcada como paga!');
       const parcelaAtualizada = { ...p, status: 'pago' as const, data_pagamento: dataPagamento, vencimento: dataPagamento };
       setRegistrosReais(prev => prev.map(x => x.id === p.id ? parcelaAtualizada : x));

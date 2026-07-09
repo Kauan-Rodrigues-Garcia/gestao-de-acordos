@@ -5,8 +5,11 @@
  *   (sincronizado pelo relógio — todos veem a mesma fase) e quartinho
  *   em modo teaser ("Em breve").
  * - Acordado e de boa (qualquer cargo): passeia pelo rodapé parando em
- *   pontos aleatórios, dá pulinhos, e de vez em quando puxa um
- *   controlezinho e joga videogame por ~30s.
+ *   pontos aleatórios, dá pulinhos, e de vez em quando acontece um evento
+ *   aleatório: videogame (~30s), borboleta passeando, moedinha caindo ou
+ *   uma espreguiçada.
+ * - Quando o usuário marca um acordo/parcela como pago (petEvents), a Aura
+ *   comemora com confete e balãozinho — mesmo se estiver dormindo.
  * Estado local em localStorage — zero banco, zero realtime.
  */
 import { useEffect, useRef, useState } from 'react';
@@ -17,13 +20,16 @@ import { cn } from '@/lib/utils';
 import './pet.css';
 import {
   usePetHabilitado, usePetInterativo, usePetDoTenant, petStorageKey,
-  type PetHumor, type PetRoupa,
+  type PetHumor, type PetRoupa, type PetCena, type PetMicro,
 } from './petConfig';
+import { PET_EVENTO_COMEMORAR } from './petEvents';
 import { PetAura } from './PetAura';
 import { PetRolo } from './PetRolo';
 import { PetQuartinho } from './PetQuartinho';
 
 interface PetEstadoLocal { roupa?: PetRoupa; dormindo?: boolean }
+
+type PetEvento = 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica';
 
 /** Área do passeio: até ALCANCE px à esquerda do canto. */
 const ALCANCE = 190;
@@ -31,8 +37,26 @@ const ALCANCE = 190;
 const VELOCIDADE = 45;
 /** Ciclo do teaser: 5 min acordado, 5 min dormindo (pelo relógio). */
 const FASE_MS = 5 * 60_000;
-/** Sessão de videogame: ~30s, sorteada em intervalos aleatórios. */
-const JOGO_MS = 30_000;
+/** Comemoração de acordo pago (confete + balãozinho). */
+const COMEMORACAO_MS = 4_500;
+
+/** Eventos aleatórios: duração e peso do sorteio (peso maior = mais comum). */
+const EVENTOS: { tipo: Exclude<PetEvento, 'nenhum'>; duracaoMs: number; peso: number }[] = [
+  { tipo: 'jogando',    duracaoMs: 30_000, peso: 3 },
+  { tipo: 'borboleta',  duracaoMs: 14_000, peso: 2 },
+  { tipo: 'moeda',      duracaoMs: 8_000,  peso: 2 },
+  { tipo: 'espreguica', duracaoMs: 2_600,  peso: 2 },
+];
+
+function sortearEvento() {
+  const total = EVENTOS.reduce((s, e) => s + e.peso, 0);
+  let r = Math.random() * total;
+  for (const e of EVENTOS) {
+    r -= e.peso;
+    if (r <= 0) return e;
+  }
+  return EVENTOS[0];
+}
 
 function faseAcordadaAgora(): boolean {
   return Math.floor(Date.now() / FASE_MS) % 2 === 0;
@@ -48,9 +72,10 @@ export function PetWidget() {
 
   const [aberto, setAberto] = useState(false);
   const [humor,  setHumor]  = useState<PetHumor>('idle');   // modo interativo
-  const [micro,  setMicro]  = useState<'none' | 'pulinho'>('none');
+  const [micro,  setMicro]  = useState<PetMicro>('none');
   const [roupa,  setRoupa]  = useState<PetRoupa>('nenhuma');
-  const [evento, setEvento] = useState<'nenhum' | 'jogando'>('nenhum');
+  const [evento, setEvento] = useState<PetEvento>('nenhum');
+  const [comemorando, setComemorando] = useState(false);
   const [acordadoTeaser, setAcordadoTeaser] = useState(faseAcordadaAgora);
 
   // ── Passeio pelo rodapé ────────────────────────────────────────────────
@@ -63,11 +88,23 @@ export function PetWidget() {
   movendoRef.current = movendo;
 
   // Humor efetivo: interativo usa o humor manual; teaser segue o ciclo 5/5.
+  // A comemoração passa por cima de tudo (até do sono — boa notícia acorda!).
   const humorBase: PetHumor = interativo
     ? humor
     : (acordadoTeaser ? 'idle' : 'dormindo');
   const humorEfetivo: PetHumor =
-    humorBase === 'idle' && evento === 'jogando' ? 'jogando' : humorBase;
+    comemorando ? 'comemorando'
+    : humorBase === 'idle' && evento === 'jogando' ? 'jogando'
+    : humorBase;
+  const cena: PetCena =
+    comemorando ? 'confete'
+    : humorBase !== 'idle' ? 'nenhuma'
+    : evento === 'borboleta' ? 'borboleta'
+    : evento === 'moeda' ? 'moeda'
+    : 'nenhuma';
+  const microEfetivo: PetMicro =
+    humorEfetivo === 'idle' && evento === 'espreguica' ? 'espreguica' : micro;
+  const emEvento = evento !== 'nenhum' || comemorando;
 
   // Restaura roupa/sono persistidos (só no modo interativo)
   useEffect(() => {
@@ -92,20 +129,35 @@ export function PetWidget() {
     return () => clearInterval(t);
   }, [interativo]);
 
+  // Comemoração: acordo/parcela marcado como pago em qualquer tela
+  useEffect(() => {
+    let dentro: ReturnType<typeof setTimeout> | null = null;
+    const comemorar = () => {
+      setComemorando(true);
+      if (dentro) clearTimeout(dentro);
+      dentro = setTimeout(() => setComemorando(false), COMEMORACAO_MS);
+    };
+    window.addEventListener(PET_EVENTO_COMEMORAR, comemorar);
+    return () => {
+      window.removeEventListener(PET_EVENTO_COMEMORAR, comemorar);
+      if (dentro) clearTimeout(dentro);
+    };
+  }, []);
+
   // Micro-animação alternada: pulinho ocasional enquanto está "de boa" parado
   useEffect(() => {
-    if (humorEfetivo !== 'idle' || movendo || aberto) return;
+    if (humorEfetivo !== 'idle' || movendo || aberto || emEvento) return;
     let dentro: ReturnType<typeof setTimeout> | null = null;
     const timer = setInterval(() => {
       setMicro('pulinho');
       dentro = setTimeout(() => setMicro('none'), 950);
     }, 9000 + Math.random() * 7000);
     return () => { clearInterval(timer); if (dentro) clearTimeout(dentro); };
-  }, [humorEfetivo, movendo, aberto]);
+  }, [humorEfetivo, movendo, aberto, emEvento]);
 
   // Passeio aleatório: anda até um ponto, para um tempinho, repete.
   useEffect(() => {
-    if (aberto || humorEfetivo !== 'idle') { setMovendo(false); return; }
+    if (aberto || humorEfetivo !== 'idle' || emEvento) { setMovendo(false); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -131,11 +183,11 @@ export function PetWidget() {
 
     agendar(passeio, 2000 + Math.random() * 3000);
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorEfetivo]);
+  }, [aberto, humorEfetivo, emEvento]);
 
-  // Evento aleatório: puxa o controlezinho e joga por ~30s.
+  // Eventos aleatórios: sorteia videogame / borboleta / moeda / espreguiçada.
   useEffect(() => {
-    if (aberto || humorBase !== 'idle') { setEvento('nenhum'); return; }
+    if (aberto || humorBase !== 'idle' || comemorando) { setEvento('nenhum'); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -144,16 +196,17 @@ export function PetWidget() {
 
     const sortearSessao = () => {
       agendar(() => {
-        // espera terminar o passinho atual para sentar e jogar
+        // espera terminar o passinho atual para o evento começar parada
         if (movendoRef.current) { agendar(sortearSessao, 0); return; }
-        setEvento('jogando');
-        agendar(() => { setEvento('nenhum'); sortearSessao(); }, JOGO_MS);
+        const e = sortearEvento();
+        setEvento(e.tipo);
+        agendar(() => { setEvento('nenhum'); sortearSessao(); }, e.duracaoMs);
       }, 40_000 + Math.random() * 140_000);
     };
 
     sortearSessao();
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorBase]);
+  }, [aberto, humorBase, comemorando]);
 
   function alimentar() {
     setHumor('feliz');
@@ -208,20 +261,27 @@ export function PetWidget() {
         )}
       </AnimatePresence>
 
-      <div style={{ transform: `translateX(${x}px)`, transition: `transform ${durMove}s linear` }}>
+      <div className="relative" style={{ transform: `translateX(${x}px)`, transition: `transform ${durMove}s linear` }}>
+        {/* balãozinho da comemoração */}
+        {comemorando && !aberto && (
+          <div className="absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
+            Acordo pago! 🎉
+          </div>
+        )}
         <button
           type="button"
           onClick={alternarPainel}
           title={`${pet.nome} — clique para abrir`}
           aria-label={`Abrir o quartinho de ${pet.nome}`}
-          className="w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
+          className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
         >
           {/* flip na direção da caminhada; passinhos no svg */}
           <div className="w-full h-full" style={{ transform: `scaleX(${dir})`, transition: 'transform .2s' }}>
             <PetSvg
               humor={humorEfetivo}
               roupa={roupa}
-              micro={micro}
+              micro={microEfetivo}
+              cena={cena}
               className={cn('w-full h-full drop-shadow-sm', movendo && 'pet-anim-anda')}
             />
           </div>

@@ -1,9 +1,26 @@
 /* pet.css — animações do mascote (CSS puro, GPU, pausa em aba oculta) */
 
-/* Flutuar (Aura — ela levita) */
+/* Flutuar (Aura — ela levita, com balancinho sutil) */
 @keyframes pet-float {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-5px); }
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30%      { transform: translateY(-4px) rotate(-1deg); }
+  50%      { transform: translateY(-6px) rotate(0deg); }
+  70%      { transform: translateY(-4px) rotate(1deg); }
+}
+/* Orelhas ondulando suavemente (cada uma no seu tempo) */
+@keyframes pet-orelha {
+  0%, 100% { transform: rotate(0deg) scaleY(1); }
+  50%      { transform: rotate(-4deg) scaleY(1.04); }
+}
+/* Halo pulsando devagar */
+@keyframes pet-halo {
+  0%, 100% { opacity: .55; transform: scale(1); }
+  50%      { opacity: .95; transform: scale(1.07); }
+}
+/* Brilhinhos piscando ao redor */
+@keyframes pet-brilho {
+  0%, 100% { opacity: .08; transform: scale(.55) rotate(0deg); }
+  50%      { opacity: 1;   transform: scale(1.1) rotate(25deg); }
 }
 /* Respirar (Rolo — sentadinho) */
 @keyframes pet-breathe {
@@ -15,13 +32,63 @@
   0%, 93%, 100% { transform: scaleY(1); }
   95%, 97%      { transform: scaleY(0.08); }
 }
-/* Pulinho ocasional (micro-animação alternada do widget) */
+/* Pulinho ocasional — com squash & stretch (antecipa, estica, amortece) */
 @keyframes pet-pulinho {
-  0%, 100% { transform: translateY(0); }
-  30%      { transform: translateY(-9px); }
-  55%      { transform: translateY(0); }
-  72%      { transform: translateY(-4px); }
-  86%      { transform: translateY(0); }
+  0%       { transform: translateY(0) scale(1, 1); }
+  12%      { transform: translateY(2px) scale(1.06, 0.9); }   /* agacha */
+  34%      { transform: translateY(-10px) scale(0.96, 1.07); } /* estica no ar */
+  52%      { transform: translateY(0) scale(1.05, 0.93); }     /* amortece */
+  66%      { transform: translateY(-4px) scale(0.98, 1.03); }
+  80%      { transform: translateY(0) scale(1.02, 0.97); }
+  100%     { transform: translateY(0) scale(1, 1); }
+}
+/* Espreguiçada gostosa (ao acordar / evento aleatório) */
+@keyframes pet-espreguica {
+  0%, 100% { transform: scale(1, 1); }
+  35%      { transform: scale(0.95, 1.1) rotate(-2deg); }
+  60%      { transform: scale(0.95, 1.1) rotate(2deg); }
+  80%      { transform: scale(1.04, 0.96); }
+}
+/* Comemoração: pulos empolgados com squash & stretch */
+@keyframes pet-comemora {
+  0%       { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  10%      { transform: translateY(2px) scale(1.08, 0.88); }
+  32%      { transform: translateY(-14px) scale(0.94, 1.1) rotate(-4deg); }
+  50%      { transform: translateY(0) scale(1.07, 0.9); }
+  68%      { transform: translateY(-9px) scale(0.96, 1.06) rotate(4deg); }
+  84%      { transform: translateY(0) scale(1.04, 0.95); }
+  100%     { transform: translateY(0) scale(1, 1) rotate(0deg); }
+}
+/* Confete caindo (comemoração) */
+@keyframes pet-confete {
+  0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+  8%   { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(185px) rotate(320deg); }
+}
+/* Borboleta passeando perto da Aura */
+@keyframes pet-borboleta {
+  0%   { transform: translate(210px, 70px) rotate(-8deg); }
+  22%  { transform: translate(150px, 34px) rotate(6deg); }
+  45%  { transform: translate(96px, 20px) rotate(-6deg); }
+  62%  { transform: translate(52px, 44px) rotate(8deg); }
+  80%  { transform: translate(96px, 64px) rotate(-4deg); }
+  100% { transform: translate(158px, 46px) rotate(6deg); }
+}
+/* Batida de asas */
+@keyframes pet-asas {
+  0%, 100% { transform: scaleX(1); }
+  50%      { transform: scaleX(0.35); }
+}
+/* Moedinha caindo e quicando */
+@keyframes pet-moeda {
+  0%   { opacity: 0; transform: translateY(-90px); }
+  10%  { opacity: 1; }
+  45%  { transform: translateY(0); }
+  62%  { transform: translateY(-18px); }
+  78%  { transform: translateY(0); }
+  88%  { transform: translateY(-7px); }
+  100% { transform: translateY(0); }
 }
 /* Feliz (após alimentar) */
 @keyframes pet-feliz {
@@ -63,8 +130,21 @@
   50%      { transform: translateY(-5px); }
 }
 
-.pet-anim-anda     { animation: pet-anda 0.45s ease-in-out infinite; }
-.pet-anim-float    { animation: pet-float 3.2s ease-in-out infinite; }
+.pet-anim-anda       { animation: pet-anda 0.45s ease-in-out infinite; }
+.pet-anim-float      { animation: pet-float 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-orelha-a   { animation: pet-orelha 3.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-orelha-b   { animation: pet-orelha 3.6s ease-in-out 1.8s infinite reverse; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-halo       { animation: pet-halo 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho     { animation: pet-brilho 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho-2   { animation: pet-brilho 3.4s ease-in-out 0.9s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho-3   { animation: pet-brilho 2.2s ease-in-out 1.6s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-espreguica { animation: pet-espreguica 2.6s ease-in-out; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-comemora   { animation: pet-comemora 0.95s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-confete    { animation: pet-confete 1.8s linear infinite; }
+.pet-anim-borboleta  { animation: pet-borboleta 7s ease-in-out infinite alternate; }
+.pet-anim-asas       { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: right center; }
+.pet-anim-asas-2     { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
+.pet-anim-moeda      { animation: pet-moeda 1.6s ease-out forwards; }
 .pet-anim-breathe  { animation: pet-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
 .pet-anim-blink    { animation: pet-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
 .pet-anim-pulinho  { animation: pet-pulinho 0.9s ease-in-out; }

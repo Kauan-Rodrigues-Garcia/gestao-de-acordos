@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -296,6 +297,7 @@ export default function Acordos() {
       patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
+      celebrarPetAcordoPago();
       toast.success('Acordo marcado como Pago!', {
         duration: 5000,
         action: {

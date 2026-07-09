@@ -56,7 +56,11 @@ export function PetQuartinho({
         <p className="text-sm font-semibold text-foreground flex items-center gap-2">
           🐾 {petNome}
           <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
-            {humor === 'dormindo' ? 'dormindo' : humor === 'feliz' ? 'feliz' : 'de boa'}
+            {humor === 'dormindo' ? 'dormindo'
+              : humor === 'feliz' ? 'feliz'
+              : humor === 'comemorando' ? 'comemorando 🎉'
+              : humor === 'jogando' ? 'jogando 🎮'
+              : 'de boa'}
           </span>
         </p>
         <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>

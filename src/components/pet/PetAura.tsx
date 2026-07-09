@@ -1,41 +1,94 @@
 /**
- * PetAura — mascote do PaguePlay: coelhinha espiritual lilás que levita.
- * SVG em camadas: corpo → rosto (humor) → roupa (skin) → zzz.
+ * PetAura — mascote oficial: coelhinha espiritual lilás que levita.
+ * SVG em camadas: halo → corpo → rosto (humor) → roupa (skin) → cena.
+ * A silhueta fantasminha é a original; o polimento está nos gradientes,
+ * no brilho ao redor e nas cenas de evento (confete, borboleta, moeda).
  */
+import { useId } from 'react';
 import { cn } from '@/lib/utils';
-import type { PetHumor, PetRoupa } from './petConfig';
+import type { PetHumor, PetRoupa, PetCena, PetMicro } from './petConfig';
 
 export interface PetSvgProps {
   humor: PetHumor;
   roupa: PetRoupa;
   /** micro-animação ocasional do widget */
-  micro?: 'none' | 'pulinho';
+  micro?: PetMicro;
+  /** cena extra desenhada junto (eventos aleatórios / comemoração) */
+  cena?: PetCena;
   className?: string;
 }
 
-export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps) {
+/** Brilhinho de 4 pontas centrado em (x, y) com "raio" s. */
+const estrela = (x: number, y: number, s: number) =>
+  `M ${x} ${y - s} L ${x + s * 0.3} ${y - s * 0.3} L ${x + s} ${y} ` +
+  `L ${x + s * 0.3} ${y + s * 0.3} L ${x} ${y + s} L ${x - s * 0.3} ${y + s * 0.3} ` +
+  `L ${x - s} ${y} L ${x - s * 0.3} ${y - s * 0.3} Z`;
+
+const CORES_CONFETE = ['#8f86d8', '#e5734f', '#f2c14e', '#7fb08f', '#f3b8c9', '#5b8dd9'];
+
+export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', className }: PetSvgProps) {
+  // ids únicos por instância (widget + quartinho convivem na mesma página)
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const id = (n: string) => `aura-${n}-${uid}`;
+  const url = (n: string) => `url(#${id(n)})`;
+
   const animCorpo =
-    humor === 'feliz'    ? 'pet-anim-feliz'
-    : humor === 'dormindo' ? 'pet-anim-dormindo'
-    : humor === 'jogando'  ? 'pet-anim-breathe' // sentadinha, concentrada
-    : micro === 'pulinho' ? 'pet-anim-pulinho'
+    humor === 'comemorando' ? 'pet-anim-comemora'
+    : humor === 'feliz'      ? 'pet-anim-feliz'
+    : humor === 'dormindo'   ? 'pet-anim-dormindo'
+    : humor === 'jogando'    ? 'pet-anim-breathe' // sentadinha, concentrada
+    : micro === 'pulinho'    ? 'pet-anim-pulinho'
+    : micro === 'espreguica' ? 'pet-anim-espreguica'
     : 'pet-anim-float';
+
+  const acordada = humor !== 'dormindo';
+  const empolgada = humor === 'comemorando';
 
   return (
     <svg viewBox="0 0 200 200" className={cn('select-none', className)} role="img" aria-label="Aura, a mascote">
+      <defs>
+        <linearGradient id={id('corpo')} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%"   stopColor="#dcd7f8" />
+          <stop offset="60%"  stopColor="#cfc9f2" />
+          <stop offset="100%" stopColor="#bab2ea" />
+        </linearGradient>
+        <linearGradient id={id('orelha')} x1="0" y1="1" x2="0" y2="0">
+          <stop offset="0%"   stopColor="#aca4e4" />
+          <stop offset="100%" stopColor="#c8c1f0" />
+        </linearGradient>
+        <radialGradient id={id('halo')}>
+          <stop offset="0%"   stopColor="#b7a8f0" stopOpacity=".4" />
+          <stop offset="100%" stopColor="#b7a8f0" stopOpacity="0" />
+        </radialGradient>
+      </defs>
+
       {/* sombra no chão (ela levita) */}
       <ellipse className="pet-anim-sombra" cx="100" cy="182" rx="44" ry="8" fill="currentColor" opacity=".14" />
 
+      {/* brilhinhos piscando ao redor (ficam fixos; ela flutua entre eles) */}
+      {acordada && (
+        <g fill="#b9aef0">
+          <path className="pet-anim-brilho"   d={estrela(36, 62, 5)} />
+          <path className="pet-anim-brilho-2" d={estrela(168, 84, 4)} />
+          <path className="pet-anim-brilho-3" d={estrela(162, 148, 3)} />
+        </g>
+      )}
+
       <g className={animCorpo}>
-        {/* orelhas etéreas */}
-        <g className="pet-anim-wiggle">
-          <path d="M78 62 C 62 40 60 18 72 10 C 84 4 90 22 88 40 C 87 50 84 58 82 62 Z" fill="#b7b0e8" />
+        {/* halo etéreo pulsando atrás dela */}
+        <ellipse className="pet-anim-halo" cx="100" cy="104" rx="70" ry="64" fill={url('halo')} />
+
+        {/* orelhas etéreas (as duas ondulam, alternadas) */}
+        <g className="pet-anim-orelha-a">
+          <path d="M78 62 C 62 40 60 18 72 10 C 84 4 90 22 88 40 C 87 50 84 58 82 62 Z" fill={url('orelha')} />
           <path d="M76 50 C 70 36 70 22 76 16" stroke="#e9e6fb" strokeWidth="4" fill="none" strokeLinecap="round" />
         </g>
-        <path d="M116 58 C 122 34 136 14 150 20 C 162 26 150 50 136 62 C 130 66 122 64 116 58 Z" fill="#b7b0e8" />
-        <path d="M128 50 C 134 38 140 30 146 28" stroke="#e9e6fb" strokeWidth="4" fill="none" strokeLinecap="round" />
+        <g className="pet-anim-orelha-b">
+          <path d="M116 58 C 122 34 136 14 150 20 C 162 26 150 50 136 62 C 130 66 122 64 116 58 Z" fill={url('orelha')} />
+          <path d="M128 50 C 134 38 140 30 146 28" stroke="#e9e6fb" strokeWidth="4" fill="none" strokeLinecap="round" />
+        </g>
 
-        {/* corpo fantasminha com barra ondulada */}
+        {/* corpo fantasminha com barra ondulada (silhueta original) */}
         <path
           d="M100 42
              C 138 42 158 72 156 106
@@ -46,12 +99,15 @@ export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps
              C 83 159 77 151 71 147
              C 56 137 45 122 44 102
              C 42 70 64 42 100 42 Z"
-          fill="#cfc9f2"
+          fill={url('corpo')}
         />
         {/* faixa de brilho */}
         <path d="M56 118 C 76 106 122 132 148 112" stroke="#e9e6fb" strokeWidth="7" fill="none" strokeLinecap="round" opacity=".9" />
+        {/* luz de contorno no topo (sheen) */}
+        <path d="M66 56 C 78 46 96 42 112 46" stroke="#f3f1fd" strokeWidth="5" fill="none" strokeLinecap="round" opacity=".75" />
         <circle cx="64" cy="70" r="2.5" fill="#ffffff" opacity=".8" />
         <circle cx="142" cy="86" r="2" fill="#ffffff" opacity=".7" />
+        <circle cx="126" cy="64" r="1.6" fill="#ffffff" opacity=".6" />
 
         {/* rosto */}
         {humor === 'dormindo' ? (
@@ -59,21 +115,29 @@ export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps
             <path d="M76 96 Q 83 102 90 96" stroke="#322b47" strokeWidth="3.5" fill="none" strokeLinecap="round" />
             <path d="M112 96 Q 119 102 126 96" stroke="#322b47" strokeWidth="3.5" fill="none" strokeLinecap="round" />
           </>
+        ) : empolgada ? (
+          /* olhos de estrelinha na comemoração */
+          <g fill="#f2c14e" stroke="#d9a832" strokeWidth="1">
+            <path d={estrela(83, 96, 8)} />
+            <path d={estrela(119, 96, 8)} />
+          </g>
         ) : (
           <g className="pet-anim-blink">
             <circle cx="83" cy="96" r="7" fill="#322b47" />
             <circle cx="85.5" cy="93.5" r="2.4" fill="#fff" />
+            <circle cx="80.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
             <circle cx="119" cy="96" r="7" fill="#322b47" />
             <circle cx="121.5" cy="93.5" r="2.4" fill="#fff" />
+            <circle cx="116.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
           </g>
         )}
-        {humor === 'feliz' ? (
-          <path d="M94 112 Q 101 122 108 112 Z" fill="#322b47" />
+        {humor === 'feliz' || empolgada ? (
+          <path d="M92 110 Q 101 123 110 110 Z" fill="#322b47" />
         ) : (
           <path d="M96 112 Q 101 117 106 112" stroke="#322b47" strokeWidth="3" fill="none" strokeLinecap="round" />
         )}
-        <ellipse cx="70" cy="108" rx="6" ry="4" fill="#f3b8c9" opacity=".7" />
-        <ellipse cx="132" cy="108" rx="6" ry="4" fill="#f3b8c9" opacity=".7" />
+        <ellipse cx="70" cy="108" rx="6" ry="4" fill="#f3b8c9" opacity={empolgada ? '.95' : '.7'} />
+        <ellipse cx="132" cy="108" rx="6" ry="4" fill="#f3b8c9" opacity={empolgada ? '.95' : '.7'} />
 
         {/* roupas (camadas) */}
         {roupa === 'cachecol' && (
@@ -125,6 +189,59 @@ export function PetAura({ humor, roupa, micro = 'none', className }: PetSvgProps
           </g>
         )}
       </g>
+
+      {/* ── cenas de evento (fora do corpo, para não herdarem o pulo) ──── */}
+
+      {/* confete da comemoração */}
+      {cena === 'confete' && (
+        <g>
+          {CORES_CONFETE.map((cor, i) => (
+            <rect
+              key={`c-${i}`}
+              className="pet-anim-confete"
+              style={{ animationDelay: `${(i * 0.23) % 1.4}s`, animationDuration: `${1.6 + (i % 3) * 0.4}s` }}
+              x={26 + i * 26} y="-10" width="7" height="10" rx="2" fill={cor}
+            />
+          ))}
+          {CORES_CONFETE.map((cor, i) => (
+            <circle
+              key={`b-${i}`}
+              className="pet-anim-confete"
+              style={{ animationDelay: `${0.5 + ((i * 0.31) % 1.4)}s`, animationDuration: `${1.8 + (i % 2) * 0.5}s` }}
+              cx={40 + i * 24} cy="-8" r="4" fill={cor}
+            />
+          ))}
+        </g>
+      )}
+
+      {/* borboleta dando voltas perto dela */}
+      {cena === 'borboleta' && (
+        <g className="pet-anim-borboleta">
+          <g className="pet-anim-asas">
+            <ellipse cx="-7" cy="0" rx="8" ry="11" fill="#f2a3b0" transform="rotate(-18)" />
+            <ellipse cx="-5" cy="8" rx="5" ry="6.5" fill="#f3b8c9" transform="rotate(-18)" />
+          </g>
+          <g className="pet-anim-asas-2">
+            <ellipse cx="7" cy="0" rx="8" ry="11" fill="#f2a3b0" transform="rotate(18)" />
+            <ellipse cx="5" cy="8" rx="5" ry="6.5" fill="#f3b8c9" transform="rotate(18)" />
+          </g>
+          <ellipse cx="0" cy="3" rx="2.4" ry="9" fill="#4a4458" />
+          <path d="M -1 -5 C -4 -10 -7 -12 -9 -13 M 1 -5 C 4 -10 7 -12 9 -13" stroke="#4a4458" strokeWidth="1.6" fill="none" strokeLinecap="round" />
+        </g>
+      )}
+
+      {/* moedinha dourada quicando na frente dela */}
+      {cena === 'moeda' && (
+        <g>
+          <g className="pet-anim-moeda">
+            <circle cx="152" cy="164" r="13" fill="#f2c14e" stroke="#d9a832" strokeWidth="2.5" />
+            <circle cx="152" cy="164" r="8.5" fill="none" stroke="#d9a832" strokeWidth="1.5" opacity=".7" />
+            <text x="152" y="169" fontSize="13" fontWeight="700" fill="#a8761c" textAnchor="middle">$</text>
+          </g>
+          <path className="pet-anim-brilho"   d={estrela(168, 146, 4)} fill="#f2c14e" />
+          <path className="pet-anim-brilho-3" d={estrela(136, 152, 3)} fill="#f2c14e" />
+        </g>
+      )}
     </svg>
   );
 }
