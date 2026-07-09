@@ -346,6 +346,7 @@ export function AcordoDetalheInline({
       });
       setModalAddParcela(false);
       onSaved?.(baseAtualizado);
+      if (r.novaParcela.status === 'pago') celebrarPetAcordoPago();
       toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`);
     } finally {
       setSalvandoAddParcela(false);

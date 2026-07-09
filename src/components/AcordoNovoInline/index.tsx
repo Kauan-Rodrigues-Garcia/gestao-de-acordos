@@ -19,6 +19,7 @@ import {
 } from '@/lib/index';
 import { calcularParcelas } from '@/lib/money';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
+import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
@@ -437,6 +438,7 @@ export function AcordoNovoInline({
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        if (payload.status === 'pago') celebrarPetAcordoPago();
         if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
         onSaved(inserido);
@@ -665,6 +667,7 @@ export function AcordoNovoInline({
       limparDraft();
       setAcordoParaParcela(null);
       onSaved(r.novaParcela);
+      if (r.novaParcela.status === 'pago') celebrarPetAcordoPago();
       toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`);
     } finally {
       setSalvandoParcela(false);
