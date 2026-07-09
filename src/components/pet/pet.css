@@ -49,6 +49,13 @@
   50%      { transform: scale(0.9); opacity: 0.10; }
 }
 
+/* Passinhos durante o passeio pelo rodapé */
+@keyframes pet-anda {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+
+.pet-anim-anda     { animation: pet-anda 0.45s ease-in-out infinite; }
 .pet-anim-float    { animation: pet-float 3.2s ease-in-out infinite; }
 .pet-anim-breathe  { animation: pet-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
 .pet-anim-blink    { animation: pet-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }

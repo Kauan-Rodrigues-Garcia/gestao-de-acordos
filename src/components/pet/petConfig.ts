@@ -6,7 +6,6 @@
  * Liberado apenas para administrador/super_admin enquanto está em teste.
  */
 import { useAuth } from '@/hooks/useAuth';
-import { useTenant } from '@/lib/tenant-config';
 
 export type PetHumor = 'idle' | 'feliz' | 'dormindo';
 export type PetRoupa = 'nenhuma' | 'chapeu' | 'cachecol';
@@ -30,16 +29,20 @@ export const COMIDAS_CATALOGO = [
   { id: 'bolinho', nome: 'Bolinho', emoji: '🧁' },
 ];
 
-/** Pet do tenant: PaguePlay = Aura (coelhinho espiritual), BookPlay = Rolo (tanuki). */
+/** Pet oficial das duas empresas: Aura (coelhinha espiritual lilás).
+ *  (PetRolo fica no repositório como possível skin futura.) */
 export function usePetDoTenant(): { nome: string; tipo: 'aura' | 'rolo' } {
-  const tenant = useTenant();
-  return tenant.isPaguePlay
-    ? { nome: 'Aura', tipo: 'aura' }
-    : { nome: 'Rolo', tipo: 'rolo' };
+  return { nome: 'Aura', tipo: 'aura' };
 }
 
-/** Fase de teste: só admin e super_admin veem o pet. */
+/** Pet visível para todos os cargos (usado também p/ subir o sino). */
 export function usePetHabilitado(): boolean {
+  return true;
+}
+
+/** Interações completas (alimentar, roupas, passeio): só admin/super_admin
+ *  enquanto o sistema de moedas não entra — os demais veem o teaser. */
+export function usePetInterativo(): boolean {
   const { perfil } = useAuth();
   const p = String(perfil?.perfil ?? '').toLowerCase();
   return p === 'administrador' || p === 'super_admin';

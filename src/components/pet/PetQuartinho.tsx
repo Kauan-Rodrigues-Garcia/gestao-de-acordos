@@ -19,6 +19,8 @@ interface PetQuartinhoProps {
   PetSvg:         ComponentType<PetSvgProps>;
   humor:          PetHumor;
   roupa:          PetRoupa;
+  /** Cargos sem interação ainda: pet dormindo + mensagem "Em breve". */
+  modoTeaser?:    boolean;
   onAlimentar:    () => void;
   onAlternarSono: () => void;
   onSetRoupa:     (r: PetRoupa) => void;
@@ -28,7 +30,7 @@ interface PetQuartinhoProps {
 type Aba = 'quarto' | 'comidas' | 'roupas';
 
 export function PetQuartinho({
-  petNome, PetSvg, humor, roupa,
+  petNome, PetSvg, humor, roupa, modoTeaser = false,
   onAlimentar, onAlternarSono, onSetRoupa, onClose,
 }: PetQuartinhoProps) {
   const [aba, setAba] = useState<Aba>('quarto');
@@ -102,7 +104,23 @@ export function PetQuartinho({
         </div>
       </div>
 
-      {/* Ações rápidas */}
+      {/* Modo teaser: só a mensagem, sem ações/lojas */}
+      {modoTeaser && (
+        <div className="p-4 space-y-2 text-center">
+          <p className="text-sm font-bold text-foreground">🐾 Em breve!</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Seu pet ganhará novas funcionalidades! Conforme você aumentar seus
+            recebimentos e atingir metas, poderá cuidar dele, interagir,
+            desbloquear itens e acompanhar sua evolução.
+          </p>
+          <p className="text-xs font-medium text-foreground">
+            Continue recebendo e prepare-se para novas aventuras! 💰✨🐾
+          </p>
+        </div>
+      )}
+
+      {/* Ações rápidas + lojas (modo completo) */}
+      {!modoTeaser && (<>
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
         <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={alimentar}>
           <UtensilsCrossed className="w-3.5 h-3.5" /> Alimentar
@@ -176,6 +194,7 @@ export function PetQuartinho({
           </div>
         )}
       </div>
+      </>)}
     </motion.div>
   );
 }
