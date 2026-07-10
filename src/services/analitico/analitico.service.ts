@@ -12,7 +12,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import type { Acordo, AnaliticoRecebimento, StatusTabulacaoAnalitico } from '@/lib/supabase';
+import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { mesReferencia } from './analiticoParser';
@@ -244,6 +244,25 @@ export async function buscarResumoOperadoresAnalitico(
     })
     .order('total_recebido', { ascending: false });
   return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error?.message ?? null };
+}
+
+// ── Agregado do mês para o dashboard (ver 20260710c) ─────────────────────────
+// Operador recebe só as próprias linhas; líder+ recebe a empresa toda.
+// Tolerante à migration ausente: retorna dbAtiva=false e o dashboard esconde.
+
+export async function buscarAnaliticoDashboardMes(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
+  const { data, error } = await supabase.rpc('fn_analitico_dashboard_mes', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+  });
+  if (error) {
+    const faltando = /function|does not exist|schema cache/i.test(error.message);
+    return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+  }
+  return { data: (data ?? []) as AnaliticoDashboardLinha[], dbAtiva: true, error: null };
 }
 
 // ── Busca ────────────────────────────────────────────────────────────────────

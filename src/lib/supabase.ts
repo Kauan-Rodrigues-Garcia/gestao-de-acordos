@@ -327,6 +327,73 @@ export interface PetEstado {
   atualizado_em: string;
 }
 
+/** Item do catálogo/mercado do pet (ver 20260710b_pet_economia_estrutura.sql). */
+export interface PetItem {
+  id: string;
+  tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel';
+  nome: string;
+  descricao: string | null;
+  emoji: string | null;
+  raridade: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo';
+  preco_moedas: number | null;      // null = não vendável (só concedido)
+  tenant: string | null;            // null = ambos; 'bookplay' | 'pagueplay'
+  disponivel_de: string | null;
+  disponivel_ate: string | null;
+  exclusivo: boolean;
+  ativo: boolean;
+  ordem: number;
+  criado_em: string;
+}
+
+/** Item que o usuário possui (comprou/ganhou). "Bloqueado" = não está aqui. */
+export interface PetInventarioItem {
+  usuario_id: string;
+  item_id: string;
+  origem: 'compra' | 'recompensa' | 'concessao' | 'evento' | 'inicial';
+  adquirido_em: string;
+}
+
+/** Regra de economia por cargo — o sistema de moedas difere por cargo. */
+export interface PetEconomiaRegra {
+  cargo: string;
+  moedas_por_real: number;
+  janela_dias: number;
+  base_recebimento: 'proprio' | 'empresa' | 'equipe';
+  ativo: boolean;
+  observacao: string | null;
+  atualizado_em: string;
+}
+
+/** Faixa de quartil por % mínimo de projeção (1 = melhor). Configurável na aba Metas. */
+export interface QuartilConfig {
+  quartil: number;   // 1..4
+  min_pct: number;   // % mínimo de projeção para entrar neste quartil
+}
+
+/** Config mensal de metas — feriados e quartis (ver 20260710c_metas_config_analitico_dashboard.sql). */
+export interface MetasConfigMes {
+  id: string;
+  empresa_id: string;
+  mes: number;
+  ano: number;
+  feriados: string[];        // ['yyyy-MM-dd', ...]
+  quartis: QuartilConfig[];
+  atualizado_por: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+/** Linha agregada de fn_analitico_dashboard_mes (dia × operador × forma × tabulação). */
+export interface AnaliticoDashboardLinha {
+  dia: string;               // 'yyyy-MM-dd'
+  operador_id: string | null;
+  forma_pagamento: 'boleto_pix' | 'cartao';
+  status_tabulacao: 'tabulado' | 'nao_tabulado' | 'divergente';
+  total: number;
+  total_ho: number;
+  qtd: number;
+}
+
 export type TipoDocumentoLgpd =
   | 'politica_privacidade'
   | 'ropa'

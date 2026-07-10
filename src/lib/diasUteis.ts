@@ -1,0 +1,82 @@
+/**
+ * diasUteis.ts — cálculo de dias úteis do mês e quartis de projeção.
+ *
+ * Dias úteis = segundas a sextas do mês, menos os feriados cadastrados
+ * (metas_config_mes.feriados). Feriados em fim de semana não subtraem.
+ *
+ * Projeção: com a meta mensal e os dias úteis, a meta diária é
+ * meta / diasUteis. O esperado até hoje é metaDiaria × diasUteisDecorridos
+ * (inclui o dia atual, pois o analítico do dia chega ao longo do dia).
+ * O quartil é a faixa configurada cuja % mínima a projeção alcança.
+ */
+
+import type { QuartilConfig } from '@/lib/supabase';
+
+/** true se a data ISO ('yyyy-MM-dd') cai de segunda a sexta. */
+export function ehDiaUtil(iso: string): boolean {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow >= 1 && dow <= 5;
+}
+
+function isoDoDia(ano: number, mes: number, dia: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+/** Todos os dias úteis do mês (seg–sex − feriados), em ISO. */
+export function listarDiasUteis(ano: number, mes: number, feriados: string[] = []): string[] {
+  const fSet = new Set(feriados);
+  const total = new Date(ano, mes, 0).getDate();
+  const dias: string[] = [];
+  for (let d = 1; d <= total; d++) {
+    const iso = isoDoDia(ano, mes, d);
+    if (ehDiaUtil(iso) && !fSet.has(iso)) dias.push(iso);
+  }
+  return dias;
+}
+
+/** Quantidade de dias úteis do mês (seg–sex − feriados). */
+export function diasUteisDoMes(ano: number, mes: number, feriados: string[] = []): number {
+  return listarDiasUteis(ano, mes, feriados).length;
+}
+
+/**
+ * Dias úteis já trabalhados até `hojeISO` (inclusive).
+ * Se hoje não for dia útil (ou for feriado), conta só os anteriores.
+ */
+export function diasUteisDecorridos(
+  ano: number, mes: number, feriados: string[] = [], hojeISO: string,
+): number {
+  return listarDiasUteis(ano, mes, feriados).filter(d => d <= hojeISO).length;
+}
+
+/** Quartis ordenados do melhor (maior min_pct) para o pior. */
+export function ordenarQuartis(quartis: QuartilConfig[]): QuartilConfig[] {
+  return [...quartis].sort((a, b) => b.min_pct - a.min_pct);
+}
+
+/**
+ * Quartil atual dado a % de projeção (realizado ÷ esperado até hoje × 100).
+ * Retorna a faixa de maior min_pct que a projeção alcança; se nenhuma,
+ * a pior faixa configurada.
+ */
+export function quartilAtual(projecaoPct: number, quartis: QuartilConfig[]): QuartilConfig | null {
+  if (!quartis.length) return null;
+  const ordenados = ordenarQuartis(quartis);
+  return ordenados.find(q => projecaoPct >= q.min_pct) ?? ordenados[ordenados.length - 1];
+}
+
+/** Próxima faixa acima do quartil atual (null se já está na melhor). */
+export function proximoQuartil(atual: QuartilConfig | null, quartis: QuartilConfig[]): QuartilConfig | null {
+  if (!atual || !quartis.length) return null;
+  const ordenados = ordenarQuartis(quartis);           // melhor → pior
+  const idx = ordenados.findIndex(q => q.quartil === atual.quartil);
+  return idx > 0 ? ordenados[idx - 1] : null;
+}
+
+export const QUARTIS_PADRAO: QuartilConfig[] = [
+  { quartil: 1, min_pct: 100 },
+  { quartil: 2, min_pct: 80 },
+  { quartil: 3, min_pct: 50 },
+  { quartil: 4, min_pct: 0 },
+];

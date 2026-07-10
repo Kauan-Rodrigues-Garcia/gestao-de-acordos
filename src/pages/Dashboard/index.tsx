@@ -25,6 +25,7 @@ import { liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
+import { MetaProgressoHeader } from '@/components/MetaProgressoHeader';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
@@ -616,6 +617,8 @@ export default function Dashboard() {
               <Building2 className="w-3 h-3" /> {empresa.nome}
             </p>
           )}
+          {/* PP: barra de meta, posição no ranking e quartil (dados do analítico) */}
+          <MetaProgressoHeader />
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (

@@ -3,15 +3,22 @@
  * Um único botão "Salvar Todas" no rodapé, sem botão por linha.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft, Loader2 } from "lucide-react";
+import {
+  Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
+  Loader2, CalendarDays, Plus, X, Layers,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
 import { supabase } from "@/lib/supabase";
-import { cn } from "@/lib/utils";
+import type { QuartilConfig } from "@/lib/supabase";
+import { useTenant } from "@/lib/tenant-config";
+import { PP_HO_PERCENTUAL, getTodayISO } from "@/lib/index";
+import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
+import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -44,8 +51,8 @@ interface Meta {
 }
 interface Setor  { id: string; nome: string; }
 interface Equipe { id: string; nome: string; setor_id: string; }
-interface Operador { id: string; nome: string; }
-interface MetaInput { meta_valor: string; }
+interface Operador { id: string; nome: string; equipe_id: string | null; }
+interface MetaInput { meta_valor: string; meta_ho: string; }
 
 function parseBRL(value: string): number {
   const cleaned = value.replace(/[^\d,]/g, "").replace(",", ".");
@@ -60,7 +67,13 @@ function formatBRL(value: string): string {
   return num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-function emptyInput(): MetaInput { return { meta_valor: "" }; }
+function fmtNum(num: number): string {
+  return num > 0
+    ? num.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    : "";
+}
+
+function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "" }; }
 
 // ── MonthNavigator ────────────────────────────────────────────────────────────
 function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onChange: (m: number, a: number) => void }) {
@@ -86,10 +99,13 @@ interface MetaRowProps {
   icon?: React.ReactNode;
   input: MetaInput;
   onChangeValor: (v: string) => void;
+  /** PaguePlay: campo Meta H.O. (24,96% do total, conversão bidirecional). */
+  mostrarHO?: boolean;
+  onChangeHO?: (v: string) => void;
   disabled?: boolean;
 }
 
-function MetaRow({ label, sublabel, icon, input, onChangeValor, disabled }: MetaRowProps) {
+function MetaRow({ label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO, disabled }: MetaRowProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5 border-b border-border last:border-0">
       <div className="flex items-center gap-2 sm:w-52 shrink-0">
@@ -113,6 +129,21 @@ function MetaRow({ label, sublabel, icon, input, onChangeValor, disabled }: Meta
             />
           </div>
         </div>
+        {mostrarHO && (
+          <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
+            <Label className="text-xs text-muted-foreground">Meta H.O. (24,96%)</Label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+              <Input
+                className="pl-8 h-8 text-sm"
+                placeholder="0,00"
+                value={input.meta_ho}
+                disabled={disabled}
+                onChange={(e) => onChangeHO?.(formatBRL(e.target.value))}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -152,6 +183,8 @@ export default function MetasConfig() {
   // padrão = true, espelhando o acesso atual). Sem ela, a tela fica só leitura.
   const podeGerenciarMetas = temPermissao("gerenciar_metas");
 
+  const isPP = useTenant().isPaguePlay;
+
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
   const [ano, setAno] = useState(hoje.getFullYear());
@@ -160,12 +193,21 @@ export default function MetasConfig() {
   const [setores,    setSetores]    = useState<Setor[]>([]);
   const [equipes,    setEquipes]    = useState<Equipe[]>([]);
   const [operadores, setOperadores] = useState<Operador[]>([]);
+  // Filtro por equipe na lista de operadores ('' = todas)
+  const [equipeFiltroOp, setEquipeFiltroOp] = useState<string>("");
 
   const [loadingSetores,    setLoadingSetores]    = useState(false);
   const [loadingEquipes,    setLoadingEquipes]    = useState(false);
   const [loadingOperadores, setLoadingOperadores] = useState(false);
   const [loadingMetas,      setLoadingMetas]      = useState(false);
   const [salvandoTudo,      setSalvandoTudo]      = useState(false);
+
+  // Config mensal (PP): feriados + quartis (metas_config_mes)
+  const [feriados,      setFeriados]      = useState<string[]>([]);
+  const [quartis,       setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
+  const [feriadoNovo,   setFeriadoNovo]   = useState<string>("");
+  const [configDbAtiva, setConfigDbAtiva] = useState(true);
+  const [configCarregada, setConfigCarregada] = useState(false);
 
   // inputs controlados por referencia_id
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
@@ -174,6 +216,26 @@ export default function MetasConfig() {
   function setInput(id: string, patch: Partial<MetaInput>) {
     setInputMetas(prev => ({ ...prev, [id]: { ...(prev[id] ?? emptyInput()), ...patch } }));
   }
+
+  // Conversão bidirecional Meta total ⇄ Meta H.O. (24,96%)
+  function onChangeValor(id: string, v: string) {
+    if (!isPP) { setInput(id, { meta_valor: v }); return; }
+    const total = parseBRL(v);
+    setInput(id, { meta_valor: v, meta_ho: fmtNum(total * PP_HO_PERCENTUAL) });
+  }
+  function onChangeHO(id: string, v: string) {
+    const ho = parseBRL(v);
+    setInput(id, { meta_ho: v, meta_valor: fmtNum(ho / PP_HO_PERCENTUAL) });
+  }
+
+  // Dias úteis derivados (seg–sex − feriados)
+  const hojeISO = getTodayISO();
+  const mesAtualVisivel = mes === hoje.getMonth() + 1 && ano === hoje.getFullYear();
+  const totalDiasUteis  = useMemo(() => diasUteisDoMes(ano, mes, feriados), [ano, mes, feriados]);
+  const diasTrabalhados = useMemo(
+    () => (mesAtualVisivel ? diasUteisDecorridos(ano, mes, feriados, hojeISO) : null),
+    [ano, mes, feriados, hojeISO, mesAtualVisivel],
+  );
 
   const fetchSetores = useCallback(async () => {
     if (!empresa?.id) return;
@@ -208,7 +270,7 @@ export default function MetasConfig() {
     if (!setorSelecionado) return;
     setLoadingOperadores(true);
     try {
-      const { data, error } = await supabase.from("perfis").select("id, nome")
+      const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id")
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
       setOperadores((data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0));
@@ -230,7 +292,8 @@ export default function MetasConfig() {
         if (!m?.referencia_id) continue;
         const v = Number(m.meta_valor) || 0;
         newInputs[m.referencia_id] = {
-          meta_valor: v > 0 ? v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "",
+          meta_valor: fmtNum(v),
+          meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
         };
       }
       setInputMetas(newInputs);
@@ -239,10 +302,40 @@ export default function MetasConfig() {
     } finally { setLoadingMetas(false); }
   }, [empresa?.id, mes, ano]);
 
+  // Config mensal (feriados + quartis) — PP
+  const fetchConfig = useCallback(async () => {
+    if (!empresa?.id || !isPP) { setConfigCarregada(true); return; }
+    const { data, dbAtiva } = await getMetasConfig(empresa.id, mes, ano);
+    setConfigDbAtiva(dbAtiva);
+    setFeriados(data?.feriados ?? []);
+    setQuartis(data?.quartis ?? QUARTIS_PADRAO);
+    setConfigCarregada(true);
+  }, [empresa?.id, isPP, mes, ano]);
+
   useEffect(() => { fetchSetores(); }, [fetchSetores]);
   useEffect(() => { fetchEquipes(); }, [fetchEquipes]);
   useEffect(() => { fetchOperadores(); }, [fetchOperadores]);
   useEffect(() => { fetchMetas(); }, [fetchMetas]);
+  useEffect(() => { void fetchConfig(); }, [fetchConfig]);
+
+  function adicionarFeriado() {
+    if (!feriadoNovo) return;
+    const [y, m] = feriadoNovo.split("-").map(Number);
+    if (y !== ano || m !== mes) {
+      toast.warning(`O feriado deve estar em ${MESES[mes - 1]}/${ano}.`);
+      return;
+    }
+    if (feriados.includes(feriadoNovo)) { setFeriadoNovo(""); return; }
+    setFeriados(prev => [...prev, feriadoNovo].sort());
+    setFeriadoNovo("");
+  }
+
+  function setQuartilPct(quartil: number, pct: string) {
+    const num = parseInt(pct.replace(/\D/g, ""), 10);
+    setQuartis(prev => prev.map(q =>
+      q.quartil === quartil ? { ...q, min_pct: isNaN(num) ? 0 : num } : q,
+    ));
+  }
 
   // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
   async function handleSalvarTudo() {
@@ -269,19 +362,33 @@ export default function MetasConfig() {
       }))
       .filter(p => p.meta_valor > 0); // só salva quem tem valor
 
-    if (payloads.length === 0) {
+    const salvaConfig = isPP && configDbAtiva;
+    if (payloads.length === 0 && !salvaConfig) {
       toast.warning("Preencha ao menos uma meta antes de salvar.");
       setSalvandoTudo(false);
       return;
     }
 
     try {
-      const { error } = await supabase.from("metas")
-        .upsert(payloads, { onConflict: "tipo,referencia_id,empresa_id,mes,ano" });
-      if (error) throw error;
-      toast.success(`${payloads.length} meta(s) salva(s) com sucesso!`, {
-        description: `${MESES[mes - 1]}/${ano}`,
-      });
+      if (payloads.length > 0) {
+        const { error } = await supabase.from("metas")
+          .upsert(payloads, { onConflict: "tipo,referencia_id,empresa_id,mes,ano" });
+        if (error) throw error;
+      }
+      // Config mensal (feriados + quartis) — PP
+      if (salvaConfig && perfil?.id) {
+        const { error: cfgErr } = await upsertMetasConfig({
+          empresaId: empresa.id, mes, ano,
+          feriados, quartis, atualizadoPor: perfil.id,
+        });
+        if (cfgErr) throw new Error(cfgErr);
+      }
+      toast.success(
+        payloads.length > 0
+          ? `${payloads.length} meta(s) salva(s) com sucesso!`
+          : "Configuração do mês salva!",
+        { description: `${MESES[mes - 1]}/${ano}` },
+      );
       await fetchMetas();
     } catch (err: unknown) {
       toast.error("Erro ao salvar metas", { description: err instanceof Error ? err.message : String(err) });
@@ -292,6 +399,10 @@ export default function MetasConfig() {
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
   const temMetas = Object.values(inputMetas).some(v => v.meta_valor.trim() !== "");
+  const podeSalvar = temMetas || (isPP && configDbAtiva);
+  const operadoresVisiveis = operadores
+    .filter(op => typeof op?.id === "string" && op.id.length > 0)
+    .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
@@ -314,6 +425,101 @@ export default function MetasConfig() {
       </div>
 
       <Separator />
+
+      {/* ── Config do mês (PP): dias úteis + feriados + quartis ── */}
+      {isPP && configDbAtiva && configCarregada && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <SectionCard
+            title="Dias úteis do mês"
+            description="Segunda a sexta, menos os feriados cadastrados. Usado para calcular a meta diária."
+            icon={<CalendarDays className="h-4 w-4" />}
+          >
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-center">
+                  <p className="text-lg font-bold tabular-nums">{totalDiasUteis}</p>
+                  <p className="text-[11px] text-muted-foreground">dias úteis em {MESES[mes - 1]}</p>
+                </div>
+                <div className="flex-1 rounded-lg border border-border bg-muted/30 px-3 py-2 text-center">
+                  <p className="text-lg font-bold tabular-nums">
+                    {diasTrabalhados !== null ? diasTrabalhados : "—"}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {diasTrabalhados !== null ? "já trabalhados" : "mês não atual"}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Feriados (a operação não trabalha)</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="date"
+                    className="h-8 text-sm max-w-[170px]"
+                    value={feriadoNovo}
+                    disabled={!podeGerenciarMetas}
+                    onChange={(e) => setFeriadoNovo(e.target.value)}
+                  />
+                  <Button size="sm" variant="outline" className="h-8 gap-1 text-xs"
+                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeGerenciarMetas}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar
+                  </Button>
+                </div>
+                {feriados.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5 pt-1">
+                    {feriados.map(f => (
+                      <Badge key={f} variant="secondary" className="gap-1 text-xs font-normal">
+                        {f.split("-").reverse().join("/")}
+                        {podeGerenciarMetas && (
+                          <button type="button" className="hover:text-destructive"
+                            onClick={() => setFeriados(prev => prev.filter(x => x !== f))}>
+                            <X className="h-3 w-3" />
+                          </button>
+                        )}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">Nenhum feriado neste mês.</p>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          <SectionCard
+            title="Quartis de projeção"
+            description="Faixas de % da projeção diária (realizado ÷ esperado até hoje). 1º quartil = melhor."
+            icon={<Target className="h-4 w-4" />}
+          >
+            <div className="space-y-2">
+              {ordenarQuartis(quartis).map((q, i, arr) => {
+                const tetoAcima = i > 0 ? arr[i - 1].min_pct - 1 : null;
+                return (
+                  <div key={q.quartil} className="flex items-center gap-3">
+                    <span className="text-sm font-semibold w-20 shrink-0">{q.quartil}º quartil</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-muted-foreground">a partir de</span>
+                      <Input
+                        className="h-8 w-20 text-sm text-center"
+                        value={String(q.min_pct)}
+                        disabled={!podeGerenciarMetas}
+                        onChange={(e) => setQuartilPct(q.quartil, e.target.value)}
+                      />
+                      <span className="text-xs text-muted-foreground">%</span>
+                    </div>
+                    <span className="text-[11px] text-muted-foreground ml-auto">
+                      {tetoAcima !== null ? `${q.min_pct}% – ${tetoAcima}%` : `≥ ${q.min_pct}%`}
+                    </span>
+                  </div>
+                );
+              })}
+              <p className="text-[11px] text-muted-foreground pt-1">
+                Com meta + dias úteis configurados, cada operador vê no dashboard a meta
+                diária, a projeção e o quartil em que está.
+              </p>
+            </div>
+          </SectionCard>
+        </div>
+      )}
 
       {/* Seletor de setor (admin) */}
       {isAdmin && (
@@ -353,7 +559,9 @@ export default function MetasConfig() {
                 icon={<Building2 className="h-4 w-4" />}
                 input={getInput(setorSelecionado)}
                 disabled={!podeGerenciarMetas}
-                onChangeValor={v => setInput(setorSelecionado, { meta_valor: v })} />
+                mostrarHO={isPP}
+                onChangeValor={v => onChangeValor(setorSelecionado, v)}
+                onChangeHO={v => onChangeHO(setorSelecionado, v)} />
             )}
           </SectionCard>
 
@@ -372,7 +580,9 @@ export default function MetasConfig() {
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
                     disabled={!podeGerenciarMetas}
-                    onChangeValor={v => setInput(eq.id, { meta_valor: v })} />
+                    mostrarHO={isPP}
+                    onChangeValor={v => onChangeValor(eq.id, v)}
+                    onChangeHO={v => onChangeHO(eq.id, v)} />
                 ))}
               </div>
             )}
@@ -381,19 +591,42 @@ export default function MetasConfig() {
           {/* Meta por Operador */}
           <SectionCard title="Meta por Operador"
             description={`Metas individuais por operador do setor ${setorNome}`}
-            icon={<User className="h-4 w-4" />} badge={operadores.length}>
+            icon={<User className="h-4 w-4" />} badge={operadoresVisiveis.length}>
+            {/* Filtro por equipe */}
+            {equipes.length > 0 && (
+              <div className="flex items-center gap-2 pb-2 mb-1 border-b border-border">
+                <Layers className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground shrink-0">Equipe:</span>
+                <Select value={equipeFiltroOp || "__todas__"}
+                  onValueChange={(v) => setEquipeFiltroOp(v === "__todas__" ? "" : v)}>
+                  <SelectTrigger className="h-8 w-48 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__todas__">Todas as equipes</SelectItem>
+                    {equipes.map(eq => (
+                      <SelectItem key={eq.id} value={eq.id}>{String(eq.nome ?? "")}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {loadingOperadores ? (
               <div className="space-y-2 py-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-8 w-full" />)}</div>
-            ) : operadores.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">Nenhum operador encontrado neste setor.</p>
+            ) : operadoresVisiveis.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                {operadores.length === 0
+                  ? "Nenhum operador encontrado neste setor."
+                  : "Nenhum operador nesta equipe."}
+              </p>
             ) : (
               <div>
-                {operadores.filter(op => typeof op?.id === "string" && op.id.length > 0).map(op => (
+                {operadoresVisiveis.map(op => (
                   <MetaRow key={op.id} label={String(op.nome ?? "")} sublabel="Operador"
                     icon={<User className="h-4 w-4" />}
                     input={getInput(op.id)}
                     disabled={!podeGerenciarMetas}
-                    onChangeValor={v => setInput(op.id, { meta_valor: v })} />
+                    mostrarHO={isPP}
+                    onChangeValor={v => onChangeValor(op.id, v)}
+                    onChangeHO={v => onChangeHO(op.id, v)} />
                 ))}
               </div>
             )}
@@ -404,13 +637,15 @@ export default function MetasConfig() {
             <p className="text-xs text-muted-foreground flex-1">
               {temMetas
                 ? "Metas preenchidas serão salvas para todos os itens acima."
+                : isPP && configDbAtiva
+                ? "Salva também os feriados e quartis configurados acima."
                 : "Preencha os campos de meta antes de salvar."}
             </p>
             <Button
               size="default"
               className="gap-2 min-w-[140px]"
               onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !temMetas || !podeGerenciarMetas}
+              disabled={salvandoTudo || !podeSalvar || !podeGerenciarMetas}
             >
               {salvandoTudo ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>

@@ -1,9 +1,21 @@
-import { DollarSign, BarChart2, Calendar, Clock, XCircle } from 'lucide-react';
+import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode, AlertTriangle } from 'lucide-react';
 import { MetricCard } from './SubComponents';
 import { formatCurrency, calcHO } from '@/lib/index';
 
 interface PPMetricsProps {
   temLogicaDiretoExtra: boolean;
+  /** true = recebido/Pix/Cartão vêm do relatório analítico (fonte certeira). */
+  usarAnalitico?: boolean;
+  analiticoBruto?: number;
+  analiticoHO?: number;
+  analiticoQtd?: number;
+  pixBruto?: number;
+  pixHO?: number;
+  cartaoBruto?: number;
+  cartaoHO?: number;
+  /** Recebido no analítico que ainda não foi tabulado pelo operador. */
+  naoTabuladoBruto?: number;
+  naoTabuladoQtd?: number;
   valorHODireto: number;
   valorHOExtra: number;
   valorHOMes: number;
@@ -25,6 +37,10 @@ interface PPMetricsProps {
 
 export function PPMetrics({
   temLogicaDiretoExtra,
+  usarAnalitico = false,
+  analiticoBruto = 0, analiticoHO = 0, analiticoQtd = 0,
+  pixBruto = 0, pixHO = 0, cartaoBruto = 0, cartaoHO = 0,
+  naoTabuladoBruto = 0, naoTabuladoQtd = 0,
   valorHODireto, valorHOExtra, valorHOMes,
   qtdDireto, qtdExtra,
   valorRecebidoDireto, valorRecebidoExtra, valorRecebidoMes,
@@ -35,6 +51,45 @@ export function PPMetrics({
 }: PPMetricsProps) {
   return (
     <div className="space-y-3">
+      {/* Aviso: recebimento do analítico ainda não tabulado */}
+      {usarAnalitico && naoTabuladoBruto > 0 && (
+        <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs leading-relaxed">
+            <p className="font-semibold text-foreground">
+              {formatCurrency(naoTabuladoBruto)} do recebimento ainda não estão tabulados
+            </p>
+            <p className="text-muted-foreground">
+              O relatório analítico registrou {formatCurrency(analiticoBruto)} no mês, mas{' '}
+              {naoTabuladoQtd} pagamento{naoTabuladoQtd !== 1 ? 's' : ''} não{' '}
+              {naoTabuladoQtd !== 1 ? 'têm' : 'tem'} acordo tabulado. Acesse a aba{' '}
+              <strong className="text-foreground">Analítico</strong> para tabular.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Pix/Boleto × Cartão — direto do relatório analítico */}
+      {usarAnalitico && (
+        <div className="grid grid-cols-2 gap-3">
+          <MetricCard
+            label="Pix/Boleto recebido (analítico)"
+            icon={<QrCode className="w-4 h-4" />}
+            accentColor="#06b6d4"
+            gradientFrom="#06b6d4"
+            value={<span className="text-cyan-500">{formatCurrency(pixBruto)}</span>}
+            sub={`H.O.: ${formatCurrency(pixHO)}`}
+          />
+          <MetricCard
+            label="Cartão recebido (analítico)"
+            icon={<CreditCard className="w-4 h-4" />}
+            accentColor="#8b5cf6"
+            gradientFrom="#8b5cf6"
+            value={<span className="text-violet-500">{formatCurrency(cartaoBruto)}</span>}
+            sub={`H.O.: ${formatCurrency(cartaoHO)}`}
+          />
+        </div>
+      )}
       {temLogicaDiretoExtra ? (
         <>
           {/* Grupo 1: H.O. Direto + Extra + Total */}
@@ -63,8 +118,14 @@ export function PPMetrics({
               accentColor="#22c55e"
               gradientFrom="#22c55e"
               trend="up"
-              value={<span className="text-emerald-500">{formatCurrency(valorHOMes)}</span>}
-              sub={`Bruto: ${formatCurrency(valorRecebidoMes)} · ${totalPagosMes} pagos`}
+              value={
+                <span className="text-emerald-500">
+                  {formatCurrency(usarAnalitico ? analiticoHO : valorHOMes)}
+                </span>
+              }
+              sub={usarAnalitico
+                ? `Bruto: ${formatCurrency(analiticoBruto)} · ${analiticoQtd} pgtos (analítico)`
+                : `Bruto: ${formatCurrency(valorRecebidoMes)} · ${totalPagosMes} pagos`}
             />
           </div>
 
@@ -141,8 +202,14 @@ export function PPMetrics({
               accentColor="#22c55e"
               gradientFrom="#22c55e"
               trend="up"
-              value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
-              sub={`${qtdDireto} diretos pagos · 24,96% do bruto`}
+              value={
+                <span className="text-emerald-500">
+                  {formatCurrency(usarAnalitico ? analiticoHO : valorHODireto)}
+                </span>
+              }
+              sub={usarAnalitico
+                ? `${analiticoQtd} pgtos no analítico · 24,96% do bruto`
+                : `${qtdDireto} diretos pagos · 24,96% do bruto`}
             />
             <MetricCard
               label="H.O. agendado no mês"
@@ -158,8 +225,14 @@ export function PPMetrics({
               icon={<DollarSign className="w-4 h-4" />}
               accentColor="#10b981"
               gradientFrom="#10b981"
-              value={<span className="text-emerald-400">{formatCurrency(valorRecebidoMes)}</span>}
-              sub={`${totalPagosMes} acordos pagos`}
+              value={
+                <span className="text-emerald-400">
+                  {formatCurrency(usarAnalitico ? analiticoBruto : valorRecebidoMes)}
+                </span>
+              }
+              sub={usarAnalitico
+                ? `${analiticoQtd} pgtos no analítico`
+                : `${totalPagosMes} acordos pagos`}
             />
           </div>
 

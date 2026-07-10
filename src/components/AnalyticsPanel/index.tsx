@@ -14,7 +14,9 @@ import {
   Clock, Award, Percent, Target,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { supabase } from '@/lib/supabase';
 import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
 } from '@/lib/index';
@@ -95,11 +97,52 @@ export function AnalyticsPanel({
     };
   }, [acordosMes, isPP]);
 
+  // ── Recebimento via relatório ANALÍTICO (fonte certeira — PP) ──────────────
+  // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a
+  // vir do analitico_recebimentos. Se a migration ainda não foi aplicada
+  // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
+  const analiticoDash = useAnaliticoDashboard(isPP);
+
+  // Escopo dos filtros ativos (operador/equipe/setor) aplicado ao analítico.
+  // Para o operador a RPC já devolve só as próprias linhas.
+  const [opsEscopo, setOpsEscopo] = useState<Set<string> | string | null>(null);
+  useEffect(() => {
+    let cancelado = false;
+    async function resolver() {
+      if (!isPP) { setOpsEscopo(null); return; }
+      if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); return; }
+      const eq = equipeFiltroExterno ?? null;
+      const st = setorExterno ?? null;
+      if (!eq && !st) { setOpsEscopo(null); return; }
+      let q = supabase.from('perfis').select('id');
+      q = eq ? q.eq('equipe_id', eq) : q.eq('setor_id', st!);
+      const { data } = await q;
+      if (!cancelado) setOpsEscopo(new Set(((data ?? []) as { id: string }[]).map(r => r.id)));
+    }
+    void resolver();
+    return () => { cancelado = true; };
+  }, [isPP, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
+
+  const anal = useMemo(
+    () => agregarAnalitico(analiticoDash.linhas, opsEscopo),
+    [analiticoDash.linhas, opsEscopo],
+  );
+  const usarAnalitico = isPP && analiticoDash.dbAtiva;
+
+  // % da meta: bruto do analítico × meta total (PP). Fallback: tabulação.
+  const percMetaAnalitico = meta && meta.meta_valor > 0
+    ? Math.min(Math.round((anal.bruto / meta.meta_valor) * 100), 999)
+    : 0;
+  const percMetaFinal = usarAnalitico && meta ? percMetaAnalitico : percMeta;
+
   const valorPrincipal  = isPP
-    ? (temLogicaDiretoExtra ? valorHOMes : valorHODireto)
+    ? (usarAnalitico ? anal.ho : (temLogicaDiretoExtra ? valorHOMes : valorHODireto))
     : valorRecebidoMes;
   const porDiaChart = isPP
-    ? porDia.map(d => ({ ...d, recebido: d.ho }))
+    ? porDia.map(d => ({
+        ...d,
+        recebido: usarAnalitico ? (anal.porDia[Number(d.dia)]?.ho ?? 0) : d.ho,
+      }))
     : porDia;
 
   useEffect(() => {
@@ -173,16 +216,16 @@ export function AnalyticsPanel({
     return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
   }, [valorRecebidoMes, mes, ano]);
 
-  const donutColor = percMeta >= 100
+  const donutColor = percMetaFinal >= 100
     ? '#22c55e'
-    : percMeta >= 70
+    : percMetaFinal >= 70
     ? '#6366f1'
-    : percMeta >= 40
+    : percMetaFinal >= 40
     ? '#f59e0b'
     : '#ef4444';
 
   const donutPercent = meta
-    ? percMeta
+    ? percMetaFinal
     : totalAcordosMes > 0
     ? Math.round((totalPagosMes / totalAcordosMes) * 100)
     : 0;
@@ -233,7 +276,9 @@ export function AnalyticsPanel({
             {isPP && !temLogicaDiretoExtra && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
-                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorRecebidoMes)}</span>
+                <span className="font-semibold tabular-nums font-mono">
+                  {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
+                </span>
               </div>
             )}
             {isPP && temLogicaDiretoExtra && (
@@ -258,7 +303,7 @@ export function AnalyticsPanel({
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
                 <span className="font-bold tabular-nums font-mono" style={{ color: donutColor }}>
-                  {percMeta}%
+                  {percMetaFinal}%
                 </span>
               </div>
             )}
@@ -318,6 +363,16 @@ export function AnalyticsPanel({
               ) : isPP ? (
                 <PPMetrics
                   temLogicaDiretoExtra={temLogicaDiretoExtra}
+                  usarAnalitico={usarAnalitico}
+                  analiticoBruto={anal.bruto}
+                  analiticoHO={anal.ho}
+                  analiticoQtd={anal.qtd}
+                  pixBruto={anal.pixBruto}
+                  pixHO={anal.pixHO}
+                  cartaoBruto={anal.cartaoBruto}
+                  cartaoHO={anal.cartaoHO}
+                  naoTabuladoBruto={anal.naoTabuladoBruto}
+                  naoTabuladoQtd={anal.naoTabuladoQtd}
                   valorHODireto={valorHODireto}
                   valorHOExtra={valorHOExtra}
                   valorHOMes={valorHOMes}
@@ -405,8 +460,8 @@ export function AnalyticsPanel({
                   donutColor={donutColor}
                   donutSublabel={donutSublabel}
                   meta={meta}
-                  percMeta={percMeta}
-                  valorRecebidoMes={valorRecebidoMes}
+                  percMeta={percMetaFinal}
+                  valorRecebidoMes={isPP && usarAnalitico ? anal.bruto : valorRecebidoMes}
                   tickColor={tickColor}
                   gridColor={gridColor}
                 />
