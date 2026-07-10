@@ -278,7 +278,6 @@ export async function buscarTotaisSemVinculoDiarioMes(
 ): Promise<{ total: number; qtd: number }> {
   const [y, m] = mes.split('-').map(Number);
   const fimDia = new Date(y, m, 0).getDate();
-  const hoje = dayKeyDiario(new Date());
   const PAGE = 1000;
   let total = 0, qtd = 0, offset = 0;
   try {
@@ -291,8 +290,7 @@ export async function buscarTotaisSemVinculoDiarioMes(
         .eq('operador_usuario', '')
         .gte('dia_referencia', `${mes}-01`)
         .lte('dia_referencia', `${mes}-${String(fimDia).padStart(2, '0')}`)
-        // mesma regra das listas: acordos ignorados (prox_contato ≤ hoje) ficam fora
-        .or(`prox_contato.is.null,prox_contato.gt.${hoje}`)
+        // acordos ignorados (prox_contato ≤ hoje) também SOMAM no total do setor
         .range(offset, offset + PAGE - 1);
       if (error || !data?.length) break;
       for (const r of data as { valor_recebido: number }[]) {

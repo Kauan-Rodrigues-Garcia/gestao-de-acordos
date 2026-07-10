@@ -5,7 +5,8 @@
  * • Lista de operadores ordenada por recebido, com subtotais Pix/Boleto/Cartão
  *   e tag "+N novos" após a 2ª importação do dia — detalhe expande ao clicar
  * • Aba "Sem operador": pagamentos importados sem vínculo (órfãos)
- * • Card "Acordos ignorados": próximo contato ≤ hoje, fora dos totais
+ * • Card "Acordos ignorados": próximo contato ≤ hoje, fora das listas
+ *   (o valor recebido deles SOMA no total do dia)
  * • Importar relatório + limpar dia (permissão importar_diario)
  */
 
@@ -72,7 +73,7 @@ export function DiarioLider({
 
   // ── Agregações ────────────────────────────────────────────────────────────
   const {
-    vinculadas, orfaos, ignorados, resumoOps, maxImportIndex, totalDia,
+    vinculadas, orfaos, ignorados, totalIgnorados, resumoOps, maxImportIndex, totalDia,
     nAcordos, nPagamentos, semVinculo,
   } = useMemo(() => {
     const vivasCalc      = linhasVivas(dados, hojeISO);
@@ -88,13 +89,18 @@ export function DiarioLider({
     for (const r of vivasCalc) {
       acordosSet.add(`${r.operador_usuario}::${acordoKey(r)}`);
     }
+    const ignoradosCalc  = consolidarIgnorados(dados, hojeISO);
+    const totalIgnorados = ignoradosCalc.reduce((s, i) => s + i.valor, 0);
     return {
       vinculadas:     vinculadasCalc,
       orfaos:         orfaosCalc,
-      ignorados:      consolidarIgnorados(dados, hojeISO),
+      ignorados:      ignoradosCalc,
+      totalIgnorados,
       resumoOps:      resumo,
       maxImportIndex: maxIdx,
-      totalDia:       vivasCalc.reduce((s, r) => s + r.valor_recebido, 0),
+      // Total do dia inclui os acordos ignorados (prox_contato ≤ hoje) —
+      // eles ficam fora das LISTAS, mas o valor recebido conta
+      totalDia:       vivasCalc.reduce((s, r) => s + r.valor_recebido, 0) + totalIgnorados,
       nAcordos:       acordosSet.size,
       nPagamentos:    vivasCalc.length,
       semVinculo: {
@@ -204,6 +210,11 @@ export function DiarioLider({
                   <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
                     {formatBRL(totalDia)}
                   </p>
+                  {totalIgnorados > 0 && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                      inclui {formatBRL(totalIgnorados)} ignorados
+                    </p>
+                  )}
                 </div>
                 <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
               </div>
@@ -432,7 +443,7 @@ export function DiarioLider({
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {ignorados.length} acordo{ignorados.length !== 1 ? 's' : ''} ·{' '}
-                    {formatBRL(ignorados.reduce((s, i) => s + i.valor, 0))} · fora dos totais e das listas
+                    {formatBRL(totalIgnorados)} · fora das listas, somado ao total do dia
                   </p>
                 </div>
               </CardHeader>
