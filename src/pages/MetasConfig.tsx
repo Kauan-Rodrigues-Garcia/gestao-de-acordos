@@ -46,13 +46,14 @@ interface Meta {
   empresa_id: string;
   meta_valor: number;
   meta_acordos: number;
+  metas_extras?: number[];
   mes: number;
   ano: number;
 }
 interface Setor  { id: string; nome: string; }
 interface Equipe { id: string; nome: string; setor_id: string; }
 interface Operador { id: string; nome: string; equipe_id: string | null; }
-interface MetaInput { meta_valor: string; meta_ho: string; }
+interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; }
 
 function parseBRL(value: string): number {
   const cleaned = value.replace(/[^\d,]/g, "").replace(",", ".");
@@ -73,7 +74,7 @@ function fmtNum(num: number): string {
     : "";
 }
 
-function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "" }; }
+function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "", extras: [] }; }
 
 // ── MonthNavigator ────────────────────────────────────────────────────────────
 function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onChange: (m: number, a: number) => void }) {
@@ -102,10 +103,16 @@ interface MetaRowProps {
   /** PaguePlay: campo Meta H.O. (24,96% do total, conversão bidirecional). */
   mostrarHO?: boolean;
   onChangeHO?: (v: string) => void;
+  /** BookPlay: quantidade de campos de metas extras (2ª, 3ª…). */
+  numExtras?: number;
+  onChangeExtra?: (idx: number, v: string) => void;
   disabled?: boolean;
 }
 
-function MetaRow({ label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO, disabled }: MetaRowProps) {
+function MetaRow({
+  label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO,
+  numExtras = 0, onChangeExtra, disabled,
+}: MetaRowProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5 border-b border-border last:border-0">
       <div className="flex items-center gap-2 sm:w-52 shrink-0">
@@ -144,6 +151,21 @@ function MetaRow({ label, sublabel, icon, input, onChangeValor, mostrarHO, onCha
             </div>
           </div>
         )}
+        {Array.from({ length: numExtras }).map((_, i) => (
+          <div key={i} className="flex flex-col gap-1 min-w-[130px] max-w-[180px]">
+            <Label className="text-xs text-muted-foreground">{i + 2}ª meta (opcional)</Label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+              <Input
+                className="pl-8 h-8 text-sm"
+                placeholder="0,00"
+                value={input.extras[i] ?? ""}
+                disabled={disabled}
+                onChange={(e) => onChangeExtra?.(i, formatBRL(e.target.value))}
+              />
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -187,6 +209,8 @@ export default function MetasConfig() {
   const isPP = tenant.isPaguePlay;
   // Dias úteis/feriados + quartis valem para os dois tenants (H.O. só na PP)
   const temConfigMes = isPP || tenant.slug === "bookplay";
+  // Metas adicionais (2ª, 3ª…) — BookPlay
+  const isBP = tenant.slug === "bookplay";
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
@@ -214,6 +238,8 @@ export default function MetasConfig() {
 
   // inputs controlados por referencia_id
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
+  // Campos extras visíveis por seção (BP): padrão 0, "+" adiciona p/ todos
+  const [extraCampos, setExtraCampos] = useState<Record<TipoMeta, number>>({ setor: 0, equipe: 0, operador: 0 });
 
   function getInput(id: string): MetaInput { return inputMetas[id] ?? emptyInput(); }
   function setInput(id: string, patch: Partial<MetaInput>) {
@@ -229,6 +255,11 @@ export default function MetasConfig() {
   function onChangeHO(id: string, v: string) {
     const ho = parseBRL(v);
     setInput(id, { meta_ho: v, meta_valor: fmtNum(ho / PP_HO_PERCENTUAL) });
+  }
+  function onChangeExtra(id: string, idx: number, v: string) {
+    const atuais = [...getInput(id).extras];
+    atuais[idx] = v;
+    setInput(id, { extras: atuais });
   }
 
   // Dias úteis derivados (seg–sex − feriados)
@@ -291,15 +322,21 @@ export default function MetasConfig() {
       if (error) throw error;
       const loaded: Meta[] = (data ?? []) as Meta[];
       const newInputs: Record<string, MetaInput> = {};
+      const maxExtras: Record<TipoMeta, number> = { setor: 0, equipe: 0, operador: 0 };
       for (const m of loaded) {
         if (!m?.referencia_id) continue;
         const v = Number(m.meta_valor) || 0;
+        const extras = (Array.isArray(m.metas_extras) ? m.metas_extras : [])
+          .map(e => Number(e) || 0).filter(e => e > 0);
         newInputs[m.referencia_id] = {
           meta_valor: fmtNum(v),
           meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
+          extras:     extras.map(fmtNum),
         };
+        if (m.tipo && extras.length > maxExtras[m.tipo]) maxExtras[m.tipo] = extras.length;
       }
       setInputMetas(newInputs);
+      setExtraCampos(maxExtras);
     } catch (err: unknown) {
       toast.error("Erro ao carregar metas", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingMetas(false); }
@@ -360,6 +397,10 @@ export default function MetasConfig() {
         empresa_id: empresa.id!,
         meta_valor: parseBRL(getInput(referenciaId).meta_valor),
         meta_acordos: 0,
+        // Metas adicionais (BP): só as preenchidas contam; em branco é ignorado
+        ...(isBP ? {
+          metas_extras: getInput(referenciaId).extras.map(parseBRL).filter(v => v > 0),
+        } : {}),
         mes,
         ano,
       }))
@@ -558,13 +599,23 @@ export default function MetasConfig() {
             description={`Metas globais para o setor ${setorNome} em ${MESES[mes - 1]}/${ano}`}
             icon={<Building2 className="h-4 w-4" />}>
             {loadingMetas ? <Skeleton className="h-8 w-full my-2" /> : (
-              <MetaRow label={setorNome || "Setor"} sublabel="Meta consolidada do setor"
-                icon={<Building2 className="h-4 w-4" />}
-                input={getInput(setorSelecionado)}
-                disabled={!podeGerenciarMetas}
-                mostrarHO={isPP}
-                onChangeValor={v => onChangeValor(setorSelecionado, v)}
-                onChangeHO={v => onChangeHO(setorSelecionado, v)} />
+              <>
+                <MetaRow label={setorNome || "Setor"} sublabel="Meta consolidada do setor"
+                  icon={<Building2 className="h-4 w-4" />}
+                  input={getInput(setorSelecionado)}
+                  disabled={!podeGerenciarMetas}
+                  mostrarHO={isPP}
+                  numExtras={isBP ? extraCampos.setor : 0}
+                  onChangeExtra={(i, v) => onChangeExtra(setorSelecionado, i, v)}
+                  onChangeValor={v => onChangeValor(setorSelecionado, v)}
+                  onChangeHO={v => onChangeHO(setorSelecionado, v)} />
+                {isBP && podeGerenciarMetas && (
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
+                    onClick={() => setExtraCampos(p => ({ ...p, setor: p.setor + 1 }))}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.setor + 2}ª meta
+                  </Button>
+                )}
+              </>
             )}
           </SectionCard>
 
@@ -584,9 +635,17 @@ export default function MetasConfig() {
                     input={getInput(eq.id)}
                     disabled={!podeGerenciarMetas}
                     mostrarHO={isPP}
+                    numExtras={isBP ? extraCampos.equipe : 0}
+                    onChangeExtra={(i, v) => onChangeExtra(eq.id, i, v)}
                     onChangeValor={v => onChangeValor(eq.id, v)}
                     onChangeHO={v => onChangeHO(eq.id, v)} />
                 ))}
+                {isBP && podeGerenciarMetas && (
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
+                    onClick={() => setExtraCampos(p => ({ ...p, equipe: p.equipe + 1 }))}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.equipe + 2}ª meta (todas as equipes)
+                  </Button>
+                )}
               </div>
             )}
           </SectionCard>
@@ -628,9 +687,17 @@ export default function MetasConfig() {
                     input={getInput(op.id)}
                     disabled={!podeGerenciarMetas}
                     mostrarHO={isPP}
+                    numExtras={isBP ? extraCampos.operador : 0}
+                    onChangeExtra={(i, v) => onChangeExtra(op.id, i, v)}
                     onChangeValor={v => onChangeValor(op.id, v)}
                     onChangeHO={v => onChangeHO(op.id, v)} />
                 ))}
+                {isBP && podeGerenciarMetas && (
+                  <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
+                    onClick={() => setExtraCampos(p => ({ ...p, operador: p.operador + 1 }))}>
+                    <Plus className="h-3.5 w-3.5" /> Adicionar {extraCampos.operador + 2}ª meta (todos os operadores)
+                  </Button>
+                )}
               </div>
             )}
           </SectionCard>

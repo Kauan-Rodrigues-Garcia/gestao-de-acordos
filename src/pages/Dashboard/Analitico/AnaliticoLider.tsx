@@ -46,6 +46,7 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
+import { DesempenhoEquipes } from './DesempenhoEquipes';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -81,7 +82,7 @@ export function AnaliticoLider({
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'orfaos'>('operadores');
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -461,6 +462,10 @@ export function AnaliticoLider({
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
+            // Desempenho por equipe (meta × analítico) — PaguePlay
+            ...(tenant.isPaguePlay
+              ? [{ key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 }] as const
+              : []),
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
@@ -797,6 +802,19 @@ export function AnaliticoLider({
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Aba: Desempenho Equipes (PP) ──────────────────────────────────── */}
+      {abaAtiva === 'desempenho' && (
+        <DesempenhoEquipes
+          empresaId={empresaId}
+          mes={mes}
+          setorId={setorId ?? null}
+          equipes={equipes}
+          resumos={resumos}
+          operadorEquipeMap={operadorEquipeMap}
+          loading={loadingResumos}
+        />
       )}
 
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
