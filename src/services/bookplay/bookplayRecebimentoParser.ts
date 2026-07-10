@@ -141,10 +141,9 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     const emp = cols.emp != null ? String(row[cols.emp] ?? '').trim() : '';
     const cli = cols.cli != null ? row[cols.cli] : '';
 
-    // Linha SEM operador não é mais descartada: entra com operador vazio
-    // (operador_id null) e soma no consolidado geral/do setor, aparecendo
-    // na aba "Sem operador". NR e data continuam obrigatórios.
-    if (!nr || !dt) {
+    // BookPlay tem vários setores: linha sem operador não tem como ser
+    // atribuída a um setor, então continua descartada (diferente da PP).
+    if (!op || !nr || !dt) {
       erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", NR="${nr}", data="${row[cols.dt!]}") — ignorada.`);
       continue;
     }

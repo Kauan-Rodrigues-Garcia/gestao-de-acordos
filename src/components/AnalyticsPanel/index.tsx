@@ -130,9 +130,11 @@ export function AnalyticsPanel({
     return () => { cancelado = true; };
   }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
 
+  // Linhas sem operador só entram no consolidado de setor da PP (setor único);
+  // na BookPlay elas nem são importadas (vários setores, sem atribuição)
   const anal = useMemo(
-    () => agregarAnalitico(analiticoDash.linhas, opsEscopo, escopoEhSetor),
-    [analiticoDash.linhas, opsEscopo, escopoEhSetor],
+    () => agregarAnalitico(analiticoDash.linhas, opsEscopo, escopoEhSetor && isPP),
+    [analiticoDash.linhas, opsEscopo, escopoEhSetor, isPP],
   );
   const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 
