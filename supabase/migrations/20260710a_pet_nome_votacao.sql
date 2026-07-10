@@ -44,7 +44,7 @@ STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
-  SELECT v.empresa_id, e.slug, v.nome_escolhido, COUNT(*)::BIGINT
+  SELECT v.empresa_id, e.slug, v.nome_escolhido, COUNT(*)::BIGINT AS votos
   FROM public.pet_nome_votos v
   LEFT JOIN public.empresas e ON e.id = v.empresa_id
   WHERE public.fn_user_has_any_role(ARRAY['administrador','super_admin'])
@@ -53,5 +53,5 @@ AS $$
       OR public.fn_can_access_empresa(v.empresa_id)
     )
   GROUP BY v.empresa_id, e.slug, v.nome_escolhido
-  ORDER BY e.slug, votos DESC;
+  ORDER BY e.slug, COUNT(*) DESC;
 $$;
