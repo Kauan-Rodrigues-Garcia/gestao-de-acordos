@@ -388,6 +388,8 @@ export interface AnaliticoDashboardLinha {
   dia: string;               // 'yyyy-MM-dd'
   operador_id: string | null;
   forma_pagamento: 'boleto_pix' | 'cartao';
+  /** Rótulo real da forma (BookPlay: Boleto, Pix, Pix Automático…); NULL na PaguePlay. */
+  forma_detalhe: string | null;
   status_tabulacao: 'tabulado' | 'nao_tabulado' | 'divergente';
   total: number;
   total_ho: number;

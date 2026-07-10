@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, RefreshCw, XCircle,
-  Clock, Award, Percent, Target,
+  Clock, Award, Percent, Target, CreditCard, QrCode,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -24,8 +24,8 @@ import { useTenant } from '@/lib/tenant-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { MESES, MEDAL_STYLES, containerVariants, itemVariants } from './constants';
-import { SkeletonCard, MetricCard, MiniSparkline } from './SubComponents';
+import { MESES, MEDAL_STYLES, BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
+import { SkeletonCard, MetricCard, MiniSparkline, BannerNaoTabulado } from './SubComponents';
 import { PPMetrics } from './PPMetrics';
 import { ChartsSection } from './ChartsSection';
 import { CHART_RECEBIDO } from './constants';
@@ -50,6 +50,8 @@ export function AnalyticsPanel({
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const mostraAgendadoRestante = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
+  // Ambos os tenants importam relatório analítico (BookPlay sem H.O.)
+  const temAnalitico = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
   const alwaysOpen = !isPP;
   const [open, setOpen] = useState(() => !isPP);
 
@@ -101,7 +103,7 @@ export function AnalyticsPanel({
   // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a
   // vir do analitico_recebimentos. Se a migration ainda não foi aplicada
   // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
-  const analiticoDash = useAnaliticoDashboard(isPP);
+  const analiticoDash = useAnaliticoDashboard(temAnalitico);
 
   // Escopo dos filtros ativos (operador/equipe/setor) aplicado ao analítico.
   // Para o operador a RPC já devolve só as próprias linhas.
@@ -109,7 +111,7 @@ export function AnalyticsPanel({
   useEffect(() => {
     let cancelado = false;
     async function resolver() {
-      if (!isPP) { setOpsEscopo(null); return; }
+      if (!temAnalitico) { setOpsEscopo(null); return; }
       if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); return; }
       const eq = equipeFiltroExterno ?? null;
       const st = setorExterno ?? null;
@@ -121,13 +123,13 @@ export function AnalyticsPanel({
     }
     void resolver();
     return () => { cancelado = true; };
-  }, [isPP, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
+  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
 
   const anal = useMemo(
     () => agregarAnalitico(analiticoDash.linhas, opsEscopo),
     [analiticoDash.linhas, opsEscopo],
   );
-  const usarAnalitico = isPP && analiticoDash.dbAtiva;
+  const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 
   // % da meta: bruto do analítico × meta total (PP). Fallback: tabulação.
   const percMetaAnalitico = meta && meta.meta_valor > 0
@@ -137,11 +139,14 @@ export function AnalyticsPanel({
 
   const valorPrincipal  = isPP
     ? (usarAnalitico ? anal.ho : (temLogicaDiretoExtra ? valorHOMes : valorHODireto))
-    : valorRecebidoMes;
-  const porDiaChart = isPP
+    : (usarAnalitico ? anal.bruto : valorRecebidoMes);
+  // Linha verde do gráfico: valor total do analítico por dia (o toggle H.O./Total
+  // da PP é resolvido dentro do ChartsSection usando o campo `ho`)
+  const porDiaChart = usarAnalitico
     ? porDia.map(d => ({
         ...d,
-        recebido: usarAnalitico ? (anal.porDia[Number(d.dia)]?.ho ?? 0) : d.ho,
+        recebido: anal.porDia[Number(d.dia)]?.bruto ?? 0,
+        ho:       anal.porDia[Number(d.dia)]?.ho ?? 0,
       }))
     : porDia;
 
@@ -392,7 +397,38 @@ export function AnalyticsPanel({
                   totalNaoPagos={totalNaoPagos}
                 />
               ) : (
-                /* Bookplay metrics grid */
+                /* Bookplay metrics */
+                <div className="space-y-3">
+                {/* Aviso: recebimento do analítico ainda não tabulado */}
+                {usarAnalitico && (
+                  <BannerNaoTabulado
+                    valor={anal.naoTabuladoBruto}
+                    qtd={anal.naoTabuladoQtd}
+                    totalAnalitico={anal.bruto}
+                  />
+                )}
+                {/* Formas de pagamento do analítico (Pix, Boleto, Pix Automático, Cartão…) */}
+                {usarAnalitico && Object.keys(anal.porForma).length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {Object.entries(anal.porForma)
+                      .sort((a, b) => b[1].bruto - a[1].bruto)
+                      .map(([forma, f], i) => {
+                        const cor = BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length];
+                        const Icone = /cart/i.test(forma) ? CreditCard : QrCode;
+                        return (
+                          <MetricCard
+                            key={forma}
+                            label={`${forma} (analítico)`}
+                            icon={<Icone className="w-4 h-4" />}
+                            accentColor={cor}
+                            gradientFrom={cor}
+                            value={<span style={{ color: cor }}>{formatCurrency(f.bruto)}</span>}
+                            sub={`${f.qtd} pagamento${f.qtd !== 1 ? 's' : ''}`}
+                          />
+                        );
+                      })}
+                  </div>
+                )}
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   <MetricCard
                     label="Recebido no mês"
@@ -400,8 +436,14 @@ export function AnalyticsPanel({
                     accentColor="#22c55e"
                     gradientFrom="#22c55e"
                     trend="up"
-                    value={<span className="text-emerald-500">{formatCurrency(valorRecebidoMes)}</span>}
-                    sub={`${totalPagosMes} acordos pagos`}
+                    value={
+                      <span className="text-emerald-500">
+                        {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
+                      </span>
+                    }
+                    sub={usarAnalitico
+                      ? `${anal.qtd} pgtos no analítico`
+                      : `${totalPagosMes} acordos pagos`}
                   />
                   <MetricCard
                     label="Agendado no mês"
@@ -448,6 +490,7 @@ export function AnalyticsPanel({
                     />
                   )}
                 </div>
+                </div>
               )}
 
               {/* Charts row */}
@@ -461,7 +504,7 @@ export function AnalyticsPanel({
                   donutSublabel={donutSublabel}
                   meta={meta}
                   percMeta={percMetaFinal}
-                  valorRecebidoMes={isPP && usarAnalitico ? anal.bruto : valorRecebidoMes}
+                  valorRecebidoMes={usarAnalitico ? anal.bruto : valorRecebidoMes}
                   tickColor={tickColor}
                   gridColor={gridColor}
                 />

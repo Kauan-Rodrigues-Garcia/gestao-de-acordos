@@ -183,7 +183,10 @@ export default function MetasConfig() {
   // padrão = true, espelhando o acesso atual). Sem ela, a tela fica só leitura.
   const podeGerenciarMetas = temPermissao("gerenciar_metas");
 
-  const isPP = useTenant().isPaguePlay;
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
+  // Dias úteis/feriados + quartis valem para os dois tenants (H.O. só na PP)
+  const temConfigMes = isPP || tenant.slug === "bookplay";
 
   const hoje = new Date();
   const [mes, setMes] = useState(hoje.getMonth() + 1);
@@ -304,13 +307,13 @@ export default function MetasConfig() {
 
   // Config mensal (feriados + quartis) — PP
   const fetchConfig = useCallback(async () => {
-    if (!empresa?.id || !isPP) { setConfigCarregada(true); return; }
+    if (!empresa?.id || !temConfigMes) { setConfigCarregada(true); return; }
     const { data, dbAtiva } = await getMetasConfig(empresa.id, mes, ano);
     setConfigDbAtiva(dbAtiva);
     setFeriados(data?.feriados ?? []);
     setQuartis(data?.quartis ?? QUARTIS_PADRAO);
     setConfigCarregada(true);
-  }, [empresa?.id, isPP, mes, ano]);
+  }, [empresa?.id, temConfigMes, mes, ano]);
 
   useEffect(() => { fetchSetores(); }, [fetchSetores]);
   useEffect(() => { fetchEquipes(); }, [fetchEquipes]);
@@ -362,7 +365,7 @@ export default function MetasConfig() {
       }))
       .filter(p => p.meta_valor > 0); // só salva quem tem valor
 
-    const salvaConfig = isPP && configDbAtiva;
+    const salvaConfig = temConfigMes && configDbAtiva;
     if (payloads.length === 0 && !salvaConfig) {
       toast.warning("Preencha ao menos uma meta antes de salvar.");
       setSalvandoTudo(false);
@@ -399,7 +402,7 @@ export default function MetasConfig() {
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
   const temMetas = Object.values(inputMetas).some(v => v.meta_valor.trim() !== "");
-  const podeSalvar = temMetas || (isPP && configDbAtiva);
+  const podeSalvar = temMetas || (temConfigMes && configDbAtiva);
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
@@ -426,8 +429,8 @@ export default function MetasConfig() {
 
       <Separator />
 
-      {/* ── Config do mês (PP): dias úteis + feriados + quartis ── */}
-      {isPP && configDbAtiva && configCarregada && (
+      {/* ── Config do mês (PP + BookPlay): dias úteis + feriados + quartis ── */}
+      {temConfigMes && configDbAtiva && configCarregada && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <SectionCard
             title="Dias úteis do mês"
@@ -637,7 +640,7 @@ export default function MetasConfig() {
             <p className="text-xs text-muted-foreground flex-1">
               {temMetas
                 ? "Metas preenchidas serão salvas para todos os itens acima."
-                : isPP && configDbAtiva
+                : temConfigMes && configDbAtiva
                 ? "Salva também os feriados e quartis configurados acima."
                 : "Preencha os campos de meta antes de salvar."}
             </p>

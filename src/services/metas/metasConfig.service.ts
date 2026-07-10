@@ -19,19 +19,23 @@ function normalizar(row: MetasConfigMes): MetasConfigMes {
 export async function getMetasConfig(
   empresaId: string, mes: number, ano: number,
 ): Promise<{ data: MetasConfigMes | null; dbAtiva: boolean }> {
-  const { data, error } = await supabase
-    .from('metas_config_mes')
-    .select('*')
-    .eq('empresa_id', empresaId)
-    .eq('mes', mes)
-    .eq('ano', ano)
-    .maybeSingle();
-  if (error) {
-    const faltando = /relation|does not exist|schema cache/i.test(error.message);
-    if (!faltando) console.warn('[metasConfig] erro:', error.message);
-    return { data: null, dbAtiva: !faltando };
+  try {
+    const { data, error } = await supabase
+      .from('metas_config_mes')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .eq('mes', mes)
+      .eq('ano', ano)
+      .maybeSingle();
+    if (error) {
+      const faltando = /relation|does not exist|schema cache/i.test(error.message);
+      if (!faltando) console.warn('[metasConfig] erro:', error.message);
+      return { data: null, dbAtiva: !faltando };
+    }
+    return { data: data ? normalizar(data as MetasConfigMes) : null, dbAtiva: true };
+  } catch {
+    return { data: null, dbAtiva: false };
   }
-  return { data: data ? normalizar(data as MetasConfigMes) : null, dbAtiva: true };
 }
 
 export async function upsertMetasConfig(params: {

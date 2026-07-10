@@ -254,15 +254,19 @@ export async function buscarAnaliticoDashboardMes(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
-  const { data, error } = await supabase.rpc('fn_analitico_dashboard_mes', {
-    p_empresa_id: empresaId,
-    p_mes:        mes,
-  });
-  if (error) {
-    const faltando = /function|does not exist|schema cache/i.test(error.message);
-    return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+  try {
+    const { data, error } = await supabase.rpc('fn_analitico_dashboard_mes', {
+      p_empresa_id: empresaId,
+      p_mes:        mes,
+    });
+    if (error) {
+      const faltando = /function|does not exist|schema cache/i.test(error.message);
+      return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+    }
+    return { data: (data ?? []) as AnaliticoDashboardLinha[], dbAtiva: true, error: null };
+  } catch (err) {
+    return { data: [], dbAtiva: false, error: err instanceof Error ? err.message : String(err) };
   }
-  return { data: (data ?? []) as AnaliticoDashboardLinha[], dbAtiva: true, error: null };
 }
 
 // ── Busca ────────────────────────────────────────────────────────────────────

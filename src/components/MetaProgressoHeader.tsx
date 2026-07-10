@@ -40,7 +40,9 @@ function pct(realizado: number, base: number): number {
 export function MetaProgressoHeader() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
-  const isPP = useTenant().isPaguePlay;
+  const tenant = useTenant();
+  // PP e BookPlay: ambos têm relatório analítico (a lógica é toda em bruto)
+  const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
 
   const hoje = new Date();
   const mes = hoje.getMonth() + 1;
@@ -52,40 +54,47 @@ export function MetaProgressoHeader() {
   const [ranking, setRanking]     = useState<ResumoOperadorAnalitico[]>([]);
   const [carregado, setCarregado] = useState(false);
 
-  const analitico = useAnaliticoDashboard(isPP);
+  const analitico = useAnaliticoDashboard(ativo);
 
   // Meta do operador + config do mês
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
-      if (!isPP || !perfil?.id || !empresa?.id) { setCarregado(true); return; }
-      const [{ data: metaRow }, cfg] = await Promise.all([
-        supabase.from('metas').select('meta_valor')
-          .eq('tipo', 'operador').eq('referencia_id', perfil.id)
-          .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano)
-          .maybeSingle(),
-        getMetasConfig(empresa.id, mes, ano),
-      ]);
-      if (cancelado) return;
-      setMetaValor(metaRow ? Number((metaRow as { meta_valor: number }).meta_valor) || null : null);
-      setConfig(cfg.data);
-      setCarregado(true);
+      if (!ativo || !perfil?.id || !empresa?.id) { setCarregado(true); return; }
+      try {
+        const [{ data: metaRow }, cfg] = await Promise.all([
+          supabase.from('metas').select('meta_valor')
+            .eq('tipo', 'operador').eq('referencia_id', perfil.id)
+            .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano)
+            .maybeSingle(),
+          getMetasConfig(empresa.id, mes, ano),
+        ]);
+        if (cancelado) return;
+        setMetaValor(metaRow ? Number((metaRow as { meta_valor: number }).meta_valor) || null : null);
+        setConfig(cfg.data);
+      } catch {
+        // sem meta/config (ou ambiente sem as tabelas) → header não aparece
+      } finally {
+        if (!cancelado) setCarregado(true);
+      }
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [isPP, perfil?.id, empresa?.id, mes, ano]);
+  }, [ativo, perfil?.id, empresa?.id, mes, ano]);
 
   // Ranking — recarrega junto com o analítico (realtime já dispara o hook)
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
-      if (!isPP || !empresa?.id || metaValor == null) return;
-      const { data } = await buscarResumoOperadoresAnalitico(empresa.id, mesStr);
-      if (!cancelado) setRanking(data);
+      if (!ativo || !empresa?.id || metaValor == null) return;
+      try {
+        const { data } = await buscarResumoOperadoresAnalitico(empresa.id, mesStr);
+        if (!cancelado) setRanking(data);
+      } catch { /* ranking indisponível — seção some */ }
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [isPP, empresa?.id, mesStr, metaValor, analitico.linhas]);
+  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas]);
 
   const dados = useMemo(() => {
     if (!perfil?.id || metaValor == null || metaValor <= 0 || !config) return null;
@@ -117,7 +126,7 @@ export function MetaProgressoHeader() {
     };
   }, [perfil?.id, metaValor, config, analitico.total, ranking, ano, mes]);
 
-  if (!isPP || !carregado || !analitico.dbAtiva || !dados) return null;
+  if (!ativo || !carregado || !analitico.dbAtiva || !dados) return null;
 
   const corMeta = dados.percMeta >= 100 ? '#22c55e'
     : dados.percMeta >= 70 ? '#6366f1'

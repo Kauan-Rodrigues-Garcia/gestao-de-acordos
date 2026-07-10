@@ -31,6 +31,8 @@ export interface AgregadoAnalitico {
   porDia: Record<number, { bruto: number; ho: number }>;
   /** operador_id → { bruto, ho, qtd } (líder+ recebe todos; operador só a si) */
   porOperador: Record<string, { bruto: number; ho: number; qtd: number }>;
+  /** rótulo da forma (forma_detalhe; fallback boleto_pix/cartao) → { bruto, qtd } */
+  porForma: Record<string, { bruto: number; qtd: number }>;
 }
 
 /** Agrega as linhas da RPC; `filtro` restringe a um operador ou a um conjunto (equipe/setor). */
@@ -46,7 +48,7 @@ export function agregarAnalitico(
     bruto: 0, ho: 0, qtd: 0,
     pixBruto: 0, pixHO: 0, cartaoBruto: 0, cartaoHO: 0,
     naoTabuladoBruto: 0, naoTabuladoHO: 0, naoTabuladoQtd: 0,
-    porDia: {}, porOperador: {},
+    porDia: {}, porOperador: {}, porForma: {},
   };
   for (const l of linhas) {
     if (!pertence(l.operador_id)) continue;
@@ -58,6 +60,13 @@ export function agregarAnalitico(
 
     if (l.forma_pagamento === 'cartao') { agg.cartaoBruto += total; agg.cartaoHO += ho; }
     else                                { agg.pixBruto    += total; agg.pixHO    += ho; }
+
+    // Rótulo real (BookPlay); PaguePlay cai no consolidado boleto_pix/cartao
+    const rotulo = l.forma_detalhe
+      ?? (l.forma_pagamento === 'cartao' ? 'Cartão' : 'Pix/Boleto');
+    if (!agg.porForma[rotulo]) agg.porForma[rotulo] = { bruto: 0, qtd: 0 };
+    agg.porForma[rotulo].bruto += total;
+    agg.porForma[rotulo].qtd  += qtd;
 
     if (l.status_tabulacao === 'nao_tabulado') {
       agg.naoTabuladoBruto += total; agg.naoTabuladoHO += ho; agg.naoTabuladoQtd += qtd;

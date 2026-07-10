@@ -7,6 +7,7 @@ import {
 } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
 import { CHART_RECEBIDO, CHART_AGENDADO, BREAKDOWN_COLORS, itemVariants } from './constants';
@@ -39,6 +40,12 @@ export function ChartsSection({
   tickColor, gridColor,
 }: ChartsSectionProps) {
   const [breakdownOpen, setBreakdownOpen] = useState(false);
+  // PP: interruptor da linha verde — Total (padrão) ⇄ H.O.
+  const [modoHO, setModoHO] = useState(false);
+  const hoAtivo = isPP && modoHO;
+  const dadosChart = hoAtivo
+    ? porDiaChart.map(d => ({ ...d, recebido: d.ho ?? 0 }))
+    : porDiaChart;
 
   return (
     <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -47,12 +54,19 @@ export function ChartsSection({
         <CardHeader className="pb-2 pt-4 px-4">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-sm font-semibold text-foreground">
-              {isPP ? 'H.O. vs Agendado — por dia' : 'Recebido vs Agendado — por dia'}
+              {hoAtivo ? 'H.O. vs Agendado — por dia' : 'Recebido vs Agendado — por dia'}
             </CardTitle>
             <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+              {isPP && (
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                  <span className={!modoHO ? 'font-semibold text-foreground' : undefined}>Total</span>
+                  <Switch checked={modoHO} onCheckedChange={setModoHO} className="scale-[0.7]" />
+                  <span className={modoHO ? 'font-semibold text-foreground' : undefined}>H.O.</span>
+                </label>
+              )}
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-3 h-[3px] rounded-full" style={{ background: CHART_RECEBIDO }} />
-                {isPP ? 'H.O.' : 'Recebido'}
+                {hoAtivo ? 'H.O.' : 'Recebido'}
               </span>
               <span className="flex items-center gap-1.5">
                 <span className="inline-block w-3 h-[3px] rounded-full" style={{ background: CHART_AGENDADO }} />
@@ -63,7 +77,7 @@ export function ChartsSection({
         </CardHeader>
         <CardContent className="px-2 pb-4">
           <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={porDiaChart} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
+            <AreaChart data={dadosChart} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorRec" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor={CHART_RECEBIDO} stopOpacity={0.45} />
@@ -104,7 +118,7 @@ export function ChartsSection({
               <Area
                 type="monotone"
                 dataKey="recebido"
-                name="Recebido"
+                name={hoAtivo ? 'H.O.' : 'Recebido'}
                 stroke={CHART_RECEBIDO}
                 fill="url(#colorRec)"
                 strokeWidth={2.5}

@@ -1,5 +1,5 @@
-import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode, AlertTriangle } from 'lucide-react';
-import { MetricCard } from './SubComponents';
+import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode } from 'lucide-react';
+import { MetricCard, BannerNaoTabulado } from './SubComponents';
 import { formatCurrency, calcHO } from '@/lib/index';
 
 interface PPMetricsProps {
@@ -52,21 +52,12 @@ export function PPMetrics({
   return (
     <div className="space-y-3">
       {/* Aviso: recebimento do analítico ainda não tabulado */}
-      {usarAnalitico && naoTabuladoBruto > 0 && (
-        <div className="flex items-start gap-2.5 px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10">
-          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-xs leading-relaxed">
-            <p className="font-semibold text-foreground">
-              {formatCurrency(naoTabuladoBruto)} do recebimento ainda não estão tabulados
-            </p>
-            <p className="text-muted-foreground">
-              O relatório analítico registrou {formatCurrency(analiticoBruto)} no mês, mas{' '}
-              {naoTabuladoQtd} pagamento{naoTabuladoQtd !== 1 ? 's' : ''} não{' '}
-              {naoTabuladoQtd !== 1 ? 'têm' : 'tem'} acordo tabulado. Acesse a aba{' '}
-              <strong className="text-foreground">Analítico</strong> para tabular.
-            </p>
-          </div>
-        </div>
+      {usarAnalitico && (
+        <BannerNaoTabulado
+          valor={naoTabuladoBruto}
+          qtd={naoTabuladoQtd}
+          totalAnalitico={analiticoBruto}
+        />
       )}
 
       {/* Pix/Boleto × Cartão — direto do relatório analítico */}
