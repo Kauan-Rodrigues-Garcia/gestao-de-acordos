@@ -252,7 +252,10 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
     const ho  = cols.ho != null ? parsearValor(row[cols.ho]) : 0;
     const eq  = cols.eq != null ? String(row[cols.eq] ?? '').trim() : '';
 
-    if (!op || !cli || !tp || !dt) {
+    // Linha SEM operador não é mais descartada: entra com operador vazio
+    // (operador_id null) e soma no consolidado geral/do setor, aparecendo
+    // na aba "Sem operador". Cliente/tipo/data continuam obrigatórios.
+    if (!cli || !tp || !dt) {
       erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", cliente="${cli}", tipo="${tp}", data="${row[cols.dt]}") — ignorada.`);
       continue;
     }

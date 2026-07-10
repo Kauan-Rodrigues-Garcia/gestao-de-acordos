@@ -108,26 +108,31 @@ export function AnalyticsPanel({
   // Escopo dos filtros ativos (operador/equipe/setor) aplicado ao analítico.
   // Para o operador a RPC já devolve só as próprias linhas.
   const [opsEscopo, setOpsEscopo] = useState<Set<string> | string | null>(null);
+  // true quando o escopo ativo é um SETOR: linhas sem operador contam no total
+  const [escopoEhSetor, setEscopoEhSetor] = useState(false);
   useEffect(() => {
     let cancelado = false;
     async function resolver() {
-      if (!temAnalitico) { setOpsEscopo(null); return; }
-      if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); return; }
+      if (!temAnalitico) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
+      if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); setEscopoEhSetor(false); return; }
       const eq = equipeFiltroExterno ?? null;
       const st = setorExterno ?? null;
-      if (!eq && !st) { setOpsEscopo(null); return; }
+      if (!eq && !st) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
       let q = supabase.from('perfis').select('id');
       q = eq ? q.eq('equipe_id', eq) : q.eq('setor_id', st!);
       const { data } = await q;
-      if (!cancelado) setOpsEscopo(new Set(((data ?? []) as { id: string }[]).map(r => r.id)));
+      if (!cancelado) {
+        setOpsEscopo(new Set(((data ?? []) as { id: string }[]).map(r => r.id)));
+        setEscopoEhSetor(!eq && !!st);
+      }
     }
     void resolver();
     return () => { cancelado = true; };
   }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
 
   const anal = useMemo(
-    () => agregarAnalitico(analiticoDash.linhas, opsEscopo),
-    [analiticoDash.linhas, opsEscopo],
+    () => agregarAnalitico(analiticoDash.linhas, opsEscopo, escopoEhSetor),
+    [analiticoDash.linhas, opsEscopo, escopoEhSetor],
   );
   const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 

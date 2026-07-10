@@ -35,15 +35,21 @@ export interface AgregadoAnalitico {
   porForma: Record<string, { bruto: number; qtd: number }>;
 }
 
-/** Agrega as linhas da RPC; `filtro` restringe a um operador ou a um conjunto (equipe/setor). */
+/**
+ * Agrega as linhas da RPC; `filtro` restringe a um operador ou a um conjunto
+ * (equipe/setor). `incluirSemOperador` soma também as linhas órfãs
+ * (operador_id null) — regra do consolidado de SETOR; equipe/operador não.
+ */
 export function agregarAnalitico(
   linhas: AnaliticoDashboardLinha[],
   filtro?: string | Set<string> | null,
+  incluirSemOperador = false,
 ): AgregadoAnalitico {
   const pertence = (id: string | null): boolean =>
     !filtro ? true
+    : id === null ? incluirSemOperador
     : typeof filtro === 'string' ? id === filtro
-    : id !== null && filtro.has(id);
+    : filtro.has(id);
   const agg: AgregadoAnalitico = {
     bruto: 0, ho: 0, qtd: 0,
     pixBruto: 0, pixHO: 0, cartaoBruto: 0, cartaoHO: 0,

@@ -47,6 +47,7 @@ import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { DesempenhoEquipes } from './DesempenhoEquipes';
+import { QuartisOperadores } from './QuartisOperadores';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -82,7 +83,7 @@ export function AnaliticoLider({
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'orfaos'>('operadores');
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -462,9 +463,12 @@ export function AnaliticoLider({
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // Desempenho por equipe (meta × analítico) — BookPlay
+            // Desempenho por equipe + quartis (meta × analítico) — BookPlay
             ...(tenant.slug === 'bookplay'
-              ? [{ key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 }] as const
+              ? [
+                  { key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 },
+                  { key: 'quartis',    label: 'Quartis',            Icon: TrendingUp },
+                ] as const
               : []),
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
@@ -813,6 +817,17 @@ export function AnaliticoLider({
           equipes={equipes}
           resumos={resumos}
           operadorEquipeMap={operadorEquipeMap}
+          loading={loadingResumos}
+        />
+      )}
+
+      {/* ── Aba: Quartis (BookPlay) ───────────────────────────────────────── */}
+      {abaAtiva === 'quartis' && (
+        <QuartisOperadores
+          empresaId={empresaId}
+          mes={mes}
+          setorId={setorId ?? null}
+          resumos={resumos}
           loading={loadingResumos}
         />
       )}

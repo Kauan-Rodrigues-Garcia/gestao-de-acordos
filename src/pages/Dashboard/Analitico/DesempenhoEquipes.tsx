@@ -19,8 +19,9 @@ import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import type {
-  ResumoOperadorAnalitico, EquipeAnalitico, OperadorEquipeInfo,
+import {
+  buscarAnaliticoDashboardMes,
+  type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 
 interface DesempenhoEquipesProps {
@@ -158,6 +159,8 @@ export function DesempenhoEquipes({
   const [feriados, setFeriados] = useState<string[]>([]);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
+  // Recebimentos sem operador no relatório — somam no consolidado do setor
+  const [semOperador, setSemOperador] = useState(0);
   const [carregado, setCarregado] = useState(false);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
@@ -166,7 +169,7 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, dash] = await Promise.all([
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', anoNum)
             .in('tipo', ['setor', 'equipe']),
@@ -174,8 +177,12 @@ export function DesempenhoEquipes({
           supabase.from('perfis').select('nome, foto_url, equipe_id')
             .eq('empresa_id', empresaId).eq('perfil', 'lider').not('equipe_id', 'is', null),
           supabase.from('setores').select('id, nome').eq('empresa_id', empresaId),
+          buscarAnaliticoDashboardMes(empresaId, mes),
         ]);
         if (cancelado) return;
+        setSemOperador(dash.data
+          .filter(l => l.operador_id === null)
+          .reduce((s, l) => s + (Number(l.total) || 0), 0));
         setMetas((metasData as MetaRow[]) ?? []);
         setFeriados(cfg.data?.feriados ?? []);
         const lMap: Record<string, LiderInfo> = {};
@@ -191,7 +198,7 @@ export function DesempenhoEquipes({
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [empresaId, mesNum, anoNum]);
+  }, [empresaId, mes, mesNum, anoNum]);
 
   const dados = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
@@ -245,12 +252,17 @@ export function DesempenhoEquipes({
     <div className="space-y-6">
       {[...dados.grupos.entries()].map(([sid, eqs]) => (
         <div key={sid} className="space-y-3">
-          {/* Painel consolidado do setor */}
+          {/* Painel consolidado do setor — linhas sem operador entram aqui
+              (só quando um único setor está visível, para não duplicar) */}
           <PainelPlacar
             titulo={setores[sid] ?? 'Setor'}
-            subtitulo="Setor geral"
+            subtitulo={
+              setorEfetivo && semOperador > 0
+                ? `Setor geral · inclui ${formatBRL(semOperador)} sem operador`
+                : 'Setor geral'
+            }
             ehSetor
-            acumulado={dados.porSetor[sid] ?? 0}
+            acumulado={(dados.porSetor[sid] ?? 0) + (setorEfetivo ? semOperador : 0)}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}
@@ -276,6 +288,9 @@ export function DesempenhoEquipes({
       <p className="text-[11px] text-muted-foreground">
         Acumulado e diário vêm do relatório analítico · meta, dias úteis e feriados
         vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).
+        {!setorEfetivo && semOperador > 0 && (
+          <> · {formatBRL(semOperador)} sem operador (não atribuído a setor específico)</>
+        )}
       </p>
     </div>
   );
