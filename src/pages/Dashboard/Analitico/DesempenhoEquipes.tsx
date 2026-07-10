@@ -40,6 +40,14 @@ interface LiderInfo { nome: string; foto_url: string | null }
 
 // ── Painel de desempenho (setor ou equipe) ───────────────────────────────────
 
+/** Fonte diminui conforme o número cresce, para nunca cortar dígitos. */
+function fonteDoValor(valor: string, destaque?: boolean): string {
+  const n = valor.length;
+  if (n > 13) return destaque ? 'text-sm sm:text-base font-extrabold' : 'text-xs sm:text-sm font-bold';
+  if (n > 10) return destaque ? 'text-base sm:text-lg font-extrabold' : 'text-sm sm:text-base font-bold';
+  return destaque ? 'text-xl sm:text-2xl font-extrabold' : 'text-lg sm:text-xl font-bold';
+}
+
 function Tile({
   label, valor, destaque, cor, hint, sub,
 }: { label: string; valor: string; destaque?: boolean; cor?: string; hint?: string; sub?: string }) {
@@ -49,10 +57,7 @@ function Tile({
         {label}
       </p>
       <p
-        className={cn(
-          'tabular-nums font-mono leading-tight truncate mt-0.5',
-          destaque ? 'text-xl sm:text-2xl font-extrabold' : 'text-lg sm:text-xl font-bold',
-        )}
+        className={cn('tabular-nums font-mono leading-tight mt-0.5 whitespace-nowrap', fonteDoValor(valor, destaque))}
         style={cor ? { color: cor } : undefined}
       >
         {valor}
