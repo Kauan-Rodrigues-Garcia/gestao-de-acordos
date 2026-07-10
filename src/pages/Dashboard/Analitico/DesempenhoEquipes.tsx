@@ -1,5 +1,5 @@
 /**
- * DesempenhoEquipes — aba do Analítico (PaguePlay, líder+).
+ * DesempenhoEquipes — aba do Analítico (BookPlay, líder+).
  *
  * Painel por equipe no estilo "placar": foto e nome do líder, acumulado do
  * analítico, média diária real e projeção vs o que deveria ter acumulado
@@ -35,7 +35,28 @@ interface DesempenhoEquipesProps {
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
 interface LiderInfo { nome: string; foto_url: string | null }
 
-// ── Painel no estilo do placar (setor ou equipe) ─────────────────────────────
+// ── Painel de desempenho (setor ou equipe) ───────────────────────────────────
+
+function Tile({
+  label, valor, destaque, cor, hint,
+}: { label: string; valor: string; destaque?: boolean; cor?: string; hint?: string }) {
+  return (
+    <div className="rounded-xl bg-muted/40 border border-border/50 px-3 py-2.5 min-w-0" title={hint}>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
+        {label}
+      </p>
+      <p
+        className={cn(
+          'tabular-nums font-mono leading-tight truncate mt-0.5',
+          destaque ? 'text-xl sm:text-2xl font-extrabold' : 'text-lg sm:text-xl font-bold',
+        )}
+        style={cor ? { color: cor } : undefined}
+      >
+        {valor}
+      </p>
+    </div>
+  );
+}
 
 function PainelPlacar({
   titulo, subtitulo, fotoUrl, ehSetor, acumulado, meta, totalUteis, decorridos,
@@ -49,71 +70,69 @@ function PainelPlacar({
   totalUteis: number;
   decorridos: number;
 }) {
-  const diasBase   = Math.max(decorridos, 1);
-  const mediaDiaria = acumulado / diasBase;
+  const mediaDiaria = acumulado / Math.max(decorridos, 1);
   const metaDiaria  = meta && totalUteis > 0 ? meta / totalUteis : null;
   const esperado    = metaDiaria !== null ? metaDiaria * decorridos : null;
   const projecao    = esperado && esperado > 0 ? Math.round((acumulado / esperado) * 100) : null;
 
-  const corProjecao = projecao === null ? '' :
-    projecao >= 100 ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
-    : projecao >= 80 ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400'
-    : 'bg-red-500/15 text-red-600 dark:text-red-400';
+  const corProjecao = projecao === null ? undefined :
+    projecao >= 100 ? '#22c55e' : projecao >= 80 ? '#f59e0b' : '#ef4444';
 
-  const hojeLabel = new Date().toLocaleDateString('pt-BR');
+  const hojeLabel = new Date().toLocaleDateString('pt-BR', {
+    day: '2-digit', month: 'short',
+  });
 
   return (
     <div className={cn(
-      'flex items-center gap-4 rounded-2xl border p-4',
-      ehSetor ? 'border-primary/40 bg-primary/5' : 'border-border bg-card',
+      'rounded-2xl border bg-card p-4 sm:p-5 shadow-sm',
+      ehSetor && 'border-primary/40 ring-1 ring-primary/10 bg-gradient-to-br from-primary/[0.06] to-transparent',
     )}>
-      {/* Foto do líder / ícone do setor */}
-      <div className="shrink-0">
+      {/* Cabeçalho: foto + nome + data | projeção */}
+      <div className="flex items-center gap-3.5">
         {fotoUrl ? (
           <img src={fotoUrl} alt={titulo}
-            className="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-border shadow" />
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-border shadow-sm shrink-0" />
         ) : (
           <div className={cn(
-            'w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center border-2 border-border shadow',
+            'w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0',
             ehSetor ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
           )}>
-            {ehSetor ? <Building2 className="w-8 h-8" /> : <Users className="w-8 h-8" />}
+            {ehSetor ? <Building2 className="w-7 h-7" /> : <Users className="w-7 h-7" />}
           </div>
         )}
+        <div className="flex-1 min-w-0">
+          <p className="text-base sm:text-lg font-bold leading-tight truncate">{titulo}</p>
+          <p className="text-xs text-muted-foreground truncate">
+            {subtitulo}{subtitulo ? ' · ' : ''}{hojeLabel}
+          </p>
+        </div>
+        {/* Projeção em destaque */}
+        <div
+          className="shrink-0 rounded-2xl px-4 py-2 text-center"
+          style={corProjecao ? { background: corProjecao + '1a' } : undefined}
+        >
+          <p
+            className="text-2xl sm:text-3xl font-extrabold tabular-nums font-mono leading-none"
+            style={{ color: corProjecao ?? 'var(--muted-foreground)' }}
+          >
+            {projecao !== null ? `${projecao}%` : '—'}
+          </p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
+            projeção
+          </p>
+        </div>
       </div>
 
-      <div className="flex-1 min-w-0 space-y-2">
-        {/* Barra de título */}
-        <div className="rounded-lg bg-gradient-to-r from-blue-700 to-blue-500 text-white text-center py-1.5 px-3">
-          <p className="text-sm font-bold uppercase tracking-wide truncate">{titulo}</p>
-          {subtitulo && <p className="text-[10px] text-blue-100 leading-none">{subtitulo}</p>}
-        </div>
-
-        {/* Linha 1 — realizado */}
-        <div className="grid grid-cols-4 gap-px rounded-lg overflow-hidden border border-border text-center text-xs">
-          {['Data', 'Acumulado', 'Diário', 'Projeção'].map(h => (
-            <div key={h} className="bg-blue-600/90 text-white font-semibold uppercase text-[10px] py-1">{h}</div>
-          ))}
-          <div className="bg-muted/40 py-1.5 tabular-nums">{hojeLabel}</div>
-          <div className="bg-muted/40 py-1.5 font-bold tabular-nums font-mono">{formatBRL(acumulado)}</div>
-          <div className="bg-muted/40 py-1.5 tabular-nums font-mono">{formatBRL(mediaDiaria)}</div>
-          <div className={cn('py-1.5 font-bold tabular-nums', projecao !== null ? corProjecao : 'bg-muted/40 text-muted-foreground')}>
-            {projecao !== null ? `${projecao}%` : '—'}
-          </div>
-        </div>
-
-        {/* Linha 2 — meta */}
-        <div className="grid grid-cols-4 gap-px rounded-lg overflow-hidden border border-border text-center text-xs">
-          <div className="bg-blue-600/90 text-white font-semibold uppercase text-[10px] py-1.5 flex items-center justify-center">Meta</div>
-          <div className="bg-muted/40 py-1.5 font-bold tabular-nums font-mono">{meta ? formatBRL(meta) : '—'}</div>
-          <div className="bg-muted/40 py-1.5 tabular-nums font-mono" title="Valor por dia útil para bater a meta">
-            {metaDiaria !== null ? formatBRL(metaDiaria) : '—'}
-          </div>
-          <div className="bg-orange-500/15 text-orange-600 dark:text-orange-400 py-1.5 font-semibold tabular-nums font-mono"
-            title="Quanto deveria ter acumulado até hoje">
-            {esperado !== null ? formatBRL(esperado) : '—'}
-          </div>
-        </div>
+      {/* Números */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
+        <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981" />
+        <Tile label="Média diária" valor={formatBRL(mediaDiaria)}
+          hint="Acumulado ÷ dias úteis trabalhados" />
+        <Tile label="Meta" valor={meta ? formatBRL(meta) : '—'} />
+        <Tile label="Diária p/ meta" valor={metaDiaria !== null ? formatBRL(metaDiaria) : '—'}
+          hint="Valor por dia útil para bater a meta" />
+        <Tile label="Deveria ter" valor={esperado !== null ? formatBRL(esperado) : '—'} cor="#f59e0b"
+          hint="Quanto deveria ter acumulado até hoje" />
       </div>
     </div>
   );

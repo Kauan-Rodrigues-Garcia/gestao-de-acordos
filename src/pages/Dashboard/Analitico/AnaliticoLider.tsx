@@ -462,8 +462,8 @@ export function AnaliticoLider({
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // Desempenho por equipe (meta × analítico) — PaguePlay
-            ...(tenant.isPaguePlay
+            // Desempenho por equipe (meta × analítico) — BookPlay
+            ...(tenant.slug === 'bookplay'
               ? [{ key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 }] as const
               : []),
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
@@ -804,7 +804,7 @@ export function AnaliticoLider({
         </div>
       )}
 
-      {/* ── Aba: Desempenho Equipes (PP) ──────────────────────────────────── */}
+      {/* ── Aba: Desempenho Equipes (BookPlay) ────────────────────────────── */}
       {abaAtiva === 'desempenho' && (
         <DesempenhoEquipes
           empresaId={empresaId}
