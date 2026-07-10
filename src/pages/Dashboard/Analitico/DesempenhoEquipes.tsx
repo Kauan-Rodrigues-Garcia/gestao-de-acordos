@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { Building2, Users } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
@@ -74,6 +75,8 @@ function PainelPlacar({
   const metaDiaria  = meta && totalUteis > 0 ? meta / totalUteis : null;
   const esperado    = metaDiaria !== null ? metaDiaria * decorridos : null;
   const projecao    = esperado && esperado > 0 ? Math.round((acumulado / esperado) * 100) : null;
+  const faltaMeta   = meta !== null ? Math.max(0, meta - acumulado) : null;
+  const metaBatida  = faltaMeta !== null && faltaMeta === 0;
 
   const corProjecao = projecao === null ? undefined :
     projecao >= 100 ? '#22c55e' : projecao >= 80 ? '#f59e0b' : '#ef4444';
@@ -124,11 +127,15 @@ function PainelPlacar({
       </div>
 
       {/* Números */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 mt-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 mt-4">
         <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981" />
         <Tile label="Média diária" valor={formatBRL(mediaDiaria)}
           hint="Acumulado ÷ dias úteis trabalhados" />
         <Tile label="Meta" valor={meta ? formatBRL(meta) : '—'} />
+        <Tile label="Falta p/ meta"
+          valor={faltaMeta === null ? '—' : metaBatida ? 'Batida! 🎉' : formatBRL(faltaMeta)}
+          cor={faltaMeta === null ? undefined : metaBatida ? '#22c55e' : '#6366f1'}
+          hint="Quanto falta para bater a meta do mês" />
         <Tile label="Diária p/ meta" valor={metaDiaria !== null ? formatBRL(metaDiaria) : '—'}
           hint="Valor por dia útil para bater a meta" />
         <Tile label="Deveria ter" valor={esperado !== null ? formatBRL(esperado) : '—'} cor="#f59e0b"
@@ -143,6 +150,10 @@ function PainelPlacar({
 export function DesempenhoEquipes({
   empresaId, mes, setorId, equipes, resumos, operadorEquipeMap, loading,
 }: DesempenhoEquipesProps) {
+  const { perfil } = useAuth();
+  // O usuário só vê o PRÓPRIO setor: sem filtro externo, usa o setor do
+  // perfil. Só quem não tem setor (admin/diretoria) enxerga todos.
+  const setorEfetivo = setorId ?? perfil?.setor_id ?? null;
   const [metas, setMetas]       = useState<MetaRow[]>([]);
   const [feriados, setFeriados] = useState<string[]>([]);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
@@ -202,8 +213,8 @@ export function DesempenhoEquipes({
       return v > 0 ? v : null;
     };
 
-    // Agrupa por setor; com setorId definido, só o setor do usuário
-    const visiveis = setorId ? equipes.filter(e => e.setor_id === setorId) : equipes;
+    // Agrupa por setor; com setor efetivo definido, só o setor do usuário
+    const visiveis = setorEfetivo ? equipes.filter(e => e.setor_id === setorEfetivo) : equipes;
     const grupos = new Map<string, EquipeAnalitico[]>();
     for (const eq of visiveis) {
       const sid = eq.setor_id ?? 'sem_setor';
@@ -212,7 +223,7 @@ export function DesempenhoEquipes({
     }
 
     return { totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos };
-  }, [anoNum, mesNum, feriados, resumos, operadorEquipeMap, equipes, metas, setorId]);
+  }, [anoNum, mesNum, feriados, resumos, operadorEquipeMap, equipes, metas, setorEfetivo]);
 
   if (loading || !carregado) {
     return (
@@ -225,7 +236,7 @@ export function DesempenhoEquipes({
   if (dados.grupos.size === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-10">
-        Nenhuma equipe encontrada{setorId ? ' neste setor' : ''}.
+        Nenhuma equipe encontrada{setorEfetivo ? ' neste setor' : ''}.
       </p>
     );
   }
