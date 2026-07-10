@@ -74,9 +74,27 @@ export function useDiario(options: UseDiarioOptions) {
     void fetchDados();
   }, [fetchDados]);
 
-  // Realtime: refetch em INSERT/DELETE (UPDATE de "visto" não altera a lista)
+  // Realtime: refetch em INSERT/DELETE (UPDATE de "visto" não altera a lista).
+  // A importação insere EM LOTE (1 evento por linha) → refetch/toast debounced:
+  // um único aviso por importação, e nunca para quem importou.
+  const rtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rtToastRef    = useRef(false);
   useEffect(() => {
     if (!empresa?.id || !options.dia) return;
+    const agendarRefetch = () => {
+      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+      rtDebounceRef.current = setTimeout(() => {
+        if (rtToastRef.current) {
+          rtToastRef.current = false;
+          toast.info('Recebimento diário atualizado!', {
+            id: 'diario-atualizado',   // mesmo id → substitui, não empilha
+            description: 'Novos pagamentos foram importados.',
+            duration: 4000,
+          });
+        }
+        void fetchDados();
+      }, 1500);
+    };
     const channel = supabase
       .channel(`diario-${empresa.id}-${options.dia}-${options.operadorFiltro ?? 'all'}`)
       .on(
@@ -87,14 +105,11 @@ export function useDiario(options: UseDiarioOptions) {
           table:  'diario_recebimentos',
           filter: `empresa_id=eq.${empresa.id}`,
         },
-        () => {
-          if (hasLoadedOnce.current) {
-            toast.info('Recebimento diário atualizado!', {
-              description: 'Novos pagamentos foram importados.',
-              duration: 4000,
-            });
-          }
-          void fetchDados();
+        (payload) => {
+          const importadoPorMim =
+            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id === perfil?.id;
+          if (hasLoadedOnce.current && !importadoPorMim) rtToastRef.current = true;
+          agendarRefetch();
         },
       )
       .on(
@@ -104,12 +119,15 @@ export function useDiario(options: UseDiarioOptions) {
           schema: 'public',
           table:  'diario_recebimentos',
         },
-        () => { void fetchDados(); },
+        () => { agendarRefetch(); },
       )
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
-  }, [empresa?.id, options.dia, options.operadorFiltro, fetchDados]);
+    return () => {
+      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+      void supabase.removeChannel(channel);
+    };
+  }, [empresa?.id, perfil?.id, options.dia, options.operadorFiltro, fetchDados]);
 
   return { dados, loading, error, novosIds, refetch: fetchDados };
 }

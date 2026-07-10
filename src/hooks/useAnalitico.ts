@@ -75,7 +75,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
     void fetchDados();
   }, [fetchDados]);
 
-  // Realtime: mostra toast de atualização após a primeira carga
+  // Realtime: a importação insere EM LOTE (1 evento por linha), então o
+  // refetch/toast é debounced — um único aviso por importação, e nunca para
+  // quem importou (o próprio fluxo de importar já dá o feedback).
+  const rtDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rtToastRef     = useRef(false);
   useEffect(() => {
     if (!empresa?.id) return;
     const channel = supabase
@@ -88,20 +92,33 @@ export function useAnalitico(options: UseAnaliticoOptions) {
           table:  'analitico_recebimentos',
           filter: `empresa_id=eq.${empresa.id}`,
         },
-        () => {
-          if (hasLoadedOnce.current) {
-            toast.info('Analítico atualizado!', {
-              description: 'Novos recebimentos foram importados.',
-              duration: 4000,
-            });
+        (payload) => {
+          const importadoPorMim =
+            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id === perfil?.id;
+          if (hasLoadedOnce.current && payload.eventType === 'INSERT' && !importadoPorMim) {
+            rtToastRef.current = true;
           }
-          void fetchDados();
+          if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+          rtDebounceRef.current = setTimeout(() => {
+            if (rtToastRef.current) {
+              rtToastRef.current = false;
+              toast.info('Analítico atualizado!', {
+                id: 'analitico-atualizado',   // mesmo id → substitui, não empilha
+                description: 'Novos recebimentos foram importados.',
+                duration: 4000,
+              });
+            }
+            void fetchDados();
+          }, 1500);
         },
       )
       .subscribe();
 
-    return () => { void supabase.removeChannel(channel); };
-  }, [empresa?.id, options.mes, fetchDados]);
+    return () => {
+      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+      void supabase.removeChannel(channel);
+    };
+  }, [empresa?.id, perfil?.id, options.mes, fetchDados]);
 
   return { dados, loading, error, novosCount, refetch: fetchDados };
 }
