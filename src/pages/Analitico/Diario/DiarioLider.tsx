@@ -73,11 +73,15 @@ export function DiarioLider({
   // ── Agregações ────────────────────────────────────────────────────────────
   const {
     vinculadas, orfaos, ignorados, resumoOps, maxImportIndex, totalDia,
-    nAcordos, nPagamentos,
+    nAcordos, nPagamentos, semVinculo,
   } = useMemo(() => {
     const vivasCalc      = linhasVivas(dados, hojeISO);
     const vinculadasCalc = vivasCalc.filter(r => r.operador_id);
-    const orfaosCalc     = vivasCalc.filter(r => !r.operador_id);
+    // Órfãos = têm NOME de operador mas sem perfil vinculado (vínculo manual).
+    // "(sem vínculo)" = importadas SEM nome (PP) — viram card consolidado.
+    const semNome = (r: DiarioRecebimento) => (r.operador_usuario ?? '').trim() === '';
+    const orfaosCalc   = vivasCalc.filter(r => !r.operador_id && !semNome(r));
+    const semVincRows  = vivasCalc.filter(r => !r.operador_id && semNome(r));
     const maxIdx         = dados.reduce((m, r) => Math.max(m, r.import_index), 0);
     const resumo         = agregarPorOperador(vinculadasCalc, maxIdx);
     const acordosSet     = new Set<string>();
@@ -93,6 +97,10 @@ export function DiarioLider({
       totalDia:       vivasCalc.reduce((s, r) => s + r.valor_recebido, 0),
       nAcordos:       acordosSet.size,
       nPagamentos:    vivasCalc.length,
+      semVinculo: {
+        total: semVincRows.reduce((s, r) => s + r.valor_recebido, 0),
+        qtd:   semVincRows.length,
+      },
     };
   }, [dados, hojeISO]);
 
@@ -381,6 +389,34 @@ export function DiarioLider({
                     mostrarNR={mostrarNR}
                   />
                 ))}
+
+                {/* Consolidado das linhas sem operador no relatório (PP) */}
+                {semVinculo.qtd > 0 && (
+                  <Card className="border-border border-dashed">
+                    <CardHeader className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0" />
+                          <div>
+                            <CardTitle className="text-sm">(sem vínculo)</CardTitle>
+                            <p className="text-xs text-muted-foreground">
+                              pagamentos sem operador no relatório — somam no total do dia e do setor
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4 text-right">
+                          <div>
+                            <p className="text-sm font-bold text-primary">{formatBRL(semVinculo.total)}</p>
+                            <p className="text-xs text-muted-foreground">recebido</p>
+                          </div>
+                          <span className="text-xs font-semibold text-muted-foreground border border-border rounded-full px-2 py-0.5 shrink-0">
+                            {semVinculo.qtd} pgto{semVinculo.qtd !== 1 ? 's' : ''}.
+                          </span>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                )}
               </div>
             </>
           )}

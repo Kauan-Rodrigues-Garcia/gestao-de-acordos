@@ -6,6 +6,7 @@
 import { useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useTenant } from '@/lib/tenant-config';
 import {
   parseRelatorioDiario,
   diaReferencia,
@@ -60,6 +61,7 @@ function mesclarNovosPorOperador(
 export function useDiarioImport() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { isPaguePlay } = useTenant();
 
   const [estado,    setEstado]    = useState<EstadoImportDiario>('idle');
   const [preview,   setPreview]   = useState<PreviewImportDiario | null>(null);
@@ -75,7 +77,10 @@ export function useDiarioImport() {
     setErroGeral(null);
     setVinculosManuais({});
 
-    const { linhas, erros, descartadasSemOperador } = await parseRelatorioDiario(file);
+    // PP: linhas sem operador entram como "(sem vínculo)" — somam no setor
+    const { linhas, erros, descartadasSemOperador } = await parseRelatorioDiario(file, {
+      permitirSemOperador: isPaguePlay,
+    });
 
     if (!linhas.length) {
       setErroGeral(
@@ -87,7 +92,9 @@ export function useDiarioImport() {
       return;
     }
 
-    const usuarios = [...new Set(linhas.map(l => l.operador_usuario))];
+    // Linhas "(sem vínculo)" (operador vazio) ficam fora da resolução de
+    // operadores — não são órfãs para vincular manualmente
+    const usuarios = [...new Set(linhas.map(l => l.operador_usuario))].filter(u => u !== '');
     const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuarios);
     const naoEncontrados = usuarios.filter(u => map[u] === null);
 

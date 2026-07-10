@@ -267,6 +267,45 @@ export async function buscarDiario(
   return { data: allData, error: null };
 }
 
+// ── Totais "(sem vínculo)" no mês — PaguePlay ─────────────────────────────────
+// Linhas do recebimento diário importadas SEM nome de operador. Não aparecem
+// na lista de órfãos (vínculo manual); viram um card consolidado no diário e
+// somam no Total recebido do setor na aba Desempenho Equipes.
+
+export async function buscarTotaisSemVinculoDiarioMes(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<{ total: number; qtd: number }> {
+  const [y, m] = mes.split('-').map(Number);
+  const fimDia = new Date(y, m, 0).getDate();
+  const hoje = dayKeyDiario(new Date());
+  const PAGE = 1000;
+  let total = 0, qtd = 0, offset = 0;
+  try {
+    while (true) {
+      const { data, error } = await supabase
+        .from('diario_recebimentos')
+        .select('valor_recebido')
+        .eq('empresa_id', empresaId)
+        .is('operador_id', null)
+        .eq('operador_usuario', '')
+        .gte('dia_referencia', `${mes}-01`)
+        .lte('dia_referencia', `${mes}-${String(fimDia).padStart(2, '0')}`)
+        // mesma regra das listas: acordos ignorados (prox_contato ≤ hoje) ficam fora
+        .or(`prox_contato.is.null,prox_contato.gt.${hoje}`)
+        .range(offset, offset + PAGE - 1);
+      if (error || !data?.length) break;
+      for (const r of data as { valor_recebido: number }[]) {
+        total += Number(r.valor_recebido) || 0;
+        qtd   += 1;
+      }
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+  } catch { /* indisponível — card não aparece */ }
+  return { total, qtd };
+}
+
 // ── Marcar como visto ─────────────────────────────────────────────────────────
 
 /**
@@ -293,7 +332,9 @@ export async function removerLinhaDiario(id: string): Promise<{ error: string | 
   return { error: error?.message ?? null };
 }
 
-/** Remove todos os órfãos (sem operador) de um dia específico. */
+/** Remove todos os órfãos (sem operador) de um dia específico.
+ *  Linhas "(sem vínculo)" — importadas sem nome de operador — são preservadas:
+ *  elas alimentam o card consolidado e o total do setor. */
 export async function removerOrfaosDoDia(
   empresaId: string,
   dia: string,
@@ -303,7 +344,8 @@ export async function removerOrfaosDoDia(
     .delete()
     .eq('empresa_id', empresaId)
     .eq('dia_referencia', dia)
-    .is('operador_id', null);
+    .is('operador_id', null)
+    .neq('operador_usuario', '');
   return { error: error?.message ?? null };
 }
 

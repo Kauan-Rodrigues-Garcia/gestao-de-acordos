@@ -8,9 +8,13 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { Building2, Layers } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
@@ -18,17 +22,18 @@ import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   diasUteisDoMes, diasUteisDecorridos, quartilAtual, proximoQuartil, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
-import type { ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
+import type { ResumoOperadorAnalitico, EquipeAnalitico } from '@/services/analitico/analitico.service';
 
 interface QuartisOperadoresProps {
   empresaId: string;
   mes: string;                 // 'yyyy-MM'
   setorId?: string | null;
+  equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   loading: boolean;
 }
 
-interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null }
+interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null }
 interface MetaOpRow { referencia_id: string; meta_valor: number }
 
 const COR_QUARTIL: Record<number, string> = {
@@ -36,10 +41,16 @@ const COR_QUARTIL: Record<number, string> = {
 };
 
 export function QuartisOperadores({
-  empresaId, mes, setorId, resumos, loading,
+  empresaId, mes, setorId, equipes, resumos, loading,
 }: QuartisOperadoresProps) {
   const { perfil } = useAuth();
-  const setorEfetivo = setorId ?? perfil?.setor_id ?? null;
+  // Admin/diretoria podem alternar entre setores; os demais ficam no próprio
+  const podeFiltrarSetor = ['administrador', 'super_admin', 'diretoria']
+    .includes(perfil?.perfil ?? '');
+  const [filtroSetor,  setFiltroSetor]  = useState<string>('');   // '' = todos
+  const [filtroEquipe, setFiltroEquipe] = useState<string>('');   // '' = todas
+  const setorProprio = setorId ?? perfil?.setor_id ?? null;
+  const setorEfetivo = podeFiltrarSetor ? (filtroSetor || setorProprio) : setorProprio;
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
   const [operadores, setOperadores] = useState<PerfilOp[]>([]);
@@ -54,7 +65,7 @@ export function QuartisOperadores({
     async function carregar() {
       try {
         const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }] = await Promise.all([
-          supabase.from('perfis').select('id, nome, foto_url, setor_id')
+          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id')
             .eq('empresa_id', empresaId).in('perfil', ['operador', 'elite']).order('nome'),
           supabase.from('metas').select('referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
@@ -88,9 +99,9 @@ export function QuartisOperadores({
     const recebidoMap: Record<string, number> = {};
     for (const r of resumos) recebidoMap[r.operador_id] = r.total_recebido;
 
-    const visiveis = setorEfetivo
-      ? operadores.filter(o => o.setor_id === setorEfetivo)
-      : operadores;
+    const visiveis = operadores
+      .filter(o => !setorEfetivo || o.setor_id === setorEfetivo)
+      .filter(o => !filtroEquipe || o.equipe_id === filtroEquipe);
 
     const porSetor = new Map<string, {
       op: PerfilOp; recebido: number; projecao: number | null;
@@ -125,7 +136,13 @@ export function QuartisOperadores({
       lista.sort((a, b) => (b.projecao ?? -1) - (a.projecao ?? -1));
     }
     return porSetor;
-  }, [anoNum, mesNum, feriados, quartis, resumos, operadores, metasOp, setorEfetivo]);
+  }, [anoNum, mesNum, feriados, quartis, resumos, operadores, metasOp, setorEfetivo, filtroEquipe]);
+
+  // Equipes disponíveis no seletor: só as do setor em exibição
+  const equipesDoSetor = useMemo(
+    () => equipes.filter(e => !setorEfetivo || e.setor_id === setorEfetivo),
+    [equipes, setorEfetivo],
+  );
 
   if (loading || !carregado) {
     return (
@@ -135,16 +152,48 @@ export function QuartisOperadores({
     );
   }
 
-  if (grupos.size === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-10">
-        Nenhum operador encontrado{setorEfetivo ? ' neste setor' : ''}.
-      </p>
-    );
-  }
-
   return (
     <div className="space-y-6">
+      {/* Filtros: setor (admin/diretoria) + equipe */}
+      <div className="flex items-center gap-3 flex-wrap">
+        {podeFiltrarSetor && Object.keys(setores).length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Select value={filtroSetor || '__todos__'}
+              onValueChange={v => { setFiltroSetor(v === '__todos__' ? '' : v); setFiltroEquipe(''); }}>
+              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todos__">Todos os setores</SelectItem>
+                {Object.entries(setores).map(([id, nome]) => (
+                  <SelectItem key={id} value={id}>{nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {equipesDoSetor.length > 0 && (
+          <div className="flex items-center gap-1.5">
+            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Select value={filtroEquipe || '__todas__'}
+              onValueChange={v => setFiltroEquipe(v === '__todas__' ? '' : v)}>
+              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__todas__">Todas as equipes</SelectItem>
+                {equipesDoSetor.map(eq => (
+                  <SelectItem key={eq.id} value={eq.id}>{eq.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+      </div>
+
+      {grupos.size === 0 && (
+        <p className="text-sm text-muted-foreground text-center py-10">
+          Nenhum operador encontrado com os filtros atuais.
+        </p>
+      )}
+
       {[...grupos.entries()].map(([sid, lista]) => (
         <div key={sid} className="space-y-1.5">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">

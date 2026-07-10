@@ -33,7 +33,6 @@ import {
   buscarDestaquesDoMes,
   buscarEquipesComOperadores,
   buscarResumoMensal,
-  buscarTotaisSemVinculo,
   removerLinhaAnalitico,
   removerOrfaosDoMes,
   limparDadosDoMes,
@@ -89,8 +88,6 @@ export function AnaliticoLider({
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
   const [loadingResumos, setLoadingResumos] = useState(true);
-  // Consolidado das linhas sem operador no relatório (PP) — card "(sem vínculo)"
-  const [semVinculo, setSemVinculo] = useState({ total: 0, ho: 0, qtd: 0 });
 
   // ── Snapshot mensal (cards de resumo) ────────────────────────────────────
   const [snapshot,        setSnapshot]        = useState<ResumoMensalAnalitico | null>(null);
@@ -127,13 +124,9 @@ export function AnaliticoLider({
     setExpandidos(new Set());
     setLinhasMap(new Map());
     setFiltrosDatas(new Map());
-    const [{ data, error }, semVinc] = await Promise.all([
-      buscarResumoOperadoresAnalitico(empresaId, mes),
-      buscarTotaisSemVinculo(empresaId, mes),
-    ]);
+    const { data, error } = await buscarResumoOperadoresAnalitico(empresaId, mes);
     if (error) toast.error(`Erro ao carregar resumo: ${error}`);
     setResumos(data);
-    setSemVinculo(semVinc);
     setLoadingResumos(false);
   }, [empresaId, mes]);
 
@@ -150,9 +143,7 @@ export function AnaliticoLider({
     setLoadingOrfaos(true);
     setOrfaosVisiveis(ORFAOS_PAGE);
     const { data } = await buscarAnalitico({ empresaId, mes, operadorId: null });
-    // Linhas sem NOME de operador ficam fora daqui — viram o card
-    // "(sem vínculo)" no fim da lista Por operador
-    setOrfaos(data.filter(o => (o.operador_usuario ?? '').trim() !== ''));
+    setOrfaos(data);
     setLoadingOrfaos(false);
   }, [empresaId, mes]);
 
@@ -720,38 +711,6 @@ export function AnaliticoLider({
               })}
             </div>
           ))}
-
-          {/* Consolidado das linhas sem operador no relatório (PP) */}
-          {!loadingResumos && semVinculo.qtd > 0 && (
-            <Card className="border-border border-dashed">
-              <CardHeader className="p-3">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-muted-foreground shrink-0" />
-                    <div>
-                      <CardTitle className="text-sm">(sem vínculo)</CardTitle>
-                      <p className="text-xs text-muted-foreground">
-                        pagamentos sem operador no relatório — somam só no consolidado do setor
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4 text-right">
-                    <div>
-                      <p className="text-sm font-bold text-primary">{formatBRL(semVinculo.total)}</p>
-                      <p className="text-xs text-muted-foreground">recebido</p>
-                    </div>
-                    {mostrarHO && (
-                      <div>
-                        <p className="text-sm font-semibold">{formatBRL(semVinculo.ho)}</p>
-                        <p className="text-xs text-muted-foreground">HO</p>
-                      </div>
-                    )}
-                    <Badge variant="outline" className="shrink-0">{semVinculo.qtd} pgto.</Badge>
-                  </div>
-                </div>
-              </CardHeader>
-            </Card>
-          )}
         </div>
       )}
 
@@ -864,6 +823,7 @@ export function AnaliticoLider({
           empresaId={empresaId}
           mes={mes}
           setorId={setorId ?? null}
+          equipes={equipes}
           resumos={resumos}
           loading={loadingResumos}
         />

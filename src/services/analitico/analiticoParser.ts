@@ -252,10 +252,7 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
     const ho  = cols.ho != null ? parsearValor(row[cols.ho]) : 0;
     const eq  = cols.eq != null ? String(row[cols.eq] ?? '').trim() : '';
 
-    // PaguePlay (setor único): linha SEM operador não é descartada — entra
-    // com operador vazio (operador_id null), soma no consolidado do setor e
-    // aparece em "Sem operador". Cliente/tipo/data continuam obrigatórios.
-    if (!cli || !tp || !dt) {
+    if (!op || !cli || !tp || !dt) {
       erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", cliente="${cli}", tipo="${tp}", data="${row[cols.dt]}") — ignorada.`);
       continue;
     }

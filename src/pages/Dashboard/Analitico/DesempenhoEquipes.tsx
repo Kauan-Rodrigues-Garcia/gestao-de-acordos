@@ -20,9 +20,9 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import {
-  buscarTotaisSemVinculo,
-  type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
+import { buscarTotaisSemVinculoDiarioMes } from '@/services/diario/diario.service';
+import type {
+  ResumoOperadorAnalitico, EquipeAnalitico, OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 
 interface DesempenhoEquipesProps {
@@ -174,8 +174,9 @@ export function DesempenhoEquipes({
   const [feriados, setFeriados] = useState<string[]>([]);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
-  // PP (setor único): linhas sem operador somam no consolidado do setor
-  const [semVinculo, setSemVinculo] = useState({ total: 0, ho: 0, qtd: 0 });
+  // PP (setor único): linhas do RECEBIMENTO DIÁRIO sem operador somam no
+  // consolidado do setor (H.O. derivado de 24,96%)
+  const [semVinculo, setSemVinculo] = useState({ total: 0, qtd: 0 });
   const [carregado, setCarregado] = useState(false);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
@@ -205,7 +206,7 @@ export function DesempenhoEquipes({
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
         setSetores(sMap);
         if (isPP) {
-          const semVinc = await buscarTotaisSemVinculo(empresaId, mes);
+          const semVinc = await buscarTotaisSemVinculoDiarioMes(empresaId, mes);
           if (!cancelado) setSemVinculo(semVinc);
         }
       } catch { /* sem metas/config — painéis mostram "—" */ }
@@ -278,13 +279,13 @@ export function DesempenhoEquipes({
             titulo={setores[sid] ?? 'Setor'}
             subtitulo={
               isPP && semVinculo.total > 0
-                ? `Setor geral · inclui ${formatBRL(semVinculo.total)} sem vínculo`
+                ? `Setor geral · inclui ${formatBRL(semVinculo.total)} sem vínculo (diário)`
                 : 'Setor geral'
             }
             ehSetor
             mostrarHO={isPP}
             acumulado={(dados.porSetor[sid]?.bruto ?? 0) + (isPP ? semVinculo.total : 0)}
-            acumuladoHO={(dados.porSetor[sid]?.ho ?? 0) + (isPP ? semVinculo.ho : 0)}
+            acumuladoHO={(dados.porSetor[sid]?.ho ?? 0) + (isPP ? semVinculo.total * PP_HO_PERCENTUAL : 0)}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}

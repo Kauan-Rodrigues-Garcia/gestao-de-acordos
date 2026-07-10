@@ -155,7 +155,14 @@ export function diaReferencia(linhas: LinhaDiario[]): string | null {
  * Lê o arquivo Excel do relatório de recebimento diário e retorna as linhas.
  * Rejeita o arquivo se as colunas Operador / Valor Recebido não existirem.
  */
-export async function parseRelatorioDiario(arquivo: File): Promise<ResultadoParseDiario> {
+export async function parseRelatorioDiario(
+  arquivo: File,
+  opts?: {
+    /** PaguePlay: linhas sem operador entram com operador vazio (sem vínculo)
+     *  em vez de serem descartadas — somam no consolidado do setor. */
+    permitirSemOperador?: boolean;
+  },
+): Promise<ResultadoParseDiario> {
   const buffer = await arquivo.arrayBuffer();
   const wb = xlsxRead(buffer, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
@@ -187,7 +194,10 @@ export async function parseRelatorioDiario(arquivo: File): Promise<ResultadoPars
     if (row.every(c => c == null || c === '')) continue; // linha em branco
 
     const op = String(row[cols.op!] ?? '').trim();
-    if (!op) { descartadasSemOperador++; continue; }
+    if (!op) {
+      descartadasSemOperador++;
+      if (!opts?.permitirSemOperador) continue;
+    }
 
     const d        = cols.dt   != null ? toDate(row[cols.dt])   : null;
     const prox     = cols.prox != null ? toDate(row[cols.prox]) : null;

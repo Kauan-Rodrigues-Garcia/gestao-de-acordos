@@ -167,7 +167,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
                 <p className="text-xl font-bold">{preview.descartadasSemOperador}</p>
-                <p className="text-xs text-muted-foreground">sem operador (descartadas)</p>
+                <p className="text-xs text-muted-foreground">sem operador</p>
               </div>
               <div className="rounded-lg border bg-muted p-3 text-center">
                 <p className={`text-xl font-bold ${naoDetectados.length - vinculadosManuaisCount > 0 ? 'text-amber-500' : 'text-emerald-500'}`}>
