@@ -15,12 +15,14 @@ import { Building2, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
-import { getTodayISO } from '@/lib/index';
+import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import type {
-  ResumoOperadorAnalitico, EquipeAnalitico, OperadorEquipeInfo,
+import {
+  buscarTotaisSemVinculo,
+  type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 
 interface DesempenhoEquipesProps {
@@ -39,8 +41,8 @@ interface LiderInfo { nome: string; foto_url: string | null }
 // ── Painel de desempenho (setor ou equipe) ───────────────────────────────────
 
 function Tile({
-  label, valor, destaque, cor, hint,
-}: { label: string; valor: string; destaque?: boolean; cor?: string; hint?: string }) {
+  label, valor, destaque, cor, hint, sub,
+}: { label: string; valor: string; destaque?: boolean; cor?: string; hint?: string; sub?: string }) {
   return (
     <div className="rounded-xl bg-muted/40 border border-border/50 px-3 py-2.5 min-w-0" title={hint}>
       <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
@@ -55,18 +57,24 @@ function Tile({
       >
         {valor}
       </p>
+      {sub && (
+        <p className="text-[11px] text-muted-foreground tabular-nums font-mono truncate mt-0.5">{sub}</p>
+      )}
     </div>
   );
 }
 
 function PainelPlacar({
-  titulo, subtitulo, fotoUrl, ehSetor, acumulado, meta, totalUteis, decorridos,
+  titulo, subtitulo, fotoUrl, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
 }: {
   titulo: string;
   subtitulo?: string;
   fotoUrl?: string | null;
   ehSetor?: boolean;
   acumulado: number;
+  /** PaguePlay: H.O. do acumulado (soma de total_ho do analítico). */
+  acumuladoHO?: number;
+  mostrarHO?: boolean;
   meta: number | null;
   totalUteis: number;
   decorridos: number;
@@ -128,10 +136,12 @@ function PainelPlacar({
 
       {/* Números */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 mt-4">
-        <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981" />
+        <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981"
+          sub={mostrarHO ? `H.O. ${formatBRL(acumuladoHO ?? 0)}` : undefined} />
         <Tile label="Média diária" valor={formatBRL(mediaDiaria)}
           hint="Acumulado ÷ dias úteis trabalhados" />
-        <Tile label="Meta" valor={meta ? formatBRL(meta) : '—'} />
+        <Tile label="Meta" valor={meta ? formatBRL(meta) : '—'}
+          sub={mostrarHO && meta ? `H.O. ${formatBRL(meta * PP_HO_PERCENTUAL)}` : undefined} />
         <Tile label="Falta p/ meta"
           valor={faltaMeta === null ? '—' : metaBatida ? 'Batida! 🎉' : formatBRL(faltaMeta)}
           cor={faltaMeta === null ? undefined : metaBatida ? '#22c55e' : '#6366f1'}
@@ -151,6 +161,7 @@ export function DesempenhoEquipes({
   empresaId, mes, setorId, equipes, resumos, operadorEquipeMap, loading,
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
+  const isPP = useTenant().isPaguePlay;
   // O usuário só vê o PRÓPRIO setor: sem filtro externo, usa o setor do
   // perfil. Só quem não tem setor (admin/diretoria) enxerga todos.
   const setorEfetivo = setorId ?? perfil?.setor_id ?? null;
@@ -158,6 +169,8 @@ export function DesempenhoEquipes({
   const [feriados, setFeriados] = useState<string[]>([]);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
+  // PP (setor único): linhas sem operador somam no consolidado do setor
+  const [semVinculo, setSemVinculo] = useState({ total: 0, ho: 0, qtd: 0 });
   const [carregado, setCarregado] = useState(false);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
@@ -186,25 +199,34 @@ export function DesempenhoEquipes({
         const sMap: Record<string, string> = {};
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
         setSetores(sMap);
+        if (isPP) {
+          const semVinc = await buscarTotaisSemVinculo(empresaId, mes);
+          if (!cancelado) setSemVinculo(semVinc);
+        }
       } catch { /* sem metas/config — painéis mostram "—" */ }
       if (!cancelado) setCarregado(true);
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [empresaId, mes, mesNum, anoNum]);
+  }, [empresaId, mes, mesNum, anoNum, isPP]);
 
   const dados = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
     const decorridos = diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO());
 
-    // Acumulado por equipe e por setor a partir do resumo do analítico
-    const porEquipe: Record<string, number> = {};
-    const porSetor:  Record<string, number> = {};
+    // Acumulado (bruto + H.O.) por equipe e por setor a partir do analítico
+    const porEquipe: Record<string, { bruto: number; ho: number }> = {};
+    const porSetor:  Record<string, { bruto: number; ho: number }> = {};
+    const somar = (map: typeof porEquipe, id: string, r: ResumoOperadorAnalitico) => {
+      if (!map[id]) map[id] = { bruto: 0, ho: 0 };
+      map[id].bruto += r.total_recebido;
+      map[id].ho    += Number(r.total_ho) || 0;
+    };
     for (const r of resumos) {
       const info = operadorEquipeMap[r.operador_id];
       if (!info?.equipe_id) continue;
-      porEquipe[info.equipe_id] = (porEquipe[info.equipe_id] ?? 0) + r.total_recebido;
-      if (info.setor_id) porSetor[info.setor_id] = (porSetor[info.setor_id] ?? 0) + r.total_recebido;
+      somar(porEquipe, info.equipe_id, r);
+      if (info.setor_id) somar(porSetor, info.setor_id, r);
     }
 
     const metaDe = (tipo: string, id: string): number | null => {
@@ -245,12 +267,19 @@ export function DesempenhoEquipes({
     <div className="space-y-6">
       {[...dados.grupos.entries()].map(([sid, eqs]) => (
         <div key={sid} className="space-y-3">
-          {/* Painel consolidado do setor */}
+          {/* Painel consolidado do setor — na PP (setor único) as linhas
+              sem operador entram aqui */}
           <PainelPlacar
             titulo={setores[sid] ?? 'Setor'}
-            subtitulo="Setor geral"
+            subtitulo={
+              isPP && semVinculo.total > 0
+                ? `Setor geral · inclui ${formatBRL(semVinculo.total)} sem vínculo`
+                : 'Setor geral'
+            }
             ehSetor
-            acumulado={dados.porSetor[sid] ?? 0}
+            mostrarHO={isPP}
+            acumulado={(dados.porSetor[sid]?.bruto ?? 0) + (isPP ? semVinculo.total : 0)}
+            acumuladoHO={(dados.porSetor[sid]?.ho ?? 0) + (isPP ? semVinculo.ho : 0)}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}
@@ -258,14 +287,16 @@ export function DesempenhoEquipes({
           {/* Equipes do setor, maiores acumulados primeiro */}
           {eqs
             .slice()
-            .sort((a, b) => (dados.porEquipe[b.id] ?? 0) - (dados.porEquipe[a.id] ?? 0))
+            .sort((a, b) => (dados.porEquipe[b.id]?.bruto ?? 0) - (dados.porEquipe[a.id]?.bruto ?? 0))
             .map(eq => (
               <PainelPlacar
                 key={eq.id}
                 titulo={lideres[eq.id]?.nome ?? eq.nome}
                 subtitulo={`Equipe ${eq.nome}`}
                 fotoUrl={lideres[eq.id]?.foto_url}
-                acumulado={dados.porEquipe[eq.id] ?? 0}
+                mostrarHO={isPP}
+                acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
+                acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
                 meta={dados.metaDe('equipe', eq.id)}
                 totalUteis={dados.totalUteis}
                 decorridos={dados.decorridos}
