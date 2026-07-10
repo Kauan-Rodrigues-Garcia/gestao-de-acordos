@@ -376,8 +376,8 @@ export function PetWidget() {
           <button
             type="button"
             onClick={alternarPainel}
-            title={`${pet.nome} — clique para abrir`}
-            aria-label={`Abrir o quartinho de ${pet.nome}`}
+            title={`Seu ${pet.nome} — clique para abrir`}
+            aria-label={`Abrir o quartinho do seu ${pet.nome}`}
             className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
           >
             {/* flip na direção da caminhada; passinhos no svg */}

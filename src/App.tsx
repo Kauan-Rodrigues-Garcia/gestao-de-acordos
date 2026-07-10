@@ -12,6 +12,7 @@ import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
 import { PetWidget } from '@/components/pet/PetWidget';
+import { PetNomeVotacao } from '@/components/pet/PetNomeVotacao';
 import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
@@ -73,6 +74,7 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
           </Layout>
           <ChatNotificacoes />
           <PetWidget />
+          <PetNomeVotacao />
         </TermoUsoGate>
       </TermoUsoProvider>
     </ProtectedRoute>

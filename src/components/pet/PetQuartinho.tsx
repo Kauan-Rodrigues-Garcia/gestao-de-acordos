@@ -197,7 +197,7 @@ export function PetQuartinho({
         {aba === 'quarto' && (
           <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
             <p>
-              Este é o cantinho de <strong className="text-foreground">{petNome}</strong>.
+              Este é o cantinho do seu <strong className="text-foreground">{petNome}</strong>.
               Você tem <strong className="text-amber-600 dark:text-amber-400">🪙 {moedas.toLocaleString('pt-BR')} moedas</strong>.
             </p>
             <p>

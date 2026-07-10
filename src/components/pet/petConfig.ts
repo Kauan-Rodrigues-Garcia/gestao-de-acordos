@@ -35,10 +35,11 @@ export const COMIDAS_CATALOGO = [
   { id: 'bolinho', nome: 'Bolinho', emoji: '🧁' },
 ];
 
-/** Pet oficial das duas empresas: Aura (coelhinha espiritual lilás).
- *  (PetRolo fica no repositório como possível skin futura.) */
+/** Pet oficial das duas empresas (coelhinha espiritual lilás).
+ *  Nome removido enquanto a votação Aura/Lupi/Albi acontece — usa um rótulo
+ *  neutro ("mascote"). (PetRolo fica no repositório como possível skin.) */
 export function usePetDoTenant(): { nome: string; tipo: 'aura' | 'rolo' } {
-  return { nome: 'Aura', tipo: 'aura' };
+  return { nome: 'mascote', tipo: 'aura' };
 }
 
 /** Pet visível para todos os cargos (usado também p/ subir o sino). */
