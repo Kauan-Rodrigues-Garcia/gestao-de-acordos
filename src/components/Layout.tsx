@@ -50,6 +50,7 @@ import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
+import { ModalRecortarFoto } from './ModalRecortarFoto';
 
 interface NavItem {
   label: string;
@@ -86,6 +87,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [fotoUrl, setFotoUrl] = useState<string | null>((perfil as { foto_url?: string | null } | null)?.foto_url ?? null);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const [deletandoFoto, setDeletandoFoto] = useState(false);
+  // Foto escolhida no input aguardando recorte no modal
+  const [fotoParaRecorte, setFotoParaRecorte] = useState<File | null>(null);
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
@@ -507,11 +510,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     type="file"
                     accept="image/*"
                     className="hidden"
-                    onChange={async (e) => {
+                    onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        await handleFotoUpload(file);
-                        setPerfilPopoverOpen(false);
+                        if (!file.type.startsWith('image/')) {
+                          toast.error('Arquivo inválido. Envie uma imagem.');
+                        } else {
+                          // Abre o modal de recorte antes do upload
+                          setFotoParaRecorte(file);
+                        }
                       }
                       e.target.value = '';
                     }}
@@ -589,6 +596,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onConfirmed={() => setChatplayOnboardingOpen(false)}
         />
       )}
+
+      {/* Recorte da foto de perfil antes do upload */}
+      <ModalRecortarFoto
+        arquivo={fotoParaRecorte}
+        onCancelar={() => setFotoParaRecorte(null)}
+        onConfirmar={async (foto) => {
+          setFotoParaRecorte(null);
+          await handleFotoUpload(foto);
+          setPerfilPopoverOpen(false);
+        }}
+      />
     </div>
   );
 }

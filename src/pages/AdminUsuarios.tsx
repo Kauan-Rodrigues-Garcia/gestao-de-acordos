@@ -25,6 +25,7 @@ import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
 
 // Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
 const PERFIL_BADGE = PERFIL_COLORS;
@@ -69,6 +70,8 @@ export default function AdminUsuarios() {
   // Upload de foto pelo líder/admin para outro operador
   const [uploadTarget,    setUploadTarget]    = useState<Perfil | null>(null);
   const [uploadando,      setUploadando]      = useState(false);
+  // Foto escolhida no input aguardando recorte no modal
+  const [fotoParaRecorte, setFotoParaRecorte] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Alterar senha de operador (agora integrado ao modal unificado;
   // `senhaTarget` é mantido como compat para chamadas externas/testes —
@@ -843,11 +846,27 @@ export default function AdminUsuarios() {
         type="file"
         accept="image/*"
         className="hidden"
-        onChange={async (e) => {
+        onChange={(e) => {
           const file = e.target.files?.[0];
-          if (!file || !uploadTarget) return;
-          await fazerUploadFotoParaUsuario(uploadTarget.id, file);
+          if (file && uploadTarget) {
+            if (!file.type.startsWith('image/')) {
+              toast.error('Arquivo inválido. Envie uma imagem.');
+            } else {
+              // Abre o modal de recorte antes do upload
+              setFotoParaRecorte(file);
+            }
+          }
           e.target.value = '';
+        }}
+      />
+
+      {/* Recorte da foto antes do upload */}
+      <ModalRecortarFoto
+        arquivo={fotoParaRecorte}
+        onCancelar={() => setFotoParaRecorte(null)}
+        onConfirmar={async (foto) => {
+          setFotoParaRecorte(null);
+          if (uploadTarget) await fazerUploadFotoParaUsuario(uploadTarget.id, foto);
         }}
       />
 
