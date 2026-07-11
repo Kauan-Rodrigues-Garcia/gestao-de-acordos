@@ -327,6 +327,41 @@ export async function buscarAnalitico(
   return { data: allData, error: null };
 }
 
+// ── Total "sem operador" do mês ───────────────────────────────────────────────
+// Linhas com nome de operador no arquivo mas sem conta no sistema (aba "Sem
+// operador"). Soma no card "Total recebido" quando há filtro de setor (o
+// snapshot mensal já as inclui na visão sem filtro).
+
+export async function buscarTotalOrfaosAnaliticoMes(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<{ total: number; qtd: number }> {
+  const [y, m] = mes.split('-').map(Number);
+  const fimDia = new Date(y, m, 0).getDate();
+  const PAGE = 1000;
+  let total = 0, qtd = 0, offset = 0;
+  try {
+    while (true) {
+      const { data, error } = await supabase
+        .from('analitico_recebimentos')
+        .select('valor_recebido')
+        .eq('empresa_id', empresaId)
+        .is('operador_id', null)
+        .gte('data_pagamento', `${mes}-01`)
+        .lte('data_pagamento', `${mes}-${String(fimDia).padStart(2, '0')}`)
+        .range(offset, offset + PAGE - 1);
+      if (error || !data?.length) break;
+      for (const r of data as { valor_recebido: number }[]) {
+        total += Number(r.valor_recebido) || 0;
+        qtd   += 1;
+      }
+      if (data.length < PAGE) break;
+      offset += PAGE;
+    }
+  } catch { /* indisponível — soma fica 0 */ }
+  return { total, qtd };
+}
+
 // ── Marcar como visto ─────────────────────────────────────────────────────────
 
 export async function marcarVistoAnalitico(

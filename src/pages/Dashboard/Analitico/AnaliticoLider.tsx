@@ -36,6 +36,7 @@ import {
   removerLinhaAnalitico,
   removerOrfaosDoMes,
   limparDadosDoMes,
+  buscarTotalOrfaosAnaliticoMes,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
@@ -118,6 +119,16 @@ export function AnaliticoLider({
   // importadas no diário ao longo do mês.
   const [semVincDiario, setSemVincDiario] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
 
+  // ── Sem operador (analítico) — PP ─────────────────────────────────────────
+  // Linhas com nome no arquivo mas sem conta no sistema. O snapshot mensal já
+  // as inclui; na visão filtrada por setor entram por fora (resumos por
+  // operador não as contam).
+  const [orfaosMes, setOrfaosMes] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
+  const carregarTotalOrfaos = useCallback(async () => {
+    if (!tenant.isPaguePlay || !empresaId || !mes) { setOrfaosMes({ total: 0, qtd: 0 }); return; }
+    setOrfaosMes(await buscarTotalOrfaosAnaliticoMes(empresaId, mes));
+  }, [tenant.isPaguePlay, empresaId, mes]);
+
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, OperadorEquipeInfo>>({});
@@ -165,7 +176,8 @@ export function AnaliticoLider({
   useEffect(() => {
     void carregarResumos();
     void carregarSnapshot();
-  }, [carregarResumos, carregarSnapshot]);
+    void carregarTotalOrfaos();
+  }, [carregarResumos, carregarSnapshot, carregarTotalOrfaos]);
 
   useEffect(() => {
     if (abaAtiva === 'orfaos')    void carregarOrfaos();
@@ -257,7 +269,12 @@ export function AnaliticoLider({
     setRemovendoId(id);
     const { error } = await removerLinhaAnalitico(id);
     if (error) toast.error(`Erro ao remover: ${error}`);
-    else { toast.success('Linha removida.'); setOrfaos(prev => prev.filter(o => o.id !== id)); onRefetch(); }
+    else {
+      toast.success('Linha removida.');
+      setOrfaos(prev => prev.filter(o => o.id !== id));
+      void carregarTotalOrfaos();
+      onRefetch();
+    }
     setRemovendoId(null);
   }
 
@@ -265,7 +282,12 @@ export function AnaliticoLider({
     setRemovendoTodos(true);
     const { error } = await removerOrfaosDoMes(empresaId, mes);
     if (error) toast.error(`Erro ao remover: ${error}`);
-    else { toast.success('Todos os registros sem operador foram removidos.'); setOrfaos([]); onRefetch(); }
+    else {
+      toast.success('Todos os registros sem operador foram removidos.');
+      setOrfaos([]);
+      void carregarTotalOrfaos();
+      onRefetch();
+    }
     setRemovendoTodos(false);
   }
 
@@ -280,6 +302,7 @@ export function AnaliticoLider({
       setConfirmandoLimpeza(false);
       void carregarResumos();
       void carregarSnapshot();
+      void carregarTotalOrfaos();
       if (abaAtiva === 'orfaos')    void carregarOrfaos();
       if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
@@ -292,6 +315,7 @@ export function AnaliticoLider({
     if (importHook.estado === 'done') {
       void carregarResumos();
       void carregarSnapshot();
+      void carregarTotalOrfaos();
       if (abaAtiva === 'orfaos')    void carregarOrfaos();
       if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
@@ -332,7 +356,9 @@ export function AnaliticoLider({
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
   // "Total recebido" = analítico + sem vínculo do recebimento diário (PP);
-  // o sem vínculo é do setor, então não entra quando há filtro de equipe.
+  // sem vínculo e sem operador são do setor, então não entram com filtro de
+  // equipe. O snapshot já inclui as linhas sem operador do analítico; nos
+  // resumos filtrados elas entram por fora (orfaosMes).
   const metricas = useMemo(() => {
     if (!setorId && !filtroEquipeId) {
       // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
@@ -349,14 +375,14 @@ export function AnaliticoLider({
     // Computa a partir dos resumos filtrados (operadores com dados no período)
     return {
       totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0)
-                       + (filtroEquipeId ? 0 : semVincDiario.total),
+                       + (filtroEquipeId ? 0 : semVincDiario.total + orfaosMes.total),
       totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
       totalOperadores: resumosFiltrados.length,
       totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0),
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, semVincDiario.total]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, semVincDiario.total, orfaosMes.total]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -409,6 +435,11 @@ export function AnaliticoLider({
                     {semVincDiario.total > 0 && !filtroEquipeId && (
                       <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                         inclui {formatBRL(semVincDiario.total)} sem vínculo (diário)
+                      </p>
+                    )}
+                    {orfaosMes.total > 0 && !filtroEquipeId && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                        inclui {formatBRL(orfaosMes.total)} sem operador (analítico)
                       </p>
                     )}
                   </div>
