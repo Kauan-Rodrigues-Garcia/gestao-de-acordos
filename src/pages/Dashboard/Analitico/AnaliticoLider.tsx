@@ -42,6 +42,7 @@ import {
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
+import { buscarTotaisSemVinculoDiarioMes } from '@/services/diario/diario.service';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
@@ -112,6 +113,11 @@ export function AnaliticoLider({
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
   const [loadingDestaques, setLoadingDestaques] = useState(false);
 
+  // ── Sem vínculo (recebimento diário) — PP ─────────────────────────────────
+  // Soma no card "Total recebido": total do analítico + linhas sem operador
+  // importadas no diário ao longo do mês.
+  const [semVincDiario, setSemVincDiario] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
+
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, OperadorEquipeInfo>>({});
@@ -173,6 +179,18 @@ export function AnaliticoLider({
       setOperadorEquipeMap(oem);
     });
   }, [empresaId]);
+
+  useEffect(() => {
+    if (!tenant.isPaguePlay || !empresaId || !mes) {
+      setSemVincDiario({ total: 0, qtd: 0 });
+      return;
+    }
+    let cancelado = false;
+    void buscarTotaisSemVinculoDiarioMes(empresaId, mes).then(t => {
+      if (!cancelado) setSemVincDiario(t);
+    });
+    return () => { cancelado = true; };
+  }, [tenant.isPaguePlay, empresaId, mes]);
 
   // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
   useEffect(() => {
@@ -313,12 +331,14 @@ export function AnaliticoLider({
   }, [resumos, operadorEquipeMap, setorId]);
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
+  // "Total recebido" = analítico + sem vínculo do recebimento diário (PP);
+  // o sem vínculo é do setor, então não entra quando há filtro de equipe.
   const metricas = useMemo(() => {
     if (!setorId && !filtroEquipeId) {
       // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
       if (!snapshot) return null;
       return {
-        totalRecebido:   snapshot.total_recebido,
+        totalRecebido:   snapshot.total_recebido + semVincDiario.total,
         totalHo:         snapshot.total_ho,
         totalOperadores: snapshot.total_operadores,
         totalPagamentos: snapshot.total_pagamentos,
@@ -328,14 +348,15 @@ export function AnaliticoLider({
     }
     // Computa a partir dos resumos filtrados (operadores com dados no período)
     return {
-      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0),
+      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0)
+                       + (filtroEquipeId ? 0 : semVincDiario.total),
       totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
       totalOperadores: resumosFiltrados.length,
       totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0),
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, semVincDiario.total]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -385,6 +406,11 @@ export function AnaliticoLider({
                     <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
                       {formatBRL(metricas.totalRecebido)}
                     </p>
+                    {semVincDiario.total > 0 && !filtroEquipeId && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                        inclui {formatBRL(semVincDiario.total)} sem vínculo (diário)
+                      </p>
+                    )}
                   </div>
                   <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
                 </div>
