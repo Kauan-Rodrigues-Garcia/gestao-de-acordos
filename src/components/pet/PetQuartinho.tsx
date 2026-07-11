@@ -1,7 +1,9 @@
 /**
  * PetQuartinho — painel que abre ao clicar no pet: cenário do quarto,
- * prateleira de colecionáveis, ações (alimentar/dormir) e lojinhas (esboço).
- * Sem sistema financeiro ainda — comidas ficam "em breve".
+ * ações (alimentar/dormir), guarda-roupa e a LOJA MENSAL: vitrine que troca
+ * todo mês (itens de petConfig.LOJA_MENSAL); o que for comprado fica no
+ * inventário para sempre (itens_desbloqueados via fn_pet_gastar_moedas).
+ * Comidas custam moedinhas e alimentam de verdade.
  */
 import { useState, type ComponentType } from 'react';
 import { motion } from 'framer-motion';
@@ -11,7 +13,7 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import type { PetSvgProps } from './PetAura';
 import {
-  ROUPAS_CATALOGO, COMIDAS_CATALOGO,
+  ROUPAS_CATALOGO, COMIDAS_CATALOGO, itensLojaDoMes, roupaInfo,
   type PetHumor, type PetRoupa,
 } from './petConfig';
 
@@ -24,31 +26,86 @@ interface PetQuartinhoProps {
   modoTeaser?:    boolean;
   /** Saldo atual de moedas (0 quando o banco ainda não tem a economia). */
   moedas?:          number;
+  /** Inventário permanente (itens comprados na loja mensal). */
+  itens?:           string[];
+  /** Economia ativa no banco — sem ela a loja fica indisponível. */
+  lojaAtiva?:       boolean;
   /** Recompensa do recebimento do dia ainda não resgatada. */
   recompensaMoedas?: number;
   recompensaValor?:  number;
   onResgatar?:       () => void;
+  /** Gasta moedas no servidor (item → compra permanente). true se deu. */
+  onComprar?:     (preco: number, item?: string) => Promise<boolean>;
   onAlimentar:    () => void;
   onAlternarSono: () => void;
   onSetRoupa:     (r: PetRoupa) => void;
   onClose:        () => void;
 }
 
-type Aba = 'quarto' | 'comidas' | 'roupas';
+type Aba = 'quarto' | 'loja' | 'roupas' | 'comidas';
+
+/** 'yyyy-MM' de hoje (vitrine do mês corrente). */
+function mesAtualISO(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Dias até a vitrine trocar (1º dia do próximo mês). */
+function diasParaTrocarLoja(): number {
+  const hoje = new Date();
+  const proximo = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+  return Math.max(1, Math.ceil((proximo.getTime() - hoje.getTime()) / 86_400_000));
+}
+
+const MESES_LOJA = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
+  'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro'];
 
 export function PetQuartinho({
   petNome, PetSvg, humor, roupa, modoTeaser = false,
-  moedas = 0, recompensaMoedas = 0, recompensaValor = 0, onResgatar,
+  moedas = 0, itens = [], lojaAtiva = false,
+  recompensaMoedas = 0, recompensaValor = 0, onResgatar, onComprar,
   onAlimentar, onAlternarSono, onSetRoupa, onClose,
 }: PetQuartinhoProps) {
   const [aba, setAba] = useState<Aba>('quarto');
   const [balao, setBalao] = useState<string | null>(null);
+  const [comprando, setComprando] = useState<string | null>(null);
 
-  function alimentar() {
-    if (humor === 'dormindo') { setBalao('shhh... 😴'); setTimeout(() => setBalao(null), 1500); return; }
-    onAlimentar();
-    setBalao('nham nham! 😋');
-    setTimeout(() => setBalao(null), 1800);
+  const mesAtual   = mesAtualISO();
+  const vitrine    = itensLojaDoMes(mesAtual);
+  const diasTroca  = diasParaTrocarLoja();
+
+  function falar(msg: string, ms = 1900) {
+    setBalao(msg);
+    setTimeout(() => setBalao(null), ms);
+  }
+
+  async function comprarItemLoja(id: PetRoupa, preco: number, nome: string) {
+    if (!onComprar || comprando) return;
+    if (moedas < preco) { falar('moedas insuficientes 🥺'); return; }
+    setComprando(id);
+    const ok = await onComprar(preco, id);
+    setComprando(null);
+    if (ok) {
+      falar(`${nome}! adorei 🥰`);
+      onSetRoupa(id);         // já sai vestindo a novidade
+    } else {
+      falar('ops, não deu… tente de novo 😿');
+    }
+  }
+
+  async function comprarComida(id: string, preco: number) {
+    if (!onComprar || comprando) return;
+    if (humor === 'dormindo') { falar('shhh... 😴', 1500); return; }
+    if (moedas < preco) { falar('moedas insuficientes 🥺'); return; }
+    setComprando(id);
+    const ok = await onComprar(preco);
+    setComprando(null);
+    if (ok) {
+      onAlimentar();
+      falar('nham nham! 😋');
+    } else {
+      falar('ops, não deu… tente de novo 😿');
+    }
   }
 
   return (
@@ -165,7 +222,7 @@ export function PetQuartinho({
         </button>
       )}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={alimentar}>
+        <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={() => setAba('comidas')}>
           <UtensilsCrossed className="w-3.5 h-3.5" /> Alimentar
         </Button>
         <Button size="sm" variant="outline" className="h-8 text-xs gap-1.5 flex-1" onClick={onAlternarSono}>
@@ -179,12 +236,13 @@ export function PetQuartinho({
       <div className="flex border-b border-border">
         {([
           { id: 'quarto',  label: 'Quarto',  Icon: Home },
-          { id: 'comidas', label: 'Comidas', Icon: Store },
+          { id: 'loja',    label: 'Loja',    Icon: Store },
           { id: 'roupas',  label: 'Roupas',  Icon: Shirt },
+          { id: 'comidas', label: 'Comidas', Icon: UtensilsCrossed },
         ] as { id: Aba; label: string; Icon: typeof Home }[]).map(({ id, label, Icon }) => (
           <button key={id} onClick={() => setAba(id)}
             className={cn(
-              'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium transition-colors',
+              'flex-1 flex items-center justify-center gap-1 py-2 text-[11px] font-medium transition-colors',
               aba === id ? 'text-primary border-b-2 border-primary bg-primary/5' : 'text-muted-foreground hover:text-foreground',
             )}>
             <Icon className="w-3.5 h-3.5" /> {label}
@@ -193,7 +251,7 @@ export function PetQuartinho({
       </div>
 
       {/* Conteúdo da aba */}
-      <div className="p-3 min-h-[96px]">
+      <div className="p-3 min-h-[96px] max-h-64 overflow-y-auto">
         {aba === 'quarto' && (
           <div className="text-xs text-muted-foreground leading-relaxed space-y-1.5">
             <p>
@@ -201,35 +259,88 @@ export function PetQuartinho({
               Você tem <strong className="text-amber-600 dark:text-amber-400">🪙 {moedas.toLocaleString('pt-BR')} moedas</strong>.
             </p>
             <p>
-              Ganhe moedas a cada recebimento do dia 💰 — clique em
-              <strong className="text-foreground"> Pegar recompensa</strong> quando
-              aparecer. Em breve: comidas de verdade e colecionáveis para gastá-las.
+              Ganhe moedas a cada recebimento do dia 💰 e gaste na{' '}
+              <button type="button" className="font-semibold text-primary underline underline-offset-2" onClick={() => setAba('loja')}>
+                Loja do mês
+              </button>{' '}
+              — a vitrine troca todo mês, mas o que você comprar é seu para sempre.
             </p>
           </div>
         )}
 
-        {aba === 'comidas' && (
-          <div className="grid grid-cols-3 gap-2">
-            {COMIDAS_CATALOGO.map(c => (
-              <div key={c.id} className="rounded-xl border border-border p-2 text-center space-y-1">
-                <p className="text-2xl">{c.emoji}</p>
-                <p className="text-[11px] font-medium text-foreground">{c.nome}</p>
-                <Button size="sm" variant="outline" className="h-6 w-full text-[10px]" disabled>
-                  Em breve
-                </Button>
+        {/* ── Loja mensal: vitrine rotativa ── */}
+        {aba === 'loja' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-foreground capitalize">
+                🛍️ Loja de {MESES_LOJA[Number(mesAtual.split('-')[1]) - 1]}
+              </p>
+              <span className="text-[10px] font-medium text-muted-foreground bg-muted px-1.5 py-0.5 rounded-full">
+                troca em {diasTroca} dia{diasTroca !== 1 ? 's' : ''}
+              </span>
+            </div>
+            {!lojaAtiva && (
+              <p className="text-[11px] text-muted-foreground text-center py-4">
+                A lojinha está fechada no momento. Volte mais tarde! 🔒
+              </p>
+            )}
+            {lojaAtiva && vitrine.length === 0 && (
+              <p className="text-[11px] text-muted-foreground text-center py-4">
+                Novidades chegando… a vitrine deste mês ainda está sendo montada! 📦
+              </p>
+            )}
+            {lojaAtiva && (
+              <div className="grid grid-cols-2 gap-2">
+                {vitrine.map(item => {
+                  const comprado = itens.includes(item.id);
+                  const equipada = roupa === item.id;
+                  const semSaldo = moedas < item.preco;
+                  return (
+                    <div key={item.id} className={cn(
+                      'rounded-xl border p-2 text-center space-y-1',
+                      equipada ? 'border-primary bg-primary/5' : 'border-border',
+                    )}>
+                      <p className="text-2xl leading-none">{item.emoji}</p>
+                      <p className="text-[11px] font-medium text-foreground truncate">{item.nome}</p>
+                      {comprado ? (
+                        <Button
+                          size="sm" variant={equipada ? 'default' : 'outline'}
+                          className="h-6 w-full text-[10px]"
+                          onClick={() => onSetRoupa(equipada ? 'nenhuma' : item.id)}
+                        >
+                          {equipada ? 'Remover' : 'Equipar'}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm" variant="outline"
+                          className={cn('h-6 w-full text-[10px] gap-1', !semSaldo && 'border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-400/10')}
+                          disabled={semSaldo || comprando === item.id}
+                          title={semSaldo ? `Faltam ${(item.preco - moedas).toLocaleString('pt-BR')} moedas` : undefined}
+                          onClick={() => void comprarItemLoja(item.id, item.preco, item.nome)}
+                        >
+                          {comprando === item.id ? '…' : <>🪙 {item.preco.toLocaleString('pt-BR')}</>}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
         )}
 
+        {/* ── Guarda-roupa: grátis + tudo que já foi comprado (permanente) ── */}
         {aba === 'roupas' && (
           <div className="grid grid-cols-2 gap-2">
-            {ROUPAS_CATALOGO.map(r => {
+            {[
+              ...ROUPAS_CATALOGO,
+              ...itens.map(roupaInfo).filter((r): r is NonNullable<ReturnType<typeof roupaInfo>> => r !== null),
+            ].map(r => {
               const equipada = roupa === r.id;
               return (
                 <div key={r.id} className={cn('rounded-xl border p-2 text-center space-y-1', equipada ? 'border-primary bg-primary/5' : 'border-border')}>
                   <p className="text-2xl">{r.emoji}</p>
-                  <p className="text-[11px] font-medium text-foreground">{r.nome}</p>
+                  <p className="text-[11px] font-medium text-foreground truncate">{r.nome}</p>
                   <Button
                     size="sm" variant={equipada ? 'default' : 'outline'}
                     className="h-6 w-full text-[10px]"
@@ -240,6 +351,27 @@ export function PetQuartinho({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Comidas: consumíveis baratinhos ── */}
+        {aba === 'comidas' && (
+          <div className="grid grid-cols-3 gap-2">
+            {COMIDAS_CATALOGO.map(c => (
+              <div key={c.id} className="rounded-xl border border-border p-2 text-center space-y-1">
+                <p className="text-2xl">{c.emoji}</p>
+                <p className="text-[11px] font-medium text-foreground">{c.nome}</p>
+                <Button
+                  size="sm" variant="outline"
+                  className="h-6 w-full text-[10px]"
+                  disabled={!lojaAtiva || moedas < c.preco || comprando === c.id}
+                  title={!lojaAtiva ? 'Indisponível no momento' : moedas < c.preco ? 'Moedas insuficientes' : undefined}
+                  onClick={() => void comprarComida(c.id, c.preco)}
+                >
+                  {comprando === c.id ? '…' : <>🪙 {c.preco}</>}
+                </Button>
+              </div>
+            ))}
           </div>
         )}
       </div>

@@ -10,13 +10,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { petStorageKey, type PetRoupa } from './petConfig';
+import { petStorageKey, ROUPAS_VALIDAS, type PetRoupa } from './petConfig';
 import {
-  getPetEstado, getRecompensaDisponivel, resgatarRecompensa, salvarVisualPet,
+  getPetEstado, getRecompensaDisponivel, resgatarRecompensa, salvarVisualPet, gastarMoedas,
   type RecompensaDisponivel, type ResultadoResgate,
 } from '@/services/pet/petEstado.service';
 
-const ROUPAS_VALIDAS: PetRoupa[] = ['nenhuma', 'chapeu', 'cachecol'];
 function coerceRoupa(v: string | null | undefined): PetRoupa {
   return ROUPAS_VALIDAS.includes(v as PetRoupa) ? (v as PetRoupa) : 'nenhuma';
 }
@@ -30,11 +29,15 @@ export interface UsePetEstado {
   carregado: boolean;
   dbAtiva: boolean;
   moedas: number;
+  /** Inventário permanente (ids de itens comprados na loja mensal). */
+  itens: string[];
   roupaInicial: PetRoupa;
   dormindoInicial: boolean;
   disponivel: RecompensaDisponivel;
   salvarVisual: (roupa: PetRoupa, dormindo: boolean) => void;
   resgatar: () => Promise<ResultadoResgate | null>;
+  /** Gasta moedas (com item = compra na loja; sem item = consumível). true se deu. */
+  comprar: (preco: number, item?: string) => Promise<boolean>;
   refetchDisponivel: () => void;
 }
 
@@ -46,6 +49,7 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
   const [carregado, setCarregado]     = useState(false);
   const [dbAtiva, setDbAtiva]         = useState(false);
   const [moedas, setMoedas]           = useState(0);
+  const [itens, setItens]             = useState<string[]>([]);
   const [roupaInicial, setRoupaInic]  = useState<PetRoupa>('nenhuma');
   const [dormindoInic, setDormindoIn] = useState(false);
   const [disponivel, setDisponivel]   = useState<RecompensaDisponivel>({ valor: 0, moedas: 0 });
@@ -64,6 +68,9 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
         dbAtivaRef.current = true;
         setDbAtiva(true);
         setMoedas(estado.moedas);
+        setItens(Array.isArray(estado.itens_desbloqueados)
+          ? (estado.itens_desbloqueados as unknown[]).map(String)
+          : []);
         setRoupaInic(coerceRoupa(estado.roupa_equipada));
         setDormindoIn(!!estado.dormindo);
         const disp = await getRecompensaDisponivel();
@@ -133,15 +140,28 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
     return r;
   }, []);
 
+  // Compra na loja (com item → entra no inventário permanente no servidor)
+  // ou consumível (sem item, ex.: comida). O saldo é validado no servidor.
+  const comprar = useCallback(async (preco: number, item?: string): Promise<boolean> => {
+    if (!dbAtivaRef.current || preco <= 0) return false;
+    const novoSaldo = await gastarMoedas(preco, item);
+    if (novoSaldo === null) return false;
+    setMoedas(novoSaldo);
+    if (item) setItens(prev => (prev.includes(item) ? prev : [...prev, item]));
+    return true;
+  }, []);
+
   return {
     carregado,
     dbAtiva,
     moedas,
+    itens,
     roupaInicial,
     dormindoInicial: dormindoInic,
     disponivel,
     salvarVisual,
     resgatar,
+    comprar,
     refetchDisponivel,
   };
 }

@@ -307,9 +307,12 @@ export function PetWidget() {
             roupa={roupa}
             modoTeaser={!interativo}
             moedas={estado.moedas}
+            itens={estado.itens}
+            lojaAtiva={estado.dbAtiva}
             recompensaMoedas={estado.disponivel.moedas}
             recompensaValor={estado.disponivel.valor}
             onResgatar={pegarRecompensa}
+            onComprar={estado.comprar}
             onAlimentar={alimentar}
             onAlternarSono={alternarSono}
             onSetRoupa={trocarRoupa}

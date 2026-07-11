@@ -156,6 +156,104 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
           </g>
         )}
 
+        {/* ── itens da loja mensal (julho/2026) ── */}
+        {roupa === 'coroa' && (
+          <g>
+            <path d="M78 46 L 78 26 L 88 36 L 100 20 L 112 36 L 122 26 L 122 46 Z"
+              fill="#f2c14e" stroke="#d9a832" strokeWidth="2" strokeLinejoin="round" />
+            <rect x="78" y="42" width="44" height="7" rx="3" fill="#d9a832" />
+            <circle cx="100" cy="20" r="3" fill="#e5734f" />
+            <circle cx="88" cy="45.5" r="2" fill="#e5734f" />
+            <circle cx="112" cy="45.5" r="2" fill="#5b8dd9" />
+          </g>
+        )}
+        {roupa === 'oculos_sol' && (
+          <g>
+            <rect x="70" y="87" width="26" height="18" rx="8" fill="#322b47" />
+            <rect x="106" y="87" width="26" height="18" rx="8" fill="#322b47" />
+            <path d="M96 94 Q 101 90 106 94" stroke="#322b47" strokeWidth="3.5" fill="none" />
+            <path d="M70 93 L 57 88 M 132 93 L 145 88" stroke="#322b47" strokeWidth="3" strokeLinecap="round" fill="none" />
+            <path d="M75 92 L 88 92" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" opacity=".35" />
+            <path d="M111 92 L 124 92" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" opacity=".35" />
+          </g>
+        )}
+        {roupa === 'laco' && (
+          <g transform="rotate(10 132 60)">
+            <path d="M132 60 L 115 49 C 111 57 111 65 115 71 Z" fill="#ee8ba1" />
+            <path d="M132 60 L 149 49 C 153 57 153 65 149 71 Z" fill="#ee8ba1" />
+            <path d="M132 60 L 120 53 C 118 58 118 63 120 67 Z" fill="#f5aebf" />
+            <path d="M132 60 L 144 53 C 146 58 146 63 144 67 Z" fill="#f5aebf" />
+            <circle cx="132" cy="60" r="5" fill="#d96a83" />
+          </g>
+        )}
+        {roupa === 'bone' && (
+          <g>
+            <path d="M74 44 C 74 27 126 27 126 44 L 126 49 C 108 43 92 43 74 49 Z" fill="#d94f4f" />
+            <path d="M122 44 C 138 42 149 46 153 52 C 141 55 130 53 121 50 Z" fill="#b83e3e" />
+            <path d="M100 30 L 100 44" stroke="#b83e3e" strokeWidth="2.5" fill="none" />
+            <circle cx="100" cy="29" r="3.5" fill="#b83e3e" />
+          </g>
+        )}
+        {roupa === 'gravata' && (
+          <g>
+            <path d="M100 130 L 82 122 L 82 138 Z" fill="#5b8dd9" />
+            <path d="M100 130 L 118 122 L 118 138 Z" fill="#5b8dd9" />
+            <path d="M100 130 L 88 125.5 L 88 134.5 Z" fill="#7dabe8" />
+            <path d="M100 130 L 112 125.5 L 112 134.5 Z" fill="#7dabe8" />
+            <rect x="95.5" y="124.5" width="9" height="11" rx="3" fill="#3f6cb0" />
+          </g>
+        )}
+        {roupa === 'flor' && (
+          <g>
+            <circle cx="72" cy="41.5" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="80" cy="46" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="80" cy="55" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="72" cy="59.5" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="64" cy="55" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="64" cy="46" r="4.5" fill="#ffffff" stroke="#f3b8c9" strokeWidth="1" />
+            <circle cx="72" cy="50.5" r="5" fill="#f2c14e" stroke="#d9a832" strokeWidth="1.5" />
+          </g>
+        )}
+        {roupa === 'capa' && (
+          <g>
+            {/* pano esvoaçando no lado esquerdo */}
+            <path d="M64 122 C 46 132 36 150 40 168 C 52 162 62 150 70 140 Z" fill="#c94f4f" />
+            <path d="M64 122 C 50 132 44 146 46 158 C 56 152 64 142 70 136 Z" fill="#d95f5f" opacity=".85" />
+            {/* faixa nos ombros + broche */}
+            <path d="M62 124 C 84 136 118 136 140 124 L 138 132 C 116 142 86 142 64 132 Z" fill="#d94f4f" />
+            <circle cx="100" cy="134" r="4" fill="#f2c14e" stroke="#d9a832" strokeWidth="1.5" />
+          </g>
+        )}
+        {roupa === 'oculos_nerd' && (
+          <g stroke="#3a3350" fill="none">
+            <circle cx="83" cy="96" r="12" strokeWidth="3.5" />
+            <circle cx="119" cy="96" r="12" strokeWidth="3.5" />
+            <path d="M95 94 Q 101 90 107 94" strokeWidth="3" />
+            <path d="M71 93 L 58 88 M 131 93 L 144 88" strokeWidth="3" strokeLinecap="round" />
+          </g>
+        )}
+        {roupa === 'colar' && (
+          <g>
+            <path d="M70 124 C 86 138 114 138 130 124" stroke="#e9e6fb" strokeWidth="1.5" fill="none" opacity=".6" />
+            {[
+              [72, 126, 3.4], [80, 130.5, 3.4], [89, 133.5, 3.4], [100, 134.5, 4],
+              [111, 133.5, 3.4], [120, 130.5, 3.4], [128, 126, 3.4],
+            ].map(([cx, cy, r], i) => (
+              <circle key={i} cx={cx} cy={cy} r={r} fill="#f7f4ff" stroke="#cfc6ee" strokeWidth="1" />
+            ))}
+            <circle cx="98.6" cy="133" r="1.2" fill="#ffffff" />
+          </g>
+        )}
+        {roupa === 'tiara' && (
+          <g>
+            <path d="M76 46 C 88 38 112 38 124 46" stroke="#f2c14e" strokeWidth="4.5" fill="none" strokeLinecap="round" />
+            <path d="M78 44.5 C 89 37.5 111 37.5 122 44.5" stroke="#d9a832" strokeWidth="1.4" fill="none" opacity=".7" strokeLinecap="round" />
+            <path d={estrela(100, 32, 8)} fill="#f2c14e" stroke="#d9a832" strokeWidth="1.2" />
+            <circle cx="86" cy="41.5" r="1.8" fill="#ffffff" opacity=".9" />
+            <circle cx="114" cy="41.5" r="1.8" fill="#ffffff" opacity=".9" />
+          </g>
+        )}
+
         {/* zzz */}
         {humor === 'dormindo' && (
           <g fill="#8f86d8" fontFamily="inherit" fontWeight="700">
