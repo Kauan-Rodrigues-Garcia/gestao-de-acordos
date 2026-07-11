@@ -6,7 +6,7 @@
  */
 import { useId } from 'react';
 import { cn } from '@/lib/utils';
-import type { PetHumor, PetRoupa, PetCena, PetMicro } from './petConfig';
+import type { PetHumor, PetRoupa, PetCena, PetMicro, PetPescaFase } from './petConfig';
 
 export interface PetSvgProps {
   humor: PetHumor;
@@ -18,6 +18,10 @@ export interface PetSvgProps {
   /** passeando pelo rodapé: passinhos no corpo (a sombra fica no chão)
    *  e ondinhas da barra mais rapidinhas */
   andando?: boolean;
+  /** deslocamento das pupilas (px do viewBox) — olhos seguindo o mouse */
+  olhar?: { x: number; y: number };
+  /** fase atual da pescaria (humor 'pescando') */
+  pescaFase?: PetPescaFase;
   className?: string;
 }
 
@@ -29,7 +33,10 @@ const estrela = (x: number, y: number, s: number) =>
 
 const CORES_CONFETE = ['#8f86d8', '#e5734f', '#f2c14e', '#7fb08f', '#f3b8c9', '#5b8dd9'];
 
-export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andando = false, className }: PetSvgProps) {
+export function PetAura({
+  humor, roupa, micro = 'none', cena = 'nenhuma', andando = false,
+  olhar = { x: 0, y: 0 }, pescaFase = 'espera', className,
+}: PetSvgProps) {
   // ids únicos por instância (widget + quartinho convivem na mesma página)
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const id = (n: string) => `aura-${n}-${uid}`;
@@ -40,15 +47,22 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andand
     : humor === 'feliz'      ? 'pet-anim-feliz'
     : humor === 'dormindo'   ? 'pet-anim-dormindo'
     : humor === 'dancando'   ? 'pet-anim-danca'
+    : humor === 'surpresa'   ? 'pet-anim-surpresa'
+    : humor === 'tonta'      ? 'pet-anim-tonta'
     // sentadinha, concentrada (videogame, pescaria, marshmallow)
     : humor === 'jogando' || humor === 'pescando' || humor === 'assando'
       ? 'pet-anim-breathe'
     : micro === 'pulinho'    ? 'pet-anim-pulinho'
     : micro === 'espreguica' ? 'pet-anim-espreguica'
+    : micro === 'bocejo'     ? 'pet-anim-bocejo'
+    : micro === 'espirro'    ? 'pet-anim-espirro'
     : 'pet-anim-float';
 
   const acordada = humor !== 'dormindo';
   const empolgada = humor === 'comemorando';
+  // olhos fechados: dormindo, no meio do bocejo ou do espirro
+  const olhosFechados = humor === 'dormindo' || micro === 'bocejo' || micro === 'espirro';
+  const pescando = humor === 'pescando';
 
   return (
     <svg viewBox="0 0 200 200" className={cn('select-none', className)} role="img" aria-label="Aura, a mascote">
@@ -119,7 +133,7 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andand
         <circle cx="126" cy="64" r="1.6" fill="#ffffff" opacity=".6" />
 
         {/* rosto */}
-        {humor === 'dormindo' ? (
+        {olhosFechados ? (
           <>
             <path d="M76 96 Q 83 102 90 96" stroke="#322b47" strokeWidth="3.5" fill="none" strokeLinecap="round" />
             <path d="M112 96 Q 119 102 126 96" stroke="#322b47" strokeWidth="3.5" fill="none" strokeLinecap="round" />
@@ -130,17 +144,46 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andand
             <path d={estrela(83, 96, 8)} />
             <path d={estrela(119, 96, 8)} />
           </g>
+        ) : humor === 'surpresa' ? (
+          /* olhos arregalados */
+          <g>
+            <circle cx="83" cy="96" r="8.5" fill="#ffffff" stroke="#322b47" strokeWidth="2" />
+            <circle cx="83" cy="96" r="3.6" fill="#322b47" />
+            <circle cx="119" cy="96" r="8.5" fill="#ffffff" stroke="#322b47" strokeWidth="2" />
+            <circle cx="119" cy="96" r="3.6" fill="#322b47" />
+          </g>
+        ) : humor === 'tonta' ? (
+          /* olhinhos de X */
+          <g stroke="#322b47" strokeWidth="3.2" strokeLinecap="round">
+            <path d="M78 91 L 88 101 M 88 91 L 78 101" />
+            <path d="M114 91 L 124 101 M 124 91 L 114 101" />
+          </g>
         ) : (
-          <g className="pet-anim-blink">
-            <circle cx="83" cy="96" r="7" fill="#322b47" />
-            <circle cx="85.5" cy="93.5" r="2.4" fill="#fff" />
-            <circle cx="80.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
-            <circle cx="119" cy="96" r="7" fill="#322b47" />
-            <circle cx="121.5" cy="93.5" r="2.4" fill="#fff" />
-            <circle cx="116.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
+          /* pupilas seguem o mouse (olhar) */
+          <g style={{ transform: `translate(${olhar.x}px, ${olhar.y}px)`, transition: 'transform .15s ease-out' }}>
+            <g className="pet-anim-blink">
+              <circle cx="83" cy="96" r="7" fill="#322b47" />
+              <circle cx="85.5" cy="93.5" r="2.4" fill="#fff" />
+              <circle cx="80.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
+              <circle cx="119" cy="96" r="7" fill="#322b47" />
+              <circle cx="121.5" cy="93.5" r="2.4" fill="#fff" />
+              <circle cx="116.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
+            </g>
           </g>
         )}
-        {humor === 'feliz' || humor === 'dancando' || empolgada ? (
+        {micro === 'bocejo' ? (
+          /* boca escancarada do bocejo */
+          <ellipse cx="101" cy="113" rx="7" ry="9" fill="#322b47" />
+        ) : humor === 'surpresa' ? (
+          /* boquinha de espanto */
+          <ellipse cx="101" cy="113" rx="4.5" ry="6" fill="#322b47" />
+        ) : humor === 'tonta' ? (
+          /* boquinha ondulada de tonta */
+          <path d="M93 112 Q 97 109 101 112 T 109 112" stroke="#322b47" strokeWidth="3" fill="none" strokeLinecap="round" />
+        ) : pescando && pescaFase === 'escapou' ? (
+          /* bico emburradinho: o peixe escapou… */
+          <path d="M96 114 Q 101 109 106 114" stroke="#322b47" strokeWidth="3" fill="none" strokeLinecap="round" />
+        ) : humor === 'feliz' || humor === 'dancando' || empolgada || (pescando && pescaFase === 'peixe') ? (
           <path d="M92 110 Q 101 123 110 110 Z" fill="#322b47" />
         ) : (
           <path d="M96 112 Q 101 117 106 112" stroke="#322b47" strokeWidth="3" fill="none" strokeLinecap="round" />
@@ -296,8 +339,8 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andand
           </g>
         )}
 
-        {/* pescaria: varinha nas patinhas, laguinho com boia e peixinho saltitante */}
-        {humor === 'pescando' && (
+        {/* pescaria multi-fase: espera → fisgada! → peixe / escapou / bota */}
+        {pescando && (
           <g>
             {/* laguinho */}
             <ellipse cx="164" cy="170" rx="30" ry="9" fill="#9ec3e0" />
@@ -306,23 +349,92 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andand
             {/* vara de pescar */}
             <path d="M108 140 L 156 100" stroke="#a8815c" strokeWidth="4" strokeLinecap="round" />
             <path d="M156 100 L 162 95" stroke="#8a6a4a" strokeWidth="3" strokeLinecap="round" />
-            {/* linha + boia balançando */}
-            <path d="M162 95 L 163 155" stroke="#7d7595" strokeWidth="1.4" fill="none" />
-            <g className="pet-anim-boia">
-              <circle cx="163" cy="159" r="4.5" fill="#e5734f" />
-              <path d="M158.5 159 A 4.5 4.5 0 0 1 167.5 159 Z" fill="#ffffff" />
-            </g>
-            {/* peixinho pulando de vez em quando */}
-            <g className="pet-anim-peixe">
-              <g transform="translate(180, 165)">
-                <ellipse cx="0" cy="0" rx="7" ry="4" fill="#8fb8d8" />
-                <path d="M5 0 L 11 -4 L 11 4 Z" fill="#8fb8d8" />
-                <circle cx="-3.5" cy="-1" r="0.9" fill="#2b3a4a" />
-              </g>
-            </g>
+
+            {pescaFase === 'espera' && (
+              <>
+                {/* linha + boia balançando, peixinho pula ao longe */}
+                <path d="M162 95 L 163 155" stroke="#7d7595" strokeWidth="1.4" fill="none" />
+                <g className="pet-anim-boia">
+                  <circle cx="163" cy="159" r="4.5" fill="#e5734f" />
+                  <path d="M158.5 159 A 4.5 4.5 0 0 1 167.5 159 Z" fill="#ffffff" />
+                </g>
+                <g className="pet-anim-peixe">
+                  <g transform="translate(180, 165)">
+                    <ellipse cx="0" cy="0" rx="7" ry="4" fill="#8fb8d8" />
+                    <path d="M5 0 L 11 -4 L 11 4 Z" fill="#8fb8d8" />
+                    <circle cx="-3.5" cy="-1" r="0.9" fill="#2b3a4a" />
+                  </g>
+                </g>
+              </>
+            )}
+
+            {pescaFase === 'fisgada' && (
+              <>
+                {/* boia quase afundando + ondas + "!" */}
+                <path d="M162 95 L 164 165" stroke="#7d7595" strokeWidth="1.4" fill="none" />
+                <path d="M159.5 167 A 4.5 4.5 0 0 1 168.5 167 Z" fill="#e5734f" />
+                <circle className="pet-anim-ondas"   cx="164" cy="168" r="8"  fill="none" stroke="#c9dff0" strokeWidth="2" />
+                <circle className="pet-anim-ondas-2" cx="164" cy="168" r="12" fill="none" stroke="#c9dff0" strokeWidth="1.6" />
+                <text className="pet-anim-pop" x="132" y="62" fontSize="26" fontWeight="800" fill="#e5734f">!</text>
+              </>
+            )}
+
+            {pescaFase === 'peixe' && (
+              <>
+                {/* peixe fisgado pendurado na linha + estrelinhas */}
+                <path d="M162 95 L 162 120" stroke="#7d7595" strokeWidth="1.4" fill="none" />
+                <g className="pet-anim-boia">
+                  <g transform="translate(162, 132)">
+                    <ellipse cx="0" cy="0" rx="4.5" ry="8" fill="#8fb8d8" />
+                    <path d="M0 -7 L -4.5 -13 L 4.5 -13 Z" fill="#8fb8d8" />
+                    <circle cx="-1.6" cy="3" r="0.9" fill="#2b3a4a" />
+                  </g>
+                </g>
+                <path className="pet-anim-brilho"   d={estrela(148, 112, 4)} fill="#f2c14e" />
+                <path className="pet-anim-brilho-3" d={estrela(176, 124, 3)} fill="#f2c14e" />
+              </>
+            )}
+
+            {pescaFase === 'bota' && (
+              <>
+                {/* …uma bota velha?! */}
+                <path d="M162 95 L 162 118" stroke="#7d7595" strokeWidth="1.4" fill="none" />
+                <g className="pet-anim-boia">
+                  <g transform="translate(162, 128)">
+                    <path d="M-4 -10 L 4 -10 L 4 4 L 10 8 L 10 12 L -4 12 Z" fill="#8a6a4a" />
+                    <rect x="-5.5" y="-13" width="11" height="4" rx="2" fill="#6f543a" />
+                  </g>
+                </g>
+              </>
+            )}
+
+            {pescaFase === 'escapou' && (
+              <>
+                {/* só ondas e gotinhas: o peixe fugiu… */}
+                <path d="M162 95 L 163 158" stroke="#7d7595" strokeWidth="1.4" fill="none" opacity=".5" />
+                <circle className="pet-anim-ondas"   cx="164" cy="168" r="9"  fill="none" stroke="#c9dff0" strokeWidth="2" />
+                <circle className="pet-anim-ondas-2" cx="164" cy="168" r="13" fill="none" stroke="#c9dff0" strokeWidth="1.6" />
+                <circle cx="152" cy="156" r="2" fill="#9ec3e0" />
+                <circle cx="176" cy="152" r="1.6" fill="#9ec3e0" />
+              </>
+            )}
+
             {/* patinhas segurando a vara */}
             <ellipse cx="104" cy="143" rx="8" ry="6.5" fill="#b7b0e8" />
             <ellipse cx="115" cy="136" rx="7" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
+
+        {/* "!" da surpresa */}
+        {humor === 'surpresa' && (
+          <text className="pet-anim-pop" x="136" y="56" fontSize="26" fontWeight="800" fill="#e5734f">!</text>
+        )}
+
+        {/* estrelinhas rodando da tontura */}
+        {humor === 'tonta' && (
+          <g fontWeight="700">
+            <text className="pet-anim-zzz" x="140" y="60" fontSize="14" fill="#8f86d8">✶</text>
+            <text className="pet-anim-zzz-2" x="52" y="56" fontSize="12" fill="#e5734f">✶</text>
           </g>
         )}
 

@@ -14,11 +14,15 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 export type PetHumor =
   | 'idle' | 'feliz' | 'dormindo' | 'jogando' | 'comemorando'
   // eventos aleatórios que mudam a pose do corpo
-  | 'pescando' | 'dancando' | 'assando';
+  | 'pescando' | 'dancando' | 'assando'
+  // reações ao mouse (hover no widget)
+  | 'surpresa' | 'tonta';
 /** Cenas extras desenhadas junto do pet (eventos aleatórios / comemoração). */
 export type PetCena = 'nenhuma' | 'confete' | 'borboleta' | 'moeda' | 'aceno' | 'carrinho';
 /** Micro-animações ocasionais do corpo. */
-export type PetMicro = 'none' | 'pulinho' | 'espreguica';
+export type PetMicro = 'none' | 'pulinho' | 'espreguica' | 'bocejo' | 'espirro';
+/** Fases da pescaria (evento multi-fase com final aleatório). */
+export type PetPescaFase = 'espera' | 'fisgada' | 'peixe' | 'escapou' | 'bota';
 export type PetRoupa =
   | 'nenhuma' | 'chapeu' | 'cachecol'
   // Itens da loja mensal (ids permanentes — nunca reutilizar entre meses)
@@ -110,6 +114,25 @@ export function usePetInterativo(): boolean {
 
 export function petStorageKey(empresaId?: string, perfilId?: string): string {
   return `pet-estado::${empresaId ?? 'noemp'}::${perfilId ?? 'nouser'}`;
+}
+
+// ── Memória da última comida (para os balõezinhos contextuais) ────────────────
+const ULTIMA_COMIDA_KEY = 'pet-ultima-comida';
+
+export interface PetUltimaComida { nome: string; ts: number }
+
+export function salvarUltimaComida(nome: string): void {
+  try { localStorage.setItem(ULTIMA_COMIDA_KEY, JSON.stringify({ nome, ts: Date.now() })); } catch { /* noop */ }
+}
+
+export function lerUltimaComida(): PetUltimaComida | null {
+  try {
+    const raw = localStorage.getItem(ULTIMA_COMIDA_KEY);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as Partial<PetUltimaComida>;
+    if (typeof v?.nome === 'string' && typeof v?.ts === 'number') return { nome: v.nome, ts: v.ts };
+  } catch { /* noop */ }
+  return null;
 }
 
 /** Preferência "pet desativado": para o passeio/animações e deixa só um

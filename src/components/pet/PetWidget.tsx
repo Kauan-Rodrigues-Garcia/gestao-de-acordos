@@ -10,6 +10,10 @@
  *   pescaria, carrinho de controle remoto, dancinha ou marshmallow na fogueira.
  * - Quando o usuário marca um acordo/parcela como pago (petEvents), a Aura
  *   comemora com confete e balãozinho — mesmo se estiver dormindo.
+ * - Vida própria: pupilas seguem o mouse; passar o mouse por cima 1x →
+ *   surpresa e feliz, várias vezes → tontinha; pescaria multi-fase com final
+ *   aleatório; bocejo/espirro; ritmo do dia (manhã espreguiça, sexta dança);
+ *   balõezinhos contextuais raros; 5 min sem atividade → cochila em pé.
  * - Botão no quartinho desativa o pet: vira um iconezinho fixo e parado no
  *   canto (clicável para reabrir o menu e reativar). Preferência local.
  */
@@ -18,7 +22,8 @@ import { AnimatePresence } from 'framer-motion';
 import './pet.css';
 import {
   usePetHabilitado, usePetInterativo, usePetDoTenant, usePetMinimizado,
-  type PetHumor, type PetRoupa, type PetCena, type PetMicro,
+  lerUltimaComida, salvarUltimaComida,
+  type PetHumor, type PetRoupa, type PetCena, type PetMicro, type PetPescaFase,
 } from './petConfig';
 import { PET_EVENTO_COMEMORAR, celebrarPetAcordoPago } from './petEvents';
 import { usePetEstado } from './usePetEstado';
@@ -30,6 +35,8 @@ type PetEvento =
   | 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica' | 'escada'
   | 'pesca' | 'carrinho' | 'danca' | 'marshmallow';
 type EscadaFase = 'nenhuma' | 'subindo' | 'topo' | 'descendo';
+/** Reação ao mouse por cima: 1 passada → surpresa+feliz; várias → tontinha. */
+type Reacao = 'nenhuma' | 'surpresa' | 'feliz' | 'tonta';
 
 /** Área do passeio: até ALCANCE px à esquerda do canto. */
 const ALCANCE = 190;
@@ -39,6 +46,10 @@ const VELOCIDADE = 45;
 const FASE_MS = 5 * 60_000;
 /** Comemoração de acordo pago (confete + balãozinho). */
 const COMEMORACAO_MS = 4_500;
+/** Sem atividade (mouse/teclado) por esse tempo → cochilo em pé. */
+const COCHILO_MS = 5 * 60_000;
+/** Duração dos balõezinhos de frase contextual. */
+const FRASE_MS = 3_200;
 /** Escada: altura da subida (px) e deriva pra acompanhar a inclinação. */
 const ESCADA_ALTURA = 230;
 const ESCADA_DERIVA_X = -16;
@@ -57,14 +68,60 @@ const EVENTOS: { tipo: Exclude<PetEvento, 'nenhum'>; duracaoMs: number; peso: nu
   { tipo: 'marshmallow', duracaoMs: 22_000, peso: 2 },
 ];
 
+/** Sorteio com "ritmo do dia": de manhã espreguiça mais, na sexta dança mais. */
 function sortearEvento() {
-  const total = EVENTOS.reduce((s, e) => s + e.peso, 0);
+  const agora = new Date();
+  const pesos = EVENTOS.map(e => {
+    let peso = e.peso;
+    if (e.tipo === 'danca' && agora.getDay() === 5) peso = 4;        // sextou!
+    if (e.tipo === 'espreguica' && agora.getHours() < 10) peso = 4;  // manhãzinha
+    return { ...e, peso };
+  });
+  const total = pesos.reduce((s, e) => s + e.peso, 0);
   let r = Math.random() * total;
-  for (const e of EVENTOS) {
+  for (const e of pesos) {
     r -= e.peso;
     if (r <= 0) return e;
   }
-  return EVENTOS[0];
+  return pesos[0];
+}
+
+/** Micro-animação ocasional: pulinho, bocejo (mais no fim do dia), espirro… */
+function sortearMicro(): { tipo: PetMicro; duracaoMs: number } {
+  const h = new Date().getHours();
+  const opcoes: { tipo: PetMicro; duracaoMs: number; peso: number }[] = [
+    { tipo: 'pulinho',    duracaoMs: 950,   peso: 5 },
+    { tipo: 'bocejo',     duracaoMs: 2_200, peso: h >= 17 || h < 7 ? 4 : 1.5 },
+    { tipo: 'espirro',    duracaoMs: 1_300, peso: 1 },
+    { tipo: 'espreguica', duracaoMs: 2_600, peso: h < 10 ? 3 : 1 },
+  ];
+  const total = opcoes.reduce((s, o) => s + o.peso, 0);
+  let r = Math.random() * total;
+  for (const o of opcoes) {
+    r -= o.peso;
+    if (r <= 0) return o;
+  }
+  return opcoes[0];
+}
+
+/** Balõezinhos contextuais: hora do dia, dia da semana e memória de comida. */
+function sortearFrase(interativo: boolean): string {
+  const agora = new Date();
+  const h = agora.getHours();
+  const dia = agora.getDay();
+  const pool: string[] = ['oii! 👋', 'tô de olho 👀', 'lalala~ 🎵'];
+  if (h >= 6 && h < 11)  pool.push('bom dia! ☀️', 'cadê meu café? ☕');
+  if (h >= 11 && h < 14) pool.push('que fome… 🍽️');
+  if (h >= 17)           pool.push('que dia longo… 🥱', 'já tá acabando! 🌆');
+  if (dia === 5) pool.push('sextou! 🎉', 'bora dançar? 💃');
+  if (dia === 1) pool.push('segundou! 💪');
+  const ultima = lerUltimaComida();
+  if (ultima) {
+    const horas = (Date.now() - ultima.ts) / 3_600_000;
+    if (horas >= 20 && horas <= 48) pool.push(`${ultima.nome.toLowerCase()}… que saudade 😋`);
+    if (interativo && horas > 8 && horas < 20) pool.push('tô com fominha… 🍎');
+  }
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 function faseAcordadaAgora(): boolean {
@@ -87,6 +144,20 @@ export function PetWidget() {
   const [moedaGanha, setMoedaGanha]   = useState<number | null>(null);
   const [acordadoTeaser, setAcordadoTeaser] = useState(faseAcordadaAgora);
 
+  // ── Vida própria ───────────────────────────────────────────────────────
+  const [reacao,     setReacao]     = useState<Reacao>('nenhuma');       // hover
+  const [pescaFase,  setPescaFase]  = useState<PetPescaFase>('espera');  // pescaria
+  const [cochilando, setCochilando] = useState(false);                   // inatividade
+  const [frase,      setFrase]      = useState<string | null>(null);     // balõezinho
+  const [olhar,      setOlhar]      = useState({ x: 0, y: 0 });          // pupilas → mouse
+  const reacaoRef = useRef<Reacao>('nenhuma');
+  reacaoRef.current = reacao;
+  const cochilandoRef = useRef(false);
+  cochilandoRef.current = cochilando;
+  const reacaoTimeoutsRef = useRef<number[]>([]);
+  const hoverTsRef = useRef<number[]>([]);
+  const petBtnRef = useRef<HTMLButtonElement | null>(null);
+
   // ── Passeio pelo rodapé ────────────────────────────────────────────────
   const [x,       setX]       = useState(0);   // deslocamento (negativo = esquerda)
   const [durMove, setDurMove] = useState(0);   // duração da transição (s)
@@ -103,11 +174,16 @@ export function PetWidget() {
 
   // Humor efetivo: interativo usa o humor manual; teaser segue o ciclo 5/5.
   // A comemoração passa por cima de tudo (até do sono — boa notícia acorda!).
+  // Depois vêm o cochilo por inatividade e as reações ao mouse.
   const humorBase: PetHumor = interativo
     ? humor
     : (acordadoTeaser ? 'idle' : 'dormindo');
   const humorEfetivo: PetHumor =
     comemorando ? 'comemorando'
+    : humorBase === 'idle' && cochilando ? 'dormindo'
+    : humorBase === 'idle' && reacao === 'tonta' ? 'tonta'
+    : humorBase === 'idle' && reacao === 'surpresa' ? 'surpresa'
+    : humorBase === 'idle' && reacao === 'feliz' ? 'feliz'
     : humorBase === 'idle' && evento === 'jogando' ? 'jogando'
     : humorBase === 'idle' && evento === 'pesca' ? 'pescando'
     : humorBase === 'idle' && evento === 'danca' ? 'dancando'
@@ -157,13 +233,15 @@ export function PetWidget() {
     };
   }, []);
 
-  // Micro-animação alternada: pulinho ocasional enquanto está "de boa" parado
+  // Micro-animação alternada enquanto está "de boa" parada: pulinho, bocejo
+  // (mais frequente no fim do dia), espirro raro, espreguiçada de manhã.
   useEffect(() => {
     if (humorEfetivo !== 'idle' || movendo || aberto || emEvento || minimizado) return;
     let dentro: ReturnType<typeof setTimeout> | null = null;
     const timer = setInterval(() => {
-      setMicro('pulinho');
-      dentro = setTimeout(() => setMicro('none'), 950);
+      const m = sortearMicro();
+      setMicro(m.tipo);
+      dentro = setTimeout(() => setMicro('none'), m.duracaoMs);
     }, 9000 + Math.random() * 7000);
     return () => { clearInterval(timer); if (dentro) clearTimeout(dentro); };
   }, [humorEfetivo, movendo, aberto, emEvento, minimizado]);
@@ -200,7 +278,7 @@ export function PetWidget() {
 
   // Eventos aleatórios: sorteia videogame / borboleta / pescaria / dancinha…
   useEffect(() => {
-    if (aberto || humorBase !== 'idle' || comemorando || minimizado) { setEvento('nenhum'); return; }
+    if (aberto || humorBase !== 'idle' || comemorando || minimizado || cochilando) { setEvento('nenhum'); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -209,8 +287,8 @@ export function PetWidget() {
 
     const sortearSessao = () => {
       agendar(() => {
-        // espera terminar o passinho atual para o evento começar parada
-        if (movendoRef.current) { agendar(sortearSessao, 0); return; }
+        // espera terminar o passinho/reação atual para o evento começar parada
+        if (movendoRef.current || reacaoRef.current !== 'nenhuma') { agendar(sortearSessao, 0); return; }
         const e = sortearEvento();
         setEvento(e.tipo);
         agendar(() => { setEvento('nenhum'); sortearSessao(); }, e.duracaoMs);
@@ -219,7 +297,134 @@ export function PetWidget() {
 
     sortearSessao();
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorBase, comemorando, minimizado]);
+  }, [aberto, humorBase, comemorando, minimizado, cochilando]);
+
+  // Coreografia da pescaria: espera → fisgada! → peixe (70%) / escapou / bota
+  useEffect(() => {
+    if (evento !== 'pesca') { setPescaFase('espera'); return; }
+    let vivo = true;
+    const ids: number[] = [];
+    const agendar = (fn: () => void, ms: number) => {
+      ids.push(window.setTimeout(() => { if (vivo) fn(); }, ms));
+    };
+    setPescaFase('espera');
+    const tFisgada = 9_000 + Math.random() * 8_000;
+    agendar(() => setPescaFase('fisgada'), tFisgada);
+    agendar(() => {
+      const r = Math.random();
+      setPescaFase(r < 0.05 ? 'bota' : r < 0.30 ? 'escapou' : 'peixe');
+    }, tFisgada + 1_100);
+    return () => { vivo = false; ids.forEach(clearTimeout); };
+  }, [evento]);
+
+  // Reação ao mouse por cima: 1 passada (ou parar em cima) → surpresa e feliz;
+  // passar várias vezes seguidas → fica tontinha. Sem clique — clique abre o menu.
+  function limparReacaoTimeouts() {
+    reacaoTimeoutsRef.current.forEach(clearTimeout);
+    reacaoTimeoutsRef.current = [];
+  }
+
+  function aoPassarMousePorCima() {
+    if (minimizado || aberto || cochilando) return;
+    if (humorBase !== 'idle' || comemorando || evento !== 'nenhum') return;
+    const agora = Date.now();
+    hoverTsRef.current = [...hoverTsRef.current.filter(t => agora - t < 6_000), agora];
+    limparReacaoTimeouts();
+    if (hoverTsRef.current.length >= 4) {
+      setReacao('tonta');
+      reacaoTimeoutsRef.current.push(window.setTimeout(() => setReacao('nenhuma'), 2_600));
+    } else {
+      setReacao('surpresa');
+      reacaoTimeoutsRef.current.push(window.setTimeout(() => setReacao('feliz'), 750));
+      reacaoTimeoutsRef.current.push(window.setTimeout(() => setReacao('nenhuma'), 2_250));
+    }
+  }
+
+  useEffect(() => () => limparReacaoTimeouts(), []);
+
+  // Cochilo por inatividade: 5 min sem mouse/teclado → dorme em pé;
+  // qualquer atividade → acorda assustadinha.
+  useEffect(() => {
+    if (minimizado) return;
+    const ultimaAtividade = { ts: Date.now() };
+    const marcar = () => {
+      ultimaAtividade.ts = Date.now();
+      if (cochilandoRef.current) {
+        setCochilando(false);
+        limparReacaoTimeouts();
+        setReacao('surpresa');
+        reacaoTimeoutsRef.current.push(window.setTimeout(() => setReacao('nenhuma'), 900));
+      }
+    };
+    window.addEventListener('mousemove', marcar, { passive: true });
+    window.addEventListener('keydown', marcar);
+    window.addEventListener('click', marcar);
+    const t = setInterval(() => {
+      if (Date.now() - ultimaAtividade.ts > COCHILO_MS) setCochilando(true);
+    }, 30_000);
+    return () => {
+      window.removeEventListener('mousemove', marcar);
+      window.removeEventListener('keydown', marcar);
+      window.removeEventListener('click', marcar);
+      clearInterval(t);
+    };
+  }, [minimizado]);
+
+  // Olhos seguindo o mouse: direção do cursor em relação ao pet, com alcance
+  // curto (±3px no viewBox), atualizado no ritmo de 1 frame (rAF).
+  useEffect(() => {
+    if (minimizado) return;
+    let raf = 0;
+    let px = 0;
+    let py = 0;
+    const aoMover = (e: MouseEvent) => {
+      px = e.clientX;
+      py = e.clientY;
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const el = petBtnRef.current;
+        if (!el) return;
+        const r = el.getBoundingClientRect();
+        const dx = px - (r.left + r.width / 2);
+        const dy = py - (r.top + r.height * 0.45);
+        const dist = Math.hypot(dx, dy) || 1;
+        const alcance = Math.min(1, dist / 120);
+        // quantiza em passos de 0.5px para não re-renderizar a cada pixel
+        const nx = Math.round((dx / dist) * 3 * alcance * 2) / 2;
+        const ny = Math.round((dy / dist) * 2 * alcance * 2) / 2;
+        setOlhar(prev => (prev.x === nx && prev.y === ny ? prev : { x: nx, y: ny }));
+      });
+    };
+    window.addEventListener('mousemove', aoMover, { passive: true });
+    return () => {
+      window.removeEventListener('mousemove', aoMover);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [minimizado]);
+
+  // Balõezinhos contextuais raros enquanto está de boa (bom dia, sextou…)
+  useEffect(() => {
+    if (aberto || humorBase !== 'idle' || emEvento || minimizado || cochilando) { setFrase(null); return; }
+    let vivo = true;
+    const ids: number[] = [];
+    const agendar = (fn: () => void, ms: number) => {
+      ids.push(window.setTimeout(() => { if (vivo) fn(); }, ms));
+    };
+    const ciclo = () => {
+      agendar(() => {
+        if (Math.random() < 0.6 && reacaoRef.current === 'nenhuma') {
+          setFrase(sortearFrase(interativo));
+          agendar(() => setFrase(null), FRASE_MS);
+          agendar(ciclo, FRASE_MS + 100);
+        } else {
+          ciclo();
+        }
+      }, 90_000 + Math.random() * 240_000);
+    };
+    ciclo();
+    return () => { vivo = false; ids.forEach(clearTimeout); setFrase(null); };
+  }, [aberto, humorBase, emEvento, minimizado, cochilando, interativo]);
 
   // Coreografia da escada: vai pro canto → sobe devagarinho → oizinho → desce
   useEffect(() => {
@@ -261,7 +466,8 @@ export function PetWidget() {
     return () => { vivo = false; ids.forEach(clearTimeout); };
   }, [evento]);
 
-  function alimentar() {
+  function alimentar(nomeComida?: string) {
+    if (nomeComida) salvarUltimaComida(nomeComida);  // memória p/ balõezinhos
     setHumor('feliz');
     setTimeout(() => setHumor('idle'), 1900);
   }
@@ -417,9 +623,23 @@ export function PetWidget() {
               oiii! 👋
             </div>
           )}
+          {/* resultado da pescaria */}
+          {evento === 'pesca' && (pescaFase === 'peixe' || pescaFase === 'escapou' || pescaFase === 'bota') && !aberto && (
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
+              {pescaFase === 'peixe' ? 'pesquei! 🐟' : pescaFase === 'escapou' ? 'escapou… 😿' : 'uma bota?! 🥾'}
+            </div>
+          )}
+          {/* frase contextual rara (bom dia, sextou, fominha…) */}
+          {frase && !aberto && !comemorando && moedaGanha == null && (
+            <div className="absolute -top-6 left-1/2 -translate-x-1/2 whitespace-nowrap bg-card border border-border text-foreground text-[11px] font-semibold px-2.5 py-1 rounded-full shadow-md">
+              {frase}
+            </div>
+          )}
           <button
+            ref={petBtnRef}
             type="button"
             onClick={alternarPainel}
+            onMouseEnter={aoPassarMousePorCima}
             title={`Seu ${pet.nome} — clique para abrir`}
             aria-label={`Abrir o quartinho do seu ${pet.nome}`}
             className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
@@ -432,6 +652,8 @@ export function PetWidget() {
                 micro={microEfetivo}
                 cena={cena}
                 andando={movendo || escadaFase === 'subindo' || escadaFase === 'descendo'}
+                olhar={{ x: olhar.x * dir, y: olhar.y }}  /* compensa o flip */
+                pescaFase={pescaFase}
                 className="w-full h-full drop-shadow-sm"
               />
             </div>

@@ -36,7 +36,8 @@ interface PetQuartinhoProps {
   onResgatar?:       () => void;
   /** Gasta moedas no servidor (item → compra permanente). true se deu. */
   onComprar?:     (preco: number, item?: string) => Promise<boolean>;
-  onAlimentar:    () => void;
+  /** Alimenta o pet; recebe o nome da comida (memória p/ balõezinhos). */
+  onAlimentar:    (nomeComida?: string) => void;
   onAlternarSono: () => void;
   onSetRoupa:     (r: PetRoupa) => void;
   /** Pet desativado (iconezinho fixo no canto) + botão para alternar. */
@@ -97,7 +98,7 @@ export function PetQuartinho({
     }
   }
 
-  async function comprarComida(id: string, preco: number) {
+  async function comprarComida(id: string, preco: number, nome: string) {
     if (!onComprar || comprando) return;
     if (humor === 'dormindo') { falar('shhh... 😴', 1500); return; }
     if (moedas < preco) { falar('moedas insuficientes 🥺'); return; }
@@ -105,7 +106,7 @@ export function PetQuartinho({
     const ok = await onComprar(preco);
     setComprando(null);
     if (ok) {
-      onAlimentar();
+      onAlimentar(nome);
       falar('nham nham! 😋');
     } else {
       falar('ops, não deu… tente de novo 😿');
@@ -418,7 +419,7 @@ export function PetQuartinho({
                   className="h-6 w-full text-[10px]"
                   disabled={!lojaAtiva || moedas < c.preco || comprando === c.id}
                   title={!lojaAtiva ? 'Indisponível no momento' : moedas < c.preco ? 'Moedas insuficientes' : undefined}
-                  onClick={() => void comprarComida(c.id, c.preco)}
+                  onClick={() => void comprarComida(c.id, c.preco, c.nome)}
                 >
                   {comprando === c.id ? '…' : <>🪙 {c.preco}</>}
                 </Button>
