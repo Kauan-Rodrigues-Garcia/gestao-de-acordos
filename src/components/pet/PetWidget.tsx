@@ -546,6 +546,7 @@ export function PetWidget() {
             modoTeaser={!interativo}
             moedas={estado.moedas}
             itens={estado.itens}
+            catalogo={estado.catalogo}
             lojaAtiva={estado.dbAtiva}
             recompensaMoedas={estado.disponivel.moedas}
             recompensaValor={estado.disponivel.valor}

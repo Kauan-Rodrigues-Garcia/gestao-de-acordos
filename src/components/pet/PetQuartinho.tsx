@@ -11,9 +11,10 @@ import { X, UtensilsCrossed, Moon, Sun, Shirt, Store, Home, Eye, EyeOff } from '
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
+import type { PetItem } from '@/lib/supabase';
 import type { PetSvgProps } from './PetAura';
 import {
-  ROUPAS_CATALOGO, COMIDAS_CATALOGO, itensLojaDoMes, roupaInfo,
+  ROUPAS_CATALOGO, COMIDAS_CATALOGO, ROUPAS_VALIDAS, itensLojaDoMes, roupaInfo,
   type PetHumor, type PetRoupa,
 } from './petConfig';
 import { CIDADES_CLIMA, descricaoClima, type ClimaAtual } from './usePetClima';
@@ -29,14 +30,16 @@ interface PetQuartinhoProps {
   moedas?:          number;
   /** Inventário permanente (itens comprados na loja mensal). */
   itens?:           string[];
+  /** Catálogo do servidor (pet_itens); null/ausente → catálogo local. */
+  catalogo?:        PetItem[] | null;
   /** Economia ativa no banco — sem ela a loja fica indisponível. */
   lojaAtiva?:       boolean;
   /** Recompensa do recebimento do dia ainda não resgatada. */
   recompensaMoedas?: number;
   recompensaValor?:  number;
   onResgatar?:       () => void;
-  /** Gasta moedas no servidor (item → compra permanente). true se deu. */
-  onComprar?:     (preco: number, item?: string) => Promise<boolean>;
+  /** Compra no servidor (item → preço validado lá; consumivel = comida). */
+  onComprar?:     (preco: number, item?: string, consumivel?: boolean) => Promise<boolean>;
   /** Alimenta o pet; recebe o nome da comida (memória p/ balõezinhos). */
   onAlimentar:    (nomeComida?: string) => void;
   onAlternarSono: () => void;
@@ -71,7 +74,7 @@ const MESES_LOJA = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho',
 
 export function PetQuartinho({
   petNome, PetSvg, humor, roupa, modoTeaser = false,
-  moedas = 0, itens = [], lojaAtiva = false,
+  moedas = 0, itens = [], catalogo = null, lojaAtiva = false,
   recompensaMoedas = 0, recompensaValor = 0, onResgatar, onComprar,
   onAlimentar, onAlternarSono, onSetRoupa,
   minimizado = false, onAlternarMinimizado,
@@ -82,8 +85,29 @@ export function PetQuartinho({
   const [comprando, setComprando] = useState<string | null>(null);
 
   const mesAtual   = mesAtualISO();
-  const vitrine    = itensLojaDoMes(mesAtual);
   const diasTroca  = diasParaTrocarLoja();
+
+  // Vitrine: catálogo do servidor quando existe (preço/janela mandam lá);
+  // senão, catálogo local do petConfig. Só entra item com arte no código.
+  const agoraMs = Date.now();
+  const vitrine: { id: PetRoupa; nome: string; emoji: string; preco: number }[] = catalogo
+    ? catalogo
+        .filter(i =>
+          i.tipo === 'roupa'
+          && (i.preco_moedas ?? 0) > 0
+          && !i.exclusivo
+          && (!i.disponivel_de || new Date(i.disponivel_de).getTime() <= agoraMs)
+          && (!i.disponivel_ate || new Date(i.disponivel_ate).getTime() > agoraMs)
+          && (ROUPAS_VALIDAS as string[]).includes(i.id))
+        .map(i => ({ id: i.id as PetRoupa, nome: i.nome, emoji: i.emoji ?? '🎁', preco: i.preco_moedas ?? 0 }))
+    : itensLojaDoMes(mesAtual);
+
+  // Comidas: preços do servidor quando existem; senão, tabela local.
+  const comidas = catalogo
+    ? catalogo
+        .filter(i => i.tipo === 'comida' && (i.preco_moedas ?? 0) > 0)
+        .map(i => ({ id: i.id, nome: i.nome, emoji: i.emoji ?? '🍎', preco: i.preco_moedas ?? 0 }))
+    : COMIDAS_CATALOGO;
 
   // Janelinha do quarto reflete o clima real lá fora
   const emojiJanela = !clima ? '🌙'
@@ -118,7 +142,7 @@ export function PetQuartinho({
     if (humor === 'dormindo') { falar('shhh... 😴', 1500); return; }
     if (moedas < preco) { falar('moedas insuficientes 🥺'); return; }
     setComprando(id);
-    const ok = await onComprar(preco);
+    const ok = await onComprar(preco, id, true);  // consumível: preço do servidor
     setComprando(null);
     if (ok) {
       onAlimentar(nome);
@@ -452,7 +476,7 @@ export function PetQuartinho({
         {/* ── Comidas: consumíveis baratinhos ── */}
         {aba === 'comidas' && (
           <div className="grid grid-cols-3 gap-2">
-            {COMIDAS_CATALOGO.map(c => (
+            {comidas.map(c => (
               <div key={c.id} className="rounded-xl border border-border p-2 text-center space-y-1">
                 <p className="text-2xl">{c.emoji}</p>
                 <p className="text-[11px] font-medium text-foreground">{c.nome}</p>

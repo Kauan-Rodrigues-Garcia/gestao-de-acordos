@@ -8,11 +8,13 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import type { PetItem } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { petStorageKey, ROUPAS_VALIDAS, type PetRoupa } from './petConfig';
 import {
-  getPetEstado, getRecompensaDisponivel, resgatarRecompensa, salvarVisualPet, gastarMoedas,
+  getPetEstado, getRecompensaDisponivel, resgatarRecompensa, salvarVisualPet,
+  gastarMoedas, comprarItemPet, listarCatalogoPet,
   type RecompensaDisponivel, type ResultadoResgate,
 } from '@/services/pet/petEstado.service';
 
@@ -31,13 +33,17 @@ export interface UsePetEstado {
   moedas: number;
   /** Inventário permanente (ids de itens comprados na loja mensal). */
   itens: string[];
+  /** Catálogo da loja no servidor (pet_itens); null = migration pendente,
+   *  a vitrine cai no catálogo local do petConfig. */
+  catalogo: PetItem[] | null;
   roupaInicial: PetRoupa;
   dormindoInicial: boolean;
   disponivel: RecompensaDisponivel;
   salvarVisual: (roupa: PetRoupa, dormindo: boolean) => void;
   resgatar: () => Promise<ResultadoResgate | null>;
-  /** Gasta moedas (com item = compra na loja; sem item = consumível). true se deu. */
-  comprar: (preco: number, item?: string) => Promise<boolean>;
+  /** Compra: com item o servidor valida preço/janela/posse (fn_pet_comprar_item);
+   *  `consumivel` marca comidas no caminho legado. true se deu. */
+  comprar: (preco: number, item?: string, consumivel?: boolean) => Promise<boolean>;
   refetchDisponivel: () => void;
 }
 
@@ -50,6 +56,7 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
   const [dbAtiva, setDbAtiva]         = useState(false);
   const [moedas, setMoedas]           = useState(0);
   const [itens, setItens]             = useState<string[]>([]);
+  const [catalogo, setCatalogo]       = useState<PetItem[] | null>(null);
   const [roupaInicial, setRoupaInic]  = useState<PetRoupa>('nenhuma');
   const [dormindoInic, setDormindoIn] = useState(false);
   const [disponivel, setDisponivel]   = useState<RecompensaDisponivel>({ valor: 0, moedas: 0 });
@@ -75,6 +82,9 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
         setDormindoIn(!!estado.dormindo);
         const disp = await getRecompensaDisponivel();
         if (vivo && disp) setDisponivel(disp);
+        // Catálogo do servidor (null = migration da loja ainda não aplicada)
+        const cat = await listarCatalogoPet();
+        if (vivo) setCatalogo(cat);
       } else {
         // Sem banco (migration ainda não aplicada) → localStorage
         dbAtivaRef.current = false;
@@ -140,14 +150,31 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
     return r;
   }, []);
 
-  // Compra na loja (com item → entra no inventário permanente no servidor)
-  // ou consumível (sem item, ex.: comida). O saldo é validado no servidor.
-  const comprar = useCallback(async (preco: number, item?: string): Promise<boolean> => {
+  // Compra na loja: com item, o SERVIDOR valida preço/janela/posse
+  // (fn_pet_comprar_item); se a RPC nova não existe (migration pendente),
+  // cai no caminho legado que só confere saldo. Consumível não vira item.
+  const comprar = useCallback(async (preco: number, item?: string, consumivel = false): Promise<boolean> => {
     if (!dbAtivaRef.current || preco <= 0) return false;
-    const novoSaldo = await gastarMoedas(preco, item);
+
+    if (item) {
+      const r = await comprarItemPet(item);
+      if (r) {
+        if (!r.ok) return false;
+        setMoedas(r.moedas);
+        if (!consumivel) setItens(prev => (prev.includes(item) ? prev : [...prev, item]));
+        return true;
+      }
+      // RPC ausente → legado (comida não entra no inventário)
+      const saldoLegado = await gastarMoedas(preco, consumivel ? undefined : item);
+      if (saldoLegado === null) return false;
+      setMoedas(saldoLegado);
+      if (!consumivel) setItens(prev => (prev.includes(item) ? prev : [...prev, item]));
+      return true;
+    }
+
+    const novoSaldo = await gastarMoedas(preco);
     if (novoSaldo === null) return false;
     setMoedas(novoSaldo);
-    if (item) setItens(prev => (prev.includes(item) ? prev : [...prev, item]));
     return true;
   }, []);
 
@@ -156,6 +183,7 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
     dbAtiva,
     moedas,
     itens,
+    catalogo,
     roupaInicial,
     dormindoInicial: dormindoInic,
     disponivel,

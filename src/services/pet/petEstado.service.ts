@@ -13,7 +13,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
-import type { PetEstado } from '@/lib/supabase';
+import type { PetEstado, PetItem } from '@/lib/supabase';
 
 export interface RecompensaDisponivel {
   valor: number;   // R$ ainda não convertidos em moeda
@@ -62,7 +62,7 @@ export async function resgatarRecompensa(): Promise<ResultadoResgate | null> {
   };
 }
 
-/** Gasta moedas (loja futura). Retorna o novo saldo, ou null se não deu. */
+/** Gasta moedas (caminho legado, sem validação de item). Novo saldo ou null. */
 export async function gastarMoedas(valor: number, item?: string): Promise<number | null> {
   const { data, error } = await supabase.rpc('fn_pet_gastar_moedas', {
     p_valor: valor,
@@ -74,6 +74,37 @@ export async function gastarMoedas(valor: number, item?: string): Promise<number
     | undefined;
   if (!row || !row.ok) return null;
   return Number(row.moedas_total) || 0;
+}
+
+/** Catálogo da loja no servidor (pet_itens). null = tabela/migration ausente. */
+export async function listarCatalogoPet(): Promise<PetItem[] | null> {
+  const { data, error } = await supabase
+    .from('pet_itens')
+    .select('*')
+    .eq('ativo', true)
+    .in('tipo', ['roupa', 'comida'])
+    .order('ordem');
+  if (error) return null;
+  return (data as PetItem[]) ?? [];
+}
+
+export interface ResultadoCompra {
+  ok: boolean;
+  /** null = ok | 'nao_encontrado' | 'indisponivel' | 'ja_possui' | 'saldo' */
+  erro: string | null;
+  moedas: number;
+}
+
+/** Compra validada no servidor (preço/janela/posse pela pet_itens).
+ *  null = RPC ausente (migration pendente) → chamador cai no caminho legado. */
+export async function comprarItemPet(itemId: string): Promise<ResultadoCompra | null> {
+  const { data, error } = await supabase.rpc('fn_pet_comprar_item', { p_item_id: itemId });
+  if (error) return null;
+  const row = (Array.isArray(data) ? data[0] : data) as
+    | { ok: boolean; erro: string | null; moedas_total: number }
+    | undefined;
+  if (!row) return null;
+  return { ok: !!row.ok, erro: row.erro ?? null, moedas: Number(row.moedas_total) || 0 };
 }
 
 /** Persiste a personalização (roupa/sono). Não toca em moedas. */
