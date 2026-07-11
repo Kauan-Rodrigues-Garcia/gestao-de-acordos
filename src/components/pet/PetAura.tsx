@@ -15,6 +15,9 @@ export interface PetSvgProps {
   micro?: PetMicro;
   /** cena extra desenhada junto (eventos aleatórios / comemoração) */
   cena?: PetCena;
+  /** passeando pelo rodapé: passinhos no corpo (a sombra fica no chão)
+   *  e ondinhas da barra mais rapidinhas */
+  andando?: boolean;
   className?: string;
 }
 
@@ -26,7 +29,7 @@ const estrela = (x: number, y: number, s: number) =>
 
 const CORES_CONFETE = ['#8f86d8', '#e5734f', '#f2c14e', '#7fb08f', '#f3b8c9', '#5b8dd9'];
 
-export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', className }: PetSvgProps) {
+export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', andando = false, className }: PetSvgProps) {
   // ids únicos por instância (widget + quartinho convivem na mesma página)
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const id = (n: string) => `aura-${n}-${uid}`;
@@ -77,6 +80,8 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
         </g>
       )}
 
+      {/* passinhos do passeio só no corpo — sombra e brilhinhos ficam no chão */}
+      <g className={cn(andando && 'pet-anim-anda')}>
       <g className={animCorpo}>
         {/* halo etéreo pulsando atrás dela */}
         <ellipse className="pet-anim-halo" cx="100" cy="104" rx="70" ry="64" fill={url('halo')} />
@@ -91,8 +96,9 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
           <path d="M128 50 C 134 38 140 30 146 28" stroke="#e9e6fb" strokeWidth="4" fill="none" strokeLinecap="round" />
         </g>
 
-        {/* corpo fantasminha com barra ondulada (silhueta original) */}
+        {/* corpo fantasminha com barra ondulada (as ondinhas balançam via CSS) */}
         <path
+          className={cn('pet-anim-ondinha', andando && 'pet-anim-ondinha-rapida')}
           d="M100 42
              C 138 42 158 72 156 106
              C 155 128 148 142 140 150
@@ -373,6 +379,7 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
             <ellipse cx="114" cy="139" rx="7.5" ry="6" fill="#b7b0e8" />
           </g>
         )}
+      </g>
       </g>
 
       {/* ── cenas de evento (fora do corpo, para não herdarem o pulo) ──── */}

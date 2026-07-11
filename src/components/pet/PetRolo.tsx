@@ -5,7 +5,7 @@
 import { cn } from '@/lib/utils';
 import type { PetSvgProps } from './PetAura';
 
-export function PetRolo({ humor, roupa, micro = 'none', className }: PetSvgProps) {
+export function PetRolo({ humor, roupa, micro = 'none', andando = false, className }: PetSvgProps) {
   const animCorpo =
     humor === 'feliz'    ? 'pet-anim-feliz'
     : humor === 'dormindo' ? 'pet-anim-dormindo'
@@ -16,6 +16,8 @@ export function PetRolo({ humor, roupa, micro = 'none', className }: PetSvgProps
     <svg viewBox="0 0 200 200" className={cn('select-none', className)} role="img" aria-label="Rolo, o mascote">
       <ellipse cx="100" cy="176" rx="56" ry="9" fill="currentColor" opacity=".14" />
 
+      {/* passinhos do passeio só no corpo — a sombra fica no chão */}
+      <g className={cn(andando && 'pet-anim-anda')}>
       <g className={animCorpo}>
         {/* rabinho */}
         <g className="pet-anim-wiggle">
@@ -95,6 +97,7 @@ export function PetRolo({ humor, roupa, micro = 'none', className }: PetSvgProps
             <text className="pet-anim-zzz-2" x="162" y="38" fontSize="13">z</text>
           </g>
         )}
+      </g>
       </g>
     </svg>
   );

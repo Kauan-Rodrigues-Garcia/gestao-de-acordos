@@ -15,7 +15,6 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
-import { cn } from '@/lib/utils';
 import './pet.css';
 import {
   usePetHabilitado, usePetInterativo, usePetDoTenant, usePetMinimizado,
@@ -425,17 +424,15 @@ export function PetWidget() {
             aria-label={`Abrir o quartinho do seu ${pet.nome}`}
             className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
           >
-            {/* flip na direção da caminhada; passinhos no svg */}
+            {/* flip na direção da caminhada; passinhos no corpo (sombra fica no chão) */}
             <div className="w-full h-full" style={{ transform: `scaleX(${dir})`, transition: 'transform .2s' }}>
               <PetSvg
                 humor={humorEfetivo}
                 roupa={roupa}
                 micro={microEfetivo}
                 cena={cena}
-                className={cn(
-                  'w-full h-full drop-shadow-sm',
-                  (movendo || escadaFase === 'subindo' || escadaFase === 'descendo') && 'pet-anim-anda',
-                )}
+                andando={movendo || escadaFase === 'subindo' || escadaFase === 'descendo'}
+                className="w-full h-full drop-shadow-sm"
               />
             </div>
           </button>

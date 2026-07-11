@@ -141,11 +141,25 @@
 }
 .pet-anim-controle { animation: pet-controle 0.35s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
 
-/* Passinhos durante o passeio pelo rodapé */
+/* Passinhos durante o passeio pelo rodapé (só o corpo — a sombra fica no chão) */
 @keyframes pet-anda {
   0%, 100% { transform: translateY(0); }
   50%      { transform: translateY(-5px); }
 }
+
+/* Ondinhas da barra fantasminha balançando (anima o próprio desenho do
+ * caminho via `d: path()` — Chromium/Firefox; sem suporte, fica estática).
+ * Paradinha: bem lenta; andando: rapidinha, parecendo propulsão. */
+@keyframes pet-ondinha {
+  0%, 100% {
+    d: path("M100 42 C 138 42 158 72 156 106 C 155 128 148 142 140 150 C 135 155 130 147 124 152 C 118 157 113 149 107 154 C 101 159 95 151 89 155 C 83 159 77 151 71 147 C 56 137 45 122 44 102 C 42 70 64 42 100 42 Z");
+  }
+  50% {
+    d: path("M100 42 C 138 42 158 72 156 106 C 155 128 148 142 140 150 C 135 147 130 155 124 150 C 118 149 113 157 107 151 C 101 151 95 159 89 152 C 83 151 77 157 71 148 C 56 138 45 122 44 102 C 42 70 64 42 100 42 Z");
+  }
+}
+.pet-anim-ondinha        { animation: pet-ondinha 2.6s ease-in-out infinite; }
+.pet-anim-ondinha-rapida { animation-duration: 0.6s; }
 
 .pet-anim-anda       { animation: pet-anda 0.45s ease-in-out infinite; }
 .pet-anim-float      { animation: pet-float 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
