@@ -195,6 +195,17 @@ export async function parseRelatorioDiario(
 
     const op = String(row[cols.op!] ?? '').trim();
     if (!op) {
+      // Rodapé de totais do relatório: sem operador E sem nenhuma identificação
+      // (cliente/CPF/acordo/forma/data) — só os somatórios preenchidos. Nunca
+      // importa, senão o total geral do arquivo viraria uma linha "(sem vínculo)".
+      const temIdentificacao =
+        (cols.prof   != null && String(row[cols.prof]   ?? '').trim() !== '') ||
+        (cols.cpf    != null && String(row[cols.cpf]    ?? '').trim() !== '') ||
+        (cols.acordo != null && String(row[cols.acordo] ?? '').trim() !== '') ||
+        (cols.idb    != null && String(row[cols.idb]    ?? '').trim() !== '') ||
+        (cols.forma  != null && String(row[cols.forma]  ?? '').trim() !== '') ||
+        (cols.dt     != null && toDate(row[cols.dt]) != null);
+      if (!temIdentificacao) continue;
       descartadasSemOperador++;
       if (!opts?.permitirSemOperador) continue;
     }
