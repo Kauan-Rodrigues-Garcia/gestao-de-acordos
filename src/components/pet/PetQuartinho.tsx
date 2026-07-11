@@ -16,6 +16,7 @@ import {
   ROUPAS_CATALOGO, COMIDAS_CATALOGO, itensLojaDoMes, roupaInfo,
   type PetHumor, type PetRoupa,
 } from './petConfig';
+import { CIDADES_CLIMA, descricaoClima, type ClimaAtual } from './usePetClima';
 
 interface PetQuartinhoProps {
   petNome:        string;
@@ -43,6 +44,10 @@ interface PetQuartinhoProps {
   /** Pet desativado (iconezinho fixo no canto) + botão para alternar. */
   minimizado?:           boolean;
   onAlternarMinimizado?: () => void;
+  /** Clima real: janelinha do quarto + seletor de cidade na aba Quarto. */
+  clima?:            ClimaAtual;
+  cidadeClimaId?:    string;
+  onSetCidadeClima?: (id: string) => void;
   onClose:        () => void;
 }
 
@@ -69,7 +74,8 @@ export function PetQuartinho({
   moedas = 0, itens = [], lojaAtiva = false,
   recompensaMoedas = 0, recompensaValor = 0, onResgatar, onComprar,
   onAlimentar, onAlternarSono, onSetRoupa,
-  minimizado = false, onAlternarMinimizado, onClose,
+  minimizado = false, onAlternarMinimizado,
+  clima, cidadeClimaId, onSetCidadeClima, onClose,
 }: PetQuartinhoProps) {
   const [aba, setAba] = useState<Aba>('quarto');
   const [balao, setBalao] = useState<string | null>(null);
@@ -78,6 +84,15 @@ export function PetQuartinho({
   const mesAtual   = mesAtualISO();
   const vitrine    = itensLojaDoMes(mesAtual);
   const diasTroca  = diasParaTrocarLoja();
+
+  // Janelinha do quarto reflete o clima real lá fora
+  const emojiJanela = !clima ? '🌙'
+    : clima.clima === 'tempestade' ? '⛈️'
+    : clima.clima === 'chuva' ? '🌧️'
+    : clima.clima === 'vento' ? '🍃'
+    : clima.clima === 'frio' ? '❄️'
+    : clima.clima === 'calor' ? '☀️'
+    : clima.dia ? '☀️' : '🌙';
 
   function falar(msg: string, ms = 1900) {
     setBalao(msg);
@@ -165,7 +180,7 @@ export function PetQuartinho({
         <div className="absolute left-5 top-5 w-16 h-14 rounded-lg" style={{ background: '#bfd7e8', border: '5px solid #a8815c' }}>
           <div className="absolute inset-x-0 top-1/2 h-[3px] -translate-y-1/2" style={{ background: '#a8815c' }} />
           <div className="absolute inset-y-0 left-1/2 w-[3px] -translate-x-1/2" style={{ background: '#a8815c' }} />
-          <span className="absolute right-1 top-0.5 text-[10px]">🌙</span>
+          <span className="absolute right-1 top-0.5 text-[10px]">{emojiJanela}</span>
         </div>
         {/* prateleira de colecionáveis */}
         <div className="absolute right-4 top-6 w-[110px]">
@@ -318,6 +333,33 @@ export function PetQuartinho({
               </button>{' '}
               — a vitrine troca todo mês, mas o que você comprar é seu para sempre.
             </p>
+            {/* clima real: o pet reage (guarda-chuva, picolé, cachecol…) */}
+            {clima && onSetCidadeClima && (
+              <div className="pt-1.5 border-t border-border/60 space-y-1.5">
+                <p>
+                  Lá fora: <strong className="text-foreground">{descricaoClima(clima.clima)}</strong>
+                  {clima.temperatura != null && <> · {clima.temperatura}°C</>}
+                </p>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px]">Clima de:</span>
+                  {CIDADES_CLIMA.map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => onSetCidadeClima(c.id)}
+                      className={cn(
+                        'text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors',
+                        c.id === cidadeClimaId
+                          ? 'border-primary text-primary bg-primary/10'
+                          : 'border-border text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {c.nome}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

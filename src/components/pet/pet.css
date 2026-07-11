@@ -304,6 +304,69 @@
 }
 .pet-anim-pop { animation: pet-pop 0.5s ease-out; transform-box: fill-box; transform-origin: center; }
 
+/* ── Clima ─────────────────────────────────────────────────────────────── */
+
+/* Gotas de chuva caindo (cada uma com delay/duração próprios via style) */
+@keyframes pet-gota {
+  0%   { opacity: 0; transform: translateY(-15px); }
+  8%   { opacity: .8; }
+  90%  { opacity: .8; }
+  100% { opacity: 0; transform: translateY(190px); }
+}
+.pet-anim-gota { animation: pet-gota 1.1s linear infinite; }
+
+/* Relâmpago: escuro quase sempre, dois flashes rápidos */
+@keyframes pet-relampago {
+  0%, 88%, 94%, 100% { opacity: 0; }
+  90%, 96%           { opacity: 1; }
+}
+.pet-anim-relampago { animation: pet-relampago 6s linear infinite; }
+
+/* Raios do sol girando devagarinho */
+@keyframes pet-sol {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.pet-anim-sol { animation: pet-sol 24s linear infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Gotinha de suor escorrendo (calor) */
+@keyframes pet-suor {
+  0%   { opacity: 0; transform: translateY(0) scale(.7); }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(14px) scale(1); }
+}
+.pet-anim-suor { animation: pet-suor 2.8s ease-in infinite; }
+
+/* Bafinho de frio subindo perto da boca */
+@keyframes pet-bafinho {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.5); }
+  25%  { opacity: .8; }
+  100% { opacity: 0; transform: translate(16px, -14px) scale(1.3); }
+}
+.pet-anim-bafinho   { animation: pet-bafinho 3s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-bafinho-2 { animation: pet-bafinho 3s ease-out 1.5s infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Folhinhas voando com o vento */
+@keyframes pet-folha {
+  0%   { opacity: 0; transform: translate(210px, 40px) rotate(0deg); }
+  10%  { opacity: 1; }
+  50%  { transform: translate(90px, 70px) rotate(200deg); }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-30px, 50px) rotate(380deg); }
+}
+.pet-anim-folha   { animation: pet-folha 3.2s linear infinite; }
+.pet-anim-folha-2 { animation: pet-folha 4.1s linear 1.6s infinite; }
+
+/* Linhas de vento passando */
+@keyframes pet-vento-linha {
+  0%   { opacity: 0; transform: translateX(60px); }
+  20%  { opacity: .6; }
+  100% { opacity: 0; transform: translateX(-120px); }
+}
+.pet-anim-vento-linha   { animation: pet-vento-linha 2.2s ease-in-out infinite; }
+.pet-anim-vento-linha-2 { animation: pet-vento-linha 2.2s ease-in-out 1.1s infinite; }
+
 /* Nota: NÃO honramos prefers-reduced-motion aqui de propósito — máquinas
  * Windows do time costumam ter "Efeitos de animação" desativado no sistema,
  * o que congelava o pet inteiro. As animações são suaves e localizadas. */

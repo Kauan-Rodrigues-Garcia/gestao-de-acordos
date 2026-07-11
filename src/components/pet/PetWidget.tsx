@@ -26,6 +26,7 @@ import {
   type PetHumor, type PetRoupa, type PetCena, type PetMicro, type PetPescaFase,
 } from './petConfig';
 import { PET_EVENTO_COMEMORAR, celebrarPetAcordoPago } from './petEvents';
+import { usePetClima, type PetClima } from './usePetClima';
 import { usePetEstado } from './usePetEstado';
 import { PetAura } from './PetAura';
 import { PetRolo } from './PetRolo';
@@ -104,8 +105,8 @@ function sortearMicro(): { tipo: PetMicro; duracaoMs: number } {
   return opcoes[0];
 }
 
-/** Balõezinhos contextuais: hora do dia, dia da semana e memória de comida. */
-function sortearFrase(interativo: boolean): string {
+/** Balõezinhos contextuais: hora, dia da semana, clima e memória de comida. */
+function sortearFrase(interativo: boolean, clima: PetClima): string {
   const agora = new Date();
   const h = agora.getHours();
   const dia = agora.getDay();
@@ -115,6 +116,11 @@ function sortearFrase(interativo: boolean): string {
   if (h >= 17)           pool.push('que dia longo… 🥱', 'já tá acabando! 🌆');
   if (dia === 5) pool.push('sextou! 🎉', 'bora dançar? 💃');
   if (dia === 1) pool.push('segundou! 💪');
+  if (clima === 'chuva')      pool.push('adoro chuvinha… 🌧️', 'menos mal que tenho guarda-chuva ☂️');
+  if (clima === 'tempestade') pool.push('ai, trovão! ⚡😨');
+  if (clima === 'calor')      pool.push('que calorão! 🥵', 'picolé salva vidas 🍧');
+  if (clima === 'frio')       pool.push('friozinho bom 🧣', 'brrr… ❄️');
+  if (clima === 'vento')      pool.push('olha o vento! 🍃', 'segura as orelhas! 💨');
   const ultima = lerUltimaComida();
   if (ultima) {
     const horas = (Date.now() - ultima.ts) / 3_600_000;
@@ -133,6 +139,7 @@ export function PetWidget() {
   const interativo  = usePetInterativo();
   const pet         = usePetDoTenant();
   const estado      = usePetEstado(interativo);
+  const { atual: climaAtual, cidade: cidadeClima, setCidade: setCidadeClima } = usePetClima();
 
   const [aberto, setAberto] = useState(false);
   const [minimizado, setMinimizado] = usePetMinimizado();
@@ -414,7 +421,7 @@ export function PetWidget() {
     const ciclo = () => {
       agendar(() => {
         if (Math.random() < 0.6 && reacaoRef.current === 'nenhuma') {
-          setFrase(sortearFrase(interativo));
+          setFrase(sortearFrase(interativo, climaAtual.clima));
           agendar(() => setFrase(null), FRASE_MS);
           agendar(ciclo, FRASE_MS + 100);
         } else {
@@ -424,7 +431,7 @@ export function PetWidget() {
     };
     ciclo();
     return () => { vivo = false; ids.forEach(clearTimeout); setFrase(null); };
-  }, [aberto, humorBase, emEvento, minimizado, cochilando, interativo]);
+  }, [aberto, humorBase, emEvento, minimizado, cochilando, interativo, climaAtual.clima]);
 
   // Coreografia da escada: vai pro canto → sobe devagarinho → oizinho → desce
   useEffect(() => {
@@ -549,6 +556,9 @@ export function PetWidget() {
             onSetRoupa={trocarRoupa}
             minimizado={minimizado}
             onAlternarMinimizado={alternarMinimizado}
+            clima={climaAtual}
+            cidadeClimaId={cidadeClima.id}
+            onSetCidadeClima={setCidadeClima}
             onClose={() => setAberto(false)}
           />
         )}
@@ -654,6 +664,7 @@ export function PetWidget() {
                 andando={movendo || escadaFase === 'subindo' || escadaFase === 'descendo'}
                 olhar={{ x: olhar.x * dir, y: olhar.y }}  /* compensa o flip */
                 pescaFase={pescaFase}
+                clima={climaAtual.clima}
                 className="w-full h-full drop-shadow-sm"
               />
             </div>

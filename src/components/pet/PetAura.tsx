@@ -7,6 +7,7 @@
 import { useId } from 'react';
 import { cn } from '@/lib/utils';
 import type { PetHumor, PetRoupa, PetCena, PetMicro, PetPescaFase } from './petConfig';
+import type { PetClima } from './usePetClima';
 
 export interface PetSvgProps {
   humor: PetHumor;
@@ -22,6 +23,8 @@ export interface PetSvgProps {
   olhar?: { x: number; y: number };
   /** fase atual da pescaria (humor 'pescando') */
   pescaFase?: PetPescaFase;
+  /** clima real lá fora: chuva → guarda-chuva, calor → picolé, frio → cachecol… */
+  clima?: PetClima;
   className?: string;
 }
 
@@ -35,7 +38,7 @@ const CORES_CONFETE = ['#8f86d8', '#e5734f', '#f2c14e', '#7fb08f', '#f3b8c9', '#
 
 export function PetAura({
   humor, roupa, micro = 'none', cena = 'nenhuma', andando = false,
-  olhar = { x: 0, y: 0 }, pescaFase = 'espera', className,
+  olhar = { x: 0, y: 0 }, pescaFase = 'espera', clima = 'ameno', className,
 }: PetSvgProps) {
   // ids únicos por instância (widget + quartinho convivem na mesma página)
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -63,6 +66,10 @@ export function PetAura({
   // olhos fechados: dormindo, no meio do bocejo ou do espirro
   const olhosFechados = humor === 'dormindo' || micro === 'bocejo' || micro === 'espirro';
   const pescando = humor === 'pescando';
+  // clima: patinhas ocupadas (vara, controle, espeto…) → sem guarda-chuva/picolé
+  const patasOcupadas =
+    humor === 'jogando' || humor === 'pescando' || humor === 'assando' || cena === 'carrinho';
+  const chovendo = clima === 'chuva' || clima === 'tempestade';
 
   return (
     <svg viewBox="0 0 200 200" className={cn('select-none', className)} role="img" aria-label="Aura, a mascote">
@@ -91,6 +98,33 @@ export function PetAura({
           <path className="pet-anim-brilho"   d={estrela(36, 62, 5)} />
           <path className="pet-anim-brilho-2" d={estrela(168, 84, 4)} />
           <path className="pet-anim-brilho-3" d={estrela(162, 148, 3)} />
+        </g>
+      )}
+
+      {/* ── clima: céu ao fundo ── */}
+      {clima === 'tempestade' && (
+        <g>
+          <ellipse cx="34" cy="16" rx="22" ry="10" fill="#8b93a8" />
+          <ellipse cx="52" cy="12" rx="15" ry="8" fill="#9aa2b5" />
+          <path className="pet-anim-relampago" d="M38 24 L 30 44 L 38 44 L 28 66 L 44 42 L 36 42 L 44 24 Z" fill="#f2c14e" />
+        </g>
+      )}
+      {clima === 'calor' && (
+        <g>
+          <g className="pet-anim-sol" stroke="#f2c14e" strokeWidth="3" strokeLinecap="round">
+            {Array.from({ length: 8 }, (_, i) => {
+              const a = (i * Math.PI) / 4;
+              return (
+                <line
+                  key={i}
+                  x1={172 + Math.cos(a) * 17} y1={26 + Math.sin(a) * 17}
+                  x2={172 + Math.cos(a) * 23} y2={26 + Math.sin(a) * 23}
+                />
+              );
+            })}
+          </g>
+          <circle cx="172" cy="26" r="12" fill="#f2c14e" />
+          <circle cx="172" cy="26" r="8" fill="#f6d47c" />
         </g>
       )}
 
@@ -438,6 +472,54 @@ export function PetAura({
           </g>
         )}
 
+        {/* ── clima: coisinhas presas nela ── */}
+
+        {/* chuva/tempestade: guarda-chuva lilás (se as patinhas estão livres) */}
+        {chovendo && !patasOcupadas && (
+          <g>
+            {/* cabo curvado pro lado, para não cruzar o rostinho */}
+            <path d="M106 30 C 134 62 126 112 116 138" stroke="#8a6a4a" strokeWidth="3.5" fill="none" strokeLinecap="round" />
+            <path
+              d="M46 36 C 50 4 162 4 166 36 L 166 37
+                 C 156 30 146 30 136 37 C 126 30 116 30 106 37
+                 C 96 30 86 30 76 37 C 66 30 56 30 46 37 Z"
+              fill="#8f86d8"
+            />
+            <path d="M46 36 C 50 4 162 4 166 36" fill="none" stroke="#7a70c9" strokeWidth="2" />
+            <path d="M60 26 C 70 14 90 8 106 8" stroke="#a89fe6" strokeWidth="3" fill="none" strokeLinecap="round" opacity=".8" />
+            <circle cx="106" cy="7" r="3" fill="#7a70c9" />
+            <ellipse cx="116" cy="138" rx="7.5" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
+
+        {/* calor: gotinha de suor + picolé de uva (se as patinhas estão livres) */}
+        {clima === 'calor' && acordada && (
+          <path className="pet-anim-suor" d="M137 64 C 133.5 70 133.5 74 137 76.5 C 140.5 74 140.5 70 137 64 Z" fill="#9ec3e0" />
+        )}
+        {clima === 'calor' && !patasOcupadas && acordada && (
+          <g>
+            <rect x="53" y="98" width="14" height="27" rx="7" fill="#a86ad1" />
+            <path d="M56 104 L 56 118" stroke="#c39ae3" strokeWidth="2.5" strokeLinecap="round" />
+            <rect x="58" y="124" width="4" height="16" rx="2" fill="#c9a97b" />
+            <ellipse cx="60" cy="140" rx="7.5" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
+
+        {/* frio: cachecol azul emprestado (se estiver sem roupa) + bafinho */}
+        {clima === 'frio' && roupa === 'nenhuma' && (
+          <g>
+            <path d="M62 128 C 84 140 118 140 140 128 L 138 142 C 116 152 86 152 64 142 Z" fill="#5b8dd9" />
+            <path d="M124 138 L 132 164 L 118 162 L 116 142 Z" fill="#4a76bd" />
+            <path d="M62 133 C 84 144 118 144 140 133" stroke="#7dabe8" strokeWidth="3" fill="none" opacity=".8" />
+          </g>
+        )}
+        {clima === 'frio' && acordada && (
+          <g fill="#dfe9f5">
+            <ellipse className="pet-anim-bafinho" cx="113" cy="112" rx="5" ry="3.5" />
+            <ellipse className="pet-anim-bafinho-2" cx="113" cy="112" rx="4" ry="3" />
+          </g>
+        )}
+
         {/* assando marshmallow: fogueirinha crepitando + espetinho nas patinhas */}
         {humor === 'assando' && (
           <g>
@@ -576,6 +658,36 @@ export function PetAura({
           </g>
           <path className="pet-anim-brilho"   d={estrela(168, 146, 4)} fill="#f2c14e" />
           <path className="pet-anim-brilho-3" d={estrela(136, 152, 3)} fill="#f2c14e" />
+        </g>
+      )}
+
+      {/* ── clima: primeiro plano ── */}
+
+      {/* gotas de chuva caindo por cima de tudo */}
+      {chovendo && (
+        <g stroke="#7fa8cc" strokeWidth="2.4" strokeLinecap="round" opacity=".75">
+          {[[14, 0], [38, 0.5], [62, 0.2], [88, 0.8], [118, 0.35], [142, 0.65], [168, 0.1], [188, 0.5]].map(([x, atraso], i) => (
+            <line
+              key={i}
+              className="pet-anim-gota"
+              x1={x} y1={-6} x2={x - 3} y2={6}
+              style={{ animationDelay: `${atraso}s`, animationDuration: `${1 + (i % 3) * 0.25}s` }}
+            />
+          ))}
+        </g>
+      )}
+
+      {/* vento: folhinhas voando + linhas de ar */}
+      {clima === 'vento' && (
+        <g>
+          <g className="pet-anim-folha">
+            <path d="M0 0 C 5 -6 12 -6 14 0 C 8 5 3 5 0 0 Z" fill="#7fb08f" />
+          </g>
+          <g className="pet-anim-folha-2">
+            <path d="M0 0 C 4 -5 10 -5 12 0 C 7 4 2 4 0 0 Z" fill="#e5a34f" />
+          </g>
+          <path className="pet-anim-vento-linha" d="M120 58 Q 142 54 168 58" stroke="#b9c6d4" strokeWidth="2.5" fill="none" strokeLinecap="round" />
+          <path className="pet-anim-vento-linha-2" d="M110 88 Q 134 84 162 88" stroke="#b9c6d4" strokeWidth="2" fill="none" strokeLinecap="round" />
         </g>
       )}
     </svg>
