@@ -20,7 +20,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import { buscarTotaisSemVinculoDiarioMes } from '@/services/diario/diario.service';
+import { buscarTotalDiarioMes } from '@/services/diario/diario.service';
 import type {
   ResumoOperadorAnalitico, EquipeAnalitico, OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
@@ -70,7 +70,7 @@ function Tile({
 }
 
 function PainelPlacar({
-  titulo, subtitulo, fotoUrl, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
+  titulo, subtitulo, fotoUrl, ehSetor, acumulado, acumuladoHO, acumuladoHint, mostrarHO, meta, totalUteis, decorridos,
 }: {
   titulo: string;
   subtitulo?: string;
@@ -79,6 +79,8 @@ function PainelPlacar({
   acumulado: number;
   /** PaguePlay: H.O. do acumulado (soma de total_ho do analítico). */
   acumuladoHO?: number;
+  /** Texto do hover no tile Acumulado (ex.: origem do valor no setor da PP). */
+  acumuladoHint?: string;
   mostrarHO?: boolean;
   meta: number | null;
   totalUteis: number;
@@ -142,6 +144,7 @@ function PainelPlacar({
       {/* Números */}
       <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 mt-4">
         <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981"
+          hint={acumuladoHint}
           sub={mostrarHO ? `H.O. ${formatBRL(acumuladoHO ?? 0)}` : undefined} />
         <Tile label="Média diária" valor={formatBRL(mediaDiaria)}
           hint="Acumulado ÷ dias úteis trabalhados" />
@@ -174,9 +177,10 @@ export function DesempenhoEquipes({
   const [feriados, setFeriados] = useState<string[]>([]);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
-  // PP (setor único): linhas do RECEBIMENTO DIÁRIO sem operador somam no
-  // consolidado do setor (H.O. derivado de 24,96%)
-  const [semVinculo, setSemVinculo] = useState({ total: 0, qtd: 0 });
+  // PP (setor único): o acumulado do setor é o total do RECEBIMENTO DIÁRIO
+  // (945) — todas as linhas do mês, com e sem operador (H.O. derivado 24,96%).
+  // O diário traz pagamentos que não geram cobrança no analítico.
+  const [totalDiario, setTotalDiario] = useState({ total: 0, qtd: 0 });
   const [carregado, setCarregado] = useState(false);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
@@ -206,8 +210,8 @@ export function DesempenhoEquipes({
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
         setSetores(sMap);
         if (isPP) {
-          const semVinc = await buscarTotaisSemVinculoDiarioMes(empresaId, mes);
-          if (!cancelado) setSemVinculo(semVinc);
+          const td = await buscarTotalDiarioMes(empresaId, mes);
+          if (!cancelado) setTotalDiario(td);
         }
       } catch { /* sem metas/config — painéis mostram "—" */ }
       if (!cancelado) setCarregado(true);
@@ -273,19 +277,28 @@ export function DesempenhoEquipes({
     <div className="space-y-6">
       {[...dados.grupos.entries()].map(([sid, eqs]) => (
         <div key={sid} className="space-y-3">
-          {/* Painel consolidado do setor — na PP (setor único) as linhas
-              sem operador entram aqui */}
+          {/* Painel consolidado do setor — na PP (setor único) o acumulado é
+              o total do recebimento diário (945), que fecha com o ERP */}
           <PainelPlacar
             titulo={setores[sid] ?? 'Setor'}
             subtitulo={
-              isPP && semVinculo.total > 0
-                ? `Setor geral · inclui ${formatBRL(semVinculo.total)} sem vínculo (diário)`
+              isPP && totalDiario.total > 0
+                ? 'Setor geral · total do recebimento diário (945)'
                 : 'Setor geral'
             }
             ehSetor
             mostrarHO={isPP}
-            acumulado={(dados.porSetor[sid]?.bruto ?? 0) + (isPP ? semVinculo.total : 0)}
-            acumuladoHO={(dados.porSetor[sid]?.ho ?? 0) + (isPP ? semVinculo.total * PP_HO_PERCENTUAL : 0)}
+            acumulado={isPP && totalDiario.total > 0 ? totalDiario.total : (dados.porSetor[sid]?.bruto ?? 0)}
+            acumuladoHO={
+              isPP && totalDiario.total > 0
+                ? totalDiario.total * PP_HO_PERCENTUAL
+                : (dados.porSetor[sid]?.ho ?? 0)
+            }
+            acumuladoHint={
+              isPP
+                ? 'Valor total do relatório 945 (recebimento diário). Para ver o valor total atualizado, importe o relatório 945 com todos os dias do mês.'
+                : undefined
+            }
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}
@@ -311,8 +324,11 @@ export function DesempenhoEquipes({
         </div>
       ))}
       <p className="text-[11px] text-muted-foreground">
-        Acumulado e diário vêm do relatório analítico · meta, dias úteis e feriados
-        vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).
+        {isPP
+          ? 'Acumulado do setor vem do recebimento diário (945); equipes vêm do analítico'
+          : 'Acumulado e diário vêm do relatório analítico'}
+        {' '}· meta, dias úteis e feriados vêm da aba Metas
+        ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).
       </p>
     </div>
   );

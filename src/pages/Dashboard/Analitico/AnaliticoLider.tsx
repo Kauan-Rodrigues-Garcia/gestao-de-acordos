@@ -36,14 +36,14 @@ import {
   removerLinhaAnalitico,
   removerOrfaosDoMes,
   limparDadosDoMes,
-  buscarTotalOrfaosAnaliticoMes,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
-import { buscarTotaisSemVinculoDiarioMes } from '@/services/diario/diario.service';
+import { buscarTotalDiarioMes } from '@/services/diario/diario.service';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
@@ -114,20 +114,11 @@ export function AnaliticoLider({
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
   const [loadingDestaques, setLoadingDestaques] = useState(false);
 
-  // ── Sem vínculo (recebimento diário) — PP ─────────────────────────────────
-  // Soma no card "Total recebido": total do analítico + linhas sem operador
-  // importadas no diário ao longo do mês.
-  const [semVincDiario, setSemVincDiario] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
-
-  // ── Sem operador (analítico) — PP ─────────────────────────────────────────
-  // Linhas com nome no arquivo mas sem conta no sistema. O snapshot mensal já
-  // as inclui; na visão filtrada por setor entram por fora (resumos por
-  // operador não as contam).
-  const [orfaosMes, setOrfaosMes] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
-  const carregarTotalOrfaos = useCallback(async () => {
-    if (!tenant.isPaguePlay || !empresaId || !mes) { setOrfaosMes({ total: 0, qtd: 0 }); return; }
-    setOrfaosMes(await buscarTotalOrfaosAnaliticoMes(empresaId, mes));
-  }, [tenant.isPaguePlay, empresaId, mes]);
+  // ── Total do recebimento diário (945) — PP ────────────────────────────────
+  // O card "Total recebido" usa a soma de TODAS as linhas do diário no mês
+  // (com e sem operador): o diário traz pagamentos que não geram cobrança no
+  // analítico (Coren/indireto), então só ele fecha com o total do ERP.
+  const [totalDiario, setTotalDiario] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
 
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
@@ -176,8 +167,7 @@ export function AnaliticoLider({
   useEffect(() => {
     void carregarResumos();
     void carregarSnapshot();
-    void carregarTotalOrfaos();
-  }, [carregarResumos, carregarSnapshot, carregarTotalOrfaos]);
+  }, [carregarResumos, carregarSnapshot]);
 
   useEffect(() => {
     if (abaAtiva === 'orfaos')    void carregarOrfaos();
@@ -194,12 +184,12 @@ export function AnaliticoLider({
 
   useEffect(() => {
     if (!tenant.isPaguePlay || !empresaId || !mes) {
-      setSemVincDiario({ total: 0, qtd: 0 });
+      setTotalDiario({ total: 0, qtd: 0 });
       return;
     }
     let cancelado = false;
-    void buscarTotaisSemVinculoDiarioMes(empresaId, mes).then(t => {
-      if (!cancelado) setSemVincDiario(t);
+    void buscarTotalDiarioMes(empresaId, mes).then(t => {
+      if (!cancelado) setTotalDiario(t);
     });
     return () => { cancelado = true; };
   }, [tenant.isPaguePlay, empresaId, mes]);
@@ -272,7 +262,6 @@ export function AnaliticoLider({
     else {
       toast.success('Linha removida.');
       setOrfaos(prev => prev.filter(o => o.id !== id));
-      void carregarTotalOrfaos();
       onRefetch();
     }
     setRemovendoId(null);
@@ -285,7 +274,6 @@ export function AnaliticoLider({
     else {
       toast.success('Todos os registros sem operador foram removidos.');
       setOrfaos([]);
-      void carregarTotalOrfaos();
       onRefetch();
     }
     setRemovendoTodos(false);
@@ -302,7 +290,6 @@ export function AnaliticoLider({
       setConfirmandoLimpeza(false);
       void carregarResumos();
       void carregarSnapshot();
-      void carregarTotalOrfaos();
       if (abaAtiva === 'orfaos')    void carregarOrfaos();
       if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
@@ -315,7 +302,6 @@ export function AnaliticoLider({
     if (importHook.estado === 'done') {
       void carregarResumos();
       void carregarSnapshot();
-      void carregarTotalOrfaos();
       if (abaAtiva === 'orfaos')    void carregarOrfaos();
       if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
@@ -355,34 +341,35 @@ export function AnaliticoLider({
   }, [resumos, operadorEquipeMap, setorId]);
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
-  // "Total recebido" = analítico + sem vínculo do recebimento diário (PP);
-  // sem vínculo e sem operador são do setor, então não entram com filtro de
-  // equipe. O snapshot já inclui as linhas sem operador do analítico; nos
-  // resumos filtrados elas entram por fora (orfaosMes).
+  // PP: "Total recebido" = soma de TODAS as linhas do recebimento diário (945)
+  // no mês — é o único valor que fecha com o total do ERP. Sem diário
+  // importado (ou com filtro de equipe), cai no analítico como antes.
+  const usarTotalDiario = totalDiario.total > 0 && !filtroEquipeId;
   const metricas = useMemo(() => {
     if (!setorId && !filtroEquipeId) {
       // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
-      if (!snapshot) return null;
+      if (!snapshot && !usarTotalDiario) return null;
       return {
-        totalRecebido:   snapshot.total_recebido + semVincDiario.total,
-        totalHo:         snapshot.total_ho,
-        totalOperadores: snapshot.total_operadores,
-        totalPagamentos: snapshot.total_pagamentos,
-        periodoInicio:   snapshot.periodo_inicio,
-        periodoFim:      snapshot.periodo_fim,
+        totalRecebido:   usarTotalDiario ? totalDiario.total : (snapshot?.total_recebido ?? 0),
+        totalHo:         snapshot?.total_ho ?? 0,
+        totalOperadores: snapshot?.total_operadores ?? 0,
+        totalPagamentos: snapshot?.total_pagamentos ?? 0,
+        periodoInicio:   snapshot?.periodo_inicio ?? null,
+        periodoFim:      snapshot?.periodo_fim ?? null,
       };
     }
     // Computa a partir dos resumos filtrados (operadores com dados no período)
     return {
-      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0)
-                       + (filtroEquipeId ? 0 : semVincDiario.total + orfaosMes.total),
+      totalRecebido:   usarTotalDiario
+        ? totalDiario.total
+        : resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0),
       totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
       totalOperadores: resumosFiltrados.length,
       totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0),
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, semVincDiario.total, orfaosMes.total]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, usarTotalDiario, totalDiario.total]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -428,20 +415,28 @@ export function AnaliticoLider({
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-1">
                   <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total recebido</p>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
+                      Total recebido
+                      {tenant.isPaguePlay && (
+                        <TooltipProvider delayDuration={150}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-amber-500/15 text-amber-600 text-[10px] font-bold cursor-help shrink-0 normal-case">
+                                !
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="max-w-[260px] text-xs">
+                              Valor total do relatório 945 (recebimento diário). Para ver o
+                              valor total atualizado, importe o relatório 945 com todos os
+                              dias do mês.
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                    </p>
                     <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
                       {formatBRL(metricas.totalRecebido)}
                     </p>
-                    {semVincDiario.total > 0 && !filtroEquipeId && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                        inclui {formatBRL(semVincDiario.total)} sem vínculo (diário)
-                      </p>
-                    )}
-                    {orfaosMes.total > 0 && !filtroEquipeId && (
-                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
-                        inclui {formatBRL(orfaosMes.total)} sem operador (analítico)
-                      </p>
-                    )}
                   </div>
                   <TrendingUp className="w-4 h-4 text-primary/50 shrink-0 mt-0.5" />
                 </div>

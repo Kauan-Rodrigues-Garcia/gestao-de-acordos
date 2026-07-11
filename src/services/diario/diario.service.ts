@@ -267,12 +267,13 @@ export async function buscarDiario(
   return { data: allData, error: null };
 }
 
-// ── Totais "(sem vínculo)" no mês — PaguePlay ─────────────────────────────────
-// Linhas do recebimento diário importadas SEM nome de operador. Não aparecem
-// na lista de órfãos (vínculo manual); viram um card consolidado no diário e
-// somam no Total recebido do setor na aba Desempenho Equipes.
+// ── Total do mês no recebimento diário (relatório 945) — PaguePlay ────────────
+// Soma TODAS as linhas do mês, com e sem operador. É a fonte do card
+// "Total recebido" do Analítico e do painel do setor em Desempenho Equipes:
+// o diário traz também pagamentos que não geram cobrança no analítico
+// (status Coren / contato indireto), então só ele fecha com o total do ERP.
 
-export async function buscarTotaisSemVinculoDiarioMes(
+export async function buscarTotalDiarioMes(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<{ total: number; qtd: number }> {
@@ -286,11 +287,8 @@ export async function buscarTotaisSemVinculoDiarioMes(
         .from('diario_recebimentos')
         .select('valor_recebido')
         .eq('empresa_id', empresaId)
-        .is('operador_id', null)
-        .eq('operador_usuario', '')
         .gte('dia_referencia', `${mes}-01`)
         .lte('dia_referencia', `${mes}-${String(fimDia).padStart(2, '0')}`)
-        // acordos ignorados (prox_contato ≤ hoje) também SOMAM no total do setor
         .range(offset, offset + PAGE - 1);
       if (error || !data?.length) break;
       for (const r of data as { valor_recebido: number }[]) {
@@ -300,7 +298,7 @@ export async function buscarTotaisSemVinculoDiarioMes(
       if (data.length < PAGE) break;
       offset += PAGE;
     }
-  } catch { /* indisponível — card não aparece */ }
+  } catch { /* indisponível — soma fica 0 e os cards caem no analítico */ }
   return { total, qtd };
 }
 
