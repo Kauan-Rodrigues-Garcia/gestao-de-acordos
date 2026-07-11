@@ -175,6 +175,67 @@
 /* Dormindo: respiração mais lenta e profunda */
 .pet-anim-dormindo { animation: pet-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
 
+/* Dança: pulinhos ritmados pra lá e pra cá com squash & stretch */
+@keyframes pet-danca {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
+  12%      { transform: translateY(1px) scale(1.05, 0.92); }
+  30%      { transform: translateY(-9px) rotate(-7deg) scale(0.97, 1.05); }
+  48%      { transform: translateY(0) rotate(0deg) scale(1.05, 0.93); }
+  66%      { transform: translateY(-9px) rotate(7deg) scale(0.97, 1.05); }
+  84%      { transform: translateY(0) rotate(0deg) scale(1.03, 0.96); }
+}
+.pet-anim-danca { animation: pet-danca 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Boia da pescaria balançando na água */
+@keyframes pet-boia {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
+}
+.pet-anim-boia { animation: pet-boia 1.4s ease-in-out infinite; }
+
+/* Peixinho pulando fora d'água de vez em quando */
+@keyframes pet-peixe {
+  0%, 74%, 100% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  78%  { opacity: 1; transform: translate(-8px, -22px) rotate(-40deg); }
+  84%  { opacity: 1; transform: translate(-20px, -30px) rotate(-100deg); }
+  90%  { opacity: 1; transform: translate(-32px, -18px) rotate(-160deg); }
+  95%  { opacity: 0; transform: translate(-38px, 0) rotate(-180deg); }
+}
+.pet-anim-peixe { animation: pet-peixe 5.5s ease-in-out infinite; }
+
+/* Chamas da fogueira tremulando */
+@keyframes pet-chama {
+  0%, 100% { transform: scale(1, 1) rotate(0deg); }
+  30%      { transform: scale(1.08, 0.9) rotate(-2deg); }
+  60%      { transform: scale(0.92, 1.12) rotate(2deg); }
+}
+.pet-anim-chama   { animation: pet-chama 0.5s  ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-chama-2 { animation: pet-chama 0.62s ease-in-out 0.2s infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Espetinho do marshmallow virando devagar sobre o fogo */
+@keyframes pet-espeto {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-6deg); }
+}
+.pet-anim-espeto { animation: pet-espeto 2.2s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
+
+/* Carrinho de controle remoto indo e voltando na frente do pet */
+@keyframes pet-carrinho {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(-112px); }
+}
+.pet-anim-carrinho { animation: pet-carrinho 3.6s ease-in-out infinite; }
+
+/* Rodinhas girando */
+@keyframes pet-roda {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+.pet-anim-roda { animation: pet-roda 0.7s linear infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Pet desativado: imagem 100% parada (nenhuma animação roda) */
+.pet-estatico, .pet-estatico * { animation: none !important; }
+
 /* Nota: NÃO honramos prefers-reduced-motion aqui de propósito — máquinas
  * Windows do time costumam ter "Efeitos de animação" desativado no sistema,
  * o que congelava o pet inteiro. As animações são suaves e localizadas. */

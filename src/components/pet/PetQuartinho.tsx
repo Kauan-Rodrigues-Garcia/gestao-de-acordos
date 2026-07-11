@@ -7,7 +7,7 @@
  */
 import { useState, type ComponentType } from 'react';
 import { motion } from 'framer-motion';
-import { X, UtensilsCrossed, Moon, Sun, Shirt, Store, Home } from 'lucide-react';
+import { X, UtensilsCrossed, Moon, Sun, Shirt, Store, Home, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
@@ -39,6 +39,9 @@ interface PetQuartinhoProps {
   onAlimentar:    () => void;
   onAlternarSono: () => void;
   onSetRoupa:     (r: PetRoupa) => void;
+  /** Pet desativado (iconezinho fixo no canto) + botão para alternar. */
+  minimizado?:           boolean;
+  onAlternarMinimizado?: () => void;
   onClose:        () => void;
 }
 
@@ -64,7 +67,8 @@ export function PetQuartinho({
   petNome, PetSvg, humor, roupa, modoTeaser = false,
   moedas = 0, itens = [], lojaAtiva = false,
   recompensaMoedas = 0, recompensaValor = 0, onResgatar, onComprar,
-  onAlimentar, onAlternarSono, onSetRoupa, onClose,
+  onAlimentar, onAlternarSono, onSetRoupa,
+  minimizado = false, onAlternarMinimizado, onClose,
 }: PetQuartinhoProps) {
   const [aba, setAba] = useState<Aba>('quarto');
   const [balao, setBalao] = useState<string | null>(null);
@@ -137,6 +141,17 @@ export function PetQuartinho({
               🪙 {moedas.toLocaleString('pt-BR')}
             </span>
           )}
+          {onAlternarMinimizado && (
+            <Button
+              variant="ghost" size="icon" className="w-7 h-7"
+              title={minimizado
+                ? 'Reativar o pet (volta a passear pela tela)'
+                : 'Desativar o pet (vira um iconezinho parado no canto)'}
+              onClick={onAlternarMinimizado}
+            >
+              {minimizado ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="w-7 h-7" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>
@@ -170,17 +185,54 @@ export function PetQuartinho({
         {/* plantinha */}
         <span className="absolute left-4 bottom-9 text-2xl">🪴</span>
 
+        {/* caminha no cantinho — clique coloca para dormir / acorda */}
+        <button
+          type="button"
+          disabled={modoTeaser}
+          onClick={modoTeaser ? undefined : onAlternarSono}
+          title={modoTeaser ? undefined : humor === 'dormindo' ? 'Acordar' : 'Colocar para dormir'}
+          aria-label={humor === 'dormindo' ? 'Acordar o pet' : 'Colocar o pet para dormir'}
+          className={cn('absolute right-2 bottom-2 p-0 bg-transparent border-0', !modoTeaser && 'cursor-pointer')}
+        >
+          <svg width="126" height="72" viewBox="0 0 126 72" aria-hidden="true">
+            {/* cabeceira + pezinho */}
+            <rect x="112" y="6" width="12" height="60" rx="5" fill="#a8815c" />
+            <rect x="2" y="40" width="10" height="26" rx="4" fill="#a8815c" />
+            {/* estrado + colchão */}
+            <rect x="4" y="38" width="116" height="20" rx="8" fill="#c9a97b" />
+            <rect x="8" y="26" width="108" height="20" rx="10" fill="#f7f1e4" />
+            {/* travesseiro */}
+            <rect x="86" y="18" width="28" height="15" rx="7" fill="#e8ddf7" />
+          </svg>
+        </button>
+
         {/* balão de fala */}
         {balao && (
-          <div className="absolute left-1/2 top-4 -translate-x-1/2 bg-white text-[#4a3b2a] text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-black/5">
+          <div className="absolute left-1/2 top-4 -translate-x-1/2 z-10 bg-white text-[#4a3b2a] text-xs font-semibold px-3 py-1.5 rounded-full shadow-md border border-black/5">
             {balao}
           </div>
         )}
 
-        {/* o pet */}
-        <div className="absolute left-1/2 bottom-3 -translate-x-1/2 w-36 h-36 text-black/70">
+        {/* o pet — dormindo, desliza até a caminha */}
+        <div
+          className={cn(
+            'absolute text-black/70 transition-all duration-700 ease-in-out',
+            humor === 'dormindo' ? 'left-[206px] bottom-7 w-28 h-28' : 'left-[93px] bottom-3 w-36 h-36',
+          )}
+        >
           <PetSvg humor={humor} roupa={roupa} className="w-full h-full" />
         </div>
+
+        {/* cobertinha por cima do pet na caminha */}
+        {humor === 'dormindo' && (
+          <svg
+            className="absolute right-2 bottom-2 pointer-events-none"
+            width="126" height="72" viewBox="0 0 126 72" aria-hidden="true"
+          >
+            <path d="M8 34 C 26 26 48 30 64 32 C 84 34 100 28 116 36 L 116 46 C 116 52 112 56 107 56 L 17 56 C 11 56 8 48 8 34 Z" fill="#b8a5e3" />
+            <path d="M12 44 C 34 40 76 43 112 46" stroke="#a690d6" strokeWidth="2" fill="none" opacity=".6" strokeLinecap="round" />
+          </svg>
+        )}
       </div>
 
       {/* Modo teaser: só a mensagem, sem ações/lojas */}

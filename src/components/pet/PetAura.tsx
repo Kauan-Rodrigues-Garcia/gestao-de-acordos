@@ -36,7 +36,10 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
     humor === 'comemorando' ? 'pet-anim-comemora'
     : humor === 'feliz'      ? 'pet-anim-feliz'
     : humor === 'dormindo'   ? 'pet-anim-dormindo'
-    : humor === 'jogando'    ? 'pet-anim-breathe' // sentadinha, concentrada
+    : humor === 'dancando'   ? 'pet-anim-danca'
+    // sentadinha, concentrada (videogame, pescaria, marshmallow)
+    : humor === 'jogando' || humor === 'pescando' || humor === 'assando'
+      ? 'pet-anim-breathe'
     : micro === 'pulinho'    ? 'pet-anim-pulinho'
     : micro === 'espreguica' ? 'pet-anim-espreguica'
     : 'pet-anim-float';
@@ -131,7 +134,7 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
             <circle cx="116.5" cy="98.5" r="1.1" fill="#fff" opacity=".85" />
           </g>
         )}
-        {humor === 'feliz' || empolgada ? (
+        {humor === 'feliz' || humor === 'dancando' || empolgada ? (
           <path d="M92 110 Q 101 123 110 110 Z" fill="#322b47" />
         ) : (
           <path d="M96 112 Q 101 117 106 112" stroke="#322b47" strokeWidth="3" fill="none" strokeLinecap="round" />
@@ -286,6 +289,90 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
             </g>
           </g>
         )}
+
+        {/* pescaria: varinha nas patinhas, laguinho com boia e peixinho saltitante */}
+        {humor === 'pescando' && (
+          <g>
+            {/* laguinho */}
+            <ellipse cx="164" cy="170" rx="30" ry="9" fill="#9ec3e0" />
+            <ellipse cx="164" cy="170" rx="30" ry="9" fill="none" stroke="#7fa8cc" strokeWidth="1.5" opacity=".7" />
+            <path d="M150 168 Q 156 166 162 168 M 166 172 Q 172 170 178 172" stroke="#c9dff0" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+            {/* vara de pescar */}
+            <path d="M108 140 L 156 100" stroke="#a8815c" strokeWidth="4" strokeLinecap="round" />
+            <path d="M156 100 L 162 95" stroke="#8a6a4a" strokeWidth="3" strokeLinecap="round" />
+            {/* linha + boia balançando */}
+            <path d="M162 95 L 163 155" stroke="#7d7595" strokeWidth="1.4" fill="none" />
+            <g className="pet-anim-boia">
+              <circle cx="163" cy="159" r="4.5" fill="#e5734f" />
+              <path d="M158.5 159 A 4.5 4.5 0 0 1 167.5 159 Z" fill="#ffffff" />
+            </g>
+            {/* peixinho pulando de vez em quando */}
+            <g className="pet-anim-peixe">
+              <g transform="translate(180, 165)">
+                <ellipse cx="0" cy="0" rx="7" ry="4" fill="#8fb8d8" />
+                <path d="M5 0 L 11 -4 L 11 4 Z" fill="#8fb8d8" />
+                <circle cx="-3.5" cy="-1" r="0.9" fill="#2b3a4a" />
+              </g>
+            </g>
+            {/* patinhas segurando a vara */}
+            <ellipse cx="104" cy="143" rx="8" ry="6.5" fill="#b7b0e8" />
+            <ellipse cx="115" cy="136" rx="7" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
+
+        {/* assando marshmallow: fogueirinha crepitando + espetinho nas patinhas */}
+        {humor === 'assando' && (
+          <g>
+            {/* lenha + pedrinhas */}
+            <path d="M144 172 L 178 164 M 148 164 L 176 172" stroke="#8a6a4a" strokeWidth="5" strokeLinecap="round" />
+            <circle cx="136" cy="174" r="3" fill="#b9b2a6" />
+            <circle cx="185" cy="172" r="2.6" fill="#b9b2a6" />
+            {/* chamas tremulando */}
+            <g className="pet-anim-chama">
+              <path d="M161 164 C 152 155 154 144 161 135 C 162 144 168 147 169 153 C 170 159 166 163 161 164 Z" fill="#f2a13c" />
+            </g>
+            <g className="pet-anim-chama-2">
+              <path d="M161 162 C 156 156 157 149 161 144 C 162 149 165 150 165.5 154 C 166 158 164 161 161 162 Z" fill="#f2c14e" />
+            </g>
+            {/* espetinho com marshmallow na ponta */}
+            <g className="pet-anim-espeto">
+              <path d="M112 138 L 152 145" stroke="#8a6a4a" strokeWidth="3" strokeLinecap="round" />
+              <rect x="148" y="137" width="14" height="13" rx="4.5" fill="#fdf6ec" stroke="#e8cfa8" strokeWidth="1.2" />
+            </g>
+            {/* patinhas segurando o espeto */}
+            <ellipse cx="106" cy="139" rx="8" ry="6.5" fill="#b7b0e8" />
+            <ellipse cx="118" cy="141" rx="7" ry="6" fill="#b7b0e8" />
+            {/* faisquinhas subindo */}
+            <g fontFamily="inherit" fontWeight="700">
+              <text className="pet-anim-zzz" x="170" y="138" fontSize="11" fill="#f2a13c">✦</text>
+              <text className="pet-anim-zzz-2" x="148" y="130" fontSize="9" fill="#f2c14e">✦</text>
+            </g>
+          </g>
+        )}
+
+        {/* dançando: notas musicais subindo ao redor */}
+        {humor === 'dancando' && (
+          <g fontFamily="inherit" fontWeight="700">
+            <text className="pet-anim-zzz" x="146" y="66" fontSize="15" fill="#8f86d8">♪</text>
+            <text className="pet-anim-zzz-2" x="158" y="50" fontSize="13" fill="#e5734f">♫</text>
+            <text className="pet-anim-zzz" x="40" y="72" fontSize="12" fill="#5b8dd9" style={{ animationDelay: '0.8s' }}>♩</text>
+          </g>
+        )}
+
+        {/* carrinho de controle remoto: controle nas patinhas (carro é cena) */}
+        {cena === 'carrinho' && (
+          <g>
+            <g className="pet-anim-controle">
+              <rect x="86" y="128" width="26" height="17" rx="5.5" fill="#4a4458" />
+              <path d="M108 128 L 114 116" stroke="#4a4458" strokeWidth="2.5" strokeLinecap="round" />
+              <circle cx="114.5" cy="114.5" r="2" fill="#e5734f" />
+              <circle cx="94" cy="136.5" r="3" fill="#cfc9f2" />
+              <circle cx="104" cy="136.5" r="3" fill="#e5734f" />
+            </g>
+            <ellipse cx="84" cy="139" rx="7.5" ry="6" fill="#b7b0e8" />
+            <ellipse cx="114" cy="139" rx="7.5" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
       </g>
 
       {/* ── cenas de evento (fora do corpo, para não herdarem o pulo) ──── */}
@@ -333,6 +420,30 @@ export function PetAura({ humor, roupa, micro = 'none', cena = 'nenhuma', classN
         <g className="pet-anim-acena">
           <ellipse cx="150" cy="98" rx="8" ry="11" fill="#b7b0e8" />
           <ellipse cx="150" cy="93" rx="6" ry="5" fill="#c8c1f0" />
+        </g>
+      )}
+
+      {/* carrinho de controle remoto zanzando pra lá e pra cá */}
+      {cena === 'carrinho' && (
+        <g className="pet-anim-carrinho">
+          <g transform="translate(148, 156)">
+            {/* cabine + carroceria */}
+            <path d="M4 10 L 8 2 C 10 -2 24 -2 26 2 L 30 10 Z" fill="#d94f4f" />
+            <rect x="-2" y="8" width="38" height="11" rx="5.5" fill="#e5734f" />
+            <rect x="10" y="1.5" width="8" height="6.5" rx="2" fill="#bfd7e8" />
+            {/* antena do controle remoto */}
+            <path d="M30 1 L 34 -8" stroke="#4a4458" strokeWidth="1.8" strokeLinecap="round" />
+            <circle cx="34.5" cy="-9" r="1.7" fill="#f2c14e" />
+            {/* rodinhas girando */}
+            <g className="pet-anim-roda">
+              <circle cx="6" cy="20" r="5.5" fill="#322b47" />
+              <path d="M6 16.5 L 6 23.5 M 2.5 20 L 9.5 20" stroke="#8f86d8" strokeWidth="1.4" />
+            </g>
+            <g className="pet-anim-roda">
+              <circle cx="28" cy="20" r="5.5" fill="#322b47" />
+              <path d="M28 16.5 L 28 23.5 M 24.5 20 L 31.5 20" stroke="#8f86d8" strokeWidth="1.4" />
+            </g>
+          </g>
         </g>
       )}
 

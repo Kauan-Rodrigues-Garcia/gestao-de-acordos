@@ -7,11 +7,16 @@
  * cache/fallback quando a migration ainda não foi aplicada.
  * Liberado apenas para administrador/super_admin enquanto está em teste.
  */
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 
-export type PetHumor = 'idle' | 'feliz' | 'dormindo' | 'jogando' | 'comemorando';
+export type PetHumor =
+  | 'idle' | 'feliz' | 'dormindo' | 'jogando' | 'comemorando'
+  // eventos aleatórios que mudam a pose do corpo
+  | 'pescando' | 'dancando' | 'assando';
 /** Cenas extras desenhadas junto do pet (eventos aleatórios / comemoração). */
-export type PetCena = 'nenhuma' | 'confete' | 'borboleta' | 'moeda' | 'aceno';
+export type PetCena = 'nenhuma' | 'confete' | 'borboleta' | 'moeda' | 'aceno' | 'carrinho';
 /** Micro-animações ocasionais do corpo. */
 export type PetMicro = 'none' | 'pulinho' | 'espreguica';
 export type PetRoupa =
@@ -105,4 +110,24 @@ export function usePetInterativo(): boolean {
 
 export function petStorageKey(empresaId?: string, perfilId?: string): string {
   return `pet-estado::${empresaId ?? 'noemp'}::${perfilId ?? 'nouser'}`;
+}
+
+/** Preferência "pet desativado": para o passeio/animações e deixa só um
+ *  iconezinho fixo no canto (clicável para reabrir o quartinho). Preferência
+ *  de interface por usuário+dispositivo — localStorage, não é estado do jogo. */
+export function usePetMinimizado(): [boolean, (v: boolean) => void] {
+  const { perfil }  = useAuth();
+  const { empresa } = useEmpresa();
+  const key = `${petStorageKey(empresa?.id, perfil?.id)}::minimizado`;
+
+  const [mini, setMini] = useState(false);
+  useEffect(() => {
+    try { setMini(localStorage.getItem(key) === '1'); } catch { /* noop */ }
+  }, [key]);
+
+  const salvar = (v: boolean) => {
+    setMini(v);
+    try { localStorage.setItem(key, v ? '1' : '0'); } catch { /* noop */ }
+  };
+  return [mini, salvar];
 }

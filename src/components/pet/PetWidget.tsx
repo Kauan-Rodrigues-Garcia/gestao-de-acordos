@@ -6,18 +6,19 @@
  *   em modo teaser ("Em breve").
  * - Acordado e de boa (qualquer cargo): passeia pelo rodapé parando em
  *   pontos aleatórios, dá pulinhos, e de vez em quando acontece um evento
- *   aleatório: videogame (~30s), borboleta passeando, moedinha caindo ou
- *   uma espreguiçada.
+ *   aleatório: videogame, borboleta, moedinha, espreguiçada, escada,
+ *   pescaria, carrinho de controle remoto, dancinha ou marshmallow na fogueira.
  * - Quando o usuário marca um acordo/parcela como pago (petEvents), a Aura
  *   comemora com confete e balãozinho — mesmo se estiver dormindo.
- * Estado local em localStorage — zero banco, zero realtime.
+ * - Botão no quartinho desativa o pet: vira um iconezinho fixo e parado no
+ *   canto (clicável para reabrir o menu e reativar). Preferência local.
  */
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import './pet.css';
 import {
-  usePetHabilitado, usePetInterativo, usePetDoTenant,
+  usePetHabilitado, usePetInterativo, usePetDoTenant, usePetMinimizado,
   type PetHumor, type PetRoupa, type PetCena, type PetMicro,
 } from './petConfig';
 import { PET_EVENTO_COMEMORAR, celebrarPetAcordoPago } from './petEvents';
@@ -26,7 +27,9 @@ import { PetAura } from './PetAura';
 import { PetRolo } from './PetRolo';
 import { PetQuartinho } from './PetQuartinho';
 
-type PetEvento = 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica' | 'escada';
+type PetEvento =
+  | 'nenhum' | 'jogando' | 'borboleta' | 'moeda' | 'espreguica' | 'escada'
+  | 'pesca' | 'carrinho' | 'danca' | 'marshmallow';
 type EscadaFase = 'nenhuma' | 'subindo' | 'topo' | 'descendo';
 
 /** Área do passeio: até ALCANCE px à esquerda do canto. */
@@ -44,11 +47,15 @@ const ESCADA_SUBIDA_S = 7;
 
 /** Eventos aleatórios: duração e peso do sorteio (peso maior = mais comum). */
 const EVENTOS: { tipo: Exclude<PetEvento, 'nenhum'>; duracaoMs: number; peso: number }[] = [
-  { tipo: 'jogando',    duracaoMs: 30_000, peso: 3 },
-  { tipo: 'borboleta',  duracaoMs: 14_000, peso: 2 },
-  { tipo: 'moeda',      duracaoMs: 8_000,  peso: 2 },
-  { tipo: 'espreguica', duracaoMs: 2_600,  peso: 2 },
-  { tipo: 'escada',     duracaoMs: 18_500, peso: 2 },
+  { tipo: 'jogando',     duracaoMs: 30_000, peso: 3 },
+  { tipo: 'borboleta',   duracaoMs: 14_000, peso: 2 },
+  { tipo: 'moeda',       duracaoMs: 8_000,  peso: 2 },
+  { tipo: 'espreguica',  duracaoMs: 2_600,  peso: 2 },
+  { tipo: 'escada',      duracaoMs: 18_500, peso: 2 },
+  { tipo: 'pesca',       duracaoMs: 26_000, peso: 2 },
+  { tipo: 'carrinho',    duracaoMs: 16_000, peso: 2 },
+  { tipo: 'danca',       duracaoMs: 12_000, peso: 2 },
+  { tipo: 'marshmallow', duracaoMs: 22_000, peso: 2 },
 ];
 
 function sortearEvento() {
@@ -72,6 +79,7 @@ export function PetWidget() {
   const estado      = usePetEstado(interativo);
 
   const [aberto, setAberto] = useState(false);
+  const [minimizado, setMinimizado] = usePetMinimizado();
   const [humor,  setHumor]  = useState<PetHumor>('idle');   // modo interativo
   const [micro,  setMicro]  = useState<PetMicro>('none');
   const [roupa,  setRoupa]  = useState<PetRoupa>('nenhuma');
@@ -102,12 +110,16 @@ export function PetWidget() {
   const humorEfetivo: PetHumor =
     comemorando ? 'comemorando'
     : humorBase === 'idle' && evento === 'jogando' ? 'jogando'
+    : humorBase === 'idle' && evento === 'pesca' ? 'pescando'
+    : humorBase === 'idle' && evento === 'danca' ? 'dancando'
+    : humorBase === 'idle' && evento === 'marshmallow' ? 'assando'
     : humorBase;
   const cena: PetCena =
     comemorando ? 'confete'
     : humorBase !== 'idle' ? 'nenhuma'
     : evento === 'borboleta' ? 'borboleta'
     : evento === 'moeda' ? 'moeda'
+    : evento === 'carrinho' ? 'carrinho'
     : escadaFase === 'topo' ? 'aceno'
     : 'nenhuma';
   const microEfetivo: PetMicro =
@@ -148,18 +160,18 @@ export function PetWidget() {
 
   // Micro-animação alternada: pulinho ocasional enquanto está "de boa" parado
   useEffect(() => {
-    if (humorEfetivo !== 'idle' || movendo || aberto || emEvento) return;
+    if (humorEfetivo !== 'idle' || movendo || aberto || emEvento || minimizado) return;
     let dentro: ReturnType<typeof setTimeout> | null = null;
     const timer = setInterval(() => {
       setMicro('pulinho');
       dentro = setTimeout(() => setMicro('none'), 950);
     }, 9000 + Math.random() * 7000);
     return () => { clearInterval(timer); if (dentro) clearTimeout(dentro); };
-  }, [humorEfetivo, movendo, aberto, emEvento]);
+  }, [humorEfetivo, movendo, aberto, emEvento, minimizado]);
 
   // Passeio aleatório: anda até um ponto, para um tempinho, repete.
   useEffect(() => {
-    if (aberto || humorEfetivo !== 'idle' || emEvento) { setMovendo(false); return; }
+    if (aberto || humorEfetivo !== 'idle' || emEvento || minimizado) { setMovendo(false); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -185,11 +197,11 @@ export function PetWidget() {
 
     agendar(passeio, 2000 + Math.random() * 3000);
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorEfetivo, emEvento]);
+  }, [aberto, humorEfetivo, emEvento, minimizado]);
 
-  // Eventos aleatórios: sorteia videogame / borboleta / moeda / espreguiçada.
+  // Eventos aleatórios: sorteia videogame / borboleta / pescaria / dancinha…
   useEffect(() => {
-    if (aberto || humorBase !== 'idle' || comemorando) { setEvento('nenhum'); return; }
+    if (aberto || humorBase !== 'idle' || comemorando || minimizado) { setEvento('nenhum'); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -208,7 +220,7 @@ export function PetWidget() {
 
     sortearSessao();
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorBase, comemorando]);
+  }, [aberto, humorBase, comemorando, minimizado]);
 
   // Coreografia da escada: vai pro canto → sobe devagarinho → oizinho → desce
   useEffect(() => {
@@ -278,6 +290,20 @@ export function PetWidget() {
     }
   }
 
+  // Desativa o pet (vira iconezinho fixo) ou reativa. Ao desativar, volta
+  // pro canto e fecha o quartinho para o efeito ficar visível na hora.
+  function alternarMinimizado() {
+    const novo = !minimizado;
+    setMinimizado(novo);
+    if (novo) {
+      setDurMove(0);
+      setMovendo(false);
+      setX(0);
+      xRef.current = 0;
+      setAberto(false);
+    }
+  }
+
   function alternarPainel() {
     setAberto(v => {
       if (!v) {
@@ -316,6 +342,8 @@ export function PetWidget() {
             onAlimentar={alimentar}
             onAlternarSono={alternarSono}
             onSetRoupa={trocarRoupa}
+            minimizado={minimizado}
+            onAlternarMinimizado={alternarMinimizado}
             onClose={() => setAberto(false)}
           />
         )}
@@ -333,6 +361,20 @@ export function PetWidget() {
         </button>
       )}
 
+      {/* pet desativado: iconezinho fixo e parado — clique reabre o quartinho */}
+      {minimizado && (
+        <button
+          type="button"
+          onClick={alternarPainel}
+          title={`Seu ${pet.nome} está quietinho — clique para abrir`}
+          aria-label={`Abrir o quartinho do seu ${pet.nome}`}
+          className="relative w-9 h-9 text-black/70 dark:text-white/60 opacity-70 hover:opacity-100 hover:scale-110 transition-all cursor-pointer bg-transparent border-0 p-0"
+        >
+          <PetSvg humor="idle" roupa={roupa} className="pet-estatico w-full h-full drop-shadow-sm" />
+        </button>
+      )}
+
+      {!minimizado && (<>
       {/* escadinha de madeira encostada no cantinho */}
       {evento === 'escada' && (
         <svg
@@ -399,6 +441,7 @@ export function PetWidget() {
           </button>
         </div>
       </div>
+      </>)}
     </div>
   );
 }
