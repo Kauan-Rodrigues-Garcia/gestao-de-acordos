@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { ImagePlus, Loader2, Sparkles, ScanText, X, Wand2 } from 'lucide-react';
+import { ImagePlus, Loader2, Sparkles, ScanText, X, Wand2, Monitor, MonitorCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useCapturaMundialErp } from '@/hooks/useCapturaMundialErp';
+import { canvasParaFile } from '@/lib/ocr/fileToCanvas';
 import {
   lerImagensAcordoBP,
   preaquecerOcrAcordo,
@@ -36,10 +38,14 @@ export function DropzoneImagensAcordo({ onDados, disabled, className }: Dropzone
   const [imagens, setImagens] = useState<ImagemSel[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [processando, setProcessando] = useState(false);
+  const [capturando, setCapturando] = useState(false);
   const [fonte, setFonte] = useState<'ia' | 'ocr' | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const imagensRef = useRef<ImagemSel[]>([]);
   imagensRef.current = imagens;
+
+  // Captura de tela via seletor do navegador (reaproveita o hook do PaguePlay).
+  const { ativo, capturarFrame } = useCapturaMundialErp();
 
   // Pré-aquece o modelo de OCR (usado no fallback) e limpa ao desmontar.
   useEffect(() => {
@@ -121,14 +127,53 @@ export function DropzoneImagensAcordo({ onDados, disabled, className }: Dropzone
     }
   }
 
+  async function capturarTela() {
+    if (disabled || capturando) return;
+    setCapturando(true);
+    if (!ativo) {
+      toast.info('Escolha a aba/janela/tela para capturar e clique em Compartilhar.', {
+        id: 'captura-hint', duration: 6000,
+      });
+    }
+    try {
+      const canvas = await capturarFrame();
+      toast.dismiss('captura-hint');
+      if (!canvas) return; // usuário cancelou o seletor
+      const file = await canvasParaFile(canvas, `captura-${Date.now()}.png`);
+      adicionar([file]);
+      toast.success('Tela capturada. Clique em "Ler" para extrair os campos.');
+    } catch (err) {
+      toast.dismiss('captura-hint');
+      toast.error(err instanceof Error ? err.message : 'Falha ao capturar a tela.');
+    } finally {
+      setCapturando(false);
+    }
+  }
+
   return (
     <div className={className}>
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
-        <Wand2 className="w-3 h-3" /> Preencher por imagem
-        <span className="font-normal normal-case text-muted-foreground/50 ml-1">
-          IA + OCR · admin
-        </span>
-      </p>
+      <div className="flex items-center justify-between mb-2 gap-2">
+        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+          <Wand2 className="w-3 h-3" /> Preencher por imagem
+          <span className="font-normal normal-case text-muted-foreground/50 ml-1">
+            IA + OCR · admin
+          </span>
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={capturarTela}
+          disabled={disabled || capturando || processando}
+          className="h-7 gap-1.5 shrink-0"
+          title="Captura a aba/janela/tela que você selecionar e joga na fila de leitura"
+        >
+          {capturando
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : ativo ? <MonitorCheck className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+          {capturando ? 'Capturando…' : ativo ? 'Capturar de novo' : 'Capturar tela'}
+        </Button>
+      </div>
 
       <div
         role="button"
@@ -160,8 +205,8 @@ export function DropzoneImagensAcordo({ onDados, disabled, className }: Dropzone
           Arraste, <span className="text-primary">cole (Ctrl+V)</span> ou clique para enviar prints
         </p>
         <p className="text-[11px] text-muted-foreground">
-          NR, vencimento, valor, status… preenchidos automaticamente ·
-          {' '}pode juntar 2 prints do reparcelamento (até {MAX_IMAGENS})
+          NR, vencimento, valor, status… preenchidos automaticamente · ou use
+          {' '}<span className="text-primary">Capturar tela</span> · junte até {MAX_IMAGENS} prints (reparcelamento)
         </p>
       </div>
 

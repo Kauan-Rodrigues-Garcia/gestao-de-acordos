@@ -31,6 +31,16 @@ export async function fileParaCanvas(file: Blob): Promise<HTMLCanvasElement> {
   }
 }
 
+/** Converte um canvas em `File` PNG (ex.: para uma captura de tela virar upload). */
+export async function canvasParaFile(
+  src: HTMLCanvasElement,
+  nome = 'captura.png',
+): Promise<File> {
+  const blob = await new Promise<Blob | null>((res) => src.toBlob(res, 'image/png'));
+  if (!blob) throw new Error('Não foi possível gerar a imagem da captura.');
+  return new File([blob], nome, { type: 'image/png' });
+}
+
 /**
  * Converte um canvas em Data URL JPEG, reduzindo a maior dimensão para no
  * máximo `maxDim` px. Mantém o payload da IA pequeno (custo e limite de body
