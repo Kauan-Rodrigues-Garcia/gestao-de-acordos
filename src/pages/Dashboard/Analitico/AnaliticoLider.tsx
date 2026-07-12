@@ -36,14 +36,14 @@ import {
   removerLinhaAnalitico,
   removerOrfaosDoMes,
   limparDadosDoMes,
+  limparDadosDoMesSetor,
+  atualizarResumoMensal,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
-import { buscarTotalDiarioMes } from '@/services/diario/diario.service';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
@@ -61,6 +61,9 @@ interface AnaliticoLiderProps {
   empresaId: string;
   mes: string;
   setorId?: string | null;
+  /** true = diretoria/admin (enxerga e limpa a empresa toda). false = líder/
+   *  gerência restritos ao próprio setor (setorId vem travado no setor deles). */
+  podeVerTodosSetores?: boolean;
   temPermissaoImportar: boolean;
   operadorId: string;
   operadorNome: string;
@@ -76,7 +79,7 @@ interface AnaliticoLiderProps {
 interface FiltroData { inicio: string; fim: string }
 
 export function AnaliticoLider({
-  empresaId, mes, setorId,
+  empresaId, mes, setorId, podeVerTodosSetores = true,
   temPermissaoImportar, operadorId, operadorNome, liderId,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
@@ -113,12 +116,6 @@ export function AnaliticoLider({
   // ── Destaques ─────────────────────────────────────────────────────────────
   const [destaques,        setDestaques]        = useState<DestaqueDiaAnalitico[]>([]);
   const [loadingDestaques, setLoadingDestaques] = useState(false);
-
-  // ── Total do recebimento diário (945) — PP ────────────────────────────────
-  // O card "Total recebido" usa a soma de TODAS as linhas do diário no mês
-  // (com e sem operador): o diário traz pagamentos que não geram cobrança no
-  // analítico (Coren/indireto), então só ele fecha com o total do ERP.
-  const [totalDiario, setTotalDiario] = useState<{ total: number; qtd: number }>({ total: 0, qtd: 0 });
 
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
@@ -182,18 +179,6 @@ export function AnaliticoLider({
     });
   }, [empresaId]);
 
-  useEffect(() => {
-    if (!tenant.isPaguePlay || !empresaId || !mes) {
-      setTotalDiario({ total: 0, qtd: 0 });
-      return;
-    }
-    let cancelado = false;
-    void buscarTotalDiarioMes(empresaId, mes).then(t => {
-      if (!cancelado) setTotalDiario(t);
-    });
-    return () => { cancelado = true; };
-  }, [tenant.isPaguePlay, empresaId, mes]);
-
   // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
   useEffect(() => {
     setFiltroEquipeId(null);
@@ -206,6 +191,24 @@ export function AnaliticoLider({
     if (!setorId) return equipes;
     return equipes.filter(e => e.setor_id === setorId);
   }, [equipes, setorId]);
+
+  // ── Escopo de setor (líder/gerência restritos) ────────────────────────────
+  const restritoAoSetor = !podeVerTodosSetores && !!setorId;
+
+  /** Todos os perfis (ativos) do setor em foco — para limpar/remover escopado. */
+  const perfilIdsDoSetor = useMemo(() => {
+    if (!setorId) return [];
+    return Object.entries(operadorEquipeMap)
+      .filter(([, info]) => info.setor_id === setorId)
+      .map(([id]) => id);
+  }, [operadorEquipeMap, setorId]);
+
+  // Órfãos não têm operador (logo, não têm setor): pertencem ao setor de quem
+  // os importou. Restrito ao setor → só os importados pelo próprio setor.
+  const orfaosVisiveisSetor = useMemo(() => {
+    if (!restritoAoSetor) return orfaos;
+    return orfaos.filter(o => operadorEquipeMap[o.importado_por_id ?? '']?.setor_id === setorId);
+  }, [orfaos, restritoAoSetor, operadorEquipeMap, setorId]);
 
   // ── Filtro de equipe ──────────────────────────────────────────────────────
   function mudarFiltroEquipe(equipeId: string | null) {
@@ -269,11 +272,14 @@ export function AnaliticoLider({
 
   async function removerTodosOrfaos() {
     setRemovendoTodos(true);
-    const { error } = await removerOrfaosDoMes(empresaId, mes);
+    // Restrito ao setor: remove só os órfãos importados por gente do setor
+    const { error } = await removerOrfaosDoMes(
+      empresaId, mes, restritoAoSetor ? perfilIdsDoSetor : undefined);
     if (error) toast.error(`Erro ao remover: ${error}`);
     else {
       toast.success('Todos os registros sem operador foram removidos.');
-      setOrfaos([]);
+      if (restritoAoSetor) void carregarOrfaos();
+      else setOrfaos([]);
       onRefetch();
     }
     setRemovendoTodos(false);
@@ -281,12 +287,21 @@ export function AnaliticoLider({
 
   async function limparMes() {
     setLimpando(true);
-    const { error } = await limparDadosDoMes(empresaId, mes);
+    // Líder/gerência limpam SÓ o próprio setor; diretoria/admin, a empresa toda
+    const { error } = restritoAoSetor
+      ? await limparDadosDoMesSetor(empresaId, mes, perfilIdsDoSetor)
+      : await limparDadosDoMes(empresaId, mes);
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
+      // Recalcula o snapshot mensal para o card refletir o que sobrou no banco
+      await atualizarResumoMensal(empresaId, mes);
       const mesLabel = new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-      toast.success(`Dados de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`);
+      toast.success(
+        restritoAoSetor
+          ? `Dados do seu setor em ${mesLabel} excluídos. Reimporte o relatório quando necessário.`
+          : `Dados de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`,
+      );
       setConfirmandoLimpeza(false);
       void carregarResumos();
       void carregarSnapshot();
@@ -341,35 +356,31 @@ export function AnaliticoLider({
   }, [resumos, operadorEquipeMap, setorId]);
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
-  // PP: "Total recebido" = soma de TODAS as linhas do recebimento diário (945)
-  // no mês — é o único valor que fecha com o total do ERP. Sem diário
-  // importado (ou com filtro de equipe), cai no analítico como antes.
-  const usarTotalDiario = totalDiario.total > 0 && !filtroEquipeId;
+  // Tudo vem exclusivamente do relatório ANALÍTICO: sem filtro usa o snapshot
+  // salvo na importação; com filtro de setor/equipe, soma os resumos filtrados.
   const metricas = useMemo(() => {
     if (!setorId && !filtroEquipeId) {
       // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
-      if (!snapshot && !usarTotalDiario) return null;
+      if (!snapshot) return null;
       return {
-        totalRecebido:   usarTotalDiario ? totalDiario.total : (snapshot?.total_recebido ?? 0),
-        totalHo:         snapshot?.total_ho ?? 0,
-        totalOperadores: snapshot?.total_operadores ?? 0,
-        totalPagamentos: snapshot?.total_pagamentos ?? 0,
-        periodoInicio:   snapshot?.periodo_inicio ?? null,
-        periodoFim:      snapshot?.periodo_fim ?? null,
+        totalRecebido:   snapshot.total_recebido,
+        totalHo:         snapshot.total_ho,
+        totalOperadores: snapshot.total_operadores,
+        totalPagamentos: snapshot.total_pagamentos,
+        periodoInicio:   snapshot.periodo_inicio,
+        periodoFim:      snapshot.periodo_fim,
       };
     }
     // Computa a partir dos resumos filtrados (operadores com dados no período)
     return {
-      totalRecebido:   usarTotalDiario
-        ? totalDiario.total
-        : resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0),
+      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0),
       totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
       totalOperadores: resumosFiltrados.length,
       totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0),
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, usarTotalDiario, totalDiario.total]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -415,25 +426,7 @@ export function AnaliticoLider({
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-1">
                   <div className="min-w-0">
-                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide flex items-center gap-1">
-                      Total recebido
-                      {tenant.isPaguePlay && (
-                        <TooltipProvider delayDuration={150}>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <span className="inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-amber-500/15 text-amber-600 text-[10px] font-bold cursor-help shrink-0 normal-case">
-                                !
-                              </span>
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="max-w-[260px] text-xs">
-                              Valor total do relatório 945 (recebimento diário). Para ver o
-                              valor total atualizado, importe o relatório 945 com todos os
-                              dias do mês.
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider>
-                      )}
-                    </p>
+                    <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Total recebido</p>
                     <p className="text-base font-bold text-primary font-mono leading-tight mt-1 truncate">
                       {formatBRL(metricas.totalRecebido)}
                     </p>
@@ -889,16 +882,16 @@ export function AnaliticoLider({
               {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-10 bg-muted rounded-lg" />)}
             </div>
           )}
-          {!loadingOrfaos && orfaos.length === 0 && (
+          {!loadingOrfaos && orfaosVisiveisSetor.length === 0 && (
             <div className="text-center py-12 text-muted-foreground">
               <p className="text-sm">Nenhuma linha sem operador. ✓</p>
             </div>
           )}
-          {!loadingOrfaos && orfaos.length > 0 && (
+          {!loadingOrfaos && orfaosVisiveisSetor.length > 0 && (
             <>
               <div className="flex items-center justify-between gap-2">
                 <p className="text-xs text-muted-foreground">
-                  {orfaos.length} linha{orfaos.length !== 1 ? 's' : ''} não vinculada{orfaos.length !== 1 ? 's' : ''}.
+                  {orfaosVisiveisSetor.length} linha{orfaosVisiveisSetor.length !== 1 ? 's' : ''} não vinculada{orfaosVisiveisSetor.length !== 1 ? 's' : ''}.
                 </p>
                 <Button size="sm" variant="destructive" className="gap-1.5 h-7 text-xs"
                   onClick={() => void removerTodosOrfaos()} disabled={removendoTodos}>
@@ -922,7 +915,7 @@ export function AnaliticoLider({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
-                      {orfaos.slice(0, orfaosVisiveis).map(linha => (
+                      {orfaosVisiveisSetor.slice(0, orfaosVisiveis).map(linha => (
                         <tr key={linha.id} className="hover:bg-muted/20">
                           <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                           <td className="px-3 py-2 font-semibold">{linha.codigo}</td>
@@ -955,11 +948,11 @@ export function AnaliticoLider({
                   </table>
                 </CardContent>
               </Card>
-              {orfaosVisiveis < orfaos.length && (
+              {orfaosVisiveis < orfaosVisiveisSetor.length && (
                 <div className="flex justify-center pt-1">
                   <Button variant="outline" size="sm" className="gap-1.5 text-xs"
                     onClick={() => setOrfaosVisiveis(prev => prev + ORFAOS_PAGE)}>
-                    Carregar mais ({orfaos.length - orfaosVisiveis} restantes)
+                    Carregar mais ({orfaosVisiveisSetor.length - orfaosVisiveis} restantes)
                   </Button>
                 </div>
               )}
@@ -980,7 +973,9 @@ export function AnaliticoLider({
                 <strong>
                   {new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                 </strong>{' '}
-                serão excluídos permanentemente, incluindo todas as tabulações registradas no período.
+                {restritoAoSetor ? 'do seu setor ' : ''}serão excluídos permanentemente,
+                incluindo todas as tabulações registradas no período.
+                {restritoAoSetor && ' Os dados dos demais setores não serão afetados.'}
               </p>
               <p className="text-xs text-muted-foreground">
                 Esta ação não pode ser desfeita. Após a exclusão, reimporte o relatório para restaurar os dados.

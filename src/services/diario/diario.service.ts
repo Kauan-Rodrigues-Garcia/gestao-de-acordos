@@ -267,41 +267,6 @@ export async function buscarDiario(
   return { data: allData, error: null };
 }
 
-// ── Total do mês no recebimento diário (relatório 945) — PaguePlay ────────────
-// Soma TODAS as linhas do mês, com e sem operador. É a fonte do card
-// "Total recebido" do Analítico e do painel do setor em Desempenho Equipes:
-// o diário traz também pagamentos que não geram cobrança no analítico
-// (status Coren / contato indireto), então só ele fecha com o total do ERP.
-
-export async function buscarTotalDiarioMes(
-  empresaId: string,
-  mes: string,   // 'yyyy-MM'
-): Promise<{ total: number; qtd: number }> {
-  const [y, m] = mes.split('-').map(Number);
-  const fimDia = new Date(y, m, 0).getDate();
-  const PAGE = 1000;
-  let total = 0, qtd = 0, offset = 0;
-  try {
-    while (true) {
-      const { data, error } = await supabase
-        .from('diario_recebimentos')
-        .select('valor_recebido')
-        .eq('empresa_id', empresaId)
-        .gte('dia_referencia', `${mes}-01`)
-        .lte('dia_referencia', `${mes}-${String(fimDia).padStart(2, '0')}`)
-        .range(offset, offset + PAGE - 1);
-      if (error || !data?.length) break;
-      for (const r of data as { valor_recebido: number }[]) {
-        total += Number(r.valor_recebido) || 0;
-        qtd   += 1;
-      }
-      if (data.length < PAGE) break;
-      offset += PAGE;
-    }
-  } catch { /* indisponível — soma fica 0 e os cards caem no analítico */ }
-  return { total, qtd };
-}
-
 // ── Marcar como visto ─────────────────────────────────────────────────────────
 
 /**

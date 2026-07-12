@@ -7,7 +7,10 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { isPerfilAdminOuLider, getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
+import {
+  isPerfilAdminOuLider, isPerfilAdmin, isPerfilDiretoria,
+  getEstadoFromAcordo, ROUTE_PATHS,
+} from '@/lib/index';
 import { supabase } from '@/lib/supabase';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
@@ -28,8 +31,13 @@ export default function PaginaAnalitico() {
   const navigate         = useNavigate();
 
   const isElite     = perfil?.perfil === 'elite';
-  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
+  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
   const isOperador  = !isLiderMais;
+
+  // Isolamento por setor: líder/elite/gerência enxergam APENAS o próprio setor.
+  // Só diretoria e admin/super_admin veem todos os setores (e podem filtrar).
+  const veTodosSetores = isPerfilAdmin(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  const setorProprio   = perfil?.setor_id ?? null;
 
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
@@ -311,8 +319,9 @@ export default function PaginaAnalitico() {
           </div>
         </div>
 
-        {/* Filtro de setor — só aparece para líderes+ com setores cadastrados */}
-        {isLiderMais && setores.length > 0 && (
+        {/* Filtro de setor — só diretoria/admin podem alternar entre setores;
+            líder/gerência ficam travados no próprio setor */}
+        {isLiderMais && veTodosSetores && setores.length > 0 && (
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             <span className="text-xs text-muted-foreground font-medium shrink-0">Setor:</span>
@@ -335,6 +344,12 @@ export default function PaginaAnalitico() {
               </button>
             )}
           </div>
+        )}
+        {isLiderMais && !veTodosSetores && setorProprio && (
+          <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg">
+            <Building2 className="w-3.5 h-3.5" />
+            {setores.find(s => s.id === setorProprio)?.nome ?? 'Meu setor'}
+          </span>
         )}
       </div>
       )}
@@ -359,7 +374,8 @@ export default function PaginaAnalitico() {
         <AnaliticoLider
           empresaId={empresa.id}
           mes={mesFiltro}
-          setorId={filtroSetorId}
+          setorId={veTodosSetores ? filtroSetorId : setorProprio}
+          podeVerTodosSetores={veTodosSetores}
           temPermissaoImportar={temPermissao('importar_analitico')}
           operadorId={perfil.id}
           operadorNome={perfil.nome}

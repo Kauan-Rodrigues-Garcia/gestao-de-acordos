@@ -230,14 +230,20 @@ export function useAnaliticoImport() {
       }
     }
 
+    // Notificação escopada: só o setor do importador + operadores do lote
+    // (linhas de gente de outro setor seguem para o setor delas).
     await notificarImportacaoAnalitico(
       empresa.id,
       preview.mes,
       perfil.nome ?? 'Líder',
+      {
+        setorId:     perfil.setor_id ?? null,
+        operadorIds: [...new Set(Object.values(mapFinal).filter((v): v is string => !!v))],
+      },
     );
 
     setEstado('done');
-  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, tenant.isPaguePlay]);
+  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, perfil?.setor_id, tenant.isPaguePlay]);
 
   const cancelar = useCallback(() => {
     setEstado('idle');

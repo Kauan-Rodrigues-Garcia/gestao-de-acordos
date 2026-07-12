@@ -90,19 +90,31 @@ export function MetaProgressoHeader() {
     return () => { cancelado = true; };
   }, [ativo, perfil?.id, empresa?.id, mes, ano]);
 
-  // Ranking — recarrega junto com o analítico (realtime já dispara o hook)
+  // Ranking — recarrega junto com o analítico (realtime já dispara o hook).
+  // Isolamento por setor: a posição compara APENAS com operadores do próprio
+  // setor — os números de outro setor não entram no ranking pessoal.
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
       if (!ativo || !empresa?.id || metaValor == null) return;
       try {
         const { data } = await buscarResumoOperadoresAnalitico(empresa.id, mesStr);
-        if (!cancelado) setRanking(data);
+        let lista = data;
+        if (perfil?.setor_id) {
+          const { data: doSetor } = await supabase
+            .from('perfis')
+            .select('id')
+            .eq('empresa_id', empresa.id)
+            .eq('setor_id', perfil.setor_id);
+          const ids = new Set(((doSetor ?? []) as { id: string }[]).map(r => r.id));
+          lista = data.filter(r => ids.has(r.operador_id));
+        }
+        if (!cancelado) setRanking(lista);
       } catch { /* ranking indisponível — seção some */ }
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas]);
+  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas, perfil?.setor_id]);
 
   const dados = useMemo(() => {
     if (!perfil?.id || metaValor == null || metaValor <= 0 || !config) return null;

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
+import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import {
@@ -46,6 +47,7 @@ export function AnalyticsPanel({
   temLogicaDiretoExtra = false,
 }: AnalyticsPanelProps = {}) {
   const { tickColor, gridColor } = useAxisColors();
+  const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -110,13 +112,19 @@ export function AnalyticsPanel({
   const [opsEscopo, setOpsEscopo] = useState<Set<string> | string | null>(null);
   // true quando o escopo ativo é um SETOR: linhas sem operador contam no total
   const [escopoEhSetor, setEscopoEhSetor] = useState(false);
+  // Isolamento por setor: sem visão global (admin/diretoria/'ver_todos_setores'),
+  // o analítico do painel fica travado no setor do próprio usuário — os números
+  // de um setor nunca somam nos do outro.
+  const veTodosSetores =
+    temPermissao('ver_analiticos_global') || temPermissao('ver_todos_setores');
+  const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
   useEffect(() => {
     let cancelado = false;
     async function resolver() {
       if (!temAnalitico) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
       if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); setEscopoEhSetor(false); return; }
       const eq = equipeFiltroExterno ?? null;
-      const st = setorExterno ?? null;
+      const st = (setorExterno ?? null) || setorTravado;
       if (!eq && !st) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
       let q = supabase.from('perfis').select('id');
       q = eq ? q.eq('equipe_id', eq) : q.eq('setor_id', st!);
@@ -128,7 +136,7 @@ export function AnalyticsPanel({
     }
     void resolver();
     return () => { cancelado = true; };
-  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno]);
+  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno, setorTravado]);
 
   // Linhas sem operador só entram no consolidado de setor da PP (setor único);
   // na BookPlay elas nem são importadas (vários setores, sem atribuição)

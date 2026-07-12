@@ -387,24 +387,66 @@ export async function limparDadosDoMes(
   return { error: error?.message ?? null };
 }
 
-/** Remove todos os órfãos (sem operador) de um mês específico. */
+/**
+ * Versão escopada por setor de `limparDadosDoMes`: remove só as linhas do mês
+ * cujo operador pertence ao setor (ids em `perfilIdsDoSetor`) e os órfãos
+ * (sem operador) importados por alguém do setor. Usada por líder/gerência —
+ * os dados dos DEMAIS setores ficam intactos.
+ */
+export async function limparDadosDoMesSetor(
+  empresaId: string,
+  mes: string,
+  perfilIdsDoSetor: string[],
+): Promise<{ error: string | null }> {
+  if (!perfilIdsDoSetor.length) return { error: null };
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  const { error: errOps } = await supabase
+    .from('analitico_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .in('operador_id', perfilIdsDoSetor)
+    .gte('data_pagamento', primeiro)
+    .lte('data_pagamento', fim);
+  if (errOps) return { error: errOps.message };
+
+  const { error: errOrfaos } = await supabase
+    .from('analitico_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .is('operador_id', null)
+    .in('importado_por_id', perfilIdsDoSetor)
+    .gte('data_pagamento', primeiro)
+    .lte('data_pagamento', fim);
+
+  return { error: errOrfaos?.message ?? null };
+}
+
+/** Remove todos os órfãos (sem operador) de um mês específico.
+ *  Com `importadorIds`, remove só os importados por esses perfis (escopo de setor). */
 export async function removerOrfaosDoMes(
   empresaId: string,
   mes: string,
+  importadorIds?: string[],
 ): Promise<{ error: string | null }> {
+  if (importadorIds && !importadorIds.length) return { error: null };
   const [y, m] = mes.split('-').map(Number);
   const primeiro = `${mes}-01`;
   const ultimo   = new Date(y, m, 0);
   const fim      = `${mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
 
-  const { error } = await supabase
+  let q = supabase
     .from('analitico_recebimentos')
     .delete()
     .eq('empresa_id', empresaId)
     .is('operador_id', null)
     .gte('data_pagamento', primeiro)
     .lte('data_pagamento', fim);
+  if (importadorIds) q = q.in('importado_por_id', importadorIds);
 
+  const { error } = await q;
   return { error: error?.message ?? null };
 }
 
@@ -454,7 +496,7 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
 }> {
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, equipes(id, nome, setor_id)')
+    .select('id, equipe_id, setor_id, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
 
@@ -464,13 +506,15 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
   for (const p of (data ?? []) as {
     id: string;
     equipe_id: string | null;
+    setor_id: string | null;
     equipes: { id: string; nome: string; setor_id: string | null } | null;
   }[]) {
     const eq = p.equipes;
     operadorEquipeMap[p.id] = {
       equipe_id:   p.equipe_id ?? null,
       equipe_nome: eq?.nome ?? 'Sem equipe',
-      setor_id:    eq?.setor_id ?? null,
+      // Setor da equipe; quem não tem equipe usa o setor do próprio perfil
+      setor_id:    eq?.setor_id ?? p.setor_id ?? null,
     };
     if (p.equipe_id && eq?.nome) {
       equipeMap.set(p.equipe_id, { nome: eq.nome, setor_id: eq.setor_id ?? null });
@@ -697,17 +741,26 @@ export async function notificarImportacaoAnalitico(
   empresaId: string,
   mes: string,
   importadorNome: string,
+  /** Escopo por setor: notifica só os perfis do setor do importador +
+   *  os operadores vinculados no lote (que podem ser de outro setor).
+   *  Sem setor (PP/importador sem setor cadastrado) → todos, como antes. */
+  escopo?: { setorId?: string | null; operadorIds?: string[] },
 ): Promise<void> {
-  const { data: perfis } = await supabase
+  let q = supabase
     .from('perfis')
     .select('id')
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
+  if (escopo?.setorId) q = q.eq('setor_id', escopo.setorId);
 
-  if (!perfis?.length) return;
+  const { data: perfis } = await q;
 
-  const notifs = perfis.map(p => ({
-    usuario_id: p.id,
+  const ids = new Set<string>((perfis ?? []).map(p => p.id as string));
+  if (escopo?.setorId) for (const id of escopo.operadorIds ?? []) ids.add(id);
+  if (!ids.size) return;
+
+  const notifs = [...ids].map(usuarioId => ({
+    usuario_id: usuarioId,
     empresa_id: empresaId,
     titulo:     'Analítico atualizado',
     mensagem:   `${importadorNome} importou os recebimentos de ${mes}. Acesse a aba Analítico para ver seus pagamentos.`,
