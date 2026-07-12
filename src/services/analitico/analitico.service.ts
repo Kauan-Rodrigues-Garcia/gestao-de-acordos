@@ -183,45 +183,84 @@ export async function importarLoteAnalitico(
     }
   }
 
-  // ── Reconciliação de valores (linhas descartadas pela dedupe) ──────────────
-  if (duplicados > 0) {
-    type RowImport = (typeof rows)[number];
-    const chaveDe = (r: {
-      codigo: string; data_pagamento: string;
-      forma_pagamento: string; operador_usuario: string;
-    }) => `${r.codigo}::${r.data_pagamento}::${r.forma_pagamento}::${r.operador_usuario}`;
+  // ── Reconciliação por NR: o relatório é a VERDADE do mês ───────────────────
+  // Para cada (operador, NR, mês) presente no relatório, a SOMA das linhas no
+  // banco tem que ser igual ao valor do relatório. Isso cobre todos os casos
+  // em que a dedupe deixava o total divergir do arquivo:
+  //   • novas parcelas do NR caindo na mesma chave (linha descartada);
+  //   • NR dividido em várias linhas por importações parciais antigas;
+  //   • duplicata com chave diferente (forma/data da 1ª parcela mudou).
+  // O ajuste é aplicado na linha de mesma chave (ou na de maior valor),
+  // preservando tabulação e "visto" das demais.
+  type ExRow = {
+    id: string; codigo: string; operador_usuario: string; mes_referencia: string;
+    data_pagamento: string; forma_pagamento: string; valor_recebido: number; total_ho: number;
+  };
+  type RowImport = (typeof rows)[number];
+  const grupoDe = (r: { operador_usuario: string; codigo: string; mes_referencia: string }) =>
+    `${r.operador_usuario}::${r.codigo}::${r.mes_referencia}`;
 
-    const porChave = new Map<string, RowImport>();
-    for (const r of rows) porChave.set(chaveDe(r), r);
+  const alvoPorGrupo = new Map<string, RowImport>();
+  for (const r of rows) alvoPorGrupo.set(grupoDe(r), r);
 
-    const codigos = [...new Set(rows.map(r => r.codigo))];
-    for (let i = 0; i < codigos.length; i += CHUNK) {
-      const { data: existentes } = await supabase
-        .from('analitico_recebimentos')
-        .select('id, codigo, data_pagamento, forma_pagamento, operador_usuario, valor_recebido, total_ho')
-        .eq('empresa_id', empresaId)
-        .in('codigo', codigos.slice(i, i + CHUNK));
+  const codigos = [...new Set(rows.map(r => r.codigo))];
+  const meses   = [...new Set(rows.map(r => r.mes_referencia))];
+  const existentes: ExRow[] = [];
+  for (let i = 0; i < codigos.length; i += CHUNK) {
+    const { data } = await supabase
+      .from('analitico_recebimentos')
+      .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
+      .eq('empresa_id', empresaId)
+      .in('mes_referencia', meses)
+      .in('codigo', codigos.slice(i, i + CHUNK));
+    existentes.push(...((data ?? []) as ExRow[]));
+  }
 
-      for (const ex of (existentes ?? []) as {
-        id: string; codigo: string; data_pagamento: string; forma_pagamento: string;
-        operador_usuario: string; valor_recebido: number; total_ho: number;
-      }[]) {
-        const alvo = porChave.get(chaveDe(ex));
-        if (!alvo) continue;
-        const cresceu = alvo.valor_recebido - (Number(ex.valor_recebido) || 0) > 0.005;
-        if (!cresceu) continue;
-        const { error: errUp } = await supabase
-          .from('analitico_recebimentos')
-          .update({
-            valor_recebido:        alvo.valor_recebido,
-            total_ho:              alvo.total_ho,
-            pagamentos_detalhados: alvo.pagamentos_detalhados,
-          })
-          .eq('id', ex.id);
-        if (errUp) erros.push(`Atualização ${ex.codigo}: ${errUp.message}`);
-        else atualizados++;
-      }
+  const dbPorGrupo = new Map<string, ExRow[]>();
+  for (const ex of existentes) {
+    const k = grupoDe(ex);
+    if (!alvoPorGrupo.has(k)) continue;
+    const lista = dbPorGrupo.get(k);
+    if (lista) lista.push(ex); else dbPorGrupo.set(k, [ex]);
+  }
+
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  for (const [k, alvo] of alvoPorGrupo) {
+    const doBanco = dbPorGrupo.get(k) ?? [];
+    if (!doBanco.length) continue; // linha nem inseriu (erro já reportado no chunk)
+
+    const somaDb = doBanco.reduce((s, x) => s + (Number(x.valor_recebido) || 0), 0);
+    const delta  = alvo.valor_recebido - somaDb;
+    if (Math.abs(delta) <= 0.005) continue;
+
+    const chaveIgual = doBanco.find(x =>
+      x.data_pagamento === alvo.data_pagamento && x.forma_pagamento === alvo.forma_pagamento);
+    const linha = chaveIgual
+      ?? doBanco.reduce((a, b) => (Number(a.valor_recebido) >= Number(b.valor_recebido) ? a : b));
+
+    const novoValor = round2((Number(linha.valor_recebido) || 0) + delta);
+    if (novoValor < 0) {
+      erros.push(
+        `NR ${alvo.codigo} (${alvo.operador_usuario}): banco tem ${somaDb.toFixed(2)} em ` +
+        `${doBanco.length} linha(s), relatório diz ${alvo.valor_recebido.toFixed(2)} — ` +
+        `ajuste manual necessário (use "Limpar mês" e reimporte).`,
+      );
+      continue;
     }
+    const somaHoDb = doBanco.reduce((s, x) => s + (Number(x.total_ho) || 0), 0);
+    const novoHo   = round2(Math.max((Number(linha.total_ho) || 0) + (alvo.total_ho - somaHoDb), 0));
+
+    const { error: errUp } = await supabase
+      .from('analitico_recebimentos')
+      .update({
+        valor_recebido: novoValor,
+        total_ho:       novoHo,
+        // Detalhamento completo só faz sentido quando o NR está numa linha única
+        ...(doBanco.length === 1 ? { pagamentos_detalhados: alvo.pagamentos_detalhados } : {}),
+      })
+      .eq('id', linha.id);
+    if (errUp) erros.push(`Atualização ${alvo.codigo}: ${errUp.message}`);
+    else atualizados++;
   }
 
   return { inseridos, duplicados, atualizados, erros };

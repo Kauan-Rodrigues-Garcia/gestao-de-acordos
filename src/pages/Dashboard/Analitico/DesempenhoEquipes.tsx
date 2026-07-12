@@ -212,7 +212,10 @@ export function DesempenhoEquipes({
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
     const decorridos = diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO());
 
-    // Acumulado (bruto + H.O.) por equipe e por setor a partir do analítico
+    // Acumulado (bruto + H.O.) por equipe e por setor a partir do analítico.
+    // O card do SETOR soma TODOS os operadores do setor — inclusive quem está
+    // sem equipe (o setor vem da equipe ou, na falta dela, do próprio perfil);
+    // sem isso o consolidado do setor ficava menor que o card Total recebido.
     const porEquipe: Record<string, { bruto: number; ho: number }> = {};
     const porSetor:  Record<string, { bruto: number; ho: number }> = {};
     const somar = (map: typeof porEquipe, id: string, r: ResumoOperadorAnalitico) => {
@@ -222,9 +225,8 @@ export function DesempenhoEquipes({
     };
     for (const r of resumos) {
       const info = operadorEquipeMap[r.operador_id];
-      if (!info?.equipe_id) continue;
-      somar(porEquipe, info.equipe_id, r);
-      if (info.setor_id) somar(porSetor, info.setor_id, r);
+      if (info?.equipe_id) somar(porEquipe, info.equipe_id, r);
+      if (info?.setor_id)  somar(porSetor, info.setor_id, r);
     }
 
     const metaDe = (tipo: string, id: string): number | null => {

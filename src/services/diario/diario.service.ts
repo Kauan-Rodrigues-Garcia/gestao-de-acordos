@@ -159,9 +159,10 @@ export async function importarLoteDiario(
     }
   }
 
-  // ── Reconciliação: mesma chave, valor MAIOR no relatório novo ──────────────
-  // O NR recebeu outra parcela no mesmo dia depois da importação anterior; o
-  // ignoreDuplicates descartava a linha e a diferença sumia. Só aumenta.
+  // ── Reconciliação: o relatório é a verdade do (NR, dia) ────────────────────
+  // A chave é única por (dia, operador|NR|dia): se a linha já existia com
+  // valor diferente (nova parcela do mesmo dia, ou correção no ERP), o
+  // ignoreDuplicates descartava a linha nova — o valor é igualado ao arquivo.
   let atualizados = 0;
   if (duplicados > 0) {
     const porChave = new Map(rows.map(r => [`${r.dia_referencia}::${r.chave_unica}`, r]));
@@ -178,7 +179,7 @@ export async function importarLoteDiario(
           id: string; dia_referencia: string; chave_unica: string; valor_recebido: number;
         }[]) {
           const alvo = porChave.get(`${ex.dia_referencia}::${ex.chave_unica}`);
-          if (!alvo || alvo.valor_recebido - (Number(ex.valor_recebido) || 0) <= 0.005) continue;
+          if (!alvo || Math.abs(alvo.valor_recebido - (Number(ex.valor_recebido) || 0)) <= 0.005) continue;
           const { error: errUp } = await supabase
             .from('diario_recebimentos')
             .update({ valor_recebido: alvo.valor_recebido })
