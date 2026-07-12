@@ -1,7 +1,8 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2 } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2 } from 'lucide-react';
+import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
@@ -79,6 +80,24 @@ export default function AdminUsuarios() {
   const [senhaTarget,     setSenhaTarget]     = useState<Perfil | null>(null);
   const [novaSenha,       setNovaSenha]       = useState('');
   const [salvandoSenha,   setSalvandoSenha]   = useState(false);
+  const [impersonando,    setImpersonando]    = useState<string | null>(null);
+
+  // Entrar como (impersonação) — só super_admin. Recarrega ao assumir a sessão.
+  async function entrarComo(u: Perfil) {
+    if (!perfilAtual?.id || u.id === perfilAtual.id) return;
+    const ok = window.confirm(
+      `Entrar como "${u.nome}"?\n\nVocê vai assumir a sessão dele (login real). Use a faixa laranja no topo para voltar à sua conta a qualquer momento.`,
+    );
+    if (!ok) return;
+    setImpersonando(u.id);
+    try {
+      await iniciarImpersonacao(u.id, perfilAtual.id, perfilAtual.nome ?? 'super_admin');
+      // iniciarImpersonacao recarrega a página em caso de sucesso.
+    } catch (e) {
+      setImpersonando(null);
+      toast.error(e instanceof Error ? e.message : 'Falha ao entrar como usuário.');
+    }
+  }
 
   useEffect(() => {
     if (empresaAtual?.id) {
@@ -588,6 +607,21 @@ export default function AdminUsuarios() {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">
+                                {isSuperAdmin && u.id !== perfilAtual?.id && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 gap-1.5 px-2 text-amber-600 hover:text-amber-700 hover:bg-amber-500/10 dark:text-amber-400"
+                                    title="Entrar como este usuário (impersonação — super admin)"
+                                    disabled={impersonando === u.id}
+                                    onClick={() => entrarComo(u)}
+                                  >
+                                    {impersonando === u.id
+                                      ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                      : <LogIn className="w-3.5 h-3.5" />}
+                                    <span className="text-xs">Entrar como</span>
+                                  </Button>
+                                )}
                                 {temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
                                   <Button
                                     variant="ghost"

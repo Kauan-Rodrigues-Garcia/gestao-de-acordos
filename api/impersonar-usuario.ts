@@ -1,0 +1,159 @@
+/**
+ * Função serverless (Vercel) — IMPERSONAÇÃO de usuário (login real).
+ *
+ * Só super_admin pode chamar. O fluxo:
+ *   1. Valida o JWT de quem chamou e confirma perfil = super_admin (no SERVIDOR,
+ *      via service_role — a UI sozinha não é confiável).
+ *   2. Gera um magic link (OTP) do usuário-alvo com a Admin API do GoTrue.
+ *   3. Registra a impersonação em logs_sistema (auditoria).
+ *   4. Devolve o `token_hash` — o cliente troca a sessão com verifyOtp.
+ *
+ * A SERVICE_ROLE_KEY NUNCA chega ao navegador: fica só neste ambiente de
+ * servidor. Requer as variáveis SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.
+ *
+ * Salvaguardas: super_admin não pode impersonar outro super_admin.
+ */
+
+interface ReqLike {
+  method?: string;
+  body?: unknown;
+  headers?: Record<string, string | string[] | undefined>;
+}
+interface ResLike {
+  status: (code: number) => ResLike;
+  json: (data: unknown) => void;
+}
+
+function header(req: ReqLike, nome: string): string | undefined {
+  const v = req.headers?.[nome] ?? req.headers?.[nome.toLowerCase()];
+  return Array.isArray(v) ? v[0] : v;
+}
+
+export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method not allowed' });
+    return;
+  }
+
+  const url = (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !serviceKey) {
+    res.status(503).json({ error: 'Impersonação não configurada no servidor (falta SUPABASE_SERVICE_ROLE_KEY).' });
+    return;
+  }
+
+  // JWT de quem está chamando
+  const auth = header(req, 'authorization') || '';
+  const callerJwt = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+  if (!callerJwt) {
+    res.status(401).json({ error: 'Não autenticado.' });
+    return;
+  }
+
+  const admin = {
+    apikey: serviceKey,
+    Authorization: `Bearer ${serviceKey}`,
+    'Content-Type': 'application/json',
+  };
+
+  try {
+    // 1) Identidade de quem chamou
+    const userResp = await fetch(`${url}/auth/v1/user`, {
+      headers: { apikey: serviceKey, Authorization: `Bearer ${callerJwt}` },
+    });
+    if (!userResp.ok) {
+      res.status(401).json({ error: 'Sessão inválida.' });
+      return;
+    }
+    const caller = (await userResp.json()) as { id?: string };
+    if (!caller?.id) {
+      res.status(401).json({ error: 'Sessão inválida.' });
+      return;
+    }
+
+    // 2) Confirma super_admin
+    const perfilResp = await fetch(
+      `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id`,
+      { headers: admin },
+    );
+    const perfilArr = (await perfilResp.json()) as Array<{ perfil?: string; nome?: string; empresa_id?: string }>;
+    const callerPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
+    if (!callerPerfil || callerPerfil.perfil !== 'super_admin') {
+      res.status(403).json({ error: 'Apenas super_admin pode impersonar usuários.' });
+      return;
+    }
+
+    // 3) Alvo
+    const body = (typeof req.body === 'string' ? JSON.parse(req.body) : req.body) as { alvoUserId?: string };
+    const alvoId = body?.alvoUserId;
+    if (!alvoId) {
+      res.status(400).json({ error: 'alvoUserId é obrigatório.' });
+      return;
+    }
+    if (alvoId === caller.id) {
+      res.status(400).json({ error: 'Você já está logado como você mesmo.' });
+      return;
+    }
+
+    const alvoResp = await fetch(
+      `${url}/rest/v1/perfis?id=eq.${alvoId}&select=id,nome,email,perfil`,
+      { headers: admin },
+    );
+    const alvoArr = (await alvoResp.json()) as Array<{ id: string; nome?: string; email?: string; perfil?: string }>;
+    const alvo = Array.isArray(alvoArr) ? alvoArr[0] : null;
+    if (!alvo?.email) {
+      res.status(404).json({ error: 'Usuário-alvo não encontrado ou sem e-mail.' });
+      return;
+    }
+    if (alvo.perfil === 'super_admin') {
+      res.status(403).json({ error: 'Não é permitido impersonar outro super_admin.' });
+      return;
+    }
+
+    // 4) Gera o magic link (OTP) do alvo
+    const linkResp = await fetch(`${url}/auth/v1/admin/generate_link`, {
+      method: 'POST',
+      headers: admin,
+      body: JSON.stringify({ type: 'magiclink', email: alvo.email }),
+    });
+    if (!linkResp.ok) {
+      const msg = await linkResp.text().catch(() => '');
+      res.status(502).json({ error: `Falha ao gerar sessão do alvo (${linkResp.status}). ${msg}`.trim() });
+      return;
+    }
+    const link = (await linkResp.json()) as { hashed_token?: string; properties?: { hashed_token?: string } };
+    const tokenHash = link.hashed_token ?? link.properties?.hashed_token;
+    if (!tokenHash) {
+      res.status(502).json({ error: 'Resposta do provedor sem token de sessão.' });
+      return;
+    }
+
+    // 5) Auditoria (best-effort — não bloqueia a impersonação se falhar)
+    await fetch(`${url}/rest/v1/logs_sistema`, {
+      method: 'POST',
+      headers: { ...admin, Prefer: 'return=minimal' },
+      body: JSON.stringify({
+        usuario_id: caller.id,
+        acao: 'impersonar_inicio',
+        tabela: 'auth.users',
+        registro_id: alvo.id,
+        empresa_id: callerPerfil.empresa_id ?? null,
+        detalhes: {
+          admin_nome: callerPerfil.nome ?? null,
+          alvo_id: alvo.id,
+          alvo_nome: alvo.nome ?? null,
+          alvo_email: alvo.email,
+          em: new Date().toISOString(),
+        },
+      }),
+    }).catch(() => {/* auditoria falhou, segue */});
+
+    res.status(200).json({
+      token_hash: tokenHash,
+      alvo: { id: alvo.id, nome: alvo.nome ?? '', email: alvo.email, perfil: alvo.perfil ?? '' },
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Erro ao impersonar.';
+    res.status(500).json({ error: msg });
+  }
+}
