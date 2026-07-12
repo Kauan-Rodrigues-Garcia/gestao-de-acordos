@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
@@ -9,9 +9,11 @@ import {
 } from '@/components/ui/select';
 import {
   AlertCircle, CheckCircle2, Upload, Loader2, Users, FileSpreadsheet,
-  ChevronDown, ChevronUp, ArrowRight,
+  ChevronDown, ChevronUp, ArrowRight, Building2,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
+import { supabase } from '@/lib/supabase';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import type { UseAnaliticoImport } from './types';
 
 interface ImportarModalProps {
@@ -25,10 +27,24 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     estado, preview, resultado, erroGeral,
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
+    precisaEscolherSetor, setorImportacao, setSetorEscolhido,
   } = hook;
 
+  const { empresa } = useEmpresa();
   const inputRef = useRef<HTMLInputElement>(null);
   const [detectadosExpandido, setDetectadosExpandido] = useState(false);
+
+  // Setores para o admin escolher o dono da importação (BookPlay)
+  const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
+  useEffect(() => {
+    if (!aberto || !precisaEscolherSetor || !empresa?.id || setores.length) return;
+    supabase
+      .from('setores')
+      .select('id, nome')
+      .eq('empresa_id', empresa.id)
+      .order('nome')
+      .then(({ data }) => setSetores((data as { id: string; nome: string }[]) ?? []));
+  }, [aberto, precisaEscolherSetor, empresa?.id, setores.length]);
 
   function handleFechar() {
     cancelar();
@@ -192,6 +208,36 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
+            {/* Setor da importação — admin BookPlay escolhe o dono dos órfãos */}
+            {precisaEscolherSetor && (
+              <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+                <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-primary" />
+                  Setor desta importação
+                </p>
+                <Select
+                  value={setorImportacao ?? '__nenhum__'}
+                  onValueChange={v => setSetorEscolhido(v === '__nenhum__' ? null : v)}
+                >
+                  <SelectTrigger className="h-8 text-xs bg-background">
+                    <SelectValue placeholder="Selecione o setor…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__nenhum__">
+                      <span className="text-muted-foreground">Selecione o setor…</span>
+                    </SelectItem>
+                    {setores.map(s => (
+                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">
+                  Os pagamentos sem operador vinculado (órfãos) passam a contar no
+                  Total recebido deste setor.
+                </p>
+              </div>
+            )}
+
             {/* Operadores não detectados — com seleção manual */}
             {naoDetectados.length > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20">
@@ -320,7 +366,11 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
 
           <DialogFooter className="mt-4 border-t pt-4">
             <Button variant="outline" onClick={cancelar}>Cancelar</Button>
-            <Button onClick={() => void confirmarImportacao()} disabled={estado === 'confirming'}>
+            <Button
+              onClick={() => void confirmarImportacao()}
+              disabled={estado === 'confirming' || (precisaEscolherSetor && !setorImportacao)}
+              title={precisaEscolherSetor && !setorImportacao ? 'Escolha o setor da importação' : undefined}
+            >
               {estado === 'confirming'
                 ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Importando…</>
                 : `Confirmar (${preview.linhasNovas} registro${preview.linhasNovas !== 1 ? 's' : ''})`

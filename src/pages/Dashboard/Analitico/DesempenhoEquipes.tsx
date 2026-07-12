@@ -11,7 +11,9 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Building2, Users } from 'lucide-react';
+import { Building2, Users, Headset, Pencil, Check, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
@@ -31,6 +33,10 @@ interface DesempenhoEquipesProps {
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+  /** Equipes em que cada operador é CLONE — o recebimento dele soma nelas também. */
+  equipesExtrasPorOperador?: Record<string, string[]>;
+  /** Total dos órfãos (sem operador) por setor — entram no card do setor. */
+  orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
   loading: boolean;
 }
 
@@ -159,10 +165,139 @@ function PainelPlacar({
   );
 }
 
+// ── Contribuição Receptivo (card manual por setor — BookPlay) ─────────────────
+// Card visual idêntico ao placar, preenchido À MÃO (acumulado + meta) pelo
+// botão de editar ao lado. Sem banco: fica no localStorage, por setor e mês.
+
+interface ContribReceptivo { acumulado: number; meta: number }
+
+function chaveContribuicao(empresaId: string, setorId: string, mes: string): string {
+  return `contribuicao-receptivo::${empresaId}::${setorId}::${mes}`;
+}
+
+function lerContribuicao(chave: string): ContribReceptivo | null {
+  try {
+    const raw = localStorage.getItem(chave);
+    if (!raw) return null;
+    const v = JSON.parse(raw) as ContribReceptivo;
+    if (typeof v?.acumulado !== 'number') return null;
+    return { acumulado: v.acumulado, meta: Number(v.meta) || 0 };
+  } catch { return null; }
+}
+
+/** Aceita "12.345,67", "12345,67" ou "12345.67". */
+function parseValorBR(s: string): number {
+  const limpo = s.trim().replace(/[R$\s]/g, '');
+  if (!limpo) return 0;
+  const normalizado = limpo.includes(',')
+    ? limpo.replace(/\./g, '').replace(',', '.')
+    : limpo;
+  const n = parseFloat(normalizado);
+  return isNaN(n) ? 0 : n;
+}
+
+function CardContribuicaoReceptivo({
+  empresaId, setorId, mes, totalUteis, decorridos,
+}: { empresaId: string; setorId: string; mes: string; totalUteis: number; decorridos: number }) {
+  const chave = chaveContribuicao(empresaId, setorId, mes);
+  const [dados, setDados]         = useState<ContribReceptivo | null>(() => lerContribuicao(chave));
+  const [editando, setEditando]   = useState(false);
+  const [acumuladoStr, setAcumuladoStr] = useState('');
+  const [metaStr, setMetaStr]           = useState('');
+
+  // Troca de setor/mês → recarrega o valor salvo daquela chave
+  useEffect(() => {
+    setDados(lerContribuicao(chave));
+    setEditando(false);
+  }, [chave]);
+
+  function abrirEdicao() {
+    setAcumuladoStr(dados ? String(dados.acumulado).replace('.', ',') : '');
+    setMetaStr(dados && dados.meta > 0 ? String(dados.meta).replace('.', ',') : '');
+    setEditando(true);
+  }
+
+  function salvar() {
+    const novo: ContribReceptivo = {
+      acumulado: parseValorBR(acumuladoStr),
+      meta:      parseValorBR(metaStr),
+    };
+    try { localStorage.setItem(chave, JSON.stringify(novo)); } catch { /* noop */ }
+    setDados(novo);
+    setEditando(false);
+  }
+
+  return (
+    <div className="flex items-start gap-2">
+      <div className="flex-1 min-w-0">
+        <PainelPlacar
+          titulo="Contribuição Receptivo"
+          subtitulo="Preenchido manualmente"
+          acumulado={dados?.acumulado ?? 0}
+          meta={dados && dados.meta > 0 ? dados.meta : null}
+          totalUteis={totalUteis}
+          decorridos={decorridos}
+        />
+      </div>
+      {/* Botão de editar ao lado (fora) do card */}
+      <div className="flex flex-col gap-2 shrink-0 pt-4">
+        {!editando ? (
+          <Button
+            variant="outline" size="icon" className="h-8 w-8"
+            title="Preencher Contribuição Receptivo"
+            onClick={abrirEdicao}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        ) : (
+          <div className="w-44 rounded-xl border border-border bg-card p-3 space-y-2 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Headset className="w-3 h-3" /> Receptivo
+            </p>
+            <div className="space-y-1">
+              <label className="text-[11px] text-muted-foreground">Acumulado (R$)</label>
+              <Input
+                autoFocus
+                inputMode="decimal"
+                placeholder="0,00"
+                value={acumuladoStr}
+                onChange={e => setAcumuladoStr(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+                className="h-7 text-xs"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] text-muted-foreground">Meta (R$)</label>
+              <Input
+                inputMode="decimal"
+                placeholder="0,00"
+                value={metaStr}
+                onChange={e => setMetaStr(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+                className="h-7 text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-1.5 pt-0.5">
+              <Button size="sm" className="h-6 px-2 text-[11px] gap-1 flex-1" onClick={salvar}>
+                <Check className="w-3 h-3" /> Salvar
+              </Button>
+              <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] gap-1"
+                onClick={() => setEditando(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Aba ───────────────────────────────────────────────────────────────────────
 
 export function DesempenhoEquipes({
-  empresaId, mes, setorId, equipes, resumos, operadorEquipeMap, loading,
+  empresaId, mes, setorId, equipes, resumos, operadorEquipeMap,
+  equipesExtrasPorOperador = {}, orfaosPorSetor = {}, loading,
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
@@ -227,6 +362,17 @@ export function DesempenhoEquipes({
       const info = operadorEquipeMap[r.operador_id];
       if (info?.equipe_id) somar(porEquipe, info.equipe_id, r);
       if (info?.setor_id)  somar(porSetor, info.setor_id, r);
+      // Clones: o recebimento conta TAMBÉM nas equipes clonadas (o setor não
+      // duplica — lá o operador entra uma vez só, pelo setor dele)
+      for (const eqId of equipesExtrasPorOperador[r.operador_id] ?? []) {
+        if (eqId !== info?.equipe_id) somar(porEquipe, eqId, r);
+      }
+    }
+
+    // Órfãos (sem operador) pertencem ao setor da importação
+    for (const [sid, o] of Object.entries(orfaosPorSetor)) {
+      if (!porSetor[sid]) porSetor[sid] = { bruto: 0, ho: 0 };
+      porSetor[sid].bruto += o.total;
     }
 
     const metaDe = (tipo: string, id: string): number | null => {
@@ -245,7 +391,8 @@ export function DesempenhoEquipes({
     }
 
     return { totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos };
-  }, [anoNum, mesNum, feriados, resumos, operadorEquipeMap, equipes, metas, setorEfetivo]);
+  }, [anoNum, mesNum, feriados, resumos, operadorEquipeMap, equipesExtrasPorOperador,
+      orfaosPorSetor, equipes, metas, setorEfetivo]);
 
   if (loading || !carregado) {
     return (
@@ -279,6 +426,16 @@ export function DesempenhoEquipes({
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}
           />
+          {/* Contribuição Receptivo — card manual do setor (BookPlay) */}
+          {!isPP && sid !== 'sem_setor' && (
+            <CardContribuicaoReceptivo
+              empresaId={empresaId}
+              setorId={sid}
+              mes={mes}
+              totalUteis={dados.totalUteis}
+              decorridos={dados.decorridos}
+            />
+          )}
           {/* Equipes do setor, maiores acumulados primeiro */}
           {eqs
             .slice()

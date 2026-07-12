@@ -77,6 +77,15 @@ export function useAnaliticoImport() {
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
   const [vinculosManuais, setVinculosManuais] = useState<Record<string, string>>({});
 
+  // ── Setor da importação (BookPlay) ────────────────────────────────────────
+  // Os órfãos (sem operador) pertencem ao setor de quem importa. Líder já tem
+  // setor no perfil; admin/diretoria (sem setor) escolhem no modal.
+  const setorAutomatico = perfil?.setor_id ?? null;
+  const [setorEscolhido, setSetorEscolhido] = useState<string | null>(null);
+  const setorImportacao = setorAutomatico ?? setorEscolhido;
+  /** true quando o modal precisa exibir o seletor de setor (BookPlay, admin). */
+  const precisaEscolherSetor = !tenant.isPaguePlay && !setorAutomatico;
+
   const carregarArquivo = useCallback(async (file: File) => {
     if (!empresa?.id) return;
     setEstado('parsing');
@@ -191,6 +200,8 @@ export function useAnaliticoImport() {
       preview.loteId,
       preview.linhas,
       mapFinal,
+      // BookPlay: setor da importação (dá dono aos órfãos). PP não usa.
+      tenant.isPaguePlay ? null : setorImportacao,
     );
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
@@ -246,13 +257,13 @@ export function useAnaliticoImport() {
       preview.mes,
       perfil.nome ?? 'Líder',
       {
-        setorId:     perfil.setor_id ?? null,
+        setorId:     setorImportacao,
         operadorIds: [...new Set(Object.values(mapFinal).filter((v): v is string => !!v))],
       },
     );
 
     setEstado('done');
-  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, perfil?.setor_id, tenant.isPaguePlay]);
+  }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, setorImportacao, tenant.isPaguePlay]);
 
   const cancelar = useCallback(() => {
     setEstado('idle');
@@ -260,6 +271,7 @@ export function useAnaliticoImport() {
     setResultado(null);
     setErroGeral(null);
     setVinculosManuais({});
+    setSetorEscolhido(null);
   }, []);
 
   return {
@@ -272,5 +284,9 @@ export function useAnaliticoImport() {
     confirmarImportacao,
     definirVinculo,
     cancelar,
+    // Setor da importação (BookPlay)
+    precisaEscolherSetor,
+    setorImportacao,
+    setSetorEscolhido,
   };
 }

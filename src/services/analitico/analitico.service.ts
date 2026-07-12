@@ -126,6 +126,9 @@ export async function importarLoteAnalitico(
   loteId: string,
   linhas: LinhaRelatorio[],
   operadoresMap: OperadorResolvidoMap,
+  /** BookPlay: setor da importação — dá dono às linhas SEM operador (órfãos),
+   *  que passam a contar no card do setor. Requer a migration 20260712a. */
+  setorImportacaoId?: string | null,
 ): Promise<ResultadoImportacao> {
   if (!linhas.length) return { inseridos: 0, duplicados: 0, atualizados: 0, erros: [] };
 
@@ -180,6 +183,29 @@ export async function importarLoteAnalitico(
     } else {
       inseridos += (data?.length ?? 0);
       duplicados += chunk.length - (data?.length ?? 0);
+    }
+  }
+
+  // ── Setor da importação (BookPlay) ──────────────────────────────────────────
+  // Carimba o setor nas linhas do lote e nos órfãos que já existiam sem setor
+  // (dedupe). Se a coluna ainda não existe (migration 20260712a pendente), os
+  // updates falham em silêncio e tudo continua funcionando como antes.
+  if (setorImportacaoId) {
+    await supabase
+      .from('analitico_recebimentos')
+      .update({ setor_id: setorImportacaoId })
+      .eq('empresa_id', empresaId)
+      .eq('lote_id', loteId);
+
+    const codigosOrfaos = [...new Set(rows.filter(r => !r.operador_id).map(r => r.codigo))];
+    for (let i = 0; i < codigosOrfaos.length; i += CHUNK) {
+      await supabase
+        .from('analitico_recebimentos')
+        .update({ setor_id: setorImportacaoId })
+        .eq('empresa_id', empresaId)
+        .is('operador_id', null)
+        .is('setor_id', null)
+        .in('codigo', codigosOrfaos.slice(i, i + CHUNK));
     }
   }
 
@@ -566,6 +592,67 @@ export async function buscarDestaquesDoMes(
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
 }
 
+// ── Total dos órfãos (sem operador) por setor ─────────────────────────────────
+// Órfão pertence ao setor da importação (setor_id da linha; linhas antigas caem
+// no setor de quem importou). O card "Total recebido" do setor e o painel do
+// setor em Desempenho Equipes somam esses valores — sem isso o card fica menor
+// que o total do relatório sempre que o arquivo traz operadores sem conta.
+
+export async function buscarTotalOrfaosPorSetor(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<Record<string, { total: number; qtd: number }>> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  interface RowOrfao { valor_recebido: number; setor_id?: string | null; importado_por_id: string | null }
+  const buscar = async (comSetor: boolean): Promise<RowOrfao[] | null> => {
+    const cols = comSetor
+      ? 'valor_recebido, setor_id, importado_por_id'
+      : 'valor_recebido, importado_por_id';
+    const PAGE = 1000;
+    const linhas: RowOrfao[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('analitico_recebimentos')
+        .select(cols)
+        .eq('empresa_id', empresaId)
+        .is('operador_id', null)
+        .gte('data_pagamento', primeiro)
+        .lte('data_pagamento', fim)
+        .range(offset, offset + PAGE - 1);
+      if (error) return null;
+      linhas.push(...((data ?? []) as unknown as RowOrfao[]));
+      if (!data?.length || data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return linhas;
+  };
+
+  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
+  const linhas = (await buscar(true)) ?? (await buscar(false));
+  if (!linhas?.length) return {};
+
+  const { data: perfis } = await supabase
+    .from('perfis')
+    .select('id, setor_id')
+    .eq('empresa_id', empresaId);
+  const setorDoPerfil = new Map(
+    ((perfis ?? []) as { id: string; setor_id: string | null }[]).map(p => [p.id, p.setor_id]));
+
+  const porSetor: Record<string, { total: number; qtd: number }> = {};
+  for (const l of linhas) {
+    const sid = l.setor_id ?? setorDoPerfil.get(l.importado_por_id ?? '') ?? null;
+    if (!sid) continue;
+    const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, qtd: 0 });
+    acc.total += Number(l.valor_recebido) || 0;
+    acc.qtd   += 1;
+  }
+  return porSetor;
+}
+
 // ── Equipes e mapa operador→equipe ────────────────────────────────────────────
 
 export interface EquipeAnalitico {
@@ -580,16 +667,29 @@ export interface OperadorEquipeInfo {
   setor_id:    string | null;
 }
 
-/** Busca equipes da empresa e gera mapa operadorId → equipe (inclui setor_id). */
+/** Busca equipes da empresa e gera mapa operadorId → equipe (inclui setor_id).
+ *  `equipesExtrasPorOperador` traz as equipes em que o operador é CLONE
+ *  (equipe_operadores_clones): o recebimento dele conta nelas também. */
 export async function buscarEquipesComOperadores(empresaId: string): Promise<{
   equipes: EquipeAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+  equipesExtrasPorOperador: Record<string, string[]>;
 }> {
   const { data } = await supabase
     .from('perfis')
     .select('id, equipe_id, setor_id, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
+
+  // Clones (tabela pode não existir — migration 20260712a pendente → vazio)
+  const { data: clones } = await supabase
+    .from('equipe_operadores_clones')
+    .select('equipe_id, operador_id')
+    .eq('empresa_id', empresaId);
+  const equipesExtrasPorOperador: Record<string, string[]> = {};
+  for (const c of ((clones ?? []) as { equipe_id: string; operador_id: string }[])) {
+    (equipesExtrasPorOperador[c.operador_id] ??= []).push(c.equipe_id);
+  }
 
   const equipeMap = new Map<string, { nome: string; setor_id: string | null }>();
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
@@ -616,7 +716,7 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
     .map(([id, v]) => ({ id, nome: v.nome, setor_id: v.setor_id }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
-  return { equipes, operadorEquipeMap };
+  return { equipes, operadorEquipeMap, equipesExtrasPorOperador };
 }
 
 // ── Resumo mensal (snapshot salvo na importação) ──────────────────────────────

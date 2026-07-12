@@ -23,6 +23,7 @@ import {
   UserCheck,
   Layers,
   Search,
+  Copy,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,11 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
+import {
+  listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, type CloneEquipe,
+} from '@/services/equipes/equipesClones.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -147,6 +152,7 @@ export default function AdminEquipes() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
+  const tenant = useTenant();
 
   const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
   // Permissão configurável para criar/editar/excluir equipes e membros.
@@ -174,6 +180,12 @@ export default function AdminEquipes() {
   const [editandoEquipeId, setEditandoEquipeId] = useState<string | null>(null);
   const [editNome, setEditNome] = useState('');
   const [salvandoNome, setSalvandoNome] = useState(false);
+
+  // ── Clones (BookPlay): operador contando em mais de uma equipe ─────────────
+  // null = tabela ausente (migration 20260712a pendente) → recurso oculto
+  const [clones, setClones] = useState<CloneEquipe[] | null>(null);
+  const [clonandoEquipeId, setClonandoEquipeId] = useState<string | null>(null);
+  const clonesHabilitados = tenant.slug === 'bookplay' && clones !== null;
 
   const empresaId = empresa?.id;
 
@@ -228,6 +240,7 @@ export default function AdminEquipes() {
       setSetores(setoresList);
       setEquipes(equipesRes.data ?? []);
       setOperadores(operadoresRes.data ?? []);
+      setClones(await listarClonesEquipes(empresaId));
 
       // Auto-selecionar: líder vai para seu setor, admin para o primeiro da lista
       setSetorSelecionado(prev => {
@@ -258,6 +271,32 @@ export default function AdminEquipes() {
 
   const operadoresDaEquipe = (equipeId: string) =>
     operadores.filter(o => o.equipe_id === equipeId);
+
+  /** Clones alocados numa equipe (com o operador original resolvido). */
+  const clonesDaEquipe = (equipeId: string) =>
+    (clones ?? [])
+      .filter(c => c.equipe_id === equipeId)
+      .map(c => ({ clone: c, operador: operadores.find(o => o.id === c.operador_id) }))
+      .filter((x): x is { clone: CloneEquipe; operador: Operador } => !!x.operador);
+
+  // ── Clonar operador para outra equipe ──────────────────────────────────────
+
+  async function handleClonarOperador(equipe: Equipe, operadorId: string) {
+    const operador = operadores.find(o => o.id === operadorId);
+    if (!operador || !empresaId) return;
+    const criado = await criarCloneEquipe(empresaId, equipe.id, operadorId, perfil?.id ?? null);
+    if (!criado) { toast.error('Não foi possível clonar (já está nesta equipe?).'); return; }
+    setClones(prev => [...(prev ?? []), criado]);
+    setClonandoEquipeId(null);
+    toast.success(`${operador.nome} clonado para "${equipe.nome}" — o recebimento dele passa a contar nas duas equipes.`);
+  }
+
+  async function handleRemoverClone(cloneId: string, nomeOperador: string) {
+    const ok = await removerCloneEquipe(cloneId);
+    if (!ok) { toast.error('Erro ao remover clone.'); return; }
+    setClones(prev => (prev ?? []).filter(c => c.id !== cloneId));
+    toast.success(`Clone de ${nomeOperador} removido (segue normal na equipe original).`);
+  }
 
   const podeGerenciarSetorSelecionado = podeEditarEquipes && (isAdmin || setorSelecionado === perfil?.setor_id);
 
@@ -745,6 +784,20 @@ export default function AdminEquipes() {
                                   </div>
                                   {podeGerenciarEquipe && (
                                     <div className="flex items-center gap-0.5 shrink-0">
+                                      {clonesHabilitados && (
+                                        <button
+                                          type="button"
+                                          title="Clonar operador de outra equipe (o recebimento conta nas duas)"
+                                          onClick={() => setClonandoEquipeId(prev => prev === equipe.id ? null : equipe.id)}
+                                          className={`p-1 rounded transition-colors ${
+                                            clonandoEquipeId === equipe.id
+                                              ? 'text-primary bg-primary/10'
+                                              : 'text-muted-foreground/50 hover:text-primary hover:bg-primary/10'
+                                          }`}
+                                        >
+                                          <Copy className="w-3.5 h-3.5" />
+                                        </button>
+                                      )}
                                       <button
                                         type="button"
                                         title="Editar nome da equipe"
@@ -769,9 +822,42 @@ export default function AdminEquipes() {
 
                             {/* Membros da equipe */}
                             <div className="p-2.5 flex-1 min-h-[80px]">
+                              {/* Seletor de clone (aberto pelo botão de copiar no header) */}
+                              {clonesHabilitados && clonandoEquipeId === equipe.id && (
+                                <div className="mb-2 rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1.5">
+                                  <p className="text-[10px] font-semibold text-primary flex items-center gap-1">
+                                    <Copy className="w-3 h-3" /> Clonar operador para esta equipe
+                                  </p>
+                                  <Select onValueChange={v => void handleClonarOperador(equipe, v)}>
+                                    <SelectTrigger className="h-7 text-xs bg-background">
+                                      <SelectValue placeholder="Escolha o operador…" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {operadores
+                                        .filter(o =>
+                                          o.setor_id === equipe.setor_id
+                                          && o.equipe_id
+                                          && o.equipe_id !== equipe.id
+                                          && !clonesDaEquipe(equipe.id).some(c => c.operador.id === o.id))
+                                        .map(o => (
+                                          <SelectItem key={o.id} value={o.id}>
+                                            {o.nome}
+                                            <span className="text-muted-foreground ml-1.5">
+                                              ({equipes.find(e => e.id === o.equipe_id)?.nome ?? 'equipe'})
+                                            </span>
+                                          </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                  </Select>
+                                  <p className="text-[10px] text-muted-foreground">
+                                    O recebimento do analítico dele passa a contar nas duas equipes.
+                                  </p>
+                                </div>
+                              )}
+
                               <div className="flex flex-col gap-1.5 min-h-[60px]">
                                 <AnimatePresence>
-                                  {membros.length === 0 ? (
+                                  {membros.length === 0 && clonesDaEquipe(equipe.id).length === 0 ? (
                                     <div className="flex items-center justify-center h-12 text-muted-foreground/40 text-[11px] italic">
                                       Arraste membros aqui
                                     </div>
@@ -787,6 +873,33 @@ export default function AdminEquipes() {
                                     ))
                                   )}
                                 </AnimatePresence>
+
+                                {/* Clones — vinculados ao operador original */}
+                                {clonesHabilitados && clonesDaEquipe(equipe.id).map(({ clone, operador }) => (
+                                  <div
+                                    key={clone.id}
+                                    className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 select-none group"
+                                    title={`Clone de ${operador.nome} — original na equipe "${equipes.find(e => e.id === operador.equipe_id)?.nome ?? '?'}". O recebimento conta nas duas equipes.`}
+                                  >
+                                    <Copy className="w-3 h-3 text-primary/60 flex-shrink-0" />
+                                    <span className="font-medium text-foreground truncate text-xs max-w-[90px]">
+                                      {operador.nome}
+                                    </span>
+                                    <span className="inline-flex items-center rounded-full border border-primary/30 text-primary font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5">
+                                      clone de {equipes.find(e => e.id === operador.equipe_id)?.nome ?? 'equipe'}
+                                    </span>
+                                    {podeGerenciarEquipe && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleRemoverClone(clone.id, operador.nome)}
+                                        className="ml-auto text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
+                                        title="Remover clone (não afeta a equipe original)"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>

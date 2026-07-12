@@ -277,6 +277,9 @@ export interface AnaliticoRecebimento {
   importado_por_id: string | null;
   importado_em: string;
   lote_id: string;
+  /** Setor da importação — dá dono aos órfãos (sem operador). Pode não existir
+   *  no banco enquanto a migration 20260712a não for aplicada. */
+  setor_id?: string | null;
   /** Preenchido quando 2+ pagamentos (ex: BOLETO + PIX) foram consolidados nesta linha */
   pagamentos_detalhados?: PagamentoDetalheAnalitico[] | null;
   /** Join opcional: nome do perfil do operador */
