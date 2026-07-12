@@ -12,6 +12,7 @@ import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
 import { PetWidget } from '@/components/pet/PetWidget';
+import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
@@ -238,6 +239,7 @@ export default function App() {
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
+          <ImpersonacaoBanner />
           <Toaster richColors position="top-right" />
         </Router>
           </PresenceProvider>
