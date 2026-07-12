@@ -23,7 +23,8 @@ export const CIDADES_CLIMA: CidadeClima[] = [
 ];
 
 const CIDADE_KEY = 'pet-clima-cidade';
-const CACHE_KEY  = 'pet-clima-cache';
+// v2: classificação nova (garoa do modelo ≠ chuva) — não reaproveita cache antigo
+const CACHE_KEY  = 'pet-clima-cache-v2';
 const CACHE_TTL_MS   = 20 * 60_000;
 const REFETCH_MS     = 30 * 60_000;
 
@@ -35,10 +36,18 @@ export interface ClimaAtual {
 
 const CLIMA_AMENO: ClimaAtual = { clima: 'ameno', temperatura: null, dia: true };
 
-/** WMO weather code + temperatura + vento → clima do pet. */
-function classificar(codigo: number, temperatura: number, ventoKmh: number): PetClima {
+/** WMO weather code + temperatura + vento + precipitação → clima do pet. */
+function classificar(
+  codigo: number, temperatura: number, ventoKmh: number, precipitacaoMm: number,
+): PetClima {
   if (codigo >= 95) return 'tempestade';                       // trovoada
-  if ((codigo >= 51 && codigo <= 67) || (codigo >= 80 && codigo <= 82)) return 'chuva';
+  // Chuva de verdade: rain (61-67) e aguaceiros (80-82). Os códigos de GAROA
+  // (51-57) o modelo da Open-Meteo marca com frequência em dia apenas nublado
+  // (o pet abria o guarda-chuva sem estar chovendo) — só contam como chuva
+  // com precipitação real na hora (≥ 0,5 mm).
+  const chuva = (codigo >= 61 && codigo <= 67) || (codigo >= 80 && codigo <= 82);
+  const garoa = codigo >= 51 && codigo <= 57;
+  if (chuva || (garoa && precipitacaoMm >= 0.5)) return 'chuva';
   if (temperatura >= 31) return 'calor';
   if (temperatura <= 14) return 'frio';
   if (ventoKmh >= 25) return 'vento';
@@ -78,17 +87,20 @@ async function buscarClima(cidade: CidadeClima): Promise<ClimaAtual | null> {
   try {
     const url = 'https://api.open-meteo.com/v1/forecast'
       + `?latitude=${cidade.lat}&longitude=${cidade.lon}`
-      + '&current=temperature_2m,weather_code,wind_speed_10m,is_day'
+      + '&current=temperature_2m,weather_code,wind_speed_10m,precipitation,is_day'
       + '&timezone=America%2FSao_Paulo';
     const resp = await fetch(url);
     if (!resp.ok) return null;
     const dados = await resp.json() as {
-      current?: { temperature_2m?: number; weather_code?: number; wind_speed_10m?: number; is_day?: number };
+      current?: {
+        temperature_2m?: number; weather_code?: number; wind_speed_10m?: number;
+        precipitation?: number; is_day?: number;
+      };
     };
     const c = dados.current;
     if (!c || typeof c.temperature_2m !== 'number' || typeof c.weather_code !== 'number') return null;
     return {
-      clima: classificar(c.weather_code, c.temperature_2m, c.wind_speed_10m ?? 0),
+      clima: classificar(c.weather_code, c.temperature_2m, c.wind_speed_10m ?? 0, c.precipitation ?? 0),
       temperatura: Math.round(c.temperature_2m),
       dia: c.is_day !== 0,
     };
