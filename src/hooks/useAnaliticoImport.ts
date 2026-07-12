@@ -207,6 +207,15 @@ export function useAnaliticoImport() {
 
     setResultado(res);
 
+    if (res.atualizados > 0) {
+      toast.success(
+        `${res.atualizados} recebimento${res.atualizados !== 1 ? 's' : ''} ` +
+        `${res.atualizados !== 1 ? 'tiveram os valores atualizados' : 'teve o valor atualizado'} ` +
+        `(NRs que receberam novas parcelas desde a última importação).`,
+        { duration: 6000 },
+      );
+    }
+
     // Salva snapshot de totais imediatamente após inserção + revínculo
     // (o revínculo altera a contagem de operadores distintos do mês)
     await atualizarResumoMensal(empresa.id, preview.mes);

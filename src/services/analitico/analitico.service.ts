@@ -102,6 +102,9 @@ export async function resolverOperadores(
 export interface ResultadoImportacao {
   inseridos: number;
   duplicados: number;
+  /** Linhas já existentes cujo valor foi corrigido para cima (novas parcelas
+   *  do mesmo NR desde a última importação). */
+  atualizados: number;
   erros: string[];
 }
 
@@ -109,6 +112,13 @@ export interface ResultadoImportacao {
  * Persiste linhas no banco usando INSERT ... ON CONFLICT DO NOTHING.
  * Chave de unicidade: (empresa_id, codigo, data_pagamento, forma_pagamento, operador_usuario).
  * Operadores não encontrados têm operador_id = null (visíveis só para líder+).
+ *
+ * Reconciliação: quando a linha já existe MAS o valor do relatório é MAIOR
+ * (o NR recebeu novas parcelas e a consolidação cai na mesma chave), o valor
+ * é atualizado — antes o ignoreDuplicates descartava a linha nova e a
+ * diferença nunca entrava no sistema (card menor que o total do relatório).
+ * Só aumenta, nunca diminui: um relatório parcial (de um dia) não rebaixa o
+ * acumulado do mês já importado.
  */
 export async function importarLoteAnalitico(
   empresaId: string,
@@ -117,7 +127,7 @@ export async function importarLoteAnalitico(
   linhas: LinhaRelatorio[],
   operadoresMap: OperadorResolvidoMap,
 ): Promise<ResultadoImportacao> {
-  if (!linhas.length) return { inseridos: 0, duplicados: 0, erros: [] };
+  if (!linhas.length) return { inseridos: 0, duplicados: 0, atualizados: 0, erros: [] };
 
   const rows = linhas.map(l => ({
     empresa_id:      empresaId,
@@ -152,6 +162,7 @@ export async function importarLoteAnalitico(
   const CHUNK = 200;
   let inseridos = 0;
   let duplicados = 0;
+  let atualizados = 0;
   const erros: string[] = [];
 
   for (let i = 0; i < rows.length; i += CHUNK) {
@@ -172,7 +183,48 @@ export async function importarLoteAnalitico(
     }
   }
 
-  return { inseridos, duplicados, erros };
+  // ── Reconciliação de valores (linhas descartadas pela dedupe) ──────────────
+  if (duplicados > 0) {
+    type RowImport = (typeof rows)[number];
+    const chaveDe = (r: {
+      codigo: string; data_pagamento: string;
+      forma_pagamento: string; operador_usuario: string;
+    }) => `${r.codigo}::${r.data_pagamento}::${r.forma_pagamento}::${r.operador_usuario}`;
+
+    const porChave = new Map<string, RowImport>();
+    for (const r of rows) porChave.set(chaveDe(r), r);
+
+    const codigos = [...new Set(rows.map(r => r.codigo))];
+    for (let i = 0; i < codigos.length; i += CHUNK) {
+      const { data: existentes } = await supabase
+        .from('analitico_recebimentos')
+        .select('id, codigo, data_pagamento, forma_pagamento, operador_usuario, valor_recebido, total_ho')
+        .eq('empresa_id', empresaId)
+        .in('codigo', codigos.slice(i, i + CHUNK));
+
+      for (const ex of (existentes ?? []) as {
+        id: string; codigo: string; data_pagamento: string; forma_pagamento: string;
+        operador_usuario: string; valor_recebido: number; total_ho: number;
+      }[]) {
+        const alvo = porChave.get(chaveDe(ex));
+        if (!alvo) continue;
+        const cresceu = alvo.valor_recebido - (Number(ex.valor_recebido) || 0) > 0.005;
+        if (!cresceu) continue;
+        const { error: errUp } = await supabase
+          .from('analitico_recebimentos')
+          .update({
+            valor_recebido:        alvo.valor_recebido,
+            total_ho:              alvo.total_ho,
+            pagamentos_detalhados: alvo.pagamentos_detalhados,
+          })
+          .eq('id', ex.id);
+        if (errUp) erros.push(`Atualização ${ex.codigo}: ${errUp.message}`);
+        else atualizados++;
+      }
+    }
+  }
+
+  return { inseridos, duplicados, atualizados, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────

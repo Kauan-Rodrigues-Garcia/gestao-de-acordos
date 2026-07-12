@@ -48,6 +48,9 @@ export interface NovoPorOperador {
 export interface ResultadoImportacaoDiario {
   inseridos: number;
   duplicados: number;
+  /** Linhas já existentes cujo valor foi corrigido para cima (o mesmo
+   *  NR/dia recebeu novas parcelas desde a importação anterior). */
+  atualizados: number;
   erros: string[];
   importIndex: number;
   novosPorOperador: NovoPorOperador[];
@@ -74,7 +77,7 @@ export async function importarLoteDiario(
   operadoresMap: OperadorResolvidoMap,
 ): Promise<ResultadoImportacaoDiario> {
   if (!linhas.length) {
-    return { inseridos: 0, duplicados: 0, erros: [], importIndex: 0, novosPorOperador: [] };
+    return { inseridos: 0, duplicados: 0, atualizados: 0, erros: [], importIndex: 0, novosPorOperador: [] };
   }
 
   // Dia de referência de cada linha: a própria data de pagamento; sem data,
@@ -156,9 +159,41 @@ export async function importarLoteDiario(
     }
   }
 
+  // ── Reconciliação: mesma chave, valor MAIOR no relatório novo ──────────────
+  // O NR recebeu outra parcela no mesmo dia depois da importação anterior; o
+  // ignoreDuplicates descartava a linha e a diferença sumia. Só aumenta.
+  let atualizados = 0;
+  if (duplicados > 0) {
+    const porChave = new Map(rows.map(r => [`${r.dia_referencia}::${r.chave_unica}`, r]));
+    for (const d of diasNoLote) {
+      const chavesDia = rows.filter(r => r.dia_referencia === d).map(r => r.chave_unica);
+      for (let i = 0; i < chavesDia.length; i += CHUNK) {
+        const { data: existentes } = await supabase
+          .from('diario_recebimentos')
+          .select('id, dia_referencia, chave_unica, valor_recebido')
+          .eq('empresa_id', empresaId)
+          .eq('dia_referencia', d)
+          .in('chave_unica', chavesDia.slice(i, i + CHUNK));
+        for (const ex of (existentes ?? []) as {
+          id: string; dia_referencia: string; chave_unica: string; valor_recebido: number;
+        }[]) {
+          const alvo = porChave.get(`${ex.dia_referencia}::${ex.chave_unica}`);
+          if (!alvo || alvo.valor_recebido - (Number(ex.valor_recebido) || 0) <= 0.005) continue;
+          const { error: errUp } = await supabase
+            .from('diario_recebimentos')
+            .update({ valor_recebido: alvo.valor_recebido })
+            .eq('id', ex.id);
+          if (errUp) erros.push(`Atualização ${ex.chave_unica}: ${errUp.message}`);
+          else atualizados++;
+        }
+      }
+    }
+  }
+
   return {
     inseridos,
     duplicados,
+    atualizados,
     erros,
     // Índice do dia de referência (moda) — usado só como informação no modal
     importIndex: importIndexPorDia[dia] ?? Math.max(...Object.values(importIndexPorDia)),

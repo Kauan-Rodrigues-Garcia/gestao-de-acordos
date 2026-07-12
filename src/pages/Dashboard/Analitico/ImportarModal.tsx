@@ -52,11 +52,17 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3 py-2">
-            <div className="grid grid-cols-2 gap-3">
+            <div className={`grid gap-3 ${resultado.atualizados > 0 ? 'grid-cols-3' : 'grid-cols-2'}`}>
               <div className="rounded-lg border bg-emerald-50 dark:bg-emerald-950/20 p-3 text-center">
                 <p className="text-2xl font-bold text-emerald-600">{resultado.inseridos}</p>
                 <p className="text-xs text-muted-foreground">pagamentos inseridos</p>
               </div>
+              {resultado.atualizados > 0 && (
+                <div className="rounded-lg border bg-blue-50 dark:bg-blue-950/20 p-3 text-center">
+                  <p className="text-2xl font-bold text-blue-600">{resultado.atualizados}</p>
+                  <p className="text-xs text-muted-foreground">valores atualizados</p>
+                </div>
+              )}
               <div className="rounded-lg border bg-muted p-3 text-center">
                 <p className="text-2xl font-bold">{resultado.duplicados}</p>
                 <p className="text-xs text-muted-foreground">já existiam</p>
