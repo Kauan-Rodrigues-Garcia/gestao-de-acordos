@@ -7,6 +7,7 @@ import { visualizer } from 'rollup-plugin-visualizer';
 import path from 'path';
 
 import { cdnPrefixImages } from './vite-plugins/cdn-prefix-images';
+import { devApi } from './vite-plugins/dev-api';
 
 // Versão do build: timestamp em produção, 'dev' em desenvolvimento.
 // Injetada no bundle como __APP_VERSION__ e gravada em dist/version.json
@@ -25,6 +26,8 @@ export default defineConfig(({ mode }) => {
       react(),
       mode === 'development' && componentTagger(),
       cdnPrefixImages(),
+      // DEV: serve as funções /api dentro do `vite dev` (só em `serve`, não no build).
+      devApi(),
       // Grava dist/version.json ao final do build para o polling de atualização.
       // Usa emitFile (API Rollup) em vez de fs.writeFileSync para que o Vite
       // gerencie o outDir corretamente em qualquer ambiente (local, CI, Render).
