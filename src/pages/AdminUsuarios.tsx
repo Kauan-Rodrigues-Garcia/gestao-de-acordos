@@ -180,6 +180,7 @@ export default function AdminUsuarios() {
     setLoading(false);
   }
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDados é recriada a cada render; incluí-la causaria refetch em loop.
   useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
 
   function abrirCriar() {
@@ -214,6 +215,7 @@ export default function AdminUsuarios() {
     setSaving(true);
     try {
       if (editando) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payload parcial e heterogêneo p/ update(); tipar exigiria o shape completo de Perfil.
         const updatePayload: Record<string, any> = {
           nome:       form.nome,
           perfil:     form.perfil,
@@ -298,6 +300,7 @@ export default function AdminUsuarios() {
       if (upErr) { toast.error(`Erro no upload: ${upErr.message}`); return; }
       const { data: { publicUrl } } = supabase.storage.from('perfis').getPublicUrl(path);
       const urlFinal = `${publicUrl}?t=${Date.now()}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- foto_url ainda não está no tipo gerado de Perfil.
       const { error: dbErr } = await supabase.from('perfis').update({ foto_url: urlFinal } as any).eq('id', targetId);
       if (dbErr) { toast.error(`Erro ao salvar foto: ${dbErr.message}`); return; }
       toast.success('Foto atualizada com sucesso!');
@@ -313,6 +316,7 @@ export default function AdminUsuarios() {
     if (urlPath) {
       await supabase.storage.from('perfis').remove([urlPath]);
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- foto_url ainda não está no tipo gerado de Perfil.
     const { error } = await supabase.from('perfis').update({ foto_url: null } as any).eq('id', u.id);
     if (error) { toast.error(`Erro ao excluir foto: ${error.message}`); return; }
     toast.success('Foto removida com sucesso!');
