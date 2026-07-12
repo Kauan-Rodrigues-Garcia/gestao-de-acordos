@@ -7,7 +7,9 @@ import {
 } from '@/components/ui/select';
 import { FileText, Hash, Link2, Save, User, X, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { INSTITUICOES_OPTIONS } from '@/lib/index';
+import { INSTITUICOES_OPTIONS, isPerfilAdmin } from '@/lib/index';
+import { useAuth } from '@/hooks/useAuth';
+import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
 import { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
@@ -34,6 +36,9 @@ export function FormBP({ state }: { state: SharedFormState }) {
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
   } = state;
 
+  const { perfil } = useAuth();
+  const admin = isPerfilAdmin(perfil?.perfil ?? '');
+
   return (
     <>
       <tr className="bg-primary/5 border-b-2 border-primary/30">
@@ -47,6 +52,23 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 <X className="w-4 h-4" />
               </Button>
             </div>
+
+            {admin && (
+            <DropzoneImagensAcordo
+              disabled={salvando}
+              onDados={(d) => {
+                if (d.nr_cliente)   setNrCliente(d.nr_cliente);
+                if (d.vencimento)   setVencimento(d.vencimento);
+                if (d.valor)        setValorStr(d.valor);
+                if (d.tipo)         handleChangeTipo(d.tipo);
+                if (d.parcelas)     setParcelasStr(d.parcelas);
+                if (d.status)       setStatus(d.status);
+                if (d.nome_cliente) setNomeCliente(d.nome_cliente);
+                if (d.whatsapp)     setWhatsapp(d.whatsapp);
+                if (d.instituicao)  setInstituicao(d.instituicao);
+              }}
+            />
+            )}
 
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
