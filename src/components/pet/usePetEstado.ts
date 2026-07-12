@@ -66,6 +66,11 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
   useEffect(() => {
     if (!ativo || !perfil?.id) { setCarregado(true); return; }
     let vivo = true;
+    // O effect re-roda quando o auth resolve (ativo/perfil mudam): volta a
+    // false para `carregado` significar sempre "estado REAL já carregado" —
+    // sem isso, o widget semeava roupa 'nenhuma' antes de o banco responder
+    // e a roupa equipada "sumia" ao sair e entrar da conta.
+    setCarregado(false);
 
     (async () => {
       const estado = await getPetEstado();

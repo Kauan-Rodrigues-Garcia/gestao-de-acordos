@@ -208,12 +208,13 @@ export function PetWidget() {
     humorEfetivo === 'idle' && evento === 'espreguica' ? 'espreguica' : micro;
   const emEvento = evento !== 'nenhum' || comemorando;
 
-  // Semeia roupa/sono a partir do estado carregado (banco ou localStorage),
-  // uma única vez, sem sobrescrever ações do usuário depois.
-  const seededRef = useRef(false);
+  // Semeia roupa/sono a partir do estado carregado (banco ou localStorage).
+  // Reaplica sempre que o estado inicial chegar/mudar, ATÉ o usuário mexer
+  // (trocar roupa ou alternar sono) — assim a roupa salva no banco nunca é
+  // atropelada por uma semeadura precoce com 'nenhuma' durante o login.
+  const usuarioMexeuRef = useRef(false);
   useEffect(() => {
-    if (!interativo || !estado.carregado || seededRef.current) return;
-    seededRef.current = true;
+    if (!interativo || !estado.carregado || usuarioMexeuRef.current) return;
     setRoupa(estado.roupaInicial);
     if (estado.dormindoInicial) setHumor('dormindo');
   }, [interativo, estado.carregado, estado.roupaInicial, estado.dormindoInicial]);
@@ -480,6 +481,7 @@ export function PetWidget() {
   }
 
   function alternarSono() {
+    usuarioMexeuRef.current = true;
     setHumor(h => {
       const novo: PetHumor = h === 'dormindo' ? 'idle' : 'dormindo';
       estado.salvarVisual(roupa, novo === 'dormindo');
@@ -488,6 +490,7 @@ export function PetWidget() {
   }
 
   function trocarRoupa(r: PetRoupa) {
+    usuarioMexeuRef.current = true;
     setRoupa(r);
     estado.salvarVisual(r, humor === 'dormindo');
   }
