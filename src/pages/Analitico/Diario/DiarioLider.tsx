@@ -10,10 +10,10 @@
  * • Importar relatório + limpar dia (permissão importar_diario)
  */
 
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Upload, Users, AlertCircle, ChevronDown, ChevronRight, Trash2, Loader2,
-  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X, Copy,
+  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X, Copy, Layers,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +31,8 @@ import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { fmtCPF } from '@/services/diario/diarioParser';
 import { copiarTexto } from '@/lib/clipboard';
+import { supabase } from '@/lib/supabase';
+import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';
 import {
   removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia, limparTodoDiario,
 } from '@/services/diario/diario.service';
@@ -41,6 +43,8 @@ import {
 } from './helpers';
 import { FormaChip } from './FormaChip';
 import { ImportarDiarioModal } from './ImportarDiarioModal';
+
+const SEM_EQUIPE = '__sem__';
 
 interface DiarioLiderProps {
   empresaId: string;
@@ -59,7 +63,33 @@ export function DiarioLider({
   const { dados, loading, refetch } = useDiario({ dia });
 
   const [modalImportar, setModalImportar]  = useState(false);
-  const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'equipes' | 'orfaos'>('operadores');
+
+  // Mapa operador→equipe + nomes de equipe + clones (aba "Por equipe")
+  const [perfEquipe, setPerfEquipe]   = useState<Record<string, string | null>>({});
+  const [equipeNomes, setEquipeNomes] = useState<Record<string, string>>({});
+  const [clonesEq, setClonesEq]       = useState<{ equipe_id: string; operador_id: string }[]>([]);
+
+  useEffect(() => {
+    let cancel = false;
+    async function load() {
+      const [{ data: perfis }, { data: equipesData }, clones] = await Promise.all([
+        supabase.from('perfis').select('id, equipe_id').eq('empresa_id', empresaId),
+        supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId),
+        listarClonesEquipes(empresaId),
+      ]);
+      if (cancel) return;
+      const pm: Record<string, string | null> = {};
+      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null }[]) pm[p.id] = p.equipe_id ?? null;
+      setPerfEquipe(pm);
+      const em: Record<string, string> = {};
+      for (const e of (equipesData ?? []) as { id: string; nome: string }[]) em[e.id] = e.nome;
+      setEquipeNomes(em);
+      setClonesEq(clones ?? []);
+    }
+    void load();
+    return () => { cancel = true; };
+  }, [empresaId]);
   const [busca, setBusca]                  = useState('');
   const [expandidos, setExpandidos]        = useState<Set<string>>(new Set());
   const [removendoId, setRemovendoId]      = useState<string | null>(null);
@@ -123,6 +153,38 @@ export function DiarioLider({
   }, [resumoOps, busca]);
 
   const maxTotal = resumoOps[0]?.total || 1;
+
+  // ── Agregação por equipe (aba "Por equipe") ────────────────────────────────
+  // Cada operador soma na própria equipe; clones (BookPlay) somam também nas
+  // equipes clonadas — por isso a soma das equipes pode passar o total do dia.
+  const resumoEquipes = useMemo(() => {
+    const clonesPorOp = new Map<string, string[]>();
+    for (const c of clonesEq) {
+      const arr = clonesPorOp.get(c.operador_id) ?? [];
+      arr.push(c.equipe_id);
+      clonesPorOp.set(c.operador_id, arr);
+    }
+    const map = new Map<string, { equipeId: string; total: number; ops: Set<string>; pgtos: number }>();
+    const add = (equipeId: string, r: DiarioRecebimento) => {
+      const cur = map.get(equipeId) ?? { equipeId, total: 0, ops: new Set<string>(), pgtos: 0 };
+      cur.total += r.valor_recebido;
+      if (r.operador_id) cur.ops.add(r.operador_id);
+      cur.pgtos += 1;
+      map.set(equipeId, cur);
+    };
+    for (const r of vinculadas) {
+      if (!r.operador_id) continue;
+      const own = perfEquipe[r.operador_id] ?? SEM_EQUIPE;
+      add(own, r);
+      for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
+        if (eq !== own) add(eq, r);
+      }
+    }
+    return [...map.values()]
+      .map(g => ({ equipeId: g.equipeId, total: g.total, nOps: g.ops.size, pgtos: g.pgtos }))
+      .sort((a, b) => b.total - a.total);
+  }, [vinculadas, perfEquipe, clonesEq]);
+  const maxTotalEquipe = resumoEquipes[0]?.total || 1;
 
   // ── Ações ─────────────────────────────────────────────────────────────────
   function toggleExpandido(opId: string) {
@@ -287,6 +349,7 @@ export function DiarioLider({
         <div className="flex items-center gap-1 border-b border-border">
           {([
             { key: 'operadores', label: 'Por operador',  Icon: Users },
+            { key: 'equipes',    label: 'Por equipe',    Icon: Layers },
             { key: 'orfaos',     label: 'Sem operador',  Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
@@ -493,6 +556,63 @@ export function DiarioLider({
                 </div>
               </CardContent>
             </Card>
+          )}
+        </div>
+      )}
+
+      {/* ── Aba: Por equipe ───────────────────────────────────────────────── */}
+      {abaAtiva === 'equipes' && (
+        <div className="space-y-3">
+          {loading && (
+            <div className="space-y-2 animate-pulse">
+              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-14 bg-muted rounded-lg" />)}
+            </div>
+          )}
+          {!loading && resumoEquipes.length === 0 && (
+            <div className="text-center py-16 text-muted-foreground">
+              <p className="text-sm">Nenhum recebimento vinculado a equipes{dia ? ` em ${fmtDataISO(dia)}` : ''}.</p>
+            </div>
+          )}
+          {!loading && resumoEquipes.length > 0 && (
+            <div className="space-y-2">
+              {resumoEquipes.map((g, i) => {
+                const nome = g.equipeId === SEM_EQUIPE ? 'Sem equipe' : (equipeNomes[g.equipeId] ?? 'Equipe');
+                const barra = Math.max(4, Math.round((g.total / maxTotalEquipe) * 100));
+                return (
+                  <Card key={g.equipeId} className="border-border">
+                    <CardHeader className="p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={cn(
+                            'text-xs font-bold w-6 text-right shrink-0',
+                            i < 3 ? 'text-amber-600 dark:text-amber-500' : 'text-muted-foreground',
+                          )}>
+                            {i + 1}º
+                          </span>
+                          <div className="min-w-0">
+                            <CardTitle className="text-sm flex items-center gap-1.5">
+                              {g.equipeId === SEM_EQUIPE
+                                ? <AlertCircle className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                : <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+                              {nome}
+                            </CardTitle>
+                            <div className="mt-1.5 h-1 rounded-full bg-border overflow-hidden max-w-[280px]">
+                              <div className="h-full rounded-full bg-primary/50" style={{ width: `${barra}%` }} />
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              {g.nOps} operador{g.nOps !== 1 ? 'es' : ''} · {g.pgtos} pagamento{g.pgtos !== 1 ? 's' : ''}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-bold text-primary font-mono">{formatBRL(g.total)}</p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                );
+              })}
+            </div>
           )}
         </div>
       )}

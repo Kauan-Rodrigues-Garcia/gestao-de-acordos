@@ -82,6 +82,8 @@ export interface Perfil {
   tampermonkey_configured?: boolean | null;
   /** true após o usuário dispensar a notificação da nova funcionalidade Chatplay */
   viu_notificacao_chatplay?: boolean | null;
+  /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
+  senha_alterada?: boolean | null;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;

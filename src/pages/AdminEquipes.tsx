@@ -24,6 +24,7 @@ import {
   Layers,
   Search,
   Copy,
+  GraduationCap,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,6 +59,9 @@ interface Equipe {
   nome: string;
   setor_id: string;
   empresa_id: string;
+  /** Equipe de treinamento: dias úteis contam a partir de treinamento_inicio. */
+  treinamento?: boolean;
+  treinamento_inicio?: string | null;
 }
 
 interface Operador {
@@ -207,7 +211,7 @@ export default function AdminEquipes() {
 
       let equipesQuery = supabase
         .from('equipes')
-        .select('id, nome, setor_id, empresa_id')
+        .select('id, nome, setor_id, empresa_id, treinamento, treinamento_inicio')
         .eq('empresa_id', empresaId)
         .order('nome');
 
@@ -389,6 +393,30 @@ export default function AdminEquipes() {
       toast.error('Erro ao renomear equipe: ' + (err?.message ?? 'Erro desconhecido'));
     } finally {
       setSalvandoNome(false);
+    }
+  }
+
+  // ─── Marcar/desmarcar equipe como treinamento ──────────────────────────────
+
+  async function handleToggleTreinamento(equipe: Equipe) {
+    if (!isAdmin && equipe.setor_id !== perfil?.setor_id) {
+      toast.error('Você só pode editar equipes do seu próprio setor.');
+      return;
+    }
+    const novo = !equipe.treinamento;
+    // Atualização otimista
+    setEquipes(prev => prev.map(e => e.id === equipe.id ? { ...e, treinamento: novo } : e));
+    try {
+      const { error } = await supabase.from('equipes').update({ treinamento: novo }).eq('id', equipe.id);
+      if (error) throw error;
+      toast.success(
+        novo
+          ? `"${equipe.nome}" marcada como treinamento. Configure a data de início e os dias úteis na aba Metas.`
+          : `"${equipe.nome}" não é mais equipe de treinamento.`,
+      );
+    } catch (err: any) {
+      toast.error('Erro ao atualizar equipe: ' + (err?.message ?? 'Erro desconhecido'));
+      setEquipes(prev => prev.map(e => e.id === equipe.id ? { ...e, treinamento: equipe.treinamento } : e));
     }
   }
 
@@ -781,9 +809,30 @@ export default function AdminEquipes() {
                                     <Badge variant="secondary" className="text-[10px] px-1.5 shrink-0">
                                       {membros.length}
                                     </Badge>
+                                    {equipe.treinamento && (
+                                      <Badge
+                                        variant="outline"
+                                        className="text-[10px] px-1.5 shrink-0 gap-0.5 border-amber-500/40 bg-amber-500/10 text-amber-600"
+                                        title="Equipe de treinamento — dias úteis configurados na aba Metas"
+                                      >
+                                        <GraduationCap className="w-3 h-3" /> Treino
+                                      </Badge>
+                                    )}
                                   </div>
                                   {podeGerenciarEquipe && (
                                     <div className="flex items-center gap-0.5 shrink-0">
+                                      <button
+                                        type="button"
+                                        title={equipe.treinamento ? 'Desmarcar equipe de treinamento' : 'Marcar como equipe de treinamento'}
+                                        onClick={() => handleToggleTreinamento(equipe)}
+                                        className={`p-1 rounded transition-colors ${
+                                          equipe.treinamento
+                                            ? 'text-amber-600 bg-amber-500/10'
+                                            : 'text-muted-foreground/50 hover:text-amber-600 hover:bg-amber-500/10'
+                                        }`}
+                                      >
+                                        <GraduationCap className="w-3.5 h-3.5" />
+                                      </button>
                                       {clonesHabilitados && (
                                         <button
                                           type="button"

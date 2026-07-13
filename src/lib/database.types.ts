@@ -234,6 +234,8 @@ export type Database = {
           id: string
           nome: string
           setor_id: string | null
+          treinamento: boolean | null
+          treinamento_inicio: string | null
         }
         Insert: {
           created_at?: string | null
@@ -241,6 +243,8 @@ export type Database = {
           id?: string
           nome: string
           setor_id?: string | null
+          treinamento?: boolean | null
+          treinamento_inicio?: string | null
         }
         Update: {
           created_at?: string | null
@@ -248,6 +252,8 @@ export type Database = {
           id?: string
           nome?: string
           setor_id?: string | null
+          treinamento?: boolean | null
+          treinamento_inicio?: string | null
         }
         Relationships: [
           {
@@ -676,6 +682,7 @@ export type Database = {
           lider_id: string | null
           nome: string
           perfil: string
+          senha_alterada: boolean | null
           setor_id: string | null
           usuario: string | null
         }
@@ -691,6 +698,7 @@ export type Database = {
           lider_id?: string | null
           nome: string
           perfil: string
+          senha_alterada?: boolean | null
           setor_id?: string | null
           usuario?: string | null
         }
@@ -706,6 +714,7 @@ export type Database = {
           lider_id?: string | null
           nome?: string
           perfil?: string
+          senha_alterada?: boolean | null
           setor_id?: string | null
           usuario?: string | null
         }

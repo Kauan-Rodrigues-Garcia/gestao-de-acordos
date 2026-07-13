@@ -91,8 +91,9 @@ export function MetaProgressoHeader() {
   }, [ativo, perfil?.id, empresa?.id, mes, ano]);
 
   // Ranking — recarrega junto com o analítico (realtime já dispara o hook).
-  // Isolamento por setor: a posição compara APENAS com operadores do próprio
-  // setor — os números de outro setor não entram no ranking pessoal.
+  // Isolamento por EQUIPE: a posição compara APENAS com operadores da própria
+  // equipe do operador. Sem equipe cadastrada, cai para o setor (comportamento
+  // antigo); sem nenhum dos dois, compara com a empresa toda.
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
@@ -100,13 +101,18 @@ export function MetaProgressoHeader() {
       try {
         const { data } = await buscarResumoOperadoresAnalitico(empresa.id, mesStr);
         let lista = data;
-        if (perfil?.setor_id) {
-          const { data: doSetor } = await supabase
+        // Filtra os membros do mesmo grupo do operador (equipe tem prioridade).
+        let filtroCol: 'equipe_id' | 'setor_id' | null = null;
+        let filtroVal: string | null = null;
+        if (perfil?.equipe_id) { filtroCol = 'equipe_id'; filtroVal = perfil.equipe_id; }
+        else if (perfil?.setor_id) { filtroCol = 'setor_id'; filtroVal = perfil.setor_id; }
+        if (filtroCol && filtroVal) {
+          const { data: doGrupo } = await supabase
             .from('perfis')
             .select('id')
             .eq('empresa_id', empresa.id)
-            .eq('setor_id', perfil.setor_id);
-          const ids = new Set(((doSetor ?? []) as { id: string }[]).map(r => r.id));
+            .eq(filtroCol, filtroVal);
+          const ids = new Set(((doGrupo ?? []) as { id: string }[]).map(r => r.id));
           lista = data.filter(r => ids.has(r.operador_id));
         }
         if (!cancelado) setRanking(lista);
@@ -114,7 +120,22 @@ export function MetaProgressoHeader() {
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas, perfil?.setor_id]);
+  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas, perfil?.equipe_id, perfil?.setor_id]);
+
+  // Equipe de treinamento do operador → dias úteis contam a partir do início.
+  const [treinoInicio, setTreinoInicio] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelado = false;
+    void (async () => {
+      if (!perfil?.equipe_id) { setTreinoInicio(null); return; }
+      const { data, error } = await supabase.from('equipes')
+        .select('treinamento, treinamento_inicio').eq('id', perfil.equipe_id).maybeSingle();
+      if (cancelado || error || !data) return;
+      const row = data as { treinamento: boolean | null; treinamento_inicio: string | null };
+      setTreinoInicio(row.treinamento ? (row.treinamento_inicio ?? null) : null);
+    })();
+    return () => { cancelado = true; };
+  }, [perfil?.equipe_id]);
 
   const dados = useMemo(() => {
     if (!perfil?.id || metaValor == null || metaValor <= 0 || !config) return null;
@@ -122,9 +143,10 @@ export function MetaProgressoHeader() {
     const recebido = analitico.total.porOperador[perfil.id]?.bruto ?? 0;
     const percMeta = pct(recebido, metaValor);
 
-    const totalUteis = diasUteisDoMes(ano, mes, config.feriados);
+    const inicioTreino = treinoInicio ?? undefined;
+    const totalUteis = diasUteisDoMes(ano, mes, config.feriados, inicioTreino);
     if (totalUteis === 0) return null;
-    const decorridos  = diasUteisDecorridos(ano, mes, config.feriados, getTodayISO());
+    const decorridos  = diasUteisDecorridos(ano, mes, config.feriados, getTodayISO(), inicioTreino);
     const metaDiaria  = metaValor / totalUteis;
     const esperado    = metaDiaria * Math.max(decorridos, 1);
     const projecao    = pct(recebido, esperado);
@@ -152,7 +174,7 @@ export function MetaProgressoHeader() {
       acimaNome: acima ? (acima.operador_nome ?? acima.operador_usuario) : null,
       gap,
     };
-  }, [perfil?.id, metaValor, metasExtras, config, analitico.total, ranking, ano, mes]);
+  }, [perfil?.id, metaValor, metasExtras, config, analitico.total, ranking, ano, mes, treinoInicio]);
 
   if (!ativo || !carregado || !analitico.dbAtiva || !dados) return null;
 

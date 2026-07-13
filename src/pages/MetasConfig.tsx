@@ -7,7 +7,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
-  Loader2, CalendarDays, Plus, X, Layers,
+  Loader2, CalendarDays, Plus, X, Layers, GraduationCap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
@@ -51,7 +51,10 @@ interface Meta {
   ano: number;
 }
 interface Setor  { id: string; nome: string; }
-interface Equipe { id: string; nome: string; setor_id: string; }
+interface Equipe {
+  id: string; nome: string; setor_id: string;
+  treinamento: boolean | null; treinamento_inicio: string | null;
+}
 interface Operador { id: string; nome: string; equipe_id: string | null; }
 interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; }
 
@@ -291,7 +294,8 @@ export default function MetasConfig() {
     if (!setorSelecionado) return;
     setLoadingEquipes(true);
     try {
-      const { data, error } = await supabase.from("equipes").select("id, nome, setor_id")
+      const { data, error } = await supabase.from("equipes")
+        .select("id, nome, setor_id, treinamento, treinamento_inicio")
         .eq("setor_id", setorSelecionado).order("nome");
       if (error) throw error;
       setEquipes((data ?? []).filter((e): e is Equipe => typeof e?.id === "string" && e.id.length > 0));
@@ -376,6 +380,23 @@ export default function MetasConfig() {
       q.quartil === quartil ? { ...q, min_pct: isNaN(num) ? 0 : num } : q,
     ));
   }
+
+  // Equipes de treinamento: data de início salva na hora (equipes.treinamento_inicio)
+  const [salvandoTreino, setSalvandoTreino] = useState<string | null>(null);
+  async function setTreinamentoInicio(equipeId: string, dataISO: string) {
+    const valor = dataISO || null;
+    setEquipes(prev => prev.map(e => e.id === equipeId ? { ...e, treinamento_inicio: valor } : e));
+    setSalvandoTreino(equipeId);
+    try {
+      const { error } = await supabase.from("equipes").update({ treinamento_inicio: valor }).eq("id", equipeId);
+      if (error) throw error;
+    } catch (err: unknown) {
+      toast.error("Erro ao salvar início do treinamento", { description: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setSalvandoTreino(null);
+    }
+  }
+  const equipesTreinamento = equipes.filter(e => e.treinamento);
 
   // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
   async function handleSalvarTudo() {
@@ -594,6 +615,53 @@ export default function MetasConfig() {
 
       {setorSelecionado && (
         <>
+          {/* Equipes de treinamento — data de início + dias úteis reduzidos */}
+          {equipesTreinamento.length > 0 && (
+            <SectionCard
+              title="Equipes de treinamento"
+              description="Equipes que começaram no meio do mês. Informe a data de início — os dias úteis (e a meta diária/projeção da equipe e dos operadores) passam a contar a partir dela."
+              icon={<GraduationCap className="h-4 w-4" />}
+              badge={equipesTreinamento.length}
+            >
+              <div className="space-y-2">
+                {equipesTreinamento.map(eq => {
+                  const inicio = eq.treinamento_inicio ?? "";
+                  const uteis = diasUteisDoMes(ano, mes, feriados, inicio || undefined);
+                  return (
+                    <div key={eq.id} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2 border-b border-border last:border-0">
+                      <div className="flex items-center gap-2 sm:w-52 shrink-0">
+                        <GraduationCap className="h-4 w-4 text-amber-600 shrink-0" />
+                        <p className="text-sm font-medium truncate">{String(eq.nome ?? "")}</p>
+                      </div>
+                      <div className="flex flex-1 items-center gap-3 flex-wrap">
+                        <div className="flex flex-col gap-1">
+                          <Label className="text-xs text-muted-foreground">Início das atividades</Label>
+                          <Input
+                            type="date"
+                            className="h-8 text-sm max-w-[170px]"
+                            value={inicio}
+                            disabled={!podeGerenciarMetas || salvandoTreino === eq.id}
+                            onChange={e => setTreinamentoInicio(eq.id, e.target.value)}
+                          />
+                        </div>
+                        <div className="rounded-lg border border-border bg-muted/30 px-3 py-1.5 text-center">
+                          <p className="text-base font-bold tabular-nums">{inicio ? uteis : totalDiasUteis}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {inicio ? "dias úteis no treino" : "sem data — mês cheio"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  Feriados antes do início são ignorados; feriados após entram no cálculo.
+                  Marque/desmarque uma equipe como treinamento na aba <strong>Equipes</strong>.
+                </p>
+              </div>
+            </SectionCard>
+          )}
+
           {/* Meta do Setor */}
           <SectionCard title="Meta do Setor"
             description={`Metas globais para o setor ${setorNome} em ${MESES[mes - 1]}/${ano}`}

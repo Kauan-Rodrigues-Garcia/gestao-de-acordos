@@ -10,7 +10,7 @@
  * sem setor vê todos os setores em sequência.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Building2, Users, Headset, Pencil, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -197,19 +197,25 @@ function parseValorBR(s: string): number {
 }
 
 function CardContribuicaoReceptivo({
-  empresaId, setorId, mes, totalUteis, decorridos,
-}: { empresaId: string; setorId: string; mes: string; totalUteis: number; decorridos: number }) {
+  empresaId, setorId, mes, totalUteis, decorridos, onReport,
+}: {
+  empresaId: string; setorId: string; mes: string; totalUteis: number; decorridos: number;
+  /** Reporta o acumulado ao pai para somar no card consolidado do setor. */
+  onReport?: (setorId: string, acumulado: number) => void;
+}) {
   const chave = chaveContribuicao(empresaId, setorId, mes);
   const [dados, setDados]         = useState<ContribReceptivo | null>(() => lerContribuicao(chave));
   const [editando, setEditando]   = useState(false);
   const [acumuladoStr, setAcumuladoStr] = useState('');
   const [metaStr, setMetaStr]           = useState('');
 
-  // Troca de setor/mês → recarrega o valor salvo daquela chave
+  // Troca de setor/mês → recarrega o valor salvo daquela chave e reporta ao pai
   useEffect(() => {
-    setDados(lerContribuicao(chave));
+    const salvo = lerContribuicao(chave);
+    setDados(salvo);
     setEditando(false);
-  }, [chave]);
+    onReport?.(setorId, salvo?.acumulado ?? 0);
+  }, [chave, setorId, onReport]);
 
   function abrirEdicao() {
     setAcumuladoStr(dados ? String(dados.acumulado).replace('.', ',') : '');
@@ -225,6 +231,7 @@ function CardContribuicaoReceptivo({
     try { localStorage.setItem(chave, JSON.stringify(novo)); } catch { /* noop */ }
     setDados(novo);
     setEditando(false);
+    onReport?.(setorId, novo.acumulado);
   }
 
   return (
@@ -309,6 +316,29 @@ export function DesempenhoEquipes({
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
   const [carregado, setCarregado] = useState(false);
+  // Contribuição Receptivo (manual, localStorage) reportada por cada card-filho;
+  // soma no acumulado do card consolidado do setor.
+  const [contribPorSetor, setContribPorSetor] = useState<Record<string, number>>({});
+  const reportContrib = useCallback((sid: string, acumulado: number) => {
+    setContribPorSetor(prev => (prev[sid] === acumulado ? prev : { ...prev, [sid]: acumulado }));
+  }, []);
+  // Equipes de treinamento: equipe_id → data de início (só as treinamento=true).
+  // Fetch isolado e tolerante — coluna ausente não quebra o painel principal.
+  const [treinoMap, setTreinoMap] = useState<Record<string, string | null>>({});
+  useEffect(() => {
+    let cancel = false;
+    void (async () => {
+      const { data, error } = await supabase.from('equipes')
+        .select('id, treinamento, treinamento_inicio').eq('empresa_id', empresaId);
+      if (cancel || error || !data) return;
+      const m: Record<string, string | null> = {};
+      for (const e of data as { id: string; treinamento: boolean | null; treinamento_inicio: string | null }[]) {
+        if (e.treinamento) m[e.id] = e.treinamento_inicio ?? null;
+      }
+      setTreinoMap(m);
+    })();
+    return () => { cancel = true; };
+  }, [empresaId]);
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
@@ -420,7 +450,7 @@ export function DesempenhoEquipes({
             subtitulo="Setor geral"
             ehSetor
             mostrarHO={isPP}
-            acumulado={dados.porSetor[sid]?.bruto ?? 0}
+            acumulado={(dados.porSetor[sid]?.bruto ?? 0) + (contribPorSetor[sid] ?? 0)}
             acumuladoHO={dados.porSetor[sid]?.ho ?? 0}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
@@ -434,26 +464,37 @@ export function DesempenhoEquipes({
               mes={mes}
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
+              onReport={reportContrib}
             />
           )}
           {/* Equipes do setor, maiores acumulados primeiro */}
           {eqs
             .slice()
             .sort((a, b) => (dados.porEquipe[b.id]?.bruto ?? 0) - (dados.porEquipe[a.id]?.bruto ?? 0))
-            .map(eq => (
-              <PainelPlacar
-                key={eq.id}
-                titulo={lideres[eq.id]?.nome ?? eq.nome}
-                subtitulo={`Equipe ${eq.nome}`}
-                fotoUrl={lideres[eq.id]?.foto_url}
-                mostrarHO={isPP}
-                acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
-                acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
-                meta={dados.metaDe('equipe', eq.id)}
-                totalUteis={dados.totalUteis}
-                decorridos={dados.decorridos}
-              />
-            ))}
+            .map(eq => {
+              // Equipe de treinamento com data de início → dias úteis reduzidos.
+              const inicioTreino = treinoMap[eq.id] ?? undefined;
+              const eqUteis = inicioTreino
+                ? diasUteisDoMes(anoNum, mesNum, feriados, inicioTreino)
+                : dados.totalUteis;
+              const eqDecorridos = inicioTreino
+                ? diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicioTreino)
+                : dados.decorridos;
+              return (
+                <PainelPlacar
+                  key={eq.id}
+                  titulo={lideres[eq.id]?.nome ?? eq.nome}
+                  subtitulo={inicioTreino ? `Equipe ${eq.nome} · treino` : `Equipe ${eq.nome}`}
+                  fotoUrl={lideres[eq.id]?.foto_url}
+                  mostrarHO={isPP}
+                  acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
+                  acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
+                  meta={dados.metaDe('equipe', eq.id)}
+                  totalUteis={eqUteis}
+                  decorridos={eqDecorridos}
+                />
+              );
+            })}
         </div>
       ))}
       <p className="text-[11px] text-muted-foreground">

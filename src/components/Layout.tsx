@@ -28,7 +28,7 @@ import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2,
+  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -51,6 +51,7 @@ import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 import { ModalRecortarFoto } from './ModalRecortarFoto';
+import { TrocarSenhaModal } from './TrocarSenhaModal';
 
 interface NavItem {
   label: string;
@@ -197,6 +198,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // ── Chatplay modal (PaguePlay only) ─────────────────────────────────────────
   const [chatplayOnboardingOpen, setChatplayOnboardingOpen] = useState(false);
+
+  // ── Troca de senha 1x (botão de chave) ──────────────────────────────────────
+  const [senhaModalOpen, setSenhaModalOpen] = useState(false);
+  const [senhaTrocadaLocal, setSenhaTrocadaLocal] = useState(false);
+  const mostrarBotaoSenha = !!perfil?.id && !perfil?.senha_alterada && !senhaTrocadaLocal;
 
   // Filtra por role, visibilidade PaguePay e permissões configuráveis.
   //
@@ -444,6 +450,20 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 )}
               </Button>
             )}
+            {/* Trocar senha 1x — some após a primeira troca */}
+            {mostrarBotaoSenha && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-8 h-8 relative text-amber-500 hover:text-amber-600"
+                title="Alterar minha senha"
+                aria-label="Alterar minha senha"
+                onClick={() => setSenhaModalOpen(true)}
+              >
+                <KeyRound className="w-4 h-4" />
+                <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
+              </Button>
+            )}
             {/* Badge de notificações — indica novas sem abrir o painel */}
             <Button
               variant="ghost"
@@ -594,6 +614,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           open={chatplayOnboardingOpen}
           onClose={() => setChatplayOnboardingOpen(false)}
           onConfirmed={() => setChatplayOnboardingOpen(false)}
+        />
+      )}
+
+      {/* Troca de senha 1x */}
+      {perfil?.id && (
+        <TrocarSenhaModal
+          open={senhaModalOpen}
+          onOpenChange={setSenhaModalOpen}
+          perfilId={perfil.id}
+          onTrocada={() => setSenhaTrocadaLocal(true)}
         />
       )}
 
