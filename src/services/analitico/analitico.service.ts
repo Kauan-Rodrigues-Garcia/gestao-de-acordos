@@ -226,8 +226,31 @@ export async function importarLoteAnalitico(
   const grupoDe = (r: { operador_usuario: string; codigo: string; mes_referencia: string }) =>
     `${r.operador_usuario}::${r.codigo}::${r.mes_referencia}`;
 
-  const alvoPorGrupo = new Map<string, RowImport>();
-  for (const r of rows) alvoPorGrupo.set(grupoDe(r), r);
+  // Agrega as linhas do relatório por grupo (operador, NR, mês). Um NR pode vir
+  // em VÁRIAS linhas no mês (datas/formas diferentes) — cada uma vira uma linha
+  // no banco (chave de dedupe distinta). O alvo da reconciliação tem que ser a
+  // SOMA dessas linhas, senão comparamos o total do banco contra uma parcela só
+  // e o delta fica negativo à toa ("banco tem 2× o relatório").
+  // Deduplica por (data_pagamento, forma_pagamento) — mesmo critério do banco —
+  // para não contar em dobro uma duplicata exata do arquivo.
+  type AlvoAgg = { rep: RowImport; valor: number; ho: number };
+  const alvoPorGrupo = new Map<string, AlvoAgg>();
+  const chavesVistasPorGrupo = new Map<string, Set<string>>();
+  for (const r of rows) {
+    const k  = grupoDe(r);
+    const dk = `${r.data_pagamento}::${r.forma_pagamento}`;
+    let vistas = chavesVistasPorGrupo.get(k);
+    if (!vistas) { vistas = new Set(); chavesVistasPorGrupo.set(k, vistas); }
+    const cur = alvoPorGrupo.get(k);
+    if (!cur) {
+      alvoPorGrupo.set(k, { rep: r, valor: r.valor_recebido, ho: r.total_ho });
+      vistas.add(dk);
+    } else if (!vistas.has(dk)) {
+      cur.valor += r.valor_recebido;
+      cur.ho    += r.total_ho;
+      vistas.add(dk);
+    }
+  }
 
   const codigos = [...new Set(rows.map(r => r.codigo))];
   const meses   = [...new Set(rows.map(r => r.mes_referencia))];
@@ -251,12 +274,13 @@ export async function importarLoteAnalitico(
   }
 
   const round2 = (n: number) => Math.round(n * 100) / 100;
-  for (const [k, alvo] of alvoPorGrupo) {
+  for (const [k, agg] of alvoPorGrupo) {
+    const alvo = agg.rep;                 // linha representante (chave/detalhe)
     const doBanco = dbPorGrupo.get(k) ?? [];
     if (!doBanco.length) continue; // linha nem inseriu (erro já reportado no chunk)
 
     const somaDb = doBanco.reduce((s, x) => s + (Number(x.valor_recebido) || 0), 0);
-    const delta  = alvo.valor_recebido - somaDb;
+    const delta  = agg.valor - somaDb;    // SOMA do relatório no grupo vs soma do banco
     if (Math.abs(delta) <= 0.005) continue;
 
     const chaveIgual = doBanco.find(x =>
@@ -268,13 +292,13 @@ export async function importarLoteAnalitico(
     if (novoValor < 0) {
       erros.push(
         `NR ${alvo.codigo} (${alvo.operador_usuario}): banco tem ${somaDb.toFixed(2)} em ` +
-        `${doBanco.length} linha(s), relatório diz ${alvo.valor_recebido.toFixed(2)} — ` +
+        `${doBanco.length} linha(s), relatório diz ${agg.valor.toFixed(2)} — ` +
         `ajuste manual necessário (use "Limpar mês" e reimporte).`,
       );
       continue;
     }
     const somaHoDb = doBanco.reduce((s, x) => s + (Number(x.total_ho) || 0), 0);
-    const novoHo   = round2(Math.max((Number(linha.total_ho) || 0) + (alvo.total_ho - somaHoDb), 0));
+    const novoHo   = round2(Math.max((Number(linha.total_ho) || 0) + (agg.ho - somaHoDb), 0));
 
     const { error: errUp } = await supabase
       .from('analitico_recebimentos')
