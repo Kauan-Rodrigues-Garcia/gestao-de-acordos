@@ -357,23 +357,6 @@
 .pet-anim-vapor-2 { animation: pet-vapor 2.6s ease-out 0.9s infinite; transform-box: fill-box; transform-origin: center bottom; }
 .pet-anim-vapor-3 { animation: pet-vapor 2.6s ease-out 1.8s infinite; transform-box: fill-box; transform-origin: center bottom; }
 
-/* Fumaça saindo da chaminé da lareira (frio) */
-@keyframes pet-fumaca {
-  0%   { opacity: 0; transform: translate(0, 0) scale(.4); }
-  20%  { opacity: .5; }
-  100% { opacity: 0; transform: translate(-11px, -30px) scale(1.5); }
-}
-.pet-anim-fumaca   { animation: pet-fumaca 4.2s ease-out infinite;      transform-box: fill-box; transform-origin: center bottom; }
-.pet-anim-fumaca-2 { animation: pet-fumaca 4.2s ease-out 1.4s infinite; transform-box: fill-box; transform-origin: center bottom; }
-.pet-anim-fumaca-3 { animation: pet-fumaca 4.2s ease-out 2.8s infinite; transform-box: fill-box; transform-origin: center bottom; }
-
-/* Lareira surgindo no cantinho quando esfria */
-@keyframes pet-lareira-in {
-  0%   { opacity: 0; transform: translateY(12px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-.pet-anim-lareira-in { animation: pet-lareira-in 0.6s ease-out; }
-
 /* Folhinhas voando com o vento */
 @keyframes pet-folha {
   0%   { opacity: 0; transform: translate(210px, 40px) rotate(0deg); }
