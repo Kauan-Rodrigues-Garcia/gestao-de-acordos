@@ -19,6 +19,7 @@ import { useTenant } from "@/lib/tenant-config";
 import { PP_HO_PERCENTUAL, getTodayISO } from "@/lib/index";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
+import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
@@ -55,7 +56,12 @@ interface Equipe {
   id: string; nome: string; setor_id: string;
   treinamento: boolean | null; treinamento_inicio: string | null;
 }
-interface Operador { id: string; nome: string; equipe_id: string | null; }
+interface Operador {
+  id: string; nome: string; equipe_id: string | null;
+  /** Nome do setor de origem quando o operador entra aqui como CLONE. A meta é
+   *  a mesma nos dois setores — a linha em `metas` é por operador, sem setor. */
+  clonadoDe?: string | null;
+}
 interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; }
 
 function parseBRL(value: string): number {
@@ -311,11 +317,54 @@ export default function MetasConfig() {
       const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id")
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
-      setOperadores((data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0));
+      const proprios = (data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0);
+      setOperadores([...proprios, ...(await buscarClonadosNoSetor(proprios))]);
     } catch (err: unknown) {
       toast.error("Erro ao carregar operadores", { description: err instanceof Error ? err.message : String(err) });
     } finally { setLoadingOperadores(false); }
-  }, [setorSelecionado]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setorSelecionado, empresa?.id]);
+
+  /** Operadores de OUTRO setor clonados em alguma equipe deste setor. Entram na
+   *  lista de metas junto dos próprios: a meta é por operador (a chave do
+   *  upsert é tipo+referencia_id+empresa_id+mes+ano, sem setor), então salvar
+   *  daqui ou do setor de origem escreve a mesma linha. */
+  async function buscarClonadosNoSetor(proprios: Operador[]): Promise<Operador[]> {
+    if (!empresa?.id || !setorSelecionado) return [];
+    const { data: eqs } = await supabase.from("equipes").select("id").eq("setor_id", setorSelecionado);
+    const eqIds = new Set(((eqs ?? []) as { id: string }[]).map(e => e.id));
+    if (!eqIds.size) return [];
+
+    const clones = await listarClonesEquipes(empresa.id);  // null = migration pendente
+    if (!clones?.length) return [];
+
+    // operador → equipe DESTE setor em que ele é clone (para o filtro de equipe)
+    const equipeAqui = new Map<string, string>();
+    for (const c of clones) {
+      if (eqIds.has(c.equipe_id) && !equipeAqui.has(c.operador_id)) equipeAqui.set(c.operador_id, c.equipe_id);
+    }
+    const jaNaLista = new Set(proprios.map(o => o.id));
+    const faltando = [...equipeAqui.keys()].filter(id => !jaNaLista.has(id));
+    if (!faltando.length) return [];
+
+    const { data: perfisClonados } = await supabase.from("perfis")
+      .select("id, nome, setor_id").in("id", faltando)
+      .in("perfil", ["operador", "elite"]).order("nome");
+    const linhas = (perfisClonados ?? []) as { id: string; nome: string; setor_id: string | null }[];
+    if (!linhas.length) return [];
+
+    // Nome do setor de origem para a etiqueta (o líder pode não ter esse setor carregado)
+    const origemIds = [...new Set(linhas.map(l => l.setor_id).filter((s): s is string => !!s))];
+    const { data: setoresOrigem } = await supabase.from("setores").select("id, nome").in("id", origemIds);
+    const nomeOrigem = new Map(((setoresOrigem ?? []) as { id: string; nome: string }[]).map(s => [s.id, s.nome]));
+
+    return linhas.map(l => ({
+      id: l.id,
+      nome: l.nome,
+      equipe_id: equipeAqui.get(l.id) ?? null,
+      clonadoDe: (l.setor_id && nomeOrigem.get(l.setor_id)) || "outro setor",
+    }));
+  }
 
   const fetchMetas = useCallback(async () => {
     if (!empresa?.id) return;
@@ -750,7 +799,8 @@ export default function MetasConfig() {
             ) : (
               <div>
                 {operadoresVisiveis.map(op => (
-                  <MetaRow key={op.id} label={String(op.nome ?? "")} sublabel="Operador"
+                  <MetaRow key={op.id} label={String(op.nome ?? "")}
+                    sublabel={op.clonadoDe ? `Operador · clone de ${op.clonadoDe} — meta compartilhada` : "Operador"}
                     icon={<User className="h-4 w-4" />}
                     input={getInput(op.id)}
                     disabled={!podeGerenciarMetas}
