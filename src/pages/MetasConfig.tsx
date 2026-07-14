@@ -242,6 +242,9 @@ export default function MetasConfig() {
   const [feriados,      setFeriados]      = useState<string[]>([]);
   const [quartis,       setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [feriadoNovo,   setFeriadoNovo]   = useState<string>("");
+  // Contar o dia de hoje nos dias trabalhados. Padrão false: o dia atual ainda
+  // está acontecendo, o analítico dele só fecha no fim do expediente.
+  const [contarDiaAtual, setContarDiaAtual] = useState(false);
   const [configDbAtiva, setConfigDbAtiva] = useState(true);
   const [configCarregada, setConfigCarregada] = useState(false);
 
@@ -276,8 +279,10 @@ export default function MetasConfig() {
   const mesAtualVisivel = mes === hoje.getMonth() + 1 && ano === hoje.getFullYear();
   const totalDiasUteis  = useMemo(() => diasUteisDoMes(ano, mes, feriados), [ano, mes, feriados]);
   const diasTrabalhados = useMemo(
-    () => (mesAtualVisivel ? diasUteisDecorridos(ano, mes, feriados, hojeISO) : null),
-    [ano, mes, feriados, hojeISO, mesAtualVisivel],
+    () => (mesAtualVisivel
+      ? diasUteisDecorridos(ano, mes, feriados, hojeISO, undefined, contarDiaAtual)
+      : null),
+    [ano, mes, feriados, hojeISO, mesAtualVisivel, contarDiaAtual],
   );
 
   const fetchSetores = useCallback(async () => {
@@ -402,6 +407,7 @@ export default function MetasConfig() {
     setConfigDbAtiva(dbAtiva);
     setFeriados(data?.feriados ?? []);
     setQuartis(data?.quartis ?? QUARTIS_PADRAO);
+    setContarDiaAtual(data?.contar_dia_atual === true);
     setConfigCarregada(true);
   }, [empresa?.id, temConfigMes, mes, ano]);
 
@@ -493,7 +499,7 @@ export default function MetasConfig() {
       if (salvaConfig && perfil?.id) {
         const { error: cfgErr } = await upsertMetasConfig({
           empresaId: empresa.id, mes, ano,
-          feriados, quartis, atualizadoPor: perfil.id,
+          feriados, quartis, contarDiaAtual, atualizadoPor: perfil.id,
         });
         if (cfgErr) throw new Error(cfgErr);
       }
@@ -563,6 +569,26 @@ export default function MetasConfig() {
                   </p>
                 </div>
               </div>
+
+              {/* O dia de hoje ainda está acontecendo: contá-lo infla o esperado
+                  e derruba a projeção/quartil de todo mundo durante o dia. */}
+              <label className="flex items-start gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={contarDiaAtual}
+                  disabled={!podeGerenciarMetas}
+                  onChange={e => setContarDiaAtual(e.target.checked)}
+                  className="mt-0.5 h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
+                />
+                <span className="text-[11px] leading-tight">
+                  <span className="font-medium text-foreground">Contar o dia de hoje</span>
+                  <span className="block text-muted-foreground">
+                    Desmarcado, os dias trabalhados consideram só os dias já fechados — o
+                    analítico de hoje ainda está entrando. Afeta a meta diária, a projeção
+                    e os quartis.
+                  </span>
+                </span>
+              </label>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground">Feriados (a operação não trabalha)</Label>
                 <div className="flex items-center gap-2">

@@ -313,6 +313,8 @@ export function DesempenhoEquipes({
   const setorEfetivo = setorId ?? perfil?.setor_id ?? null;
   const [metas, setMetas]       = useState<MetaRow[]>([]);
   const [feriados, setFeriados] = useState<string[]>([]);
+  // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
+  const [contarHoje, setContarHoje] = useState(false);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
   const [carregado, setCarregado] = useState(false);
@@ -358,6 +360,7 @@ export function DesempenhoEquipes({
         if (cancelado) return;
         setMetas((metasData as MetaRow[]) ?? []);
         setFeriados(cfg.data?.feriados ?? []);
+        setContarHoje(cfg.data?.contar_dia_atual === true);
         const lMap: Record<string, LiderInfo> = {};
         for (const l of (lideresData as { nome: string; foto_url: string | null; equipe_id: string }[]) ?? []) {
           if (!lMap[l.equipe_id]) lMap[l.equipe_id] = { nome: l.nome, foto_url: l.foto_url };
@@ -375,7 +378,7 @@ export function DesempenhoEquipes({
 
   const dados = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
-    const decorridos = diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO());
+    const decorridos = diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), undefined, contarHoje);
 
     // Acumulado (bruto + H.O.) por equipe e por setor a partir do analítico.
     // O card do SETOR soma TODOS os operadores do setor — inclusive quem está
@@ -434,7 +437,7 @@ export function DesempenhoEquipes({
     }
 
     return { totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos };
-  }, [anoNum, mesNum, feriados, resumos, operadorEquipeMap, equipesExtrasPorOperador,
+  }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
       orfaosPorSetor, equipes, metas, setorEfetivo]);
 
   if (loading || !carregado) {
@@ -491,7 +494,7 @@ export function DesempenhoEquipes({
                 ? diasUteisDoMes(anoNum, mesNum, feriados, inicioTreino)
                 : dados.totalUteis;
               const eqDecorridos = inicioTreino
-                ? diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicioTreino)
+                ? diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicioTreino, contarHoje)
                 : dados.decorridos;
               return (
                 <PainelPlacar

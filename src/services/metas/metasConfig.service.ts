@@ -13,6 +13,8 @@ function normalizar(row: MetasConfigMes): MetasConfigMes {
     ...row,
     feriados: Array.isArray(row.feriados) ? row.feriados : [],
     quartis:  Array.isArray(row.quartis) && row.quartis.length ? row.quartis : QUARTIS_PADRAO,
+    // Coluna nova (20260714a): sem ela, o padrão é não contar o dia atual
+    contar_dia_atual: row.contar_dia_atual === true,
   };
 }
 
@@ -44,17 +46,19 @@ export async function upsertMetasConfig(params: {
   ano: number;
   feriados: string[];
   quartis: QuartilConfig[];
+  contarDiaAtual?: boolean;
   atualizadoPor: string;
 }): Promise<{ error: string | null }> {
   const { error } = await supabase
     .from('metas_config_mes')
     .upsert({
-      empresa_id:     params.empresaId,
-      mes:            params.mes,
-      ano:            params.ano,
-      feriados:       params.feriados,
-      quartis:        params.quartis,
-      atualizado_por: params.atualizadoPor,
+      empresa_id:       params.empresaId,
+      mes:              params.mes,
+      ano:              params.ano,
+      feriados:         params.feriados,
+      quartis:          params.quartis,
+      contar_dia_atual: params.contarDiaAtual === true,
+      atualizado_por:   params.atualizadoPor,
       atualizado_em:  new Date().toISOString(),
     }, { onConflict: 'empresa_id,mes,ano' });
   return { error: error?.message ?? null };

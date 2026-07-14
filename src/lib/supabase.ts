@@ -383,6 +383,9 @@ export interface MetasConfigMes {
   ano: number;
   feriados: string[];        // ['yyyy-MM-dd', ...]
   quartis: QuartilConfig[];
+  /** Contar o dia de hoje nos dias úteis decorridos (migration 20260714a).
+   *  Padrão FALSE: o dia atual ainda está acontecendo e infla o esperado. */
+  contar_dia_atual?: boolean | null;
   atualizado_por: string | null;
   criado_em: string;
   atualizado_em: string;

@@ -91,9 +91,18 @@ export function MetaProgressoHeader() {
   }, [ativo, perfil?.id, empresa?.id, mes, ano]);
 
   // Ranking — recarrega junto com o analítico (realtime já dispara o hook).
-  // Isolamento por EQUIPE: a posição compara APENAS com operadores da própria
-  // equipe do operador. Sem equipe cadastrada, cai para o setor (comportamento
-  // antigo); sem nenhum dos dois, compara com a empresa toda.
+  //
+  // Isolamento por EQUIPE: para o OPERADOR quem faz isso é a própria RPC
+  // (fn_analitico_resumo_por_operador, SECURITY DEFINER), que deriva a equipe
+  // de auth.uid() no servidor e já devolve a lista ordenada por valor.
+  //
+  // NÃO filtrar de novo aqui: a policy perfis_select só deixa lider/
+  // administrador/super_admin lerem perfis de terceiros, então para o operador
+  // um `select id from perfis where equipe_id = X` volta só com ele mesmo — a
+  // lista colapsava para 1 linha e TODO operador aparecia em 1º lugar.
+  //
+  // Para líder+ a RPC devolve a empresa inteira, e aí o recorte por equipe
+  // precisa ser feito aqui mesmo — esses cargos conseguem ler o grupo.
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
@@ -101,26 +110,28 @@ export function MetaProgressoHeader() {
       try {
         const { data } = await buscarResumoOperadoresAnalitico(empresa.id, mesStr);
         let lista = data;
-        // Filtra os membros do mesmo grupo do operador (equipe tem prioridade).
-        let filtroCol: 'equipe_id' | 'setor_id' | null = null;
-        let filtroVal: string | null = null;
-        if (perfil?.equipe_id) { filtroCol = 'equipe_id'; filtroVal = perfil.equipe_id; }
-        else if (perfil?.setor_id) { filtroCol = 'setor_id'; filtroVal = perfil.setor_id; }
-        if (filtroCol && filtroVal) {
+        const cargo = String(perfil?.perfil ?? '').toLowerCase();
+        const podeLerGrupo = cargo === 'lider' || cargo === 'administrador' || cargo === 'super_admin';
+        const filtroCol: 'equipe_id' | 'setor_id' | null =
+          perfil?.equipe_id ? 'equipe_id' : perfil?.setor_id ? 'setor_id' : null;
+        const filtroVal = perfil?.equipe_id ?? perfil?.setor_id ?? null;
+        if (podeLerGrupo && filtroCol && filtroVal) {
           const { data: doGrupo } = await supabase
             .from('perfis')
             .select('id')
             .eq('empresa_id', empresa.id)
             .eq(filtroCol, filtroVal);
           const ids = new Set(((doGrupo ?? []) as { id: string }[]).map(r => r.id));
-          lista = data.filter(r => ids.has(r.operador_id));
+          // Só aplica se realmente leu o grupo — nunca deixa a lista virar "só eu"
+          if (ids.size > 1) lista = data.filter(r => ids.has(r.operador_id));
         }
         if (!cancelado) setRanking(lista);
       } catch { /* ranking indisponível — seção some */ }
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas, perfil?.equipe_id, perfil?.setor_id]);
+  }, [ativo, empresa?.id, mesStr, metaValor, analitico.linhas,
+      perfil?.equipe_id, perfil?.setor_id, perfil?.perfil]);
 
   // Equipe de treinamento do operador → dias úteis contam a partir do início.
   const [treinoInicio, setTreinoInicio] = useState<string | null>(null);
@@ -146,7 +157,9 @@ export function MetaProgressoHeader() {
     const inicioTreino = treinoInicio ?? undefined;
     const totalUteis = diasUteisDoMes(ano, mes, config.feriados, inicioTreino);
     if (totalUteis === 0) return null;
-    const decorridos  = diasUteisDecorridos(ano, mes, config.feriados, getTodayISO(), inicioTreino);
+    const decorridos  = diasUteisDecorridos(
+      ano, mes, config.feriados, getTodayISO(), inicioTreino, config.contar_dia_atual === true,
+    );
     const metaDiaria  = metaValor / totalUteis;
     const esperado    = metaDiaria * Math.max(decorridos, 1);
     const projecao    = pct(recebido, esperado);

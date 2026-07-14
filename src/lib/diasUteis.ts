@@ -51,14 +51,21 @@ export function diasUteisDoMes(
 }
 
 /**
- * Dias úteis já trabalhados até `hojeISO` (inclusive).
+ * Dias úteis já trabalhados até `hojeISO`.
  * Se hoje não for dia útil (ou for feriado), conta só os anteriores.
  * `inicioISO` (treinamento): ignora os dias antes do início das atividades.
+ * `contarHoje` (metas_config_mes.contar_dia_atual): inclui o dia atual. O dia
+ * de hoje ainda está acontecendo — o analítico dele só fecha no fim do
+ * expediente —, então contá-lo infla o esperado e derruba a projeção durante
+ * o dia. Default true só por compatibilidade da assinatura; quem chama passa
+ * o valor da config, cujo padrão no banco é FALSE.
  */
 export function diasUteisDecorridos(
-  ano: number, mes: number, feriados: string[] = [], hojeISO: string, inicioISO?: string,
+  ano: number, mes: number, feriados: string[] = [], hojeISO: string,
+  inicioISO?: string, contarHoje = true,
 ): number {
-  return listarDiasUteis(ano, mes, feriados, inicioISO).filter(d => d <= hojeISO).length;
+  return listarDiasUteis(ano, mes, feriados, inicioISO)
+    .filter(d => (contarHoje ? d <= hojeISO : d < hojeISO)).length;
 }
 
 /** Quartis ordenados do melhor (maior min_pct) para o pior. */

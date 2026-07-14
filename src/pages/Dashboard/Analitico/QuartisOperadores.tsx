@@ -58,6 +58,8 @@ export function QuartisOperadores({
   const [feriados, setFeriados]     = useState<string[]>([]);
   const [quartis, setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [setores, setSetores]       = useState<Record<string, string>>({});
+  // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
+  const [contarHoje, setContarHoje] = useState(false);
   const [carregado, setCarregado]   = useState(false);
 
   useEffect(() => {
@@ -82,6 +84,7 @@ export function QuartisOperadores({
         }
         setMetasOp(mMap);
         setFeriados(cfg.data?.feriados ?? []);
+        setContarHoje(cfg.data?.contar_dia_atual === true);
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
         const sMap: Record<string, string> = {};
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
@@ -95,7 +98,9 @@ export function QuartisOperadores({
 
   const grupos = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
-    const decorridos = Math.max(diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO()), 1);
+    const decorridos = Math.max(
+      diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), undefined, contarHoje), 1,
+    );
     const recebidoMap: Record<string, number> = {};
     for (const r of resumos) recebidoMap[r.operador_id] = r.total_recebido;
 
@@ -136,7 +141,7 @@ export function QuartisOperadores({
       lista.sort((a, b) => (b.projecao ?? -1) - (a.projecao ?? -1));
     }
     return porSetor;
-  }, [anoNum, mesNum, feriados, quartis, resumos, operadores, metasOp, setorEfetivo, filtroEquipe]);
+  }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp, setorEfetivo, filtroEquipe]);
 
   // Equipes disponíveis no seletor: só as do setor em exibição
   const equipesDoSetor = useMemo(
