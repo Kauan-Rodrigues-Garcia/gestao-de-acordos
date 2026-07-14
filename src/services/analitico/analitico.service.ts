@@ -705,17 +705,28 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
 
+  // Equipes vêm da tabela, não dos perfis: uma equipe formada SÓ por clones
+  // (ex.: "Digital Amauri" dentro do Play 5) não tem nenhum perfil apontando
+  // para ela e sumia da lista — ficava sem card e sem setor no consolidado.
+  const { data: equipesData } = await supabase
+    .from('equipes')
+    .select('id, nome, setor_id')
+    .eq('empresa_id', empresaId);
+
   // Clones (tabela pode não existir — migration 20260712a pendente → vazio)
   const { data: clones } = await supabase
     .from('equipe_operadores_clones')
     .select('equipe_id, operador_id')
     .eq('empresa_id', empresaId);
   const equipesExtrasPorOperador: Record<string, string[]> = {};
+  // Equipes que têm gente: membro de verdade OU clone. Sem isso, equipe vazia
+  // de propósito passaria a aparecer zerada no painel.
+  const comGente = new Set<string>();
   for (const c of ((clones ?? []) as { equipe_id: string; operador_id: string }[])) {
     (equipesExtrasPorOperador[c.operador_id] ??= []).push(c.equipe_id);
+    comGente.add(c.equipe_id);
   }
 
-  const equipeMap = new Map<string, { nome: string; setor_id: string | null }>();
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
 
   for (const p of (data ?? []) as {
@@ -731,13 +742,14 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
       // Setor da equipe; quem não tem equipe usa o setor do próprio perfil
       setor_id:    eq?.setor_id ?? p.setor_id ?? null,
     };
-    if (p.equipe_id && eq?.nome) {
-      equipeMap.set(p.equipe_id, { nome: eq.nome, setor_id: eq.setor_id ?? null });
-    }
+    if (p.equipe_id) comGente.add(p.equipe_id);
   }
 
-  const equipes: EquipeAnalitico[] = Array.from(equipeMap.entries())
-    .map(([id, v]) => ({ id, nome: v.nome, setor_id: v.setor_id }))
+  const equipes: EquipeAnalitico[] = ((equipesData ?? []) as {
+    id: string; nome: string; setor_id: string | null;
+  }[])
+    .filter(e => comGente.has(e.id))
+    .map(e => ({ id: e.id, nome: e.nome, setor_id: e.setor_id ?? null }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   return { equipes, operadorEquipeMap, equipesExtrasPorOperador };
