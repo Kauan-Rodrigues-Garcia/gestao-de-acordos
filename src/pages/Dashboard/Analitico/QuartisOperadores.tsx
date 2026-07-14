@@ -348,41 +348,45 @@ export function QuartisOperadores({
             ))}
           </div>
 
-          {/* Distribuição por quartil */}
-          <div className="w-full xl:w-64 shrink-0 rounded-xl border border-border bg-card p-3">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+          {/* Distribuição por quartil. O título fica FORA do card, irmão do
+              rótulo do setor: assim o topo do card alinha com o cabeçalho da
+              tabela sem depender de um margin-top chutado. */}
+          <div className="w-full xl:w-64 shrink-0 space-y-1">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1">
               Distribuição
             </p>
-            <div className="flex justify-center">
-              <PizzaQuartis3D fatias={distribuicao.fatias} total={distribuicao.total} />
+            <div className="rounded-xl border border-border bg-card p-3">
+              <div className="flex justify-center">
+                <PizzaQuartis3D fatias={distribuicao.fatias} total={distribuicao.total} />
+              </div>
+              <table className="w-full text-[11px] mt-2">
+                <tbody>
+                  {distribuicao.fatias.map(f => {
+                    const cor = COR_QUARTIL[f.quartil] ?? '#6366f1';
+                    const pct = distribuicao.total > 0
+                      ? Math.round((f.qtd / distribuicao.total) * 100) : 0;
+                    return (
+                      <tr key={f.quartil} className="border-t border-border/40">
+                        <td className="py-1 pr-1 w-3">
+                          <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: cor }} />
+                        </td>
+                        <td className="py-1 font-medium">{f.quartil}º quartil</td>
+                        <td className="py-1 text-right tabular-nums font-mono text-muted-foreground">{pct}%</td>
+                        <td className="py-1 text-right tabular-nums font-mono font-bold w-8" style={{ color: cor }}>
+                          {f.qtd}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  <tr className="border-t border-border">
+                    <td />
+                    <td className="py-1 font-semibold text-muted-foreground">Total</td>
+                    <td />
+                    <td className="py-1 text-right tabular-nums font-mono font-bold">{distribuicao.total}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-            <table className="w-full text-[11px] mt-2">
-              <tbody>
-                {distribuicao.fatias.map(f => {
-                  const cor = COR_QUARTIL[f.quartil] ?? '#6366f1';
-                  const pct = distribuicao.total > 0
-                    ? Math.round((f.qtd / distribuicao.total) * 100) : 0;
-                  return (
-                    <tr key={f.quartil} className="border-t border-border/40">
-                      <td className="py-1 pr-1 w-3">
-                        <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: cor }} />
-                      </td>
-                      <td className="py-1 font-medium">{f.quartil}º quartil</td>
-                      <td className="py-1 text-right tabular-nums font-mono text-muted-foreground">{pct}%</td>
-                      <td className="py-1 text-right tabular-nums font-mono font-bold w-8" style={{ color: cor }}>
-                        {f.qtd}
-                      </td>
-                    </tr>
-                  );
-                })}
-                <tr className="border-t border-border">
-                  <td />
-                  <td className="py-1 font-semibold text-muted-foreground">Total</td>
-                  <td />
-                  <td className="py-1 text-right tabular-nums font-mono font-bold">{distribuicao.total}</td>
-                </tr>
-              </tbody>
-            </table>
           </div>
         </div>
       )}

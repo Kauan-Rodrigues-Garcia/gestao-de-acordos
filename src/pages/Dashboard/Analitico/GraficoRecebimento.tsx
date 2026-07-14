@@ -1,6 +1,6 @@
 /**
  * GraficoRecebimento — aba do Analítico (líder+): total recebido em cada dia do
- * mês, com o valor rotulado sobre cada ponto da linha.
+ * mês, com o valor rotulado sobre cada ponto e a média diária de referência.
  *
  * Escopo: segue o filtro de setor da tela. A pergunta "este recebimento conta
  * neste setor?" usa setoresDoOperador — o operador clonado credita o setor da
@@ -11,7 +11,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, LabelList,
-  ResponsiveContainer,
+  ReferenceLine, ResponsiveContainer,
 } from 'recharts';
 import { TrendingUp, Loader2 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
@@ -31,19 +31,27 @@ interface GraficoRecebimentoProps {
 }
 
 const COR_LINHA = '#10b981';
+const MESES_ABREV = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+
+/** Cada dia precisa de largura para caber "R$ 95.441,22" sem encavalar. */
+const PX_POR_DIA = 44;
+
+interface Ponto {
+  dia: number;
+  /** null = dia sem recebimento. Vira buraco na linha (connectNulls liga os
+   *  vizinhos), não um vale até o zero — fim de semana não é queda de venda. */
+  valor: number | null;
+  /** 0 ou 1 — alterna a altura do rótulo. Com ~44px por dia e o rótulo em
+   *  ~62px, vizinhos colidiriam; em alturas alternadas a distância entre dois
+   *  rótulos do mesmo nível dobra e eles passam limpos. */
+  nivel: number;
+}
 
 /** Abrevia no eixo Y — R$ 205.944,66 por tick não caberia. */
 function formatYAxis(v: number): string {
   if (v >= 1_000_000) return `R$${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1_000)     return `R$${(v / 1_000).toFixed(0)}k`;
   return `R$${v}`;
-}
-
-/** Rótulo sobre o ponto: some nos dias zerados para não poluir a linha base. */
-function rotuloValor(v: number): string {
-  if (!v) return '';
-  if (v >= 1_000) return `${(v / 1_000).toFixed(1)}k`;
-  return String(Math.round(v));
 }
 
 export function GraficoRecebimento({
@@ -80,9 +88,9 @@ export function GraficoRecebimento({
 
   const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
 
-  const { dados, total, maiorDia } = useMemo(() => {
-    const [ano, mesNum] = mes.split('-').map(Number);
-    const diasNoMes = new Date(ano, mesNum, 0).getDate();
+  const { dados, total, maiorDia, media, diasComRecebimento, mesNum } = useMemo(() => {
+    const [ano, mesN] = mes.split('-').map(Number);
+    const diasNoMes = new Date(ano, mesN, 0).getDate();
     const porDia = new Array<number>(diasNoMes).fill(0);
 
     for (const l of linhas) {
@@ -99,10 +107,25 @@ export function GraficoRecebimento({
       if (dia >= 1 && dia <= diasNoMes) porDia[dia - 1] += Number(l.valor_recebido) || 0;
     }
 
+    // Alterna o nível só entre os dias que têm rótulo — se contasse os buracos,
+    // dois pontos vizinhos poderiam cair no mesmo nível.
+    let n = 0;
+    const pontos: Ponto[] = porDia.map((v, i) => ({
+      dia: i + 1,
+      valor: v > 0 ? v : null,
+      nivel: v > 0 ? n++ % 2 : 0,
+    }));
+
+    const comValor = porDia.filter(v => v > 0);
+    const soma = comValor.reduce((s, v) => s + v, 0);
+
     return {
-      dados: porDia.map((valor, i) => ({ dia: i + 1, valor })),
-      total: porDia.reduce((s, v) => s + v, 0),
+      dados: pontos,
+      total: soma,
       maiorDia: Math.max(...porDia, 0),
+      media: comValor.length ? soma / comValor.length : 0,
+      diasComRecebimento: comValor.length,
+      mesNum: mesN,
     };
   }, [linhas, mes, setorId, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe]);
 
@@ -125,6 +148,37 @@ export function GraficoRecebimento({
       </p>
     );
   }
+
+  const rotuloEixoX = (d: number) =>
+    `${String(d).padStart(2, '0')}/${MESES_ABREV[mesNum - 1]}`;
+
+  /** Pílula com o valor cheio sobre o ponto, na altura alternada do datum. */
+  function RotuloValor(props: {
+    x?: number; y?: number; value?: number | null; index?: number;
+  }) {
+    const { x, y, value, index } = props;
+    if (value == null || x == null || y == null || index == null) return null;
+    const texto  = formatBRL(value);
+    const largura = texto.length * 5.3 + 10;
+    const alto   = dados[index]?.nivel === 1;
+    const topo   = y - (alto ? 32 : 14);
+    return (
+      <g style={{ pointerEvents: 'none' }}>
+        <rect
+          x={x - largura / 2} y={topo - 10} width={largura} height={14} rx={3}
+          fill="var(--card)" stroke={COR_LINHA} strokeOpacity={0.35} strokeWidth={0.75}
+        />
+        <text
+          x={x} y={topo} textAnchor="middle"
+          style={{ fontSize: 9, fontWeight: 600, fill: 'var(--foreground)' }}
+        >
+          {texto}
+        </text>
+      </g>
+    );
+  }
+
+  const larguraMin = dados.length * PX_POR_DIA;
 
   return (
     <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
@@ -150,59 +204,100 @@ export function GraficoRecebimento({
             </p>
           </div>
           <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Média/dia</p>
+            <p className="text-base font-bold tabular-nums font-mono">{formatBRL(media)}</p>
+          </div>
+          <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Melhor dia</p>
             <p className="text-base font-bold tabular-nums font-mono">{formatBRL(maiorDia)}</p>
+          </div>
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Dias c/ receb.</p>
+            <p className="text-base font-bold tabular-nums font-mono">{diasComRecebimento}</p>
           </div>
         </div>
       </div>
 
-      <ResponsiveContainer width="100%" height={340}>
-        <AreaChart data={dados} margin={{ top: 24, right: 16, left: 0, bottom: 0 }}>
-          <defs>
-            <linearGradient id="gradRecebimentoDia" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%"   stopColor={COR_LINHA} stopOpacity={0.4} />
-              <stop offset="100%" stopColor={COR_LINHA} stopOpacity={0.02} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" vertical={false} />
-          <XAxis dataKey="dia" tick={{ fontSize: 10 }} stroke="transparent"
-            tickLine={false} axisLine={false} interval={0} />
-          <YAxis tick={{ fontSize: 10 }} stroke="transparent" tickLine={false}
-            axisLine={false} tickFormatter={formatYAxis} width={56}
-            domain={[0, 'dataMax']} />
-          <Tooltip
-            contentStyle={{
-              borderRadius: '10px',
-              border: '1px solid rgba(148,163,184,0.2)',
-              background: 'var(--popover)',
-              color: 'var(--popover-foreground)',
-              fontSize: '12px',
-              padding: '6px 10px',
-            }}
-            formatter={(v: number) => [formatBRL(v), 'Recebido']}
-            labelFormatter={(d: number) => `Dia ${d}`}
-          />
-          <Area
-            type="monotone"
-            dataKey="valor"
-            name="Recebido"
-            stroke={COR_LINHA}
-            fill="url(#gradRecebimentoDia)"
-            strokeWidth={2.5}
-            dot={{ r: 2.5, fill: COR_LINHA, strokeWidth: 0 }}
-            activeDot={{ r: 5, fill: COR_LINHA, strokeWidth: 0 }}
-            isAnimationActive={false}
-          >
-            <LabelList dataKey="valor" position="top" offset={8}
-              formatter={rotuloValor}
-              style={{ fontSize: 9, fill: 'var(--muted-foreground)', fontWeight: 600 }} />
-          </Area>
-        </AreaChart>
-      </ResponsiveContainer>
+      {/* Em tela estreita o gráfico rola na horizontal em vez de espremer os
+          rótulos até virarem tarja ilegível. */}
+      <div className="overflow-x-auto">
+        <div style={{ minWidth: larguraMin }}>
+          <ResponsiveContainer width="100%" height={400}>
+            <AreaChart data={dados} margin={{ top: 44, right: 24, left: 4, bottom: 4 }}>
+              <defs>
+                <linearGradient id="gradRecebimentoDia" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={COR_LINHA} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={COR_LINHA} stopOpacity={0.01} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.18)" vertical={false} />
+              <XAxis
+                dataKey="dia"
+                tickFormatter={rotuloEixoX}
+                tick={{ fontSize: 10 }}
+                stroke="transparent"
+                tickLine={false}
+                axisLine={false}
+                interval={0}
+                angle={-45}
+                textAnchor="end"
+                height={52}
+              />
+              <YAxis
+                tick={{ fontSize: 10 }}
+                stroke="transparent"
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={formatYAxis}
+                width={64}
+                domain={[0, 'dataMax']}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: '10px',
+                  border: '1px solid rgba(148,163,184,0.2)',
+                  background: 'var(--popover)',
+                  color: 'var(--popover-foreground)',
+                  fontSize: '12px',
+                  padding: '6px 10px',
+                }}
+                formatter={(v: number) => [formatBRL(v), 'Recebido']}
+                labelFormatter={rotuloEixoX}
+              />
+              <ReferenceLine
+                y={media}
+                stroke="var(--muted-foreground)"
+                strokeDasharray="5 4"
+                strokeOpacity={0.55}
+                label={{
+                  value: `média ${formatBRL(media)}`,
+                  position: 'insideTopRight',
+                  style: { fontSize: 9.5, fill: 'var(--muted-foreground)', fontWeight: 600 },
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey="valor"
+                name="Recebido"
+                stroke={COR_LINHA}
+                fill="url(#gradRecebimentoDia)"
+                strokeWidth={2.5}
+                connectNulls
+                dot={{ r: 3, fill: 'var(--card)', stroke: COR_LINHA, strokeWidth: 2 }}
+                activeDot={{ r: 5.5, fill: COR_LINHA, strokeWidth: 0 }}
+                isAnimationActive={false}
+              >
+                <LabelList dataKey="valor" content={RotuloValor} />
+              </Area>
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Valor recebido em cada dia do mês, do relatório analítico. Rótulos em milhares
-        (ex.: 12.5k = R$ 12.500); passe o mouse para o valor exato.
+        Valor recebido em cada dia do mês, do relatório analítico. Dias sem recebimento
+        (fim de semana, feriado) não aparecem como zero — a linha liga os dias vizinhos.
+        Média = total ÷ {diasComRecebimento} dia{diasComRecebimento !== 1 ? 's' : ''} com recebimento.
       </p>
     </div>
   );
