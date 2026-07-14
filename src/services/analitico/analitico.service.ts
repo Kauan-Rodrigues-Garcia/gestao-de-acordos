@@ -691,6 +691,42 @@ export interface OperadorEquipeInfo {
   setor_id:    string | null;
 }
 
+/** equipe_id → setor_id, para resolver o setor DONO de uma equipe clonada. */
+export function mapaSetorDaEquipe(equipes: EquipeAnalitico[]): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const e of equipes) if (e.setor_id) m.set(e.id, e.setor_id);
+  return m;
+}
+
+/**
+ * Setores em que o recebimento do operador conta: o setor dele MAIS os setores
+ * donos das equipes em que ele é clone (equipe_operadores_clones). É o que
+ * permite o setor misto emprestar operadores para play 4 / play 5 sem que eles
+ * saiam do setor de origem.
+ *
+ * FONTE ÚNICA — todo painel que pergunta "este operador conta neste setor?"
+ * precisa usar esta função. Quando o card do setor usava esta regra e o
+ * "Total recebido" usava `info.setor_id === setorId`, os dois divergiam.
+ *
+ * Não vale para EXCLUSÃO: apagar dados continua sendo pelo setor dono do
+ * operador (perfilIdsDoSetor), senão um setor apagaria dados de outro.
+ */
+export function setoresDoOperador(
+  operadorId: string,
+  operadorEquipeMap: Record<string, OperadorEquipeInfo>,
+  equipesExtrasPorOperador: Record<string, string[]>,
+  setorDaEquipe: Map<string, string>,
+): Set<string> {
+  const out = new Set<string>();
+  const proprio = operadorEquipeMap[operadorId]?.setor_id;
+  if (proprio) out.add(proprio);
+  for (const eqId of equipesExtrasPorOperador[operadorId] ?? []) {
+    const sid = setorDaEquipe.get(eqId);
+    if (sid) out.add(sid);
+  }
+  return out;
+}
+
 /** Busca equipes da empresa e gera mapa operadorId → equipe (inclui setor_id).
  *  `equipesExtrasPorOperador` traz as equipes em que o operador é CLONE
  *  (equipe_operadores_clones): o recebimento dele conta nelas também. */

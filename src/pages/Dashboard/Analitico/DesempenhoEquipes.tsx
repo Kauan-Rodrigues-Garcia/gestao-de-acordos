@@ -22,8 +22,9 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
-import type {
-  ResumoOperadorAnalitico, EquipeAnalitico, OperadorEquipeInfo,
+import {
+  mapaSetorDaEquipe, setoresDoOperador,
+  type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 
 interface DesempenhoEquipesProps {
@@ -392,26 +393,23 @@ export function DesempenhoEquipes({
       map[id].ho    += Number(r.total_ho) || 0;
     };
     // Setor de cada equipe — o clone credita o setor DONO da equipe clonada
-    const setorDaEquipe = new Map<string, string>();
-    for (const e of equipes) if (e.setor_id) setorDaEquipe.set(e.id, e.setor_id);
+    const setorDaEquipe = mapaSetorDaEquipe(equipes);
 
     for (const r of resumos) {
       const info = operadorEquipeMap[r.operador_id];
       if (info?.equipe_id) somar(porEquipe, info.equipe_id, r);
-      if (info?.setor_id)  somar(porSetor, info.setor_id, r);
-      // Clones: o recebimento conta TAMBÉM nas equipes clonadas — e no setor
-      // dono dessas equipes, quando o clone cruza setor (o setor misto empresta
-      // operadores para play 4 / play 5). O Set impede contar o mesmo setor
-      // duas vezes: clone dentro do próprio setor (o caso antigo) não mexe no
-      // card do setor, e dois clones no mesmo setor de destino somam uma vez.
-      const setoresContados = new Set<string>(info?.setor_id ? [info.setor_id] : []);
+      // Clones: o recebimento conta TAMBÉM nas equipes clonadas
       for (const eqId of equipesExtrasPorOperador[r.operador_id] ?? []) {
         if (eqId !== info?.equipe_id) somar(porEquipe, eqId, r);
-        const sid = setorDaEquipe.get(eqId);
-        if (sid && !setoresContados.has(sid)) {
-          somar(porSetor, sid, r);
-          setoresContados.add(sid);
-        }
+      }
+      // Setores: o próprio + os das equipes clonadas (setor misto emprestando
+      // para play 4 / play 5). O Set já deduplica, então clone dentro do
+      // próprio setor não conta duas vezes. Mesma regra do "Total recebido"
+      // no AnaliticoLider — as duas telas TÊM que concordar.
+      for (const sid of setoresDoOperador(
+        r.operador_id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
+      )) {
+        somar(porSetor, sid, r);
       }
     }
 

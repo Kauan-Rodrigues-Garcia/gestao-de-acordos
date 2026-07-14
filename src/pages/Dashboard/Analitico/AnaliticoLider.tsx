@@ -39,6 +39,8 @@ import {
   limparDadosDoMes,
   limparDadosDoMesSetor,
   atualizarResumoMensal,
+  mapaSetorDaEquipe,
+  setoresDoOperador,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
@@ -334,11 +336,22 @@ export function AnaliticoLider({
     }
   }
 
+  // "Este operador conta neste setor?" — inclui os clonados de outro setor.
+  // Fonte única compartilhada com o card de setor de Desempenho Equipes.
+  const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
+  const contaNoSetor = useCallback(
+    (operadorId: string, sid: string) =>
+      setoresDoOperador(operadorId, operadorEquipeMap, equipesExtras, setorDaEquipe).has(sid),
+    [operadorEquipeMap, equipesExtras, setorDaEquipe],
+  );
+
   // ── Resumos filtrados (ranking / métricas por setor ou equipe) ────────────
   const resumosFiltrados = useMemo(() => {
     let base = resumos;
     if (setorId) {
-      base = base.filter(r => operadorEquipeMap[r.operador_id]?.setor_id === setorId);
+      // Inclui os clonados de outro setor — mesma regra do card de setor em
+      // Desempenho Equipes. Sem isso o "Total recebido" ficava menor que ele.
+      base = base.filter(r => contaNoSetor(r.operador_id, setorId));
     }
     if (filtroEquipeId) {
       // Clones contam na equipe clonada também (equipe_operadores_clones)
@@ -347,12 +360,12 @@ export function AnaliticoLider({
         || (equipesExtras[r.operador_id] ?? []).includes(filtroEquipeId));
     }
     return base;
-  }, [resumos, operadorEquipeMap, equipesExtras, setorId, filtroEquipeId]);
+  }, [resumos, contaNoSetor, operadorEquipeMap, equipesExtras, setorId, filtroEquipeId]);
 
   // ── Agrupamento por equipe (Por operador) ─────────────────────────────────
   const resumosPorEquipe = useMemo(() => {
     const baseResumos = setorId
-      ? resumos.filter(r => operadorEquipeMap[r.operador_id]?.setor_id === setorId)
+      ? resumos.filter(r => contaNoSetor(r.operador_id, setorId))
       : resumos;
     const groups = new Map<string, {
       equipeId: string | null;
@@ -367,7 +380,7 @@ export function AnaliticoLider({
       groups.get(key)!.items.push(r);
     }
     return Array.from(groups.values()).filter(g => g.items.length > 0);
-  }, [resumos, operadorEquipeMap, setorId]);
+  }, [resumos, contaNoSetor, operadorEquipeMap, setorId]);
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
   // Tudo vem exclusivamente do relatório ANALÍTICO: sem filtro usa o snapshot
