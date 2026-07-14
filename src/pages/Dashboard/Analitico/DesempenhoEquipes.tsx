@@ -388,14 +388,27 @@ export function DesempenhoEquipes({
       map[id].bruto += r.total_recebido;
       map[id].ho    += Number(r.total_ho) || 0;
     };
+    // Setor de cada equipe — o clone credita o setor DONO da equipe clonada
+    const setorDaEquipe = new Map<string, string>();
+    for (const e of equipes) if (e.setor_id) setorDaEquipe.set(e.id, e.setor_id);
+
     for (const r of resumos) {
       const info = operadorEquipeMap[r.operador_id];
       if (info?.equipe_id) somar(porEquipe, info.equipe_id, r);
       if (info?.setor_id)  somar(porSetor, info.setor_id, r);
-      // Clones: o recebimento conta TAMBÉM nas equipes clonadas (o setor não
-      // duplica — lá o operador entra uma vez só, pelo setor dele)
+      // Clones: o recebimento conta TAMBÉM nas equipes clonadas — e no setor
+      // dono dessas equipes, quando o clone cruza setor (o setor misto empresta
+      // operadores para play 4 / play 5). O Set impede contar o mesmo setor
+      // duas vezes: clone dentro do próprio setor (o caso antigo) não mexe no
+      // card do setor, e dois clones no mesmo setor de destino somam uma vez.
+      const setoresContados = new Set<string>(info?.setor_id ? [info.setor_id] : []);
       for (const eqId of equipesExtrasPorOperador[r.operador_id] ?? []) {
         if (eqId !== info?.equipe_id) somar(porEquipe, eqId, r);
+        const sid = setorDaEquipe.get(eqId);
+        if (sid && !setoresContados.has(sid)) {
+          somar(porSetor, sid, r);
+          setoresContados.add(sid);
+        }
       }
     }
 

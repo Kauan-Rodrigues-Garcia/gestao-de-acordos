@@ -74,6 +74,25 @@ interface Operador {
   empresa_id: string;
 }
 
+/** Catálogo enxuto da empresa inteira, só para o clone entre setores.
+ *  As listas principais da tela ficam trancadas no setor do líder; o clone
+ *  precisa enxergar além, então carrega à parte e com poucos campos. */
+interface CloneCatalogo {
+  setores:    Setor[];
+  equipes:    { id: string; nome: string; setor_id: string }[];
+  operadores: { id: string; nome: string; setor_id: string | null; equipe_id: string | null }[];
+}
+
+const CLONE_CATALOGO_VAZIO: CloneCatalogo = { setores: [], equipes: [], operadores: [] };
+
+/** Operador de um clone: vem da lista do setor ou do catálogo da empresa. */
+interface CloneOperadorInfo {
+  id: string;
+  nome: string;
+  equipe_id: string | null;
+  setor_id: string | null;
+}
+
 // ─── Drag state (module-level ref, avoids stale closure issues) ───────────────
 let draggedOperadorId: string | null = null;
 
@@ -84,9 +103,14 @@ interface OperadorChipProps {
   onRemove?: (operadorId: string) => void;
   onDragStart: (operadorId: string) => void;
   compact?: boolean;
+  /** Nomes dos setores (fora do dele) em que o operador está clonado — o
+   *  recebimento conta lá também. Aparece no setor de origem. */
+  setoresEmprestado?: string[];
 }
 
-function OperadorChip({ operador, onRemove, onDragStart, compact = false }: OperadorChipProps) {
+function OperadorChip({
+  operador, onRemove, onDragStart, compact = false, setoresEmprestado = [],
+}: OperadorChipProps) {
   const cargoLabel = PERFIL_LABELS[operador.perfil] ?? operador.perfil;
   const cargoCss = PERFIL_COLORS[operador.perfil] ?? 'bg-muted/10 text-muted-foreground border-border';
   return (
@@ -106,6 +130,16 @@ function OperadorChip({ operador, onRemove, onDragStart, compact = false }: Oper
       <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'} ${cargoCss}`}>
         {cargoLabel}
       </span>
+      {setoresEmprestado.map(nome => (
+        <span
+          key={nome}
+          title={`Clonado em ${nome} — o recebimento dele conta neste setor e em ${nome}.`}
+          className={`inline-flex items-center gap-0.5 rounded-full border border-dashed border-primary/40 bg-primary/5 text-primary font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'}`}
+        >
+          <Copy className={compact ? 'w-2 h-2' : 'w-2.5 h-2.5'} />
+          {nome}
+        </span>
+      ))}
       {onRemove && (
         <button
           type="button"
@@ -190,6 +224,10 @@ export default function AdminEquipes() {
   const [clones, setClones] = useState<CloneEquipe[] | null>(null);
   const [clonandoEquipeId, setClonandoEquipeId] = useState<string | null>(null);
   const clonesHabilitados = tenant.slug === 'bookplay' && clones !== null;
+  // Setor escolhido no seletor de clone — começa no setor da própria equipe,
+  // então o caso comum (clonar de dentro do setor) segue a um clique.
+  const [cloneSetorSel, setCloneSetorSel] = useState<string>('');
+  const [cloneCat, setCloneCat] = useState<CloneCatalogo>(CLONE_CATALOGO_VAZIO);
 
   const empresaId = empresa?.id;
 
@@ -261,6 +299,32 @@ export default function AdminEquipes() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // ─── Catálogo da empresa p/ clone entre setores ────────────────────────────
+  // Fetch separado e tolerante: o líder só carrega o próprio setor acima, mas
+  // o clone precisa alcançar operadores de outros setores (o setor misto
+  // empresta gente para play 4 / play 5). A RLS já permite — quem restringia
+  // ao setor era só o filtro do front. Não alimenta o drag & drop.
+  useEffect(() => {
+    if (!empresaId || tenant.slug !== 'bookplay') { setCloneCat(CLONE_CATALOGO_VAZIO); return; }
+    let cancel = false;
+    void (async () => {
+      const [s, e, o] = await Promise.all([
+        supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
+        supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId).order('nome'),
+        supabase.from('perfis').select('id, nome, setor_id, equipe_id')
+          .eq('empresa_id', empresaId).eq('ativo', true)
+          .in('perfil', ['operador', 'lider', 'elite']).order('nome'),
+      ]);
+      if (cancel) return;
+      setCloneCat({
+        setores:    (s.data as CloneCatalogo['setores'])    ?? [],
+        equipes:    (e.data as CloneCatalogo['equipes'])    ?? [],
+        operadores: (o.data as CloneCatalogo['operadores']) ?? [],
+      });
+    })();
+    return () => { cancel = true; };
+  }, [empresaId, tenant.slug]);
+
   // ─── Derivados do setor selecionado ────────────────────────────────────────
 
   const setorAtual = setores.find(s => s.id === setorSelecionado);
@@ -276,23 +340,64 @@ export default function AdminEquipes() {
   const operadoresDaEquipe = (equipeId: string) =>
     operadores.filter(o => o.equipe_id === equipeId);
 
+  // Nomes de equipe/setor que podem estar fora do setor carregado: procura na
+  // lista principal e cai no catálogo da empresa.
+  const nomeEquipeQualquer = useCallback((id: string | null | undefined): string | null =>
+    (id ? equipes.find(e => e.id === id)?.nome ?? cloneCat.equipes.find(e => e.id === id)?.nome : null) ?? null,
+  [equipes, cloneCat.equipes]);
+
+  const nomeSetorQualquer = useCallback((id: string | null | undefined): string | null =>
+    (id ? setores.find(s => s.id === id)?.nome ?? cloneCat.setores.find(s => s.id === id)?.nome : null) ?? null,
+  [setores, cloneCat.setores]);
+
+  /** Operador de um clone — pode ser de outro setor, então resolve no catálogo. */
+  const resolverOperadorClone = useCallback((operadorId: string): CloneOperadorInfo | null => {
+    const l = operadores.find(o => o.id === operadorId);
+    if (l) return { id: l.id, nome: l.nome, equipe_id: l.equipe_id, setor_id: l.setor_id };
+    const c = cloneCat.operadores.find(o => o.id === operadorId);
+    return c ? { id: c.id, nome: c.nome, equipe_id: c.equipe_id, setor_id: c.setor_id } : null;
+  }, [operadores, cloneCat.operadores]);
+
   /** Clones alocados numa equipe (com o operador original resolvido). */
   const clonesDaEquipe = (equipeId: string) =>
     (clones ?? [])
       .filter(c => c.equipe_id === equipeId)
-      .map(c => ({ clone: c, operador: operadores.find(o => o.id === c.operador_id) }))
-      .filter((x): x is { clone: CloneEquipe; operador: Operador } => !!x.operador);
+      .map(c => ({ clone: c, operador: resolverOperadorClone(c.operador_id) }))
+      .filter((x): x is { clone: CloneEquipe; operador: CloneOperadorInfo } => !!x.operador);
+
+  /** Setores (fora do dele) em que o operador está clonado. Alimenta a tag que
+   *  aparece no card dele no setor de origem. */
+  const setoresEmprestadoDoOperador = useCallback((operadorId: string, setorOrigem: string | null): string[] => {
+    const nomes: string[] = [];
+    const vistos = new Set<string>();
+    for (const c of clones ?? []) {
+      if (c.operador_id !== operadorId) continue;
+      const sid = cloneCat.equipes.find(e => e.id === c.equipe_id)?.setor_id;
+      if (!sid || sid === setorOrigem || vistos.has(sid)) continue;
+      vistos.add(sid);
+      const n = nomeSetorQualquer(sid);
+      if (n) nomes.push(n);
+    }
+    return nomes;
+  }, [clones, cloneCat.equipes, nomeSetorQualquer]);
 
   // ── Clonar operador para outra equipe ──────────────────────────────────────
 
   async function handleClonarOperador(equipe: Equipe, operadorId: string) {
-    const operador = operadores.find(o => o.id === operadorId);
+    const operador = resolverOperadorClone(operadorId);
     if (!operador || !empresaId) return;
     const criado = await criarCloneEquipe(empresaId, equipe.id, operadorId, perfil?.id ?? null);
     if (!criado) { toast.error('Não foi possível clonar (já está nesta equipe?).'); return; }
     setClones(prev => [...(prev ?? []), criado]);
     setClonandoEquipeId(null);
-    toast.success(`${operador.nome} clonado para "${equipe.nome}" — o recebimento dele passa a contar nas duas equipes.`);
+    // Cruzou setor: o recebimento passa a contar nos dois setores, não só nas equipes.
+    const outroSetor = !!operador.setor_id && operador.setor_id !== equipe.setor_id;
+    const nomeSetorEquipe = nomeSetorQualquer(equipe.setor_id);
+    toast.success(
+      outroSetor && nomeSetorEquipe
+        ? `${operador.nome} clonado para "${equipe.nome}" — o recebimento dele passa a contar também no setor ${nomeSetorEquipe}.`
+        : `${operador.nome} clonado para "${equipe.nome}" — o recebimento dele passa a contar nas duas equipes.`,
+    );
   }
 
   async function handleRemoverClone(cloneId: string, nomeOperador: string) {
@@ -836,8 +941,11 @@ export default function AdminEquipes() {
                                       {clonesHabilitados && (
                                         <button
                                           type="button"
-                                          title="Clonar operador de outra equipe (o recebimento conta nas duas)"
-                                          onClick={() => setClonandoEquipeId(prev => prev === equipe.id ? null : equipe.id)}
+                                          title="Clonar operador de outra equipe ou de outro setor (o recebimento conta nos dois)"
+                                          onClick={() => {
+                                            setClonandoEquipeId(prev => (prev === equipe.id ? null : equipe.id));
+                                            setCloneSetorSel('');  // reabre no setor da própria equipe
+                                          }}
                                           className={`p-1 rounded transition-colors ${
                                             clonandoEquipeId === equipe.id
                                               ? 'text-primary bg-primary/10'
@@ -872,37 +980,63 @@ export default function AdminEquipes() {
                             {/* Membros da equipe */}
                             <div className="p-2.5 flex-1 min-h-[80px]">
                               {/* Seletor de clone (aberto pelo botão de copiar no header) */}
-                              {clonesHabilitados && clonandoEquipeId === equipe.id && (
-                                <div className="mb-2 rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1.5">
-                                  <p className="text-[10px] font-semibold text-primary flex items-center gap-1">
-                                    <Copy className="w-3 h-3" /> Clonar operador para esta equipe
-                                  </p>
-                                  <Select onValueChange={v => void handleClonarOperador(equipe, v)}>
-                                    <SelectTrigger className="h-7 text-xs bg-background">
-                                      <SelectValue placeholder="Escolha o operador…" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {operadores
-                                        .filter(o =>
-                                          o.setor_id === equipe.setor_id
-                                          && o.equipe_id
-                                          && o.equipe_id !== equipe.id
-                                          && !clonesDaEquipe(equipe.id).some(c => c.operador.id === o.id))
-                                        .map(o => (
+                              {clonesHabilitados && clonandoEquipeId === equipe.id && (() => {
+                                // Passo 1: setor de origem (começa no da própria equipe).
+                                // Passo 2: operadores daquele setor que ainda não estão aqui.
+                                const setorBusca = cloneSetorSel || equipe.setor_id;
+                                const candidatos = cloneCat.operadores.filter(o =>
+                                  o.setor_id === setorBusca
+                                  && o.equipe_id
+                                  && o.equipe_id !== equipe.id
+                                  && !clonesDaEquipe(equipe.id).some(c => c.operador.id === o.id));
+                                const cruzandoSetor = setorBusca !== equipe.setor_id;
+                                return (
+                                  <div className="mb-2 rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1.5">
+                                    <p className="text-[10px] font-semibold text-primary flex items-center gap-1">
+                                      <Copy className="w-3 h-3" /> Clonar operador para esta equipe
+                                    </p>
+                                    <Select value={setorBusca} onValueChange={setCloneSetorSel}>
+                                      <SelectTrigger className="h-7 text-xs bg-background">
+                                        <SelectValue placeholder="Setor…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {cloneCat.setores.map(s => (
+                                          <SelectItem key={s.id} value={s.id}>
+                                            {s.nome}
+                                            {s.id === equipe.setor_id && (
+                                              <span className="text-muted-foreground ml-1.5">(este setor)</span>
+                                            )}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Select onValueChange={v => void handleClonarOperador(equipe, v)}>
+                                      <SelectTrigger className="h-7 text-xs bg-background">
+                                        <SelectValue placeholder="Escolha o operador…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {candidatos.length === 0 ? (
+                                          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                            Nenhum operador com equipe neste setor.
+                                          </div>
+                                        ) : candidatos.map(o => (
                                           <SelectItem key={o.id} value={o.id}>
                                             {o.nome}
                                             <span className="text-muted-foreground ml-1.5">
-                                              ({equipes.find(e => e.id === o.equipe_id)?.nome ?? 'equipe'})
+                                              ({nomeEquipeQualquer(o.equipe_id) ?? 'equipe'})
                                             </span>
                                           </SelectItem>
                                         ))}
-                                    </SelectContent>
-                                  </Select>
-                                  <p className="text-[10px] text-muted-foreground">
-                                    O recebimento do analítico dele passa a contar nas duas equipes.
-                                  </p>
-                                </div>
-                              )}
+                                      </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {cruzandoSetor
+                                        ? `Operador de outro setor: o recebimento dele conta no setor de origem dele e também em ${nomeSetorQualquer(equipe.setor_id) ?? 'este setor'}.`
+                                        : 'O recebimento do analítico dele passa a contar nas duas equipes.'}
+                                    </p>
+                                  </div>
+                                );
+                              })()}
 
                               <div className="flex flex-col gap-1.5 min-h-[60px]">
                                 <AnimatePresence>
@@ -918,24 +1052,39 @@ export default function AdminEquipes() {
                                         onRemove={podeGerenciarEquipe ? handleRemoverDaEquipe : undefined}
                                         onDragStart={handleDragStart}
                                         compact
+                                        setoresEmprestado={
+                                          clonesHabilitados
+                                            ? setoresEmprestadoDoOperador(op.id, op.setor_id)
+                                            : []
+                                        }
                                       />
                                     ))
                                   )}
                                 </AnimatePresence>
 
                                 {/* Clones — vinculados ao operador original */}
-                                {clonesHabilitados && clonesDaEquipe(equipe.id).map(({ clone, operador }) => (
+                                {clonesHabilitados && clonesDaEquipe(equipe.id).map(({ clone, operador }) => {
+                                  // Veio de outro setor: mostra o setor de origem, não só a equipe
+                                  const deOutroSetor = !!operador.setor_id && operador.setor_id !== equipe.setor_id;
+                                  const origem = deOutroSetor
+                                    ? nomeSetorQualquer(operador.setor_id) ?? 'outro setor'
+                                    : nomeEquipeQualquer(operador.equipe_id) ?? 'equipe';
+                                  return (
                                   <div
                                     key={clone.id}
                                     className="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-dashed border-primary/40 bg-primary/5 select-none group"
-                                    title={`Clone de ${operador.nome} — original na equipe "${equipes.find(e => e.id === operador.equipe_id)?.nome ?? '?'}". O recebimento conta nas duas equipes.`}
+                                    title={
+                                      deOutroSetor
+                                        ? `Clone de ${operador.nome} — original no setor "${origem}", equipe "${nomeEquipeQualquer(operador.equipe_id) ?? '?'}". O recebimento conta nos dois setores.`
+                                        : `Clone de ${operador.nome} — original na equipe "${origem}". O recebimento conta nas duas equipes.`
+                                    }
                                   >
                                     <Copy className="w-3 h-3 text-primary/60 flex-shrink-0" />
                                     <span className="font-medium text-foreground truncate text-xs max-w-[90px]">
                                       {operador.nome}
                                     </span>
                                     <span className="inline-flex items-center rounded-full border border-primary/30 text-primary font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5">
-                                      clone de {equipes.find(e => e.id === operador.equipe_id)?.nome ?? 'equipe'}
+                                      clone de {origem}
                                     </span>
                                     {podeGerenciarEquipe && (
                                       <button
@@ -948,7 +1097,8 @@ export default function AdminEquipes() {
                                       </button>
                                     )}
                                   </div>
-                                ))}
+                                  );
+                                })}
                               </div>
                             </div>
                           </div>
