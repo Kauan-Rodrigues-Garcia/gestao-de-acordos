@@ -98,3 +98,25 @@ export const QUARTIS_PADRAO: QuartilConfig[] = [
   { quartil: 3, min_pct: 50 },
   { quartil: 4, min_pct: 0 },
 ];
+
+/** Cor de cada quartil. Casa com as faixas de QUARTIS_PADRAO. */
+export const COR_QUARTIL: Record<number, string> = {
+  1: '#22c55e',  // verde   — 100%+
+  2: '#6366f1',  // azul    — 80 a 99,99%
+  3: '#f59e0b',  // amarelo — 50 a 79,99%
+  4: '#ef4444',  // vermelho— 0 a 49,99%
+};
+
+/**
+ * Cor de uma projeção (%). Mesma paleta dos quartis, para o painel de equipe/
+ * setor falar a mesma língua da tabela de operadores.
+ *
+ * Faixas fixas de propósito: os quartis são configuráveis (metas_config_mes),
+ * mas a leitura visual "vermelho = mal, verde = bateu" não deve mudar junto.
+ */
+export function corProjecao(pct: number): string {
+  if (pct >= 100) return COR_QUARTIL[1];
+  if (pct >= 80)  return COR_QUARTIL[2];
+  if (pct >= 50)  return COR_QUARTIL[3];
+  return COR_QUARTIL[4];
+}

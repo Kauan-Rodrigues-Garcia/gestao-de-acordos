@@ -1,6 +1,7 @@
 /**
- * QuartisOperadores — aba do Analítico (líder+): lista simples dos operadores
- * do setor com o quartil atual, a % de projeção e quanto falta para subir.
+ * QuartisOperadores — aba do Analítico (líder+): tabela dos operadores do setor
+ * com meta, recebimento, ritmo diário, o esperado até hoje, a diferença, a % de
+ * projeção e o quartil. Ao lado, a distribuição dos operadores por quartil.
  *
  * Mesma matemática do header do dashboard (lib/diasUteis): projeção =
  * recebido no analítico ÷ (meta diária × dias úteis trabalhados); os
@@ -17,12 +18,15 @@ import {
 } from '@/components/ui/select';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
-import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
-  diasUteisDoMes, diasUteisDecorridos, quartilAtual, proximoQuartil, QUARTIS_PADRAO,
+  diasUteisDoMes, diasUteisDecorridos, quartilAtual, QUARTIS_PADRAO, COR_QUARTIL,
 } from '@/lib/diasUteis';
-import type { ResumoOperadorAnalitico, EquipeAnalitico } from '@/services/analitico/analitico.service';
+import {
+  mapaSetorDaEquipe, setoresDoOperador,
+  type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
+} from '@/services/analitico/analitico.service';
+import { PizzaQuartis3D } from './PizzaQuartis3D';
 
 interface QuartisOperadoresProps {
   empresaId: string;
@@ -30,18 +34,30 @@ interface QuartisOperadoresProps {
   setorId?: string | null;
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
+  operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+  /** Equipes em que cada operador é CLONE — ele conta no setor delas também. */
+  equipesExtrasPorOperador?: Record<string, string[]>;
   loading: boolean;
 }
 
 interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null }
 interface MetaOpRow { referencia_id: string; meta_valor: number }
 
-const COR_QUARTIL: Record<number, string> = {
-  1: '#22c55e', 2: '#6366f1', 3: '#f59e0b', 4: '#ef4444',
-};
+interface LinhaQuartil {
+  op: PerfilOp;
+  equipeNome: string;
+  meta: number | null;
+  recebido: number;
+  diaria: number | null;
+  hoje: number | null;
+  diferenca: number | null;
+  projecao: number | null;
+  quartil: QuartilConfig | null;
+}
 
 export function QuartisOperadores({
-  empresaId, mes, setorId, equipes, resumos, loading,
+  empresaId, mes, setorId, equipes, resumos,
+  operadorEquipeMap, equipesExtrasPorOperador = {}, loading,
 }: QuartisOperadoresProps) {
   const { perfil } = useAuth();
   // Admin/diretoria podem alternar entre setores; os demais ficam no próprio
@@ -96,6 +112,13 @@ export function QuartisOperadores({
     return () => { cancelado = true; };
   }, [empresaId, mesNum, anoNum]);
 
+  const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
+  const nomeDaEquipe  = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const e of equipes) m.set(e.id, e.nome);
+    return m;
+  }, [equipes]);
+
   const grupos = useMemo(() => {
     const totalUteis = diasUteisDoMes(anoNum, mesNum, feriados);
     const decorridos = Math.max(
@@ -104,36 +127,43 @@ export function QuartisOperadores({
     const recebidoMap: Record<string, number> = {};
     for (const r of resumos) recebidoMap[r.operador_id] = r.total_recebido;
 
+    // Clone: o operador conta no setor da equipe clonada, não só no dele.
+    // Mesma fonte usada pelo Total recebido e por Desempenho Equipes.
     const visiveis = operadores
-      .filter(o => !setorEfetivo || o.setor_id === setorEfetivo)
-      .filter(o => !filtroEquipe || o.equipe_id === filtroEquipe);
+      .filter(o => !setorEfetivo || setoresDoOperador(
+        o.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
+      ).has(setorEfetivo))
+      .filter(o => !filtroEquipe
+        || o.equipe_id === filtroEquipe
+        || (equipesExtrasPorOperador[o.id] ?? []).includes(filtroEquipe));
 
-    const porSetor = new Map<string, {
-      op: PerfilOp; recebido: number; projecao: number | null;
-      quartil: QuartilConfig | null; faltaProximo: number | null; proximoNum: number | null;
-    }[]>();
+    const porSetor = new Map<string, LinhaQuartil[]>();
 
     for (const op of visiveis) {
-      const sid = op.setor_id ?? 'sem_setor';
-      const meta = metasOp[op.id];
+      // Agrupa pelo setor em exibição quando há um; senão, pelo setor de origem
+      const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
+      const meta = metasOp[op.id] ?? null;
       const recebido = recebidoMap[op.id] ?? 0;
+      let diaria: number | null = null;
+      let hoje: number | null = null;
+      let diferenca: number | null = null;
       let projecao: number | null = null;
       let q: QuartilConfig | null = null;
-      let faltaProximo: number | null = null;
-      let proximoNum: number | null = null;
 
       if (meta && totalUteis > 0) {
-        const esperado = (meta / totalUteis) * decorridos;
-        projecao = esperado > 0 ? Math.round((recebido / esperado) * 100) : 0;
+        diaria    = meta / totalUteis;
+        hoje      = diaria * decorridos;
+        diferenca = recebido - hoje;
+        projecao  = hoje > 0 ? Math.round((recebido / hoje) * 100) : 0;
         q = quartilAtual(projecao, quartis);
-        const prox = proximoQuartil(q, quartis);
-        if (prox) {
-          proximoNum   = prox.quartil;
-          faltaProximo = Math.max(0, (esperado * prox.min_pct) / 100 - recebido);
-        }
       }
+
+      const equipeNome = (op.equipe_id ? nomeDaEquipe.get(op.equipe_id) : null)
+        ?? operadorEquipeMap[op.id]?.equipe_nome
+        ?? 'Sem equipe';
+
       if (!porSetor.has(sid)) porSetor.set(sid, []);
-      porSetor.get(sid)!.push({ op, recebido, projecao, quartil: q, faltaProximo, proximoNum });
+      porSetor.get(sid)!.push({ op, equipeNome, meta, recebido, diaria, hoje, diferenca, projecao, quartil: q });
     }
 
     // Melhor projeção primeiro; sem meta vai para o fim
@@ -141,7 +171,27 @@ export function QuartisOperadores({
       lista.sort((a, b) => (b.projecao ?? -1) - (a.projecao ?? -1));
     }
     return porSetor;
-  }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp, setorEfetivo, filtroEquipe]);
+  }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp,
+      setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
+      setorDaEquipe, nomeDaEquipe]);
+
+  // Distribuição por quartil — só quem tem meta entra na base do 100%
+  const distribuicao = useMemo(() => {
+    const cont = new Map<number, number>();
+    let total = 0;
+    for (const lista of grupos.values()) {
+      for (const l of lista) {
+        if (!l.quartil) continue;
+        cont.set(l.quartil.quartil, (cont.get(l.quartil.quartil) ?? 0) + 1);
+        total++;
+      }
+    }
+    const ordem = [...quartis].sort((a, b) => a.quartil - b.quartil);
+    return {
+      total,
+      fatias: ordem.map(q => ({ quartil: q.quartil, qtd: cont.get(q.quartil) ?? 0 })),
+    };
+  }, [grupos, quartis]);
 
   // Equipes disponíveis no seletor: só as do setor em exibição
   const equipesDoSetor = useMemo(
@@ -152,13 +202,13 @@ export function QuartisOperadores({
   if (loading || !carregado) {
     return (
       <div className="space-y-2 animate-pulse">
-        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-12 bg-muted rounded-xl" />)}
+        {Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-8 bg-muted rounded-lg" />)}
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Filtros: setor (admin/diretoria) + equipe */}
       <div className="flex items-center gap-3 flex-wrap">
         {podeFiltrarSetor && Object.keys(setores).length > 0 && (
@@ -199,60 +249,148 @@ export function QuartisOperadores({
         </p>
       )}
 
-      {[...grupos.entries()].map(([sid, lista]) => (
-        <div key={sid} className="space-y-1.5">
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-1">
-            {setores[sid] ?? 'Sem setor'}
-          </p>
-          <div className="rounded-2xl border border-border bg-card overflow-hidden">
-            {lista.map(({ op, projecao, quartil, faltaProximo, proximoNum }, i) => {
-              const cor = quartil ? COR_QUARTIL[quartil.quartil] ?? '#6366f1' : undefined;
-              return (
-                <div key={op.id} className={cn(
-                  'flex items-center gap-3 px-3.5 py-2.5',
-                  i > 0 && 'border-t border-border/60',
-                )}>
-                  {op.foto_url ? (
-                    <img src={op.foto_url} alt={op.nome}
-                      className="w-8 h-8 rounded-full object-cover border border-border shrink-0" />
-                  ) : (
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0">
-                      {op.nome.charAt(0).toUpperCase()}
-                    </div>
-                  )}
-                  <span className="flex-1 min-w-0 text-sm font-medium truncate">{op.nome}</span>
-
-                  {quartil ? (
-                    <>
-                      <span className="text-xs text-muted-foreground shrink-0 hidden sm:block">
-                        {faltaProximo !== null && proximoNum !== null ? (
-                          <>faltam <strong className="text-foreground">{formatBRL(faltaProximo)}</strong> p/ o {proximoNum}º</>
-                        ) : (
-                          <span className="text-emerald-500 font-medium">melhor quartil ✨</span>
-                        )}
-                      </span>
-                      <span className="w-14 text-right font-bold tabular-nums font-mono text-sm shrink-0" style={{ color: cor }}>
-                        {projecao}%
-                      </span>
-                      <span
-                        className="shrink-0 rounded-full px-2.5 py-1 text-[11px] font-bold"
-                        style={{ background: (cor ?? '#6366f1') + '1a', color: cor }}
-                      >
-                        {quartil.quartil}º quartil
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-xs text-muted-foreground italic shrink-0">sem meta definida</span>
-                  )}
+      {grupos.size > 0 && (
+        <div className="flex flex-col xl:flex-row gap-4 items-start">
+          {/* Tabela */}
+          <div className="flex-1 min-w-0 space-y-4">
+            {[...grupos.entries()].map(([sid, lista]) => (
+              <div key={sid} className="space-y-1">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1">
+                  {setores[sid] ?? 'Sem setor'}
+                </p>
+                <div className="rounded-xl border border-border bg-card overflow-x-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="bg-muted/40 border-b border-border">
+                        <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">OPERADOR</th>
+                        <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">EQUIPE</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">META</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">RECEBIMENTO</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
+                          title="Quanto o operador deve receber por dia útil para bater a meta">DIÁRIO</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
+                          title="Quanto deveria ter recebido até hoje (diário × dias úteis trabalhados)">HOJE</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
+                          title="Recebimento menos o esperado até hoje">FALTA/SOBRA</th>
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">%</th>
+                        <th className="text-center px-2 py-1.5 font-semibold text-muted-foreground">QUARTIL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lista.map(l => {
+                        const cor = l.quartil ? COR_QUARTIL[l.quartil.quartil] ?? '#6366f1' : undefined;
+                        return (
+                          <tr
+                            key={l.op.id}
+                            className="border-t border-border/50"
+                            style={cor ? {
+                              background: cor + '14',
+                              boxShadow: `inset 3px 0 0 0 ${cor}`,
+                            } : undefined}
+                          >
+                            <td className="px-2 py-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {l.op.foto_url ? (
+                                  <img src={l.op.foto_url} alt={l.op.nome}
+                                    className="w-5 h-5 rounded-full object-cover border border-border/60 shrink-0" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full bg-muted flex items-center justify-center text-[9px] font-bold text-muted-foreground shrink-0">
+                                    {l.op.nome.charAt(0).toUpperCase()}
+                                  </div>
+                                )}
+                                <span className="font-medium truncate max-w-[150px]" title={l.op.nome}>
+                                  {l.op.nome}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-2 py-1 text-muted-foreground truncate max-w-[110px]" title={l.equipeNome}>
+                              {l.equipeNome}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono">
+                              {l.meta !== null ? formatBRL(l.meta) : '—'}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold">
+                              {formatBRL(l.recebido)}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">
+                              {l.diaria !== null ? formatBRL(l.diaria) : '—'}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">
+                              {l.hoje !== null ? formatBRL(l.hoje) : '—'}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold"
+                              style={l.diferenca === null ? undefined
+                                : { color: l.diferenca >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4] }}>
+                              {l.diferenca === null ? '—'
+                                : `${l.diferenca >= 0 ? '+' : '−'}${formatBRL(Math.abs(l.diferenca))}`}
+                            </td>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono font-bold"
+                              style={cor ? { color: cor } : undefined}>
+                              {l.projecao !== null ? `${l.projecao}%` : '—'}
+                            </td>
+                            <td className="px-2 py-1 text-center">
+                              {l.quartil ? (
+                                <span className="inline-block rounded-full px-2 py-0.5 text-[10px] font-bold"
+                                  style={{ background: (cor ?? '#6366f1') + '26', color: cor }}>
+                                  {l.quartil.quartil}º
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground italic text-[10px]">sem meta</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
-              );
-            })}
+              </div>
+            ))}
+          </div>
+
+          {/* Distribuição por quartil */}
+          <div className="w-full xl:w-64 shrink-0 rounded-xl border border-border bg-card p-3">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+              Distribuição
+            </p>
+            <div className="flex justify-center">
+              <PizzaQuartis3D fatias={distribuicao.fatias} total={distribuicao.total} />
+            </div>
+            <table className="w-full text-[11px] mt-2">
+              <tbody>
+                {distribuicao.fatias.map(f => {
+                  const cor = COR_QUARTIL[f.quartil] ?? '#6366f1';
+                  const pct = distribuicao.total > 0
+                    ? Math.round((f.qtd / distribuicao.total) * 100) : 0;
+                  return (
+                    <tr key={f.quartil} className="border-t border-border/40">
+                      <td className="py-1 pr-1 w-3">
+                        <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ background: cor }} />
+                      </td>
+                      <td className="py-1 font-medium">{f.quartil}º quartil</td>
+                      <td className="py-1 text-right tabular-nums font-mono text-muted-foreground">{pct}%</td>
+                      <td className="py-1 text-right tabular-nums font-mono font-bold w-8" style={{ color: cor }}>
+                        {f.qtd}
+                      </td>
+                    </tr>
+                  );
+                })}
+                <tr className="border-t border-border">
+                  <td />
+                  <td className="py-1 font-semibold text-muted-foreground">Total</td>
+                  <td />
+                  <td className="py-1 text-right tabular-nums font-mono font-bold">{distribuicao.total}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
-      ))}
+      )}
+
       <p className="text-[11px] text-muted-foreground">
-        Projeção = recebido no analítico ÷ esperado até hoje (meta diária × dias úteis
-        trabalhados) · faixas de quartil configuradas na aba Metas.
+        Diário = meta ÷ dias úteis do mês · Hoje = diário × dias úteis trabalhados ·
+        Falta/sobra = recebimento − hoje · % = recebimento ÷ hoje ·
+        faixas de quartil configuradas na aba Metas.
       </p>
     </div>
   );

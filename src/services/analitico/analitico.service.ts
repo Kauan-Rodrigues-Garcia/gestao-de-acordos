@@ -677,6 +677,64 @@ export async function buscarTotalOrfaosPorSetor(
   return porSetor;
 }
 
+// ── Recebido por dia (gráfico do mês) ─────────────────────────────────────────
+
+export interface LinhaRecebidaDia {
+  operador_id: string | null;
+  setor_id: string | null;
+  /** Órfão sem setor_id (linhas anteriores à migration 20260712a) cai no setor
+   *  de quem importou — mesma regra de buscarTotalOrfaosPorSetor. */
+  importado_por_id: string | null;
+  valor_recebido: number;
+  data_pagamento: string;   // 'yyyy-MM-dd'
+}
+
+/**
+ * Linhas cruas do mês, só com as colunas que o gráfico por dia precisa.
+ *
+ * Agrega no cliente, não no banco, de propósito: a regra de "este recebimento
+ * conta neste setor?" mora em setoresDoOperador (setor próprio + setores das
+ * equipes clonadas) e não existe em SQL. Uma RPC teria que duplicá-la e as
+ * duas versões divergiriam — foi exatamente assim que o total do setor passou
+ * a discordar de Desempenho Equipes.
+ */
+export async function buscarRecebidoPorDia(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<{ data: LinhaRecebidaDia[]; error: string | null }> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  const buscar = async (comSetor: boolean): Promise<LinhaRecebidaDia[] | null> => {
+    const cols = comSetor
+      ? 'operador_id, setor_id, importado_por_id, valor_recebido, data_pagamento'
+      : 'operador_id, importado_por_id, valor_recebido, data_pagamento';
+    const PAGE = 1000;
+    const linhas: LinhaRecebidaDia[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('analitico_recebimentos')
+        .select(cols)
+        .eq('empresa_id', empresaId)
+        .gte('data_pagamento', primeiro)
+        .lte('data_pagamento', fim)
+        .range(offset, offset + PAGE - 1);
+      if (error) return null;
+      linhas.push(...((data ?? []) as unknown as LinhaRecebidaDia[]));
+      if (!data?.length || data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return linhas;
+  };
+
+  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
+  const linhas = (await buscar(true)) ?? (await buscar(false));
+  if (!linhas) return { data: [], error: 'Falha ao carregar os recebimentos do mês.' };
+  return { data: linhas, error: null };
+}
+
 // ── Equipes e mapa operador→equipe ────────────────────────────────────────────
 
 export interface EquipeAnalitico {

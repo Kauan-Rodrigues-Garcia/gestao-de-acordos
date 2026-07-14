@@ -21,7 +21,7 @@ import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
-import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
+import { diasUteisDoMes, diasUteisDecorridos, corProjecao } from '@/lib/diasUteis';
 import {
   mapaSetorDaEquipe, setoresDoOperador,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
@@ -97,8 +97,7 @@ function PainelPlacar({
   const faltaMeta   = meta !== null ? Math.max(0, meta - acumulado) : null;
   const metaBatida  = faltaMeta !== null && faltaMeta === 0;
 
-  const corProjecao = projecao === null ? undefined :
-    projecao >= 100 ? '#22c55e' : projecao >= 80 ? '#f59e0b' : '#ef4444';
+  const corDaProjecao = projecao === null ? undefined : corProjecao(projecao);
 
   const hojeLabel = new Date().toLocaleDateString('pt-BR', {
     day: '2-digit', month: 'short',
@@ -131,11 +130,11 @@ function PainelPlacar({
         {/* Projeção em destaque */}
         <div
           className="shrink-0 rounded-2xl px-4 py-2 text-center"
-          style={corProjecao ? { background: corProjecao + '1a' } : undefined}
+          style={corDaProjecao ? { background: corDaProjecao + '1a' } : undefined}
         >
           <p
             className="text-2xl sm:text-3xl font-extrabold tabular-nums font-mono leading-none"
-            style={{ color: corProjecao ?? 'var(--muted-foreground)' }}
+            style={{ color: corDaProjecao ?? 'var(--muted-foreground)' }}
           >
             {projecao !== null ? `${projecao}%` : '—'}
           </p>

@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3,
+  TrendingUp, CreditCard, Calendar, BarChart3, LineChart,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,7 @@ import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { DesempenhoEquipes } from './DesempenhoEquipes';
 import { QuartisOperadores } from './QuartisOperadores';
+import { GraficoRecebimento } from './GraficoRecebimento';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -91,7 +92,7 @@ export function AnaliticoLider({
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -543,6 +544,7 @@ export function AnaliticoLider({
             // Desempenho por equipe + quartis (meta × analítico) — PP e BookPlay
             { key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 },
             { key: 'quartis',    label: 'Quartis',            Icon: TrendingUp },
+            { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
@@ -904,7 +906,21 @@ export function AnaliticoLider({
           setorId={setorId ?? null}
           equipes={equipes}
           resumos={resumos}
+          operadorEquipeMap={operadorEquipeMap}
+          equipesExtrasPorOperador={equipesExtras}
           loading={loadingResumos}
+        />
+      )}
+
+      {/* ── Aba: Gráfico recebimento ──────────────────────────────────────── */}
+      {abaAtiva === 'grafico' && (
+        <GraficoRecebimento
+          empresaId={empresaId}
+          mes={mes}
+          setorId={setorId ?? null}
+          equipes={equipes}
+          operadorEquipeMap={operadorEquipeMap}
+          equipesExtrasPorOperador={equipesExtras}
         />
       )}
 
