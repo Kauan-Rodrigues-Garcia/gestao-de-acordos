@@ -519,6 +519,30 @@ export function PetAura({
             <ellipse className="pet-anim-bafinho-2" cx="113" cy="112" rx="4" ry="3" />
           </g>
         )}
+        {/* frio: caneca de chocolate quente fumegando (se as patinhas estão livres) */}
+        {clima === 'frio' && !patasOcupadas && acordada && (
+          <g>
+            {/* vapor subindo da caneca */}
+            <g fill="#dfe9f5">
+              <ellipse className="pet-anim-vapor"   cx="56" cy="108" rx="3.2" ry="2.4" />
+              <ellipse className="pet-anim-vapor-2" cx="63" cy="108" rx="2.6" ry="2" />
+              <ellipse className="pet-anim-vapor-3" cx="59.5" cy="106" rx="2.2" ry="1.8" />
+            </g>
+            {/* asa da caneca */}
+            <path d="M70 118 C 76.5 118 76.5 127 70 127" fill="none" stroke="#e8cfa8" strokeWidth="2.6" strokeLinecap="round" />
+            {/* corpo da caneca */}
+            <path
+              d="M49 113 L 70 113 L 68.5 132 C 68.2 135 65.8 137 63 137 L 56 137 C 53.2 137 50.8 135 50.5 132 Z"
+              fill="#fdf6ec" stroke="#e8cfa8" strokeWidth="1.2"
+            />
+            {/* borda + chocolate + marshmallowzinho boiando */}
+            <ellipse cx="59.5" cy="113" rx="10.5" ry="2.8" fill="#f7ead8" stroke="#e8cfa8" strokeWidth="1" />
+            <ellipse cx="59.5" cy="113" rx="7.6" ry="1.9" fill="#6b4226" />
+            <rect x="57.3" y="110.8" width="4.4" height="3.2" rx="1.4" fill="#fdf6ec" />
+            {/* patinha segurando */}
+            <ellipse cx="60" cy="140" rx="7.5" ry="6" fill="#b7b0e8" />
+          </g>
+        )}
 
         {/* assando marshmallow: fogueirinha crepitando + espetinho nas patinhas */}
         {humor === 'assando' && (

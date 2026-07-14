@@ -51,6 +51,8 @@ const COMEMORACAO_MS = 4_500;
 const COCHILO_MS = 5 * 60_000;
 /** Duração dos balõezinhos de frase contextual. */
 const FRASE_MS = 3_200;
+/** Lareira do frio: fica logo depois do fim do passeio, o pet para do ladinho. */
+const LAREIRA_RIGHT = ALCANCE + 104;
 /** Escada: altura da subida (px) e deriva pra acompanhar a inclinação. */
 const ESCADA_ALTURA = 230;
 const ESCADA_DERIVA_X = -16;
@@ -119,7 +121,7 @@ function sortearFrase(interativo: boolean, clima: PetClima): string {
   if (clima === 'chuva')      pool.push('adoro chuvinha… 🌧️', 'menos mal que tenho guarda-chuva ☂️');
   if (clima === 'tempestade') pool.push('ai, trovão! ⚡😨');
   if (clima === 'calor')      pool.push('que calorão! 🥵', 'picolé salva vidas 🍧');
-  if (clima === 'frio')       pool.push('friozinho bom 🧣', 'brrr… ❄️');
+  if (clima === 'frio')       pool.push('friozinho bom 🧣', 'brrr… ❄️', 'chocolate quente ☕', 'lareira acesa 🔥');
   if (clima === 'vento')      pool.push('olha o vento! 🍃', 'segura as orelhas! 💨');
   const ultima = lerUltimaComida();
   if (ultima) {
@@ -594,6 +596,59 @@ export function PetWidget() {
       )}
 
       {!minimizado && (<>
+      {/* frio lá fora: lareirinha acesa no cantinho, soltando fumaça pela chaminé */}
+      {climaAtual.clima === 'frio' && (
+        <svg
+          className="pet-anim-lareira-in absolute bottom-1 pointer-events-none"
+          style={{ right: LAREIRA_RIGHT }}
+          width="68"
+          height="118"
+          viewBox="0 0 68 118"
+          aria-hidden="true"
+        >
+          {/* fumacinha subindo da chaminé */}
+          <g fill="#c9ccd6">
+            <ellipse className="pet-anim-fumaca"   cx="50" cy="29" rx="5"   ry="4" />
+            <ellipse className="pet-anim-fumaca-2" cx="50" cy="29" rx="4"   ry="3.2" />
+            <ellipse className="pet-anim-fumaca-3" cx="50" cy="29" rx="4.6" ry="3.6" />
+          </g>
+          {/* chaminé */}
+          <rect x="42" y="32" width="15" height="14" rx="2" fill="#9c6b57" />
+          <rect x="40" y="30" width="19" height="6"  rx="2" fill="#b07f68" />
+          {/* prateleira */}
+          <rect x="1" y="44" width="66" height="8" rx="2.5" fill="#a8815c" />
+          {/* corpo de tijolinhos */}
+          <rect x="5" y="52" width="58" height="65" rx="3" fill="#b07f68" />
+          <g stroke="#9c6b57" strokeWidth="1.4" strokeLinecap="round">
+            <line x1="5" y1="64" x2="63" y2="64" />
+            <line x1="5" y1="76" x2="63" y2="76" />
+            <line x1="14" y1="52" x2="14" y2="64" />
+            <line x1="36" y1="52" x2="36" y2="64" />
+            <line x1="54" y1="52" x2="54" y2="64" />
+            <line x1="25" y1="64" x2="25" y2="76" />
+            <line x1="45" y1="64" x2="45" y2="76" />
+          </g>
+          {/* boca da lareira */}
+          <path d="M17 117 L 17 84 C 17 73 51 73 51 84 L 51 117 Z" fill="#3b2f38" />
+          {/* brilho quentinho no fundo */}
+          <ellipse cx="34" cy="106" rx="15" ry="9" fill="#f2a13c" opacity=".22" />
+          {/* lenha */}
+          <path d="M23 110 L 45 104 M 24 104 L 44 110" stroke="#8a6a4a" strokeWidth="4" strokeLinecap="round" />
+          {/* chamas tremulando */}
+          <g className="pet-anim-chama">
+            <path d="M34 106 C 24 96 26 84 34 75 C 35 85 42 88 43 95 C 44 102 39 105 34 106 Z" fill="#f2a13c" />
+          </g>
+          <g className="pet-anim-chama-2">
+            <path d="M34 104 C 28 98 29 90 34 84 C 35 90 39 91 39.6 96 C 40 101 37 103 34 104 Z" fill="#f2c14e" />
+          </g>
+          {/* faisquinhas */}
+          <g fontWeight="700">
+            <text className="pet-anim-zzz"   x="44" y="86" fontSize="8" fill="#f2a13c">✦</text>
+            <text className="pet-anim-zzz-2" x="21" y="92" fontSize="7" fill="#f2c14e">✦</text>
+          </g>
+        </svg>
+      )}
+
       {/* escadinha de madeira encostada no cantinho */}
       {evento === 'escada' && (
         <svg
