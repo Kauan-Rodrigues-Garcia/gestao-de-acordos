@@ -23,10 +23,14 @@ export const CIDADES_CLIMA: CidadeClima[] = [
 ];
 
 const CIDADE_KEY = 'pet-clima-cidade';
-// v2: classificação nova (garoa do modelo ≠ chuva) — não reaproveita cache antigo
-const CACHE_KEY  = 'pet-clima-cache-v2';
-const CACHE_TTL_MS   = 20 * 60_000;
-const REFETCH_MS     = 30 * 60_000;
+// v3: corte do frio subiu para 16 °C — quem tem cache antigo classificado com o
+// corte de 14 precisa reclassificar na hora, senão fica 'ameno' até o TTL vencer.
+const CACHE_KEY  = 'pet-clima-cache-v3';
+// Cache curto: a janela entre o mais adiantado e o mais atrasado é o que faz uns
+// verem cachecol e outros não. 10 min de TTL + refetch de 10 min deixa a turma
+// toda no mesmo clima em ~10 min. A API é grátis e sem chave, custa nada.
+const CACHE_TTL_MS   = 10 * 60_000;
+const REFETCH_MS     = 10 * 60_000;
 
 export interface ClimaAtual {
   clima: PetClima;
@@ -49,7 +53,7 @@ function classificar(
   const garoa = codigo >= 51 && codigo <= 57;
   if (chuva || (garoa && precipitacaoMm >= 0.5)) return 'chuva';
   if (temperatura >= 31) return 'calor';
-  if (temperatura <= 14) return 'frio';
+  if (temperatura <= 16) return 'frio';
   if (ventoKmh >= 25) return 'vento';
   return 'ameno';
 }

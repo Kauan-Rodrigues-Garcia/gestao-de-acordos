@@ -36,6 +36,13 @@ const estrela = (x: number, y: number, s: number) =>
 
 const CORES_CONFETE = ['#8f86d8', '#e5734f', '#f2c14e', '#7fb08f', '#f3b8c9', '#5b8dd9'];
 
+/** Roupas que deixam o pescoço livre: com elas o cachecol emprestado do frio
+ *  ainda cabe. Ficam de fora o cachecol do guarda-roupa (já é um) e gravata,
+ *  colar e capa, que são desenhados no mesmo lugar (y≈122-152). */
+const ROUPAS_PESCOCO_LIVRE: ReadonlySet<PetRoupa> = new Set<PetRoupa>([
+  'nenhuma', 'chapeu', 'coroa', 'bone', 'tiara', 'flor', 'laco', 'oculos_sol', 'oculos_nerd',
+]);
+
 export function PetAura({
   humor, roupa, micro = 'none', cena = 'nenhuma', andando = false,
   olhar = { x: 0, y: 0 }, pescaFase = 'espera', clima = 'ameno', className,
@@ -505,8 +512,8 @@ export function PetAura({
           </g>
         )}
 
-        {/* frio: cachecol azul emprestado (se estiver sem roupa) + bafinho */}
-        {clima === 'frio' && roupa === 'nenhuma' && (
+        {/* frio: cachecol azul emprestado (se o pescoço estiver livre) + bafinho */}
+        {clima === 'frio' && ROUPAS_PESCOCO_LIVRE.has(roupa) && (
           <g>
             <path d="M62 128 C 84 140 118 140 140 128 L 138 142 C 116 152 86 152 64 142 Z" fill="#5b8dd9" />
             <path d="M124 138 L 132 164 L 118 162 L 116 142 Z" fill="#4a76bd" />
