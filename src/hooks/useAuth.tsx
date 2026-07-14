@@ -39,6 +39,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 interface AuthContextType {
   user: User | null;
@@ -115,7 +116,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // ── Validar tenant no fallback também (sem join, empresa_id está no perfil)
             const tenantSlug = getConfiguredTenantSlug();
             const isSuperAdmin = (data2 as Perfil).perfil === 'super_admin';
-            if (!isSuperAdmin && tenantSlug && (data2 as Perfil).empresa_id) {
+            // Impersonação atravessa tenant — super_admin pode entrar como usuário de outra empresa.
+            if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && (data2 as Perfil).empresa_id) {
               // Buscar slug da empresa do usuário
               const { data: empData } = await supabase
                 .from('empresas')
@@ -138,7 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const tenantSlug = getConfiguredTenantSlug();
           const isSuperAdmin = nextPerfil.perfil === 'super_admin';
 
-          if (!isSuperAdmin && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
+          // Impersonação atravessa tenant — super_admin pode entrar como usuário de outra empresa.
+          if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {
             return rejectTenantMismatch(emp);
           }
 
@@ -230,6 +233,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchPerfil recriada a cada render; rodar só uma vez no mount é intencional.
   }, []);
 
   async function signIn(identifier: string, password: string) {
@@ -318,6 +322,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error('useAuth deve ser usado dentro de AuthProvider');

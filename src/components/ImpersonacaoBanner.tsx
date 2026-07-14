@@ -38,22 +38,20 @@ export function ImpersonacaoBanner() {
   }
 
   return (
-    <div className="fixed top-0 inset-x-0 z-[100] bg-amber-500 text-amber-950 shadow-md">
-      <div className="max-w-[1400px] mx-auto flex items-center justify-between gap-3 px-4 py-1.5 text-xs sm:text-sm">
-        <span className="flex items-center gap-2 font-medium min-w-0">
-          <UserCog className="w-4 h-4 shrink-0" />
-          <span className="truncate">
-            Você está logado como <strong>{ativa.alvoNome}</strong> (impersonação por {ativa.adminNome})
-          </span>
+    <div className="fixed top-1.5 right-1.5 z-[100]">
+      <div className="flex items-center gap-1.5 rounded-full bg-amber-500 text-amber-950 shadow-md pl-2.5 pr-1 py-1 text-[11px] max-w-[70vw]">
+        <UserCog className="w-3 h-3 shrink-0" />
+        <span className="truncate">
+          Como <strong>{ativa.alvoNome}</strong>
         </span>
         <button
           type="button"
           onClick={sair}
           disabled={saindo}
-          className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-amber-950/90 text-amber-50 px-2.5 py-1 font-semibold hover:bg-amber-950 transition-colors disabled:opacity-60"
+          title="Sair da impersonação"
+          className="shrink-0 inline-flex items-center justify-center rounded-full bg-amber-950/90 text-amber-50 w-5 h-5 hover:bg-amber-950 transition-colors disabled:opacity-60"
         >
-          {saindo ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <LogOut className="w-3.5 h-3.5" />}
-          {saindo ? 'Saindo…' : 'Sair da impersonação'}
+          {saindo ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
         </button>
       </div>
     </div>
