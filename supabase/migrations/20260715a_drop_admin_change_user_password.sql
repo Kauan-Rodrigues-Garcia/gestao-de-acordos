@@ -1,0 +1,22 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 20260715a — Remove a RPC admin_change_user_password
+--
+-- A troca de senha passou para /api/alterar-senha (Vercel), que valida o cargo
+-- no servidor e usa a Admin API do GoTrue. A RPC antiga fica sem chamador.
+--
+-- Ela não é só código morto — é um buraco de escalada de privilégio:
+--
+--   SECURITY DEFINER + GRANT EXECUTE TO authenticated, e a checagem interna
+--   aceitava 'lider'. Ou seja: qualquer líder podia trocar a senha de QUALQUER
+--   usuário, inclusive de um super_admin, e em seguida logar como ele. Não
+--   havia isolamento por empresa também.
+--
+-- Provavelmente ela já falhava em auth.crypt/auth.gen_salt (o pgcrypto do
+-- Supabase mora no schema `extensions`, não em `auth`), mas depender de um bug
+-- para não ser explorado não é uma defesa. DROP resolve nos dois casos.
+--
+-- A rota nova é mais estreita: só administrador e super_admin; administrador
+-- não mexe em super_admin nem em usuário de outra empresa.
+-- ═══════════════════════════════════════════════════════════════════════════
+
+DROP FUNCTION IF EXISTS public.admin_change_user_password(uuid, text);

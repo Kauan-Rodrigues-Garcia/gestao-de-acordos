@@ -286,14 +286,40 @@ parseBRL("1.234,56"); // 1234.56
 
 ---
 
-## Edge Functions
+## Rotas serverless (Vercel) — `api/`
 
-### Edge Function: `admin-change-password`
+Toda operação que precisa da `SUPABASE_SERVICE_ROLE_KEY` mora aqui. A chave
+ignora RLS, então nunca pode ser exposta ao navegador: fica só nas Environment
+Variables da Vercel, **sem** o prefixo `VITE_` (o que tem `VITE_` é embutido no
+bundle e vaza).
 
-Localização: `supabase/edge_function/admin-change-password.ts`
+Estas rotas sobem no mesmo deploy do site. No local elas só respondem com
+`vercel dev` — com `npm run dev` puro o fetch dá 404.
 
-Permite que administradores troquem a senha de outros usuários via Service Role Key,
-sem expor a chave no frontend.
+### `api/alterar-senha.ts`
+
+Redefine a senha de um usuário via Admin API do GoTrue. Só administrador e
+super_admin; administrador não mexe em super_admin (seria escalada de
+privilégio) nem em usuário de outra empresa. Ao concluir, zera
+`perfis.senha_alterada` para o dono definir a própria senha.
+
+Não existe "ver a senha atual": o GoTrue guarda bcrypt, que não é reversível.
+
+> Substituiu a Edge Function `admin-change-password`, que nunca chegou a ser
+> publicada — o código estava em `supabase/edge_function/`, pasta que a CLI do
+> Supabase não lê (ela publica `supabase/functions/<nome>/index.ts`), então o
+> `functions.invoke` do frontend sempre recebeu 404.
+
+### `api/impersonar-usuario.ts`
+
+Gera um magic link do usuário-alvo para o super_admin assumir a sessão dele.
+Ver `src/services/impersonacao.service.ts` no cliente.
+
+### `api/ler-acordo-imagem.ts`
+
+Leitura de acordo BookPlay por imagem via IA. Provider-agnóstica: escolhe o
+provedor por `VISION_PROVIDER` + `VISION_API_KEY`. Sem chave, responde 503 e o
+front cai no OCR local (Tesseract).
 
 ---
 

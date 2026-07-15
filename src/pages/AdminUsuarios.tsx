@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2 } from 'lucide-react';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
+import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
@@ -326,16 +327,16 @@ export default function AdminUsuarios() {
   async function alterarSenhaOperador() {
     const alvo = senhaTarget ?? editando;
     if (!alvo || !novaSenha.trim()) { toast.error('Preencha a nova senha'); return; }
-    if (novaSenha.length < 6) { toast.error('A senha deve ter pelo menos 6 caracteres'); return; }
+    if (novaSenha.length < MIN_SENHA) { toast.error(`A senha deve ter pelo menos ${MIN_SENHA} caracteres`); return; }
     setSalvandoSenha(true);
     try {
-      const { data, error } = await supabase.functions.invoke('admin-change-password', {
-        body: { p_user_id: alvo.id, p_new_password: novaSenha.trim() },
-      });
-      if (error || data?.error) { toast.error(`Erro: ${error?.message ?? data?.error}`); return; }
-      toast.success(`Senha de ${alvo.nome} alterada com sucesso!`);
+      await redefinirSenhaDeUsuario(alvo.id, novaSenha.trim());
+      toast.success(`Senha de ${alvo.nome} redefinida! Avise a senha a ela — o sistema vai pedir que troque por uma própria.`);
       setSenhaTarget(null);
       setNovaSenha('');
+      fetchDados();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Falha ao redefinir a senha.');
     } finally { setSalvandoSenha(false); }
   }
 
@@ -790,23 +791,30 @@ export default function AdminUsuarios() {
              </div>
           </div>
 
-          {/* ── Seção: Alterar senha (só em modo edição) ──────────────── */}
-          {editando && (
+          {/* ── Seção: Redefinir senha (edição, só admin/super_admin) ───
+              A senha atual não é exibida porque não existe para ser exibida: o
+              Supabase guarda o hash bcrypt dela, que não volta a texto. O que
+              o admin pode fazer é definir uma nova. */}
+          {editando && (isAdmin || isSuperAdmin) && (
             <div className="space-y-2 py-2 border-t border-border pt-4">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Alterar senha
+                Redefinir senha
               </Label>
               <div className="space-y-1.5">
                 <Label className="text-xs">Nova senha</Label>
                 <Input
-                  type="password"
+                  type="text"
                   value={novaSenha}
                   onChange={e => setNovaSenha(e.target.value)}
                   placeholder="Deixe em branco para manter a senha atual"
-                  className="h-9 text-sm"
+                  className="h-9 text-sm font-mono"
+                  autoComplete="off"
                 />
                 <p className="text-[11px] text-muted-foreground">
-                  Mínimo 6 caracteres. Deixe em branco para não alterar.
+                  Mínimo {MIN_SENHA} caracteres. Deixe em branco para não alterar.
+                  A senha atual não pode ser consultada — só substituída. Informe
+                  a nova a {editando.nome.split(' ')[0]}; o botão de chave vai
+                  aparecer para ela definir uma senha própria.
                 </p>
               </div>
               {novaSenha.length > 0 && (
@@ -815,7 +823,7 @@ export default function AdminUsuarios() {
                   variant="secondary"
                   size="sm"
                   className="h-8 gap-1.5 w-full"
-                  disabled={salvandoSenha || novaSenha.length < 6}
+                  disabled={salvandoSenha || novaSenha.length < MIN_SENHA}
                   onClick={alterarSenhaOperador}
                 >
                   <KeyRound className="w-3.5 h-3.5" />
