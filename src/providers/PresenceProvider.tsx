@@ -28,6 +28,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { fetchEmpresas } from '@/services/empresas.service';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -60,7 +61,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [onlineIds, setOnlineIds] = useState<Set<string>>(new Set());
+  const [onlineIds, setOnlineIds]           = useState<Set<string>>(new Set());
+  // Presença de OUTRAS empresas — só populado para super_admin (ver efeito abaixo).
+  const [outrasEmpresasIds, setOutrasEmpresasIds] = useState<Set<string>>(new Set());
   const [loading, setLoading]     = useState(true);
 
   const [reconnectKey, setReconnectKey] = useState(0);
@@ -184,8 +187,51 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [perfil?.id, empresa?.id, reconnectKey]);
 
+  // ── Super admin: enxerga presença de TODAS as empresas ─────────────────────
+  // O canal acima é escopado por empresa (`presence-empresa-{id}`), então um
+  // super_admin olhando o BookPlay via seu próprio canal nunca via usuários do
+  // PagueiPlay online (e vice-versa). Aqui abrimos um canal extra (só leitura,
+  // sem track) para cada OUTRA empresa e mesclamos os IDs no set exposto.
+  useEffect(() => {
+    if (perfil?.perfil !== 'super_admin') {
+      setOutrasEmpresasIds(new Set());
+      return;
+    }
+
+    let ativo = true;
+    const canaisExtras: ReturnType<typeof supabase.channel>[] = [];
+
+    fetchEmpresas().then((empresas) => {
+      if (!ativo) return;
+      const outras = empresas.filter((e) => e.id !== empresa?.id);
+      const acumulado = new Set<string>();
+
+      outras.forEach((emp) => {
+        const canal = supabase.channel(`presence-empresa-${emp.id}`);
+        canaisExtras.push(canal);
+        canal
+          .on('presence', { event: 'sync' }, () => {
+            if (!ativo) return;
+            const state = canal.presenceState<PresencePayload>();
+            Object.keys(state).forEach((id) => acumulado.add(id));
+            setOutrasEmpresasIds(new Set(acumulado));
+          })
+          .subscribe();
+      });
+    });
+
+    return () => {
+      ativo = false;
+      canaisExtras.forEach((c) => supabase.removeChannel(c));
+    };
+  }, [perfil?.perfil, empresa?.id]);
+
+  const onlineIdsTotal = outrasEmpresasIds.size
+    ? new Set([...onlineIds, ...outrasEmpresasIds])
+    : onlineIds;
+
   return (
-    <PresenceContext.Provider value={{ onlineIds, loading }}>
+    <PresenceContext.Provider value={{ onlineIds: onlineIdsTotal, loading }}>
       {children}
     </PresenceContext.Provider>
   );
@@ -197,6 +243,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
  * Retorna os IDs dos usuários online no canal da empresa.
  * Deve ser usado dentro de <PresenceProvider>.
  */
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useOnlineUsers(): PresenceContextValue {
   return useContext(PresenceContext);
 }

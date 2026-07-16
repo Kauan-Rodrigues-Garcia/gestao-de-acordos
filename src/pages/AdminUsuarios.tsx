@@ -86,10 +86,6 @@ export default function AdminUsuarios() {
   // Entrar como (impersonação) — só super_admin. Recarrega ao assumir a sessão.
   async function entrarComo(u: Perfil) {
     if (!perfilAtual?.id || u.id === perfilAtual.id) return;
-    const ok = window.confirm(
-      `Entrar como "${u.nome}"?\n\nVocê vai assumir a sessão dele (login real). Use a faixa laranja no topo para voltar à sua conta a qualquer momento.`,
-    );
-    if (!ok) return;
     setImpersonando(u.id);
     try {
       await iniciarImpersonacao(u.id, perfilAtual.id, perfilAtual.nome ?? 'super_admin');
