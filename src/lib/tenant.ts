@@ -1,4 +1,5 @@
 import type { Empresa } from '@/lib/supabase';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 export interface TenantBranding {
   appName: string;
@@ -107,8 +108,14 @@ export function getTenantBranding(slug: string, empresa?: Empresa | null): Tenan
 }
 
 export function getTenantRuntimeConfig(empresa?: Empresa | null): TenantRuntimeConfig {
-  // Prioridade: env var → hostname → slug da empresa no banco
-  const slug = getConfiguredTenantSlug() || normalizeSlug(empresa?.slug);
+  // Impersonação cruza tenant (bookplay/pagueplay são deploys separados,
+  // cada um com VITE_TENANT_SLUG fixo no build) — durante impersonação, a
+  // empresa REAL do usuário impersonado manda no branding/capabilities,
+  // não o slug fixo do site onde o super_admin está logado.
+  // Prioridade normal: env var → hostname → slug da empresa no banco
+  const slug = getImpersonacaoAtiva()
+    ? (normalizeSlug(empresa?.slug) || getConfiguredTenantSlug())
+    : (getConfiguredTenantSlug() || normalizeSlug(empresa?.slug));
 
   return {
     slug,

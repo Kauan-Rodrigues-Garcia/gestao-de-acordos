@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { Empresa, supabase } from '@/lib/supabase';
 import { fetchEmpresaBySlug, fetchEmpresaAtual } from '@/services/empresas.service';
 import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
+import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
@@ -28,6 +29,18 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
     setError(null);
 
     try {
+      // Impersonação cruza tenant (bookplay/pagueplay são deploys/domínios
+      // separados, cada um com VITE_TENANT_SLUG fixo no build). Sem isto, o
+      // super_admin impersonando um usuário PagueiPlay a partir do site
+      // BookPlay ficava preso na empresa BookPlay (slug do build), então
+      // todas as queries filtradas por empresa_id voltavam vazias.
+      // A sessão real já é a do usuário-alvo, então usamos a empresa DELE.
+      if (getImpersonacaoAtiva()) {
+        const empresaReal = await fetchEmpresaAtual();
+        setEmpresa(empresaReal);
+        return;
+      }
+
       if (!config.slug) {
         // VITE_TENANT_SLUG not configured — fall back to the empresa linked to the
         // currently-authenticated user's profile (single-tenant / dev environments).
