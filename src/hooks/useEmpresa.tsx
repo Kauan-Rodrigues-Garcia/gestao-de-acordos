@@ -105,6 +105,7 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
   );
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- arquivo exporta Provider + hook consumidor, padrão já usado no resto do projeto.
 export function useEmpresa(): EmpresaContextType {
   const ctx = useContext(EmpresaContext);
   if (!ctx) throw new Error('useEmpresa deve ser usado dentro de EmpresaProvider');
