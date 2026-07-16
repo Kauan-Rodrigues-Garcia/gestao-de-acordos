@@ -95,9 +95,9 @@ export function ModalAutorizacaoNR({
             <p className="text-sm font-semibold">Autorização do Líder</p>
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs font-medium">E-mail do Líder / Admin</Label>
+            <Label className="text-xs font-medium">Usuário ou e-mail do Líder / Admin</Label>
             <Input
-              type="email" placeholder="lider@empresa.com" value={liderEmail}
+              type="text" placeholder="usuário ou lider@empresa.com" value={liderEmail}
               onChange={(e) => onEmailChange(e.target.value)}
               className="h-9 text-sm" disabled={autorizando} autoComplete="off"
             />

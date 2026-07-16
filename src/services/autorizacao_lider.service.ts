@@ -16,6 +16,37 @@
 
 import { isPerfilAdminOuLider } from '@/lib/index';
 
+/**
+ * Resolve um identificador de login (USUÁRIO ou e-mail) para o e-mail de
+ * autenticação — mesmo fluxo do login em useAuth. Sem isto, o líder que digita
+ * o próprio usuário (como faz no login) era rejeitado: o grant_type=password do
+ * GoTrue só aceita e-mail. Se não resolver, devolve o texto original para o
+ * grant falhar naturalmente com "credenciais inválidas".
+ *
+ * supabase/tenant são importados dinamicamente: com e-mail (caso comum) a
+ * função retorna antes de tocar no client, e o teste do service — que não
+ * mocka o supabase — não carrega o client no import.
+ */
+export async function resolverEmailDeLogin(identifier: string): Promise<string> {
+  const id = identifier.trim();
+  if (id.includes('@')) return id;
+
+  const { supabase } = await import('@/lib/supabase');
+  const { getConfiguredTenantSlug } = await import('@/lib/tenant');
+
+  const tenantSlug = getConfiguredTenantSlug();
+  if (tenantSlug) {
+    const { data, error } = await supabase.rpc('buscar_email_por_usuario_empresa', {
+      p_usuario: id, p_empresa_slug: tenantSlug,
+    });
+    if (!error && data) return data as string;
+  }
+  const { data, error } = await supabase.rpc('buscar_email_por_usuario', { p_usuario: id });
+  if (!error && data) return data as string;
+
+  return id;
+}
+
 export interface AutorizadorInfo {
   uid:    string;
   nome:   string;
@@ -39,10 +70,10 @@ export async function autenticarLider(params: {
   email:    string;
   senha:    string;
 }): Promise<ResultadoAutenticacaoLider> {
-  const email = params.email.trim();
+  const rawId = params.email.trim();
   const senha = params.senha;
 
-  if (!email || !senha) {
+  if (!rawId || !senha) {
     return { ok: false, erro: 'Informe o e-mail e a senha do líder' };
   }
 
@@ -52,6 +83,9 @@ export async function autenticarLider(params: {
   if (!supabaseUrl || !supabaseAnon) {
     return { ok: false, erro: 'Configuração de ambiente ausente' };
   }
+
+  // Aceita usuário OU e-mail, igual ao login.
+  const email = await resolverEmailDeLogin(rawId);
 
   // 1. Autenticar via Supabase Auth REST (não altera a sessão do operador atual).
   let authRes: Response;

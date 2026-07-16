@@ -22,6 +22,7 @@ import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
+import { resolverEmailDeLogin } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
@@ -462,10 +463,14 @@ export function AcordoNovoInline({
       const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
       const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
+      // Aceita usuário OU e-mail: o líder digita o próprio usuário (como no
+      // login) e o grant_type=password do GoTrue só aceita e-mail.
+      const liderLogin = await resolverEmailDeLogin(liderEmail);
+
       const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
-        body: JSON.stringify({ email: liderEmail.trim(), password: liderSenha }),
+        body: JSON.stringify({ email: liderLogin, password: liderSenha }),
       });
 
       if (!authRes.ok) {

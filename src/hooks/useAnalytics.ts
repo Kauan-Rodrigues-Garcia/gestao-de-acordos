@@ -193,42 +193,61 @@ export function useAnalytics(): AnalyticsData {
       }
 
       // ── Acordos conforme perfil ──────────────────────────────────────────────
-      let q = supabase
-        .from('acordos')
-        .select('*')
-        .eq('empresa_id', empresa.id);
+      // Reconstruída a cada página: o PostgREST corta em 1000 linhas por query,
+      // então uma busca única truncava a visão do admin (empresa toda passa de
+      // 1000 acordos/mês) e a série "agendado" do gráfico vinha incompleta.
+      // Ordena por id para a paginação por range ser determinística.
+      const montarQuery = () => {
+        let q = supabase
+          .from('acordos')
+          .select('*')
+          .eq('empresa_id', empresa.id)
+          .order('id', { ascending: true });
 
-      if (!isAdmin && !isDiretoria) {
-        if (isLider && (perfil.setor_id || verTodosSetores)) {
-          // Líder/Elite: hierarquia de filtros
-          // 1. visão individual → filtra pelo próprio operador_id
-          // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
-          // 3. visão geral      → filtra pelo setor_id
-          //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
-          if (operadorFiltro) {
-            q = q.eq('operador_id', operadorFiltro);
-          } else if (operadoresDaEquipe !== null) {
-            if (operadoresDaEquipe.length === 0) {
-              // Equipe sem membros — força retorno vazio
-              q = q.eq('operador_id', 'sem-membros-na-equipe');
+        if (!isAdmin && !isDiretoria) {
+          if (isLider && (perfil.setor_id || verTodosSetores)) {
+            // Líder/Elite: hierarquia de filtros
+            // 1. visão individual → filtra pelo próprio operador_id
+            // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
+            // 3. visão geral      → filtra pelo setor_id
+            //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
+            if (operadorFiltro) {
+              q = q.eq('operador_id', operadorFiltro);
+            } else if (operadoresDaEquipe !== null) {
+              if (operadoresDaEquipe.length === 0) {
+                // Equipe sem membros — força retorno vazio
+                q = q.eq('operador_id', 'sem-membros-na-equipe');
+              } else {
+                q = q.in('operador_id', operadoresDaEquipe);
+              }
+            } else if (verTodosSetores) {
+              if (setorFiltro) q = q.eq('setor_id', setorFiltro);
             } else {
-              q = q.in('operador_id', operadoresDaEquipe);
+              q = q.eq('setor_id', perfil.setor_id);
             }
-          } else if (verTodosSetores) {
-            if (setorFiltro) q = q.eq('setor_id', setorFiltro);
           } else {
-            q = q.eq('setor_id', perfil.setor_id);
+            q = q.eq('operador_id', perfil.id);
           }
-        } else {
-          q = q.eq('operador_id', perfil.id);
+        } else if (setorFiltro) {
+          // Admin/Diretoria filtrou por setor específico
+          q = q.eq('setor_id', setorFiltro);
         }
-      } else if (setorFiltro) {
-        // Admin/Diretoria filtrou por setor específico
-        q = q.eq('setor_id', setorFiltro);
-      }
+        return q;
+      };
 
-      const { data: acordosData } = await q;
-      setAcordos((acordosData as Acordo[]) || []);
+      const PAGE = 1000;
+      let acordosData: Acordo[] = [];
+      let offset = 0;
+      while (true) {
+        const { data: pagina, error: errPagina } =
+          await montarQuery().range(offset, offset + PAGE - 1);
+        if (errPagina) break;
+        const batch = (pagina as Acordo[]) ?? [];
+        acordosData = acordosData.concat(batch);
+        if (batch.length < PAGE) break;
+        offset += PAGE;
+      }
+      setAcordos(acordosData);
 
       // ── Meta: hierarquia dependente do filtro ativo ──────────────────────────
       // Prioridade:

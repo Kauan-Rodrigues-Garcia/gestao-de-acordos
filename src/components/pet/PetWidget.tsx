@@ -251,7 +251,10 @@ export function PetWidget() {
       setMicro(m.tipo);
       dentro = setTimeout(() => setMicro('none'), m.duracaoMs);
     }, 9000 + Math.random() * 7000);
-    return () => { clearInterval(timer); if (dentro) clearTimeout(dentro); };
+    // Ao desmontar (dep mudou no meio de um micro), zera o micro. Sem isso o
+    // clearTimeout abaixo cancela o setMicro('none') pendente e o rosto fica
+    // preso no bocejo/espirro (olhos fechados) até o próximo sorteio.
+    return () => { clearInterval(timer); if (dentro) clearTimeout(dentro); setMicro('none'); };
   }, [humorEfetivo, movendo, aberto, emEvento, minimizado]);
 
   // Passeio aleatório: anda até um ponto, para um tempinho, repete.
