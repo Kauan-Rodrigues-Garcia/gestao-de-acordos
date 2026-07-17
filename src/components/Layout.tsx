@@ -98,6 +98,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const inputFotoRef = useRef<HTMLInputElement>(null);
 
   // ── Auto-hide / auto-show do sidebar ────────────────────────────────────────
+  // Comportamento automático é opcional: checkbox discreta no rodapé do
+  // sidebar, persistida por navegador. Desligada, o sidebar só muda pelo botão.
+  const [autoRecolher, setAutoRecolher] = useState<boolean>(() => {
+    try { return localStorage.getItem('sidebar-auto-recolher') !== '0'; } catch { return true; }
+  });
   const autoHideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const autoShowTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -106,7 +111,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (autoShowTimer.current) { clearTimeout(autoShowTimer.current); autoShowTimer.current = null; }
   }
 
+  function toggleAutoRecolher(ativo: boolean) {
+    setAutoRecolher(ativo);
+    if (!ativo) clearAutoTimers();
+    try { localStorage.setItem('sidebar-auto-recolher', ativo ? '1' : '0'); } catch { /* noop */ }
+  }
+
   function handleSidebarMouseEnter() {
+    if (!autoRecolher) return;
     if (autoHideTimer.current) { clearTimeout(autoHideTimer.current); autoHideTimer.current = null; }
     if (!sidebarOpen) {
       autoShowTimer.current = setTimeout(() => setSidebarOpen(true), 1000);
@@ -114,6 +126,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }
 
   function handleSidebarMouseLeave() {
+    if (!autoRecolher) return;
     if (autoShowTimer.current) { clearTimeout(autoShowTimer.current); autoShowTimer.current = null; }
     if (sidebarOpen) {
       autoHideTimer.current = setTimeout(() => setSidebarOpen(false), 3000);
@@ -363,6 +376,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </button>
         </div>
+      )}
+
+      {/* Recolhimento automático do sidebar (desktop) — discreto */}
+      {sidebarOpen && (
+        <label className="hidden md:flex items-center gap-2 px-5 pt-2 cursor-pointer select-none text-[11px] text-sidebar-foreground/45 hover:text-sidebar-foreground/75 transition-colors">
+          <input
+            type="checkbox"
+            checked={autoRecolher}
+            onChange={e => toggleAutoRecolher(e.target.checked)}
+            className="h-3 w-3 accent-primary cursor-pointer"
+          />
+          Recolher automaticamente
+        </label>
       )}
 
       {/* User info */}

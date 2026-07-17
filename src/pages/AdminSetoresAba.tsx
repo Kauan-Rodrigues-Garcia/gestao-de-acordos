@@ -108,10 +108,12 @@ export default function AdminSetoresAba() {
   const [expandido, setExpandido] = useState<Set<string>>(new Set());
   const [verTodos, setVerTodos] = useState<Set<string>>(new Set());
 
-  // Transferência de setor
-  const [transferindo, setTransferindo] = useState<Perfil | null>(null);
+  // Transferência de setor — aceita 1 ou vários usuários de uma vez
+  const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
   const [transferAlvo, setTransferAlvo] = useState<string>('');
   const [transfSalvando, setTransfSalvando] = useState(false);
+  // Seleção múltipla via checkbox nas listas de usuários
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   const acessoOk = temAcessoSetores(perfilAtual?.perfil);
 
@@ -183,22 +185,44 @@ export default function AdminSetoresAba() {
   }
 
   function abrirTransferir(usuario: Perfil) {
-    setTransferindo(usuario);
+    setTransferindo([usuario]);
     setTransferAlvo('');
   }
 
+  function abrirTransferirSelecionados() {
+    const lista = perfis.filter(p => selecionados.has(p.id));
+    if (lista.length === 0) return;
+    setTransferindo(lista);
+    setTransferAlvo('');
+  }
+
+  function toggleSelecionado(id: string) {
+    setSelecionados(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   async function transferir() {
-    if (!transferindo || !transferAlvo) return;
+    if (!transferindo?.length || !transferAlvo) return;
     setTransfSalvando(true);
     try {
-      // Ao trocar de setor, remove o usuário de qualquer equipe do setor antigo.
+      // Ao trocar de setor, remove os usuários de qualquer equipe do setor antigo.
+      const ids = transferindo.map(t => t.id);
       const { error } = await supabase
         .from('perfis')
         .update({ setor_id: transferAlvo, equipe_id: null })
-        .eq('id', transferindo.id);
+        .in('id', ids);
       if (error) throw error;
-      toast.success(`${transferindo.nome} transferido de setor!`);
+      toast.success(
+        transferindo.length === 1
+          ? `${transferindo[0].nome} transferido de setor!`
+          : `${transferindo.length} usuários transferidos de setor!`,
+      );
       setTransferindo(null);
+      setSelecionados(new Set());
       fetchPerfis();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'Erro ao transferir usuário');
@@ -340,6 +364,21 @@ export default function AdminSetoresAba() {
         </Button>
       </div>
 
+      {/* Barra de seleção múltipla (marque usuários nas listas dos setores) */}
+      {selecionados.size > 0 && (
+        <div className="mb-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+          <p className="text-xs text-foreground flex-1">
+            <strong>{selecionados.size}</strong> usuário{selecionados.size !== 1 && 's'} selecionado{selecionados.size !== 1 && 's'}
+          </p>
+          <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setSelecionados(new Set())}>
+            <X className="w-3 h-3 mr-1" /> Limpar
+          </Button>
+          <Button size="sm" className="h-7 text-xs gap-1.5" onClick={abrirTransferirSelecionados}>
+            <ArrowRightLeft className="w-3.5 h-3.5" /> Transferir selecionados
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
           Carregando...
@@ -442,6 +481,13 @@ export default function AdminSetoresAba() {
                       <>
                         {visiveis.map(u => (
                           <div key={u.id} className="flex items-center gap-2 py-1 px-1.5 rounded-lg hover:bg-muted/50">
+                            <input
+                              type="checkbox"
+                              checked={selecionados.has(u.id)}
+                              onChange={() => toggleSelecionado(u.id)}
+                              className="h-3.5 w-3.5 accent-primary cursor-pointer flex-shrink-0"
+                              title="Selecionar para transferência"
+                            />
                             {u.foto_url ? (
                               <img src={u.foto_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                             ) : (
@@ -539,7 +585,7 @@ export default function AdminSetoresAba() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog transferir usuário de setor ── */}
+      {/* ── Dialog transferir usuário(s) de setor ── */}
       <Dialog open={!!transferindo} onOpenChange={o => { if (!o) setTransferindo(null); }}>
         <DialogContent className="max-w-md" aria-describedby="modal-transferir-desc">
           <DialogHeader>
@@ -548,23 +594,37 @@ export default function AdminSetoresAba() {
               Transferir de setor
             </DialogTitle>
             <DialogDescription id="modal-transferir-desc" className="text-xs">
-              Selecione o novo setor para <strong>{transferindo?.nome}</strong>.
+              {transferindo && transferindo.length === 1 ? (
+                <>Selecione o novo setor para <strong>{transferindo[0].nome}</strong>.</>
+              ) : (
+                <>Selecione o novo setor para <strong>{transferindo?.length ?? 0} usuários</strong>.</>
+              )}
             </DialogDescription>
           </DialogHeader>
+          {transferindo && transferindo.length > 1 && (
+            <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto -mt-1">
+              {transferindo.map(t => (
+                <span key={t.id} className="inline-flex items-center rounded-full bg-muted px-2 py-0.5 text-[10px] text-foreground/80">
+                  {t.nome}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="space-y-2 py-2">
             <Label className="text-xs">Novo setor</Label>
             <Select value={transferAlvo} onValueChange={setTransferAlvo}>
               <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione o setor..." /></SelectTrigger>
               <SelectContent>
                 {setores
-                  .filter(s => s.id !== transferindo?.setor_id)
+                  // Esconde o setor de origem só quando TODOS os selecionados já estão nele
+                  .filter(s => !(transferindo && transferindo.every(t => t.setor_id === s.id)))
                   .map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.nome}{!s.ativo && ' (inativo)'}</SelectItem>
                   ))}
               </SelectContent>
             </Select>
             <p className="text-[11px] text-muted-foreground">
-              Ao transferir, o usuário sai de qualquer equipe do setor atual.
+              Ao transferir, {transferindo && transferindo.length === 1 ? 'o usuário sai' : 'os usuários saem'} de qualquer equipe do setor atual.
             </p>
           </div>
           <DialogFooter>
@@ -572,7 +632,12 @@ export default function AdminSetoresAba() {
               <X className="w-3.5 h-3.5 mr-1" /> Cancelar
             </Button>
             <Button size="sm" onClick={transferir} disabled={transfSalvando || !transferAlvo} className="gap-2">
-              <ArrowRightLeft className="w-4 h-4" /> {transfSalvando ? 'Transferindo...' : 'Transferir'}
+              <ArrowRightLeft className="w-4 h-4" />
+              {transfSalvando
+                ? 'Transferindo...'
+                : transferindo && transferindo.length > 1
+                  ? `Transferir ${transferindo.length}`
+                  : 'Transferir'}
             </Button>
           </DialogFooter>
         </DialogContent>
