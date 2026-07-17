@@ -669,6 +669,105 @@ export type Database = {
         }
         Relationships: []
       }
+      ouvidoria_acessos: {
+        Row: {
+          concedido_por: string | null
+          concedido_por_nome: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          nivel: string
+          usuario_id: string
+        }
+        Insert: {
+          concedido_por?: string | null
+          concedido_por_nome?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          nivel?: string
+          usuario_id: string
+        }
+        Update: {
+          concedido_por?: string | null
+          concedido_por_nome?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          nivel?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      ouvidoria_atendimentos: {
+        Row: {
+          atualizado_em: string
+          codigo: string | null
+          criado_em: string
+          criado_por: string | null
+          criado_por_nome: string | null
+          descricao: string | null
+          email: string | null
+          empresa_id: string
+          estado_uf: string | null
+          id: string
+          iniciado_em: string
+          link: string | null
+          nome_cliente: string
+          resolucao: string | null
+          resolvido_em: string | null
+          resolvido_por: string | null
+          resolvido_por_nome: string | null
+          status: string
+          tipo: string
+          whatsapp: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          codigo?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          descricao?: string | null
+          email?: string | null
+          empresa_id: string
+          estado_uf?: string | null
+          id?: string
+          iniciado_em?: string
+          link?: string | null
+          nome_cliente: string
+          resolucao?: string | null
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          resolvido_por_nome?: string | null
+          status?: string
+          tipo?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          codigo?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          descricao?: string | null
+          email?: string | null
+          empresa_id?: string
+          estado_uf?: string | null
+          id?: string
+          iniciado_em?: string
+          link?: string | null
+          nome_cliente?: string
+          resolucao?: string | null
+          resolvido_em?: string | null
+          resolvido_por?: string | null
+          resolvido_por_nome?: string | null
+          status?: string
+          tipo?: string
+          whatsapp?: string | null
+        }
+        Relationships: []
+      }
       perfis: {
         Row: {
           ativo: boolean

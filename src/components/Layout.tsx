@@ -29,10 +29,12 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
+  LifeBuoy,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPerfilLider, isPerfilAdmin } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -65,7 +67,9 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria'] },
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
+  // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
+  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
@@ -189,6 +193,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const ouvidoriaAcesso = useOuvidoriaAcesso();
   const { naoLidas, animarBadge } = useNotificacoesCount();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
@@ -214,6 +219,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
   const navItems = NAV_ITEMS.filter(item => {
     if (item.hiddenForPaguePay && isPP) return false;
+
+    // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
+    // usuários com acesso concedido em ouvidoria_acessos.
+    if (item.to === ROUTE_PATHS.OUVIDORIA) {
+      return isPP && ouvidoriaAcesso.podeVer;
+    }
 
     if (item.permissaoKey) {
       return !permLoading && temPermissao(item.permissaoKey);

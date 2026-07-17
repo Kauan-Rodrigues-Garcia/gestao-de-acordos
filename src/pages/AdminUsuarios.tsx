@@ -750,6 +750,7 @@ export default function AdminUsuarios() {
                    <SelectItem value="elite">Elite</SelectItem>
                    <SelectItem value="gerencia">Gerência</SelectItem>
                    <SelectItem value="diretoria">Diretoria</SelectItem>
+                   <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
                    <SelectItem value="administrador">Administrador</SelectItem>
                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                  </SelectContent>

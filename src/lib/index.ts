@@ -19,6 +19,7 @@ export const ROUTE_PATHS = {
   ADMIN_LOGS: '/admin/logs',
   ADMIN_CARGOS: '/admin/cargos',
   ANALITICO: '/analitico',
+  OUVIDORIA: '/ouvidoria',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
@@ -57,6 +58,7 @@ export const PERFIL_LABELS: Record<string, string> = {
   elite: 'Elite',
   gerencia: 'Gerência',
   diretoria: 'Diretoria',
+  ouvidoria: 'Ouvidoria',
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
@@ -67,10 +69,13 @@ export const PERFIL_COLORS: Record<string, string> = {
   diretoria:     'bg-role-diretoria/10 text-role-diretoria border-role-diretoria/30',
   administrador: 'bg-role-admin/10 text-role-admin border-role-admin/30',
   super_admin:   'bg-role-super/10 text-role-super border-role-super/30',
+  ouvidoria:     'bg-teal-500/10 text-teal-600 border-teal-500/30',
 };
 
-// Perfis com acesso de líder (visão de setor + equipe)
-export const PERFIS_LIDER = ['lider', 'elite', 'gerencia'] as const;
+// Perfis com acesso de líder (visão de setor + equipe).
+// Ouvidoria herda os gates de líder também no banco (fn_user_has_any_role,
+// migration 20260717b) — manter os dois lados espelhados.
+export const PERFIS_LIDER = ['lider', 'elite', 'gerencia', 'ouvidoria'] as const;
 // Perfis com acesso de admin (visão global)
 export const PERFIS_ADMIN = ['administrador', 'super_admin'] as const;
 // Perfis com acesso de diretoria (analíticos globais sem edição)
@@ -79,6 +84,7 @@ export const PERFIS_DIRETORIA = ['diretoria'] as const;
 // Hierarquia numérica de cargos (quanto maior, mais alto)
 export const PERFIL_NIVEL: Record<string, number> = {
   operador:      1,
+  ouvidoria:     2,
   lider:         2,
   elite:         3,
   gerencia:      4,
@@ -88,7 +94,7 @@ export const PERFIL_NIVEL: Record<string, number> = {
 };
 
 // Perfis que visualizam apenas usuários do próprio setor (abaixo de Gerência)
-export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite'] as const;
+export const PERFIS_VISAO_SETOR = ['operador', 'lider', 'elite', 'ouvidoria'] as const;
 // Perfis que podem ver todos os usuários dentro da empresa mas ficam restritos ao próprio cargo ou acima
 export const PERFIS_VISAO_EMPRESA_RESTRITA = ['gerencia', 'diretoria'] as const;
 

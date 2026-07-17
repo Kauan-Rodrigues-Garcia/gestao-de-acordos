@@ -47,6 +47,7 @@ const Registro          = lazy(() => import('@/pages/Registro'));
 const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
+const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 
 function PageLoader() {
   return (
@@ -231,6 +232,11 @@ export default function App() {
               {/* Analítico (PaguePlay + BookPlay — gate por slug dentro da página) */}
               <Route path={ROUTE_PATHS.ANALITICO} element={
                 <LayoutWrapper><PaginaAnalitico /></LayoutWrapper>
+              } />
+
+              {/* Ouvidoria (PaguePlay — acesso por cargo/concessão dentro da página) */}
+              <Route path={ROUTE_PATHS.OUVIDORIA} element={
+                <LayoutWrapper><Ouvidoria /></LayoutWrapper>
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
