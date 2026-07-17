@@ -8,9 +8,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useTenant } from '@/lib/tenant-config';
 
-// Temas disponíveis (rosa é carregado condicionalmente para PaguePLAY)
+// Temas disponíveis para os dois tenants
 const TEMAS = [
   { value: 'light',      label: 'Claro',              class: '' },
   { value: 'rosa',       label: 'Rosa',               class: 'rosa' },
@@ -46,7 +45,6 @@ function applyTheme(value: ThemeValue) {
 
 export function ThemeToggle() {
   const [current, setCurrent] = useState<ThemeValue>('light');
-  const { isPaguePlay } = useTenant();
 
   // Inicializar tema salvo
   useEffect(() => {
@@ -92,13 +90,11 @@ export function ThemeToggle() {
           Claro
           {current === 'light' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
-        {isPaguePlay && (
-          <DropdownMenuItem onClick={() => setTheme('rosa')} className="gap-2">
-            <Flower2 className="h-3.5 w-3.5 text-pink-400" />
-            Rosa
-            {current === 'rosa' && <span className="ml-auto text-primary">✓</span>}
-          </DropdownMenuItem>
-        )}
+        <DropdownMenuItem onClick={() => setTheme('rosa')} className="gap-2">
+          <Flower2 className="h-3.5 w-3.5 text-pink-400" />
+          Rosa
+          {current === 'rosa' && <span className="ml-auto text-primary">✓</span>}
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">Temas Escuros</div>
         <DropdownMenuItem onClick={() => setTheme('dark')} className="gap-2">

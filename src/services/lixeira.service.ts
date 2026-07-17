@@ -146,6 +146,40 @@ export async function esvaziarLixeira(empresaId: string): Promise<{ ok: boolean;
   return { ok: true };
 }
 
+/**
+ * Restaura um acordo da lixeira: reinsere o snapshot (dados_completos) na
+ * tabela `acordos` e, se der certo, remove o item da lixeira.
+ *
+ * O snapshot vem de um select('*, perfis(...)'), então o join `perfis` (e
+ * qualquer outra chave que não seja coluna) precisa ser removido antes do
+ * insert. O id original é mantido — o acordo volta como era; se um acordo com
+ * o mesmo id ainda existir (não deveria: a exclusão sempre deleta antes), o
+ * insert falha e o item permanece na lixeira.
+ */
+export async function restaurarItemLixeira(item: LixeiraAcordo): Promise<{ ok: boolean; error?: string }> {
+  const snap = (item.dados_completos ?? null) as Record<string, unknown> | null;
+  if (!snap || !snap.id) {
+    return { ok: false, error: 'Este item não possui o snapshot completo do acordo.' };
+  }
+
+  const { perfis: _perfis, ...colunas } = snap;
+
+  // Snapshot é dinâmico (Record) — o insert tipado do client não aceita; o
+  // shape real é o próprio acordo que saiu desta tabela.
+  const { error } = await supabase.from('acordos').insert(colunas as never);
+  if (error) {
+    console.warn('[lixeira.service] restaurarItemLixeira error:', error.message);
+    return { ok: false, error: error.message };
+  }
+
+  const { error: delError } = await supabase.from('lixeira_acordos').delete().eq('id', item.id);
+  if (delError) {
+    // Acordo já voltou; só não saiu da lixeira. Reporta mas considera ok.
+    console.warn('[lixeira.service] restaurarItemLixeira delete error:', delError.message);
+  }
+  return { ok: true };
+}
+
 /** Remove um item específico da lixeira (exclusão permanente) */
 export async function deletarItemLixeira(id: string): Promise<{ ok: boolean; error?: string }> {
   const { error } = await supabase

@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle } from 'lucide-react';
+import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,7 @@ import {
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
+import { calcularParcelas } from '@/lib/money';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
@@ -71,6 +72,12 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const [isExtra,     setIsExtra]     = useState(acordo.tipo_vinculo === 'extra');
   const [tagIds,      setTagIds]      = useState<string[]>(acordo.tag_ids ?? []);
   const { tags: empresaTags }         = useEmpresaTags();
+
+  // PP: trocar forma de pagamento ou parcelas na edição refaz o parcelamento
+  // com a mesma fórmula do acordo novo — o campo Valor passa a ser lido como
+  // VALOR TOTAL. O aviso abaixo alerta o operador antes de salvar.
+  const parcelamentoAlterado = isPaguePlay &&
+    (tipo !== acordo.tipo || parseInt(parcelas || '1', 10) !== (acordo.parcelas || 1));
 
   async function handleSave() {
     if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
@@ -141,6 +148,25 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
       };
 
       if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
+
+      // PP + parcelamento alterado: mesma fórmula do acordo novo. O valor
+      // digitado é lido como TOTAL; a linha guarda a parcela corrente (valor)
+      // e o total (valor_total), respeitando a regra dos 40% do acordo.
+      if (parcelamentoAlterado) {
+        const ehParcelado = ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && parcelasNum > 1;
+        if (ehParcelado) {
+          const quarentaEfetivo = Boolean(acordo.usou_quarenta_pct) && parcelasNum > 2;
+          const numeroParcela   = Math.min(acordo.numero_parcela ?? 1, parcelasNum);
+          const todas = calcularParcelas(valorNum, parcelasNum, quarentaEfetivo);
+          payload.valor             = todas[numeroParcela - 1];
+          payload.valor_total       = valorNum;
+          payload.usou_quarenta_pct = quarentaEfetivo;
+          payload.numero_parcela    = numeroParcela;
+        } else {
+          payload.valor_total       = null;
+          payload.usou_quarenta_pct = false;
+        }
+      }
 
       const { data: updated, error } = await supabase
         .from('acordos')
@@ -350,7 +376,9 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 <div className="space-y-1 sm:col-span-2 lg:col-span-3 xl:col-span-2">
                   <Label className="text-xs font-medium">{isPaguePlay ? 'Link do Acordo' : 'Observações'}</Label>
                   <div className="relative">
-                    <Link2 className="absolute left-2 top-2 w-3 h-3 text-muted-foreground" />
+                    {isPaguePlay
+                      ? <Link2 className="absolute left-2 top-2 w-3 h-3 text-muted-foreground" />
+                      : <FileText className="absolute left-2 top-2 w-3 h-3 text-muted-foreground" />}
                     <Textarea
                       value={observacoes}
                       onChange={e => setObservacoes(e.target.value)}
@@ -362,6 +390,18 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 </div>
 
               </div>
+
+              {/* Aviso PP: forma de pagamento/parcelas alteradas → recálculo */}
+              {parcelamentoAlterado && (
+                <div className="mt-3 rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    O cálculo de parcelamento será feito a partir do{' '}
+                    <strong>valor total</strong> que você colocou no campo Valor.
+                    Verifique se o valor está correto antes de salvar.
+                  </p>
+                </div>
+              )}
 
               {/* Tags visuais */}
               {empresaTags.length > 0 && (

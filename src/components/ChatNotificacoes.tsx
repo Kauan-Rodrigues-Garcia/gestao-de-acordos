@@ -284,12 +284,21 @@ export function ChatNotificacoes() {
     await supabase.from('notificacoes').update({ lida: true }).eq('id', id);
   }
 
-  async function marcarTodasLidas() {
+  const marcarTodasLidas = useCallback(async () => {
     if (!user?.id) return;
     setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
     await supabase.from('notificacoes').update({ lida: true })
       .eq('usuario_id', user.id).eq('lida', false);
-  }
+  }, [user?.id]);
+
+  // Janela aberta por 2s → marca tudo como lida, para não acumular não lidas.
+  // Depende de naoLidas: notificação que chegar com a janela aberta também é
+  // marcada 2s depois. Fechar antes cancela o timer.
+  useEffect(() => {
+    if (!aberto || naoLidas === 0) return;
+    const t = setTimeout(() => { marcarTodasLidas(); }, 2000);
+    return () => clearTimeout(t);
+  }, [aberto, naoLidas, marcarTodasLidas]);
 
   async function excluirNotificacao(id: string) {
     setNotificacoes(prev => prev.filter(n => n.id !== id));

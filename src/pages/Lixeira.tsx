@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Trash2, RefreshCw, Search, Clock, ArrowRightLeft,
   AlertTriangle, X, Info, ShieldAlert, FileX2, ChevronRight,
+  RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +23,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { fetchLixeira, esvaziarLixeira, purgarExpirados, LixeiraAcordo } from '@/services/lixeira.service';
+import { fetchLixeira, esvaziarLixeira, purgarExpirados, restaurarItemLixeira, LixeiraAcordo } from '@/services/lixeira.service';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
@@ -75,6 +76,7 @@ export default function Lixeira() {
   const [detalhe, setDetalhe]           = useState<LixeiraAcordo | null>(null);
   const [confirmEsvaziar, setConfirmEsvaziar] = useState(false);
   const [esvaziando, setEsvaziando]     = useState(false);
+  const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [fotoMap, setFotoMap]           = useState<Record<string, string | null>>({});
 
   const podeAcessar = temPermissao('ver_lixeira');
@@ -132,6 +134,20 @@ export default function Lixeira() {
       toast.success('Lixeira esvaziada com sucesso!');
     } else {
       toast.error('Erro ao esvaziar lixeira: ' + error);
+    }
+  }
+
+  async function handleRestaurar(item: LixeiraAcordo) {
+    if (restaurandoId) return;
+    setRestaurandoId(item.id);
+    const { ok, error } = await restaurarItemLixeira(item);
+    setRestaurandoId(null);
+    if (ok) {
+      setItens(prev => prev.filter(i => i.id !== item.id));
+      setDetalhe(d => (d?.id === item.id ? null : d));
+      toast.success('Acordo restaurado com sucesso!');
+    } else {
+      toast.error('Erro ao restaurar acordo: ' + error);
     }
   }
 
@@ -445,15 +461,27 @@ export default function Lixeira() {
                           </span>
                         </td>
 
-                        {/* Detalhes */}
+                        {/* Ações */}
                         <td className="px-3 py-3">
-                          <button
-                            title="Ver detalhes"
-                            onClick={() => setDetalhe(item)}
-                            className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150 opacity-0 group-hover:opacity-100"
-                          >
-                            <Info className="w-3.5 h-3.5" />
-                          </button>
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                            <button
+                              title="Restaurar acordo"
+                              disabled={restaurandoId === item.id}
+                              onClick={() => handleRestaurar(item)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 transition-all duration-150 disabled:opacity-50"
+                            >
+                              {restaurandoId === item.id
+                                ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                                : <RotateCcw className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              title="Ver detalhes"
+                              onClick={() => setDetalhe(item)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150"
+                            >
+                              <Info className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </motion.tr>
                     );
@@ -484,6 +512,7 @@ export default function Lixeira() {
             <DialogDescription id="lixeira-dlg-desc" className="sr-only">Detalhes completos do acordo excluído</DialogDescription>
 
             {detalhe && (
+              <>
               <ScrollArea className="max-h-[520px]">
                 <div className="p-5 space-y-4">
 
@@ -604,6 +633,31 @@ export default function Lixeira() {
 
                 </div>
               </ScrollArea>
+
+              {/* Footer: restaurar acordo */}
+              <div className="px-5 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDetalhe(null)}
+                  disabled={restaurandoId === detalhe.id}
+                  className="h-8 text-xs rounded-lg"
+                >
+                  Fechar
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleRestaurar(detalhe)}
+                  disabled={restaurandoId === detalhe.id}
+                  className="h-8 text-xs rounded-lg gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white border-0 shadow-md shadow-emerald-500/20"
+                >
+                  {restaurandoId === detalhe.id
+                    ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    : <RotateCcw className="w-3.5 h-3.5" />}
+                  {restaurandoId === detalhe.id ? 'Restaurando...' : 'Restaurar Acordo'}
+                </Button>
+              </div>
+              </>
             )}
           </DialogContent>
         </Dialog>

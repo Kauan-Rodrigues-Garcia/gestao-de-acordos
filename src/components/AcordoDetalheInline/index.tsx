@@ -107,7 +107,10 @@ export function AcordoDetalheInline({
   const podeAdicionarParcela = !isPaguePlay &&
     (perfil?.id === acordoLocal.operador_id || temVisaoAmpla(perfil?.perfil));
 
-  const link   = extractLinkAcordo(acordoLocal.observacoes);
+  // "Link do Acordo" é conceito PaguePlay (observacoes = [ESTADO]+link). Na
+  // BookPlay observacoes é texto livre e extractLinkAcordo devolveria o texto
+  // inteiro, duplicando o bloco de Observações como "Link do Acordo".
+  const link   = isPaguePlay ? extractLinkAcordo(acordoLocal.observacoes) : '';
   const estado = getEstadoFromAcordo(acordoLocal);
   const nomeOp = (acordoLocal.perfis as { nome?: string } | undefined)?.nome ?? '—';
 

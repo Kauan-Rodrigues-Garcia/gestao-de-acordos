@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart2, TrendingUp, DollarSign, Calendar,
   ChevronDown, ChevronUp, RefreshCw, XCircle,
-  Clock, Award, Percent, Target, CreditCard, QrCode,
+  Clock, Percent, Target, CreditCard, QrCode,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -25,7 +25,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { MESES, MEDAL_STYLES, BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
+import { MESES, BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
 import { SkeletonCard, MetricCard, MiniSparkline, BannerNaoTabulado } from './SubComponents';
 import { PPMetrics } from './PPMetrics';
 import { ChartsSection } from './ChartsSection';
@@ -73,7 +73,6 @@ export function AnalyticsPanel({
     meta,
     percMeta,
     porDia,
-    porOperador,
     acordosMes,
     loading,
     refetch,
@@ -176,12 +175,6 @@ export function AnalyticsPanel({
   useEffect(() => {
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
   }, [operadorFiltroExterno]);
-
-  const isAdmin = temPermissao('ver_analiticos_global');
-  // Visão de líder (métricas/KPIs do setor) exige ver_painel_lider E
-  // ver_analiticos_setor. Padrão = true (espelha o acesso atual); desligar
-  // ver_analiticos_setor reduz o usuário à visão individual.
-  const isLider = temPermissao('ver_painel_lider') && temPermissao('ver_analiticos_setor');
 
   const { mes, ano } = useMemo(() => {
     const d = new Date();
@@ -605,101 +598,6 @@ export function AnalyticsPanel({
                     </span>
                     <span className="text-[11px] text-muted-foreground pl-1">ritmo atual</span>
                   </motion.div>
-                </motion.div>
-              )}
-
-              {/* ROW 4 — Ranking de Operadores (admin/líder) */}
-              {!loading && (isAdmin || isLider) && porOperador && porOperador.length > 0 && (
-                <motion.div variants={itemVariants}>
-                  <Card className="border-border/70 bg-card shadow-sm overflow-hidden">
-                    <CardHeader className="pb-3 pt-4 px-5">
-                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                        <div className="flex items-center justify-center w-6 h-6 rounded-md bg-amber-400/15 shrink-0">
-                          <Award className="w-3.5 h-3.5 text-amber-500" />
-                        </div>
-                        Ranking de Operadores
-                        <span className="text-muted-foreground font-normal text-xs ml-1">
-                          — {MESES[mes - 1]}/{ano}
-                        </span>
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="px-5 pb-5">
-                      {(() => {
-                        const slice = porOperador.slice(0, 10);
-                        const maxValor = Math.max(...slice.map(o => o.valor), 1);
-                        return (
-                          <div className="space-y-1.5">
-                            {slice.map((op, i) => {
-                              const medal = MEDAL_STYLES[i];
-                              const barWidth = Math.max((op.valor / maxValor) * 100, 2);
-                              const barColor =
-                                i === 0 ? '#f59e0b'
-                                : i === 1 ? '#94a3b8'
-                                : i === 2 ? '#f97316'
-                                : '#6366f1';
-
-                              return (
-                                <motion.div
-                                  key={op.id}
-                                  initial={{ opacity: 0, x: -10 }}
-                                  animate={{ opacity: 1, x: 0 }}
-                                  transition={{ delay: i * 0.05, duration: 0.28 }}
-                                  className="group flex items-center gap-3 py-2 px-3 rounded-xl hover:bg-muted/40 transition-colors duration-150"
-                                >
-                                  <div
-                                    className={cn(
-                                      'flex items-center justify-center w-6 h-6 rounded-full text-[11px] font-bold border shrink-0',
-                                      i < 3
-                                        ? `${medal.bg} ${medal.text} ${medal.border}`
-                                        : 'bg-muted/40 text-muted-foreground border-border/50',
-                                    )}
-                                  >
-                                    {i + 1}
-                                  </div>
-                                  <div className="flex-1 min-w-0 space-y-1">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <span className="text-xs font-semibold truncate">{op.nome}</span>
-                                      <div className="flex items-center gap-3 shrink-0">
-                                        <span className="text-[11px] text-muted-foreground tabular-nums">
-                                          {op.acordos} ac.
-                                        </span>
-                                        <span className="text-xs font-bold tabular-nums font-mono" style={{ color: barColor }}>
-                                          {formatCurrency(op.valor)}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div className="h-1.5 w-full rounded-full bg-muted/50 overflow-hidden">
-                                      <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${barWidth}%` }}
-                                        transition={{ duration: 0.7, ease: 'easeOut', delay: i * 0.07 }}
-                                        className="h-full rounded-full"
-                                        style={{ background: `linear-gradient(90deg, ${barColor}99, ${barColor})` }}
-                                      />
-                                    </div>
-                                    {op.meta > 0 && (
-                                      <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                                        <span className="text-[10px] text-muted-foreground">Meta:</span>
-                                        <div className="flex-1 h-1 rounded-full bg-muted/40 overflow-hidden">
-                                          <div
-                                            className="h-full rounded-full bg-emerald-500/70"
-                                            style={{ width: `${Math.min(op.perc, 100)}%` }}
-                                          />
-                                        </div>
-                                        <span className="text-[10px] font-semibold text-emerald-500 tabular-nums">
-                                          {op.perc}%
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </motion.div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })()}
-                    </CardContent>
-                  </Card>
                 </motion.div>
               )}
 
