@@ -278,7 +278,12 @@ export default function AdminUsuarios() {
       setDialogOpen(false);
       fetchDados();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao salvar usuário');
+      // PostgrestError não é instanceof Error — sem este fallback o toast
+      // engolia a mensagem real do banco (ex.: violação de CHECK/RLS).
+      const msg = e instanceof Error
+        ? e.message
+        : ((e as { message?: string })?.message ?? 'Erro ao salvar usuário');
+      toast.error(msg);
     } finally {
       setSaving(false);
     }
