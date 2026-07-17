@@ -1,4 +1,4 @@
-import { Building2, Layers, Search, X } from 'lucide-react';
+import { Building2, Layers, Search, X, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -39,6 +39,10 @@ export interface AcordosFiltersProps {
   temPermissao: (p: string) => boolean;
   setCurrentPage: (n: number) => void;
   limparFiltros: () => void;
+  /** Aba destacada Pix Automático (BookPlay): quando ativa, o conteúdo da
+   *  página troca para o painel Pix e os filtros da lista somem. */
+  pixAbaAtiva: boolean;
+  setPixAbaAtiva: (v: boolean) => void;
 }
 
 export function AcordosFilters({
@@ -50,6 +54,7 @@ export function AcordosFilters({
   statusLabels, tipoLabels, operadoresMap,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
+  pixAbaAtiva, setPixAbaAtiva,
 }: AcordosFiltersProps) {
   return (
     <>
@@ -63,10 +68,10 @@ export function AcordosFilters({
         ] as const).map(tab => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setCurrentPage(1); }}
+            onClick={() => { setPixAbaAtiva(false); setActiveTab(tab.key); setCurrentPage(1); }}
             className={cn(
               'px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              activeTab === tab.key
+              !pixAbaAtiva && activeTab === tab.key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
@@ -74,7 +79,26 @@ export function AcordosFilters({
             {tab.label}
           </button>
         ))}
+
+        {/* Aba destacada Pix Automático (BookPlay) */}
+        {!isPP && (
+          <button
+            onClick={() => setPixAbaAtiva(!pixAbaAtiva)}
+            className={cn(
+              'ml-auto mb-1.5 flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all',
+              pixAbaAtiva
+                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-violet-500 shadow-md shadow-violet-500/25'
+                : 'bg-violet-500/10 text-violet-500 border-violet-500/30 hover:bg-violet-500/20 hover:border-violet-500/50',
+            )}
+          >
+            <Zap className="w-3.5 h-3.5" /> Pix Automático
+          </button>
+        )}
       </div>
+
+      {/* Aba Pix ativa: some com os filtros da lista padrão */}
+      {pixAbaAtiva ? null : (
+      <>
 
       {/* Seletor de visão Líder/Elite */}
       {(isLider || isElite) && equipesDoSetor.length > 0 && (
@@ -230,6 +254,9 @@ export function AcordosFilters({
           </div>
         </CardContent>
       </Card>
+
+      </>
+      )}
     </>
   );
 }

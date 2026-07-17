@@ -1058,6 +1058,87 @@ export type Database = {
           },
         ]
       }
+      pix_automatico_acordos: {
+        Row: {
+          atualizado_em: string
+          avaliado_em: string | null
+          avaliado_por: string | null
+          avaliado_por_nome: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          nr_cliente: string
+          operador_id: string
+          operador_nome: string | null
+          pct_comissao: number | null
+          setor_id: string | null
+          status: string
+          valor: number
+        }
+        Insert: {
+          atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
+          avaliado_por_nome?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          nr_cliente: string
+          operador_id: string
+          operador_nome?: string | null
+          pct_comissao?: number | null
+          setor_id?: string | null
+          status?: string
+          valor: number
+        }
+        Update: {
+          atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
+          avaliado_por_nome?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          nr_cliente?: string
+          operador_id?: string
+          operador_nome?: string | null
+          pct_comissao?: number | null
+          setor_id?: string | null
+          status?: string
+          valor?: number
+        }
+        Relationships: []
+      }
+      pix_automatico_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          empresa_id: string
+          id: string
+          pct: number
+          setor_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          empresa_id: string
+          id?: string
+          pct?: number
+          setor_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          empresa_id?: string
+          id?: string
+          pct?: number
+          setor_id?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null

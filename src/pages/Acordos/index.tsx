@@ -31,6 +31,7 @@ import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
 import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
 import { AcordosFilters } from './AcordosFilters';
+import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
 import { AcordosModals } from './AcordosModals';
 
@@ -82,6 +83,8 @@ export default function Acordos() {
   const [activeTab, setActiveTab] = useState<'analitico' | 'todos' | 'pagos' | 'nao_pagos'>(
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
+  // Aba destacada Pix Automático (BookPlay): substitui o conteúdo da lista
+  const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix');
 
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -629,7 +632,12 @@ export default function Acordos() {
           isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
           temPermissao={temPermissao}
           setCurrentPage={setCurrentPage} limparFiltros={limparFiltros}
+          pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
         />
+
+        {/* Aba Pix Automático substitui a lista inteira */}
+        {pixAba ? <PixAutomatico /> : (
+        <>
 
         {/* Âncora de scroll */}
         <div ref={novoInlineRef} />
@@ -702,6 +710,9 @@ export default function Acordos() {
               </Button>
             </div>
           </div>
+        )}
+
+        </>
         )}
       </div>
 
