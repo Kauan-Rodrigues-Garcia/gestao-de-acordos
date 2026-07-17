@@ -22,7 +22,6 @@ import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { MESES, BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';

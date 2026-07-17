@@ -129,6 +129,78 @@ export type Database = {
           },
         ]
       }
+      analitico_recebimentos: {
+        Row: {
+          acordo_id: string | null
+          codigo: string
+          data_pagamento: string
+          empresa_id: string
+          forma_detalhe: string | null
+          forma_pagamento: string
+          id: string
+          importado_em: string
+          importado_por_id: string | null
+          instituicao: string | null
+          lote_id: string
+          mes_referencia: string
+          nome_cliente: string | null
+          operador_id: string | null
+          operador_usuario: string
+          pagamentos_detalhados: Json | null
+          setor_id: string | null
+          status_tabulacao: string
+          total_ho: number
+          valor_recebido: number
+          visto: boolean
+        }
+        Insert: {
+          acordo_id?: string | null
+          codigo: string
+          data_pagamento: string
+          empresa_id: string
+          forma_detalhe?: string | null
+          forma_pagamento: string
+          id?: string
+          importado_em?: string
+          importado_por_id?: string | null
+          instituicao?: string | null
+          lote_id: string
+          mes_referencia: string
+          nome_cliente?: string | null
+          operador_id?: string | null
+          operador_usuario: string
+          pagamentos_detalhados?: Json | null
+          setor_id?: string | null
+          status_tabulacao?: string
+          total_ho?: number
+          valor_recebido?: number
+          visto?: boolean
+        }
+        Update: {
+          acordo_id?: string | null
+          codigo?: string
+          data_pagamento?: string
+          empresa_id?: string
+          forma_detalhe?: string | null
+          forma_pagamento?: string
+          id?: string
+          importado_em?: string
+          importado_por_id?: string | null
+          instituicao?: string | null
+          lote_id?: string
+          mes_referencia?: string
+          nome_cliente?: string | null
+          operador_id?: string | null
+          operador_usuario?: string
+          pagamentos_detalhados?: Json | null
+          setor_id?: string | null
+          status_tabulacao?: string
+          total_ho?: number
+          valor_recebido?: number
+          visto?: boolean
+        }
+        Relationships: []
+      }
       cargos_permissoes: {
         Row: {
           atualizado_em: string
@@ -166,6 +238,78 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      diario_recebimentos: {
+        Row: {
+          acordo_codigo: string | null
+          chave_unica: string
+          cpf: string | null
+          data_pagamento: string | null
+          dia_referencia: string
+          empresa_id: string
+          forma_pagamento: string
+          id: string
+          id_baixa: string | null
+          import_index: number
+          importado_em: string
+          importado_por_id: string | null
+          instituicao: string | null
+          lote_id: string
+          nome_cliente: string | null
+          operador_id: string | null
+          operador_usuario: string
+          prox_contato: string | null
+          tabulacao: string | null
+          valor_recebido: number
+          visto: boolean
+        }
+        Insert: {
+          acordo_codigo?: string | null
+          chave_unica: string
+          cpf?: string | null
+          data_pagamento?: string | null
+          dia_referencia: string
+          empresa_id: string
+          forma_pagamento?: string
+          id?: string
+          id_baixa?: string | null
+          import_index?: number
+          importado_em?: string
+          importado_por_id?: string | null
+          instituicao?: string | null
+          lote_id: string
+          nome_cliente?: string | null
+          operador_id?: string | null
+          operador_usuario: string
+          prox_contato?: string | null
+          tabulacao?: string | null
+          valor_recebido?: number
+          visto?: boolean
+        }
+        Update: {
+          acordo_codigo?: string | null
+          chave_unica?: string
+          cpf?: string | null
+          data_pagamento?: string | null
+          dia_referencia?: string
+          empresa_id?: string
+          forma_pagamento?: string
+          id?: string
+          id_baixa?: string | null
+          import_index?: number
+          importado_em?: string
+          importado_por_id?: string | null
+          instituicao?: string | null
+          lote_id?: string
+          nome_cliente?: string | null
+          operador_id?: string | null
+          operador_usuario?: string
+          prox_contato?: string | null
+          tabulacao?: string | null
+          valor_recebido?: number
+          visto?: boolean
+        }
+        Relationships: []
       }
       direto_extra_config: {
         Row: {
@@ -271,6 +415,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      equipe_operadores_clones: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          equipe_id: string
+          id: string
+          operador_id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          equipe_id: string
+          id?: string
+          operador_id: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          equipe_id?: string
+          id?: string
+          operador_id?: string
+        }
+        Relationships: []
       }
       historico_acordos: {
         Row: {
@@ -552,6 +723,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      metas_config_mes: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          atualizado_por: string | null
+          contar_dia_atual: boolean
+          criado_em: string
+          empresa_id: string
+          feriados: Json
+          id: string
+          mes: number
+          quartis: Json
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          contar_dia_atual?: boolean
+          criado_em?: string
+          empresa_id: string
+          feriados?: Json
+          id?: string
+          mes: number
+          quartis?: Json
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          contar_dia_atual?: boolean
+          criado_em?: string
+          empresa_id?: string
+          feriados?: Json
+          id?: string
+          mes?: number
+          quartis?: Json
+        }
+        Relationships: []
       }
       modelos_mensagem: {
         Row: {

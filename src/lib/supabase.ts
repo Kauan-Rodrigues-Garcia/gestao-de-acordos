@@ -200,7 +200,9 @@ export interface Notificacao {
   criado_em: string;
 }
 
-export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr';
+// 'troca_extra' é gravado pelo fluxo de troca de vínculo EXTRA (AcordoNovoInline
+// e AcordoForm) — o union estava desatualizado em relação ao runtime.
+export type MotivoLixeira = 'exclusao_manual' | 'transferencia_nr' | 'troca_extra';
 
 export interface LixeiraAcordo {
   id: string;

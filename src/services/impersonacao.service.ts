@@ -80,10 +80,11 @@ export async function iniciarImpersonacao(
       body: JSON.stringify({ alvoUserId }),
     });
   } catch {
-    throw new Error('Endpoint de impersonação indisponível. Localmente, rode com "vercel dev".');
+    // Em dev o /api é servido pelo plugin vite-plugins/dev-api.ts (npm run dev).
+    throw new Error('Endpoint de impersonação indisponível. Verifique a conexão e tente novamente.');
   }
   if (resp.status === 404) {
-    throw new Error('Endpoint /api/impersonar-usuario não está sendo servido. Use "vercel dev" no local.');
+    throw new Error('Endpoint /api/impersonar-usuario não está sendo servido neste ambiente.');
   }
   if (!resp.ok) {
     const { error } = await resp.json().catch(() => ({ error: `Erro ${resp.status}` }));

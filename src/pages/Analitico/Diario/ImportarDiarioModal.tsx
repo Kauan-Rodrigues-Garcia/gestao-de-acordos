@@ -56,7 +56,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
     const notificados = resultado.novosPorOperador.filter(n => n.totalNovo > 0).length;
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-600">
               <CheckCircle2 className="w-5 h-5" /> Importação concluída
@@ -100,7 +100,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
   if (estado === 'error') {
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
-        <DialogContent className="max-w-md">
+        <DialogContent aria-describedby={undefined} className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertCircle className="w-5 h-5" /> Erro ao processar arquivo
@@ -134,7 +134,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
 
     return (
       <Dialog open={aberto} onOpenChange={handleFechar}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+        <DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="w-5 h-5 text-primary" />
@@ -359,7 +359,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
   // ── Idle / Parsing ────────────────────────────────────────────────────────
   return (
     <Dialog open={aberto} onOpenChange={handleFechar}>
-      <DialogContent className="max-w-md">
+      <DialogContent aria-describedby={undefined} className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="w-5 h-5 text-primary" /> Importar relatório diário

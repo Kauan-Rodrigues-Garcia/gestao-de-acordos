@@ -33,7 +33,7 @@ export function ChatplayNewFeatureModal({ open, onClose }: ChatplayNewFeatureMod
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o && countdown <= 0) handleDismiss(); }}>
-      <DialogContent className="max-w-sm p-0 overflow-hidden">
+      <DialogContent aria-describedby={undefined} className="max-w-sm p-0 overflow-hidden">
 
         {/* Banner superior */}
         <div className="bg-violet-600 px-6 py-5 flex items-center gap-3">

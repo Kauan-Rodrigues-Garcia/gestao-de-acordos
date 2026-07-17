@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
-  FileText, User, Layers, MapPin, Link2, CheckCircle2, RefreshCw, Clock,
-  ArrowLeftRight, Link as LinkIcon, CalendarClock, MessageCircle, Plus,
+  FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
+  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
 } from 'lucide-react';
-import { DatePickerField } from '@/components/DatePickerField';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';

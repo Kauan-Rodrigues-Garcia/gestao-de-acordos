@@ -35,7 +35,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
-import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS, isPerfilLider, isPerfilAdmin } from '@/lib/index';
+import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
