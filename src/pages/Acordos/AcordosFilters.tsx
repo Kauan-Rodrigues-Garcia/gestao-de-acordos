@@ -80,15 +80,15 @@ export function AcordosFilters({
           </button>
         ))}
 
-        {/* Aba destacada Pix Automático (BookPlay) */}
+        {/* Aba Pix Automático (BookPlay) — mesmo padrão underline das demais abas */}
         {!isPP && (
           <button
             onClick={() => setPixAbaAtiva(!pixAbaAtiva)}
             className={cn(
-              'ml-auto mb-1.5 flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-sm font-semibold border transition-all',
+              'ml-auto flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
               pixAbaAtiva
-                ? 'bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-violet-500 shadow-md shadow-violet-500/25'
-                : 'bg-violet-500/10 text-violet-500 border-violet-500/30 hover:bg-violet-500/20 hover:border-violet-500/50',
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
           >
             <Zap className="w-3.5 h-3.5" /> Pix Automático
