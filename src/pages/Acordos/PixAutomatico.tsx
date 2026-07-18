@@ -9,17 +9,20 @@
  * Líder+: vê tudo, filtra por operador/equipe, aprova/desaprova cada linha e
  * configura o % de comissão do próprio setor (padrão 0,25%).
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
+  Copy, Upload, Download,
 } from 'lucide-react';
+import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -34,8 +37,18 @@ import {
   PixAutoAcordo, PixAutoStatus, PIX_AUTO_PCT_PADRAO,
   fetchAcordosPix, criarAcordoPix, avaliarAcordoPix, reavaliarAcordoPix,
   excluirAcordoPix, limparDesaprovados, fetchConfigsPix, upsertConfigPix,
-  comissaoDe,
+  comissaoDe, formatarLinhaPix, criarAcordosPixLote, type LinhaPixLote,
 } from '@/services/pix_automatico.service';
+
+/** Copia texto para a área de transferência com feedback via toast. */
+async function copiarTexto(texto: string, msgOk: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(texto);
+    toast.success(msgOk);
+  } catch {
+    toast.error('Não foi possível copiar (área de transferência indisponível).');
+  }
+}
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
   pendente:    { label: 'Pendente',    cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
@@ -77,6 +90,12 @@ export function PixAutomatico() {
   const [salvandoPct, setSalvandoPct] = useState(false);
   const [avaliandoId, setAvaliandoId] = useState<string | null>(null);
   const [limpando, setLimpando]       = useState(false);
+
+  // Seleção múltipla (líder) + import
+  const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
+  const [loteProcessando, setLoteProcessando] = useState(false);
+  const [importando, setImportando]     = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const setorDoLider = perfil?.setor_id ?? null;
   const pctDoMeuSetor = setorDoLider != null
@@ -250,6 +269,152 @@ export function PixAutomatico() {
     }
   }
 
+  // ── Seleção + copiar (líder) ──────────────────────────────────────────────
+  function toggleSelecionado(id: string) {
+    setSelecionados(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  }
+
+  const idsVisiveis = useMemo(() => visiveis.map(i => i.id), [visiveis]);
+  const todosVisiveisSelecionados = idsVisiveis.length > 0 && idsVisiveis.every(id => selecionados.has(id));
+
+  function toggleTodosVisiveis() {
+    setSelecionados(prev => {
+      if (todosVisiveisSelecionados) {
+        const n = new Set(prev);
+        idsVisiveis.forEach(id => n.delete(id));
+        return n;
+      }
+      return new Set([...prev, ...idsVisiveis]);
+    });
+  }
+
+  async function copiarSelecionados() {
+    const linhas = visiveis
+      .filter(i => selecionados.has(i.id))
+      .map(i => formatarLinhaPix(i, comissaoDe(i, pctPorSetor)));
+    if (linhas.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+    await copiarTexto(linhas.join('\n'), `${linhas.length} acordo(s) copiado(s) para encaminhar.`);
+  }
+
+  // Avalia (aprova/desaprova) em lote — só pendentes selecionados.
+  async function avaliarSelecionados(aprovar: boolean) {
+    if (!perfil?.id) return;
+    const alvos = visiveis.filter(i => selecionados.has(i.id) && i.status === 'pendente');
+    if (alvos.length === 0) { toast.error('Nenhum acordo pendente selecionado.'); return; }
+    setLoteProcessando(true);
+    try {
+      for (const item of alvos) {
+        const pctDaLinha = item.setor_id != null
+          ? (pctPorSetor[item.setor_id] ?? PIX_AUTO_PCT_PADRAO)
+          : PIX_AUTO_PCT_PADRAO;
+        await avaliarAcordoPix({
+          id: item.id, aprovar, pctAtual: pctDaLinha,
+          avaliadorId: perfil.id, avaliadorNome: perfil.nome ?? perfil.email ?? '—',
+        });
+      }
+      toast.success(`${alvos.length} acordo(s) ${aprovar ? 'aprovado(s)' : 'desaprovado(s)'}.`);
+      setSelecionados(new Set());
+      await carregar();
+    } finally {
+      setLoteProcessando(false);
+    }
+  }
+
+  // Exclui (lixeira) em lote os selecionados.
+  async function excluirSelecionados() {
+    const alvos = visiveis.filter(i => selecionados.has(i.id));
+    if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+    setLoteProcessando(true);
+    try {
+      for (const item of alvos) await excluirAcordoPix(item.id);
+      toast.success(`${alvos.length} registro(s) excluído(s).`);
+      setSelecionados(new Set());
+      await carregar();
+    } finally {
+      setLoteProcessando(false);
+    }
+  }
+
+  // ── Exportar / Importar planilha ──────────────────────────────────────────
+  function exportar() {
+    if (visiveis.length === 0) { toast.error('Nenhum registro para exportar.'); return; }
+    const rows = visiveis.map(i => ({
+      NR:        i.nr_cliente,
+      Operador:  i.operador_nome ?? '',
+      Valor:     Number(i.valor),
+      Comissao:  comissaoDe(i, pctPorSetor),
+      Status:    STATUS_INFO[i.status].label,
+      Data:      new Date(i.criado_em).toLocaleDateString('pt-BR'),
+    }));
+    const ws = xlsxUtils.json_to_sheet(rows);
+    const wb = xlsxUtils.book_new();
+    xlsxUtils.book_append_sheet(wb, ws, 'Pix Automatico');
+    const buf  = xlsxWrite(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+    const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    a.download = `pix_automatico_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /** Acha um cabeçalho tolerando variações de nome/caixa. */
+  function pegarCampo(row: Record<string, unknown>, nomes: string[]): unknown {
+    const chaves = Object.keys(row);
+    for (const n of nomes) {
+      const k = chaves.find(c => c.trim().toLowerCase() === n);
+      if (k != null) return row[k];
+    }
+    return undefined;
+  }
+
+  async function importarArquivo(file: File) {
+    if (!empresa?.id || !perfil?.id) return;
+    setImportando(true);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = xlsxRead(buf, { type: 'array' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+
+      const linhas: LinhaPixLote[] = rows.map(row => {
+        const nr = String(pegarCampo(row, ['nr', 'nr do acordo', 'nr_cliente']) ?? '').trim();
+        const valor = parseCurrencyInput(String(pegarCampo(row, ['valor', 'valor total', 'valor do acordo']) ?? ''));
+        const opNome = String(pegarCampo(row, ['operador', 'operador_nome', 'nome']) ?? '').trim();
+
+        // Atribuição de operador: líder + nome reconhecido → esse operador; senão, o usuário logado.
+        let opId = perfil.id;
+        let opNomeFinal = perfil.nome ?? perfil.email ?? '—';
+        let setorId = perfil.setor_id ?? null;
+        if (ehLider && opNome) {
+          const match = operadores.find(o => o.nome.trim().toLowerCase() === opNome.toLowerCase());
+          if (match) { opId = match.id; opNomeFinal = match.nome; setorId = match.setor_id; }
+        }
+        return { nrCliente: nr, valor, operadorId: opId, operadorNome: opNomeFinal, setorId };
+      });
+
+      const r = await criarAcordosPixLote(empresa.id, linhas);
+      if (!r.ok) { toast.error('Erro ao importar: ' + r.error); return; }
+      toast.success(
+        `Importados: ${r.importados}` +
+        (r.duplicados ? ` · Duplicados ignorados: ${r.duplicados}` : '') +
+        (r.ignorados ? ` · Inválidos ignorados: ${r.ignorados}` : ''),
+      );
+      await carregar();
+    } catch (e) {
+      toast.error('Falha ao ler a planilha. Confira o arquivo.');
+      console.warn('[PixAutomatico] import:', e);
+    } finally {
+      setImportando(false);
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
   // ── Render ──────────────────────────────────────────────────────────────
   const statsCards = [
     {
@@ -285,6 +450,17 @@ export function PixAutomatico() {
           <Button variant="outline" size="sm" onClick={carregar} disabled={loading}
             className="gap-1.5 h-8 text-xs rounded-lg">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} /> Atualizar
+          </Button>
+          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
+            onChange={e => { const f = e.target.files?.[0]; if (f) importarArquivo(f); }} />
+          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importando}
+            className="gap-1.5 h-8 text-xs rounded-lg" title="Importar planilha de Pix Automático">
+            {importando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+            Importar
+          </Button>
+          <Button variant="outline" size="sm" onClick={exportar} disabled={loading || visiveis.length === 0}
+            className="gap-1.5 h-8 text-xs rounded-lg" title="Exportar registros visíveis">
+            <Download className="w-3.5 h-3.5" /> Exportar
           </Button>
           {meusDesaprovados > 0 && (
             <Button variant="ghost" size="sm" onClick={limparMeusDesaprovados} disabled={limpando}
@@ -418,6 +594,32 @@ export function PixAutomatico() {
         )}
       </div>
 
+      {/* ── Barra de ação em lote (líder) ── */}
+      {ehLider && selecionados.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2">
+          <span className="text-xs font-medium text-violet-500 mr-1">{selecionados.size} selecionado(s)</span>
+          <Button size="sm" onClick={copiarSelecionados} disabled={loteProcessando} className="h-7 gap-1.5 text-xs">
+            <Copy className="w-3.5 h-3.5" /> Copiar
+          </Button>
+          <button onClick={() => avaliarSelecionados(true)} disabled={loteProcessando}
+            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
+            <Check className="w-3.5 h-3.5" /> Aprovar
+          </button>
+          <button onClick={() => avaliarSelecionados(false)} disabled={loteProcessando}
+            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
+            <XCircle className="w-3.5 h-3.5" /> Desaprovar
+          </button>
+          <button onClick={excluirSelecionados} disabled={loteProcessando}
+            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-muted-foreground border border-border hover:text-destructive hover:bg-destructive/10 disabled:opacity-50">
+            <Trash2 className="w-3.5 h-3.5" /> Excluir
+          </button>
+          <Button size="sm" variant="ghost" onClick={() => setSelecionados(new Set())} disabled={loteProcessando}
+            className="h-7 gap-1.5 text-xs text-muted-foreground ml-auto">
+            <X className="w-3.5 h-3.5" /> Limpar
+          </Button>
+        </div>
+      )}
+
       {/* ── Tabela ── */}
       <Card className="border-border">
         <CardContent className="p-0">
@@ -437,6 +639,12 @@ export function PixAutomatico() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
+                    {ehLider && (
+                      <th className="px-3 py-3 w-8">
+                        <Checkbox checked={todosVisiveisSelecionados} onCheckedChange={toggleTodosVisiveis}
+                          aria-label="Selecionar todos os visíveis" />
+                      </th>
+                    )}
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">NR</th>
                     {ehLider && <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Operador</th>}
                     <th className="text-right px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Valor</th>
@@ -462,7 +670,22 @@ export function PixAutomatico() {
                           'border-b border-border/30 group transition-colors hover:bg-accent/20',
                           desaprovado && 'opacity-60',
                         )}>
-                        <td className="px-4 py-3 font-mono font-bold text-foreground">{item.nr_cliente}</td>
+                        {ehLider && (
+                          <td className="px-3 py-3 w-8">
+                            <Checkbox checked={selecionados.has(item.id)}
+                              onCheckedChange={() => toggleSelecionado(item.id)}
+                              aria-label={`Selecionar NR ${item.nr_cliente}`} />
+                          </td>
+                        )}
+                        <td className="px-4 py-3 font-mono font-bold text-foreground">
+                          <div className="flex items-center gap-1.5">
+                            <span>{item.nr_cliente}</span>
+                            <button title="Copiar NR" onClick={() => copiarTexto(item.nr_cliente, 'NR copiado.')}
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/60 hover:text-violet-400">
+                              <Copy className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </td>
                         {ehLider && (
                           <td className="px-4 py-3 text-foreground/80 max-w-[160px]">
                             <span className="truncate block">{item.operador_nome ?? '—'}</span>

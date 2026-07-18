@@ -54,6 +54,31 @@ export function comissaoDe(a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comi
   return Math.round(Number(a.valor) * pct) / 100; // valor × pct ÷ 100, 2 casas
 }
 
+/** Data ISO → "dd/mm" para o texto de encaminhamento. */
+function ddmm(criadoEm: string): string {
+  const d = new Date(criadoEm);
+  if (isNaN(d.getTime())) return '';
+  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Valor numérico BR sem "R$" (ex.: 1234.5 → "1.234,50"). */
+function valorBR(v: number): string {
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+/**
+ * Texto de uma linha para encaminhar (copiar em lote):
+ * `NR: <nr> <operador> VALOR <valor> COMISSÃO <comissao> <dd/mm>`
+ * (operador e data entram só com o valor, sem rótulo.)
+ */
+export function formatarLinhaPix(
+  a: Pick<PixAutoAcordo, 'nr_cliente' | 'operador_nome' | 'valor' | 'criado_em'>,
+  comissao: number,
+): string {
+  const operador = (a.operador_nome ?? '—').trim().replace(/\s+/g, ' ');
+  return `NR: ${a.nr_cliente} ${operador} VALOR ${valorBR(a.valor)} COMISSÃO ${valorBR(comissao)} ${ddmm(a.criado_em)}`;
+}
+
 // ── Acordos ────────────────────────────────────────────────────────────────
 
 export async function fetchAcordosPix(empresaId: string, opts?: { operadorId?: string }): Promise<PixAutoAcordo[]> {
@@ -91,6 +116,58 @@ export async function criarAcordoPix(p: {
   });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+export interface LinhaPixLote {
+  nrCliente: string;
+  valor: number;
+  operadorId: string;
+  operadorNome: string;
+  setorId: string | null;
+}
+
+/**
+ * Cria vários acordos Pix de uma vez (importação de planilha).
+ * Faz dedupe por `NR+operador` contra os já existentes na empresa e contra a
+ * própria planilha; insere só os novos. Não sobrescreve nada.
+ */
+export async function criarAcordosPixLote(
+  empresaId: string,
+  linhas: LinhaPixLote[],
+): Promise<{ ok: boolean; importados: number; ignorados: number; duplicados: number; error?: string }> {
+  // Existentes (NR+operador) para dedupe
+  const existentes = await fetchAcordosPix(empresaId);
+  const chave = (nr: string, op: string) => `${nr.trim().toLowerCase()}::${op}`;
+  const jaExiste = new Set(existentes.map(e => chave(e.nr_cliente, e.operador_id)));
+
+  let ignorados = 0;
+  let duplicados = 0;
+  const vistosNoLote = new Set<string>();
+  const novos: Record<string, unknown>[] = [];
+
+  for (const l of linhas) {
+    const nr = (l.nrCliente ?? '').trim();
+    const valor = Number(l.valor);
+    if (!nr || !Number.isFinite(valor) || valor <= 0) { ignorados++; continue; }
+    const k = chave(nr, l.operadorId);
+    if (jaExiste.has(k) || vistosNoLote.has(k)) { duplicados++; continue; }
+    vistosNoLote.add(k);
+    novos.push({
+      empresa_id:    empresaId,
+      operador_id:   l.operadorId,
+      operador_nome: l.operadorNome,
+      setor_id:      l.setorId,
+      nr_cliente:    nr,
+      valor,
+      status:        'pendente',
+    });
+  }
+
+  if (novos.length === 0) return { ok: true, importados: 0, ignorados, duplicados };
+
+  const { error } = await supabase.from('pix_automatico_acordos').insert(novos);
+  if (error) return { ok: false, importados: 0, ignorados, duplicados, error: error.message };
+  return { ok: true, importados: novos.length, ignorados, duplicados };
 }
 
 /**
