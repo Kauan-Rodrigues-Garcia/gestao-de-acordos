@@ -46,7 +46,8 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
-import { OnboardingTour } from './OnboardingTour';
+import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
+import { PetNomeVotacaoLembrete } from './pet/PetNomeVotacaoLembrete';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
 import { useTermoUso } from '@/hooks/useTermoUso';
@@ -210,6 +211,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoesCount();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
+
+  // ── Lembrete de votação do nome do mascote — só depois de termos + tour ─────
+  // (tourPronto começa true se o tour já foi concluído em sessão anterior;
+  //  senão vira true quando o OnboardingTour chamar onFinished agora)
+  const [tourPronto, setTourPronto] = useState(false);
+  useEffect(() => {
+    if (perfil?.id && localStorage.getItem(ONBOARDING_STORAGE_KEY(perfil.id))) {
+      setTourPronto(true);
+    }
+  }, [perfil?.id]);
+  const votacaoNomePronta = !termoLoading && !precisaAceitar && tourPronto;
 
   // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
   //  todas as páginas, inclusive a de login.)
@@ -635,7 +647,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
-          onFinished={() => {}}
+          onFinished={() => setTourPronto(true)}
         />
       </div>
 
@@ -653,6 +665,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onConfirmed={() => setChatplayOnboardingOpen(false)}
         />
       )}
+
+      {/* Lembrete de votação do nome do mascote — só abre pós termos + tour */}
+      <PetNomeVotacaoLembrete pronto={votacaoNomePronta} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (
