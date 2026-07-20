@@ -48,6 +48,7 @@ interface Meta {
   meta_valor: number;
   meta_acordos: number;
   metas_extras?: number[];
+  meta_proporcional: boolean;
   mes: number;
   ano: number;
 }
@@ -62,7 +63,7 @@ interface Operador {
    *  a mesma nos dois setores — a linha em `metas` é por operador, sem setor. */
   clonadoDe?: string | null;
 }
-interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; }
+interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean; }
 
 function parseBRL(value: string): number {
   const cleaned = value.replace(/[^\d,]/g, "").replace(",", ".");
@@ -83,7 +84,7 @@ function fmtNum(num: number): string {
     : "";
 }
 
-function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "", extras: [] }; }
+function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "", extras: [], proporcional: false }; }
 
 // ── MonthNavigator ────────────────────────────────────────────────────────────
 function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onChange: (m: number, a: number) => void }) {
@@ -116,11 +117,15 @@ interface MetaRowProps {
   numExtras?: number;
   onChangeExtra?: (idx: number, v: string) => void;
   disabled?: boolean;
+  /** Meta proporcional: operador recém-chegado/retorno de férias, meta menor
+   *  que a cheia. Sinaliza pro jogo (pet) não tratar igual quem tem meta cheia. */
+  proporcional: boolean;
+  onChangeProporcional: (v: boolean) => void;
 }
 
 function MetaRow({
   label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO,
-  numExtras = 0, onChangeExtra, disabled,
+  numExtras = 0, onChangeExtra, disabled, proporcional, onChangeProporcional,
 }: MetaRowProps) {
   return (
     <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5 border-b border-border last:border-0">
@@ -175,6 +180,19 @@ function MetaRow({
             </div>
           </div>
         ))}
+        <div className="flex flex-col gap-1 shrink-0">
+          <Label className="text-xs text-muted-foreground">&nbsp;</Label>
+          <label className="h-8 flex items-center gap-1.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={proporcional}
+              disabled={disabled}
+              onChange={(e) => onChangeProporcional(e.target.checked)}
+              className="h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
+            />
+            <span className="text-xs text-muted-foreground whitespace-nowrap">Meta proporcional</span>
+          </label>
+        </div>
       </div>
     </div>
   );
@@ -272,6 +290,9 @@ export default function MetasConfig() {
     const atuais = [...getInput(id).extras];
     atuais[idx] = v;
     setInput(id, { extras: atuais });
+  }
+  function onChangeProporcional(id: string, v: boolean) {
+    setInput(id, { proporcional: v });
   }
 
   // Dias úteis derivados (seg–sex − feriados)
@@ -390,6 +411,7 @@ export default function MetasConfig() {
           meta_valor: fmtNum(v),
           meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
           extras:     extras.map(fmtNum),
+          proporcional: m.meta_proporcional === true,
         };
         if (m.tipo && extras.length > maxExtras[m.tipo]) maxExtras[m.tipo] = extras.length;
       }
@@ -473,6 +495,7 @@ export default function MetasConfig() {
         empresa_id: empresa.id!,
         meta_valor: parseBRL(getInput(referenciaId).meta_valor),
         meta_acordos: 0,
+        meta_proporcional: getInput(referenciaId).proporcional,
         // Metas adicionais (BP): só as preenchidas contam; em branco é ignorado
         ...(isBP ? {
           metas_extras: getInput(referenciaId).extras.map(parseBRL).filter(v => v > 0),
@@ -751,7 +774,9 @@ export default function MetasConfig() {
                   numExtras={isBP ? extraCampos.setor : 0}
                   onChangeExtra={(i, v) => onChangeExtra(setorSelecionado, i, v)}
                   onChangeValor={v => onChangeValor(setorSelecionado, v)}
-                  onChangeHO={v => onChangeHO(setorSelecionado, v)} />
+                  onChangeHO={v => onChangeHO(setorSelecionado, v)}
+                  proporcional={getInput(setorSelecionado).proporcional}
+                  onChangeProporcional={v => onChangeProporcional(setorSelecionado, v)} />
                 {isBP && podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
                     onClick={() => setExtraCampos(p => ({ ...p, setor: p.setor + 1 }))}>
@@ -781,7 +806,9 @@ export default function MetasConfig() {
                     numExtras={isBP ? extraCampos.equipe : 0}
                     onChangeExtra={(i, v) => onChangeExtra(eq.id, i, v)}
                     onChangeValor={v => onChangeValor(eq.id, v)}
-                    onChangeHO={v => onChangeHO(eq.id, v)} />
+                    onChangeHO={v => onChangeHO(eq.id, v)}
+                    proporcional={getInput(eq.id).proporcional}
+                    onChangeProporcional={v => onChangeProporcional(eq.id, v)} />
                 ))}
                 {isBP && podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"
@@ -834,7 +861,9 @@ export default function MetasConfig() {
                     numExtras={isBP ? extraCampos.operador : 0}
                     onChangeExtra={(i, v) => onChangeExtra(op.id, i, v)}
                     onChangeValor={v => onChangeValor(op.id, v)}
-                    onChangeHO={v => onChangeHO(op.id, v)} />
+                    onChangeHO={v => onChangeHO(op.id, v)}
+                    proporcional={getInput(op.id).proporcional}
+                    onChangeProporcional={v => onChangeProporcional(op.id, v)} />
                 ))}
                 {isBP && podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"

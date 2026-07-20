@@ -829,6 +829,7 @@ export type Database = {
           id: string
           mes: number
           meta_acordos: number
+          meta_proporcional: boolean
           meta_valor: number
           referencia_id: string
           tipo: string
@@ -842,6 +843,7 @@ export type Database = {
           id?: string
           mes: number
           meta_acordos?: number
+          meta_proporcional?: boolean
           meta_valor?: number
           referencia_id: string
           tipo: string
@@ -855,6 +857,7 @@ export type Database = {
           id?: string
           mes?: number
           meta_acordos?: number
+          meta_proporcional?: boolean
           meta_valor?: number
           referencia_id?: string
           tipo?: string
