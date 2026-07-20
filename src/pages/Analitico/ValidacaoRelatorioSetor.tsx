@@ -32,6 +32,7 @@ const LABELS: Record<ReturnType<typeof statusOrigemLabel>, { texto: string; cor:
 
 export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: Props) {
   const [status, setStatus]       = useState<StatusOrigem[]>([]);
+  const [erro, setErro]           = useState<string | null>(null);
   const [loading, setLoading]     = useState(false);
   const [emCurso, setEmCurso]     = useState(false);
   const [mostrarReabrir, setMostrarReabrir] = useState(false);
@@ -42,9 +43,11 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
   const mesNum = Number(mesStr);
 
   const fetchStatus = useCallback(async () => {
-    if (!empresaId || !setorId) { setStatus([]); return; }
+    if (!empresaId || !setorId) { setStatus([]); setErro(null); return; }
     setLoading(true);
-    setStatus(await getStatusValidacaoRelatorio(empresaId, setorId, mesNum, ano));
+    const r = await getStatusValidacaoRelatorio(empresaId, setorId, mesNum, ano);
+    setStatus(r.status);
+    setErro(r.erro);
     setLoading(false);
   }, [empresaId, setorId, mesNum, ano]);
 
@@ -88,6 +91,8 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
         <span className="font-medium text-foreground shrink-0">Validação do relatório — {setorNome}:</span>
         {loading ? (
           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+        ) : erro ? (
+          <span className="text-destructive font-mono">{erro}</span>
         ) : (
           <>
             {analitico && (

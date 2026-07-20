@@ -24,12 +24,13 @@ export function statusOrigemLabel(s: StatusOrigem): 'sem_dados' | 'pendente' | '
 
 export async function getStatusValidacaoRelatorio(
   empresaId: string, setorId: string, mes: number, ano: number,
-): Promise<StatusOrigem[]> {
+): Promise<{ status: StatusOrigem[]; erro: string | null }> {
   const { data, error } = await supabase.rpc('fn_relatorio_status_validacao', {
     p_empresa_id: empresaId, p_setor_id: setorId, p_mes: mes, p_ano: ano,
   });
-  if (error || !data) return [];
-  return (data as {
+  if (error) return { status: [], erro: error.message };
+  if (!data) return { status: [], erro: null };
+  const status = (data as {
     origem: string; dias_com_dado: number; dias_validados: number;
     valor_atual: number; valor_validado: number;
   }[]).map(r => ({
@@ -39,6 +40,7 @@ export async function getStatusValidacaoRelatorio(
     valorAtual: Number(r.valor_atual) || 0,
     valorValidado: Number(r.valor_validado) || 0,
   }));
+  return { status, erro: null };
 }
 
 export async function validarRelatorioSetor(
