@@ -33,11 +33,12 @@ export async function listarJogadoresPet(): Promise<PetJogador[] | null> {
   return (data as PetJogador[]) ?? [];
 }
 
-/** Crédito/débito manual de moedas. Novo saldo, ou null se não deu. */
-export async function ajustarMoedasPet(usuarioId: string, delta: number): Promise<number | null> {
+/** Crédito/débito manual de moedas (motivo obrigatório — fica no log de auditoria). Novo saldo, ou null se não deu. */
+export async function ajustarMoedasPet(usuarioId: string, delta: number, motivo: string): Promise<number | null> {
   const { data, error } = await supabase.rpc('fn_pet_admin_ajustar_moedas', {
     p_usuario: usuarioId,
     p_delta: delta,
+    p_motivo: motivo,
   });
   if (error) return null;
   const row = (Array.isArray(data) ? data[0] : data) as

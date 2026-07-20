@@ -7,9 +7,10 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Target, Save, ChevronLeft, ChevronRight, Building2, Users, User, ArrowLeft,
-  Loader2, CalendarDays, Plus, X, Layers, GraduationCap,
+  Loader2, CalendarDays, Plus, X, Layers, GraduationCap, Lock, LockOpen, ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { useEmpresa } from "@/hooks/useEmpresa";
 import { useCargoPermissoes } from "@/hooks/useCargoPermissoes";
@@ -19,6 +20,10 @@ import { useTenant } from "@/lib/tenant-config";
 import { PP_HO_PERCENTUAL, getTodayISO } from "@/lib/index";
 import { diasUteisDoMes, diasUteisDecorridos, ordenarQuartis, QUARTIS_PADRAO } from "@/lib/diasUteis";
 import { getMetasConfig, upsertMetasConfig } from "@/services/metas/metasConfig.service";
+import {
+  getMetaValidacaoStatus, upsertMetas, validarMetaSetor, reabrirMetaSetor,
+  type MetaValidacaoStatus,
+} from "@/services/metas/metasValidacao.service";
 import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -433,11 +438,58 @@ export default function MetasConfig() {
     setConfigCarregada(true);
   }, [empresa?.id, temConfigMes, mes, ano]);
 
+  // Trava de meta por setor (Fase 1 de validação) ─────────────────────────────
+  const [validacao, setValidacao] = useState<MetaValidacaoStatus | null>(null);
+  const [validandoAcao, setValidandoAcao] = useState(false);
+  const [mostrarReabrir, setMostrarReabrir] = useState(false);
+  const [motivoReabrir, setMotivoReabrir] = useState("");
+
+  const fetchValidacao = useCallback(async () => {
+    if (!empresa?.id || !setorSelecionado) { setValidacao(null); return; }
+    setValidacao(await getMetaValidacaoStatus(empresa.id, setorSelecionado, mes, ano));
+  }, [empresa?.id, setorSelecionado, mes, ano]);
+
+  const metaTravada = validacao?.status === "validado";
+
+  async function handleValidarMeta() {
+    if (!empresa?.id || !setorSelecionado) return;
+    setValidandoAcao(true);
+    const { ok, erro } = await validarMetaSetor(empresa.id, setorSelecionado, mes, ano);
+    setValidandoAcao(false);
+    if (!ok) {
+      toast.error(
+        erro === "sem_metas_para_validar"
+          ? "Preencha ao menos uma meta deste setor antes de validar."
+          : "Sem permissão para validar esta meta.",
+      );
+      return;
+    }
+    toast.success("Meta do setor validada — só um admin pode reabrir para editar.");
+    await fetchValidacao();
+  }
+
+  async function handleReabrirMeta() {
+    if (!empresa?.id || !setorSelecionado) return;
+    if (!motivoReabrir.trim()) { toast.warning("Informe o motivo da reabertura."); return; }
+    setValidandoAcao(true);
+    const { ok, erro } = await reabrirMetaSetor(empresa.id, setorSelecionado, mes, ano, motivoReabrir.trim());
+    setValidandoAcao(false);
+    if (!ok) {
+      toast.error(erro === "motivo_obrigatorio" ? "Informe o motivo da reabertura." : "Sem permissão para reabrir.");
+      return;
+    }
+    toast.success("Meta do setor reaberta para edição.");
+    setMostrarReabrir(false);
+    setMotivoReabrir("");
+    await fetchValidacao();
+  }
+
   useEffect(() => { fetchSetores(); }, [fetchSetores]);
   useEffect(() => { fetchEquipes(); }, [fetchEquipes]);
   useEffect(() => { fetchOperadores(); }, [fetchOperadores]);
   useEffect(() => { fetchMetas(); }, [fetchMetas]);
   useEffect(() => { void fetchConfig(); }, [fetchConfig]);
+  useEffect(() => { void fetchValidacao(); }, [fetchValidacao]);
 
   function adicionarFeriado() {
     if (!feriadoNovo) return;
@@ -479,6 +531,7 @@ export default function MetasConfig() {
   async function handleSalvarTudo() {
     if (!empresa?.id || !setorSelecionado) return;
     if (!podeGerenciarMetas) { toast.error("Sem permissão para editar metas."); return; }
+    if (metaTravada) { toast.error("Meta deste setor está validada — peça a um admin para reabrir."); return; }
     setSalvandoTudo(true);
 
     // Montar lista de todos os itens que têm valor preenchido
@@ -514,9 +567,19 @@ export default function MetasConfig() {
 
     try {
       if (payloads.length > 0) {
-        const { error } = await supabase.from("metas")
-          .upsert(payloads, { onConflict: "tipo,referencia_id,empresa_id,mes,ano" });
-        if (error) throw error;
+        const { salvos, bloqueados, error } = await upsertMetas(payloads);
+        if (error) throw new Error(error);
+        if (bloqueados.length > 0) {
+          toast.warning(
+            `${bloqueados.length} meta(s) não salva(s) — setor já validado.`,
+            { description: "Peça a um admin para reabrir antes de editar." },
+          );
+        }
+        if (salvos > 0) {
+          toast.success(`${salvos} meta(s) salva(s) com sucesso!`, { description: `${MESES[mes - 1]}/${ano}` });
+        }
+      } else if (salvaConfig) {
+        toast.success("Configuração do mês salva!", { description: `${MESES[mes - 1]}/${ano}` });
       }
       // Config mensal (feriados + quartis) — PP
       if (salvaConfig && perfil?.id) {
@@ -526,12 +589,6 @@ export default function MetasConfig() {
         });
         if (cfgErr) throw new Error(cfgErr);
       }
-      toast.success(
-        payloads.length > 0
-          ? `${payloads.length} meta(s) salva(s) com sucesso!`
-          : "Configuração do mês salva!",
-        { description: `${MESES[mes - 1]}/${ano}` },
-      );
       await fetchMetas();
     } catch (err: unknown) {
       toast.error("Erro ao salvar metas", { description: err instanceof Error ? err.message : String(err) });
@@ -760,6 +817,56 @@ export default function MetasConfig() {
             </SectionCard>
           )}
 
+          {/* Trava de meta do setor (Fase 1 de validação) */}
+          <div className={cn(
+            "flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm",
+            metaTravada ? "border-emerald-600/30 bg-emerald-600/10" : "border-border bg-muted/20",
+          )}>
+            {metaTravada
+              ? <Lock className="h-4 w-4 text-emerald-600 shrink-0" />
+              : <LockOpen className="h-4 w-4 text-muted-foreground shrink-0" />}
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-foreground">
+                {metaTravada
+                  ? `Meta validada${validacao?.validadoEm ? " em " + new Date(validacao.validadoEm).toLocaleDateString("pt-BR") : ""}`
+                  : "Meta ainda não validada"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {metaTravada
+                  ? "Ninguém edita até um admin reabrir."
+                  : "Só administrador/super_admin valida. Depois de validada, ninguém edita sem reabrir."}
+              </p>
+            </div>
+            {isAdmin && !metaTravada && (
+              <Button size="sm" variant="outline" className="gap-1.5 shrink-0"
+                disabled={validandoAcao} onClick={handleValidarMeta}>
+                <ShieldCheck className="h-3.5 w-3.5" /> Validar meta do setor
+              </Button>
+            )}
+            {isAdmin && metaTravada && !mostrarReabrir && (
+              <Button size="sm" variant="outline" className="gap-1.5 shrink-0"
+                onClick={() => setMostrarReabrir(true)}>
+                <LockOpen className="h-3.5 w-3.5" /> Reabrir
+              </Button>
+            )}
+          </div>
+          {isAdmin && metaTravada && mostrarReabrir && (
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/20 px-3 py-2 -mt-3">
+              <Input
+                className="h-8 text-sm flex-1"
+                placeholder="Motivo da reabertura (obrigatório)"
+                value={motivoReabrir}
+                onChange={e => setMotivoReabrir(e.target.value)}
+              />
+              <Button size="sm" disabled={validandoAcao || !motivoReabrir.trim()} onClick={handleReabrirMeta}>
+                Confirmar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setMostrarReabrir(false); setMotivoReabrir(""); }}>
+                Cancelar
+              </Button>
+            </div>
+          )}
+
           {/* Meta do Setor */}
           <SectionCard title="Meta do Setor"
             description={`Metas globais para o setor ${setorNome} em ${MESES[mes - 1]}/${ano}`}
@@ -769,7 +876,7 @@ export default function MetasConfig() {
                 <MetaRow label={setorNome || "Setor"} sublabel="Meta consolidada do setor"
                   icon={<Building2 className="h-4 w-4" />}
                   input={getInput(setorSelecionado)}
-                  disabled={!podeGerenciarMetas}
+                  disabled={!podeGerenciarMetas || metaTravada}
                   mostrarHO={isPP}
                   numExtras={isBP ? extraCampos.setor : 0}
                   onChangeExtra={(i, v) => onChangeExtra(setorSelecionado, i, v)}
@@ -801,7 +908,7 @@ export default function MetasConfig() {
                   <MetaRow key={eq.id} label={String(eq.nome ?? "")} sublabel="Equipe"
                     icon={<Users className="h-4 w-4" />}
                     input={getInput(eq.id)}
-                    disabled={!podeGerenciarMetas}
+                    disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
                     numExtras={isBP ? extraCampos.equipe : 0}
                     onChangeExtra={(i, v) => onChangeExtra(eq.id, i, v)}
@@ -856,7 +963,7 @@ export default function MetasConfig() {
                     sublabel={op.clonadoDe ? `Operador · clone de ${op.clonadoDe} — meta compartilhada` : "Operador"}
                     icon={<User className="h-4 w-4" />}
                     input={getInput(op.id)}
-                    disabled={!podeGerenciarMetas}
+                    disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}
                     numExtras={isBP ? extraCampos.operador : 0}
                     onChangeExtra={(i, v) => onChangeExtra(op.id, i, v)}
@@ -878,7 +985,9 @@ export default function MetasConfig() {
           {/* ── ÚNICO BOTÃO SALVAR ── */}
           <div className="flex items-center justify-end gap-3 pt-2 pb-6 sticky bottom-0 bg-background/80 backdrop-blur-sm border-t border-border -mx-4 px-4 mt-2">
             <p className="text-xs text-muted-foreground flex-1">
-              {temMetas
+              {metaTravada
+                ? "Meta deste setor está validada — peça a um admin para reabrir antes de editar."
+                : temMetas
                 ? "Metas preenchidas serão salvas para todos os itens acima."
                 : temConfigMes && configDbAtiva
                 ? "Salva também os feriados e quartis configurados acima."
@@ -888,7 +997,7 @@ export default function MetasConfig() {
               size="default"
               className="gap-2 min-w-[140px]"
               onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !podeSalvar || !podeGerenciarMetas}
+              disabled={salvandoTudo || !podeSalvar || !podeGerenciarMetas || metaTravada}
             >
               {salvandoTudo ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>

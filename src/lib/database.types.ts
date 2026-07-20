@@ -356,6 +356,7 @@ export type Database = {
           operador_id: string | null
           operador_usuario: string
           prox_contato: string | null
+          setor_id: string | null
           tabulacao: string | null
           valor_recebido: number
           visto: boolean
@@ -379,6 +380,7 @@ export type Database = {
           operador_id?: string | null
           operador_usuario: string
           prox_contato?: string | null
+          setor_id?: string | null
           tabulacao?: string | null
           valor_recebido?: number
           visto?: boolean
@@ -402,6 +404,7 @@ export type Database = {
           operador_id?: string | null
           operador_usuario?: string
           prox_contato?: string | null
+          setor_id?: string | null
           tabulacao?: string | null
           valor_recebido?: number
           visto?: boolean
@@ -419,6 +422,13 @@ export type Database = {
             columns: ["operador_id"]
             isOneToOne: false
             referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diario_recebimentos_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
             referencedColumns: ["id"]
           },
         ]
@@ -918,6 +928,63 @@ export type Database = {
           quartis?: Json
         }
         Relationships: []
+      }
+      metas_validacoes: {
+        Row: {
+          ano: number
+          empresa_id: string
+          id: string
+          mes: number
+          motivo_reabertura: string | null
+          reaberto_em: string | null
+          reaberto_por: string | null
+          setor_id: string
+          status: string
+          validado_em: string | null
+          validado_por: string | null
+        }
+        Insert: {
+          ano: number
+          empresa_id: string
+          id?: string
+          mes: number
+          motivo_reabertura?: string | null
+          reaberto_em?: string | null
+          reaberto_por?: string | null
+          setor_id: string
+          status?: string
+          validado_em?: string | null
+          validado_por?: string | null
+        }
+        Update: {
+          ano?: number
+          empresa_id?: string
+          id?: string
+          mes?: number
+          motivo_reabertura?: string | null
+          reaberto_em?: string | null
+          reaberto_por?: string | null
+          setor_id?: string
+          status?: string
+          validado_em?: string | null
+          validado_por?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "metas_validacoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_validacoes_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       modelos_mensagem: {
         Row: {
@@ -1454,6 +1521,57 @@ export type Database = {
         }
         Relationships: []
       }
+      relatorio_validacoes_dia: {
+        Row: {
+          dia_referencia: string
+          empresa_id: string
+          id: string
+          origem: string
+          qtd_registros_validados: number
+          setor_id: string
+          validado_em: string
+          validado_por: string | null
+          valor_validado: number
+        }
+        Insert: {
+          dia_referencia: string
+          empresa_id: string
+          id?: string
+          origem: string
+          qtd_registros_validados?: number
+          setor_id: string
+          validado_em?: string
+          validado_por?: string | null
+          valor_validado?: number
+        }
+        Update: {
+          dia_referencia?: string
+          empresa_id?: string
+          id?: string
+          origem?: string
+          qtd_registros_validados?: number
+          setor_id?: string
+          validado_em?: string
+          validado_por?: string | null
+          valor_validado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "relatorio_validacoes_dia_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "relatorio_validacoes_dia_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       setores: {
         Row: {
           ativo: boolean
@@ -1707,9 +1825,55 @@ export type Database = {
       }
       fn_get_perfil_usuario: { Args: { uid: string }; Returns: string }
       fn_get_setor_usuario: { Args: { uid: string }; Returns: string }
+      fn_meta_esta_bloqueada: {
+        Args: {
+          p_tipo: string
+          p_referencia_id: string
+          p_empresa_id: string
+          p_mes: number
+          p_ano: number
+        }
+        Returns: boolean
+      }
+      fn_metas_esta_validada: {
+        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
+        Returns: boolean
+      }
+      fn_metas_reabrir_setor: {
+        Args: {
+          p_empresa_id: string
+          p_setor_id: string
+          p_mes: number
+          p_ano: number
+          p_motivo: string
+        }
+        Returns: { ok: boolean; erro: string | null }[]
+      }
+      fn_metas_upsert: {
+        Args: { p_payloads: Json }
+        Returns: { salvos: number; bloqueados: Json }[]
+      }
+      fn_metas_validar_setor: {
+        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
+        Returns: { ok: boolean; erro: string | null }[]
+      }
       fn_pet_admin_ajustar_moedas: {
-        Args: { p_usuario: string; p_delta: number }
+        Args: { p_usuario: string; p_delta: number; p_motivo: string }
         Returns: { ok: boolean; moedas_total: number }[]
+      }
+      fn_pet_discrepancias_validacao: {
+        Args: { p_empresa_id: string; p_mes: number; p_ano: number }
+        Returns: {
+          setor_id: string
+          setor_nome: string
+          dia_referencia: string
+          valor_validado: number
+          valor_atual: number
+          diferenca: number
+          usuario_id: string | null
+          usuario_nome: string | null
+          moedas_creditadas: number | null
+        }[]
       }
       fn_pet_admin_listar: {
         Args: Record<PropertyKey, never>
@@ -1774,6 +1938,37 @@ export type Database = {
       fn_pet_salvar_visual: {
         Args: { p_roupa: string; p_dormindo: boolean }
         Returns: undefined
+      }
+      fn_relatorio_reabrir_setor: {
+        Args: {
+          p_empresa_id: string
+          p_setor_id: string
+          p_mes: number
+          p_ano: number
+          p_motivo: string
+          p_origem?: string
+        }
+        Returns: { ok: boolean; erro: string | null; dias_removidos: number }[]
+      }
+      fn_relatorio_status_validacao: {
+        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
+        Returns: {
+          origem: string
+          dias_com_dado: number
+          dias_validados: number
+          valor_atual: number
+          valor_validado: number
+        }[]
+      }
+      fn_relatorio_validar_setor: {
+        Args: {
+          p_empresa_id: string
+          p_setor_id: string
+          p_mes: number
+          p_ano: number
+          p_origem?: string
+        }
+        Returns: { ok: boolean; erro: string | null; dias_validados: number }[]
       }
       fn_sincronizar_cartoes_pagos: {
         Args: { p_empresa_id: string; p_mes: string }

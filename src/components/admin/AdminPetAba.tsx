@@ -32,6 +32,7 @@ export default function AdminPetAba() {
   const [itens, setItens]         = useState<PetItem[] | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [deltas, setDeltas]         = useState<Record<string, string>>({});
+  const [motivos, setMotivos]       = useState<Record<string, string>>({});
   const [precos, setPrecos]         = useState<Record<string, string>>({});
   const [salvandoItem, setSalvandoItem] = useState<string | null>(null);
 
@@ -48,13 +49,16 @@ export default function AdminPetAba() {
   async function aplicarAjuste(j: PetJogador) {
     const delta = parseInt(deltas[j.usuario_id] ?? '', 10);
     if (!delta) { toast.error('Informe um valor (ex.: 50 ou -20)'); return; }
-    const novoSaldo = await ajustarMoedasPet(j.usuario_id, delta);
+    const motivo = (motivos[j.usuario_id] ?? '').trim();
+    if (!motivo) { toast.error('Informe o motivo do ajuste (fica no log de auditoria)'); return; }
+    const novoSaldo = await ajustarMoedasPet(j.usuario_id, delta, motivo);
     if (novoSaldo === null) {
       toast.error('Não deu — saldo ficaria negativo ou a migration está pendente');
       return;
     }
     toast.success(`${j.nome}: ${delta > 0 ? '+' : ''}${delta} 🪙 (saldo ${novoSaldo})`);
     setDeltas(d => ({ ...d, [j.usuario_id]: '' }));
+    setMotivos(m => ({ ...m, [j.usuario_id]: '' }));
     setJogadores(prev => prev?.map(x =>
       x.usuario_id === j.usuario_id ? { ...x, moedas: novoSaldo } : x) ?? null);
   }
@@ -157,9 +161,15 @@ export default function AdminPetAba() {
                           <Input
                             type="number"
                             placeholder="+50 / -20"
-                            className="h-7 w-24 text-xs"
+                            className="h-7 w-20 text-xs"
                             value={deltas[j.usuario_id] ?? ''}
                             onChange={e => setDeltas(d => ({ ...d, [j.usuario_id]: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Motivo"
+                            className="h-7 w-28 text-xs"
+                            value={motivos[j.usuario_id] ?? ''}
+                            onChange={e => setMotivos(m => ({ ...m, [j.usuario_id]: e.target.value }))}
                           />
                           <Button size="sm" variant="outline" className="h-7 text-[11px] px-2"
                             onClick={() => void aplicarAjuste(j)}>

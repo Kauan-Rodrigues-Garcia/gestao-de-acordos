@@ -21,6 +21,7 @@ import {
   type RespostaTabulacaoAnalitico,
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
 import { AbaDiario } from './Diario';
+import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 
 export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
@@ -38,6 +39,8 @@ export default function PaginaAnalitico() {
   // Só diretoria e admin/super_admin veem todos os setores (e podem filtrar).
   const veTodosSetores = isPerfilAdmin(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
   const setorProprio   = perfil?.setor_id ?? null;
+  // Validação de relatório (Fase 1): só administrador/super_admin, nunca diretoria.
+  const isAdminReal     = isPerfilAdmin(perfil?.perfil ?? '');
 
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
@@ -352,6 +355,16 @@ export default function PaginaAnalitico() {
           </span>
         )}
       </div>
+      )}
+
+      {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
+      {abaPrincipal === 'analitico' && isAdminReal && (
+        <ValidacaoRelatorioSetor
+          empresaId={empresa.id}
+          setorId={veTodosSetores ? filtroSetorId : setorProprio}
+          setorNome={setores.find(s => s.id === (veTodosSetores ? filtroSetorId : setorProprio))?.nome ?? ''}
+          mes={mesFiltro}
+        />
       )}
 
       {/* Conteúdo por cargo — aba Analítico */}
