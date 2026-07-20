@@ -14,6 +14,9 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import type { Database } from '@/lib/database.types';
+
+type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
 
 export type PixAutoStatus = 'pendente' | 'aprovado' | 'desaprovado';
 
@@ -143,7 +146,7 @@ export async function criarAcordosPixLote(
   let ignorados = 0;
   let duplicados = 0;
   const vistosNoLote = new Set<string>();
-  const novos: Record<string, unknown>[] = [];
+  const novos: PixAutoAcordoInsert[] = [];
 
   for (const l of linhas) {
     const nr = (l.nrCliente ?? '').trim();

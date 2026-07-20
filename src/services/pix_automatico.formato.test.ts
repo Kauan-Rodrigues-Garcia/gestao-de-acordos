@@ -1,4 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+
+// formatarLinhaPix é pura, mas o módulo importa `supabase` no topo — sem mock,
+// createClient() explode em teste por falta de VITE_SUPABASE_URL.
+vi.mock('@/lib/supabase', () => ({ supabase: {} }));
+
 import { formatarLinhaPix } from './pix_automatico.service';
 
 describe('formatarLinhaPix', () => {
