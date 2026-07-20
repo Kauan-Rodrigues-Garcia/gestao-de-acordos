@@ -23,6 +23,10 @@ ALTER TABLE public.pet_recompensas
   ADD COLUMN IF NOT EXISTS valor_validado_no_momento NUMERIC(12,2);
 
 -- ── fn_pet_dias_disponiveis: agora capado por watermark, por setor-dia ──────
+-- Ganha uma coluna nova (setor_id) no retorno — Postgres não deixa trocar o
+-- shape de RETURNS TABLE com CREATE OR REPLACE, precisa dropar antes.
+
+DROP FUNCTION IF EXISTS public.fn_pet_dias_disponiveis();
 
 CREATE OR REPLACE FUNCTION public.fn_pet_dias_disponiveis()
 RETURNS TABLE(dia DATE, total_dia NUMERIC, ja_resgatado NUMERIC, delta NUMERIC, setor_id UUID)
