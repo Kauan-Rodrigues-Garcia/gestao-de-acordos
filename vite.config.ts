@@ -1,5 +1,5 @@
 // vite.config.ts
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import { componentTagger } from 'lovable-tagger';
@@ -40,7 +40,7 @@ export default defineConfig(({ mode }) => {
             source: JSON.stringify({ v: BUILD_VERSION }),
           });
         },
-      },
+      } satisfies Plugin,
       // Ativo apenas em `npm run analyze` (mode=analyze): gera stats.html com mapa do bundle.
       mode === 'analyze' && visualizer({ open: true, gzipSize: true, brotliSize: true, filename: 'stats.html' }),
     ].filter(Boolean),

@@ -27,7 +27,7 @@ interface PPModalsProps {
   onConfirmExclusaoLote: () => void;
   reagendarAcordo: AcordoComVinculo | null;
   salvandoReagendar: boolean;
-  onConfirmReagendar: (params: ReagendarParams) => void;
+  onConfirmReagendar: (params: ReagendarParams) => Promise<void>;
   onCloseReagendar: () => void;
   confirmarPgtoAcordo: AcordoComVinculo | null;
   salvandoConfirmarPgto: boolean;

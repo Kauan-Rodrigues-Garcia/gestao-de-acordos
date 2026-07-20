@@ -47,7 +47,13 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
   const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento;
-  const sourceTable   = hasMonthRange ? 'acordos' : 'acordos_deduplicados';
+  // 'acordos' | 'acordos_deduplicados' como union em .from() faz o supabase-js
+  // tentar resolver o tipo contra as duas tabelas ao mesmo tempo (instanciação
+  // excessivamente profunda). Ambas têm as mesmas colunas/relacionamentos —
+  // fixamos o tipo em 'acordos' só para o type-check; o valor real em runtime
+  // continua sendo o de sourceTableRuntime.
+  const sourceTableRuntime = hasMonthRange ? 'acordos' : 'acordos_deduplicados';
+  const sourceTable = sourceTableRuntime as 'acordos';
 
   const paginar = !!(filtros?.page && filtros?.perPage);
   const perPage = filtros?.perPage ?? 20;
@@ -285,7 +291,7 @@ export async function verificarNrDuplicado(
 
   const { data } = await query;
   if (data && data.length > 0) {
-    const item = data[0] as {
+    const item = data[0] as unknown as {
       id: string;
       status: string;
       operador_id: string;
@@ -356,7 +362,7 @@ export async function verificarNrsDuplicadosEmLote(
       nr_cliente?: string | null;
       instituicao?: string | null;
     };
-    for (const item of data as DupRow[]) {
+    for (const item of data as unknown as DupRow[]) {
       const val = item[campo];
       if (val) {
         resultado.set(val.trim(), {

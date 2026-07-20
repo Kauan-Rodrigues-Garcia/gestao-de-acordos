@@ -80,7 +80,9 @@ export async function enviarParaLixeira(params: EnviarParaLixeiraParams): Promis
     transferido_para_nome: transferidoParaNome ?? null,
   };
 
-  const { error } = await supabase.from('lixeira_acordos').insert(payload);
+  // dados_completos é Record<string, unknown> (snapshot dinâmico) — não bate
+  // estruturalmente com o tipo Json gerado; mesmo padrão de restaurarItemLixeira acima.
+  const { error } = await supabase.from('lixeira_acordos').insert(payload as never);
 
   if (error) {
     console.warn('[lixeira.service] enviarParaLixeira error:', error.message);

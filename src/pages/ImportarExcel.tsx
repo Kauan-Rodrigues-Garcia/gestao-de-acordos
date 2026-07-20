@@ -361,7 +361,7 @@ export default function ImportarExcel() {
     setAutorizando(true);
     try {
       const res = await autenticarLider({ email: liderEmail, senha: liderSenha });
-      if (!res.ok) { toast.error(res.erro); return; }
+      if ('erro' in res) { toast.error(res.erro); return; }
       setAutorizador(res.autorizador);
       setLinhasAutorizadas(prev => new Set([...prev, ...linhasSelecionadas]));
       setModalAberto(false);

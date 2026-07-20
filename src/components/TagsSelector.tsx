@@ -3,13 +3,15 @@
  * Exibe as tags disponíveis da empresa como badges clicáveis.
  * Tags selecionadas ficam destacadas; clicar alterna seleção.
  */
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { ChevronDown, Tag, X } from 'lucide-react';
 import { AcordoTag } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
+type TagBasica = Pick<AcordoTag, 'id' | 'nome' | 'cor'>;
+
 interface TagsSelectorProps {
-  tags: AcordoTag[];
+  tags: TagBasica[];
   selectedIds: string[];
   onChange: (ids: string[]) => void;
   disabled?: boolean;
@@ -22,7 +24,7 @@ function TagBadge({
   onClick,
   size = 'xs',
 }: {
-  tag: AcordoTag;
+  tag: TagBasica;
   selected: boolean;
   onClick: () => void;
   size?: 'sm' | 'xs';
@@ -39,7 +41,7 @@ function TagBadge({
           : 'opacity-50 hover:opacity-80',
       )}
       style={
-        selected
+        (selected
           ? {
               backgroundColor: `${tag.cor}22`,
               color: tag.cor,
@@ -50,7 +52,7 @@ function TagBadge({
               backgroundColor: 'transparent',
               color: tag.cor,
               borderColor: `${tag.cor}44`,
-            }
+            }) as CSSProperties
       }
       title={selected ? `Remover tag ${tag.nome}` : `Adicionar tag ${tag.nome}`}
     >

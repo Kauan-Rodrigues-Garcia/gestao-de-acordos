@@ -326,7 +326,7 @@ export function AcordoDetalheInline({
     setSalvandoAddParcela(true);
     try {
       const r = await adicionarParcelaAoGrupo(acordoLocal, input, { isPaguePlay });
-      if (!r.ok) { toast.error(r.erro); return; }
+      if ('erro' in r) { toast.error(r.erro); return; }
 
       const grupoId = r.novaParcela.acordo_grupo_id ?? acordoLocal.acordo_grupo_id ?? null;
       const baseAtualizado: Acordo = {

@@ -60,7 +60,7 @@ export default function AdminLogs() {
       query = query.eq('empresa_id', tenantEmpresa.id);
     }
     const { data } = await query;
-    setLogs((data as LogSistema[]) || []);
+    setLogs((data as unknown as LogSistema[]) || []);
     setLoading(false);
   }
 

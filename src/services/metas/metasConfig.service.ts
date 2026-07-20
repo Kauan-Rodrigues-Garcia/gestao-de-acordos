@@ -34,7 +34,7 @@ export async function getMetasConfig(
       if (!faltando) console.warn('[metasConfig] erro:', error.message);
       return { data: null, dbAtiva: !faltando };
     }
-    return { data: data ? normalizar(data as MetasConfigMes) : null, dbAtiva: true };
+    return { data: data ? normalizar(data as unknown as MetasConfigMes) : null, dbAtiva: true };
   } catch {
     return { data: null, dbAtiva: false };
   }
@@ -60,6 +60,6 @@ export async function upsertMetasConfig(params: {
       contar_dia_atual: params.contarDiaAtual === true,
       atualizado_por:   params.atualizadoPor,
       atualizado_em:  new Date().toISOString(),
-    }, { onConflict: 'empresa_id,mes,ano' });
+    } as never, { onConflict: 'empresa_id,mes,ano' });
   return { error: error?.message ?? null };
 }

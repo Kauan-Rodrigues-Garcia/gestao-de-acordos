@@ -158,10 +158,10 @@ export default function AcordoForm() {
         resultError = error;
       }
     } else {
-      const { error } = await supabase.from('acordos').insert(payload);
+      const { error } = await supabase.from('acordos').insert(payload as never);
       if (error && (error.code === '42703' || error.message.includes('column'))) {
         const { instituicao: _i, setor_id: _s, ...cleanPayload } = payload;
-        const { error: e2 } = await supabase.from('acordos').insert(cleanPayload);
+        const { error: e2 } = await supabase.from('acordos').insert(cleanPayload as never);
         resultError = e2;
       } else {
         resultError = error;
@@ -433,7 +433,7 @@ export default function AcordoForm() {
           });
         }
 
-        const { error: errParcelas } = await supabase.from('acordos').insert(parcelasParaCriar);
+        const { error: errParcelas } = await supabase.from('acordos').insert(parcelasParaCriar as never);
         if (errParcelas) {
           console.warn('[AcordoForm] erro ao criar parcelas adicionais:', errParcelas.message);
           toast.warning(`Acordo salvo, mas houve erro ao criar ${parcelasNum - 1} parcelas: ${errParcelas.message}`);

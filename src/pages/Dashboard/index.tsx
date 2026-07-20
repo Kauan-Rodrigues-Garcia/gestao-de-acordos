@@ -468,7 +468,7 @@ export default function Dashboard() {
         const vencCalc = i === 0 ? params.novoVencimento : addMesesDash(params.novoVencimento, i);
         const { data, error: errIns } = await supabase
           .from('acordos')
-          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc })
+          .insert({ ...basePayload, numero_parcela: numero, vencimento: vencCalc } as never)
           .select('*, perfis(id, nome, email, perfil, setor_id)')
           .single();
         if (errIns) { toast.error(`Erro ao criar parcela ${numero}: ${errIns.message}`); return; }

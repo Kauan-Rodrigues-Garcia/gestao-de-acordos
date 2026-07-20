@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type CSSProperties } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Target, ChevronRight, ArrowUpRight } from 'lucide-react';
 import {
@@ -15,7 +15,7 @@ import { CustomTooltip, DonutChart } from './SubComponents';
 
 interface ChartsSectionProps {
   isPP: boolean;
-  porDiaChart: Array<{ dia: number; recebido?: number; agendado?: number; ho?: number }>;
+  porDiaChart: Array<{ dia: string; recebido?: number; agendado?: number; ho?: number }>;
   porTipo: Array<{ label: string; acordos: number; valor: number; perc: number }>;
   donutPercent: number;
   donutColor: string;
@@ -207,7 +207,7 @@ export function ChartsSection({
                           style={{
                             background: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length],
                             ringColor: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length] + '55',
-                          }}
+                          } as CSSProperties}
                         />
                         <span className="text-xs flex-1 truncate font-medium">{t.label}</span>
                         <div className="flex items-center gap-2">

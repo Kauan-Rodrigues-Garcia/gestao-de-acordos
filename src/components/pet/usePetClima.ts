@@ -133,7 +133,7 @@ export function usePetClima(): UsePetClima {
 
   useEffect(() => {
     let vivo = true;
-    const carregar = async (forcar: boolean) => {
+    const carregar = async (forcar: boolean): Promise<void> => {
       if (!forcar) {
         const cache = lerCache(cidade.id);
         if (cache) { setAtual(cache); return; }
@@ -146,7 +146,7 @@ export function usePetClima(): UsePetClima {
       }
     };
     void carregar(false);
-    const t = setInterval(() => void carregar(true), REFETCH_MS);
+    const t = setInterval((): void => { void carregar(true); }, REFETCH_MS);
     return () => { vivo = false; clearInterval(t); };
   }, [cidade.id]);  // eslint-disable-line react-hooks/exhaustive-deps
 

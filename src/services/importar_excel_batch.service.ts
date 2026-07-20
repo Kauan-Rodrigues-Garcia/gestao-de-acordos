@@ -17,9 +17,13 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Acordo } from '@/lib/supabase';
+import type { Database } from '@/lib/database.types';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
 import type { ClassificacaoNR } from './classificar_nrs_import.service';
+
+/** `registro` é montado dinamicamente (planilha) — não dá pra tipar como literal. */
+type AcordoInsert = Database['public']['Tables']['acordos']['Insert'];
 
 /** Registro pronto para ser inserido (payload básico de `acordos`). */
 export interface PayloadAcordoImport {
@@ -147,7 +151,7 @@ export async function processarImportacaoEmLote(
 
   // Insert em lote dos 'novo'/'disponivel'.
   for (let i = 0; i < paraInserirSimples.length; i += BATCH) {
-    const lote = paraInserirSimples.slice(i, i + BATCH).map(p => p.registro);
+    const lote = paraInserirSimples.slice(i, i + BATCH).map(p => p.registro) as AcordoInsert[];
     const { error, data } = await supabase.from('acordos').insert(lote).select('id');
     if (error) {
       resultado.erros.push(`Lote ${Math.floor(i / BATCH) + 1}: ${error.message}`);
@@ -179,7 +183,7 @@ async function aplicarCasoA(
     vinculo_operador_nome: dono?.operadorNome ?? null,
   };
 
-  const { error: errInsert } = await supabase.from('acordos').insert(registro);
+  const { error: errInsert } = await supabase.from('acordos').insert(registro as AcordoInsert);
   if (errInsert) {
     erros.push(`Linha ${p.linhaOriginal} (EXTRA): ${errInsert.message}`);
     return false;
@@ -244,7 +248,7 @@ async function aplicarCasoBCruzado(
     vinculo_operador_id:   dono.operadorId,
     vinculo_operador_nome: dono.operadorNome,
   };
-  const { error: errInsert } = await supabase.from('acordos').insert(registroDireto);
+  const { error: errInsert } = await supabase.from('acordos').insert(registroDireto as AcordoInsert);
   if (errInsert) {
     erros.push(`Linha ${p.linhaOriginal} (DIRETO): ${errInsert.message}`);
     return false;
@@ -310,7 +314,7 @@ async function aplicarCasoC(
   }
 
   // 4. Inserir novo acordo.
-  const { error: errInsert } = await supabase.from('acordos').insert(p.registro);
+  const { error: errInsert } = await supabase.from('acordos').insert(p.registro as AcordoInsert);
   if (errInsert) {
     erros.push(`Linha ${p.linhaOriginal} (INSERT novo): ${errInsert.message}`);
     return false;

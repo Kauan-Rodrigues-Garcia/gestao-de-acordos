@@ -216,7 +216,7 @@ export function AcordoNovoInline({
   async function executarSalvar(payload: Record<string, unknown>): Promise<Acordo | null> {
     const { data: inserido, error } = await supabase
       .from('acordos')
-      .insert(payload)
+      .insert(payload as never)
       .select('*, perfis(id, nome, email, perfil, setor_id)')
       .single();
 
@@ -227,12 +227,12 @@ export function AcordoNovoInline({
         // Tier 1: strip only usou_quarenta_pct, preserving valor_total
         const { usou_quarenta_pct: _qp, ...payloadSemQP } = payload;
         const { data: inseridoT1, error: e1 } = await supabase
-          .from('acordos').insert(payloadSemQP).select('*, perfis(id, nome, email, perfil, setor_id)').single();
+          .from('acordos').insert(payloadSemQP as never).select('*, perfis(id, nome, email, perfil, setor_id)').single();
         if (!e1) return inseridoT1 as Acordo;
         // Tier 2: strip all newer columns (DB too old — no valor_total, acordo_grupo_id, numero_parcela)
         const { acordo_grupo_id: _g, numero_parcela: _n, valor_total: _vt, ...payloadMin } = payloadSemQP;
         const { data: inseridoMin, error: e2 } = await supabase
-          .from('acordos').insert(payloadMin).select('*, perfis(id, nome, email, perfil, setor_id)').single();
+          .from('acordos').insert(payloadMin as never).select('*, perfis(id, nome, email, perfil, setor_id)').single();
         if (e2) { toast.error(`Erro ao salvar: ${e2.message}`); return null; }
         return inseridoMin as Acordo;
       }
@@ -668,7 +668,7 @@ export function AcordoNovoInline({
     setSalvandoParcela(true);
     try {
       const r = await adicionarParcelaAoGrupo(acordoParaParcela, input, { isPaguePlay });
-      if (!r.ok) { toast.error(r.erro); return; }
+      if ('erro' in r) { toast.error(r.erro); return; }
       limparDraft();
       setAcordoParaParcela(null);
       onSaved(r.novaParcela);

@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase, Acordo, HistoricoAcordo } from '@/lib/supabase';
+import { supabase, Acordo, HistoricoAcordo, StatusAcordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
@@ -48,7 +48,7 @@ export default function AcordoDetalhe() {
 
   useEffect(() => { fetchAcordo(); }, [id]);
 
-  async function atualizarStatus(novoStatus: string) {
+  async function atualizarStatus(novoStatus: StatusAcordo) {
     if (!acordo || !perfil) return;
     setAtualizando(true);
     const statusAnterior = acordo.status;

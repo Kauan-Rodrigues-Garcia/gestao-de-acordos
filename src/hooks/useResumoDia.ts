@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { PostgrestFilterBuilder } from '@supabase/postgrest-js';
 import { supabase, Acordo, AcordoTag } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -85,7 +84,8 @@ export function useResumoDia({
             .eq('setor_id', perfil.setor_id);
           const eqIds = ((eqs as { id: string }[]) || []).map(e => e.id);
           if (eqIds.length > 0) {
-            opQ = (opQ as PostgrestFilterBuilder<any, any, any[]>).in('equipe_id', eqIds);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            opQ = (opQ as any).in('equipe_id', eqIds);
           }
         }
 
@@ -94,7 +94,8 @@ export function useResumoDia({
       }
 
       // ── Aplica escopo de perfil à query ──────────────────────────────────
-      type AnyBuilder = PostgrestFilterBuilder<any, any, any[]>;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      type AnyBuilder = any;
       function applyScope(q: AnyBuilder): AnyBuilder {
         if (_isAdmin || _isDiretoria) {
           return selectedOperadorId ? q.eq('operador_id', selectedOperadorId) : q;

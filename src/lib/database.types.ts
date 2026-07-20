@@ -14,12 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      aceites_termo: {
+        Row: {
+          aceito_em: string
+          id: string
+          ip: string | null
+          termo_id: string
+          user_agent: string | null
+          usuario_id: string
+        }
+        Insert: {
+          aceito_em?: string
+          id?: string
+          ip?: string | null
+          termo_id: string
+          user_agent?: string | null
+          usuario_id: string
+        }
+        Update: {
+          aceito_em?: string
+          id?: string
+          ip?: string | null
+          termo_id?: string
+          user_agent?: string | null
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "aceites_termo_termo_id_fkey"
+            columns: ["termo_id"]
+            isOneToOne: false
+            referencedRelation: "termos_uso"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       acordos: {
         Row: {
           acordo_grupo_id: string | null
           atualizado_em: string
           criado_em: string
           data_cadastro: string
+          data_pagamento: string | null
           empresa_id: string
           estado_uf: string | null
           id: string
@@ -29,15 +65,14 @@ export type Database = {
           numero_parcela: number | null
           observacoes: string | null
           operador_id: string
-          operador_vinculado_id: string | null
           pago_em: string | null
           parcelas: number | null
           setor_id: string | null
-          status: string
+          status: 'verificar_pendente' | 'pago' | 'nao_pago'
           tag_ids: string[] | null
-          tipo: string
-          tipo_receptivo: string | null
-          tipo_vinculo: string
+          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
+          tipo_vinculo: 'direto' | 'extra'
+          usou_quarenta_pct: boolean
           valor: number
           valor_total: number | null
           vencimento: string
@@ -50,6 +85,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string
           data_cadastro?: string
+          data_pagamento?: string | null
           empresa_id: string
           estado_uf?: string | null
           id?: string
@@ -59,15 +95,14 @@ export type Database = {
           numero_parcela?: number | null
           observacoes?: string | null
           operador_id: string
-          operador_vinculado_id?: string | null
           pago_em?: string | null
           parcelas?: number | null
           setor_id?: string | null
-          status: string
+          status?: 'verificar_pendente' | 'pago' | 'nao_pago'
           tag_ids?: string[] | null
-          tipo: string
-          tipo_receptivo?: string | null
-          tipo_vinculo?: string
+          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
+          tipo_vinculo?: 'direto' | 'extra'
+          usou_quarenta_pct?: boolean
           valor: number
           valor_total?: number | null
           vencimento: string
@@ -80,6 +115,7 @@ export type Database = {
           atualizado_em?: string
           criado_em?: string
           data_cadastro?: string
+          data_pagamento?: string | null
           empresa_id?: string
           estado_uf?: string | null
           id?: string
@@ -89,15 +125,14 @@ export type Database = {
           numero_parcela?: number | null
           observacoes?: string | null
           operador_id?: string
-          operador_vinculado_id?: string | null
           pago_em?: string | null
           parcelas?: number | null
           setor_id?: string | null
-          status?: string
+          status?: 'verificar_pendente' | 'pago' | 'nao_pago'
           tag_ids?: string[] | null
-          tipo?: string
-          tipo_receptivo?: string | null
-          tipo_vinculo?: string
+          tipo?: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
+          tipo_vinculo?: 'direto' | 'extra'
+          usou_quarenta_pct?: boolean
           valor?: number
           valor_total?: number | null
           vencimento?: string
@@ -199,7 +234,69 @@ export type Database = {
           valor_recebido?: number
           visto?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "analitico_recebimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_recebimentos_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analitico_resumo_mensal: {
+        Row: {
+          atualizado_em: string | null
+          empresa_id: string
+          id: string
+          mes: string
+          periodo_fim: string | null
+          periodo_inicio: string | null
+          total_ho: number
+          total_operadores: number
+          total_pagamentos: number
+          total_recebido: number
+        }
+        Insert: {
+          atualizado_em?: string | null
+          empresa_id: string
+          id?: string
+          mes: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          total_ho?: number
+          total_operadores?: number
+          total_pagamentos?: number
+          total_recebido?: number
+        }
+        Update: {
+          atualizado_em?: string | null
+          empresa_id?: string
+          id?: string
+          mes?: string
+          periodo_fim?: string | null
+          periodo_inicio?: string | null
+          total_ho?: number
+          total_operadores?: number
+          total_pagamentos?: number
+          total_recebido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitico_resumo_mensal_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cargos_permissoes: {
         Row: {
@@ -309,7 +406,22 @@ export type Database = {
           valor_recebido?: number
           visto?: boolean
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "diario_recebimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "diario_recebimentos_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       direto_extra_config: {
         Row: {
@@ -340,6 +452,47 @@ export type Database = {
           referencia_id?: string
         }
         Relationships: []
+      }
+      documentos_lgpd: {
+        Row: {
+          atualizado_em: string
+          conteudo: string
+          criado_em: string
+          empresa_id: string | null
+          id: string
+          tipo: string
+          titulo: string
+          versao: string
+        }
+        Insert: {
+          atualizado_em?: string
+          conteudo: string
+          criado_em?: string
+          empresa_id?: string | null
+          id?: string
+          tipo: string
+          titulo: string
+          versao?: string
+        }
+        Update: {
+          atualizado_em?: string
+          conteudo?: string
+          criado_em?: string
+          empresa_id?: string | null
+          id?: string
+          tipo?: string
+          titulo?: string
+          versao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "documentos_lgpd_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       empresas: {
         Row: {
@@ -575,7 +728,7 @@ export type Database = {
           acao: string
           criado_em: string
           detalhes: Json | null
-          empresa_id: string | null
+          empresa_id: string
           id: string
           registro_id: string | null
           tabela: string | null
@@ -585,7 +738,7 @@ export type Database = {
           acao: string
           criado_em?: string
           detalhes?: Json | null
-          empresa_id?: string | null
+          empresa_id: string
           id?: string
           registro_id?: string | null
           tabela?: string | null
@@ -595,7 +748,7 @@ export type Database = {
           acao?: string
           criado_em?: string
           detalhes?: Json | null
-          empresa_id?: string | null
+          empresa_id?: string
           id?: string
           registro_id?: string | null
           tabela?: string | null
@@ -993,7 +1146,9 @@ export type Database = {
           perfil: string
           senha_alterada: boolean | null
           setor_id: string | null
+          tampermonkey_configured: boolean | null
           usuario: string | null
+          viu_notificacao_chatplay: boolean | null
         }
         Insert: {
           ativo?: boolean
@@ -1009,7 +1164,9 @@ export type Database = {
           perfil: string
           senha_alterada?: boolean | null
           setor_id?: string | null
+          tampermonkey_configured?: boolean | null
           usuario?: string | null
+          viu_notificacao_chatplay?: boolean | null
         }
         Update: {
           ativo?: boolean
@@ -1025,7 +1182,9 @@ export type Database = {
           perfil?: string
           senha_alterada?: boolean | null
           setor_id?: string | null
+          tampermonkey_configured?: boolean | null
           usuario?: string | null
+          viu_notificacao_chatplay?: boolean | null
         }
         Relationships: [
           {
@@ -1054,6 +1213,93 @@ export type Database = {
             columns: ["setor_id"]
             isOneToOne: false
             referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pet_itens: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          descricao: string | null
+          disponivel_ate: string | null
+          disponivel_de: string | null
+          emoji: string | null
+          exclusivo: boolean
+          id: string
+          nome: string
+          ordem: number
+          preco_moedas: number | null
+          raridade: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
+          tenant: string | null
+          tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string | null
+          disponivel_ate?: string | null
+          disponivel_de?: string | null
+          emoji?: string | null
+          exclusivo?: boolean
+          id: string
+          nome: string
+          ordem?: number
+          preco_moedas?: number | null
+          raridade?: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
+          tenant?: string | null
+          tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string | null
+          disponivel_ate?: string | null
+          disponivel_de?: string | null
+          emoji?: string | null
+          exclusivo?: boolean
+          id?: string
+          nome?: string
+          ordem?: number
+          preco_moedas?: number | null
+          raridade?: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
+          tenant?: string | null
+          tipo?: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
+        }
+        Relationships: []
+      }
+      pet_nome_votos: {
+        Row: {
+          empresa_id: string | null
+          nome_escolhido: 'Aura' | 'Lupi' | 'Albi'
+          usuario_id: string
+          votado_em: string
+        }
+        Insert: {
+          empresa_id?: string | null
+          nome_escolhido: 'Aura' | 'Lupi' | 'Albi'
+          usuario_id: string
+          votado_em?: string
+        }
+        Update: {
+          empresa_id?: string | null
+          nome_escolhido?: 'Aura' | 'Lupi' | 'Albi'
+          usuario_id?: string
+          votado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pet_nome_votos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pet_nome_votos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -1136,6 +1382,42 @@ export type Database = {
           id?: string
           pct?: number
           setor_id?: string
+        }
+        Relationships: []
+      }
+      profissionais: {
+        Row: {
+          atualizado_em: string
+          cpf: string | null
+          criado_em: string
+          codigo: string
+          empresa_id: string
+          estado_uf: string | null
+          id: string
+          nome: string
+          telefone: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          cpf?: string | null
+          criado_em?: string
+          codigo: string
+          empresa_id: string
+          estado_uf?: string | null
+          id?: string
+          nome: string
+          telefone?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          cpf?: string | null
+          criado_em?: string
+          codigo?: string
+          empresa_id?: string
+          estado_uf?: string | null
+          id?: string
+          nome?: string
+          telefone?: string | null
         }
         Relationships: []
       }
@@ -1239,6 +1521,44 @@ export type Database = {
           },
         ]
       }
+      termos_uso: {
+        Row: {
+          ativo: boolean
+          conteudo: string
+          criado_em: string
+          empresa_id: string
+          id: string
+          titulo: string
+          versao: string
+        }
+        Insert: {
+          ativo?: boolean
+          conteudo: string
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          titulo: string
+          versao: string
+        }
+        Update: {
+          ativo?: boolean
+          conteudo?: string
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          titulo?: string
+          versao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "termos_uso_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       acordos_deduplicados: {
@@ -1247,6 +1567,7 @@ export type Database = {
           atualizado_em: string | null
           criado_em: string | null
           data_cadastro: string | null
+          data_pagamento: string | null
           empresa_id: string | null
           estado_uf: string | null
           id: string | null
@@ -1256,15 +1577,16 @@ export type Database = {
           numero_parcela: number | null
           observacoes: string | null
           operador_id: string | null
-          operador_vinculado_id: string | null
+          pago_em: string | null
           parcelas: number | null
           setor_id: string | null
-          status: string | null
+          status: 'verificar_pendente' | 'pago' | 'nao_pago' | null
           tag_ids: string[] | null
-          tipo: string | null
-          tipo_receptivo: string | null
-          tipo_vinculo: string | null
+          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico' | null
+          tipo_vinculo: 'direto' | 'extra' | null
+          usou_quarenta_pct: boolean | null
           valor: number | null
+          valor_total: number | null
           vencimento: string | null
           vinculo_operador_id: string | null
           vinculo_operador_nome: string | null
@@ -1314,6 +1636,50 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      fn_analitico_atualizar_resumo: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: undefined
+      }
+      fn_analitico_dashboard_mes: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: {
+          dia: string
+          operador_id: string
+          forma_pagamento: string
+          forma_detalhe: string
+          status_tabulacao: string
+          total: number
+          total_ho: number
+          qtd: number
+        }[]
+      }
+      fn_analitico_destaques_dia: {
+        Args: {
+          p_empresa_id: string
+          p_mes: string
+          p_equipe_id?: string
+          p_setor_id?: string
+        }
+        Returns: {
+          dia: string
+          operador_id: string
+          operador_usuario: string
+          operador_nome: string
+          total_recebido: number
+          total_pagamentos: number
+        }[]
+      }
+      fn_analitico_resumo_por_operador: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: {
+          operador_id: string
+          operador_usuario: string
+          operador_nome: string
+          total_recebido: number
+          total_ho: number
+          total_pagamentos: number
+        }[]
+      }
       fn_can_access_empresa: {
         Args: { target_empresa_id: string }
         Returns: boolean
@@ -1338,6 +1704,78 @@ export type Database = {
       }
       fn_get_perfil_usuario: { Args: { uid: string }; Returns: string }
       fn_get_setor_usuario: { Args: { uid: string }; Returns: string }
+      fn_pet_admin_ajustar_moedas: {
+        Args: { p_usuario: string; p_delta: number }
+        Returns: { ok: boolean; moedas_total: number }[]
+      }
+      fn_pet_admin_listar: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          usuario_id: string
+          nome: string
+          cargo: string
+          moedas: number
+          moedas_ganhas_total: number
+          moedas_gastas_total: number
+          xp: number
+          nivel: number
+          streak: number
+          qtd_itens: number
+          roupa_equipada: string
+          ultimo_dia_ativo: string | null
+        }[]
+      }
+      fn_pet_comprar_item: {
+        Args: { p_item_id: string }
+        Returns: { ok: boolean; erro: string | null; moedas_total: number }[]
+      }
+      fn_pet_estado_get: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          usuario_id: string
+          moedas: number
+          moedas_ganhas_total: number
+          moedas_gastas_total: number
+          xp: number
+          nivel: number
+          streak: number
+          ultimo_dia_ativo: string | null
+          roupa_equipada: string
+          itens_desbloqueados: Json
+          dormindo: boolean
+          criado_em: string
+          atualizado_em: string
+        }
+      }
+      fn_pet_gastar_moedas: {
+        Args: { p_valor: number; p_item?: string }
+        Returns: { ok: boolean; moedas_total: number }[]
+      }
+      fn_pet_nome_resultado: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          empresa_id: string
+          empresa_slug: string
+          nome_escolhido: string
+          votos: number
+        }[]
+      }
+      fn_pet_recompensa_disponivel: {
+        Args: Record<PropertyKey, never>
+        Returns: { valor_disponivel: number; moedas_disponivel: number }[]
+      }
+      fn_pet_resgatar_recompensa: {
+        Args: Record<PropertyKey, never>
+        Returns: { moedas_creditadas: number; valor_base: number; moedas_total: number }[]
+      }
+      fn_pet_salvar_visual: {
+        Args: { p_roupa: string; p_dormindo: boolean }
+        Returns: undefined
+      }
+      fn_sincronizar_cartoes_pagos: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: number
+      }
       fn_sync_par_vinculo: {
         Args: {
           p_acordo_id: string

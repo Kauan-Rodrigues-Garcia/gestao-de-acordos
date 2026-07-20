@@ -5,7 +5,8 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 
 interface RankEntry {
-  id: string;
+  /** porEquipe não tem id (agrupado por nome); porOperador tem e usa como key. */
+  id?: string;
   nome: string;
   valor: number;
   acordos: number;

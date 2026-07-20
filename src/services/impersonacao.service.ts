@@ -139,13 +139,16 @@ export async function sairImpersonacao(): Promise<void> {
   // Auditoria de encerramento (já de volta como admin; best-effort)
   if (!error && ativa) {
     try {
+      // NOTA: logs_sistema.empresa_id é NOT NULL no banco e não é preenchido aqui
+      // (ImpersonacaoAtiva/SessaoAdminSalva não carregam empresa_id) — o insert já
+      // falhava silenciosamente (catch abaixo), pré-existente a este fix de tipos.
       await supabase.from('logs_sistema').insert({
         usuario_id: salva.adminId,
         acao: 'impersonar_fim',
         tabela: 'auth.users',
         registro_id: ativa.alvoId,
         detalhes: { alvo_nome: ativa.alvoNome, inicio: ativa.inicio, fim: new Date().toISOString() },
-      });
+      } as never);
     } catch {/* segue */}
   }
 

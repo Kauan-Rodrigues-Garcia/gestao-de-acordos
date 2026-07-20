@@ -26,14 +26,13 @@ import _traverse from '@babel/traverse';
 import _generate from '@babel/generator';
 import * as t from '@babel/types';
 
-// CJS/ESM interop para as libs Babel
-const traverse: typeof _traverse.default = (
-  (_traverse as unknown as { default: typeof _traverse.default }).default ?? _traverse
-) as typeof _traverse.default;
+// CJS/ESM interop para as libs Babel — dependendo do bundler, o import default
+// vem "duplo-embrulhado" ({ default: fn }) ou já é a função em si.
+const traverse: typeof _traverse =
+  (_traverse as unknown as { default?: typeof _traverse }).default ?? _traverse;
 
-const generate: typeof _generate.default = (
-  (_generate as unknown as { default: typeof _generate.default }).default ?? _generate
-) as typeof _generate.default;
+const generate: typeof _generate =
+  (_generate as unknown as { default?: typeof _generate }).default ?? _generate;
 
 // ---------------------------------------------------------------------------
 // Helpers internos
@@ -188,7 +187,7 @@ async function collectPublicImagesFrom(dir: string, imageSet: Set<string>): Prom
   const stack = [imagesDir];
   while (stack.length) {
     const cur = stack.pop()!;
-    let entries: Awaited<ReturnType<typeof fs.readdir>> = [];
+    let entries: import('node:fs').Dirent[] = [];
     try {
       entries = await fs.readdir(cur, { withFileTypes: true });
     } catch {

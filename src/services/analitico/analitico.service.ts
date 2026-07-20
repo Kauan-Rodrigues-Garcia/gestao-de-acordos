@@ -460,7 +460,7 @@ export async function buscarAnalitico(
   while (true) {
     const { data, error } = await buildQuery(offset, offset + PAGE - 1);
     if (error) return { data: [], error: error.message };
-    if (data?.length) allData = allData.concat(data as AnaliticoRecebimento[]);
+    if (data?.length) allData = allData.concat(data as unknown as AnaliticoRecebimento[]);
     if (!data?.length || data.length < PAGE) break;
     offset += PAGE;
   }
@@ -609,9 +609,10 @@ export async function buscarDestaquesDoMes(
   equipeId?: string | null,
   setorId?: string | null,
 ): Promise<{ data: DestaqueDiaAnalitico[]; error: string | null }> {
-  const params: Record<string, unknown> = { p_empresa_id: empresaId, p_mes: mes };
-  if (equipeId) params['p_equipe_id'] = equipeId;
-  if (setorId)  params['p_setor_id']  = setorId;
+  const params: { p_empresa_id: string; p_mes: string; p_equipe_id?: string; p_setor_id?: string } =
+    { p_empresa_id: empresaId, p_mes: mes };
+  if (equipeId) params.p_equipe_id = equipeId;
+  if (setorId)  params.p_setor_id  = setorId;
   const { data, error } = await supabase.rpc('fn_analitico_destaques_dia', params);
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
 }

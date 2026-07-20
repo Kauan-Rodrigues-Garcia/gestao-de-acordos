@@ -132,7 +132,7 @@ export async function adicionarParcelaAoGrupo(
 
   const { data: inserida, error: errIns } = await supabase
     .from('acordos')
-    .insert(payloadNovaParcela(acordoBase, input, grupoId, novoNumero, novoTotal))
+    .insert(payloadNovaParcela(acordoBase, input, grupoId, novoNumero, novoTotal) as never)
     .select('*, perfis(id, nome, email, perfil, setor_id)')
     .single();
   if (errIns) return { ok: false, erro: `Erro ao adicionar parcela: ${errIns.message}` };
@@ -204,7 +204,7 @@ async function espelharParcelaNoVinculo(
 
   const { error: errIns } = await supabase
     .from('acordos')
-    .insert(payloadNovaParcela(parBase, input, grupoPar.grupoId, novoNumero, novoTotal));
+    .insert(payloadNovaParcela(parBase, input, grupoPar.grupoId, novoNumero, novoTotal) as never);
   if (errIns) {
     console.warn('[parcelas.service] espelho do vínculo não inserido:', errIns.message);
     return;

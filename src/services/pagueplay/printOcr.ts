@@ -50,7 +50,7 @@ export async function lerPrintMundialErp(
   const worker = await obterWorker();
   const imagem = preprocessarParaOcr(canvas);
   const { data } = await worker.recognize(imagem);
-  const resultado = extrairDadosPrintPP(data.text);
+  const resultado: DadosExtraidosPP & { _textoOcr?: string } = extrairDadosPrintPP(data.text);
   if (debug) resultado._textoOcr = data.text;
   return resultado;
 }
