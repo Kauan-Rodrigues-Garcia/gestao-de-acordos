@@ -54,8 +54,10 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
 
   const analitico = status.find(s => s.origem === 'analitico');
   const diario    = status.find(s => s.origem === 'diario');
-  const tudoValidado = [analitico, diario].filter((s): s is StatusOrigem => !!s)
-    .every(s => statusOrigemLabel(s) === 'validado' || statusOrigemLabel(s) === 'sem_dados');
+  // Só considera origens que TÊM dado no mês — "sem dados" não é "validado".
+  const relevantes = [analitico, diario].filter((s): s is StatusOrigem => !!s && s.diasComDado > 0);
+  const semDado      = relevantes.length === 0;
+  const tudoValidado = !semDado && relevantes.every(s => statusOrigemLabel(s) === 'validado');
 
   async function handleValidar() {
     if (!empresaId || !setorId) return;
@@ -101,7 +103,9 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
           </>
         )}
         <div className="ml-auto flex items-center gap-2">
-          {tudoValidado ? (
+          {semDado ? (
+            <span className="text-muted-foreground">sem recebimento importado ainda</span>
+          ) : tudoValidado ? (
             !mostrarReabrir && (
               <Button size="sm" variant="outline" className="h-7 gap-1.5 text-xs" onClick={() => setMostrarReabrir(true)}>
                 <Unlock className="h-3.5 w-3.5" /> Reabrir
@@ -112,7 +116,7 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
               <ShieldCheck className="h-3.5 w-3.5" /> Validar {setorNome}
             </Button>
           )}
-          {tudoValidado && !mostrarReabrir && (
+          {tudoValidado && !semDado && !mostrarReabrir && (
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           )}
         </div>
