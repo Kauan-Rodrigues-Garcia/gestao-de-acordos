@@ -420,9 +420,12 @@ export async function notificarImportacaoDiario(
 // são alimentadas pelo relatório de recebimento diário: cada linha já é
 // gravada no seu próprio dia (dia_referencia), então somar o mês dá o
 // acumulado por operador. TODAS as linhas do relatório contam no total GERAL
-// do setor; mas acordos FORA DO VÍNCULO (prox_contato ≤ hoje — mesma regra do
-// card "Acordos ignorados" da aba do dia), os órfãos e os "(sem vínculo)" NÃO
-// contam para o operador nem para a equipe — apenas no geral.
+// do setor; mas acordos FORA DO VÍNCULO (prox_contato ≤ dia do pagamento —
+// mesma regra do card "Acordos ignorados" da aba do dia), os órfãos e os
+// "(sem vínculo)" NÃO contam para o operador nem para a equipe — apenas no
+// geral. A referência é o dia_referencia da linha (não "hoje"): importar o
+// mensal dias depois não pode reclassificar pagamentos que estavam dentro do
+// vínculo quando aconteceram.
 
 export interface ResumoMensalDiario {
   /** Acumulado do mês por operador vinculado, SEM os fora do vínculo — mesmo
@@ -461,7 +464,7 @@ interface RowResumoRpc {
    *  quem importou (órfã/sem vínculo). */
   setor_geral: string | null;
   dia_referencia: string;
-  /** prox_contato ≤ hoje: conta só no geral, nunca no operador/equipe. */
+  /** prox_contato ≤ dia_referencia: conta só no geral, nunca no operador/equipe. */
   fora_vinculo: boolean;
   total_recebido: number;
   total_pagamentos: number;
@@ -580,14 +583,13 @@ async function buscarResumoMensalDiarioLinhas(
   const porOperador = new Map<string, ResumoOperadorAnalitico>();
   const orfaosPorSetor: Record<string, { total: number; qtd: number }> = {};
   const linhasDia: LinhaRecebidaDia[] = [];
-  const hoje = dayKeyDiario(new Date());
 
   for (const r of rows) {
     const valor = Number(r.valor_recebido) || 0;
-    // Fora do vínculo (prox_contato ≤ hoje — regra dos "Acordos ignorados"):
-    // conta SÓ no geral, nunca no operador/equipe. Órfãos e "(sem vínculo)"
-    // idem.
-    const foraVinculo = r.prox_contato != null && r.prox_contato <= hoje;
+    // Fora do vínculo (prox_contato ≤ dia do pagamento — regra dos "Acordos
+    // ignorados"): conta SÓ no geral, nunca no operador/equipe. Órfãos e
+    // "(sem vínculo)" idem.
+    const foraVinculo = r.prox_contato != null && r.prox_contato <= r.dia_referencia;
     const contaNoOperador = !!r.operador_id && !foraVinculo;
 
     // Setor do geral: do operador (fora do vínculo) ou de quem importou

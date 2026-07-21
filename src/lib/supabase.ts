@@ -304,7 +304,7 @@ export interface DiarioRecebimento {
   valor_recebido: number;
   data_pagamento: string | null; // DATE → 'yyyy-MM-dd'
   dia_referencia: string;        // DATE → 'yyyy-MM-dd' (dia do relatório)
-  prox_contato: string | null;   // DATE → 'yyyy-MM-dd'; ≤ hoje → acordo ignorado
+  prox_contato: string | null;   // DATE → 'yyyy-MM-dd'; ≤ dia_referencia → acordo ignorado
   tabulacao: string | null;
   id_baixa: string | null;
   chave_unica: string;

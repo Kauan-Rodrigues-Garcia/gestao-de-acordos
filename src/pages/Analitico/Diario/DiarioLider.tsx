@@ -549,7 +549,7 @@ export function DiarioLider({
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <CardTitle className="text-sm text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                     <AlertCircle className="w-4 h-4" />
-                    Acordos ignorados · próximo contato ≤ hoje ({fmtDataISO(hojeISO)})
+                    Acordos ignorados · próximo contato ≤ data do pagamento
                   </CardTitle>
                   <p className="text-xs text-muted-foreground">
                     {ignorados.length} acordo{ignorados.length !== 1 ? 's' : ''} ·{' '}

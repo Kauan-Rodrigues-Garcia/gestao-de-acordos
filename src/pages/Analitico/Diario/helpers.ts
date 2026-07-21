@@ -4,17 +4,22 @@
  * Regras herdadas do protótipo HTML:
  *  - Cartão consolida por Cód.Acordo (parcelas somadas → 1 acordo, badge "Nx")
  *  - Pix/Boleto: 1 item por pagamento (Id.Baixa)
- *  - Próx.Contato ≤ hoje → acordo ignorado (fora dos totais e listas)
+ *  - Próx.Contato ≤ data do pagamento → acordo ignorado (fora dos totais e listas)
  */
 
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { formaKindDiario, isCartaoDiario, fmtCPF, normDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
 import { formatBRL } from '@/lib/money';
 
-// ── Ignorados (próximo contato ≤ hoje) ───────────────────────────────────────
+// ── Ignorados (próximo contato ≤ data do pagamento) ──────────────────────────
+// A referência é o dia do PAGAMENTO (dia_referencia), não o dia em que se olha
+// o relatório: um pagamento feito dia 01 com próx. contato dia 15 estava
+// dentro do vínculo quando aconteceu, e importar o mensal dias depois não pode
+// reclassificá-lo. `hojeISO` é só fallback para linha sem dia_referencia.
 
 export function isIgnorado(row: DiarioRecebimento, hojeISO: string): boolean {
-  return row.prox_contato != null && row.prox_contato <= hojeISO;
+  const ref = row.dia_referencia || hojeISO;
+  return row.prox_contato != null && row.prox_contato <= ref;
 }
 
 export function linhasVivas(rows: DiarioRecebimento[], hojeISO: string): DiarioRecebimento[] {

@@ -12,7 +12,7 @@
  *     cpf|acordo|forma|valor|data quando não houver Id.Baixa
  *   - Cartão consolida por Cód.Acordo apenas na EXIBIÇÃO (parcelas somadas);
  *     no banco cada pagamento é uma linha
- *   - Próx.Contato ≤ hoje → acordo "ignorado" (fora dos totais e listas)
+ *   - Próx.Contato ≤ data do pagamento → acordo "ignorado" (fora dos totais e listas)
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';

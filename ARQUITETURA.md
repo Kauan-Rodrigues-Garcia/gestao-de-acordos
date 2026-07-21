@@ -503,7 +503,7 @@ forma_pagamento   TEXT  texto bruto (Pix, Boleto, Cartão Padrão…)
 valor_recebido    NUMERIC
 data_pagamento    DATE
 dia_referencia    DATE  dia do relatório (moda das datas de pagamento)
-prox_contato      DATE  ≤ hoje → acordo "ignorado" (fora dos totais e listas)
+prox_contato      DATE  ≤ dia_referencia → acordo "ignorado" (fora dos totais e listas)
 tabulacao         TEXT  coluna "Tabulação" do ERP (informativa)
 id_baixa          TEXT  identificador do pagamento no ERP
 chave_unica       TEXT  id_baixa ou composta cpf|acordo|forma|valor|data
@@ -523,8 +523,11 @@ importação/exclusão só líder+; operador atualiza as próprias — marcar vi
 
 - Cartão consolida por `acordo_codigo` na exibição (parcelas somadas, badge "Nx");
   Pix/Boleto = 1 item por pagamento.
-- `prox_contato ≤ hoje` → acordo ignorado: fora dos totais e das listas dos
-  operadores; visível só no card "Acordos ignorados" da visão líder.
+- `prox_contato ≤ dia_referencia` (data do pagamento) → acordo ignorado: fora
+  dos totais e das listas dos operadores; visível só no card "Acordos
+  ignorados" da visão líder. A referência é o dia do PAGAMENTO, não o dia em
+  que se olha: importar o mensal dias depois não reclassifica pagamentos que
+  estavam dentro do vínculo quando aconteceram (migration 20260721h).
 - Linhas do arquivo sem a coluna Operador são descartadas no parse (contadas).
 
 ### Lógica de "novos" do operador
