@@ -18,6 +18,7 @@ import {
   Users, AlertTriangle, ArrowRight, Calendar,
   ChevronRight, ChevronLeft, ChevronDown, RefreshCw, X, Loader2,
   TrendingUp, Wallet, Percent, ArrowUpDown, Search, Radio,
+  BarChart3, LineChart,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -34,6 +35,16 @@ import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, i
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
+import {
+  buscarEquipesComOperadores,
+  type EquipeAnalitico, type OperadorEquipeInfo,
+} from '@/services/analitico/analitico.service';
+import {
+  buscarResumoMensalDiario, type ResumoMensalDiario,
+} from '@/services/diario/diario.service';
+import { DesempenhoEquipes } from '@/pages/Dashboard/Analitico/DesempenhoEquipes';
+import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores';
+import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
@@ -53,6 +64,10 @@ interface OpMetric {
 }
 
 type SortKey = 'recebido' | 'conversao' | 'naoPagos' | 'aReceber' | 'nome';
+
+/** Abas do painel (PaguePlay). 'time' = acompanhamento original; as demais são
+ *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
+type AbaPainel = 'time' | 'desempenho' | 'quartis' | 'grafico';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -154,6 +169,41 @@ export default function PainelLider() {
   const [opSelId, setOpSelId]       = useState<string | null>(null);
   const [busca, setBusca]           = useState('');
   const [sortKey, setSortKey]       = useState<SortKey>('recebido');
+
+  // ── Abas do painel (PP): Desempenho Equipes / Quartis / Gráfico ───────────
+  // Alimentadas pelo relatório de RECEBIMENTO DIÁRIO (diario_recebimentos):
+  // soma-se o mês inteiro (dia_referencia). Antes moravam no Analítico e
+  // liam o relatório analítico — na PaguePlay a fonte agora é o diário.
+  const [abaAtiva, setAbaAtiva] = useState<AbaPainel>('time');
+  const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
+  // Líder/gerência restritos ao próprio setor; admin/diretoria veem tudo
+  const setorAbas = (!isAdmin && !verTodosSetores) ? (perfil?.setor_id ?? null) : null;
+
+  const [equipesInfo, setEquipesInfo] = useState<{
+    equipes: EquipeAnalitico[];
+    operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+    equipesExtrasPorOperador: Record<string, string[]>;
+  } | null>(null);
+  const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
+  const [loadingDiario, setLoadingDiario] = useState(false);
+
+  const abaDiaria = abaAtiva !== 'time';
+  useEffect(() => {
+    if (!isPP || !abaDiaria || !empresa?.id) return;
+    let cancel = false;
+    setLoadingDiario(true);
+    void (async () => {
+      const [res, eqs] = await Promise.all([
+        buscarResumoMensalDiario(empresa.id, mesStr),
+        buscarEquipesComOperadores(empresa.id),
+      ]);
+      if (cancel) return;
+      setResumoDiario(res);
+      setEquipesInfo(eqs);
+      setLoadingDiario(false);
+    })();
+    return () => { cancel = true; };
+  }, [isPP, abaDiaria, empresa?.id, mesStr]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -321,7 +371,30 @@ export default function PainelLider() {
         </div>
       </div>
 
-      {erro && (
+      {/* ── Abas (PP): acompanhamento × desempenho × quartis × gráfico ───── */}
+      {isPP && (
+        <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
+          {([
+            { key: 'time',       label: 'Acompanhamento',      Icon: Users },
+            { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
+            { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
+            { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
+          ] as const).map(({ key, label, Icon }) => (
+            <button key={key} onClick={() => setAbaAtiva(key)}
+              className={cn(
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
+                abaAtiva === key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" /> {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {abaAtiva === 'time' && erro && (
         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex items-center justify-between">
           <span>{erro}</span>
           <Button size="sm" variant="link" className="text-destructive h-auto p-0" onClick={() => void carregarTudo()}>
@@ -330,8 +403,63 @@ export default function PainelLider() {
         </div>
       )}
 
+      {/* ── Aba: Desempenho Equipes (PP — recebimento diário) ─────────────── */}
+      {isPP && abaAtiva === 'desempenho' && (
+        <>
+          {resumoDiario?.error && (
+            <p className="text-sm text-destructive">{resumoDiario.error}</p>
+          )}
+          <DesempenhoEquipes
+            empresaId={empresa.id}
+            mes={mesStr}
+            setorId={setorAbas}
+            equipes={equipesInfo?.equipes ?? []}
+            resumos={resumoDiario?.resumos ?? []}
+            operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
+            equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
+            orfaosPorSetor={resumoDiario?.orfaosPorSetor ?? {}}
+            loading={loadingDiario}
+            fonteLabel="relatório de recebimento diário"
+          />
+        </>
+      )}
+
+      {/* ── Aba: Quartis (PP — recebimento diário) ────────────────────────── */}
+      {isPP && abaAtiva === 'quartis' && (
+        <QuartisOperadores
+          empresaId={empresa.id}
+          mes={mesStr}
+          setorId={setorAbas}
+          equipes={equipesInfo?.equipes ?? []}
+          resumos={resumoDiario?.resumos ?? []}
+          operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
+          equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
+          loading={loadingDiario}
+        />
+      )}
+
+      {/* ── Aba: Gráfico recebimento (PP — recebimento diário) ────────────── */}
+      {isPP && abaAtiva === 'grafico' && (
+        loadingDiario ? (
+          <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
+          </div>
+        ) : (
+          <GraficoRecebimento
+            empresaId={empresa.id}
+            mes={mesStr}
+            setorId={setorAbas}
+            equipes={equipesInfo?.equipes ?? []}
+            operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
+            equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
+            linhasExternas={resumoDiario?.linhasDia ?? []}
+            fonteLabel="relatório de recebimento diário"
+          />
+        )
+      )}
+
       {/* ── KPIs do time ─────────────────────────────────────────────────── */}
-      {loading ? (
+      {abaAtiva === 'time' && (loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-[76px] bg-muted rounded-xl animate-pulse" />)}
         </div>
@@ -355,9 +483,10 @@ export default function PainelLider() {
             value={String(time.nOperadores)}
             sub="na equipe" />
         </div>
-      )}
+      ))}
 
       {/* ── Lista de operadores ──────────────────────────────────────────── */}
+      {abaAtiva === 'time' && (
       <Card className="border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -485,6 +614,7 @@ export default function PainelLider() {
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

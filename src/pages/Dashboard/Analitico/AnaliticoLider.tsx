@@ -89,7 +89,8 @@ export function AnaliticoLider({
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
   const tenant = useTenant();
-  const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
+  const isPP = tenant.isPaguePlay;
+  const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
@@ -541,10 +542,14 @@ export function AnaliticoLider({
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // Desempenho por equipe + quartis (meta × analítico) — PP e BookPlay
-            { key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3 },
-            { key: 'quartis',    label: 'Quartis',            Icon: TrendingUp },
-            { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
+            // PaguePlay: Desempenho Equipes / Quartis / Gráfico moraram para o
+            // Painel Líder (alimentadas pelo recebimento diário). BookPlay
+            // continua com elas aqui, alimentadas pelo analítico.
+            ...(!isPP ? [
+              { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
+              { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
+              { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
+            ] as const : []),
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
@@ -883,8 +888,8 @@ export function AnaliticoLider({
         </div>
       )}
 
-      {/* ── Aba: Desempenho Equipes (PP + BookPlay) ───────────────────────── */}
-      {abaAtiva === 'desempenho' && (
+      {/* ── Aba: Desempenho Equipes (só BookPlay — na PP fica no Painel Líder) */}
+      {!isPP && abaAtiva === 'desempenho' && (
         <DesempenhoEquipes
           empresaId={empresaId}
           mes={mes}
@@ -898,8 +903,8 @@ export function AnaliticoLider({
         />
       )}
 
-      {/* ── Aba: Quartis (PP + BookPlay) ──────────────────────────────────── */}
-      {abaAtiva === 'quartis' && (
+      {/* ── Aba: Quartis (só BookPlay — na PP fica no Painel Líder) ───────── */}
+      {!isPP && abaAtiva === 'quartis' && (
         <QuartisOperadores
           empresaId={empresaId}
           mes={mes}
@@ -912,8 +917,8 @@ export function AnaliticoLider({
         />
       )}
 
-      {/* ── Aba: Gráfico recebimento ──────────────────────────────────────── */}
-      {abaAtiva === 'grafico' && (
+      {/* ── Aba: Gráfico recebimento (só BookPlay — na PP fica no Painel Líder) */}
+      {!isPP && abaAtiva === 'grafico' && (
         <GraficoRecebimento
           empresaId={empresaId}
           mes={mes}

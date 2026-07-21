@@ -28,6 +28,11 @@ interface GraficoRecebimentoProps {
   equipes: EquipeAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
   equipesExtrasPorOperador?: Record<string, string[]>;
+  /** Linhas já carregadas de outra fonte (Painel Líder — recebimento diário).
+   *  Quando presente, o componente NÃO busca o analítico. */
+  linhasExternas?: LinhaRecebidaDia[];
+  /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
+  fonteLabel?: string;
 }
 
 const COR_LINHA = '#10b981';
@@ -57,6 +62,7 @@ function formatYAxis(v: number): string {
 export function GraficoRecebimento({
   empresaId, mes, setorId, equipes,
   operadorEquipeMap, equipesExtrasPorOperador = {},
+  linhasExternas, fonteLabel = 'relatório analítico',
 }: GraficoRecebimentoProps) {
   const [linhas, setLinhas]   = useState<LinhaRecebidaDia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,6 +80,13 @@ export function GraficoRecebimento({
   }, [setorId]);
 
   useEffect(() => {
+    // Fonte externa (recebimento diário): usa as linhas recebidas por prop
+    if (linhasExternas) {
+      setLinhas(linhasExternas);
+      setErro(null);
+      setLoading(false);
+      return;
+    }
     let cancelado = false;
     setLoading(true);
     setErro(null);
@@ -84,7 +97,7 @@ export function GraficoRecebimento({
       setLoading(false);
     });
     return () => { cancelado = true; };
-  }, [empresaId, mes]);
+  }, [empresaId, mes, linhasExternas]);
 
   const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
 
@@ -295,7 +308,7 @@ export function GraficoRecebimento({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Valor recebido em cada dia do mês, do relatório analítico. Dias sem recebimento
+        Valor recebido em cada dia do mês, do {fonteLabel}. Dias sem recebimento
         (fim de semana, feriado) não aparecem como zero — a linha liga os dias vizinhos.
         Média = total ÷ {diasComRecebimento} dia{diasComRecebimento !== 1 ? 's' : ''} com recebimento.
       </p>

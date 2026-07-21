@@ -15,7 +15,12 @@
 
 import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
-import type { OperadorResolvidoMap } from '@/services/analitico/analitico.service';
+import { PP_HO_PERCENTUAL } from '@/lib/index';
+import type {
+  OperadorResolvidoMap,
+  ResumoOperadorAnalitico,
+  LinhaRecebidaDia,
+} from '@/services/analitico/analitico.service';
 import type { LinhaDiario } from './diarioParser';
 import { dayKeyDiario } from './diarioParser';
 
@@ -407,4 +412,111 @@ export async function notificarImportacaoDiario(
   for (let i = 0; i < notifs.length; i += CHUNK) {
     await supabase.from('notificacoes').insert(notifs.slice(i, i + CHUNK));
   }
+}
+
+// ── Resumo MENSAL do recebimento diário (Painel Líder — PaguePlay) ────────────
+//
+// As abas Desempenho Equipes / Quartis / Gráfico recebimento do Painel Líder
+// são alimentadas pelo relatório de recebimento diário: cada linha já é
+// gravada no seu próprio dia (dia_referencia), então somar o mês dá o
+// acumulado por operador. TODAS as linhas do relatório contam no total do
+// setor — com operador, órfãs (nome sem perfil) e "(sem vínculo)" (sem nome).
+
+export interface ResumoMensalDiario {
+  /** Acumulado do mês por operador vinculado — mesmo formato do analítico,
+   *  para reusar DesempenhoEquipes/QuartisOperadores sem alteração.
+   *  total_ho é calculado (recebido × PP_HO_PERCENTUAL): o relatório diário
+   *  não traz a coluna de H.O. */
+  resumos: ResumoOperadorAnalitico[];
+  /** Linhas sem operador (órfãs + "(sem vínculo)") somadas por setor — o setor
+   *  é o de quem importou o relatório, igual à regra dos órfãos do analítico. */
+  orfaosPorSetor: Record<string, { total: number; qtd: number }>;
+  /** Linhas cruas para o gráfico por dia (data_pagamento = dia_referencia). */
+  linhasDia: LinhaRecebidaDia[];
+  error: string | null;
+}
+
+export async function buscarResumoMensalDiario(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<ResumoMensalDiario> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  interface Row {
+    operador_id: string | null;
+    operador_usuario: string;
+    valor_recebido: number;
+    dia_referencia: string;
+    importado_por_id: string | null;
+  }
+
+  const PAGE = 1000;
+  const rows: Row[] = [];
+  let offset = 0;
+  while (true) {
+    const { data, error } = await supabase
+      .from('diario_recebimentos')
+      .select('operador_id, operador_usuario, valor_recebido, dia_referencia, importado_por_id')
+      .eq('empresa_id', empresaId)
+      .gte('dia_referencia', primeiro)
+      .lte('dia_referencia', fim)
+      .range(offset, offset + PAGE - 1);
+    if (error) return { resumos: [], orfaosPorSetor: {}, linhasDia: [], error: error.message };
+    rows.push(...((data ?? []) as unknown as Row[]));
+    if (!data?.length || data.length < PAGE) break;
+    offset += PAGE;
+  }
+
+  // Perfis: nome/usuario dos operadores + setor do importador (para os órfãos)
+  const { data: perfis } = await supabase
+    .from('perfis')
+    .select('id, nome, usuario, setor_id')
+    .eq('empresa_id', empresaId);
+  const perfilMap = new Map(
+    ((perfis ?? []) as { id: string; nome: string; usuario: string; setor_id: string | null }[])
+      .map(p => [p.id, p]));
+
+  const porOperador = new Map<string, ResumoOperadorAnalitico>();
+  const orfaosPorSetor: Record<string, { total: number; qtd: number }> = {};
+  const linhasDia: LinhaRecebidaDia[] = [];
+
+  for (const r of rows) {
+    const valor = Number(r.valor_recebido) || 0;
+    linhasDia.push({
+      operador_id:      r.operador_id,
+      setor_id:         null,
+      importado_por_id: r.importado_por_id,
+      valor_recebido:   valor,
+      data_pagamento:   r.dia_referencia,
+    });
+
+    if (r.operador_id) {
+      const perfil = perfilMap.get(r.operador_id);
+      const atual = porOperador.get(r.operador_id) ?? {
+        operador_id:      r.operador_id,
+        operador_usuario: perfil?.usuario ?? r.operador_usuario,
+        operador_nome:    perfil?.nome ?? null,
+        total_recebido:   0,
+        total_ho:         0,
+        total_pagamentos: 0,
+      };
+      atual.total_recebido   += valor;
+      atual.total_pagamentos += 1;
+      porOperador.set(r.operador_id, atual);
+    } else {
+      const sid = perfilMap.get(r.importado_por_id ?? '')?.setor_id ?? null;
+      if (!sid) continue;
+      const acc = orfaosPorSetor[sid] ?? (orfaosPorSetor[sid] = { total: 0, qtd: 0 });
+      acc.total += valor;
+      acc.qtd   += 1;
+    }
+  }
+
+  const resumos = [...porOperador.values()]
+    .map(r => ({ ...r, total_ho: r.total_recebido * PP_HO_PERCENTUAL }))
+    .sort((a, b) => b.total_recebido - a.total_recebido);
+
+  return { resumos, orfaosPorSetor, linhasDia, error: null };
 }

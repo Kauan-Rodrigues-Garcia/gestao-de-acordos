@@ -39,6 +39,8 @@ interface DesempenhoEquipesProps {
   /** Total dos órfãos (sem operador) por setor — entram no card do setor. */
   orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
   loading: boolean;
+  /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
+  fonteLabel?: string;
 }
 
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
@@ -305,6 +307,7 @@ function CardContribuicaoReceptivo({
 export function DesempenhoEquipes({
   empresaId, mes, setorId, equipes, resumos, operadorEquipeMap,
   equipesExtrasPorOperador = {}, orfaosPorSetor = {}, loading,
+  fonteLabel = 'relatório analítico',
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
@@ -511,7 +514,7 @@ export function DesempenhoEquipes({
         </div>
       ))}
       <p className="text-[11px] text-muted-foreground">
-        Acumulado e diário vêm do relatório analítico · meta, dias úteis e feriados
+        Acumulado e diário vêm do {fonteLabel} · meta, dias úteis e feriados
         vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).
       </p>
     </div>
