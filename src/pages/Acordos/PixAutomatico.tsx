@@ -4,17 +4,21 @@
  * Acompanhamento de comissão de acordos fechados no Pix automático, SEM
  * vínculo com a tabela `acordos`.
  *
- * Operador: registra NR + valor (nasce pendente), vê os próprios registros e
- * a comissão por linha + totais pendente/aprovado. Pode limpar desaprovados.
- * Líder+: vê tudo, filtra por operador/equipe, aprova/desaprova cada linha e
- * configura o % de comissão do próprio setor (padrão 0,25%).
+ * Operador: registra NR + valor (nasce pendente) — se o registro manual do
+ * setor estiver LIGADO —, vê os próprios registros, a comissão por linha,
+ * totais pendente/aprovado e o card de bônus por meta (comissão aprovada do
+ * mês é paga de novo se bater a meta; estado do card segue meta + quartis).
+ * Líder+: vê tudo, filtra por operador/equipe (e por setor para gerência+),
+ * aprova/desaprova, registra vinculando a um operador, e configura o setor:
+ * % de comissão (com confirmação) e interruptor do registro manual.
+ * Cada NR é único por empresa (registro histórico em pix_automatico_nr_registro).
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
-  Copy, Upload, Download,
+  Copy, Upload, Download, Building2, Lock, Target, TrendingUp,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -28,15 +32,25 @@ import { Card, CardContent } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
-import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider } from '@/lib/index';
+import type { MetasConfigMes } from '@/lib/supabase';
+import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { diasUteisDoMes, diasUteisDecorridos, quartilAtual } from '@/lib/diasUteis';
+import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import {
-  PixAutoAcordo, PixAutoStatus, PIX_AUTO_PCT_PADRAO,
+  PixAutoAcordo, PixAutoStatus, PixAutoConfig, PIX_AUTO_PCT_PADRAO,
   fetchAcordosPix, criarAcordoPix, avaliarAcordoPix, reavaliarAcordoPix,
   excluirAcordoPix, limparDesaprovados, fetchConfigsPix, upsertConfigPix,
+  setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarLinhaPix, criarAcordosPixLote, type LinhaPixLote,
 } from '@/services/pix_automatico.service';
 
@@ -60,34 +74,48 @@ function fmtPct(pct: number): string {
   return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`;
 }
 
-interface OperadorInfo { id: string; nome: string; equipe_id: string | null; setor_id: string | null; }
+interface OperadorInfo { id: string; nome: string; equipe_id: string | null; setor_id: string | null; perfil: string; }
+
+/** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
+const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
 
 export function PixAutomatico() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
 
-  const ehLider = isPerfilAdminOuLider(perfil?.perfil ?? '');
+  const cargo   = String(perfil?.perfil ?? '').toLowerCase();
+  const ehLider = isPerfilAdminOuLider(cargo);
+  const ehMultiSetor = CARGOS_MULTI_SETOR.includes(cargo);
 
   const [itens, setItens]           = useState<PixAutoAcordo[]>([]);
-  const [pctPorSetor, setPctPorSetor] = useState<Record<string, number>>({});
+  const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>({});
   const [operadores, setOperadores] = useState<OperadorInfo[]>([]);
   const [equipes, setEquipes]       = useState<{ id: string; nome: string }[]>([]);
+  const [setores, setSetores]       = useState<{ id: string; nome: string }[]>([]);
+  const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
   const [loading, setLoading]       = useState(true);
 
   // Form de registro
   const [nrNovo, setNrNovo]       = useState('');
   const [valorNovo, setValorNovo] = useState('');
   const [salvando, setSalvando]   = useState(false);
+  // Vínculo do acordo a um operador (líder+): busca por nome
+  const [vinculoBusca, setVinculoBusca] = useState('');
+  const [vinculoOp, setVinculoOp]       = useState<OperadorInfo | null>(null);
+  const [vinculoAberto, setVinculoAberto] = useState(false);
 
   // Filtros (líder)
   const [busca, setBusca]                   = useState('');
   const [filtroStatus, setFiltroStatus]     = useState<'todos' | PixAutoStatus>('todos');
   const [filtroOperador, setFiltroOperador] = useState('');
   const [filtroEquipe, setFiltroEquipe]     = useState('');
+  const [filtroSetor, setFiltroSetor]       = useState('');
 
   // Config % (líder)
   const [pctInput, setPctInput]     = useState('');
   const [salvandoPct, setSalvandoPct] = useState(false);
+  const [confirmandoPct, setConfirmandoPct] = useState<number | null>(null);
+  const [salvandoToggle, setSalvandoToggle] = useState(false);
   const [avaliandoId, setAvaliandoId] = useState<string | null>(null);
   const [limpando, setLimpando]       = useState(false);
 
@@ -97,34 +125,64 @@ export function PixAutomatico() {
   const [importando, setImportando]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const setorDoLider = perfil?.setor_id ?? null;
-  const pctDoMeuSetor = setorDoLider != null
-    ? (pctPorSetor[setorDoLider] ?? PIX_AUTO_PCT_PADRAO)
+  // Meta / quartil do operador logado (card de bônus)
+  const [metaValor, setMetaValor]   = useState<number | null>(null);
+  const [configMes, setConfigMes]   = useState<MetasConfigMes | null>(null);
+  const [recebidoMes, setRecebidoMes] = useState<number | null>(null);
+
+  const meuSetor = perfil?.setor_id ?? null;
+  // Setor cuja configuração (% e interruptor) está em edição: multi-setor usa o
+  // filtro de setor; líder/elite sempre o próprio setor.
+  const setorConfig = ehMultiSetor ? (filtroSetor || meuSetor) : meuSetor;
+
+  const pctPorSetor = useMemo(() => {
+    const m: Record<string, number> = {};
+    Object.values(configs).forEach(c => { m[c.setor_id] = Number(c.pct); });
+    return m;
+  }, [configs]);
+
+  const pctDoMeuSetor = meuSetor != null
+    ? (pctPorSetor[meuSetor] ?? PIX_AUTO_PCT_PADRAO)
     : PIX_AUTO_PCT_PADRAO;
+  const pctSetorConfig = setorConfig != null
+    ? (pctPorSetor[setorConfig] ?? PIX_AUTO_PCT_PADRAO)
+    : PIX_AUTO_PCT_PADRAO;
+  const registroLigadoSetorConfig = setorConfig != null
+    ? (configs[setorConfig]?.permite_registro_operador ?? true)
+    : true;
+  // Operador só registra com o interruptor do PRÓPRIO setor ligado
+  const podeRegistrar = ehLider
+    || meuSetor == null
+    || (configs[meuSetor]?.permite_registro_operador ?? true);
 
   const carregar = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
     setLoading(true);
     try {
-      const [lista, configs] = await Promise.all([
+      const [lista, cfgs, bloqueados] = await Promise.all([
         fetchAcordosPix(empresa.id, ehLider ? undefined : { operadorId: perfil.id }),
         fetchConfigsPix(empresa.id),
+        fetchNrsBloqueados(empresa.id),
       ]);
       setItens(lista);
-      const mapa: Record<string, number> = {};
-      configs.forEach(c => { mapa[c.setor_id] = Number(c.pct); });
-      setPctPorSetor(mapa);
+      const mapa: Record<string, PixAutoConfig> = {};
+      cfgs.forEach(c => { mapa[c.setor_id] = { ...c, permite_registro_operador: c.permite_registro_operador ?? true }; });
+      setConfigs(mapa);
+      setNrsBloqueados(bloqueados);
 
       if (ehLider) {
-        // Nomes/equipes para filtros e coluna Operador
-        const [{ data: ops }, { data: eqs }] = await Promise.all([
-          supabase.from('perfis').select('id, nome, equipe_id, setor_id')
+        // Nomes/equipes/setores para filtros, vínculo e coluna Operador
+        const [{ data: ops }, { data: eqs }, { data: sets }] = await Promise.all([
+          supabase.from('perfis').select('id, nome, equipe_id, setor_id, perfil')
             .eq('empresa_id', empresa.id).order('nome'),
           supabase.from('equipes').select('id, nome')
+            .eq('empresa_id', empresa.id).order('nome'),
+          supabase.from('setores').select('id, nome')
             .eq('empresa_id', empresa.id).order('nome'),
         ]);
         setOperadores(((ops ?? []) as OperadorInfo[]));
         setEquipes(((eqs ?? []) as { id: string; nome: string }[]));
+        setSetores(((sets ?? []) as { id: string; nome: string }[]));
       }
     } finally {
       setLoading(false);
@@ -132,7 +190,35 @@ export function PixAutomatico() {
   }, [empresa?.id, perfil?.id, ehLider]);
 
   useEffect(() => { carregar(); }, [carregar]);
-  useEffect(() => { setPctInput(String(pctDoMeuSetor).replace('.', ',')); }, [pctDoMeuSetor]);
+  useEffect(() => { setPctInput(String(pctSetorConfig).replace('.', ',')); }, [pctSetorConfig]);
+
+  // Meta do mês + config de quartis + recebido no analítico (card de bônus)
+  useEffect(() => {
+    let cancelado = false;
+    void (async () => {
+      if (!empresa?.id || !perfil?.id) return;
+      const hoje = new Date();
+      const mes = hoje.getMonth() + 1;
+      const ano = hoje.getFullYear();
+      const mesStr = `${ano}-${String(mes).padStart(2, '0')}`;
+      try {
+        const [{ data: metaRow }, cfg, resumo] = await Promise.all([
+          supabase.from('metas').select('meta_valor')
+            .eq('tipo', 'operador').eq('referencia_id', perfil.id)
+            .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano)
+            .maybeSingle(),
+          getMetasConfig(empresa.id, mes, ano),
+          buscarResumoOperadoresAnalitico(empresa.id, mesStr),
+        ]);
+        if (cancelado) return;
+        setMetaValor(metaRow ? Number((metaRow as { meta_valor: number }).meta_valor) || null : null);
+        setConfigMes(cfg.data);
+        const minha = resumo.data.find(r => r.operador_id === perfil.id);
+        setRecebidoMes(minha ? Number(minha.total_recebido) || 0 : 0);
+      } catch { /* sem meta/config → card não aparece */ }
+    })();
+    return () => { cancelado = true; };
+  }, [empresa?.id, perfil?.id]);
 
   // ── Derivados ───────────────────────────────────────────────────────────
   const operadorEquipe = useMemo(() => {
@@ -141,16 +227,38 @@ export function PixAutomatico() {
     return m;
   }, [operadores]);
 
+  const operadorSetor = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    operadores.forEach(o => { m[o.id] = o.setor_id; });
+    return m;
+  }, [operadores]);
+
+  // Filtro de operador só lista OPERADORES (sem líder/gerência/diretoria etc.)
+  const operadoresFiltro = useMemo(
+    () => operadores.filter(o => String(o.perfil ?? '').toLowerCase() === 'operador'),
+    [operadores],
+  );
+
+  // Sugestões do vínculo (líder+ registra em nome de um operador)
+  const sugestoesVinculo = useMemo(() => {
+    const b = vinculoBusca.trim().toLowerCase();
+    if (!b) return [];
+    return operadoresFiltro
+      .filter(o => o.nome.toLowerCase().includes(b))
+      .slice(0, 8);
+  }, [operadoresFiltro, vinculoBusca]);
+
   const visiveis = useMemo(() => {
     const b = busca.trim().toLowerCase();
     return itens.filter(i => {
       if (filtroStatus !== 'todos' && i.status !== filtroStatus) return false;
       if (filtroOperador && i.operador_id !== filtroOperador) return false;
       if (filtroEquipe && operadorEquipe[i.operador_id] !== filtroEquipe) return false;
+      if (filtroSetor && (i.setor_id ?? operadorSetor[i.operador_id] ?? null) !== filtroSetor) return false;
       if (!b) return true;
       return i.nr_cliente.toLowerCase().includes(b) || (i.operador_nome ?? '').toLowerCase().includes(b);
     });
-  }, [itens, busca, filtroStatus, filtroOperador, filtroEquipe, operadorEquipe]);
+  }, [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor, operadorEquipe, operadorSetor]);
 
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)
   const totais = useMemo(() => {
@@ -167,6 +275,34 @@ export function PixAutomatico() {
 
   const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
 
+  // ── Bônus por meta (card dinâmico) ──────────────────────────────────────
+  // O que o operador já recebeu de comissão APROVADA no mês é pago DE NOVO se
+  // ele bater a meta. Estado do card vem da meta + quartis configurados:
+  //   • meta batida → valor garantido (verde)
+  //   • 1º quartil  → projetando a meta, mensagem de incentivo (azul)
+  //   • demais      → informativo (violeta)
+  const bonusMeta = useMemo(() => {
+    if (!perfil?.id || metaValor == null || metaValor <= 0 || !configMes || recebidoMes == null) return null;
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = agora.getMonth() + 1;
+    const prefixoMes = `${ano}-${String(mes).padStart(2, '0')}`;
+    const acumulado = itens
+      .filter(i => i.operador_id === perfil.id && i.status === 'aprovado' && i.criado_em.startsWith(prefixoMes))
+      .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0);
+    if (acumulado <= 0) return null;
+
+    const metaBatida = recebidoMes >= metaValor;
+    const totalUteis = diasUteisDoMes(ano, mes, configMes.feriados);
+    const decorridos = totalUteis === 0 ? 0 : diasUteisDecorridos(
+      ano, mes, configMes.feriados, getTodayISO(), undefined, configMes.contar_dia_atual === true,
+    );
+    const esperado  = totalUteis === 0 ? 0 : (metaValor / totalUteis) * Math.max(decorridos, 1);
+    const projecao  = esperado > 0 ? Math.min(Math.round((recebidoMes / esperado) * 100), 999) : 0;
+    const quartil   = quartilAtual(projecao, configMes.quartis);
+    return { acumulado, metaBatida, quartil: quartil?.quartil ?? null, projecao };
+  }, [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes]);
+
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
     if (!empresa?.id || !perfil?.id) return;
@@ -174,20 +310,34 @@ export function PixAutomatico() {
     const valor = parseCurrencyInput(valorNovo);
     if (!nr) { toast.error('Informe o NR do acordo'); return; }
     if (isNaN(valor) || valor <= 0) { toast.error('Valor inválido'); return; }
+    if (nrsBloqueados.has(normalizarNr(nr))) {
+      toast.error(`O NR ${nr} já registrou um acordo no Pix automático.`);
+      return;
+    }
+    if (!podeRegistrar) {
+      toast.error('O registro manual está desativado para o seu setor.');
+      return;
+    }
+    // Líder+ pode vincular o acordo a um operador; sem vínculo, registra em nome próprio
+    const dono = ehLider && vinculoOp ? vinculoOp : null;
     setSalvando(true);
     try {
       const { ok, error } = await criarAcordoPix({
         empresaId:    empresa.id,
-        operadorId:   perfil.id,
-        operadorNome: perfil.nome ?? perfil.email ?? '—',
-        setorId:      perfil.setor_id ?? null,
+        operadorId:   dono ? dono.id : perfil.id,
+        operadorNome: dono ? dono.nome : (perfil.nome ?? perfil.email ?? '—'),
+        setorId:      dono ? dono.setor_id : (perfil.setor_id ?? null),
         nrCliente:    nr,
         valor,
       });
       if (!ok) { toast.error('Erro ao registrar: ' + error); return; }
-      toast.success('Acordo Pix registrado — aguardando verificação do líder.');
+      toast.success(dono
+        ? `Acordo Pix registrado para ${dono.nome} — aguardando verificação.`
+        : 'Acordo Pix registrado — aguardando verificação do líder.');
       setNrNovo('');
       setValorNovo('');
+      setVinculoOp(null);
+      setVinculoBusca('');
       await carregar();
     } finally {
       setSalvando(false);
@@ -248,15 +398,25 @@ export function PixAutomatico() {
     }
   }
 
-  async function salvarPct() {
-    if (!empresa?.id || !perfil?.id || !setorDoLider) return;
+  /** Passo 1: valida o % digitado e abre a confirmação. */
+  function pedirConfirmacaoPct() {
+    if (!setorConfig) return;
     const pct = parseFloat(pctInput.replace(',', '.'));
     if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('Percentual inválido (0 a 100)'); return; }
+    if (pct === pctSetorConfig) { toast.info('O percentual não mudou.'); return; }
+    setConfirmandoPct(pct);
+  }
+
+  /** Passo 2: usuário confirmou no diálogo — grava o % do setor. */
+  async function salvarPctConfirmado() {
+    const pct = confirmandoPct;
+    setConfirmandoPct(null);
+    if (!empresa?.id || !perfil?.id || !setorConfig || pct == null) return;
     setSalvandoPct(true);
     try {
       const { ok, error } = await upsertConfigPix({
         empresaId: empresa.id,
-        setorId: setorDoLider,
+        setorId: setorConfig,
         pct,
         atualizadoPor: perfil.id,
         atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
@@ -266,6 +426,28 @@ export function PixAutomatico() {
       await carregar();
     } finally {
       setSalvandoPct(false);
+    }
+  }
+
+  /** Liga/desliga o registro manual de operadores no setor em edição. */
+  async function alternarRegistroSetor(ligar: boolean) {
+    if (!empresa?.id || !perfil?.id || !setorConfig) return;
+    setSalvandoToggle(true);
+    try {
+      const { ok, error } = await setPermiteRegistroOperador({
+        empresaId: empresa.id,
+        setorId: setorConfig,
+        permite: ligar,
+        atualizadoPor: perfil.id,
+        atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
+      });
+      if (!ok) { toast.error('Erro ao alterar registro manual: ' + error); return; }
+      toast.success(ligar
+        ? 'Registro manual LIGADO — operadores do setor podem adicionar acordos.'
+        : 'Registro manual DESLIGADO — operadores do setor apenas visualizam.');
+      await carregar();
+    } finally {
+      setSalvandoToggle(false);
     }
   }
 
@@ -473,9 +655,10 @@ export function PixAutomatico() {
       </div>
 
       {/* ── Registrar novo ── */}
+      {podeRegistrar ? (
       <Card className="border-violet-500/20 bg-violet-500/[0.03]">
         <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-3 flex-wrap">
             <div className="space-y-1 flex-1 max-w-[220px]">
               <Label className="text-xs font-medium flex items-center gap-1"><Hash className="w-3 h-3" /> NR do acordo *</Label>
               <Input value={nrNovo} onChange={e => setNrNovo(e.target.value)}
@@ -487,6 +670,43 @@ export function PixAutomatico() {
                 placeholder="0,00" className="h-9 text-sm font-mono"
                 onKeyDown={e => { if (e.key === 'Enter') registrar(); }} />
             </div>
+            {ehLider && (
+              <div className="space-y-1 flex-1 max-w-[260px] relative">
+                <Label className="text-xs font-medium flex items-center gap-1">
+                  <User className="w-3 h-3" /> Vincular a um operador
+                </Label>
+                {vinculoOp ? (
+                  <div className="h-9 flex items-center justify-between gap-2 rounded-md border border-violet-500/40 bg-violet-500/10 px-3">
+                    <span className="text-xs font-medium truncate">{vinculoOp.nome}</span>
+                    <button onClick={() => { setVinculoOp(null); setVinculoBusca(''); }}
+                      className="text-muted-foreground hover:text-foreground" title="Remover vínculo">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Input value={vinculoBusca}
+                      onChange={e => { setVinculoBusca(e.target.value); setVinculoAberto(true); }}
+                      onFocus={() => setVinculoAberto(true)}
+                      onBlur={() => setTimeout(() => setVinculoAberto(false), 150)}
+                      placeholder="Digite o nome do operador…" className="h-9 text-sm" />
+                    {vinculoAberto && sugestoesVinculo.length > 0 && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 rounded-lg border border-border bg-popover shadow-lg overflow-hidden">
+                        {sugestoesVinculo.map(o => (
+                          <button key={o.id}
+                            onMouseDown={e => e.preventDefault()}
+                            onClick={() => { setVinculoOp(o); setVinculoAberto(false); }}
+                            className="w-full text-left px-3 py-2 text-xs hover:bg-accent/60 flex items-center gap-2">
+                            <User className="w-3 h-3 text-muted-foreground shrink-0" />
+                            <span className="truncate">{o.nome}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             {valorNovo && !isNaN(parseCurrencyInput(valorNovo)) && parseCurrencyInput(valorNovo) > 0 && (
               <p className="text-[11px] text-muted-foreground pb-2.5">
                 Comissão estimada:{' '}
@@ -503,9 +723,22 @@ export function PixAutomatico() {
           </div>
           <p className="text-[11px] text-muted-foreground mt-2">
             Todo registro entra como <strong>verificação pendente</strong> — o líder aprova ou desaprova.
+            Cada NR só pode registrar <strong>um</strong> acordo no Pix automático.
+            {ehLider && ' Sem vínculo, o acordo é registrado em seu próprio nome.'}
           </p>
         </CardContent>
       </Card>
+      ) : (
+      <Card className="border-amber-500/25 bg-amber-500/[0.04]">
+        <CardContent className="p-4 flex items-center gap-3">
+          <Lock className="w-4 h-4 text-amber-500 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            O registro manual de acordos está <strong className="text-amber-500">desativado</strong> para
+            o seu setor. Você pode acompanhar seus acordos pendentes, aprovados e desaprovados abaixo.
+          </p>
+        </CardContent>
+      </Card>
+      )}
 
       {/* ── Totais pendente × aprovado ── */}
       {!loading && (
@@ -529,6 +762,49 @@ export function PixAutomatico() {
             </motion.div>
           ))}
         </div>
+      )}
+
+      {/* ── Bônus por meta (dinâmico: meta batida / 1º quartil / demais) ── */}
+      {!loading && bonusMeta && (
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
+          <div className={cn(
+            'rounded-xl border bg-gradient-to-br p-4 flex items-start gap-3',
+            bonusMeta.metaBatida
+              ? 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/40'
+              : bonusMeta.quartil === 1
+                ? 'from-sky-500/15 to-indigo-600/5 border-sky-500/30'
+                : 'from-violet-500/15 to-fuchsia-600/5 border-violet-500/25',
+          )}>
+            {bonusMeta.metaBatida
+              ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              : bonusMeta.quartil === 1
+                ? <TrendingUp className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+                : <Target className="w-5 h-5 text-violet-400 shrink-0 mt-0.5" />}
+            <div className="min-w-0">
+              <p className="text-[11px] text-muted-foreground">
+                Bônus por meta · comissão aprovada acumulada no mês
+              </p>
+              <p className={cn('text-xl font-bold font-mono leading-tight',
+                bonusMeta.metaBatida ? 'text-emerald-400' : bonusMeta.quartil === 1 ? 'text-sky-400' : 'text-violet-400')}>
+                {formatCurrency(bonusMeta.acumulado)}
+              </p>
+              {bonusMeta.metaBatida ? (
+                <p className="text-xs font-semibold text-emerald-400 mt-1">
+                  🏆 Meta batida — este valor está <strong>garantido</strong> e será recebido novamente!
+                </p>
+              ) : bonusMeta.quartil === 1 ? (
+                <p className="text-xs text-muted-foreground mt-1">
+                  <span className="font-semibold text-sky-400">Você está no 1º quartil, projetando a meta ({bonusMeta.projecao}%)!</span>{' '}
+                  Continue assim: batendo a meta do mês, você recebe este valor <strong className="text-foreground">de novo</strong>.
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Bata a meta do mês e receba este valor <strong className="text-foreground">novamente</strong> como bônus.
+                </p>
+              )}
+            </div>
+          </div>
+        </motion.div>
       )}
 
       {/* ── Filtros ── */}
@@ -556,6 +832,18 @@ export function PixAutomatico() {
         </Select>
         {ehLider && (
           <>
+            {ehMultiSetor && (
+              <Select value={filtroSetor || '__todos__'}
+                onValueChange={v => setFiltroSetor(v === '__todos__' ? '' : v)}>
+                <SelectTrigger className="h-9 w-40 text-xs rounded-lg">
+                  <Building2 className="w-3 h-3 mr-1 shrink-0" /><SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__todos__">Todos os setores</SelectItem>
+                  {setores.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
             <Select value={filtroEquipe || '__todas__'}
               onValueChange={v => setFiltroEquipe(v === '__todas__' ? '' : v)}>
               <SelectTrigger className="h-9 w-40 text-xs rounded-lg">
@@ -573,26 +861,65 @@ export function PixAutomatico() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__todos__">Todos os operadores</SelectItem>
-                {operadores.map(o => <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>)}
+                {operadoresFiltro.map(o => <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </>
         )}
+      </div>
 
-        {/* Config % do setor (líder) */}
-        {ehLider && setorDoLider && (
-          <div className="flex items-center gap-1.5 sm:ml-auto rounded-lg border border-border bg-card px-2.5 py-1.5">
+      {/* ── Configuração do setor (líder+): % de comissão + registro manual ── */}
+      {ehLider && setorConfig && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
+          <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5 text-violet-400" />
+            {setores.find(s => s.id === setorConfig)?.nome ?? 'Meu setor'}
+          </span>
+          <div className="flex items-center gap-1.5">
             <Percent className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-            <span className="text-[11px] text-muted-foreground shrink-0">% do setor:</span>
+            <span className="text-[11px] text-muted-foreground shrink-0">Comissão do setor:</span>
             <Input value={pctInput} onChange={e => setPctInput(e.target.value)}
               className="h-7 w-16 text-xs text-center font-mono" />
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-violet-400 hover:text-violet-300"
-              onClick={salvarPct} disabled={salvandoPct} title="Salvar percentual do setor">
+            <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-violet-400 hover:text-violet-300"
+              onClick={pedirConfirmacaoPct} disabled={salvandoPct} title="Confirmar novo percentual do setor">
               {salvandoPct ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Confirmar
             </Button>
           </div>
-        )}
-      </div>
+          <div className="flex items-center gap-2">
+            <Switch checked={registroLigadoSetorConfig} disabled={salvandoToggle}
+              onCheckedChange={alternarRegistroSetor}
+              aria-label="Registro manual pelos operadores" />
+            <span className="text-[11px] text-muted-foreground">
+              Registro manual pelos operadores:{' '}
+              <strong className={registroLigadoSetorConfig ? 'text-emerald-500' : 'text-amber-500'}>
+                {registroLigadoSetorConfig ? 'ligado' : 'desligado'}
+              </strong>
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmação de alteração do % */}
+      <AlertDialog open={confirmandoPct != null} onOpenChange={aberto => { if (!aberto) setConfirmandoPct(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Alterar comissão do setor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja alterar a comissão do setor{' '}
+              <strong>{setores.find(s => s.id === setorConfig)?.nome ?? 'atual'}</strong>{' '}
+              de <strong>{fmtPct(pctSetorConfig)}</strong> para{' '}
+              <strong>{confirmandoPct != null ? fmtPct(confirmandoPct) : ''}</strong>?
+              A mudança vale apenas para este setor e para as próximas aprovações —
+              acordos já aprovados não mudam.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={salvarPctConfirmado}>Sim, alterar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Barra de ação em lote (líder) ── */}
       {ehLider && selecionados.size > 0 && (

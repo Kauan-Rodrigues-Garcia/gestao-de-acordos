@@ -1433,6 +1433,7 @@ export type Database = {
           empresa_id: string
           id: string
           pct: number
+          permite_registro_operador: boolean
           setor_id: string
         }
         Insert: {
@@ -1442,6 +1443,7 @@ export type Database = {
           empresa_id: string
           id?: string
           pct?: number
+          permite_registro_operador?: boolean
           setor_id: string
         }
         Update: {
@@ -1451,7 +1453,56 @@ export type Database = {
           empresa_id?: string
           id?: string
           pct?: number
+          permite_registro_operador?: boolean
           setor_id?: string
+        }
+        Relationships: []
+      }
+      pix_automatico_nr_registro: {
+        Row: {
+          acordo_id: string | null
+          atualizado_em: string
+          avaliado_em: string | null
+          avaliado_por: string | null
+          avaliado_por_nome: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          nr_cliente: string
+          nr_normalizado: string
+          operador_id: string | null
+          operador_nome: string | null
+          status: string
+        }
+        Insert: {
+          acordo_id?: string | null
+          atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
+          avaliado_por_nome?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          nr_cliente: string
+          nr_normalizado: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          status?: string
+        }
+        Update: {
+          acordo_id?: string | null
+          atualizado_em?: string
+          avaliado_em?: string | null
+          avaliado_por?: string | null
+          avaliado_por_nome?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          nr_cliente?: string
+          nr_normalizado?: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          status?: string
         }
         Relationships: []
       }

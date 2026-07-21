@@ -44,9 +44,32 @@ export interface PixAutoConfig {
   empresa_id: string;
   setor_id: string;
   pct: number;
+  /** Interruptor do setor: false = operador só visualiza, não registra. */
+  permite_registro_operador: boolean;
   atualizado_por: string | null;
   atualizado_por_nome: string | null;
   atualizado_em: string;
+}
+
+/** Registro histórico de NR (pix_automatico_nr_registro, mantido por triggers). */
+export interface PixNrRegistro {
+  id: string;
+  empresa_id: string;
+  nr_normalizado: string;
+  nr_cliente: string;
+  acordo_id: string | null;
+  operador_id: string | null;
+  operador_nome: string | null;
+  status: 'pendente' | 'validado' | 'recusado';
+  avaliado_por: string | null;
+  avaliado_por_nome: string | null;
+  avaliado_em: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+export function normalizarNr(nr: string): string {
+  return nr.trim().toLowerCase();
 }
 
 /** Comissão de uma linha: aprovado usa o % travado; pendente usa o % do setor. */
@@ -130,18 +153,53 @@ export interface LinhaPixLote {
 }
 
 /**
+ * NRs que NÃO podem ser registrados de novo: registro histórico com status
+ * pendente ou validado (recusado pode voltar). Retorna o conjunto normalizado.
+ */
+export async function fetchNrsBloqueados(empresaId: string): Promise<Set<string>> {
+  const { data, error } = await supabase
+    .from('pix_automatico_nr_registro')
+    .select('nr_normalizado, status')
+    .eq('empresa_id', empresaId)
+    .in('status', ['pendente', 'validado']);
+  if (error) {
+    // Migration ausente → sem bloqueio pelo cliente (trigger também não existe)
+    console.warn('[pix_automatico.service] fetchNrsBloqueados:', error.message);
+    return new Set();
+  }
+  return new Set(((data ?? []) as { nr_normalizado: string }[]).map(r => r.nr_normalizado));
+}
+
+/** Histórico completo de NRs da empresa (para consulta/ferramentas futuras). */
+export async function fetchNrRegistros(empresaId: string): Promise<PixNrRegistro[]> {
+  const { data, error } = await supabase
+    .from('pix_automatico_nr_registro')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('atualizado_em', { ascending: false })
+    .limit(2000);
+  if (error) {
+    console.warn('[pix_automatico.service] fetchNrRegistros:', error.message);
+    return [];
+  }
+  return (data as unknown as PixNrRegistro[]) ?? [];
+}
+
+/**
  * Cria vários acordos Pix de uma vez (importação de planilha).
- * Faz dedupe por `NR+operador` contra os já existentes na empresa e contra a
- * própria planilha; insere só os novos. Não sobrescreve nada.
+ * Dedupe por NR (único por empresa): pula NRs já bloqueados no registro
+ * histórico (pendente/validado) e repetidos na própria planilha.
  */
 export async function criarAcordosPixLote(
   empresaId: string,
   linhas: LinhaPixLote[],
 ): Promise<{ ok: boolean; importados: number; ignorados: number; duplicados: number; error?: string }> {
-  // Existentes (NR+operador) para dedupe
-  const existentes = await fetchAcordosPix(empresaId);
-  const chave = (nr: string, op: string) => `${nr.trim().toLowerCase()}::${op}`;
-  const jaExiste = new Set(existentes.map(e => chave(e.nr_cliente, e.operador_id)));
+  const bloqueados = await fetchNrsBloqueados(empresaId);
+  // Fallback dos ambientes sem a migration do registro: dedupe pelos acordos
+  const existentes = bloqueados.size === 0 ? await fetchAcordosPix(empresaId) : [];
+  existentes.forEach(e => {
+    if (e.status !== 'desaprovado') bloqueados.add(normalizarNr(e.nr_cliente));
+  });
 
   let ignorados = 0;
   let duplicados = 0;
@@ -152,8 +210,8 @@ export async function criarAcordosPixLote(
     const nr = (l.nrCliente ?? '').trim();
     const valor = Number(l.valor);
     if (!nr || !Number.isFinite(valor) || valor <= 0) { ignorados++; continue; }
-    const k = chave(nr, l.operadorId);
-    if (jaExiste.has(k) || vistosNoLote.has(k)) { duplicados++; continue; }
+    const k = normalizarNr(nr);
+    if (bloqueados.has(k) || vistosNoLote.has(k)) { duplicados++; continue; }
     vistosNoLote.add(k);
     novos.push({
       empresa_id:    empresaId,
@@ -257,6 +315,28 @@ export async function upsertConfigPix(p: {
       atualizado_por:      p.atualizadoPor,
       atualizado_por_nome: p.atualizadoPorNome,
       atualizado_em:       new Date().toISOString(),
+    }, { onConflict: 'empresa_id,setor_id' });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+/** Liga/desliga o registro manual dos operadores no setor (interruptor). */
+export async function setPermiteRegistroOperador(p: {
+  empresaId: string;
+  setorId: string;
+  permite: boolean;
+  atualizadoPor: string;
+  atualizadoPorNome: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('pix_automatico_config')
+    .upsert({
+      empresa_id:                p.empresaId,
+      setor_id:                  p.setorId,
+      permite_registro_operador: p.permite,
+      atualizado_por:            p.atualizadoPor,
+      atualizado_por_nome:       p.atualizadoPorNome,
+      atualizado_em:             new Date().toISOString(),
     }, { onConflict: 'empresa_id,setor_id' });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
