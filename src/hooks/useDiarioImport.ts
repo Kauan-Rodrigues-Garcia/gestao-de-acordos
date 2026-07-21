@@ -24,6 +24,12 @@ import {
   type PerfilResumido,
   type ResultadoImportacaoDiario,
 } from '@/services/diario/diario.service';
+import {
+  loteEhMensal,
+  mensalJaImportadoHoje,
+  marcarMensalImportadoHoje,
+  MSG_BLOQUEIO_MENSAL,
+} from '@/services/diario/diarioMensalGuard';
 
 export type EstadoImportDiario = 'idle' | 'parsing' | 'preview' | 'confirming' | 'done' | 'error';
 
@@ -92,6 +98,15 @@ export function useDiarioImport() {
       return;
     }
 
+    // PP: o PRIMEIRO relatório do dia precisa ser o mensal (multi-dia).
+    // Relatório de 1 dia só libera depois do mensal de hoje; "Limpar dia" /
+    // "Limpar tudo" derrubam a marca e o bloqueio volta.
+    if (isPaguePlay && !loteEhMensal(linhas) && !mensalJaImportadoHoje(empresa.id)) {
+      setErroGeral(MSG_BLOQUEIO_MENSAL);
+      setEstado('error');
+      return;
+    }
+
     // Linhas "(sem vínculo)" (operador vazio) ficam fora da resolução de
     // operadores — não são órfãs para vincular manualmente
     const usuarios = [...new Set(linhas.map(l => l.operador_usuario))].filter(u => u !== '');
@@ -111,7 +126,7 @@ export function useDiarioImport() {
       dia:                      diaReferencia(linhas) ?? dayKeyDiario(new Date()),
     });
     setEstado('preview');
-  }, [empresa?.id]);
+  }, [empresa?.id, isPaguePlay]);
 
   const definirVinculo = useCallback((usuarioArquivo: string, perfilId: string | null) => {
     setVinculosManuais(prev => {
@@ -156,8 +171,13 @@ export function useDiarioImport() {
     const notificacoes = mesclarNovosPorOperador(res.novosPorOperador, revinc.novosPorOperador);
     await notificarImportacaoDiario(empresa.id, preview.dia, notificacoes);
 
+    // PP: mensal importado hoje → libera relatórios de 1 dia até amanhã
+    if (isPaguePlay && loteEhMensal(preview.linhas)) {
+      marcarMensalImportadoHoje(empresa.id);
+    }
+
     setEstado('done');
-  }, [preview, vinculosManuais, empresa?.id, perfil?.id]);
+  }, [preview, vinculosManuais, empresa?.id, perfil?.id, isPaguePlay]);
 
   const cancelar = useCallback(() => {
     setEstado('idle');

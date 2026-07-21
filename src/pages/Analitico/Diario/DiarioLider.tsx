@@ -37,6 +37,9 @@ import {
   removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia, limparTodoDiario,
 } from '@/services/diario/diario.service';
 import {
+  mensalJaImportadoHoje, limparMarcaMensal,
+} from '@/services/diario/diarioMensalGuard';
+import {
   linhasVivas, consolidarItens, consolidarIgnorados, agregarPorOperador,
   acordoKey, dataLabel, fmtDataISO, montarTextoListaDiario,
   type ResumoOperadorDiario,
@@ -99,7 +102,16 @@ export function DiarioLider({
   const [confirmandoLimpezaTudo, setConfirmandoLimpezaTudo] = useState(false);
   const [limpandoTudo, setLimpandoTudo]    = useState(false);
 
+  // PP: o primeiro relatório do dia deve ser o MENSAL — banner diário até o
+  // mensal de hoje ser importado; limpar dia/tudo derruba a marca e ele volta.
+  const [mensalOkHoje, setMensalOkHoje] = useState(() => mensalJaImportadoHoje(empresaId));
+
   const hojeISO = getTodayISO();
+
+  // Revalida a marca ao trocar de empresa e na virada do dia (chave é por dia)
+  useEffect(() => {
+    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
+  }, [empresaId, hojeISO]);
 
   // ── Agregações ────────────────────────────────────────────────────────────
   const {
@@ -220,7 +232,13 @@ export function DiarioLider({
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
-      toast.success(`Dados de ${fmtDataISO(dia)} excluídos. Reimporte o relatório quando necessário.`);
+      // Derruba a marca do mensal: a próxima importação exige o mês inteiro
+      limparMarcaMensal(empresaId);
+      setMensalOkHoje(false);
+      toast.success(
+        `Dados de ${fmtDataISO(dia)} excluídos. ` +
+        'A próxima importação deve ser o relatório MENSAL, para realinhar os valores.',
+      );
       setConfirmandoLimpeza(false);
       void refetch();
     }
@@ -233,9 +251,13 @@ export function DiarioLider({
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
+      // Derruba a marca do mensal: a próxima importação exige o mês inteiro
+      limparMarcaMensal(empresaId);
+      setMensalOkHoje(false);
       toast.success(
         `Todos os dados do recebimento diário foram excluídos` +
-        `${removidos > 0 ? ` (${removidos} registro${removidos !== 1 ? 's' : ''})` : ''}.`,
+        `${removidos > 0 ? ` (${removidos} registro${removidos !== 1 ? 's' : ''})` : ''}. ` +
+        'A próxima importação deve ser o relatório MENSAL, para realinhar os valores.',
       );
       setConfirmandoLimpezaTudo(false);
       void refetch();
@@ -243,17 +265,42 @@ export function DiarioLider({
     setLimpandoTudo(false);
   }
 
+  const handlePosImportComMarca = useCallback(() => {
+    // Reflete a marca gravada pelo useDiarioImport (mensal importado hoje)
+    setMensalOkHoje(mensalJaImportadoHoje(empresaId));
+  }, [empresaId]);
+
   const handlePosImport = useCallback(() => {
     setModalImportar(false);
+    handlePosImportComMarca();
     if (importHook.estado === 'done' && importHook.preview) {
       onDadosImportados(importHook.preview.dia);
       void refetch();
     }
-  }, [importHook.estado, importHook.preview, onDadosImportados, refetch]);
+  }, [importHook.estado, importHook.preview, onDadosImportados, refetch, handlePosImportComMarca]);
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-4">
+
+      {/* Aviso diário (PP): o primeiro relatório do dia deve ser o MENSAL */}
+      {tenant.isPaguePlay && !mensalOkHoje && (
+        <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3">
+          <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs">
+            <p className="font-semibold text-amber-700 dark:text-amber-400">
+              Primeiro relatório do dia: importe o MENSAL (mês inteiro)
+            </p>
+            <p className="text-muted-foreground mt-0.5">
+              O primeiro relatório importado hoje deve conter o mês inteiro — ele
+              realinha os dias anteriores e evita que algum valor quebrado passe
+              despercebido. Relatórios de apenas 1 dia ficam bloqueados até o
+              mensal de hoje ser importado. Limpar o dia ou limpar tudo volta a
+              exigir o mensal.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Cards de resumo do dia */}
       {loading ? (
