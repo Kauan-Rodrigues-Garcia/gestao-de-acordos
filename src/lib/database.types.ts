@@ -1819,6 +1819,18 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_diario_resumo_mensal: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: {
+          operador_id: string | null
+          operador_usuario: string
+          operador_nome: string | null
+          setor_importador: string | null
+          dia_referencia: string
+          total_recebido: number
+          total_pagamentos: number
+        }[]
+      }
       fn_direto_extra_ativo: {
         Args: { p_empresa_id: string; p_user_id: string }
         Returns: boolean

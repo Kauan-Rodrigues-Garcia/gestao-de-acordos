@@ -440,6 +440,89 @@ export async function buscarResumoMensalDiario(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<ResumoMensalDiario> {
+  // 1) RPC agregada no banco (migration 20260721f): uma requisição pequena —
+  //    uma linha por (operador|órfão, dia) — em vez de todas as linhas do mês
+  //    paginadas + tabela de perfis. Se a migration ainda não foi aplicada,
+  //    cai no caminho antigo (varredura das linhas).
+  const rpc = await buscarResumoMensalDiarioRpc(empresaId, mes);
+  if (rpc) return rpc;
+
+  return buscarResumoMensalDiarioLinhas(empresaId, mes);
+}
+
+interface RowResumoRpc {
+  operador_id: string | null;
+  operador_usuario: string;
+  operador_nome: string | null;
+  setor_importador: string | null;
+  dia_referencia: string;
+  total_recebido: number;
+  total_pagamentos: number;
+}
+
+/** Caminho rápido via fn_diario_resumo_mensal; null = função ausente no banco. */
+async function buscarResumoMensalDiarioRpc(
+  empresaId: string,
+  mes: string,
+): Promise<ResumoMensalDiario | null> {
+  const { data, error } = await supabase.rpc('fn_diario_resumo_mensal', {
+    p_empresa_id: empresaId,
+    p_mes:        mes,
+  });
+  if (error) {
+    // Migration não aplicada → fallback silencioso; outros erros são reais
+    if (/function|does not exist|schema cache/i.test(error.message)) return null;
+    return { resumos: [], orfaosPorSetor: {}, linhasDia: [], error: error.message };
+  }
+
+  const porOperador = new Map<string, ResumoOperadorAnalitico>();
+  const orfaosPorSetor: Record<string, { total: number; qtd: number }> = {};
+  const linhasDia: LinhaRecebidaDia[] = [];
+
+  for (const r of (data ?? []) as RowResumoRpc[]) {
+    const valor = Number(r.total_recebido) || 0;
+    const qtd   = Number(r.total_pagamentos) || 0;
+    linhasDia.push({
+      operador_id:      r.operador_id,
+      // Órfão já vem com o setor do importador resolvido no banco
+      setor_id:         r.operador_id ? null : (r.setor_importador ?? null),
+      importado_por_id: null,
+      valor_recebido:   valor,
+      data_pagamento:   r.dia_referencia,
+    });
+
+    if (r.operador_id) {
+      const atual = porOperador.get(r.operador_id) ?? {
+        operador_id:      r.operador_id,
+        operador_usuario: r.operador_usuario,
+        operador_nome:    r.operador_nome,
+        total_recebido:   0,
+        total_ho:         0,
+        total_pagamentos: 0,
+      };
+      atual.total_recebido   += valor;
+      atual.total_pagamentos += qtd;
+      porOperador.set(r.operador_id, atual);
+    } else if (r.setor_importador) {
+      const acc = orfaosPorSetor[r.setor_importador]
+        ?? (orfaosPorSetor[r.setor_importador] = { total: 0, qtd: 0 });
+      acc.total += valor;
+      acc.qtd   += qtd;
+    }
+  }
+
+  const resumos = [...porOperador.values()]
+    .map(r => ({ ...r, total_ho: r.total_recebido * PP_HO_PERCENTUAL }))
+    .sort((a, b) => b.total_recebido - a.total_recebido);
+
+  return { resumos, orfaosPorSetor, linhasDia, error: null };
+}
+
+/** Fallback sem a RPC: varre as linhas do mês paginadas (caminho antigo). */
+async function buscarResumoMensalDiarioLinhas(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<ResumoMensalDiario> {
   const [y, m] = mes.split('-').map(Number);
   const primeiro = `${mes}-01`;
   const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;

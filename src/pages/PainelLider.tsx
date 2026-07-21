@@ -175,6 +175,13 @@ export default function PainelLider() {
   // soma-se o mês inteiro (dia_referencia). Antes moravam no Analítico e
   // liam o relatório analítico — na PaguePlay a fonte agora é o diário.
   const [abaAtiva, setAbaAtiva] = useState<AbaPainel>('time');
+  // Abas já visitadas ficam MONTADAS (escondidas com CSS): trocar de aba não
+  // remonta o componente nem refaz os fetches internos (metas, líderes, etc.)
+  const [abasVisitadas, setAbasVisitadas] = useState<Set<AbaPainel>>(() => new Set(['time']));
+  const mudarAba = useCallback((k: AbaPainel) => {
+    setAbaAtiva(k);
+    setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
+  }, []);
   const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
   // Líder/gerência restritos ao próprio setor; admin/diretoria veem tudo
   const setorAbas = (!isAdmin && !verTodosSetores) ? (perfil?.setor_id ?? null) : null;
@@ -186,24 +193,33 @@ export default function PainelLider() {
   } | null>(null);
   const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
   const [loadingDiario, setLoadingDiario] = useState(false);
+  // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
+  const [diarioReloadKey, setDiarioReloadKey] = useState(0);
 
-  const abaDiaria = abaAtiva !== 'time';
+  // Equipes não dependem do mês — carrega uma vez no mount
   useEffect(() => {
-    if (!isPP || !abaDiaria || !empresa?.id) return;
+    if (!isPP || !empresa?.id) return;
+    let cancel = false;
+    void buscarEquipesComOperadores(empresa.id).then(eqs => {
+      if (!cancel) setEquipesInfo(eqs);
+    });
+    return () => { cancel = true; };
+  }, [isPP, empresa?.id]);
+
+  // Resumo mensal do diário: pré-carrega no mount (e ao trocar o mês) — quando
+  // o usuário clica numa das abas, os dados já estão prontos. Antes a busca só
+  // começava no clique e refazia tudo a cada visita.
+  useEffect(() => {
+    if (!isPP || !empresa?.id) return;
     let cancel = false;
     setLoadingDiario(true);
-    void (async () => {
-      const [res, eqs] = await Promise.all([
-        buscarResumoMensalDiario(empresa.id, mesStr),
-        buscarEquipesComOperadores(empresa.id),
-      ]);
+    void buscarResumoMensalDiario(empresa.id, mesStr).then(res => {
       if (cancel) return;
       setResumoDiario(res);
-      setEquipesInfo(eqs);
       setLoadingDiario(false);
-    })();
+    });
     return () => { cancel = true; };
-  }, [isPP, abaDiaria, empresa?.id, mesStr]);
+  }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -365,7 +381,9 @@ export default function PainelLider() {
               Hoje
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => void carregarTudo()} disabled={loading} title="Recarregar">
+          <Button variant="ghost" size="icon" className="h-7 w-7"
+            onClick={() => { void carregarTudo(); if (isPP) setDiarioReloadKey(k => k + 1); }}
+            disabled={loading} title="Recarregar">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
         </div>
@@ -380,7 +398,7 @@ export default function PainelLider() {
             { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
             { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
           ] as const).map(({ key, label, Icon }) => (
-            <button key={key} onClick={() => setAbaAtiva(key)}
+            <button key={key} onClick={() => mudarAba(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
                 abaAtiva === key
@@ -403,11 +421,14 @@ export default function PainelLider() {
         </div>
       )}
 
+      {/* Abas do diário ficam montadas após a 1ª visita (hidden via CSS):
+          trocar de aba é instantâneo — nada é refeito, só reexibido. */}
+
       {/* ── Aba: Desempenho Equipes (PP — recebimento diário) ─────────────── */}
-      {isPP && abaAtiva === 'desempenho' && (
-        <>
+      {isPP && abasVisitadas.has('desempenho') && (
+        <div className={cn(abaAtiva !== 'desempenho' && 'hidden')}>
           {resumoDiario?.error && (
-            <p className="text-sm text-destructive">{resumoDiario.error}</p>
+            <p className="text-sm text-destructive mb-3">{resumoDiario.error}</p>
           )}
           <DesempenhoEquipes
             empresaId={empresa.id}
@@ -421,41 +442,45 @@ export default function PainelLider() {
             loading={loadingDiario}
             fonteLabel="relatório de recebimento diário"
           />
-        </>
+        </div>
       )}
 
       {/* ── Aba: Quartis (PP — recebimento diário) ────────────────────────── */}
-      {isPP && abaAtiva === 'quartis' && (
-        <QuartisOperadores
-          empresaId={empresa.id}
-          mes={mesStr}
-          setorId={setorAbas}
-          equipes={equipesInfo?.equipes ?? []}
-          resumos={resumoDiario?.resumos ?? []}
-          operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
-          equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-          loading={loadingDiario}
-        />
-      )}
-
-      {/* ── Aba: Gráfico recebimento (PP — recebimento diário) ────────────── */}
-      {isPP && abaAtiva === 'grafico' && (
-        loadingDiario ? (
-          <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
-            <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
-          </div>
-        ) : (
-          <GraficoRecebimento
+      {isPP && abasVisitadas.has('quartis') && (
+        <div className={cn(abaAtiva !== 'quartis' && 'hidden')}>
+          <QuartisOperadores
             empresaId={empresa.id}
             mes={mesStr}
             setorId={setorAbas}
             equipes={equipesInfo?.equipes ?? []}
+            resumos={resumoDiario?.resumos ?? []}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
             equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-            linhasExternas={resumoDiario?.linhasDia ?? []}
-            fonteLabel="relatório de recebimento diário"
+            loading={loadingDiario}
           />
-        )
+        </div>
+      )}
+
+      {/* ── Aba: Gráfico recebimento (PP — recebimento diário) ────────────── */}
+      {isPP && abasVisitadas.has('grafico') && (
+        <div className={cn(abaAtiva !== 'grafico' && 'hidden')}>
+          {loadingDiario ? (
+            <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
+            </div>
+          ) : (
+            <GraficoRecebimento
+              empresaId={empresa.id}
+              mes={mesStr}
+              setorId={setorAbas}
+              equipes={equipesInfo?.equipes ?? []}
+              operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
+              equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
+              linhasExternas={resumoDiario?.linhasDia ?? []}
+              fonteLabel="relatório de recebimento diário"
+            />
+          )}
+        </div>
       )}
 
       {/* ── KPIs do time ─────────────────────────────────────────────────── */}
