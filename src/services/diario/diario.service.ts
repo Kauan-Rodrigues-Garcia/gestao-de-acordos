@@ -419,17 +419,20 @@ export async function notificarImportacaoDiario(
 // As abas Desempenho Equipes / Quartis / Gráfico recebimento do Painel Líder
 // são alimentadas pelo relatório de recebimento diário: cada linha já é
 // gravada no seu próprio dia (dia_referencia), então somar o mês dá o
-// acumulado por operador. TODAS as linhas do relatório contam no total do
-// setor — com operador, órfãs (nome sem perfil) e "(sem vínculo)" (sem nome).
+// acumulado por operador. TODAS as linhas do relatório contam no total GERAL
+// do setor; mas acordos FORA DO VÍNCULO (prox_contato ≤ hoje — mesma regra do
+// card "Acordos ignorados" da aba do dia), os órfãos e os "(sem vínculo)" NÃO
+// contam para o operador nem para a equipe — apenas no geral.
 
 export interface ResumoMensalDiario {
-  /** Acumulado do mês por operador vinculado — mesmo formato do analítico,
-   *  para reusar DesempenhoEquipes/QuartisOperadores sem alteração.
-   *  total_ho é calculado (recebido × PP_HO_PERCENTUAL): o relatório diário
-   *  não traz a coluna de H.O. */
+  /** Acumulado do mês por operador vinculado, SEM os fora do vínculo — mesmo
+   *  formato do analítico, para reusar DesempenhoEquipes/QuartisOperadores
+   *  sem alteração. total_ho é calculado (recebido × PP_HO_PERCENTUAL): o
+   *  relatório diário não traz a coluna de H.O. */
   resumos: ResumoOperadorAnalitico[];
-  /** Linhas sem operador (órfãs + "(sem vínculo)") somadas por setor — o setor
-   *  é o de quem importou o relatório, igual à regra dos órfãos do analítico. */
+  /** Valores que contam SÓ no geral, somados por setor: órfãos,
+   *  "(sem vínculo)" e fora do vínculo. Setor = do operador (fora do
+   *  vínculo) ou de quem importou (órfãos/sem vínculo). */
   orfaosPorSetor: Record<string, { total: number; qtd: number }>;
   /** Linhas cruas para o gráfico por dia (data_pagamento = dia_referencia). */
   linhasDia: LinhaRecebidaDia[];
@@ -440,7 +443,7 @@ export async function buscarResumoMensalDiario(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<ResumoMensalDiario> {
-  // 1) RPC agregada no banco (migration 20260721f): uma requisição pequena —
+  // 1) RPC agregada no banco (migration 20260721g): uma requisição pequena —
   //    uma linha por (operador|órfão, dia) — em vez de todas as linhas do mês
   //    paginadas + tabela de perfis. Se a migration ainda não foi aplicada,
   //    cai no caminho antigo (varredura das linhas).
@@ -454,8 +457,12 @@ interface RowResumoRpc {
   operador_id: string | null;
   operador_usuario: string;
   operador_nome: string | null;
-  setor_importador: string | null;
+  /** Setor onde o valor conta no GERAL: do operador (linha vinculada) ou de
+   *  quem importou (órfã/sem vínculo). */
+  setor_geral: string | null;
   dia_referencia: string;
+  /** prox_contato ≤ hoje: conta só no geral, nunca no operador/equipe. */
+  fora_vinculo: boolean;
   total_recebido: number;
   total_pagamentos: number;
 }
@@ -475,25 +482,32 @@ async function buscarResumoMensalDiarioRpc(
     return { resumos: [], orfaosPorSetor: {}, linhasDia: [], error: error.message };
   }
 
+  const rows = (data ?? []) as unknown as RowResumoRpc[];
+  // Banco ainda com a v1 da função (migration 20260721f, sem fora_vinculo):
+  // cai na varredura de linhas, que aplica a regra corretamente no cliente.
+  if (rows.length > 0 && !('fora_vinculo' in rows[0])) return null;
+
   const porOperador = new Map<string, ResumoOperadorAnalitico>();
   const orfaosPorSetor: Record<string, { total: number; qtd: number }> = {};
   const linhasDia: LinhaRecebidaDia[] = [];
 
-  for (const r of (data ?? []) as RowResumoRpc[]) {
+  for (const r of rows) {
     const valor = Number(r.total_recebido) || 0;
     const qtd   = Number(r.total_pagamentos) || 0;
+    // Fora do vínculo, órfão e "(sem vínculo)" contam SÓ no geral
+    const contaNoOperador = !!r.operador_id && !r.fora_vinculo;
+
     linhasDia.push({
-      operador_id:      r.operador_id,
-      // Órfão já vem com o setor do importador resolvido no banco
-      setor_id:         r.operador_id ? null : (r.setor_importador ?? null),
+      operador_id:      contaNoOperador ? r.operador_id : null,
+      setor_id:         contaNoOperador ? null : (r.setor_geral ?? null),
       importado_por_id: null,
       valor_recebido:   valor,
       data_pagamento:   r.dia_referencia,
     });
 
-    if (r.operador_id) {
-      const atual = porOperador.get(r.operador_id) ?? {
-        operador_id:      r.operador_id,
+    if (contaNoOperador) {
+      const atual = porOperador.get(r.operador_id!) ?? {
+        operador_id:      r.operador_id!,
         operador_usuario: r.operador_usuario,
         operador_nome:    r.operador_nome,
         total_recebido:   0,
@@ -502,10 +516,10 @@ async function buscarResumoMensalDiarioRpc(
       };
       atual.total_recebido   += valor;
       atual.total_pagamentos += qtd;
-      porOperador.set(r.operador_id, atual);
-    } else if (r.setor_importador) {
-      const acc = orfaosPorSetor[r.setor_importador]
-        ?? (orfaosPorSetor[r.setor_importador] = { total: 0, qtd: 0 });
+      porOperador.set(r.operador_id!, atual);
+    } else if (r.setor_geral) {
+      const acc = orfaosPorSetor[r.setor_geral]
+        ?? (orfaosPorSetor[r.setor_geral] = { total: 0, qtd: 0 });
       acc.total += valor;
       acc.qtd   += qtd;
     }
@@ -532,6 +546,7 @@ async function buscarResumoMensalDiarioLinhas(
     operador_usuario: string;
     valor_recebido: number;
     dia_referencia: string;
+    prox_contato: string | null;
     importado_por_id: string | null;
   }
 
@@ -541,7 +556,7 @@ async function buscarResumoMensalDiarioLinhas(
   while (true) {
     const { data, error } = await supabase
       .from('diario_recebimentos')
-      .select('operador_id, operador_usuario, valor_recebido, dia_referencia, importado_por_id')
+      .select('operador_id, operador_usuario, valor_recebido, dia_referencia, prox_contato, importado_por_id')
       .eq('empresa_id', empresaId)
       .gte('dia_referencia', primeiro)
       .lte('dia_referencia', fim)
@@ -552,7 +567,8 @@ async function buscarResumoMensalDiarioLinhas(
     offset += PAGE;
   }
 
-  // Perfis: nome/usuario dos operadores + setor do importador (para os órfãos)
+  // Perfis: nome/usuario dos operadores + setor (do operador p/ fora do
+  // vínculo; do importador p/ órfãos)
   const { data: perfis } = await supabase
     .from('perfis')
     .select('id, nome, usuario, setor_id')
@@ -564,21 +580,35 @@ async function buscarResumoMensalDiarioLinhas(
   const porOperador = new Map<string, ResumoOperadorAnalitico>();
   const orfaosPorSetor: Record<string, { total: number; qtd: number }> = {};
   const linhasDia: LinhaRecebidaDia[] = [];
+  const hoje = dayKeyDiario(new Date());
 
   for (const r of rows) {
     const valor = Number(r.valor_recebido) || 0;
+    // Fora do vínculo (prox_contato ≤ hoje — regra dos "Acordos ignorados"):
+    // conta SÓ no geral, nunca no operador/equipe. Órfãos e "(sem vínculo)"
+    // idem.
+    const foraVinculo = r.prox_contato != null && r.prox_contato <= hoje;
+    const contaNoOperador = !!r.operador_id && !foraVinculo;
+
+    // Setor do geral: do operador (fora do vínculo) ou de quem importou
+    const setorGeral = contaNoOperador
+      ? null
+      : (perfilMap.get(r.operador_id ?? '')?.setor_id
+         ?? perfilMap.get(r.importado_por_id ?? '')?.setor_id
+         ?? null);
+
     linhasDia.push({
-      operador_id:      r.operador_id,
-      setor_id:         null,
+      operador_id:      contaNoOperador ? r.operador_id : null,
+      setor_id:         setorGeral,
       importado_por_id: r.importado_por_id,
       valor_recebido:   valor,
       data_pagamento:   r.dia_referencia,
     });
 
-    if (r.operador_id) {
-      const perfil = perfilMap.get(r.operador_id);
-      const atual = porOperador.get(r.operador_id) ?? {
-        operador_id:      r.operador_id,
+    if (contaNoOperador) {
+      const perfil = perfilMap.get(r.operador_id!);
+      const atual = porOperador.get(r.operador_id!) ?? {
+        operador_id:      r.operador_id!,
         operador_usuario: perfil?.usuario ?? r.operador_usuario,
         operador_nome:    perfil?.nome ?? null,
         total_recebido:   0,
@@ -587,11 +617,10 @@ async function buscarResumoMensalDiarioLinhas(
       };
       atual.total_recebido   += valor;
       atual.total_pagamentos += 1;
-      porOperador.set(r.operador_id, atual);
+      porOperador.set(r.operador_id!, atual);
     } else {
-      const sid = perfilMap.get(r.importado_por_id ?? '')?.setor_id ?? null;
-      if (!sid) continue;
-      const acc = orfaosPorSetor[sid] ?? (orfaosPorSetor[sid] = { total: 0, qtd: 0 });
+      if (!setorGeral) continue;
+      const acc = orfaosPorSetor[setorGeral] ?? (orfaosPorSetor[setorGeral] = { total: 0, qtd: 0 });
       acc.total += valor;
       acc.qtd   += 1;
     }

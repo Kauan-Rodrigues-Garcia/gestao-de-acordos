@@ -1825,8 +1825,9 @@ export type Database = {
           operador_id: string | null
           operador_usuario: string
           operador_nome: string | null
-          setor_importador: string | null
+          setor_geral: string | null
           dia_referencia: string
+          fora_vinculo: boolean
           total_recebido: number
           total_pagamentos: number
         }[]
