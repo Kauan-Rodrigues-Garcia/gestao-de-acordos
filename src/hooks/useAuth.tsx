@@ -67,6 +67,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const isSigningIn                   = useRef(false);
   const isManualSignOut               = useRef(false);
 
+  /**
+   * signOut() com rede de segurança: alguns builds do supabase-js abortam a
+   * limpeza do localStorage quando o POST /auth/v1/logout responde erro
+   * (ex: 403 — sessão já revogada no servidor). Sem isso, um F5 restaura a
+   * sessão velha salva no localStorage mesmo com o React state já zerado.
+   */
+  async function forceSignOut() {
+    await supabase.auth.signOut().catch(() => {
+      // Servidor pode recusar o /logout (sessão já revogada lá) — segue e limpa local mesmo assim.
+    });
+    try {
+      const ref = new URL(import.meta.env.VITE_SUPABASE_URL as string).hostname.split('.')[0];
+      localStorage.removeItem(`sb-${ref}-auth-token`);
+    } catch {
+      // Ambiente sem localStorage (SSR/teste) ou URL ausente — nada a limpar.
+    }
+  }
+
   async function rejectTenantMismatch(currentEmpresa: Empresa | null) {
     const tenantSlug = getConfiguredTenantSlug();
     const companyName = currentEmpresa?.nome ?? 'outra empresa';
@@ -77,7 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthError(message);
     setPerfil(null);
     setEmpresa(null);
-    await supabase.auth.signOut();
+    await forceSignOut();
     return { tenantMismatch: message, missingProfile: null as string | null };
   }
 
@@ -291,7 +309,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user) {
         const { tenantMismatch, missingProfile } = await fetchPerfil(data.user.id);
         if (tenantMismatch || missingProfile) {
-          await supabase.auth.signOut();
+          await forceSignOut();
           return { error: tenantMismatch ?? missingProfile };
         }
       }
@@ -303,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     isManualSignOut.current = true;
-    await supabase.auth.signOut();
+    await forceSignOut();
     setPerfil(null);
     setEmpresa(null);
     setUser(null);
