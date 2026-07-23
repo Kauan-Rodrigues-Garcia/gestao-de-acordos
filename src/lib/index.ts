@@ -20,6 +20,7 @@ export const ROUTE_PATHS = {
   ADMIN_CARGOS: '/admin/cargos',
   ANALITICO: '/analitico',
   OUVIDORIA: '/ouvidoria',
+  CAMPANHA_FACIL: '/campanha-facil',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

@@ -29,7 +29,7 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
-  LifeBuoy,
+  LifeBuoy, Megaphone,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -328,6 +328,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {(sidebarOpen || mobileOpen) && (
                 <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
                   Analítico
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </NavLink>
+        )}
+
+        {/* Campanha Fácil — BookPlay only (todos os usuários logados da empresa) */}
+        {empresa?.slug === 'bookplay' && (
+          <NavLink
+            to={ROUTE_PATHS.CAMPANHA_FACIL}
+            onClick={() => setMobileOpen(false)}
+            className={({ isActive }) => cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              isActive
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
+            )}
+          >
+            <Megaphone className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
+                  Campanha Fácil
                 </motion.span>
               )}
             </AnimatePresence>

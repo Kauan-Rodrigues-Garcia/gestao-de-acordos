@@ -298,6 +298,105 @@ export type Database = {
           },
         ]
       }
+      campanha_facil_mensagens: {
+        Row: {
+          atualizado_em: string
+          categoria: string
+          corpo: string
+          criado_em: string
+          criado_por: string | null
+          criado_por_nome: string | null
+          empresa_id: string
+          id: string
+          titulo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          categoria?: string
+          corpo: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id: string
+          id?: string
+          titulo: string
+        }
+        Update: {
+          atualizado_em?: string
+          categoria?: string
+          corpo?: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id?: string
+          id?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
+      campanha_facil_descontos: {
+        Row: {
+          annual: number
+          atualizado_em: string
+          bundle: number
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          id: string
+          interest: number
+          nome: string
+          overdue: number
+          settlement: number
+        }
+        Insert: {
+          annual?: number
+          atualizado_em?: string
+          bundle?: number
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          id?: string
+          interest?: number
+          nome: string
+          overdue?: number
+          settlement?: number
+        }
+        Update: {
+          annual?: number
+          atualizado_em?: string
+          bundle?: number
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          id?: string
+          interest?: number
+          nome?: string
+          overdue?: number
+          settlement?: number
+        }
+        Relationships: []
+      }
+      campanha_facil_mensagens_ocultas: {
+        Row: {
+          criado_em: string
+          empresa_id: string
+          ocultado_por: string | null
+          template_id: string
+        }
+        Insert: {
+          criado_em?: string
+          empresa_id: string
+          ocultado_por?: string | null
+          template_id: string
+        }
+        Update: {
+          criado_em?: string
+          empresa_id?: string
+          ocultado_por?: string | null
+          template_id?: string
+        }
+        Relationships: []
+      }
       cargos_permissoes: {
         Row: {
           atualizado_em: string

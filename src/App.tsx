@@ -48,6 +48,7 @@ const Lixeira           = lazy(() => import('@/pages/Lixeira'));
 const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
+const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 
 function PageLoader() {
   return (
@@ -237,6 +238,11 @@ export default function App() {
               {/* Ouvidoria (PaguePlay — acesso por cargo/concessão dentro da página) */}
               <Route path={ROUTE_PATHS.OUVIDORIA} element={
                 <LayoutWrapper><Ouvidoria /></LayoutWrapper>
+              } />
+
+              {/* Campanha Fácil (BookPlay — gate por slug dentro da página) */}
+              <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
+                <LayoutWrapper><CampanhaFacil /></LayoutWrapper>
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
