@@ -141,7 +141,7 @@ function MetaRow({
           {sublabel && <p className="text-xs text-muted-foreground truncate">{sublabel}</p>}
         </div>
       </div>
-      <div className="flex flex-1 items-center gap-2">
+      <div className="flex flex-1 flex-wrap items-center gap-2">
         <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
           <Label className="text-xs text-muted-foreground">Meta R$</Label>
           <div className="relative">
