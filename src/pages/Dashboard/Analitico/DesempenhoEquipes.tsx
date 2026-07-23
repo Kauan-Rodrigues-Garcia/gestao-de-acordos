@@ -46,6 +46,36 @@ interface DesempenhoEquipesProps {
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
 interface LiderInfo { nome: string; foto_url: string | null }
 
+/** Avatares dos líderes da equipe, lado a lado (item 1: clone mantém foto/tag
+ *  e uma equipe pode ter vários líderes). Cai no ícone quando não há líder. */
+function AvataresLideres({ lideres, ehSetor }: { lideres: LiderInfo[]; ehSetor?: boolean }) {
+  if (lideres.length === 0) {
+    return (
+      <div className={cn(
+        'w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0',
+        ehSetor ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
+      )}>
+        {ehSetor ? <Building2 className="w-7 h-7" /> : <Users className="w-7 h-7" />}
+      </div>
+    );
+  }
+  return (
+    <div className="flex -space-x-3 shrink-0">
+      {lideres.map((l, i) => (
+        l.foto_url ? (
+          <img key={i} src={l.foto_url} alt={l.nome} title={l.nome}
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-card shadow-sm bg-card" />
+        ) : (
+          <div key={i} title={l.nome}
+            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-card bg-muted text-muted-foreground text-lg font-bold shadow-sm">
+            {l.nome.charAt(0).toUpperCase()}
+          </div>
+        )
+      ))}
+    </div>
+  );
+}
+
 // ── Painel de desempenho (setor ou equipe) ───────────────────────────────────
 
 /** Fonte diminui conforme o número cresce, para nunca cortar dígitos. */
@@ -78,11 +108,12 @@ function Tile({
 }
 
 function PainelPlacar({
-  titulo, subtitulo, fotoUrl, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
+  titulo, subtitulo, lideres, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
 }: {
   titulo: string;
   subtitulo?: string;
-  fotoUrl?: string | null;
+  /** Líderes da equipe (fotos lado a lado). Vazio/omisso = ícone. */
+  lideres?: LiderInfo[];
   ehSetor?: boolean;
   acumulado: number;
   /** PaguePlay: H.O. do acumulado (soma de total_ho do analítico). */
@@ -110,19 +141,9 @@ function PainelPlacar({
       'rounded-2xl border bg-card p-4 sm:p-5 shadow-sm',
       ehSetor && 'border-primary/40 ring-1 ring-primary/10 bg-gradient-to-br from-primary/[0.06] to-transparent',
     )}>
-      {/* Cabeçalho: foto + nome + data | projeção */}
+      {/* Cabeçalho: foto(s) do(s) líder(es) + nome + data | projeção */}
       <div className="flex items-center gap-3.5">
-        {fotoUrl ? (
-          <img src={fotoUrl} alt={titulo}
-            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-border shadow-sm shrink-0" />
-        ) : (
-          <div className={cn(
-            'w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0',
-            ehSetor ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
-          )}>
-            {ehSetor ? <Building2 className="w-7 h-7" /> : <Users className="w-7 h-7" />}
-          </div>
-        )}
+        <AvataresLideres lideres={lideres ?? []} ehSetor={ehSetor} />
         <div className="flex-1 min-w-0">
           <p className="text-base sm:text-lg font-bold leading-tight truncate">{titulo}</p>
           <p className="text-xs text-muted-foreground truncate">
@@ -318,7 +339,7 @@ export function DesempenhoEquipes({
   const [feriados, setFeriados] = useState<string[]>([]);
   // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
   const [contarHoje, setContarHoje] = useState(false);
-  const [lideres, setLideres]   = useState<Record<string, LiderInfo>>({});  // equipe_id → líder
+  const [lideres, setLideres]   = useState<Record<string, LiderInfo[]>>({});  // equipe_id → líderes (inclui clones)
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
   const [carregado, setCarregado] = useState(false);
   // Contribuição Receptivo (manual, localStorage) reportada por cada card-filho;
@@ -351,22 +372,41 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: clonesData }] = await Promise.all([
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', anoNum)
             .in('tipo', ['setor', 'equipe']),
           getMetasConfig(empresaId, mesNum, anoNum),
-          supabase.from('perfis').select('nome, foto_url, equipe_id')
-            .eq('empresa_id', empresaId).eq('perfil', 'lider').not('equipe_id', 'is', null),
+          // TODOS os líderes (id/nome/foto + equipe de origem). Sem filtro de
+          // equipe_id: um líder pode ser só clone (sem equipe própria).
+          supabase.from('perfis').select('id, nome, foto_url, equipe_id')
+            .eq('empresa_id', empresaId).eq('perfil', 'lider'),
           supabase.from('setores').select('id, nome').eq('empresa_id', empresaId),
+          // Clones: líder clonado numa equipe deve mostrar foto/tag lá também.
+          // Tabela pode não existir (migration 20260712a pendente) → vazio.
+          supabase.from('equipe_operadores_clones').select('equipe_id, operador_id')
+            .eq('empresa_id', empresaId),
         ]);
         if (cancelado) return;
         setMetas((metasData as MetaRow[]) ?? []);
         setFeriados(cfg.data?.feriados ?? []);
         setContarHoje(cfg.data?.contar_dia_atual === true);
-        const lMap: Record<string, LiderInfo> = {};
-        for (const l of (lideresData as { nome: string; foto_url: string | null; equipe_id: string }[]) ?? []) {
-          if (!lMap[l.equipe_id]) lMap[l.equipe_id] = { nome: l.nome, foto_url: l.foto_url };
+        // Identidade de cada líder + equipe → líderes (origem + clones).
+        const lideresById = new Map<string, LiderInfo>();
+        const lMap: Record<string, LiderInfo[]> = {};
+        const addLider = (equipeId: string | null, info: LiderInfo) => {
+          if (!equipeId) return;
+          const lista = (lMap[equipeId] ??= []);
+          if (!lista.some(x => x.nome === info.nome)) lista.push(info);
+        };
+        for (const l of (lideresData as { id: string; nome: string; foto_url: string | null; equipe_id: string | null }[]) ?? []) {
+          const info = { nome: l.nome, foto_url: l.foto_url };
+          lideresById.set(l.id, info);
+          addLider(l.equipe_id, info);   // equipe de origem
+        }
+        for (const c of (clonesData as { equipe_id: string; operador_id: string }[]) ?? []) {
+          const info = lideresById.get(c.operador_id);
+          if (info) addLider(c.equipe_id, info);   // líder clonado nesta equipe
         }
         setLideres(lMap);
         const sMap: Record<string, string> = {};
@@ -499,9 +539,9 @@ export function DesempenhoEquipes({
               return (
                 <PainelPlacar
                   key={eq.id}
-                  titulo={lideres[eq.id]?.nome ?? eq.nome}
+                  titulo={(lideres[eq.id]?.length === 1 ? lideres[eq.id][0].nome : eq.nome)}
                   subtitulo={inicioTreino ? `Equipe ${eq.nome} · treino` : `Equipe ${eq.nome}`}
-                  fotoUrl={lideres[eq.id]?.foto_url}
+                  lideres={lideres[eq.id] ?? []}
                   mostrarHO={isPP}
                   acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
                   acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}

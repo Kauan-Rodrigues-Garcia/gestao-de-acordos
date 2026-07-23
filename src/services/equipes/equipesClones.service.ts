@@ -14,16 +14,36 @@ export interface CloneEquipe {
   id: string;
   equipe_id: string;
   operador_id: string;
+  /** Item 1: quando false, o recebimento do clone NÃO conta para esta equipe
+   *  (nem para o setor dela). Padrão true. */
+  conta_recebimento?: boolean;
 }
 
 /** Clones da empresa. null = tabela ausente (migration pendente). */
 export async function listarClonesEquipes(empresaId: string): Promise<CloneEquipe[] | null> {
+  // Tenta com a coluna nova; se a migration 20260723e ainda não rodou, cai no
+  // select antigo (conta_recebimento assume true por padrão).
+  const comFlag = await supabase
+    .from('equipe_operadores_clones')
+    .select('id, equipe_id, operador_id, conta_recebimento')
+    .eq('empresa_id', empresaId);
+  if (!comFlag.error) return (comFlag.data as CloneEquipe[]) ?? [];
+
   const { data, error } = await supabase
     .from('equipe_operadores_clones')
     .select('id, equipe_id, operador_id')
     .eq('empresa_id', empresaId);
   if (error) return null;
-  return (data as CloneEquipe[]) ?? [];
+  return ((data as CloneEquipe[]) ?? []).map(c => ({ ...c, conta_recebimento: true }));
+}
+
+/** Liga/desliga a contagem de recebimento de um clone naquela equipe. */
+export async function setCloneContaRecebimento(cloneId: string, conta: boolean): Promise<boolean> {
+  const { error } = await supabase
+    .from('equipe_operadores_clones')
+    .update({ conta_recebimento: conta })
+    .eq('id', cloneId);
+  return !error;
 }
 
 /** Clona um operador para outra equipe. Retorna o clone criado ou null. */

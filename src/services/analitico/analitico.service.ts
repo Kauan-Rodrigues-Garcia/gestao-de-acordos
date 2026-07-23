@@ -808,18 +808,30 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
     .select('id, nome, setor_id')
     .eq('empresa_id', empresaId);
 
-  // Clones (tabela pode não existir — migration 20260712a pendente → vazio)
-  const { data: clones } = await supabase
+  // Clones (tabela pode não existir — migration 20260712a pendente → vazio).
+  // conta_recebimento (migration 20260723e) pode faltar → tratamos ausente como
+  // true. Um segundo select sem a coluna é o fallback.
+  let clones = (await supabase
     .from('equipe_operadores_clones')
-    .select('equipe_id, operador_id')
-    .eq('empresa_id', empresaId);
+    .select('equipe_id, operador_id, conta_recebimento')
+    .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string; conta_recebimento?: boolean }[] | null;
+  if (!clones) {
+    clones = ((await supabase
+      .from('equipe_operadores_clones')
+      .select('equipe_id, operador_id')
+      .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string }[] | null)
+      ?.map(c => ({ ...c, conta_recebimento: true })) ?? null;
+  }
   const equipesExtrasPorOperador: Record<string, string[]> = {};
   // Equipes que têm gente: membro de verdade OU clone. Sem isso, equipe vazia
   // de propósito passaria a aparecer zerada no painel.
   const comGente = new Set<string>();
-  for (const c of ((clones ?? []) as { equipe_id: string; operador_id: string }[])) {
-    (equipesExtrasPorOperador[c.operador_id] ??= []).push(c.equipe_id);
+  for (const c of (clones ?? [])) {
+    // A equipe aparece mesmo com a caixinha desligada (para mostrar foto/tag do
+    // líder clonado); mas só entra no cálculo de recebimento se conta_recebimento.
     comGente.add(c.equipe_id);
+    if (c.conta_recebimento === false) continue;
+    (equipesExtrasPorOperador[c.operador_id] ??= []).push(c.equipe_id);
   }
 
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};

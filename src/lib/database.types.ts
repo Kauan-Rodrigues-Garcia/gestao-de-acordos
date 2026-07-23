@@ -680,6 +680,7 @@ export type Database = {
       }
       equipe_operadores_clones: {
         Row: {
+          conta_recebimento: boolean
           criado_em: string
           criado_por: string | null
           empresa_id: string
@@ -688,6 +689,7 @@ export type Database = {
           operador_id: string
         }
         Insert: {
+          conta_recebimento?: boolean
           criado_em?: string
           criado_por?: string | null
           empresa_id: string
@@ -696,6 +698,7 @@ export type Database = {
           operador_id: string
         }
         Update: {
+          conta_recebimento?: boolean
           criado_em?: string
           criado_por?: string | null
           empresa_id?: string

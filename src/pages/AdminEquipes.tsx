@@ -44,7 +44,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import {
-  listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, type CloneEquipe,
+  listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento, type CloneEquipe,
 } from '@/services/equipes/equipesClones.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -405,6 +405,16 @@ export default function AdminEquipes() {
     if (!ok) { toast.error('Erro ao remover clone.'); return; }
     setClones(prev => (prev ?? []).filter(c => c.id !== cloneId));
     toast.success(`Clone de ${nomeOperador} removido (segue normal na equipe original).`);
+  }
+
+  // Item 1: liga/desliga a contagem de recebimento do clone naquela equipe.
+  async function handleToggleContaRecebimento(cloneId: string, conta: boolean) {
+    const ok = await setCloneContaRecebimento(cloneId, conta);
+    if (!ok) { toast.error('Erro ao alterar a contagem de recebimento.'); return; }
+    setClones(prev => (prev ?? []).map(c => (c.id === cloneId ? { ...c, conta_recebimento: conta } : c)));
+    toast.success(conta
+      ? 'Recebimento deste clone passa a contar nesta equipe.'
+      : 'Recebimento deste clone NÃO conta mais nesta equipe.');
   }
 
   const podeGerenciarSetorSelecionado = podeEditarEquipes && (isAdmin || setorSelecionado === perfil?.setor_id);
@@ -1086,6 +1096,21 @@ export default function AdminEquipes() {
                                     <span className="inline-flex items-center rounded-full border border-primary/30 text-primary font-medium flex-shrink-0 text-[9px] px-1 py-0 h-3.5">
                                       clone de {origem}
                                     </span>
+                                    {/* Item 1: caixinha de contar recebimento nesta equipe */}
+                                    <label
+                                      className="flex items-center gap-0.5 flex-shrink-0 cursor-pointer"
+                                      title="Contar o recebimento deste clone nesta equipe (desligado = não conta aqui nem no setor dela; o setor de origem continua contando)"
+                                      onClick={e => e.stopPropagation()}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={clone.conta_recebimento !== false}
+                                        disabled={!podeGerenciarEquipe}
+                                        onChange={e => void handleToggleContaRecebimento(clone.id, e.target.checked)}
+                                        className="h-3 w-3 accent-primary cursor-pointer disabled:cursor-not-allowed"
+                                      />
+                                      <span className="text-[9px] text-muted-foreground">receb.</span>
+                                    </label>
                                     {podeGerenciarEquipe && (
                                       <button
                                         type="button"
