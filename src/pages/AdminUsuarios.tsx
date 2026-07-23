@@ -794,22 +794,32 @@ export default function AdminUsuarios() {
                 <Input type="password" value={form.senha} onChange={e => setForm(f => ({ ...f, senha: e.target.value }))} placeholder="••••••••" className="h-9 text-sm" />
               </div>
             )}
+            {/* Cargo: só admin/super_admin definem. Para os demais o campo é
+                somente leitura — impede líder de escolher/criar admin. (O banco
+                também bloqueia via RLS; isto remove a opção enganosa da tela.) */}
             <div className="space-y-1.5">
               <Label className="text-xs">Perfil *</Label>
-               <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
-                 <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                 <SelectContent>
-                   <SelectItem value="operador">Operador</SelectItem>
-                   <SelectItem value="lider">Líder</SelectItem>
-                   <SelectItem value="elite">Elite</SelectItem>
-                   <SelectItem value="gerencia">Gerência</SelectItem>
-                   <SelectItem value="diretoria">Diretoria</SelectItem>
-                   <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
-                   <SelectItem value="administrador">Administrador</SelectItem>
-                   {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
-                 </SelectContent>
-               </Select>
-             </div>
+              {(isAdmin || isSuperAdmin) ? (
+                <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="operador">Operador</SelectItem>
+                    <SelectItem value="lider">Líder</SelectItem>
+                    <SelectItem value="elite">Elite</SelectItem>
+                    <SelectItem value="gerencia">Gerência</SelectItem>
+                    <SelectItem value="diretoria">Diretoria</SelectItem>
+                    <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
+                    <SelectItem value="administrador">Administrador</SelectItem>
+                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="h-9 flex items-center rounded-md border border-input bg-muted/40 px-3 text-sm text-muted-foreground">
+                  {PERFIL_LABELS[form.perfil] ?? form.perfil}
+                  <span className="ml-auto text-[10px] uppercase tracking-wide">só admin altera</span>
+                </div>
+              )}
+            </div>
             <div className="space-y-1.5">
               <Label className="text-xs">Setor</Label>
               <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
