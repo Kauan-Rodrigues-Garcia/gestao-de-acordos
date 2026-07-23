@@ -21,5 +21,16 @@
 ALTER VIEW public.acordos_deduplicados SET (security_invoker = true);
 
 -- Defesa em profundidade: a mesma proteção na view de resumo por código
--- (hoje sem uso visual, mas agrega acordos da empresa toda).
-ALTER VIEW public.vw_resumo_codigo SET (security_invoker = true);
+-- (hoje sem uso visual, mas agrega acordos da empresa toda). Só existe em
+-- ambientes que rodaram a migration 20260611 — por isso é condicional, senão
+-- quem não tem essa view recebe "relation does not exist".
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_class c
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relname = 'vw_resumo_codigo' AND c.relkind = 'v'
+  ) THEN
+    EXECUTE 'ALTER VIEW public.vw_resumo_codigo SET (security_invoker = true)';
+  END IF;
+END $$;
