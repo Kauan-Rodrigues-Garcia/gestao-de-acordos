@@ -1,0 +1,67 @@
+/**
+ * situacaoUsuario.service.ts — situação operacional do usuário (item 5).
+ *
+ * ativo | ferias | desligado. Férias/desligado somem de ranking e quartil
+ * (filtro na aplicação); o recebimento deles NÃO é filtrado, então os totais de
+ * setor/equipe seguem inteiros. Desligado não loga (ativo=false + bloqueio no
+ * useAuth) e é arquivado na virada do mês. Ver migration 20260723c.
+ */
+import { supabase } from '@/lib/supabase';
+import type { SituacaoUsuario } from '@/lib/supabase';
+
+/**
+ * Define a situação de um usuário, ajustando os efeitos colaterais:
+ *   • desligado → ativo=false, desligado_em=now (bloqueia login).
+ *   • ativo/ferias → ativo=true, desligado_em=null, arquivado=false
+ *     (reativar traz de volta às listas e ao login).
+ */
+export async function definirSituacao(
+  perfilId: string,
+  situacao: SituacaoUsuario,
+): Promise<{ error: string | null }> {
+  const patch: Record<string, unknown> = { situacao, atualizado_em: new Date().toISOString() };
+  if (situacao === 'desligado') {
+    patch.ativo = false;
+    patch.desligado_em = new Date().toISOString();
+  } else {
+    patch.ativo = true;
+    patch.desligado_em = null;
+    patch.arquivado = false;
+  }
+  const { error } = await supabase.from('perfis').update(patch).eq('id', perfilId);
+  return { error: error?.message ?? null };
+}
+
+/** Arquiva desligados de meses anteriores (some das listas). Best-effort. */
+export async function arquivarDesligadosAnteriores(empresaId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('fn_arquivar_desligados_anteriores', { p_empresa_id: empresaId });
+  if (error) return 0;
+  return (data as number) ?? 0;
+}
+
+/**
+ * Mapa operadorId → situacao para toda a empresa (sem filtrar por ativo, para
+ * pegar desligados também). Usado para ocultar férias/desligado de ranking e
+ * quartil sem afetar os totais.
+ */
+export async function buscarSituacaoOperadores(
+  empresaId: string,
+): Promise<Record<string, SituacaoUsuario>> {
+  const { data, error } = await supabase
+    .from('perfis')
+    .select('id, situacao')
+    .eq('empresa_id', empresaId);
+  if (error || !data) return {};
+  const out: Record<string, SituacaoUsuario> = {};
+  for (const p of data as { id: string; situacao: string | null }[]) {
+    out[p.id] = (p.situacao as SituacaoUsuario) ?? 'ativo';
+  }
+  return out;
+}
+
+/** IDs que devem sumir de ranking/quartil (situacao != 'ativo'). */
+export function idsOcultosRankingQuartil(mapa: Record<string, SituacaoUsuario>): Set<string> {
+  const s = new Set<string>();
+  for (const [id, sit] of Object.entries(mapa)) if (sit !== 'ativo') s.add(id);
+  return s;
+}

@@ -1302,9 +1302,11 @@ export type Database = {
       }
       perfis: {
         Row: {
+          arquivado: boolean
           ativo: boolean
           atualizado_em: string
           criado_em: string
+          desligado_em: string | null
           email: string
           empresa_id: string
           equipe_id: string | null
@@ -1315,14 +1317,17 @@ export type Database = {
           perfil: string
           senha_alterada: boolean | null
           setor_id: string | null
+          situacao: string
           tampermonkey_configured: boolean | null
           usuario: string | null
           viu_notificacao_chatplay: boolean | null
         }
         Insert: {
+          arquivado?: boolean
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
+          desligado_em?: string | null
           email: string
           empresa_id: string
           equipe_id?: string | null
@@ -1333,14 +1338,17 @@ export type Database = {
           perfil: string
           senha_alterada?: boolean | null
           setor_id?: string | null
+          situacao?: string
           tampermonkey_configured?: boolean | null
           usuario?: string | null
           viu_notificacao_chatplay?: boolean | null
         }
         Update: {
+          arquivado?: boolean
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
+          desligado_em?: string | null
           email?: string
           empresa_id?: string
           equipe_id?: string | null
@@ -1351,6 +1359,7 @@ export type Database = {
           perfil?: string
           senha_alterada?: boolean | null
           setor_id?: string | null
+          situacao?: string
           tampermonkey_configured?: boolean | null
           usuario?: string | null
           viu_notificacao_chatplay?: boolean | null
@@ -1950,6 +1959,10 @@ export type Database = {
           total_ho: number
           total_pagamentos: number
         }[]
+      }
+      fn_arquivar_desligados_anteriores: {
+        Args: { p_empresa_id: string }
+        Returns: number
       }
       fn_can_access_empresa: {
         Args: { target_empresa_id: string }

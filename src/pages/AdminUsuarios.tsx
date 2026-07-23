@@ -20,8 +20,10 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Switch } from '@/components/ui/switch';
-import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa } from '@/lib/supabase';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { ChevronDown } from 'lucide-react';
+import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
+import { definirSituacao, arquivarDesligadosAnteriores } from '@/services/situacaoUsuario.service';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib/index';
@@ -31,6 +33,18 @@ import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
 
 // Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
 const PERFIL_BADGE = PERFIL_COLORS;
+
+// Item 5: situação operacional — cor da bolinha e rótulo.
+const SITU_DOT: Record<SituacaoUsuario, string> = {
+  ativo:     'bg-green-500',
+  ferias:    'bg-amber-500',
+  desligado: 'bg-red-500',
+};
+const SITU_LABEL: Record<SituacaoUsuario, string> = {
+  ativo:     'Ativo',
+  ferias:    'Férias',
+  desligado: 'Desligado',
+};
 
 interface UserForm {
   nome:       string;
@@ -50,6 +64,10 @@ export default function AdminUsuarios() {
   const { temPermissao } = useCargoPermissoes();
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
+  // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
+  // limita o líder ao próprio setor; admin/super atingem qualquer usuário.
+  const podeGerenciarSituacao = isAdmin || isSuperAdmin
+    || ['lider', 'elite', 'gerencia', 'diretoria'].includes(perfilAtual?.perfil ?? '');
   // Gate para a aba Setores: visível apenas para Gerência ou superior
   // (gerencia, diretoria, administrador, super_admin).
   const podeVerSetores =
@@ -108,6 +126,9 @@ export default function AdminUsuarios() {
 
   async function fetchDados() {
     setLoading(true);
+    // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
+    const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
+    if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo); } catch { /* best-effort */ } }
     let usuariosData: Perfil[] = [];
     try {
       let usersQuery = supabase
@@ -165,7 +186,8 @@ export default function AdminUsuarios() {
     } catch (err) {
       console.warn('[AdminUsuarios] fetchDados setores/empresas error:', err);
     }
-    setUsuarios(usuariosData);
+    // Arquivados somem da lista padrão (item 5).
+    setUsuarios(usuariosData.filter(u => !u.arquivado));
     setSetores(setoresData);
     setEmpresas(emps);
     if (setoresData.length > 0 && !form.setor_id) {
@@ -341,10 +363,17 @@ export default function AdminUsuarios() {
     } finally { setSalvandoSenha(false); }
   }
 
-  async function toggleAtivo(u: Perfil) {
-    const { error } = await supabase.from('perfis').update({ ativo: !u.ativo }).eq('id', u.id);
-    if (!error) { toast.success(u.ativo ? 'Usuário desativado' : 'Usuário ativado'); fetchDados(); }
-    else toast.error('Erro ao alterar status');
+  // Item 5: define a situação (ativo/férias/desligado) com efeitos colaterais.
+  async function handleSituacao(u: Perfil, sit: SituacaoUsuario) {
+    if ((u.situacao ?? 'ativo') === sit) return;
+    const { error } = await definirSituacao(u.id, sit);
+    if (error) { toast.error('Erro ao alterar situação'); return; }
+    toast.success(
+      sit === 'ativo' ? 'Usuário marcado como ativo'
+      : sit === 'ferias' ? 'Usuário marcado como férias (sai de ranking e quartil)'
+      : 'Usuário desligado (sem acesso; sai de ranking e quartil)',
+    );
+    fetchDados();
   }
 
   // #6: excluir usuário direto do modal Editar.
@@ -606,10 +635,30 @@ export default function AdminUsuarios() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-center">
-                              {(isAdmin || isSuperAdmin)
-                                ? <Switch checked={u.ativo} onCheckedChange={() => toggleAtivo(u)} />
-                                : <span className={cn('inline-flex w-2 h-2 rounded-full', u.ativo ? 'bg-green-500' : 'bg-muted-foreground')} />
-                              }
+                              {podeGerenciarSituacao ? (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium transition-colors hover:bg-accent">
+                                      <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[u.situacao ?? 'ativo'])} />
+                                      {SITU_LABEL[u.situacao ?? 'ativo']}
+                                      <ChevronDown className="w-3 h-3 text-muted-foreground" />
+                                    </button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    {(['ativo', 'ferias', 'desligado'] as SituacaoUsuario[]).map(sit => (
+                                      <DropdownMenuItem key={sit} className="gap-2 text-xs" onClick={() => handleSituacao(u, sit)}>
+                                        <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[sit])} />
+                                        {SITU_LABEL[sit]}
+                                      </DropdownMenuItem>
+                                    ))}
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              ) : (
+                                <span
+                                  title={SITU_LABEL[u.situacao ?? 'ativo']}
+                                  className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[u.situacao ?? 'ativo'])}
+                                />
+                              )}
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">

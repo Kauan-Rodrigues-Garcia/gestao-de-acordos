@@ -99,6 +99,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { tenantMismatch: message, missingProfile: null as string | null };
   }
 
+  // Item 5: usuário desligado não acessa mais. Bloqueia no login e limpa a sessão.
+  async function rejectDesligado() {
+    const message = 'Sua conta foi desligada. Contate o administrador.';
+    setAuthError(message);
+    setPerfil(null);
+    setEmpresa(null);
+    await forceSignOut();
+    return { tenantMismatch: null as string | null, missingProfile: message };
+  }
+
   async function fetchPerfil(userId: string): Promise<{ tenantMismatch: string | null; missingProfile: string | null }> {
     setPerfilLoading(true);
     setAuthError(null);
@@ -134,6 +144,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // ── Validar tenant no fallback também (sem join, empresa_id está no perfil)
             const tenantSlug = getConfiguredTenantSlug();
             const isSuperAdmin = (data2 as Perfil).perfil === 'super_admin';
+            // Item 5: conta desligada não acessa (super_admin nunca é bloqueado).
+            if (!isSuperAdmin && (data2 as Perfil).situacao === 'desligado') {
+              return rejectDesligado();
+            }
             // Impersonação atravessa tenant — super_admin pode entrar como usuário de outra empresa.
             if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && (data2 as Perfil).empresa_id) {
               // Buscar slug da empresa do usuário
@@ -157,6 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const nextPerfil = perfilData as Perfil;
           const tenantSlug = getConfiguredTenantSlug();
           const isSuperAdmin = nextPerfil.perfil === 'super_admin';
+
+          // Item 5: conta desligada não acessa (super_admin nunca é bloqueado).
+          if (!isSuperAdmin && nextPerfil.situacao === 'desligado') {
+            return rejectDesligado();
+          }
 
           // Impersonação atravessa tenant — super_admin pode entrar como usuário de outra empresa.
           if (!isSuperAdmin && !getImpersonacaoAtiva() && tenantSlug && emp?.slug && emp.slug !== tenantSlug) {

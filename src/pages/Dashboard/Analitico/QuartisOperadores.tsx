@@ -40,7 +40,7 @@ interface QuartisOperadoresProps {
   loading: boolean;
 }
 
-interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null }
+interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null; situacao?: string | null }
 interface MetaOpRow { referencia_id: string; meta_valor: number }
 
 interface LinhaQuartil {
@@ -83,7 +83,7 @@ export function QuartisOperadores({
     async function carregar() {
       try {
         const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }] = await Promise.all([
-          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id')
+          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao')
             .eq('empresa_id', empresaId).in('perfil', ['operador', 'elite']).order('nome'),
           supabase.from('metas').select('referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
@@ -130,6 +130,8 @@ export function QuartisOperadores({
     // Clone: o operador conta no setor da equipe clonada, não só no dele.
     // Mesma fonte usada pelo Total recebido e por Desempenho Equipes.
     const visiveis = operadores
+      // Item 5: férias/desligado somem do quartil (recebimento segue nos totais).
+      .filter(o => (o.situacao ?? 'ativo') === 'ativo')
       .filter(o => !setorEfetivo || setoresDoOperador(
         o.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
       ).has(setorEfetivo))

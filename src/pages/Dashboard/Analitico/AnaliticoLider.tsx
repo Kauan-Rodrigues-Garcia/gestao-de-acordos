@@ -53,6 +53,7 @@ import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { DesempenhoEquipes } from './DesempenhoEquipes';
 import { QuartisOperadores } from './QuartisOperadores';
+import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import { GraficoRecebimento } from './GraficoRecebimento';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
@@ -127,6 +128,17 @@ export function AnaliticoLider({
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, OperadorEquipeInfo>>({});
   const [equipesExtras,     setEquipesExtras]     = useState<Record<string, string[]>>({});
   const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
+  // Item 5: ids que somem do ranking/quartil (férias/desligado). Só exibição —
+  // o recebimento deles continua nos totais de setor/equipe.
+  const [operadoresOcultos, setOperadoresOcultos] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    if (!empresaId) return;
+    let ativo = true;
+    buscarSituacaoOperadores(empresaId)
+      .then(m => { if (ativo) setOperadoresOcultos(idsOcultosRankingQuartil(m)); })
+      .catch(() => { /* sem situação — ninguém oculto */ });
+    return () => { ativo = false; };
+  }, [empresaId]);
 
   // ── Órfãos por setor (sem operador pertencem ao setor da importação) ──────
   const [orfaosPorSetor, setOrfaosPorSetor] = useState<Record<string, { total: number; qtd: number }>>({});
@@ -813,7 +825,7 @@ export function AnaliticoLider({
               <p className="text-sm">Nenhum dado para exibir.</p>
             </div>
           ) : (
-            <RankingView resumos={resumosFiltrados} mostrarCopiar />
+            <RankingView resumos={resumosFiltrados} mostrarCopiar operadoresOcultos={operadoresOcultos} />
           )}
         </div>
       )}

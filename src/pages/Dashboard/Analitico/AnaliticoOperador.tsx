@@ -22,6 +22,7 @@ import {
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
+import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 
 interface AnaliticoOperadorProps {
   dados: AnaliticoRecebimento[];
@@ -74,12 +75,19 @@ export function AnaliticoOperador({
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
   const [loadingRanking, setLoadingRanking] = useState(false);
 
+  // Item 5: férias/desligado somem do ranking (recebimento deles segue nos totais).
+  const [operadoresOcultos, setOperadoresOcultos] = useState<Set<string>>(new Set());
+
   const carregarRanking = useCallback(async () => {
     if (!empresaId || !mes) return;
     setLoadingRanking(true);
-    const { data, error } = await buscarResumoOperadoresAnalitico(empresaId, mes);
+    const [{ data, error }, situacaoMap] = await Promise.all([
+      buscarResumoOperadoresAnalitico(empresaId, mes),
+      buscarSituacaoOperadores(empresaId),
+    ]);
     if (error) toast.error(`Erro ao carregar ranking: ${error}`);
     setRanking(data);
+    setOperadoresOcultos(idsOcultosRankingQuartil(situacaoMap));
     setLoadingRanking(false);
   }, [empresaId, mes]);
 
@@ -334,7 +342,7 @@ export function AnaliticoOperador({
               <p className="text-sm">Nenhum dado para exibir neste mês.</p>
             </div>
           ) : (
-            <RankingView resumos={ranking} destaqueOperadorId={operadorId} />
+            <RankingView resumos={ranking} destaqueOperadorId={operadorId} operadoresOcultos={operadoresOcultos} />
           )}
         </div>
       )}

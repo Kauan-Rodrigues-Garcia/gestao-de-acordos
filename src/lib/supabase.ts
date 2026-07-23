@@ -84,11 +84,21 @@ export interface Perfil {
   viu_notificacao_chatplay?: boolean | null;
   /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
   senha_alterada?: boolean | null;
+  /** Situação operacional (item 5): 'ativo' | 'ferias' | 'desligado'.
+   *  Férias/desligado somem de ranking e quartil; recebimento ainda conta.
+   *  Desligado não loga. Ver migration 20260723c. */
+  situacao?: SituacaoUsuario | null;
+  /** Quando foi desligado — usado para arquivar na virada do mês. */
+  desligado_em?: string | null;
+  /** true após ser arquivado (desligado de mês anterior) — some das listas. */
+  arquivado?: boolean | null;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;
   empresas?: Empresa;
 }
+
+export type SituacaoUsuario = 'ativo' | 'ferias' | 'desligado';
 
 /*
  * SQL para adicionar colunas de parcelamento (executar no Supabase SQL editor):

@@ -21,6 +21,9 @@ interface RankingViewProps {
   destaqueOperadorId?: string | null;
   /** Exibe o botão "Copiar mensagem" em cada posição (visão líder+). */
   mostrarCopiar?: boolean;
+  /** Item 5: ids que somem do ranking (férias/desligado). O recebimento deles
+   *  continua nos totais — o filtro é só de exibição. */
+  operadoresOcultos?: Set<string>;
 }
 
 /** Nome completo do operador reduzido ao primeiro e segundo nome. */
@@ -77,11 +80,13 @@ function CopiarMsgBtn({
   );
 }
 
-export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar }: RankingViewProps) {
-  const max   = resumos[0]?.total_recebido || 1;
-  const top3  = resumos.slice(0, 3);
-  const meio  = resumos.slice(3, 10);
-  const resto = resumos.slice(10);
+export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar, operadoresOcultos }: RankingViewProps) {
+  // Item 5: férias/desligado saem do ranking (o recebimento deles segue nos totais).
+  const lista = operadoresOcultos ? resumos.filter(r => !operadoresOcultos.has(r.operador_id)) : resumos;
+  const max   = lista[0]?.total_recebido || 1;
+  const top3  = lista.slice(0, 3);
+  const meio  = lista.slice(3, 10);
+  const resto = lista.slice(10);
 
   const ehVoce = (id: string) => !!destaqueOperadorId && id === destaqueOperadorId;
 
@@ -105,7 +110,7 @@ export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar }: Rank
       {/* Pódio — top 3 */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {top3.map((r, i) => {
-          const acima = i > 0 ? resumos[i - 1] : null;
+          const acima = i > 0 ? lista[i - 1] : null;
           const gap   = acima ? acima.total_recebido - r.total_recebido : 0;
           const prox  = acima && acima.total_recebido > 0
             ? Math.min(100, Math.round((r.total_recebido / acima.total_recebido) * 100))
@@ -163,7 +168,7 @@ export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar }: Rank
               {meio.map((r, i) => {
                 const pos   = i + 4;
                 const w     = Math.max(4, Math.round((r.total_recebido / max) * 100));
-                const acima = resumos[pos - 2];
+                const acima = lista[pos - 2];
                 const gap   = acima ? acima.total_recebido - r.total_recebido : 0;
                 const voce  = ehVoce(r.operador_id);
                 return (
@@ -206,7 +211,7 @@ export function RankingView({ resumos, destaqueOperadorId, mostrarCopiar }: Rank
             <CardContent className="p-0">
               {resto.map((r, i) => {
                 const pos   = i + 11;
-                const acima = resumos[pos - 2] ?? null;
+                const acima = lista[pos - 2] ?? null;
                 const voce  = ehVoce(r.operador_id);
                 return (
                   <div key={r.operador_id} className={cn(
