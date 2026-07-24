@@ -97,10 +97,11 @@ export default function AdminSetoresAba() {
   // Dialog criar/editar
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editando, setEditando] = useState<Setor | null>(null);
-  const [form, setForm] = useState<{ nome: string; descricao: string; ativo: boolean }>({
+  const [form, setForm] = useState<{ nome: string; descricao: string; ativo: boolean; alternativo: boolean }>({
     nome: '',
     descricao: '',
     ativo: true,
+    alternativo: false,
   });
 
   // Lista de usuários por setor
@@ -258,13 +259,13 @@ export default function AdminSetoresAba() {
 
   function abrirCriar() {
     setEditando(null);
-    setForm({ nome: '', descricao: '', ativo: true });
+    setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
     setDialogOpen(true);
   }
 
   function abrirEditar(s: Setor) {
     setEditando(s);
-    setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo });
+    setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo, alternativo: s.alternativo === true });
     setDialogOpen(true);
   }
 
@@ -286,6 +287,7 @@ export default function AdminSetoresAba() {
             nome: form.nome.trim(),
             descricao: form.descricao.trim() || null,
             ativo: form.ativo,
+            alternativo: form.alternativo,
           })
           .eq('id', editando.id);
         if (error) throw error;
@@ -297,6 +299,7 @@ export default function AdminSetoresAba() {
             nome: form.nome.trim(),
             descricao: form.descricao.trim() || null,
             ativo: form.ativo,
+            alternativo: form.alternativo,
             empresa_id: empresaAtual.id,
           })
           .select('id')
@@ -434,6 +437,11 @@ export default function AdminSetoresAba() {
                         <p className="text-xs text-muted-foreground truncate">{s.descricao}</p>
                       )}
                     </div>
+                    {s.alternativo && (
+                      <span className="text-[10px] uppercase tracking-wide font-semibold bg-amber-500/15 text-amber-600 border border-amber-500/30 rounded-full px-2 py-0.5 flex-shrink-0">
+                        Alternativo
+                      </span>
+                    )}
                     {!s.ativo && (
                       <span className="text-[10px] uppercase tracking-wide font-semibold bg-muted text-muted-foreground border border-border rounded-full px-2 py-0.5 flex-shrink-0">
                         Inativo
@@ -571,6 +579,20 @@ export default function AdminSetoresAba() {
               <Switch
                 checked={form.ativo}
                 onCheckedChange={v => setForm(f => ({ ...f, ativo: v }))}
+              />
+            </div>
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border bg-muted/30 p-2.5">
+              <div className="min-w-0">
+                <Label className="text-xs font-medium">Setor alternativo</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">
+                  Setor sem relatório próprio. O total acumulado passa a ser a
+                  <strong> soma dos usuários</strong> que estão nele (membros + clones),
+                  em vez do total do relatório importado. Use para setores como o Digital.
+                </p>
+              </div>
+              <Switch
+                checked={form.alternativo}
+                onCheckedChange={v => setForm(f => ({ ...f, alternativo: v }))}
               />
             </div>
           </div>

@@ -26,6 +26,7 @@ import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { copiarTexto } from '@/lib/clipboard';
+import { supabase } from '@/lib/supabase';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import {
   buscarResumoOperadoresAnalitico,
@@ -33,6 +34,7 @@ import {
   buscarDestaquesDoMes,
   buscarEquipesComOperadores,
   buscarTotalOrfaosPorSetor,
+  buscarTotalPorSetor,
   buscarResumoMensal,
   removerLinhaAnalitico,
   removerOrfaosDoMes,
@@ -142,6 +144,11 @@ export function AnaliticoLider({
 
   // ── Órfãos por setor (sem operador pertencem ao setor da importação) ──────
   const [orfaosPorSetor, setOrfaosPorSetor] = useState<Record<string, { total: number; qtd: number }>>({});
+  // ── Total do RELATÓRIO por setor + setores alternativos ───────────────────
+  // Setor normal → total do relatório (carimbo). Setor alternativo → soma de
+  // membros/clones. Fonte única do "total do setor" para as duas telas.
+  const [totalPorSetor, setTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
+  const [setoresAlternativos, setSetoresAlternativos] = useState<Set<string>>(new Set());
 
   // ── Cargas ────────────────────────────────────────────────────────────────
   const carregarResumos = useCallback(async () => {
@@ -150,13 +157,15 @@ export function AnaliticoLider({
     setExpandidos(new Set());
     setLinhasMap(new Map());
     setFiltrosDatas(new Map());
-    const [{ data, error }, orfaosSetor] = await Promise.all([
+    const [{ data, error }, orfaosSetor, totSetor] = await Promise.all([
       buscarResumoOperadoresAnalitico(empresaId, mes),
       buscarTotalOrfaosPorSetor(empresaId, mes),
+      buscarTotalPorSetor(empresaId, mes),
     ]);
     if (error) toast.error(`Erro ao carregar resumo: ${error}`);
     setResumos(data);
     setOrfaosPorSetor(orfaosSetor);
+    setTotalPorSetor(totSetor);
     setLoadingResumos(false);
   }, [empresaId, mes]);
 
@@ -203,6 +212,17 @@ export function AnaliticoLider({
       setOperadorEquipeMap(oem);
       setEquipesExtras(equipesExtrasPorOperador);
     });
+    // Setores alternativos (coluna pode não existir → todos normais)
+    void (async () => {
+      const comFlag = await supabase.from('setores')
+        .select('id, alternativo').eq('empresa_id', empresaId);
+      if (comFlag.error) return;
+      const alt = new Set<string>();
+      for (const s of (comFlag.data as { id: string; alternativo: boolean | null }[]) ?? []) {
+        if (s.alternativo) alt.add(s.id);
+      }
+      setSetoresAlternativos(alt);
+    })();
   }, [empresaId]);
 
   // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
@@ -412,9 +432,22 @@ export function AnaliticoLider({
         periodoFim:      snapshot.periodo_fim,
       };
     }
-    // Computa a partir dos resumos filtrados (operadores com dados no período).
-    // Com filtro de SETOR, os órfãos (sem operador) do setor entram no total —
-    // eles pertencem ao setor de quem importou o relatório.
+    // Filtro de SETOR (sem equipe): o total do setor vem do RELATÓRIO
+    // (soma carimbada por setor_id) — clones não afetam. Exceção: setor
+    // ALTERNATIVO (Digital), cujo total é a soma dos membros/clones.
+    if (setorId && !filtroEquipeId && !setoresAlternativos.has(setorId)) {
+      const tot = totalPorSetor[setorId];
+      return {
+        totalRecebido:   tot?.total ?? 0,
+        totalHo:         tot?.ho ?? 0,
+        totalOperadores: resumosFiltrados.length,
+        totalPagamentos: tot?.qtd ?? 0,
+        periodoInicio:   snapshot?.periodo_inicio ?? null,
+        periodoFim:      snapshot?.periodo_fim ?? null,
+      };
+    }
+    // Setor alternativo ou filtro de equipe: soma dos resumos (membros + clones).
+    // Com filtro de SETOR alternativo, os órfãos daquele setor entram no total.
     const orfaosDoSetor = setorId && !filtroEquipeId ? orfaosPorSetor[setorId] : undefined;
     return {
       totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0)
@@ -426,7 +459,7 @@ export function AnaliticoLider({
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, orfaosPorSetor]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, orfaosPorSetor, totalPorSetor, setoresAlternativos]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -911,6 +944,8 @@ export function AnaliticoLider({
           operadorEquipeMap={operadorEquipeMap}
           equipesExtrasPorOperador={equipesExtras}
           orfaosPorSetor={orfaosPorSetor}
+          totalPorSetor={totalPorSetor}
+          setoresAlternativos={setoresAlternativos}
           loading={loadingResumos}
         />
       )}

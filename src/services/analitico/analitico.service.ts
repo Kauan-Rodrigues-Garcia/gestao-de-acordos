@@ -678,6 +678,67 @@ export async function buscarTotalOrfaosPorSetor(
   return porSetor;
 }
 
+// ── Total do relatório por setor (fonte de verdade do total do setor NORMAL) ──
+// Soma TODAS as linhas do mês agrupadas pelo setor_id carimbado na importação
+// (operadores + órfãos). É o "total do relatório" que o setor normal deve
+// mostrar — sem depender de cadastro de operador nem de clones. Órfão/linha
+// antiga sem setor_id cai no setor de quem importou (mesma regra dos órfãos).
+
+export async function buscarTotalPorSetor(
+  empresaId: string,
+  mes: string,   // 'yyyy-MM'
+): Promise<Record<string, { total: number; ho: number; qtd: number }>> {
+  const [y, m] = mes.split('-').map(Number);
+  const primeiro = `${mes}-01`;
+  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+
+  interface RowTot { valor_recebido: number; total_ho: number | null; setor_id?: string | null; importado_por_id: string | null }
+  const buscar = async (comSetor: boolean): Promise<RowTot[] | null> => {
+    const cols = comSetor
+      ? 'valor_recebido, total_ho, setor_id, importado_por_id'
+      : 'valor_recebido, total_ho, importado_por_id';
+    const PAGE = 1000;
+    const linhas: RowTot[] = [];
+    let offset = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('analitico_recebimentos')
+        .select(cols)
+        .eq('empresa_id', empresaId)
+        .gte('data_pagamento', primeiro)
+        .lte('data_pagamento', fim)
+        .range(offset, offset + PAGE - 1);
+      if (error) return null;
+      linhas.push(...((data ?? []) as unknown as RowTot[]));
+      if (!data?.length || data.length < PAGE) break;
+      offset += PAGE;
+    }
+    return linhas;
+  };
+
+  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
+  const linhas = (await buscar(true)) ?? (await buscar(false));
+  if (!linhas?.length) return {};
+
+  const { data: perfis } = await supabase
+    .from('perfis')
+    .select('id, setor_id')
+    .eq('empresa_id', empresaId);
+  const setorDoPerfil = new Map(
+    ((perfis ?? []) as { id: string; setor_id: string | null }[]).map(p => [p.id, p.setor_id]));
+
+  const porSetor: Record<string, { total: number; ho: number; qtd: number }> = {};
+  for (const l of linhas) {
+    const sid = l.setor_id ?? setorDoPerfil.get(l.importado_por_id ?? '') ?? null;
+    if (!sid) continue;
+    const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, ho: 0, qtd: 0 });
+    acc.total += Number(l.valor_recebido) || 0;
+    acc.ho    += Number(l.total_ho) || 0;
+    acc.qtd   += 1;
+  }
+  return porSetor;
+}
+
 // ── Recebido por dia (gráfico do mês) ─────────────────────────────────────────
 
 export interface LinhaRecebidaDia {

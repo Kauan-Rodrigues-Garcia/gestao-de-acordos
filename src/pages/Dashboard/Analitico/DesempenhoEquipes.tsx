@@ -38,6 +38,11 @@ interface DesempenhoEquipesProps {
   equipesExtrasPorOperador?: Record<string, string[]>;
   /** Total dos órfãos (sem operador) por setor — entram no card do setor. */
   orfaosPorSetor?: Record<string, { total: number; qtd: number }>;
+  /** Total do RELATÓRIO por setor (soma das linhas carimbadas). Fonte do card
+   *  do setor NORMAL — clones não afetam. */
+  totalPorSetor?: Record<string, { total: number; ho: number; qtd: number }>;
+  /** Ids dos setores ALTERNATIVOS: total = soma dos membros/clones, não do relatório. */
+  setoresAlternativos?: Set<string>;
   loading: boolean;
   /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
   fonteLabel?: string;
@@ -327,7 +332,8 @@ function CardContribuicaoReceptivo({
 
 export function DesempenhoEquipes({
   empresaId, mes, setorId, equipes, resumos, operadorEquipeMap,
-  equipesExtrasPorOperador = {}, orfaosPorSetor = {}, loading,
+  equipesExtrasPorOperador = {}, orfaosPorSetor = {},
+  totalPorSetor = {}, setoresAlternativos = new Set(), loading,
   fonteLabel = 'relatório analítico',
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
@@ -498,16 +504,26 @@ export function DesempenhoEquipes({
 
   return (
     <div className="space-y-6">
-      {[...dados.grupos.entries()].map(([sid, eqs]) => (
+      {[...dados.grupos.entries()].map(([sid, eqs]) => {
+        // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
+        // Setor ALTERNATIVO → soma dos membros/clones (Digital, sem relatório próprio).
+        const ehAlternativo = setoresAlternativos.has(sid);
+        const baseSetor = ehAlternativo
+          ? (dados.porSetor[sid]?.bruto ?? 0)
+          : (totalPorSetor[sid]?.total ?? 0);
+        const baseSetorHO = ehAlternativo
+          ? (dados.porSetor[sid]?.ho ?? 0)
+          : (totalPorSetor[sid]?.ho ?? 0);
+        return (
         <div key={sid} className="space-y-3">
-          {/* Painel consolidado do setor — soma do analítico das equipes */}
+          {/* Painel consolidado do setor */}
           <PainelPlacar
             titulo={setores[sid] ?? 'Setor'}
-            subtitulo="Setor geral"
+            subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : 'Setor geral · total do relatório'}
             ehSetor
             mostrarHO={isPP}
-            acumulado={(dados.porSetor[sid]?.bruto ?? 0) + (contribPorSetor[sid] ?? 0)}
-            acumuladoHO={dados.porSetor[sid]?.ho ?? 0}
+            acumulado={baseSetor + (contribPorSetor[sid] ?? 0)}
+            acumuladoHO={baseSetorHO}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
             decorridos={dados.decorridos}
@@ -552,7 +568,8 @@ export function DesempenhoEquipes({
               );
             })}
         </div>
-      ))}
+        );
+      })}
       <p className="text-[11px] text-muted-foreground">
         Acumulado e diário vêm do {fonteLabel} · meta, dias úteis e feriados
         vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).

@@ -61,6 +61,9 @@ export interface Setor {
   nome: string;
   descricao: string | null;
   ativo: boolean;
+  /** Setor alternativo (sem relatório próprio): acumulado = soma dos usuários
+   *  que pertencem a ele (membros + clones), não o total do relatório. */
+  alternativo?: boolean;
   empresa_id?: string;
   criado_em: string;
   atualizado_em: string;
