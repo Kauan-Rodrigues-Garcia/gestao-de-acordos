@@ -75,3 +75,15 @@ export async function removerCloneEquipe(cloneId: string): Promise<boolean> {
     .eq('id', cloneId);
   return !error;
 }
+
+/** Apaga TODOS os clones da empresa (os operadores seguem normais nas equipes
+ *  de origem). Retorna a quantidade removida, ou null em erro. */
+export async function removerTodosClonesEmpresa(empresaId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from('equipe_operadores_clones')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .select('id');
+  if (error) return null;
+  return (data as { id: string }[] | null)?.length ?? 0;
+}

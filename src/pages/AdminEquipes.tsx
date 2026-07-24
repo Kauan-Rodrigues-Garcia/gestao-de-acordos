@@ -44,7 +44,8 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import {
-  listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento, type CloneEquipe,
+  listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento,
+  removerTodosClonesEmpresa, type CloneEquipe,
 } from '@/services/equipes/equipesClones.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -407,6 +408,22 @@ export default function AdminEquipes() {
     toast.success(`Clone de ${nomeOperador} removido (segue normal na equipe original).`);
   }
 
+  // Apaga TODOS os clones da empresa de uma vez (confirmação em dois cliques).
+  const [confirmandoLimparClones, setConfirmandoLimparClones] = useState(false);
+  const [limpandoClones, setLimpandoClones] = useState(false);
+  async function handleLimparTodosClones() {
+    if (!empresaId) return;
+    setLimpandoClones(true);
+    const n = await removerTodosClonesEmpresa(empresaId);
+    setLimpandoClones(false);
+    setConfirmandoLimparClones(false);
+    if (n === null) { toast.error('Erro ao excluir os clones.'); return; }
+    setClones([]);
+    toast.success(n > 0
+      ? `${n} clone${n !== 1 ? 's' : ''} excluído${n !== 1 ? 's' : ''}. Os operadores seguem normais nas equipes de origem.`
+      : 'Nenhum clone para excluir.');
+  }
+
   // Item 1: liga/desliga a contagem de recebimento do clone naquela equipe.
   async function handleToggleContaRecebimento(cloneId: string, conta: boolean) {
     const ok = await setCloneContaRecebimento(cloneId, conta);
@@ -654,6 +671,31 @@ export default function AdminEquipes() {
               : 'Gerencie os membros e equipes do seu setor.'}
           </p>
         </div>
+
+        {/* Excluir todos os clones (admin, BookPlay) — confirmação em 2 cliques */}
+        {isAdmin && clonesHabilitados && (clones?.length ?? 0) > 0 && (
+          confirmandoLimparClones ? (
+            <div className="flex items-center gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2">
+              <span className="text-xs text-foreground">
+                Excluir os <strong>{clones?.length}</strong> clones da empresa?
+              </span>
+              <Button size="sm" variant="destructive" className="h-7 text-xs gap-1"
+                disabled={limpandoClones} onClick={handleLimparTodosClones}>
+                <Trash2 className="w-3.5 h-3.5" /> {limpandoClones ? 'Excluindo…' : 'Confirmar'}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs"
+                disabled={limpandoClones} onClick={() => setConfirmandoLimparClones(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline"
+              className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+              onClick={() => setConfirmandoLimparClones(true)}>
+              <Trash2 className="w-4 h-4" /> Excluir todos os clones ({clones?.length})
+            </Button>
+          )
+        )}
       </motion.div>
 
       {/* ── Seletor de Setor ──────────────────────────────────────────────── */}
