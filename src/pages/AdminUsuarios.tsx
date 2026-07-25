@@ -68,8 +68,9 @@ export default function AdminUsuarios() {
   const { empresa: empresaAtual } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
-  // Item 6 (BookPlay): a aba Metas passa a viver dentro de Usuários.
-  const metasComoAba = tenant.slug === 'bookplay';
+  // Item 6: a aba Metas passa a viver dentro de Usuários (BookPlay e PaguePlay).
+  // `tenant` é usado em outras partes; mantém a referência p/ clareza.
+  const metasComoAba = tenant.slug === 'bookplay' || tenant.isPaguePlay;
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
