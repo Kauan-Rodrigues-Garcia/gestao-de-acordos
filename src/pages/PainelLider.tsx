@@ -379,9 +379,15 @@ export default function PainelLider() {
         const rec = analiticoPorOp[op.id] ?? 0;
         return { ...base, recebido: rec, ho: 0 };
       }
+      // PaguePlay: "Recebido" também vem do analítico (fonte de verdade do que
+      // o operador recebeu). H.O. segue a convenção PP (% sobre o recebido).
+      if (isPP) {
+        const rec = analiticoPorOp[op.id] ?? 0;
+        return { ...base, recebido: rec, ho: rec * PP_HO_PERCENTUAL };
+      }
       return base;
     });
-  }, [operadores, acordosMes, isBookplay, analiticoPorOp]);
+  }, [operadores, acordosMes, isBookplay, isPP, analiticoPorOp]);
 
   const time = useMemo(() => {
     const recebido = sumSafe(metricas.map(m => m.recebido));
@@ -583,7 +589,7 @@ export default function PainelLider() {
             sub={isPP
               ? `H.O. ${formatBRL(time.ho)} · ${time.pagos} pago${time.pagos !== 1 ? 's' : ''}`
               : `${time.pagos} acordo${time.pagos !== 1 ? 's' : ''} pago${time.pagos !== 1 ? 's' : ''}`} />
-          <KpiCard label={isBookplay ? 'Agendado' : 'A receber'} accent="#6366f1" icon={<Wallet className="w-4 h-4" />}
+          <KpiCard label={isBookplay ? 'Agendado' : 'Pendente'} accent="#6366f1" icon={<Wallet className="w-4 h-4" />}
             value={<span className="text-primary">{formatBRL(time.aReceber)}</span>}
             sub={`${time.abertos} em aberto`} />
           <KpiCard label="Não pagos" accent="#ef4444" icon={<AlertTriangle className="w-4 h-4" />}
@@ -622,7 +628,7 @@ export default function PainelLider() {
                   <SelectItem value="recebido">Maior recebido</SelectItem>
                   <SelectItem value="conversao">Maior conversão</SelectItem>
                   <SelectItem value="naoPagos">Mais não pagos</SelectItem>
-                  <SelectItem value="aReceber">Maior a receber</SelectItem>
+                  <SelectItem value="aReceber">{isBookplay ? 'Maior agendado' : 'Maior pendente'}</SelectItem>
                   <SelectItem value="nome">Nome (A-Z)</SelectItem>
                 </SelectContent>
               </Select>
@@ -646,7 +652,7 @@ export default function PainelLider() {
                     <th className="text-left px-4 py-2.5 font-semibold">OPERADOR</th>
                     <th className="text-right px-3 py-2.5 font-semibold">RECEBIDO</th>
                     {isPP && <th className="text-right px-3 py-2.5 font-semibold">H.O.</th>}
-                    <th className="text-right px-3 py-2.5 font-semibold">{isBookplay ? 'AGENDADO' : 'A RECEBER'}</th>
+                    <th className="text-right px-3 py-2.5 font-semibold">{isBookplay ? 'AGENDADO' : 'PENDENTE'}</th>
                     <th className="text-center px-3 py-2.5 font-semibold">ABERTOS</th>
                     <th className="text-center px-3 py-2.5 font-semibold">NÃO PAGOS</th>
                     <th className="text-left px-3 py-2.5 font-semibold min-w-[120px]">CONVERSÃO</th>
@@ -689,8 +695,8 @@ export default function PainelLider() {
                             {m.naoPagos > 0 ? (
                               <span className="inline-flex items-center gap-1 font-mono font-semibold text-destructive">
                                 <AlertTriangle className="w-3 h-3" />
-                                {/* BookPlay: valor total agendado como não pago; PP: quantidade. */}
-                                {isBookplay ? formatBRL(m.valorNaoPago) : m.naoPagos}
+                                {/* BookPlay e PaguePlay: valor R$ total não pago. */}
+                                {formatBRL(m.valorNaoPago)}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
@@ -856,7 +862,7 @@ function DetalheOperador({
               {[
                 { label: 'Recebido/mês', value: formatBRL(recebido),          cls: 'text-success',     sub: `${pagos.length} pago(s)` },
                 ...(isPP ? [{ label: 'H.O./mês', value: formatBRL(ho), cls: 'text-emerald-600', sub: `${(PP_HO_PERCENTUAL * 100).toFixed(2)}% do recebido` }] : []),
-                { label: 'A receber/mês', value: formatBRL(aReceber),          cls: 'text-primary',     sub: `${abertos.length} aberto(s)` },
+                { label: isPP ? 'Pendente/mês' : 'A receber/mês', value: formatBRL(aReceber), cls: 'text-primary', sub: `${abertos.length} aberto(s)` },
                 { label: 'Não pagos',    value: String(naoPagos.length),       cls: 'text-destructive', sub: `${formatBRL(sumSafe(naoPagos.map(a => a.valor)))} não pago` },
                 { label: 'Conversão',    value: `${totalConv > 0 ? Math.round((pagos.length / totalConv) * 100) : 0}%`, cls: 'text-warning', sub: `${pagos.length}/${totalConv}` },
               ].map(({ label, value, cls, sub }) => (
