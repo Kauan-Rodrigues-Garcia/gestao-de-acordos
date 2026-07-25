@@ -36,7 +36,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import {
-  buscarEquipesComOperadores,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
   type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import {
@@ -146,7 +146,12 @@ export default function PainelLider() {
   // a permissão ver_operadores esconde a expansão da linha do operador).
   const podeVerOperadores = temPermissao('ver_operadores');
   const { subscribe, unsubscribe } = useRealtimeAcordos();
-  const isPP = useTenant().isPaguePlay;
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
+  // Item 4 (BookPlay): a coluna "Recebido" do painel passa a espelhar o valor do
+  // relatório analítico (o mesmo que aparece na lista de operadores do Analítico),
+  // não a soma dos acordos pagos tabulados.
+  const isBookplay = tenant.slug === 'bookplay';
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
@@ -191,6 +196,8 @@ export default function PainelLider() {
     operadorEquipeMap: Record<string, OperadorEquipeInfo>;
     equipesExtrasPorOperador: Record<string, string[]>;
   } | null>(null);
+  // BookPlay: recebido do relatório analítico por operador (operador_id → R$)
+  const [analiticoPorOp, setAnaliticoPorOp] = useState<Record<string, number>>({});
   const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
   const [loadingDiario, setLoadingDiario] = useState(false);
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
@@ -220,6 +227,19 @@ export default function PainelLider() {
     });
     return () => { cancel = true; };
   }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
+
+  // BookPlay: carrega o recebido do analítico por operador (mês selecionado).
+  useEffect(() => {
+    if (!isBookplay || !empresa?.id) { setAnaliticoPorOp({}); return; }
+    let cancel = false;
+    void buscarResumoOperadoresAnalitico(empresa.id, mesStr).then(({ data }) => {
+      if (cancel) return;
+      const map: Record<string, number> = {};
+      for (const r of data) map[r.operador_id] = Number(r.total_recebido) || 0;
+      setAnaliticoPorOp(map);
+    });
+    return () => { cancel = true; };
+  }, [isBookplay, empresa?.id, mesStr, diarioReloadKey]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -296,8 +316,16 @@ export default function PainelLider() {
       arr.push(a);
       porOp.set(a.operador_id, arr);
     }
-    return operadores.map(op => metricasOperador(op, porOp.get(op.id) ?? []));
-  }, [operadores, acordosMes]);
+    return operadores.map(op => {
+      const base = metricasOperador(op, porOp.get(op.id) ?? []);
+      // BookPlay: "Recebido" = valor do relatório analítico do operador.
+      if (isBookplay) {
+        const rec = analiticoPorOp[op.id] ?? 0;
+        return { ...base, recebido: rec, ho: 0 };
+      }
+      return base;
+    });
+  }, [operadores, acordosMes, isBookplay, analiticoPorOp]);
 
   const time = useMemo(() => {
     const recebido = sumSafe(metricas.map(m => m.recebido));
@@ -495,7 +523,7 @@ export default function PainelLider() {
             sub={isPP
               ? `H.O. ${formatBRL(time.ho)} · ${time.pagos} pago${time.pagos !== 1 ? 's' : ''}`
               : `${time.pagos} acordo${time.pagos !== 1 ? 's' : ''} pago${time.pagos !== 1 ? 's' : ''}`} />
-          <KpiCard label="A receber" accent="#6366f1" icon={<Wallet className="w-4 h-4" />}
+          <KpiCard label={isBookplay ? 'Agendado' : 'A receber'} accent="#6366f1" icon={<Wallet className="w-4 h-4" />}
             value={<span className="text-primary">{formatBRL(time.aReceber)}</span>}
             sub={`${time.abertos} em aberto`} />
           <KpiCard label="Não pagos" accent="#ef4444" icon={<AlertTriangle className="w-4 h-4" />}
@@ -558,7 +586,7 @@ export default function PainelLider() {
                     <th className="text-left px-4 py-2.5 font-semibold">OPERADOR</th>
                     <th className="text-right px-3 py-2.5 font-semibold">RECEBIDO</th>
                     {isPP && <th className="text-right px-3 py-2.5 font-semibold">H.O.</th>}
-                    <th className="text-right px-3 py-2.5 font-semibold">A RECEBER</th>
+                    <th className="text-right px-3 py-2.5 font-semibold">{isBookplay ? 'AGENDADO' : 'A RECEBER'}</th>
                     <th className="text-center px-3 py-2.5 font-semibold">ABERTOS</th>
                     <th className="text-center px-3 py-2.5 font-semibold">NÃO PAGOS</th>
                     <th className="text-left px-3 py-2.5 font-semibold min-w-[120px]">CONVERSÃO</th>
@@ -600,7 +628,9 @@ export default function PainelLider() {
                           <td className="px-3 py-2.5 text-center">
                             {m.naoPagos > 0 ? (
                               <span className="inline-flex items-center gap-1 font-mono font-semibold text-destructive">
-                                <AlertTriangle className="w-3 h-3" /> {m.naoPagos}
+                                <AlertTriangle className="w-3 h-3" />
+                                {/* BookPlay: valor total agendado como não pago; PP: quantidade. */}
+                                {isBookplay ? formatBRL(m.valorNaoPago) : m.naoPagos}
                               </span>
                             ) : (
                               <span className="text-muted-foreground">—</span>
