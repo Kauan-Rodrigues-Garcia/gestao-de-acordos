@@ -58,6 +58,9 @@ interface UserForm {
   empresa_id: string;
 }
 
+/** Perfil exibido na lista; `_cloneDe` marca um clone de OUTRO setor (tag). */
+type PerfilComClone = Perfil & { _cloneDe?: string | null };
+
 export default function AdminUsuarios() {
   const [searchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') ?? 'usuarios';
@@ -434,6 +437,38 @@ export default function AdminUsuarios() {
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
 
+  // ── Clones cross-setor (BookPlay) ───────────────────────────────────────────
+  // Operador clonado numa equipe de OUTRO setor aparece TAMBÉM no setor destino,
+  // com tag "clone de <setor de origem>" — igual à aba Setores (item 12).
+  const [clonesCross, setClonesCross] = useState<{ operadorId: string; destinoSetorId: string }[]>([]);
+  useEffect(() => {
+    if (!empresaAtual?.id || tenant.slug !== 'bookplay') { setClonesCross([]); return; }
+    let cancel = false;
+    void (async () => {
+      const [clones, equipesData] = await Promise.all([
+        supabase.from('equipe_operadores_clones').select('operador_id, equipe_id').eq('empresa_id', empresaAtual.id),
+        supabase.from('equipes').select('id, setor_id').eq('empresa_id', empresaAtual.id),
+      ]);
+      if (cancel) return;
+      const setorDaEquipe = new Map<string, string | null>();
+      for (const e of (equipesData.data as { id: string; setor_id: string | null }[]) ?? []) {
+        setorDaEquipe.set(e.id, e.setor_id ?? null);
+      }
+      const out: { operadorId: string; destinoSetorId: string }[] = [];
+      const seen = new Set<string>();
+      for (const c of (clones.data as { operador_id: string; equipe_id: string }[]) ?? []) {
+        const destino = setorDaEquipe.get(c.equipe_id);
+        if (!destino) continue;
+        const key = `${c.operador_id}::${destino}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ operadorId: c.operador_id, destinoSetorId: destino });
+      }
+      setClonesCross(out);
+    })();
+    return () => { cancel = true; };
+  }, [empresaAtual?.id, tenant.slug]);
+
   // ── Filtro de acesso por cargo ──────────────────────────────────────────────
   // Regras:
   //   • Admin / Super Admin → vê todos sem restrição
@@ -463,13 +498,31 @@ export default function AdminUsuarios() {
   );
 
   // ── Agrupamento por setor ────────────────────────────────────────────────────
-  const usuariosPorSetor = usuariosFiltrados.reduce<Record<string, { nomeSetor: string; lista: Perfil[] }>>((acc, u) => {
+  const usuariosPorSetor = usuariosFiltrados.reduce<Record<string, { nomeSetor: string; lista: PerfilComClone[] }>>((acc, u) => {
     const sid = u.setor_id ?? '__sem_setor__';
     const snome = nomeSetor(u);
     if (!acc[sid]) acc[sid] = { nomeSetor: snome, lista: [] };
     acc[sid].lista.push(u);
     return acc;
   }, {});
+
+  // BookPlay: injeta os clones de OUTRO setor no grupo do setor destino, com tag.
+  // Respeita o acesso: cargo escopado (operador/líder/elite) só vê o próprio setor
+  // — o grupo do setor dele é criado mesmo se for formado só por clones.
+  if (tenant.slug === 'bookplay' && clonesCross.length) {
+    const escopadoAoSetor = ['operador', 'lider', 'elite'].includes(perfilAtual?.perfil ?? '');
+    const perfilPorId = new Map(usuarios.map(p => [p.id, p]));
+    const nomeSetorPorId = (id: string) => setores.find(s => s.id === id)?.nome ?? 'Setor';
+    for (const c of clonesCross) {
+      if (escopadoAoSetor && c.destinoSetorId !== perfilAtual?.setor_id) continue;
+      const p = perfilPorId.get(c.operadorId);
+      if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
+      if (PERFIS_ADMIN.includes(p.perfil) && !(isAdmin || isSuperAdmin)) continue;
+      const grupo = (usuariosPorSetor[c.destinoSetorId] ??= { nomeSetor: nomeSetorPorId(c.destinoSetorId), lista: [] });
+      if (grupo.lista.some(x => x.id === p.id)) continue;
+      grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
+    }
+  }
 
   const setoresOrdenados = (() => {
     const entries = Object.entries(usuariosPorSetor);
@@ -624,6 +677,12 @@ export default function AdminUsuarios() {
                                     {u.id === perfilAtual?.id && (
                                       <span className="text-[9px] bg-primary/15 text-primary border border-primary/30 rounded px-1 py-0 font-bold">Você</span>
                                     )}
+                                    {u._cloneDe && (
+                                      <span className="text-[9px] bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30 rounded px-1 py-0 font-semibold whitespace-nowrap"
+                                        title={`Operador clonado do setor ${u._cloneDe}`}>
+                                        clone de {u._cloneDe}
+                                      </span>
+                                    )}
                                   </div>
                                   <div className="flex items-center gap-1">
                                     {u.usuario && <p className="text-[10px] text-muted-foreground font-mono truncate">{u.usuario}</p>}
@@ -648,7 +707,7 @@ export default function AdminUsuarios() {
                               </span>
                             </td>
                             <td className="px-3 py-2.5 text-center">
-                              {podeGerenciarSituacao ? (
+                              {podeGerenciarSituacao && !u._cloneDe ? (
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
                                     <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium transition-colors hover:bg-accent">
@@ -675,7 +734,10 @@ export default function AdminUsuarios() {
                             </td>
                             <td className="px-3 py-2.5">
                               <div className="flex items-center justify-end gap-1">
-                                {isSuperAdmin && u.id !== perfilAtual?.id && (
+                                {u._cloneDe && (
+                                  <span className="text-[10px] text-muted-foreground italic">gerido no setor de origem</span>
+                                )}
+                                {!u._cloneDe && isSuperAdmin && u.id !== perfilAtual?.id && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -690,7 +752,7 @@ export default function AdminUsuarios() {
                                     <span className="text-xs">Entrar como</span>
                                   </Button>
                                 )}
-                                {temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
+                                {!u._cloneDe && temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
                                   <Button
                                     variant="ghost"
                                     size="sm"
