@@ -58,15 +58,23 @@ export function diasDoLote(linhas: LinhaDiario[]): string[] {
 
 /**
  * O lote conta como relatório MENSAL?
- *  - Mais de um dia distinto → mensal.
- *  - Um único dia que é o dia 1º do mês → mensal (no primeiro dia do mês o
- *    relatório mensal só tem um dia mesmo — sem essa exceção o dia 1º ficaria
- *    travado sem saída).
+ *
+ * A regra antiga ("mais de um dia distinto → mensal") furava: o relatório de
+ * UM dia costuma trazer baixas atrasadas de 1 ou 2 dias anteriores, então tinha
+ * 2 dias distintos e passava como mensal — ainda por cima marcando o dia como
+ * liberado. Regra endurecida:
+ *  - Começa no dia 1º do mês (menor dia = '...-01') → é o mês inteiro (o mensal
+ *    sempre parte do dia 1). Cobre também o caso de importar o mensal já no dia
+ *    1º (um único dia).
+ *  - 3+ dias distintos → mensal. Um relatório de 1 dia, mesmo com atraso de
+ *    baixa, não passa de 2 dias distintos; 3+ caracteriza o mês.
+ *  - Caso contrário (1 ou 2 dias sem começar no 1º) → NÃO é mensal: bloqueia.
  */
 export function loteEhMensal(linhas: LinhaDiario[]): boolean {
   const dias = diasDoLote(linhas);
-  if (dias.length > 1) return true;
-  return dias.length === 1 && dias[0].endsWith('-01');
+  if (dias.length === 0) return false;
+  if (dias[0].endsWith('-01')) return true;   // dias ordenado asc → menor dia
+  return dias.length >= 3;
 }
 
 export const MSG_BLOQUEIO_MENSAL =

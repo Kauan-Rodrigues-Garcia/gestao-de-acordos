@@ -42,12 +42,20 @@ describe('diasDoLote', () => {
 });
 
 describe('loteEhMensal', () => {
-  it('multi-dia é mensal', () => {
+  it('começa no dia 1º do mês é mensal (mês inteiro parte do dia 1)', () => {
     expect(loteEhMensal([linha('2026-07-01'), linha('2026-07-02')])).toBe(true);
+  });
+
+  it('3+ dias distintos é mensal', () => {
+    expect(loteEhMensal([linha('2026-07-13'), linha('2026-07-14'), linha('2026-07-15')])).toBe(true);
   });
 
   it('um único dia comum NÃO é mensal', () => {
     expect(loteEhMensal([linha('2026-07-15'), linha('2026-07-15')])).toBe(false);
+  });
+
+  it('2 dias por atraso de baixa (sem começar no 1º) NÃO é mensal — fecha o furo', () => {
+    expect(loteEhMensal([linha('2026-07-14'), linha('2026-07-15')])).toBe(false);
   });
 
   it('um único dia que é o 1º do mês conta como mensal (exceção do dia 1º)', () => {
