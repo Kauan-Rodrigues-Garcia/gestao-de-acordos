@@ -68,26 +68,38 @@ export function DiarioLider({
   const [modalImportar, setModalImportar]  = useState(false);
   const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'equipes' | 'orfaos'>('operadores');
 
-  // Mapa operador→equipe + nomes de equipe + clones (aba "Por equipe")
+  // Mapa operador→equipe/setor + nomes/setor de equipe + clones (aba "Por equipe")
   const [perfEquipe, setPerfEquipe]   = useState<Record<string, string | null>>({});
+  const [perfSetor,  setPerfSetor]    = useState<Record<string, string | null>>({});
   const [equipeNomes, setEquipeNomes] = useState<Record<string, string>>({});
+  const [equipeSetor, setEquipeSetor] = useState<Record<string, string | null>>({});
   const [clonesEq, setClonesEq]       = useState<{ equipe_id: string; operador_id: string }[]>([]);
 
   useEffect(() => {
     let cancel = false;
     async function load() {
       const [{ data: perfis }, { data: equipesData }, clones] = await Promise.all([
-        supabase.from('perfis').select('id, equipe_id').eq('empresa_id', empresaId),
-        supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId),
+        supabase.from('perfis').select('id, equipe_id, setor_id').eq('empresa_id', empresaId),
+        supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId),
         listarClonesEquipes(empresaId),
       ]);
       if (cancel) return;
       const pm: Record<string, string | null> = {};
-      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null }[]) pm[p.id] = p.equipe_id ?? null;
+      const ps: Record<string, string | null> = {};
+      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null; setor_id: string | null }[]) {
+        pm[p.id] = p.equipe_id ?? null;
+        ps[p.id] = p.setor_id ?? null;
+      }
       setPerfEquipe(pm);
+      setPerfSetor(ps);
       const em: Record<string, string> = {};
-      for (const e of (equipesData ?? []) as { id: string; nome: string }[]) em[e.id] = e.nome;
+      const es: Record<string, string | null> = {};
+      for (const e of (equipesData ?? []) as { id: string; nome: string; setor_id: string | null }[]) {
+        em[e.id] = e.nome;
+        es[e.id] = e.setor_id ?? null;
+      }
       setEquipeNomes(em);
+      setEquipeSetor(es);
       setClonesEq(clones ?? []);
     }
     void load();
@@ -184,18 +196,46 @@ export function DiarioLider({
       cur.pgtos += 1;
       map.set(equipeId, cur);
     };
-    for (const r of vinculadas) {
-      if (!r.operador_id) continue;
-      const own = perfEquipe[r.operador_id] ?? SEM_EQUIPE;
-      add(own, r);
-      for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
-        if (eq !== own) add(eq, r);
+    if (mostrarNR) {
+      // BookPlay: mostra só as equipes EXISTENTES do(s) setor(es) presentes na
+      // visão (o líder já vê apenas o próprio setor via RLS). Cada equipe soma
+      // todos os seus membros — próprios e clones. Equipe clonada de OUTRO setor
+      // (ex.: "Digital Amauri" no Play 5) NÃO vira card aqui: ela aparece no
+      // diário do setor dono. Sem bucket "Sem equipe".
+      const setoresPresentes = new Set<string>();
+      for (const r of vinculadas) {
+        if (!r.operador_id) continue;
+        const s = perfSetor[r.operador_id];
+        if (s) setoresPresentes.add(s);
+      }
+      // equipe sem setor cadastrado ou nenhum setor detectado → não filtra
+      const doSetorPresente = (eqId: string) => {
+        const s = equipeSetor[eqId];
+        return s == null || setoresPresentes.size === 0 || setoresPresentes.has(s);
+      };
+      for (const r of vinculadas) {
+        if (!r.operador_id) continue;
+        const own = perfEquipe[r.operador_id];
+        if (own && doSetorPresente(own)) add(own, r);
+        for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
+          if (eq !== own && doSetorPresente(eq)) add(eq, r);
+        }
+      }
+    } else {
+      // PaguePlay: própria equipe + clones + bucket "Sem equipe" (comportamento antigo).
+      for (const r of vinculadas) {
+        if (!r.operador_id) continue;
+        const own = perfEquipe[r.operador_id] ?? SEM_EQUIPE;
+        add(own, r);
+        for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
+          if (eq !== own) add(eq, r);
+        }
       }
     }
     return [...map.values()]
       .map(g => ({ equipeId: g.equipeId, total: g.total, nOps: g.ops.size, pgtos: g.pgtos }))
       .sort((a, b) => b.total - a.total);
-  }, [vinculadas, perfEquipe, clonesEq]);
+  }, [vinculadas, perfEquipe, perfSetor, equipeSetor, clonesEq, mostrarNR]);
   const maxTotalEquipe = resumoEquipes[0]?.total || 1;
 
   // ── Ações ─────────────────────────────────────────────────────────────────
