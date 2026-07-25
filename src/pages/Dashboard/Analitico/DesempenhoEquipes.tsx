@@ -450,7 +450,7 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: clonesData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: clonesData }, { data: equipeLideresData }] = await Promise.all([
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', anoNum)
             .in('tipo', ['setor', 'equipe']),
@@ -463,6 +463,10 @@ export function DesempenhoEquipes({
           // Clones: líder clonado numa equipe deve mostrar foto/tag lá também.
           // Tabela pode não existir (migration 20260712a pendente) → vazio.
           supabase.from('equipe_operadores_clones').select('equipe_id, operador_id')
+            .eq('empresa_id', empresaId),
+          // Item 10/11: líder definido explicitamente por equipe (modelo novo).
+          // Tabela pode não existir (migration 20260725b pendente) → vazio.
+          supabase.from('equipe_lideres').select('equipe_id, lider_id')
             .eq('empresa_id', empresaId),
         ]);
         if (cancelado) return;
@@ -485,6 +489,12 @@ export function DesempenhoEquipes({
         for (const c of (clonesData as { equipe_id: string; operador_id: string }[]) ?? []) {
           const info = lideresById.get(c.operador_id);
           if (info) addLider(c.equipe_id, info);   // líder clonado nesta equipe
+        }
+        // Modelo novo (item 10): líderes definidos por equipe em equipe_lideres —
+        // inclui clones de líder de outro setor. addLider deduplica por nome.
+        for (const el of (equipeLideresData as { equipe_id: string; lider_id: string }[]) ?? []) {
+          const info = lideresById.get(el.lider_id);
+          if (info) addLider(el.equipe_id, info);
         }
         setLideres(lMap);
         const sMap: Record<string, string> = {};

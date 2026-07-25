@@ -25,6 +25,7 @@ import {
   Search,
   Copy,
   GraduationCap,
+  Crown,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,9 @@ import {
   listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento,
   removerTodosClonesEmpresa, type CloneEquipe,
 } from '@/services/equipes/equipesClones.service';
+import {
+  listarLideresEquipes, adicionarLiderEquipe, removerLiderEquipe, type LiderEquipe,
+} from '@/services/equipes/equipesLideres.service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -85,7 +89,7 @@ interface Operador {
 interface CloneCatalogo {
   setores:    Setor[];
   equipes:    { id: string; nome: string; setor_id: string }[];
-  operadores: { id: string; nome: string; setor_id: string | null; equipe_id: string | null }[];
+  operadores: { id: string; nome: string; setor_id: string | null; equipe_id: string | null; perfil: string }[];
 }
 
 const CLONE_CATALOGO_VAZIO: CloneCatalogo = { setores: [], equipes: [], operadores: [] };
@@ -234,6 +238,12 @@ export default function AdminEquipes() {
   const [cloneSetorSel, setCloneSetorSel] = useState<string>('');
   const [cloneCat, setCloneCat] = useState<CloneCatalogo>(CLONE_CATALOGO_VAZIO);
 
+  // ── Líderes por equipe (BookPlay, migration 20260725b) ─────────────────────
+  // null = tabela ausente → modelo antigo (líder mora na equipe via perfis).
+  const [lideresEq, setLideresEq] = useState<LiderEquipe[] | null>(null);
+  const [adicionandoLiderId, setAdicionandoLiderId] = useState<string | null>(null);  // equipe com seletor aberto
+  const lideresHabilitados = tenant.slug === 'bookplay' && lideresEq !== null;
+
   const empresaId = empresa?.id;
 
   // ─── Load ──────────────────────────────────────────────────────────────────
@@ -287,7 +297,12 @@ export default function AdminEquipes() {
       setSetores(setoresList);
       setEquipes(equipesRes.data ?? []);
       setOperadores(operadoresRes.data ?? []);
-      setClones(await listarClonesEquipes(empresaId));
+      const [clonesData, lideresData] = await Promise.all([
+        listarClonesEquipes(empresaId),
+        listarLideresEquipes(empresaId),
+      ]);
+      setClones(clonesData);
+      setLideresEq(lideresData);
 
       // Auto-selecionar: líder vai para seu setor, admin para o primeiro da lista
       setSetorSelecionado(prev => {
@@ -316,7 +331,7 @@ export default function AdminEquipes() {
       const [s, e, o] = await Promise.all([
         supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
         supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId).order('nome'),
-        supabase.from('perfis').select('id, nome, setor_id, equipe_id')
+        supabase.from('perfis').select('id, nome, setor_id, equipe_id, perfil')
           .eq('empresa_id', empresaId).eq('ativo', true)
           .in('perfil', ['operador', 'lider', 'elite']).order('nome'),
       ]);
@@ -335,15 +350,19 @@ export default function AdminEquipes() {
   const setorAtual = setores.find(s => s.id === setorSelecionado);
   const equipesDoSetor = equipes.filter(e => e.setor_id === setorSelecionado);
 
+  // Item 10 (BookPlay): líderes não entram no pool "sem equipe" nem como membros
+  // de equipe — a liderança é definida no espaço "Líderes" de cada equipe.
+  const ehLiderExcluido = (o: Operador) => lideresHabilitados && o.perfil === 'lider';
+
   // Membros do setor selecionado
-  const membrosDoSetor = operadores.filter(o => o.setor_id === setorSelecionado);
+  const membrosDoSetor = operadores.filter(o => o.setor_id === setorSelecionado && !ehLiderExcluido(o));
   // Membros sem equipe (disponíveis para alocar), com filtro de busca
   const membrosSemEquipe = membrosDoSetor.filter(o => !o.equipe_id).filter(o =>
     !buscaMembro || o.nome.toLowerCase().includes(buscaMembro.toLowerCase())
   );
 
   const operadoresDaEquipe = (equipeId: string) =>
-    operadores.filter(o => o.equipe_id === equipeId);
+    operadores.filter(o => o.equipe_id === equipeId && !ehLiderExcluido(o));
 
   // Nomes de equipe/setor que podem estar fora do setor carregado: procura na
   // lista principal e cai no catálogo da empresa.
@@ -369,6 +388,40 @@ export default function AdminEquipes() {
       .filter(c => c.equipe_id === equipeId)
       .map(c => ({ clone: c, operador: resolverOperadorClone(c.operador_id) }))
       .filter((x): x is { clone: CloneEquipe; operador: CloneOperadorInfo } => !!x.operador);
+
+  // ── Líderes por equipe (item 10) ───────────────────────────────────────────
+  /** Líderes definidos para a equipe (resolve nome/setor do líder). */
+  const lideresDaEquipe = (equipeId: string) =>
+    (lideresEq ?? [])
+      .filter(v => v.equipe_id === equipeId)
+      .map(v => ({ vinculo: v, info: resolverOperadorClone(v.lider_id) }))
+      .filter((x): x is { vinculo: LiderEquipe; info: CloneOperadorInfo } => !!x.info);
+
+  /** Líderes que podem ser adicionados: os do setor da equipe primeiro, depois
+   *  os de outros setores (clone). Exclui os já atribuídos. */
+  const lideresDisponiveis = (equipe: Equipe) => {
+    const jaAtribuidos = new Set((lideresEq ?? []).filter(v => v.equipe_id === equipe.id).map(v => v.lider_id));
+    return cloneCat.operadores
+      .filter(o => o.perfil === 'lider' && !jaAtribuidos.has(o.id))
+      .map(o => ({ ...o, mesmoSetor: o.setor_id === equipe.setor_id }))
+      .sort((a, b) => Number(b.mesmoSetor) - Number(a.mesmoSetor) || a.nome.localeCompare(b.nome));
+  };
+
+  async function handleAdicionarLider(equipe: Equipe, liderId: string) {
+    if (!empresaId || !liderId) return;
+    const criado = await adicionarLiderEquipe(empresaId, equipe.id, liderId, perfil?.id);
+    if (!criado) { toast.error('Erro ao adicionar líder.'); return; }
+    setLideresEq(prev => [...(prev ?? []), criado]);
+    setAdicionandoLiderId(null);
+    toast.success('Líder adicionado à equipe.');
+  }
+
+  async function handleRemoverLider(vinculoId: string) {
+    const ok = await removerLiderEquipe(vinculoId);
+    if (!ok) { toast.error('Erro ao remover líder.'); return; }
+    setLideresEq(prev => (prev ?? []).filter(v => v.id !== vinculoId));
+    toast.success('Líder removido da equipe.');
+  }
 
   /** Setores (fora do dele) em que o operador está clonado. Alimenta a tag que
    *  aparece no card dele no setor de origem. */
@@ -1048,6 +1101,78 @@ export default function AdminEquipes() {
 
                             {/* Membros da equipe */}
                             <div className="p-2.5 flex-1 min-h-[80px]">
+                              {/* Líderes da equipe (item 10, BookPlay) */}
+                              {lideresHabilitados && (
+                                <div className="mb-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-2 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[10px] font-semibold text-amber-600 flex items-center gap-1">
+                                      <Crown className="w-3 h-3" /> Líderes da equipe
+                                    </p>
+                                    {podeGerenciarEquipe && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setAdicionandoLiderId(prev => (prev === equipe.id ? null : equipe.id))}
+                                        className="text-[10px] text-primary hover:underline flex items-center gap-0.5"
+                                      >
+                                        <Plus className="w-3 h-3" /> Adicionar
+                                      </button>
+                                    )}
+                                  </div>
+                                  {lideresDaEquipe(equipe.id).length === 0 ? (
+                                    <p className="text-[10px] text-muted-foreground italic">Nenhum líder definido.</p>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1">
+                                      {lideresDaEquipe(equipe.id).map(({ vinculo, info }) => {
+                                        const cross = !!info.setor_id && info.setor_id !== equipe.setor_id;
+                                        return (
+                                          <span
+                                            key={vinculo.id}
+                                            className="inline-flex items-center gap-1 text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30 rounded-full pl-2 pr-1 py-0.5"
+                                          >
+                                            <Crown className="w-2.5 h-2.5 shrink-0" /> {info.nome}
+                                            {cross && (
+                                              <span className="text-[9px] text-muted-foreground">
+                                                (clone de {nomeSetorQualquer(info.setor_id) ?? 'outro setor'})
+                                              </span>
+                                            )}
+                                            {podeGerenciarEquipe && (
+                                              <button
+                                                type="button"
+                                                title="Remover líder da equipe"
+                                                onClick={() => void handleRemoverLider(vinculo.id)}
+                                                className="ml-0.5 text-muted-foreground hover:text-destructive"
+                                              >
+                                                <X className="w-2.5 h-2.5" />
+                                              </button>
+                                            )}
+                                          </span>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                  {podeGerenciarEquipe && adicionandoLiderId === equipe.id && (
+                                    <Select onValueChange={v => void handleAdicionarLider(equipe, v)}>
+                                      <SelectTrigger className="h-7 text-xs bg-background">
+                                        <SelectValue placeholder="Escolha o líder…" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {lideresDisponiveis(equipe).length === 0 ? (
+                                          <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                                            Nenhum líder disponível.
+                                          </div>
+                                        ) : lideresDisponiveis(equipe).map(l => (
+                                          <SelectItem key={l.id} value={l.id}>
+                                            {l.nome}
+                                            <span className="text-muted-foreground ml-1.5">
+                                              {l.mesmoSetor ? '(este setor)' : `(clone de ${nomeSetorQualquer(l.setor_id) ?? 'outro setor'})`}
+                                            </span>
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  )}
+                                </div>
+                              )}
                               {/* Seletor de clone (aberto pelo botão de copiar no header) */}
                               {clonesHabilitados && clonandoEquipeId === equipe.id && (() => {
                                 // Passo 1: setor de origem (começa no da própria equipe).
