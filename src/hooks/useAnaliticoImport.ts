@@ -1,7 +1,8 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
+import { supabase } from '@/lib/supabase';
 import {
   parseRelatorioExcel,
   type LinhaRelatorio,
@@ -82,9 +83,28 @@ export function useAnaliticoImport() {
   // setor no perfil; admin/diretoria (sem setor) escolhem no modal.
   const setorAutomatico = perfil?.setor_id ?? null;
   const [setorEscolhido, setSetorEscolhido] = useState<string | null>(null);
-  const setorImportacao = setorAutomatico ?? setorEscolhido;
-  /** true quando o modal precisa exibir o seletor de setor (BookPlay, admin). */
-  const precisaEscolherSetor = !tenant.isPaguePlay && !setorAutomatico;
+
+  // Item 9: quando o setor do importador é ALTERNATIVO (ex.: Digital), o
+  // relatório na verdade é de outro setor (Play 4/5). Ele deve escolher o setor
+  // de ORIGEM e a importação carimba esse setor — como se alguém dele tivesse
+  // importado. Setor alternativo não é o dono das linhas.
+  const [setorProprioAlternativo, setSetorProprioAlternativo] = useState(false);
+  useEffect(() => {
+    if (tenant.isPaguePlay || !setorAutomatico) { setSetorProprioAlternativo(false); return; }
+    let cancel = false;
+    supabase.from('setores').select('alternativo').eq('id', setorAutomatico).maybeSingle()
+      .then(({ data }) => {
+        if (!cancel) setSetorProprioAlternativo(!!(data as { alternativo?: boolean } | null)?.alternativo);
+      });
+    return () => { cancel = true; };
+  }, [tenant.isPaguePlay, setorAutomatico]);
+
+  // Usa o setor ESCOLHIDO quando o importador não tem setor (admin) OU quando o
+  // setor dele é alternativo; caso normal, usa o setor do próprio perfil.
+  const usarSetorEscolhido = !setorAutomatico || setorProprioAlternativo;
+  const setorImportacao = usarSetorEscolhido ? setorEscolhido : setorAutomatico;
+  /** true quando o modal precisa exibir o seletor de setor (BookPlay). */
+  const precisaEscolherSetor = !tenant.isPaguePlay && usarSetorEscolhido;
 
   const carregarArquivo = useCallback(async (file: File) => {
     if (!empresa?.id) return;
@@ -288,5 +308,7 @@ export function useAnaliticoImport() {
     precisaEscolherSetor,
     setorImportacao,
     setSetorEscolhido,
+    /** true quando o importador é de um setor alternativo (escolhe o setor de origem). */
+    setorProprioAlternativo,
   };
 }

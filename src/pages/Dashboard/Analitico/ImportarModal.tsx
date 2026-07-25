@@ -27,7 +27,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
     estado, preview, resultado, erroGeral,
     vinculosManuais,
     carregarArquivo, confirmarImportacao, cancelar, definirVinculo,
-    precisaEscolherSetor, setorImportacao, setSetorEscolhido,
+    precisaEscolherSetor, setorImportacao, setSetorEscolhido, setorProprioAlternativo,
   } = hook;
 
   const { empresa } = useEmpresa();
@@ -213,7 +213,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-primary" />
-                  Setor desta importação
+                  {setorProprioAlternativo ? 'Setor de origem do relatório' : 'Setor desta importação'}
                 </p>
                 <Select
                   value={setorImportacao ?? '__nenhum__'}
@@ -232,8 +232,9 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   </SelectContent>
                 </Select>
                 <p className="text-[10px] text-muted-foreground">
-                  Os pagamentos sem operador vinculado (órfãos) passam a contar no
-                  Total recebido deste setor.
+                  {setorProprioAlternativo
+                    ? 'Seu setor é alternativo. Escolha de qual setor é este relatório (ex.: Play 5) — a importação é carimbada nele, como se alguém desse setor tivesse importado.'
+                    : 'Os pagamentos sem operador vinculado (órfãos) passam a contar no Total recebido deste setor.'}
                 </p>
               </div>
             )}
