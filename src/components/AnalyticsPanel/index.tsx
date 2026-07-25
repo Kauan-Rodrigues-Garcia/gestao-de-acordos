@@ -50,6 +50,7 @@ export function AnalyticsPanel({
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
+  const isBookplay = tenant.slug === 'bookplay';
   const mostraAgendadoRestante = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
   // Ambos os tenants importam relatório analítico (BookPlay sem H.O.)
   const temAnalitico = tenant.slug === 'pagueplay' || tenant.slug === 'bookplay';
@@ -127,14 +128,27 @@ export function AnalyticsPanel({
       let q = supabase.from('perfis').select('id');
       q = eq ? q.eq('equipe_id', eq) : q.eq('setor_id', st!);
       const { data } = await q;
+      const ids = new Set(((data ?? []) as { id: string }[]).map(r => r.id));
+      // BookPlay: no escopo de SETOR, inclui os operadores CLONADOS em equipes
+      // desse setor (setor de origem diferente). Sem isso, um setor formado só
+      // por clones (ex.: Digital) tem o "Recebido" do analítico zerado.
+      if (isBookplay && !eq && st) {
+        const { data: eqs } = await supabase.from('equipes').select('id').eq('setor_id', st);
+        const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
+        if (eqIds.length) {
+          const { data: cl } = await supabase
+            .from('equipe_operadores_clones').select('operador_id').in('equipe_id', eqIds);
+          for (const c of ((cl as { operador_id: string }[]) ?? [])) ids.add(c.operador_id);
+        }
+      }
       if (!cancelado) {
-        setOpsEscopo(new Set(((data ?? []) as { id: string }[]).map(r => r.id)));
+        setOpsEscopo(ids);
         setEscopoEhSetor(!eq && !!st);
       }
     }
     void resolver();
     return () => { cancelado = true; };
-  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno, setorTravado]);
+  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno, setorTravado, isBookplay]);
 
   // Linhas sem operador só entram no consolidado de setor da PP (setor único);
   // na BookPlay elas nem são importadas (vários setores, sem atribuição)

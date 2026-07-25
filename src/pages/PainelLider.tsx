@@ -280,19 +280,39 @@ export default function PainelLider() {
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
     if (!perfil || !empresa?.id) return [];
+    const escopoSetor = !isAdmin && isLiderOuSimilar && !!perfil.setor_id && !verTodosSetores;
+
+    // BookPlay: um setor pode ser formado SÓ por operadores CLONADOS (setor de
+    // origem diferente). O filtro por setor_id os deixaria de fora e o painel
+    // ficaria zerado. Inclui também os clonados em equipes do setor do líder.
+    let cloneIds: string[] = [];
+    if (escopoSetor && isBookplay) {
+      const { data: eqs } = await supabase
+        .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
+      const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
+      if (eqIds.length) {
+        const { data: cl } = await supabase
+          .from('equipe_operadores_clones').select('operador_id')
+          .eq('empresa_id', empresa.id).in('equipe_id', eqIds);
+        cloneIds = [...new Set(((cl as { operador_id: string }[]) ?? []).map(c => c.operador_id))];
+      }
+    }
+
     let q = supabase
       .from('perfis')
       .select('*, setores(id, nome)')
       .eq('empresa_id', empresa.id)
       .in('perfil', ['operador', 'elite'])
       .eq('ativo', true);
-    if (!isAdmin && isLiderOuSimilar && perfil.setor_id && !verTodosSetores) {
-      q = q.eq('setor_id', perfil.setor_id);
+    if (escopoSetor) {
+      q = cloneIds.length
+        ? q.or(`setor_id.eq.${perfil.setor_id},id.in.(${cloneIds.join(',')})`)
+        : q.eq('setor_id', perfil.setor_id);
     }
     const { data, error } = await q.order('nome');
     if (error) throw new Error(`Operadores: ${error.message}`);
     return (data as Perfil[]) ?? [];
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin, isLiderOuSimilar, verTodosSetores]);
+  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin, isBookplay, isLiderOuSimilar, verTodosSetores]);
 
   // ── Carregar acordos do mês para os operadores ────────────────────────────
   const carregarAcordosMes = useCallback(async (ids: string[]): Promise<Acordo[]> => {

@@ -118,7 +118,9 @@ export function useAnalytics(): AnalyticsData {
   // Permissão configurável (Admin → Cargos): líder/elite/gerência com
   // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
   const verTodosSetores = temPermissao('ver_todos_setores');
-  const isPP = useTenant().isPaguePlay;
+  const tenant = useTenant();
+  const isPP = tenant.isPaguePlay;
+  const isBookplay = tenant.slug === 'bookplay';
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   // ID estável por instância
   const instanceId = useRef(`useAnalytics-${Math.random().toString(36).slice(2, 10)}`).current;
@@ -192,6 +194,22 @@ export function useAnalytics(): AnalyticsData {
         operadoresDaEquipe = ((membros as { id: string }[]) ?? []).map(m => m.id);
       }
 
+      // BookPlay: operadores CLONADOS em equipes do setor do líder (setor de
+      // origem diferente). A visão geral do setor precisa incluí-los, senão um
+      // setor formado só por clones (ex.: Digital) fica com o dashboard zerado.
+      let cloneIdsSetor: string[] = [];
+      if (isBookplay && isLider && !verTodosSetores && perfil.setor_id && !operadorFiltro && !equipeFiltro) {
+        const { data: eqs } = await supabase
+          .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
+        const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
+        if (eqIds.length) {
+          const { data: cl } = await supabase
+            .from('equipe_operadores_clones').select('operador_id')
+            .eq('empresa_id', empresa.id).in('equipe_id', eqIds);
+          cloneIdsSetor = [...new Set(((cl as { operador_id: string }[]) ?? []).map(c => c.operador_id))];
+        }
+      }
+
       // ── Acordos conforme perfil ──────────────────────────────────────────────
       // Reconstruída a cada página: o PostgREST corta em 1000 linhas por query,
       // então uma busca única truncava a visão do admin (empresa toda passa de
@@ -222,6 +240,10 @@ export function useAnalytics(): AnalyticsData {
               }
             } else if (verTodosSetores) {
               if (setorFiltro) q = q.eq('setor_id', setorFiltro);
+            } else if (cloneIdsSetor.length) {
+              // BookPlay: setor do líder + operadores clonados nele (setor de
+              // origem diferente). A RLS já autoriza esses acordos ao líder.
+              q = q.or(`setor_id.eq.${perfil.setor_id},operador_id.in.(${cloneIdsSetor.join(',')})`);
             } else {
               q = q.eq('setor_id', perfil.setor_id);
             }
@@ -346,7 +368,7 @@ export function useAnalytics(): AnalyticsData {
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
