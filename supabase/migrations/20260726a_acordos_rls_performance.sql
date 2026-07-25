@@ -5,27 +5,28 @@
 -- (57014) numa SELECT em acordos_deduplicados, contexto fn_user_is_super_admin
 -- / fn_can_access_empresa. Dashboard e Acordos lentos.
 --
--- Causa: a policy de SELECT roda com security_invoker (migration 20260723d) e
--- chama varias funcoes SECURITY DEFINER POR LINHA — fn_can_access_empresa e
--- fn_pode_gerir_acordo, que por sua vez chamam fn_user_is_super_admin,
--- fn_user_empresa_id, fn_user_has_any_role, fn_user_setor_id,
--- fn_user_empresa_is_pagueplay. Cada uma faz um SELECT em perfis. Sobre a view
--- acordos_deduplicados (DISTINCT ON da tabela) MAIS o count exato do PostgREST
--- (materializa o conjunto inteiro), isso multiplica os SELECTs por dezenas de
--- milhares de linhas e estoura o statement_timeout conforme a base cresce.
+-- Causa: a policy acordos_select roda com security_invoker (migration 20260723d)
+-- e chama varias funcoes SECURITY DEFINER POR LINHA (fn_can_access_empresa ->
+-- fn_user_is_super_admin/fn_user_empresa_id; e as fn_user_* do predicado de
+-- setor). Cada uma faz um SELECT em perfis. Sobre a view acordos_deduplicados
+-- (DISTINCT ON da tabela) MAIS o count exato do PostgREST (materializa o
+-- conjunto inteiro), isso multiplica os SELECTs por dezenas de milhares de
+-- linhas e estoura o statement_timeout conforme a base cresce.
 --
--- Correcao (NAO muda a semantica de acesso — mesmo booleano de 20260723f):
+-- Correcao (NAO muda a semantica de acesso — mesmo booleano da 20260724b, que e
+-- a policy ATUAL: bookplay-keyed + predicado de clone fn_operador_clonado_no_setor):
 --   1. Inline do predicado de SELECT com as chamadas de SESSAO (que so dependem
 --      de auth.uid(), logo tem o MESMO valor em toda linha) embrulhadas em
 --      (SELECT ...). O planner promove cada uma a InitPlan e as avalia UMA vez
---      por query, nao por linha. Só fn_operador_setor_id(operador_id), que
---      depende da coluna, continua por-linha — e apenas no ramo legado
---      setor_id IS NULL.
+--      por query, nao por linha. Só as funcoes que recebem a COLUNA
+--      (fn_operador_setor_id, fn_operador_clonado_no_setor) seguem por-linha, e
+--      apenas no ramo BookPlay quando o setor nao casa direto.
 --   2. Indice de expressao casando com o ORDER BY da view (DISTINCT ON via
 --      index-scan em vez de sort da tabela inteira).
 --   3. Indice (empresa_id, vencimento) para o filtro + ordenacao da listagem.
 --
--- Idempotente. Afeta os dois tenants (RLS compartilhada); semantica preservada.
+-- Idempotente. Afeta os dois tenants (RLS compartilhada); semantica preservada,
+-- INCLUSIVE a visibilidade de acordos de operador clonado (20260724b).
 
 -- ─── Indices ─────────────────────────────────────────────────────────────────
 -- Casa com: ORDER BY COALESCE(acordo_grupo_id::text, id::text),
@@ -40,9 +41,10 @@ CREATE INDEX IF NOT EXISTS idx_acordos_empresa_vencimento
   ON public.acordos (empresa_id, vencimento);
 
 -- ─── SELECT inlined com chamadas de sessao em (SELECT ...) (InitPlan) ─────────
--- Equivalente logico EXATO de:
---   fn_can_access_empresa(empresa_id) AND fn_pode_gerir_acordo(setor_id, operador_id)
--- (20260723f), so que avaliado uma vez por query em vez de por linha.
+-- Equivalente logico EXATO da policy da 20260724b, so que as chamadas de sessao
+-- sao avaliadas UMA vez por query em vez de por linha. O predicado de clone
+-- (fn_operador_clonado_no_setor) e mantido — recebe a coluna operador_id, entao
+-- segue por-linha, so alcancado no ramo BookPlay/lider quando o setor nao casa.
 DROP POLICY IF EXISTS "acordos_select" ON public.acordos;
 CREATE POLICY "acordos_select" ON public.acordos
   FOR SELECT USING (
@@ -51,19 +53,12 @@ CREATE POLICY "acordos_select" ON public.acordos
       (SELECT public.fn_user_is_super_admin())
       OR empresa_id = (SELECT public.fn_user_empresa_id())
     )
-    -- fn_pode_gerir_acordo(setor_id, operador_id)
     AND (
       operador_id = (SELECT auth.uid())
       OR (SELECT public.fn_user_is_super_admin())
-      OR (SELECT public.fn_user_has_any_role(ARRAY['administrador']))
       OR (
-        (SELECT public.fn_user_empresa_is_pagueplay())
-        AND (SELECT public.fn_user_has_any_role(ARRAY['lider']))
-      )
-      OR (
-        NOT (SELECT public.fn_user_empresa_is_pagueplay())
-        AND (
-          (SELECT public.fn_user_has_any_role(ARRAY['diretoria']))
+        (SELECT public.fn_user_empresa_is_bookplay()) AND (
+          (SELECT public.fn_user_has_any_role(ARRAY['administrador','diretoria']))
           OR (
             (SELECT public.fn_user_has_any_role(ARRAY['lider','elite','gerencia']))
             AND (
@@ -72,12 +67,17 @@ CREATE POLICY "acordos_select" ON public.acordos
                 setor_id IS NULL
                 AND public.fn_operador_setor_id(operador_id) = (SELECT public.fn_user_setor_id())
               )
+              OR public.fn_operador_clonado_no_setor(operador_id, (SELECT public.fn_user_setor_id()))
             )
           )
         )
       )
+      OR (
+        NOT (SELECT public.fn_user_empresa_is_bookplay())
+        AND (SELECT public.fn_user_has_any_role(ARRAY['lider','administrador']))
+      )
     )
   );
 
--- INSERT/UPDATE/DELETE nao mudam: sao operacoes de 1 linha (sem custo de escala)
--- e continuam usando fn_pode_gerir_acordo (20260723f), preservando a semantica.
+-- INSERT/UPDATE/DELETE inalterados (20260724b): sao operacoes de 1 linha, sem
+-- custo de escala, e preservam a semantica com o predicado de clone.
