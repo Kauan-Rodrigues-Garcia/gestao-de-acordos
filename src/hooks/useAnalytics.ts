@@ -233,8 +233,10 @@ export function useAnalytics(): AnalyticsData {
               q = q.eq('operador_id', operadorFiltro);
             } else if (operadoresDaEquipe !== null) {
               if (operadoresDaEquipe.length === 0) {
-                // Equipe sem membros — força retorno vazio
-                q = q.eq('operador_id', 'sem-membros-na-equipe');
+                // Equipe sem membros — força retorno vazio.
+                // operador_id é UUID: precisa de um UUID válido que nunca casa
+                // (o UUID nulo), senão o Postgres rejeita com 22P02.
+                q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
               } else {
                 q = q.in('operador_id', operadoresDaEquipe);
               }
