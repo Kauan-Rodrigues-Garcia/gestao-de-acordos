@@ -29,7 +29,7 @@ import { useTenant } from '@/lib/tenant-config';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
-import { fmtCPF } from '@/services/diario/diarioParser';
+import { fmtCPF, normDiario } from '@/services/diario/diarioParser';
 import { copiarTexto } from '@/lib/clipboard';
 import { supabase } from '@/lib/supabase';
 import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';
@@ -939,6 +939,15 @@ function OperadorCardDiario({
                       )}
                       {item.instituicao && (
                         <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[200px]">{item.instituicao}</span>
+                      )}
+                      {/* PaguePlay (CPF, não NR): acordo veio em negociação (não
+                          "acordo fechado") — mesma indicação do "Copiar lista",
+                          agora visível na tabela. */}
+                      {!mostrarNR && normDiario(item.tabulacao) !== 'acordofechado' && (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                          title="Este acordo não está tabulado como Acordo Fechado">
+                          <AlertCircle className="w-2.5 h-2.5" /> Tabular Acordo Fechado
+                        </span>
                       )}
                     </td>
                     <td className="px-3 py-2"><FormaChip forma={item.forma_pagamento} /></td>
