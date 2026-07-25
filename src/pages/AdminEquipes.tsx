@@ -242,7 +242,9 @@ export default function AdminEquipes() {
   // null = tabela ausente → modelo antigo (líder mora na equipe via perfis).
   const [lideresEq, setLideresEq] = useState<LiderEquipe[] | null>(null);
   const [adicionandoLiderId, setAdicionandoLiderId] = useState<string | null>(null);  // equipe com seletor aberto
-  const lideresHabilitados = tenant.slug === 'bookplay' && lideresEq !== null;
+  // Líder por equipe vale para os dois tenants (BookPlay e PaguePlay). A tabela
+  // ausente (migration pendente) → null → recurso escondido, modelo antigo.
+  const lideresHabilitados = lideresEq !== null;
 
   const empresaId = empresa?.id;
 
@@ -397,12 +399,17 @@ export default function AdminEquipes() {
       .map(v => ({ vinculo: v, info: resolverOperadorClone(v.lider_id) }))
       .filter((x): x is { vinculo: LiderEquipe; info: CloneOperadorInfo } => !!x.info);
 
-  /** Líderes que podem ser adicionados: os do setor da equipe primeiro, depois
-   *  os de outros setores (clone). Exclui os já atribuídos. */
+  /** Líderes que podem ser adicionados. BookPlay: catálogo da empresa toda (do
+   *  setor da equipe primeiro, depois de outros setores como clone). PaguePlay:
+   *  só líderes do mesmo setor da equipe (sem clone entre setores). Exclui os
+   *  já atribuídos. */
   const lideresDisponiveis = (equipe: Equipe) => {
     const jaAtribuidos = new Set((lideresEq ?? []).filter(v => v.equipe_id === equipe.id).map(v => v.lider_id));
-    return cloneCat.operadores
-      .filter(o => o.perfil === 'lider' && !jaAtribuidos.has(o.id))
+    const permiteClone = tenant.slug === 'bookplay';
+    const fonte = permiteClone ? cloneCat.operadores : operadores;
+    return fonte
+      .filter(o => o.perfil === 'lider' && !jaAtribuidos.has(o.id)
+        && (permiteClone || o.setor_id === equipe.setor_id))
       .map(o => ({ ...o, mesmoSetor: o.setor_id === equipe.setor_id }))
       .sort((a, b) => Number(b.mesmoSetor) - Number(a.mesmoSetor) || a.nome.localeCompare(b.nome));
   };
