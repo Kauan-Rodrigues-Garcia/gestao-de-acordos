@@ -397,7 +397,12 @@ export function AnaliticoLider({
   }, [resumos, contaNoSetor, operadorEquipeMap, equipesExtras, setorId, filtroEquipeId]);
 
   // ── Agrupamento por equipe (Por operador) ─────────────────────────────────
+  // Um operador CLONADO aparece na(s) equipe(s) em que foi clonado, não só na
+  // própria. Com filtro de setor, cada operador só entra nas equipes daquele
+  // setor — assim um clone do Play 5 no Digital aparece sob "Digital", não sob
+  // "Play 5" (a equipe de origem, de outro setor).
   const resumosPorEquipe = useMemo(() => {
+    const eqInfo = new Map(equipes.map(e => [e.id, e] as const));  // id → {nome, setor_id}
     const baseResumos = setorId
       ? resumos.filter(r => contaNoSetor(r.operador_id, setorId))
       : resumos;
@@ -406,15 +411,35 @@ export function AnaliticoLider({
       equipeNome: string;
       items: ResumoOperadorAnalitico[];
     }>();
+    const addTo = (key: string, equipeId: string | null, nome: string, r: ResumoOperadorAnalitico) => {
+      let g = groups.get(key);
+      if (!g) { g = { equipeId, equipeNome: nome, items: [] }; groups.set(key, g); }
+      if (!g.items.some(x => x.operador_id === r.operador_id)) g.items.push(r);
+    };
     for (const r of baseResumos) {
       const info = operadorEquipeMap[r.operador_id];
-      const key  = info?.equipe_id ?? '__sem__';
-      const nome = info?.equipe_nome ?? 'Sem equipe';
-      if (!groups.has(key)) groups.set(key, { equipeId: info?.equipe_id ?? null, equipeNome: nome, items: [] });
-      groups.get(key)!.items.push(r);
+      // Equipes candidatas: a própria + as clonadas.
+      const candidatas = new Set<string>();
+      if (info?.equipe_id) candidatas.add(info.equipe_id);
+      for (const ex of equipesExtras[r.operador_id] ?? []) candidatas.add(ex);
+
+      let entrouEmAlguma = false;
+      for (const eqId of candidatas) {
+        const e = eqInfo.get(eqId);
+        const eqSetor = e?.setor_id ?? (eqId === info?.equipe_id ? info?.setor_id ?? null : null);
+        // Com filtro de setor, só as equipes daquele setor entram.
+        if (setorId && eqSetor !== setorId) continue;
+        const nome = e?.nome ?? (eqId === info?.equipe_id ? info?.equipe_nome ?? 'Sem equipe' : 'Equipe');
+        addTo(eqId, eqId, nome, r);
+        entrouEmAlguma = true;
+      }
+      // Operador sem nenhuma equipe visível: cai em "Sem equipe" (respeita setor).
+      if (!entrouEmAlguma && (!setorId || info?.setor_id === setorId)) {
+        addTo('__sem__', null, info?.equipe_nome ?? 'Sem equipe', r);
+      }
     }
     return Array.from(groups.values()).filter(g => g.items.length > 0);
-  }, [resumos, contaNoSetor, operadorEquipeMap, setorId]);
+  }, [resumos, contaNoSetor, operadorEquipeMap, equipesExtras, equipes, setorId]);
 
   // ── Métricas dos cards ────────────────────────────────────────────────────
   // Tudo vem exclusivamente do relatório ANALÍTICO: sem filtro usa o snapshot

@@ -10,8 +10,9 @@
  * sem setor vê todos os setores em sequência.
  */
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Building2, Users, Headset, Pencil, Check, X } from 'lucide-react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Building2, Users, Headset, Pencil, Check, X, Camera, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,14 +54,44 @@ interface LiderInfo { nome: string; foto_url: string | null }
 
 /** Avatares dos líderes da equipe, lado a lado (item 1: clone mantém foto/tag
  *  e uma equipe pode ter vários líderes). Cai no ícone quando não há líder. */
-function AvataresLideres({ lideres, ehSetor }: { lideres: LiderInfo[]; ehSetor?: boolean }) {
+function AvataresLideres({
+  lideres, ehSetor, fotoSetor, onEditarFotoSetor, salvandoFoto,
+}: {
+  lideres: LiderInfo[];
+  ehSetor?: boolean;
+  /** Foto do setor (só quando ehSetor). Clicável para trocar. */
+  fotoSetor?: string | null;
+  onEditarFotoSetor?: () => void;
+  salvandoFoto?: boolean;
+}) {
+  // Card do setor: avatar próprio, clicável para enviar/trocar foto do setor.
+  if (ehSetor) {
+    const conteudo = fotoSetor ? (
+      <img src={fotoSetor} alt="Foto do setor"
+        className="w-full h-full rounded-full object-cover" />
+    ) : (
+      <Building2 className="w-7 h-7" />
+    );
+    const classe = cn(
+      'relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0 overflow-hidden',
+      fotoSetor ? 'bg-card' : 'bg-primary/15 text-primary',
+    );
+    if (!onEditarFotoSetor) return <div className={classe}>{conteudo}</div>;
+    return (
+      <button type="button" onClick={onEditarFotoSetor} disabled={salvandoFoto}
+        title="Alterar foto do setor"
+        className={cn(classe, 'group cursor-pointer')}>
+        {conteudo}
+        <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white">
+          {salvandoFoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+        </span>
+      </button>
+    );
+  }
   if (lideres.length === 0) {
     return (
-      <div className={cn(
-        'w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0',
-        ehSetor ? 'bg-primary/15 text-primary' : 'bg-muted text-muted-foreground',
-      )}>
-        {ehSetor ? <Building2 className="w-7 h-7" /> : <Users className="w-7 h-7" />}
+      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0 bg-muted text-muted-foreground">
+        <Users className="w-7 h-7" />
       </div>
     );
   }
@@ -114,6 +145,7 @@ function Tile({
 
 function PainelPlacar({
   titulo, subtitulo, lideres, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
+  fotoSetor, onEditarFotoSetor, salvandoFoto,
 }: {
   titulo: string;
   subtitulo?: string;
@@ -127,6 +159,10 @@ function PainelPlacar({
   meta: number | null;
   totalUteis: number;
   decorridos: number;
+  /** Foto do setor + callback de upload (só no card do setor). */
+  fotoSetor?: string | null;
+  onEditarFotoSetor?: () => void;
+  salvandoFoto?: boolean;
 }) {
   const mediaDiaria = acumulado / Math.max(decorridos, 1);
   const metaDiaria  = meta && totalUteis > 0 ? meta / totalUteis : null;
@@ -148,7 +184,8 @@ function PainelPlacar({
     )}>
       {/* Cabeçalho: foto(s) do(s) líder(es) + nome + data | projeção */}
       <div className="flex items-center gap-3.5">
-        <AvataresLideres lideres={lideres ?? []} ehSetor={ehSetor} />
+        <AvataresLideres lideres={lideres ?? []} ehSetor={ehSetor}
+          fotoSetor={fotoSetor} onEditarFotoSetor={onEditarFotoSetor} salvandoFoto={salvandoFoto} />
         <div className="flex-1 min-w-0">
           <p className="text-base sm:text-lg font-bold leading-tight truncate">{titulo}</p>
           <p className="text-xs text-muted-foreground truncate">
@@ -347,6 +384,11 @@ export function DesempenhoEquipes({
   const [contarHoje, setContarHoje] = useState(false);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo[]>>({});  // equipe_id → líderes (inclui clones)
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
+  const [setorFotos, setSetorFotos] = useState<Record<string, string | null>>({});  // setor_id → foto_url
+  // Upload da foto do setor (bucket 'perfis', path setores/<id>).
+  const inputFotoSetorRef = useRef<HTMLInputElement>(null);
+  const [uploadSetorId, setUploadSetorId] = useState<string | null>(null);
+  const [salvandoFotoSetor, setSalvandoFotoSetor] = useState(false);
   const [carregado, setCarregado] = useState(false);
   // Contribuição Receptivo (manual, localStorage) reportada por cada card-filho;
   // soma no acumulado do card consolidado do setor.
@@ -374,6 +416,36 @@ export function DesempenhoEquipes({
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
+  // ── Upload da foto do setor ────────────────────────────────────────────────
+  const abrirUploadFotoSetor = useCallback((sid: string) => {
+    setUploadSetorId(sid);
+    inputFotoSetorRef.current?.click();
+  }, []);
+
+  async function onArquivoFotoSetor(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const sid = uploadSetorId;
+    if (!file || !sid) return;
+    setSalvandoFotoSetor(true);
+    try {
+      const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+      const path = `setores/${sid}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('perfis').upload(path, file, { upsert: true });
+      if (upErr) { toast.error(`Erro no upload: ${upErr.message}`); return; }
+      const { data: { publicUrl } } = supabase.storage.from('perfis').getPublicUrl(path);
+      const urlFinal = `${publicUrl}?t=${Date.now()}`;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- foto_url é coluna nova (migration 20260725a), ainda fora do tipo gerado.
+      const { error: dbErr } = await supabase.from('setores').update({ foto_url: urlFinal } as any).eq('id', sid);
+      if (dbErr) { toast.error(`Erro ao salvar foto: ${dbErr.message}`); return; }
+      setSetorFotos(prev => ({ ...prev, [sid]: urlFinal }));
+      toast.success('Foto do setor atualizada!');
+    } finally {
+      setSalvandoFotoSetor(false);
+      setUploadSetorId(null);
+    }
+  }
+
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
@@ -387,7 +459,7 @@ export function DesempenhoEquipes({
           // equipe_id: um líder pode ser só clone (sem equipe própria).
           supabase.from('perfis').select('id, nome, foto_url, equipe_id')
             .eq('empresa_id', empresaId).eq('perfil', 'lider'),
-          supabase.from('setores').select('id, nome').eq('empresa_id', empresaId),
+          supabase.from('setores').select('id, nome, foto_url').eq('empresa_id', empresaId),
           // Clones: líder clonado numa equipe deve mostrar foto/tag lá também.
           // Tabela pode não existir (migration 20260712a pendente) → vazio.
           supabase.from('equipe_operadores_clones').select('equipe_id, operador_id')
@@ -416,8 +488,13 @@ export function DesempenhoEquipes({
         }
         setLideres(lMap);
         const sMap: Record<string, string> = {};
-        for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
+        const fMap: Record<string, string | null> = {};
+        for (const s of (setoresData as { id: string; nome: string; foto_url: string | null }[]) ?? []) {
+          sMap[s.id] = s.nome;
+          fMap[s.id] = s.foto_url ?? null;
+        }
         setSetores(sMap);
+        setSetorFotos(fMap);
       } catch { /* sem metas/config — painéis mostram "—" */ }
       if (!cancelado) setCarregado(true);
     }
@@ -504,6 +581,14 @@ export function DesempenhoEquipes({
 
   return (
     <div className="space-y-6">
+      {/* Input único para o upload da foto do setor (disparado pelo avatar) */}
+      <input
+        ref={inputFotoSetorRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onArquivoFotoSetor}
+      />
       {[...dados.grupos.entries()].map(([sid, eqs]) => {
         // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
         // Setor ALTERNATIVO → soma dos membros/clones (Digital, sem relatório próprio).
@@ -521,6 +606,9 @@ export function DesempenhoEquipes({
             titulo={setores[sid] ?? 'Setor'}
             subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : 'Setor geral · total do relatório'}
             ehSetor
+            fotoSetor={setorFotos[sid] ?? null}
+            onEditarFotoSetor={sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid) : undefined}
+            salvandoFoto={salvandoFotoSetor && uploadSetorId === sid}
             mostrarHO={isPP}
             acumulado={baseSetor + (contribPorSetor[sid] ?? 0)}
             acumuladoHO={baseSetorHO}
