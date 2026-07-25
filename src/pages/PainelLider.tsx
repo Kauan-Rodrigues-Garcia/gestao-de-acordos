@@ -36,8 +36,8 @@ import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import {
-  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
-  type EquipeAnalitico, type OperadorEquipeInfo,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarTotalOrfaosPorSetor,
+  type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
@@ -198,6 +198,12 @@ export default function PainelLider() {
   } | null>(null);
   // BookPlay: recebido do relatório analítico por operador (operador_id → R$)
   const [analiticoPorOp, setAnaliticoPorOp] = useState<Record<string, number>>({});
+  // PaguePlay: Desempenho Equipes / Quartis voltam a ser alimentados pelo
+  // relatório ANALÍTICO (o Gráfico continua no diário). Resumos por operador +
+  // órfãos por setor do mês selecionado.
+  const [analiticoResumos, setAnaliticoResumos] = useState<ResumoOperadorAnalitico[]>([]);
+  const [analiticoOrfaos,  setAnaliticoOrfaos]  = useState<Record<string, { total: number; qtd: number }>>({});
+  const [loadingAnalitico, setLoadingAnalitico] = useState(false);
   const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
   const [loadingDiario, setLoadingDiario] = useState(false);
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
@@ -224,6 +230,23 @@ export default function PainelLider() {
       if (cancel) return;
       setResumoDiario(res);
       setLoadingDiario(false);
+    });
+    return () => { cancel = true; };
+  }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
+
+  // PaguePlay: resumos do analítico (Desempenho Equipes / Quartis) + órfãos.
+  useEffect(() => {
+    if (!isPP || !empresa?.id) { setAnaliticoResumos([]); setAnaliticoOrfaos({}); return; }
+    let cancel = false;
+    setLoadingAnalitico(true);
+    void Promise.all([
+      buscarResumoOperadoresAnalitico(empresa.id, mesStr),
+      buscarTotalOrfaosPorSetor(empresa.id, mesStr),
+    ]).then(([{ data }, orfaos]) => {
+      if (cancel) return;
+      setAnaliticoResumos(data);
+      setAnaliticoOrfaos(orfaos);
+      setLoadingAnalitico(false);
     });
     return () => { cancel = true; };
   }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
@@ -452,28 +475,26 @@ export default function PainelLider() {
       {/* Abas do diário ficam montadas após a 1ª visita (hidden via CSS):
           trocar de aba é instantâneo — nada é refeito, só reexibido. */}
 
-      {/* ── Aba: Desempenho Equipes (PP — recebimento diário) ─────────────── */}
+      {/* ── Aba: Desempenho Equipes (PP — relatório analítico) ────────────── */}
       {isPP && abasVisitadas.has('desempenho') && (
         <div className={cn(abaAtiva !== 'desempenho' && 'hidden')}>
-          {resumoDiario?.error && (
-            <p className="text-sm text-destructive mb-3">{resumoDiario.error}</p>
-          )}
           <DesempenhoEquipes
             empresaId={empresa.id}
             mes={mesStr}
             setorId={setorAbas}
             equipes={equipesInfo?.equipes ?? []}
-            resumos={resumoDiario?.resumos ?? []}
+            resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
             equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-            orfaosPorSetor={resumoDiario?.orfaosPorSetor ?? {}}
-            loading={loadingDiario}
-            fonteLabel="relatório de recebimento diário"
+            orfaosPorSetor={analiticoOrfaos}
+            setorSomaMembros
+            loading={loadingAnalitico}
+            fonteLabel="relatório analítico"
           />
         </div>
       )}
 
-      {/* ── Aba: Quartis (PP — recebimento diário) ────────────────────────── */}
+      {/* ── Aba: Quartis (PP — relatório analítico) ───────────────────────── */}
       {isPP && abasVisitadas.has('quartis') && (
         <div className={cn(abaAtiva !== 'quartis' && 'hidden')}>
           <QuartisOperadores
@@ -481,10 +502,10 @@ export default function PainelLider() {
             mes={mesStr}
             setorId={setorAbas}
             equipes={equipesInfo?.equipes ?? []}
-            resumos={resumoDiario?.resumos ?? []}
+            resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
             equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-            loading={loadingDiario}
+            loading={loadingAnalitico}
           />
         </div>
       )}

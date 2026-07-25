@@ -44,6 +44,9 @@ interface DesempenhoEquipesProps {
   totalPorSetor?: Record<string, { total: number; ho: number; qtd: number }>;
   /** Ids dos setores ALTERNATIVOS: total = soma dos membros/clones, não do relatório. */
   setoresAlternativos?: Set<string>;
+  /** PaguePlay: card do setor = soma dos operadores (analítico), não o total
+   *  do relatório carimbado por setor_id. Vale para TODOS os setores. */
+  setorSomaMembros?: boolean;
   loading: boolean;
   /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
   fonteLabel?: string;
@@ -370,7 +373,7 @@ function CardContribuicaoReceptivo({
 export function DesempenhoEquipes({
   empresaId, mes, setorId, equipes, resumos, operadorEquipeMap,
   equipesExtrasPorOperador = {}, orfaosPorSetor = {},
-  totalPorSetor = {}, setoresAlternativos = new Set(), loading,
+  totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, loading,
   fonteLabel = 'relatório analítico',
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
@@ -602,11 +605,13 @@ export function DesempenhoEquipes({
       {[...dados.grupos.entries()].map(([sid, eqs]) => {
         // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
         // Setor ALTERNATIVO → soma dos membros/clones (Digital, sem relatório próprio).
+        // PaguePlay (setorSomaMembros) → soma dos operadores do analítico p/ todos.
         const ehAlternativo = setoresAlternativos.has(sid);
-        const baseSetor = ehAlternativo
+        const usarSoma = setorSomaMembros || ehAlternativo;
+        const baseSetor = usarSoma
           ? (dados.porSetor[sid]?.bruto ?? 0)
           : (totalPorSetor[sid]?.total ?? 0);
-        const baseSetorHO = ehAlternativo
+        const baseSetorHO = usarSoma
           ? (dados.porSetor[sid]?.ho ?? 0)
           : (totalPorSetor[sid]?.ho ?? 0);
         return (
@@ -614,7 +619,7 @@ export function DesempenhoEquipes({
           {/* Painel consolidado do setor */}
           <PainelPlacar
             titulo={setores[sid] ?? 'Setor'}
-            subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : 'Setor geral · total do relatório'}
+            subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : setorSomaMembros ? 'Setor · soma dos operadores' : 'Setor geral · total do relatório'}
             ehSetor
             fotoSetor={setorFotos[sid] ?? null}
             onEditarFotoSetor={sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid) : undefined}
