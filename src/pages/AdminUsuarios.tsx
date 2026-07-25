@@ -1,12 +1,14 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2 } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target } from 'lucide-react';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
+import MetasConfig from '@/pages/MetasConfig';
+import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -62,6 +64,9 @@ export default function AdminUsuarios() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
+  const tenant = useTenant();
+  // Item 6 (BookPlay): a aba Metas passa a viver dentro de Usuários.
+  const metasComoAba = tenant.slug === 'bookplay';
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
@@ -520,6 +525,14 @@ export default function AdminUsuarios() {
               <Users2 className="w-4 h-4" /> Equipes
             </TabsTrigger>
             )}
+            {metasComoAba && temPermissao('ver_metas') && (
+            <TabsTrigger
+              value="metas"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Target className="w-4 h-4" /> Metas
+            </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -717,6 +730,13 @@ export default function AdminUsuarios() {
         <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
           <AdminEquipes />
         </TabsContent>
+        )}
+
+        {/* ─── Aba: Metas (BookPlay) ─────────────────────────────────── */}
+        {metasComoAba && temPermissao('ver_metas') && (
+          <TabsContent value="metas" className="flex-1 overflow-y-auto p-6 mt-0">
+            <MetasConfig />
+          </TabsContent>
         )}
 
       </Tabs>

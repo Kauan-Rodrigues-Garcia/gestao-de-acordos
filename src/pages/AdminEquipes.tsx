@@ -31,6 +31,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -411,6 +415,8 @@ export default function AdminEquipes() {
   // Apaga TODOS os clones da empresa de uma vez (confirmação em dois cliques).
   const [confirmandoLimparClones, setConfirmandoLimparClones] = useState(false);
   const [limpandoClones, setLimpandoClones] = useState(false);
+  const [equipeParaExcluir, setEquipeParaExcluir] = useState<Equipe | null>(null);
+  const [excluindoEquipe, setExcluindoEquipe] = useState(false);
   async function handleLimparTodosClones() {
     if (!empresaId) return;
     setLimpandoClones(true);
@@ -473,24 +479,35 @@ export default function AdminEquipes() {
 
   // ─── Excluir equipe ────────────────────────────────────────────────────────
 
-  async function handleExcluirEquipe(equipe: Equipe) {
+  // Valida antes de abrir o diálogo de confirmação (evita confirmar algo que
+  // seria rejeitado de qualquer forma).
+  function solicitarExcluirEquipe(equipe: Equipe) {
     if (!isAdmin && equipe.setor_id !== perfil?.setor_id) {
       toast.error('Você só pode excluir equipes do seu próprio setor.');
       return;
     }
-
     const membros = operadoresDaEquipe(equipe.id);
     if (membros.length > 0) {
       toast.error('Remova todos os membros antes de excluir a equipe.');
       return;
     }
+    setEquipeParaExcluir(equipe);
+  }
+
+  async function confirmarExcluirEquipe() {
+    const equipe = equipeParaExcluir;
+    if (!equipe) return;
+    setExcluindoEquipe(true);
     try {
       const { error } = await supabase.from('equipes').delete().eq('id', equipe.id);
       if (error) throw error;
       toast.success(`Equipe "${equipe.nome}" excluída.`);
+      setEquipeParaExcluir(null);
       await loadData();
     } catch (err: any) {
       toast.error('Erro ao excluir equipe: ' + (err?.message ?? 'Erro desconhecido'));
+    } finally {
+      setExcluindoEquipe(false);
     }
   }
 
@@ -1018,7 +1035,7 @@ export default function AdminEquipes() {
                                       <button
                                         type="button"
                                         title="Excluir equipe (somente se vazia)"
-                                        onClick={() => handleExcluirEquipe(equipe)}
+                                        onClick={() => solicitarExcluirEquipe(equipe)}
                                         className="p-1 rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
                                       >
                                         <Trash2 className="w-3.5 h-3.5" />
@@ -1179,6 +1196,30 @@ export default function AdminEquipes() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Confirmação de exclusão de equipe */}
+      <AlertDialog open={!!equipeParaExcluir} onOpenChange={o => { if (!o) setEquipeParaExcluir(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir equipe?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a equipe{' '}
+              <span className="font-semibold text-foreground">“{equipeParaExcluir?.nome}”</span>?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoEquipe}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={e => { e.preventDefault(); void confirmarExcluirEquipe(); }}
+              disabled={excluindoEquipe}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {excluindoEquipe ? 'Excluindo…' : 'Excluir equipe'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
