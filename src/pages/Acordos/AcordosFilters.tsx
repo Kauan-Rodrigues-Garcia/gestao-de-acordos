@@ -62,7 +62,7 @@ export function AcordosFilters({
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',     label: 'Todos' },
-          { key: 'analitico', label: 'Pendentes' },
+          { key: 'analitico', label: 'Verificar' },
           { key: 'pagos',     label: 'Pagos / Quitados' },
           { key: 'nao_pagos', label: 'Não Pagos' },
         ] as const).map(tab => (
@@ -192,12 +192,8 @@ export function AcordosFilters({
                 className="pl-8 h-8 text-sm"
               />
             </div>
-            <Select value={filtroStatus} onValueChange={v => { setFiltroStatus(v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* Filtro de status por dropdown removido — as abas superiores
+                (Todos / Verificar / Pagos / Não Pagos) já cobrem esse filtro. */}
             <Select value={filtroTipo} onValueChange={v => { setFiltroTipo(v); setCurrentPage(1); }}>
               <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
               <SelectContent>

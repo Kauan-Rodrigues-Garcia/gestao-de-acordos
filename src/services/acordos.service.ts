@@ -30,6 +30,11 @@ export interface FiltrosAcordo {
 /**
  * Resolve a lista de operador_id pertencentes a uma equipe.
  * Usado para filtrar acordos por equipe (equipe_id está em perfis, não em acordos).
+ *
+ * Inclui TAMBÉM os operadores CLONADOS naquela equipe (equipe_operadores_clones):
+ * uma equipe pode ser formada só por clones (ex.: Digital Amauri), então sem isso
+ * o filtro por equipe retornaria vazio. Dedup por Set. A tabela de clones é
+ * tolerada como ausente (migration pendente) — cai só nos membros reais.
  */
 async function resolverOperadoresDaEquipe(
   equipe_id: string,
@@ -38,7 +43,18 @@ async function resolverOperadoresDaEquipe(
   let q = supabase.from('perfis').select('id').eq('equipe_id', equipe_id);
   if (empresa_id) q = q.eq('empresa_id', empresa_id);
   const { data } = await q;
-  return ((data as { id: string }[]) ?? []).map(m => m.id);
+  const ids = new Set(((data as { id: string }[]) ?? []).map(m => m.id));
+
+  const clones = await supabase
+    .from('equipe_operadores_clones')
+    .select('operador_id')
+    .eq('equipe_id', equipe_id);
+  if (!clones.error) {
+    for (const c of (clones.data as { operador_id: string }[]) ?? []) {
+      ids.add(c.operador_id);
+    }
+  }
+  return [...ids];
 }
 
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */

@@ -184,6 +184,10 @@ export default function Acordos() {
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:    equipeFiltroAtivo ?? undefined,
+    // Garante que os acordos que vencem HOJE venham sempre na página 1 (mesmo
+    // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
+    // ordenação por vencimento). Ignorado quando há filtro de data exata.
+    prioritize_today: true,
     page:         currentPage,
     perPage:      PER_PAGE,
   });
@@ -495,10 +499,12 @@ export default function Acordos() {
     if (visaoAmpla && filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
-    if (activeTab === 'analitico') {
-      return base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status));
-    }
-    return [...base].sort((a, b) => {
+    const filtrada = activeTab === 'analitico'
+      ? base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status))
+      : base;
+    // Prioriza SEMPRE (todas as abas) os acordos que vencem hoje no topo; entre
+    // os de hoje, os já pagos vão por último — pendentes de hoje ficam primeiro.
+    return [...filtrada].sort((a, b) => {
       const aHoje = a.vencimento === hoje;
       const bHoje = b.vencimento === hoje;
       if (aHoje && bHoje) {
