@@ -396,15 +396,35 @@ export async function buscarAnaliticoDashboardMes(
   mes: string,   // 'yyyy-MM'
 ): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
   try {
-    const { data, error } = await supabase.rpc('fn_analitico_dashboard_mes', {
-      p_empresa_id: empresaId,
-      p_mes:        mes,
-    });
-    if (error) {
-      const faltando = /function|does not exist|schema cache/i.test(error.message);
-      return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+    // A RPC agrega por (dia, operador, forma, forma_detalhe, status). Num mês
+    // cheio esses grupos passam de 1000 linhas e o PostgREST corta a resposta
+    // — o "Total recebido" do dashboard vinha MENOR que o relatório. Pagina em
+    // blocos de 1000 (a RPC tem ORDER BY total desde a migration 20260726b, o
+    // que torna o range determinístico).
+    const PAGE = 1000;
+    let offset = 0;
+    const todas: AnaliticoDashboardLinha[] = [];
+    while (true) {
+      const { data, error } = await supabase
+        .rpc('fn_analitico_dashboard_mes', { p_empresa_id: empresaId, p_mes: mes })
+        // Ordem total explícita no wrapper do PostgREST — casa com o ORDER BY da
+        // RPC e torna o range determinístico entre as páginas.
+        .order('dia', { ascending: true })
+        .order('operador_id', { ascending: true, nullsFirst: false })
+        .order('forma_pagamento', { ascending: true, nullsFirst: false })
+        .order('forma_detalhe', { ascending: true, nullsFirst: false })
+        .order('status_tabulacao', { ascending: true, nullsFirst: false })
+        .range(offset, offset + PAGE - 1);
+      if (error) {
+        const faltando = /function|does not exist|schema cache/i.test(error.message);
+        return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+      }
+      const lote = (data ?? []) as AnaliticoDashboardLinha[];
+      todas.push(...lote);
+      if (lote.length < PAGE) break;
+      offset += PAGE;
     }
-    return { data: (data ?? []) as AnaliticoDashboardLinha[], dbAtiva: true, error: null };
+    return { data: todas, dbAtiva: true, error: null };
   } catch (err) {
     return { data: [], dbAtiva: false, error: err instanceof Error ? err.message : String(err) };
   }
