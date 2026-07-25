@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3, LineChart,
+  TrendingUp, CreditCard, Calendar, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -53,10 +53,7 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
-import { DesempenhoEquipes } from './DesempenhoEquipes';
-import { QuartisOperadores } from './QuartisOperadores';
 import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
-import { GraficoRecebimento } from './GraficoRecebimento';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -612,14 +609,9 @@ export function AnaliticoLider({
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // PaguePlay: Desempenho Equipes / Quartis / Gráfico moraram para o
-            // Painel Líder (alimentadas pelo recebimento diário). BookPlay
-            // continua com elas aqui, alimentadas pelo analítico.
-            ...(!isPP ? [
-              { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
-              { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
-              { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
-            ] as const : []),
+            // Desempenho Equipes / Quartis / Gráfico moraram para o Painel Líder
+            // nos dois tenants (mudança de caminho — BookPlay 2026-07). Aqui
+            // ficam só as abas de conferência do relatório.
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
@@ -958,48 +950,8 @@ export function AnaliticoLider({
         </div>
       )}
 
-      {/* ── Aba: Desempenho Equipes (só BookPlay — na PP fica no Painel Líder) */}
-      {!isPP && abaAtiva === 'desempenho' && (
-        <DesempenhoEquipes
-          empresaId={empresaId}
-          mes={mes}
-          setorId={setorId ?? null}
-          equipes={equipes}
-          resumos={resumos}
-          operadorEquipeMap={operadorEquipeMap}
-          equipesExtrasPorOperador={equipesExtras}
-          orfaosPorSetor={orfaosPorSetor}
-          totalPorSetor={totalPorSetor}
-          setoresAlternativos={setoresAlternativos}
-          loading={loadingResumos}
-        />
-      )}
-
-      {/* ── Aba: Quartis (só BookPlay — na PP fica no Painel Líder) ───────── */}
-      {!isPP && abaAtiva === 'quartis' && (
-        <QuartisOperadores
-          empresaId={empresaId}
-          mes={mes}
-          setorId={setorId ?? null}
-          equipes={equipes}
-          resumos={resumos}
-          operadorEquipeMap={operadorEquipeMap}
-          equipesExtrasPorOperador={equipesExtras}
-          loading={loadingResumos}
-        />
-      )}
-
-      {/* ── Aba: Gráfico recebimento (só BookPlay — na PP fica no Painel Líder) */}
-      {!isPP && abaAtiva === 'grafico' && (
-        <GraficoRecebimento
-          empresaId={empresaId}
-          mes={mes}
-          setorId={setorId ?? null}
-          equipes={equipes}
-          operadorEquipeMap={operadorEquipeMap}
-          equipesExtrasPorOperador={equipesExtras}
-        />
-      )}
+      {/* Desempenho Equipes / Quartis / Gráfico recebimento agora moram no
+          Painel Líder (os dois tenants — mudança de caminho). */}
 
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
       {abaAtiva === 'orfaos' && (

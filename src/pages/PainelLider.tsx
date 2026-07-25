@@ -36,7 +36,8 @@ import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import {
-  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico, buscarTotalOrfaosPorSetor,
+  buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
+  buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import {
@@ -152,6 +153,9 @@ export default function PainelLider() {
   // relatório analítico (o mesmo que aparece na lista de operadores do Analítico),
   // não a soma dos acordos pagos tabulados.
   const isBookplay = tenant.slug === 'bookplay';
+  // As abas Desempenho Equipes / Quartis / Gráfico moram no Painel Líder nos dois
+  // tenants. Fonte: PaguePlay = analítico (Gráfico = diário); BookPlay = analítico.
+  const mostrarAbasAnaliticas = isPP || isBookplay;
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
@@ -196,28 +200,34 @@ export default function PainelLider() {
     operadorEquipeMap: Record<string, OperadorEquipeInfo>;
     equipesExtrasPorOperador: Record<string, string[]>;
   } | null>(null);
-  // BookPlay: recebido do relatório analítico por operador (operador_id → R$)
-  const [analiticoPorOp, setAnaliticoPorOp] = useState<Record<string, number>>({});
-  // PaguePlay: Desempenho Equipes / Quartis voltam a ser alimentados pelo
-  // relatório ANALÍTICO (o Gráfico continua no diário). Resumos por operador +
-  // órfãos por setor do mês selecionado.
+  // Abas Desempenho Equipes / Quartis (e Gráfico na BookPlay) são alimentadas
+  // pelo relatório ANALÍTICO nos dois tenants: resumos por operador + órfãos +
+  // total do relatório por setor + setores alternativos. (PP: Gráfico = diário.)
   const [analiticoResumos, setAnaliticoResumos] = useState<ResumoOperadorAnalitico[]>([]);
   const [analiticoOrfaos,  setAnaliticoOrfaos]  = useState<Record<string, { total: number; qtd: number }>>({});
+  const [analiticoTotalPorSetor, setAnaliticoTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
+  const [analiticoSetoresAlt, setAnaliticoSetoresAlt] = useState<Set<string>>(new Set());
   const [loadingAnalitico, setLoadingAnalitico] = useState(false);
+  // BookPlay: recebido por operador (coluna "Recebido" da lista) vem do analítico.
+  const analiticoPorOp = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const r of analiticoResumos) map[r.operador_id] = Number(r.total_recebido) || 0;
+    return map;
+  }, [analiticoResumos]);
   const [resumoDiario, setResumoDiario]   = useState<ResumoMensalDiario | null>(null);
   const [loadingDiario, setLoadingDiario] = useState(false);
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
   const [diarioReloadKey, setDiarioReloadKey] = useState(0);
 
-  // Equipes não dependem do mês — carrega uma vez no mount
+  // Equipes não dependem do mês — carrega uma vez no mount (os dois tenants).
   useEffect(() => {
-    if (!isPP || !empresa?.id) return;
+    if (!mostrarAbasAnaliticas || !empresa?.id) return;
     let cancel = false;
     void buscarEquipesComOperadores(empresa.id).then(eqs => {
       if (!cancel) setEquipesInfo(eqs);
     });
     return () => { cancel = true; };
-  }, [isPP, empresa?.id]);
+  }, [mostrarAbasAnaliticas, empresa?.id]);
 
   // Resumo mensal do diário: pré-carrega no mount (e ao trocar o mês) — quando
   // o usuário clica numa das abas, os dados já estão prontos. Antes a busca só
@@ -234,35 +244,38 @@ export default function PainelLider() {
     return () => { cancel = true; };
   }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
 
-  // PaguePlay: resumos do analítico (Desempenho Equipes / Quartis) + órfãos.
+  // Resumos do analítico (Desempenho / Quartis / Gráfico-BookPlay / coluna
+  // "Recebido" da BookPlay) + órfãos + total do relatório por setor + setores
+  // alternativos. Roda nos dois tenants.
   useEffect(() => {
-    if (!isPP || !empresa?.id) { setAnaliticoResumos([]); setAnaliticoOrfaos({}); return; }
+    if (!mostrarAbasAnaliticas || !empresa?.id) {
+      setAnaliticoResumos([]); setAnaliticoOrfaos({});
+      setAnaliticoTotalPorSetor({}); setAnaliticoSetoresAlt(new Set());
+      return;
+    }
     let cancel = false;
     setLoadingAnalitico(true);
     void Promise.all([
       buscarResumoOperadoresAnalitico(empresa.id, mesStr),
       buscarTotalOrfaosPorSetor(empresa.id, mesStr),
-    ]).then(([{ data }, orfaos]) => {
+      buscarTotalPorSetor(empresa.id, mesStr),
+      supabase.from('setores').select('id, alternativo').eq('empresa_id', empresa.id),
+    ]).then(([{ data }, orfaos, totSetor, setoresRes]) => {
       if (cancel) return;
       setAnaliticoResumos(data);
       setAnaliticoOrfaos(orfaos);
+      setAnaliticoTotalPorSetor(totSetor);
+      const alt = new Set<string>();
+      if (!setoresRes.error) {
+        for (const s of (setoresRes.data as { id: string; alternativo: boolean | null }[]) ?? []) {
+          if (s.alternativo) alt.add(s.id);
+        }
+      }
+      setAnaliticoSetoresAlt(alt);
       setLoadingAnalitico(false);
     });
     return () => { cancel = true; };
-  }, [isPP, empresa?.id, mesStr, diarioReloadKey]);
-
-  // BookPlay: carrega o recebido do analítico por operador (mês selecionado).
-  useEffect(() => {
-    if (!isBookplay || !empresa?.id) { setAnaliticoPorOp({}); return; }
-    let cancel = false;
-    void buscarResumoOperadoresAnalitico(empresa.id, mesStr).then(({ data }) => {
-      if (cancel) return;
-      const map: Record<string, number> = {};
-      for (const r of data) map[r.operador_id] = Number(r.total_recebido) || 0;
-      setAnaliticoPorOp(map);
-    });
-    return () => { cancel = true; };
-  }, [isBookplay, empresa?.id, mesStr, diarioReloadKey]);
+  }, [mostrarAbasAnaliticas, empresa?.id, mesStr, diarioReloadKey]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -433,15 +446,15 @@ export default function PainelLider() {
             </Button>
           )}
           <Button variant="ghost" size="icon" className="h-7 w-7"
-            onClick={() => { void carregarTudo(); if (isPP) setDiarioReloadKey(k => k + 1); }}
+            onClick={() => { void carregarTudo(); if (mostrarAbasAnaliticas) setDiarioReloadKey(k => k + 1); }}
             disabled={loading} title="Recarregar">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
           </Button>
         </div>
       </div>
 
-      {/* ── Abas (PP): acompanhamento × desempenho × quartis × gráfico ───── */}
-      {isPP && (
+      {/* ── Abas: acompanhamento × desempenho × quartis × gráfico ───────── */}
+      {mostrarAbasAnaliticas && (
         <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
           {([
             { key: 'time',       label: 'Acompanhamento',      Icon: Users },
@@ -475,8 +488,10 @@ export default function PainelLider() {
       {/* Abas do diário ficam montadas após a 1ª visita (hidden via CSS):
           trocar de aba é instantâneo — nada é refeito, só reexibido. */}
 
-      {/* ── Aba: Desempenho Equipes (PP — relatório analítico) ────────────── */}
-      {isPP && abasVisitadas.has('desempenho') && (
+      {/* ── Aba: Desempenho Equipes (relatório analítico, os dois tenants) ── */}
+      {/* PaguePlay: card do setor = soma dos operadores (setorSomaMembros).    */}
+      {/* BookPlay: card do setor = total do relatório carimbado por setor_id.  */}
+      {mostrarAbasAnaliticas && abasVisitadas.has('desempenho') && (
         <div className={cn(abaAtiva !== 'desempenho' && 'hidden')}>
           <DesempenhoEquipes
             empresaId={empresa.id}
@@ -487,15 +502,17 @@ export default function PainelLider() {
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
             equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
             orfaosPorSetor={analiticoOrfaos}
-            setorSomaMembros
+            totalPorSetor={isPP ? undefined : analiticoTotalPorSetor}
+            setoresAlternativos={isPP ? undefined : analiticoSetoresAlt}
+            setorSomaMembros={isPP}
             loading={loadingAnalitico}
             fonteLabel="relatório analítico"
           />
         </div>
       )}
 
-      {/* ── Aba: Quartis (PP — relatório analítico) ───────────────────────── */}
-      {isPP && abasVisitadas.has('quartis') && (
+      {/* ── Aba: Quartis (relatório analítico, os dois tenants) ───────────── */}
+      {mostrarAbasAnaliticas && abasVisitadas.has('quartis') && (
         <div className={cn(abaAtiva !== 'quartis' && 'hidden')}>
           <QuartisOperadores
             empresaId={empresa.id}
@@ -510,10 +527,12 @@ export default function PainelLider() {
         </div>
       )}
 
-      {/* ── Aba: Gráfico recebimento (PP — recebimento diário) ────────────── */}
-      {isPP && abasVisitadas.has('grafico') && (
+      {/* ── Aba: Gráfico recebimento ──────────────────────────────────────── */}
+      {/* PaguePlay: recebimento diário (linhasExternas). BookPlay: analítico    */}
+      {/* (o componente busca por dia internamente, sem linhasExternas).         */}
+      {mostrarAbasAnaliticas && abasVisitadas.has('grafico') && (
         <div className={cn(abaAtiva !== 'grafico' && 'hidden')}>
-          {loadingDiario ? (
+          {isPP && loadingDiario ? (
             <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
               <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
             </div>
@@ -525,8 +544,8 @@ export default function PainelLider() {
               equipes={equipesInfo?.equipes ?? []}
               operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
               equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
-              linhasExternas={resumoDiario?.linhasDia ?? []}
-              fonteLabel="relatório de recebimento diário"
+              linhasExternas={isPP ? (resumoDiario?.linhasDia ?? []) : undefined}
+              fonteLabel={isPP ? 'relatório de recebimento diário' : 'relatório analítico'}
             />
           )}
         </div>
