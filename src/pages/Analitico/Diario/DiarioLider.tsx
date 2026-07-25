@@ -23,9 +23,11 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
-import { getTodayISO } from '@/lib/index';
+import { getTodayISO, isPerfilAdmin } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
+import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -62,6 +64,15 @@ export function DiarioLider({
 }: DiarioLiderProps) {
   const tenant = useTenant();
   const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
+  const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
+  // BookPlay: cargo escopado (líder/elite/gerência sem 'ver_todos_setores') vê
+  // só o PRÓPRIO setor na aba "Por equipe". Admin/diretoria e quem tem
+  // ver_todos_setores veem todas as equipes. (O diário em si é empresa-wide.)
+  const veTudoSetores = isPerfilAdmin(perfil?.perfil ?? '')
+    || perfil?.perfil === 'diretoria'
+    || temPermissao('ver_todos_setores');
+  const setorEscopo = (mostrarNR && !veTudoSetores) ? (perfil?.setor_id ?? null) : null;
   const importHook = useDiarioImport();
   const { dados, loading, refetch } = useDiario({ dia });
 
@@ -70,7 +81,6 @@ export function DiarioLider({
 
   // Mapa operador→equipe/setor + nomes/setor de equipe + clones (aba "Por equipe")
   const [perfEquipe, setPerfEquipe]   = useState<Record<string, string | null>>({});
-  const [perfSetor,  setPerfSetor]    = useState<Record<string, string | null>>({});
   const [equipeNomes, setEquipeNomes] = useState<Record<string, string>>({});
   const [equipeSetor, setEquipeSetor] = useState<Record<string, string | null>>({});
   const [clonesEq, setClonesEq]       = useState<{ equipe_id: string; operador_id: string }[]>([]);
@@ -79,19 +89,16 @@ export function DiarioLider({
     let cancel = false;
     async function load() {
       const [{ data: perfis }, { data: equipesData }, clones] = await Promise.all([
-        supabase.from('perfis').select('id, equipe_id, setor_id').eq('empresa_id', empresaId),
+        supabase.from('perfis').select('id, equipe_id').eq('empresa_id', empresaId),
         supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId),
         listarClonesEquipes(empresaId),
       ]);
       if (cancel) return;
       const pm: Record<string, string | null> = {};
-      const ps: Record<string, string | null> = {};
-      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null; setor_id: string | null }[]) {
+      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null }[]) {
         pm[p.id] = p.equipe_id ?? null;
-        ps[p.id] = p.setor_id ?? null;
       }
       setPerfEquipe(pm);
-      setPerfSetor(ps);
       const em: Record<string, string> = {};
       const es: Record<string, string | null> = {};
       for (const e of (equipesData ?? []) as { id: string; nome: string; setor_id: string | null }[]) {
@@ -197,28 +204,19 @@ export function DiarioLider({
       map.set(equipeId, cur);
     };
     if (mostrarNR) {
-      // BookPlay: mostra só as equipes EXISTENTES do(s) setor(es) presentes na
-      // visão (o líder já vê apenas o próprio setor via RLS). Cada equipe soma
-      // todos os seus membros — próprios e clones. Equipe clonada de OUTRO setor
-      // (ex.: "Digital Amauri" no Play 5) NÃO vira card aqui: ela aparece no
-      // diário do setor dono. Sem bucket "Sem equipe".
-      const setoresPresentes = new Set<string>();
-      for (const r of vinculadas) {
-        if (!r.operador_id) continue;
-        const s = perfSetor[r.operador_id];
-        if (s) setoresPresentes.add(s);
-      }
-      // equipe sem setor cadastrado ou nenhum setor detectado → não filtra
-      const doSetorPresente = (eqId: string) => {
-        const s = equipeSetor[eqId];
-        return s == null || setoresPresentes.size === 0 || setoresPresentes.has(s);
-      };
+      // BookPlay: mostra só as equipes EXISTENTES do setor. Cada equipe soma
+      // todos os seus membros — próprios e clones. Cargo escopado vê apenas as
+      // equipes do próprio setor: uma equipe clonada de OUTRO setor (ex.:
+      // "Digital Amauri" no Play 5) NÃO vira card no Play 5 — aparece só para o
+      // líder do setor dono (Digital). Sem bucket "Sem equipe".
+      const mostrarEquipe = (eqId: string) =>
+        !setorEscopo || equipeSetor[eqId] === setorEscopo;
       for (const r of vinculadas) {
         if (!r.operador_id) continue;
         const own = perfEquipe[r.operador_id];
-        if (own && doSetorPresente(own)) add(own, r);
+        if (own && mostrarEquipe(own)) add(own, r);
         for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
-          if (eq !== own && doSetorPresente(eq)) add(eq, r);
+          if (eq !== own && mostrarEquipe(eq)) add(eq, r);
         }
       }
     } else {
@@ -235,7 +233,7 @@ export function DiarioLider({
     return [...map.values()]
       .map(g => ({ equipeId: g.equipeId, total: g.total, nOps: g.ops.size, pgtos: g.pgtos }))
       .sort((a, b) => b.total - a.total);
-  }, [vinculadas, perfEquipe, perfSetor, equipeSetor, clonesEq, mostrarNR]);
+  }, [vinculadas, perfEquipe, equipeSetor, clonesEq, mostrarNR, setorEscopo]);
   const maxTotalEquipe = resumoEquipes[0]?.total || 1;
 
   // ── Ações ─────────────────────────────────────────────────────────────────
