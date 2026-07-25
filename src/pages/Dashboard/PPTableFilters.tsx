@@ -10,8 +10,8 @@ import { cn } from '@/lib/utils';
 import { ESTADOS_BRASIL } from '@/lib/index';
 
 interface PPTableFiltersProps {
-  activeTab: 'todos' | 'pagos' | 'nao_pagos';
-  setActiveTab: (tab: 'todos' | 'pagos' | 'nao_pagos') => void;
+  activeTab: 'todos' | 'pendentes' | 'pagos' | 'nao_pagos';
+  setActiveTab: (tab: 'todos' | 'pendentes' | 'pagos' | 'nao_pagos') => void;
   mesFiltro: string;
   setMesFiltro: (mes: string) => void;
   busca: string;
@@ -41,14 +41,13 @@ export function PPTableFilters({
   activeTab, setActiveTab,
   mesFiltro, setMesFiltro,
   busca, setBusca,
-  filtroStatus, setFiltroStatus,
   filtroTipo, setFiltroTipo,
   filtroData, setFiltroData,
   filtroVinculo, setFiltroVinculo,
   colFiltroEstado, setColFiltroEstado,
   estadoDropdown, setEstadoDropdown,
   setCurrentPage,
-  statusLabels, tipoLabels,
+  tipoLabels,
   isPP,
   usuarioTemLogicaDiretoExtra,
   temFiltros, limparFiltros,
@@ -59,6 +58,7 @@ export function PPTableFilters({
       <div className="flex items-center gap-1 mb-4 border-b border-border">
         {([
           { key: 'todos',      label: 'Todos' },
+          { key: 'pendentes',  label: 'Pendentes' },
           { key: 'pagos',      label: 'Pagos / Quitados' },
           { key: 'nao_pagos',  label: 'Não Pagos' },
         ] as const).map(tab => (
@@ -132,12 +132,8 @@ export function PPTableFilters({
                 className="pl-8 h-8 text-sm"
               />
             </div>
-            <Select value={filtroStatus} onValueChange={v => { setFiltroStatus(v); setCurrentPage(1); }}>
-              <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Status" /></SelectTrigger>
-              <SelectContent>
-                {Object.entries(statusLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            {/* Filtro de status por dropdown removido — as abas superiores
+                (Todos / Pendentes / Pagos / Não Pagos) já cobrem o status. */}
             <div className="relative" onClick={e => e.stopPropagation()}>
               <button
                 type="button"

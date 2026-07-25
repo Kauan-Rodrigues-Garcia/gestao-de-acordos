@@ -89,8 +89,8 @@ export default function Dashboard() {
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
   const { tags: empresaTags } = useEmpresaTags();
 
-  const [activeTab, setActiveTab] = useState<'todos' | 'pagos' | 'nao_pagos'>(
-    (searchParams.get('tab') as 'todos' | 'pagos' | 'nao_pagos') || 'todos',
+  const [activeTab, setActiveTab] = useState<'todos' | 'pendentes' | 'pagos' | 'nao_pagos'>(
+    (searchParams.get('tab') as 'todos' | 'pendentes' | 'pagos' | 'nao_pagos') || 'todos',
   );
 
   const [selecionados,            setSelecionados]            = useState<string[]>([]);
@@ -120,6 +120,7 @@ export default function Dashboard() {
 
   const statusFiltroComputed =
     filtroStatus && filtroStatus !== 'all' ? filtroStatus
+    : activeTab === 'pendentes' ? 'verificar_pendente'
     : activeTab === 'pagos'     ? 'pago'
     : activeTab === 'nao_pagos' ? 'nao_pago'
     : filtroStatus || undefined;
@@ -346,9 +347,10 @@ export default function Dashboard() {
     const page = Math.floor((count ?? 0) / PER_PAGE) + 1;
     setBusca(''); setFiltroStatus(''); setFiltroTipo(''); setFiltroData('');
     setFiltroVinculo('todos'); setColFiltroEstado(''); setMesFiltro(mesStr);
-    if ((a.status as string) === 'nao_pago')     setActiveTab('nao_pagos');
-    else if ((a.status as string) === 'pago')    setActiveTab('pagos');
-    else                                          setActiveTab('todos');
+    if ((a.status as string) === 'nao_pago')             setActiveTab('nao_pagos');
+    else if ((a.status as string) === 'pago')            setActiveTab('pagos');
+    else if ((a.status as string) === 'verificar_pendente') setActiveTab('pendentes');
+    else                                                  setActiveTab('todos');
     setCurrentPage(page);
   }
 
