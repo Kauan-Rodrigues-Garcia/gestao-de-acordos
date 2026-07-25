@@ -59,6 +59,7 @@ import {
 import { supabase, Setor, Perfil } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import {
   aplicarOrdemSetores,
@@ -68,6 +69,10 @@ import {
 
 // ─── Drag state (module-level, evita stale closures) ────────────────────────
 let draggedSetorId: string | null = null;
+
+/** Perfil exibido numa lista de setor; `_cloneDe` marca um clone de outro setor
+ *  (nome do setor de origem) — item 12. */
+type PerfilComClone = Perfil & { _cloneDe?: string | null };
 
 // Quantos usuários mostrar por setor antes do "ver todos"
 const LIMITE_USUARIOS = 20;
@@ -89,6 +94,7 @@ function temAcessoSetores(perfil: string | undefined): boolean {
 export default function AdminSetoresAba() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
+  const tenant = useTenant();
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -106,6 +112,9 @@ export default function AdminSetoresAba() {
 
   // Lista de usuários por setor
   const [perfis, setPerfis] = useState<Perfil[]>([]);
+  // Item 12 (BookPlay): operadores clonados em equipe de OUTRO setor aparecem
+  // na lista do setor destino, com tag "clone de <setor de origem>".
+  const [clonesCross, setClonesCross] = useState<{ operadorId: string; destinoSetorId: string }[]>([]);
   const [expandido, setExpandido] = useState<Set<string>>(new Set());
   const [verTodos, setVerTodos] = useState<Set<string>>(new Set());
 
@@ -166,15 +175,55 @@ export default function AdminSetoresAba() {
     fetchPerfis();
   }, [fetchSetores, fetchPerfis]);
 
-  // Usuários agrupados por setor_id
+  // Item 12: carrega os clones (operador→equipe) e resolve o setor destino de
+  // cada equipe. Só cross-setor entra na lista (o filtro final é no memo).
+  useEffect(() => {
+    if (!empresaAtual?.id || tenant.slug !== 'bookplay') { setClonesCross([]); return; }
+    let cancel = false;
+    void (async () => {
+      const [clones, equipesData] = await Promise.all([
+        supabase.from('equipe_operadores_clones').select('operador_id, equipe_id').eq('empresa_id', empresaAtual.id),
+        supabase.from('equipes').select('id, setor_id').eq('empresa_id', empresaAtual.id),
+      ]);
+      if (cancel) return;
+      const setorDaEquipe = new Map<string, string | null>();
+      for (const e of (equipesData.data as { id: string; setor_id: string | null }[]) ?? []) {
+        setorDaEquipe.set(e.id, e.setor_id ?? null);
+      }
+      const out: { operadorId: string; destinoSetorId: string }[] = [];
+      const seen = new Set<string>();
+      for (const c of (clones.data as { operador_id: string; equipe_id: string }[]) ?? []) {
+        const destino = setorDaEquipe.get(c.equipe_id);
+        if (!destino) continue;
+        const key = `${c.operador_id}::${destino}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ operadorId: c.operador_id, destinoSetorId: destino });
+      }
+      setClonesCross(out);
+    })();
+    return () => { cancel = true; };
+  }, [empresaAtual?.id, tenant.slug]);
+
+  // Usuários agrupados por setor_id. Inclui os clones de OUTRO setor no setor
+  // destino, marcados com `_cloneDe` (nome do setor de origem) para exibir a tag.
   const perfisPorSetor = useMemo(() => {
-    const map: Record<string, Perfil[]> = {};
+    const map: Record<string, PerfilComClone[]> = {};
     for (const p of perfis) {
       if (!p.setor_id) continue;
       (map[p.setor_id] ??= []).push(p);
     }
+    const nomeSetor = (id: string | null) => (id ? setores.find(s => s.id === id)?.nome ?? null : null);
+    const perfilPorId = new Map(perfis.map(p => [p.id, p]));
+    for (const c of clonesCross) {
+      const p = perfilPorId.get(c.operadorId);
+      if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;  // só cross-setor
+      const destino = (map[c.destinoSetorId] ??= []);
+      if (destino.some(x => x.id === p.id)) continue;  // já listado
+      destino.push({ ...p, _cloneDe: nomeSetor(p.setor_id) });
+    }
     return map;
-  }, [perfis]);
+  }, [perfis, clonesCross, setores]);
 
   function toggleExpandido(setorId: string) {
     setExpandido(prev => {
@@ -487,15 +536,21 @@ export default function AdminSetoresAba() {
                       <p className="text-xs text-muted-foreground py-1.5 pl-1">Nenhum usuário neste setor.</p>
                     ) : (
                       <>
-                        {visiveis.map(u => (
-                          <div key={u.id} className="flex items-center gap-2 py-1 px-1.5 rounded-lg hover:bg-muted/50">
-                            <input
-                              type="checkbox"
-                              checked={selecionados.has(u.id)}
-                              onChange={() => toggleSelecionado(u.id)}
-                              className="h-3.5 w-3.5 accent-primary cursor-pointer flex-shrink-0"
-                              title="Selecionar para transferência"
-                            />
+                        {visiveis.map(u => {
+                          const ehClone = !!u._cloneDe;
+                          return (
+                          <div key={ehClone ? `clone-${u.id}` : u.id} className="flex items-center gap-2 py-1 px-1.5 rounded-lg hover:bg-muted/50">
+                            {ehClone ? (
+                              <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+                            ) : (
+                              <input
+                                type="checkbox"
+                                checked={selecionados.has(u.id)}
+                                onChange={() => toggleSelecionado(u.id)}
+                                className="h-3.5 w-3.5 accent-primary cursor-pointer flex-shrink-0"
+                                title="Selecionar para transferência"
+                              />
+                            )}
                             {u.foto_url ? (
                               <img src={u.foto_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                             ) : (
@@ -504,19 +559,29 @@ export default function AdminSetoresAba() {
                               </div>
                             )}
                             <div className="min-w-0 flex-1">
-                              <p className="text-xs font-medium text-foreground truncate">{u.nome}</p>
+                              <p className="text-xs font-medium text-foreground truncate flex items-center gap-1.5">
+                                {u.nome}
+                                {ehClone && (
+                                  <span className="text-[9px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-full px-1.5 py-0.5 shrink-0">
+                                    clone de {u._cloneDe}
+                                  </span>
+                                )}
+                              </p>
                               <p className="text-[10px] text-muted-foreground capitalize truncate">{u.perfil}</p>
                             </div>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-6 gap-1 text-[11px] px-2 flex-shrink-0"
-                              onClick={() => abrirTransferir(u)}
-                            >
-                              <ArrowRightLeft className="w-3 h-3" /> Transferir
-                            </Button>
+                            {!ehClone && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 gap-1 text-[11px] px-2 flex-shrink-0"
+                                onClick={() => abrirTransferir(u)}
+                              >
+                                <ArrowRightLeft className="w-3 h-3" /> Transferir
+                              </Button>
+                            )}
                           </div>
-                        ))}
+                          );
+                        })}
                         {usuarios.length > LIMITE_USUARIOS && (
                           <Button
                             variant="ghost"
