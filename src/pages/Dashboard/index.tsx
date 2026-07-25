@@ -183,10 +183,13 @@ export default function Dashboard() {
       page:         currentPage,
       perPage:      PER_PAGE,
       prioritize_today: true,
-    } : {},
+    } : {
+      // BookPlay não renderiza esta tabela (é PP-only, ver `{isPP && ...}`
+      // abaixo). Ainda assim o hook roda: limita a 1 página para NÃO disparar
+      // um fetch da empresa inteira em acordos_deduplicados (causa de 500/timeout).
+      page: 1, perPage: PER_PAGE, enableRealtime: false,
+    },
   );
-
-  const { acordos: todosAcordos } = useAcordos();
 
   const acordosDeHoje = useMemo(() =>
     acordosHoje.filter(a => a.vencimento === hoje),
