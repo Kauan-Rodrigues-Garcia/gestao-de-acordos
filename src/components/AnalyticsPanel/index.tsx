@@ -37,6 +37,10 @@ interface AnalyticsPanelProps {
   equipeFiltroExterno?: string | null;
   operadorFiltroExterno?: string | null;
   temLogicaDiretoExtra?: boolean;
+  /** Oculta as grades de cards de métrica (mantém o gráfico Recebido vs
+   *  Agendado) — usado no dashboard do operador, onde os cards de meta já
+   *  cobrem esses números. Default false = comportamento atual. */
+  ocultarMetricas?: boolean;
 }
 
 export function AnalyticsPanel({
@@ -44,6 +48,7 @@ export function AnalyticsPanel({
   equipeFiltroExterno,
   operadorFiltroExterno,
   temLogicaDiretoExtra = false,
+  ocultarMetricas = false,
 }: AnalyticsPanelProps = {}) {
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
@@ -382,7 +387,7 @@ export function AnalyticsPanel({
               className="space-y-4 pt-1"
             >
               {/* Metric cards */}
-              {loading ? (
+              {ocultarMetricas ? null : loading ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
@@ -532,7 +537,7 @@ export function AnalyticsPanel({
               )}
 
               {/* ROW 3 — Métricas adicionais */}
-              {!loading && (
+              {!loading && !ocultarMetricas && (
                 <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <motion.div
                     variants={itemVariants}

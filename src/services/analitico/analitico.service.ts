@@ -13,6 +13,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
+import { rotuloFormaPagamento } from '@/lib/formaPagamento';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { mesReferencia } from './analiticoParser';
@@ -1187,4 +1188,60 @@ export async function notificarImportacaoAnalitico(
   for (let i = 0; i < notifs.length; i += CHUNK) {
     await supabase.from('notificacoes').insert(notifs.slice(i, i + CHUNK));
   }
+}
+
+// ── Agregação por forma de pagamento ──────────────────────────────────────────
+
+export interface FormaPagamentoAgregada {
+  /** Rótulo canônico (rotuloFormaPagamento). */
+  rotulo: string;
+  /** Soma de valor_recebido das linhas dessa forma. */
+  valor: number;
+  /** Quantidade de registros (linhas) dessa forma. */
+  qtd: number;
+  /** Percentual do total geral (0–100), arredondado. */
+  perc: number;
+}
+
+export interface AgregadoPorForma {
+  formas: FormaPagamentoAgregada[];
+  totalValor: number;
+  totalQtd: number;
+}
+
+/**
+ * Agrupa linhas do analítico por forma de pagamento (rótulo canônico),
+ * retornando valor, quantidade e percentual por forma, ordenado do maior valor
+ * para o menor. O total é a soma dos valores — nunca recomputado a partir dos
+ * percentuais, para não acumular erro de arredondamento. As linhas devem já vir
+ * no escopo/filtro desejado: a função só agrega.
+ */
+export function agruparPorFormaPagamento(
+  linhas: Pick<AnaliticoRecebimento, 'forma_pagamento' | 'forma_detalhe' | 'valor_recebido'>[],
+): AgregadoPorForma {
+  const mapa = new Map<string, { valor: number; qtd: number }>();
+  let totalValor = 0;
+  let totalQtd = 0;
+
+  for (const l of linhas) {
+    const rotulo = rotuloFormaPagamento(l.forma_pagamento, l.forma_detalhe);
+    const valor = Number(l.valor_recebido) || 0;
+    const atual = mapa.get(rotulo) ?? { valor: 0, qtd: 0 };
+    atual.valor += valor;
+    atual.qtd += 1;
+    mapa.set(rotulo, atual);
+    totalValor += valor;
+    totalQtd += 1;
+  }
+
+  const formas: FormaPagamentoAgregada[] = [...mapa.entries()]
+    .map(([rotulo, { valor, qtd }]) => ({
+      rotulo,
+      valor,
+      qtd,
+      perc: totalValor > 0 ? Math.round((valor / totalValor) * 100) : 0,
+    }))
+    .sort((a, b) => b.valor - a.valor);
+
+  return { formas, totalValor, totalQtd };
 }

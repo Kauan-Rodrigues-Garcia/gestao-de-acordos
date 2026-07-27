@@ -26,6 +26,7 @@ import { enviarParaLixeira } from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { MetaProgressoHeader } from '@/components/MetaProgressoHeader';
+import { DashboardOperadorCards } from '@/components/DashboardOperadorCards';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
@@ -45,11 +46,14 @@ export default function Dashboard() {
   const statusLabels = tenant.statusLabels;
   const tipoLabels   = tenant.tipoLabels;
 
-  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useAnalytics();
+  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, acordosMes } = useAnalytics();
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
   const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
   const isElite = perfil?.perfil === 'elite';
   const isLider = perfil?.perfil === 'lider';
+  // Operador "puro" (nem admin, nem líder/elite): recebe o bloco de cards novo
+  // e o AnalyticsPanel compacto (só o gráfico Recebido vs Agendado).
+  const isOperadorSimples = !isAdmin && !isLiderOuElite;
 
   const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
@@ -622,8 +626,9 @@ export default function Dashboard() {
               <Building2 className="w-3 h-3" /> {empresa.nome}
             </p>
           )}
-          {/* PP: barra de meta, posição no ranking e quartil (dados do analítico) */}
-          <MetaProgressoHeader />
+          {/* PP: barra de meta, posição no ranking e quartil (dados do analítico).
+              Para o operador puro o novo bloco de cards já cobre isso. */}
+          {!isOperadorSimples && <MetaProgressoHeader />}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
@@ -685,12 +690,22 @@ export default function Dashboard() {
             </div>
           </div>
         )}
+        {/* Dados Analíticos permanece no topo (mesmo lugar de sempre). */}
         <AnalyticsPanel
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
           temLogicaDiretoExtra={isPP && usuarioTemLogicaDiretoExtra}
+          ocultarMetricas={isOperadorSimples}
         />
+        {/* Operador puro: bloco de cards (recebido/meta, projeção, quartil, baixa
+            anterior, meta do dia, ranking) + Sua Evolução Diária, abaixo. */}
+        {isOperadorSimples && (
+          <DashboardOperadorCards
+            temDiretoExtra={usuarioTemLogicaDiretoExtra}
+            acordosMes={acordosMes}
+          />
+        )}
       </div>
 
       {/* PaguePLAY section */}

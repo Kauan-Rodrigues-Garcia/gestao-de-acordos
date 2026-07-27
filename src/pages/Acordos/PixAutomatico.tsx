@@ -20,7 +20,10 @@ import {
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock, Target, TrendingUp,
 } from 'lucide-react';
-import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
+import { utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
+import { lerArquivoOperador } from '@/services/importOperadorExcel/lerArquivo';
+import { resolverOperadorDaEmpresa } from '@/services/importOperadorExcel/resolverOperador';
+import type { ResultadoArquivo } from '@/services/importOperadorExcel/types';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -37,6 +40,9 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter,
+} from '@/components/ui/dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { supabase } from '@/lib/supabase';
@@ -75,6 +81,16 @@ function fmtPct(pct: number): string {
 }
 
 interface OperadorInfo { id: string; nome: string; equipe_id: string | null; setor_id: string | null; perfil: string; }
+
+/** Resumo da leitura das planilhas antes de confirmar a inclusão dos pendentes. */
+interface PreviewImport {
+  linhas: LinhaPixLote[];                                    // pendentes vinculados → viram acordos Pix
+  porOperador: { nome: string; qtd: number; total: number }[];
+  arquivosOk: { nome: string; pagas: number; pendentes: number }[];
+  pagas: number;
+  revisao: { arquivo: string; login: string; nr: string; motivo: string }[];
+  erros: string[];
+}
 
 /** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
 const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
@@ -124,6 +140,9 @@ export function PixAutomatico() {
   const [loteProcessando, setLoteProcessando] = useState(false);
   const [importando, setImportando]     = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Prévia da importação (aba pelo nome do arquivo, cor→pendente, login→operador)
+  const [previewImport, setPreviewImport] = useState<PreviewImport | null>(null);
+  const [confirmandoImport, setConfirmandoImport] = useState(false);
 
   // Meta / quartil do operador logado (card de bônus)
   const [metaValor, setMetaValor]   = useState<number | null>(null);
@@ -545,55 +564,100 @@ export function PixAutomatico() {
     URL.revokeObjectURL(url);
   }
 
-  /** Acha um cabeçalho tolerando variações de nome/caixa. */
-  function pegarCampo(row: Record<string, unknown>, nomes: string[]): unknown {
-    const chaves = Object.keys(row);
-    for (const n of nomes) {
-      const k = chaves.find(c => c.trim().toLowerCase() === n);
-      if (k != null) return row[k];
-    }
-    return undefined;
-  }
-
-  async function importarArquivo(file: File) {
+  /**
+   * Lê 1+ planilhas de operador e monta a prévia. Para cada arquivo:
+   *  - a aba lida é a que tem o mesmo nome do arquivo (ex.: Luciana.xlsx → aba "Luciana");
+   *  - cada linha é classificada pela COR real da célula (verde = paga; azul/branco = pendente);
+   *  - só os PENDENTES válidos (Login+NR+Meta>0) viram acordos Pix, vinculados ao
+   *    operador pelo Login (perfis.usuario). Nada é gravado até o usuário confirmar.
+   */
+  async function lerArquivos(files: FileList | File[]) {
     if (!empresa?.id || !perfil?.id) return;
+    const lista = [...files].filter(f => /\.xlsx$/i.test(f.name));
+    if (lista.length === 0) { toast.error('Envie ao menos um arquivo .xlsx.'); return; }
     setImportando(true);
     try {
-      const buf = await file.arrayBuffer();
-      const wb = xlsxRead(buf, { type: 'array' });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = xlsxUtils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-
-      const linhas: LinhaPixLote[] = rows.map(row => {
-        const nr = String(pegarCampo(row, ['nr', 'nr do acordo', 'nr_cliente']) ?? '').trim();
-        const valor = parseCurrencyInput(String(pegarCampo(row, ['valor', 'valor total', 'valor do acordo']) ?? ''));
-        const opNome = String(pegarCampo(row, ['operador', 'operador_nome', 'nome']) ?? '').trim();
-
-        // Atribuição de operador: líder + nome reconhecido → esse operador; senão, o usuário logado.
-        let opId = perfil.id;
-        let opNomeFinal = perfil.nome ?? perfil.email ?? '—';
-        let setorId = perfil.setor_id ?? null;
-        if (ehLider && opNome) {
-          const match = operadores.find(o => o.nome.trim().toLowerCase() === opNome.toLowerCase());
-          if (match) { opId = match.id; opNomeFinal = match.nome; setorId = match.setor_id; }
+      const resolver = await resolverOperadorDaEmpresa(empresa.id);
+      const resultados: ResultadoArquivo[] = [];
+      for (const file of lista) {
+        try { resultados.push(await lerArquivoOperador(file, resolver)); }
+        catch (e) {
+          resultados.push({
+            nomeArquivo: file.name, principal: file.name, abaUsada: null, hashArquivo: '',
+            ok: false, error: e instanceof Error ? e.message : 'Falha ao ler o arquivo.',
+            linhas: [], consolidado: [],
+            totais: { verdesPagas: 0, pendentes: 0, needsReview: 0, operadoresComPendencia: 0, totalPendenteBruto: '0.00000' },
+          });
         }
-        return { nrCliente: nr, valor, operadorId: opId, operadorNome: opNomeFinal, setorId };
-      });
+      }
 
-      const r = await criarAcordosPixLote(empresa.id, linhas);
-      if (!r.ok) { toast.error('Erro ao importar: ' + r.error); return; }
-      toast.success(
-        `Importados: ${r.importados}` +
-        (r.duplicados ? ` · Duplicados ignorados: ${r.duplicados}` : '') +
-        (r.ignorados ? ` · Inválidos ignorados: ${r.ignorados}` : ''),
-      );
-      await carregar();
-    } catch (e) {
-      toast.error('Falha ao ler a planilha. Confira o arquivo.');
-      console.warn('[PixAutomatico] import:', e);
+      // Pendentes vinculados → linhas do lote Pix (uma por NR pendente).
+      // O `valor` do acordo Pix é o VALOR DE NOTA (total do acordo); o sistema
+      // recalcula a comissão pelo % do setor — igual à planilha (Nota × %).
+      // Sem Valor de Nota, deriva do pendente ÷ % da linha; por último, o pendente.
+      const num = (s: string | null | undefined) => Number(String(s ?? '').replace(',', '.'));
+      const linhas: LinhaPixLote[] = [];
+      const porOp = new Map<string, { nome: string; qtd: number; total: number }>();
+      for (const r of resultados) {
+        for (const c of r.consolidado) {
+          for (const l of c.linhas) {
+            const nota = num(l.valorNota);
+            const pct = num(l.percentual);
+            const pend = num(l.metaBatidaPendente);
+            const valor = Number.isFinite(nota) && nota > 0
+              ? nota
+              : (Number.isFinite(pct) && pct > 0 ? pend / pct : pend);
+            linhas.push({
+              nrCliente: l.nrOriginal, valor,
+              operadorId: c.operadorId, operadorNome: c.operadorNome, setorId: c.operadorSetorId,
+            });
+            const acc = porOp.get(c.operadorId) ?? { nome: c.operadorNome, qtd: 0, total: 0 };
+            acc.qtd += 1; acc.total += valor;
+            porOp.set(c.operadorId, acc);
+          }
+        }
+      }
+
+      const revisao = resultados.flatMap(r => r.linhas
+        .filter(l => l.status === 'NEEDS_REVIEW' || l.status === 'OPERATOR_NOT_FOUND' || l.status === 'AMBIGUOUS_OPERATOR')
+        .map(l => ({ arquivo: r.principal, login: l.loginOriginal, nr: l.nrOriginal, motivo: l.observacao ?? l.status })));
+
+      const preview: PreviewImport = {
+        linhas,
+        porOperador: [...porOp.values()].sort((a, b) => a.nome.localeCompare(b.nome)),
+        arquivosOk: resultados.filter(r => r.ok).map(r => ({ nome: r.nomeArquivo, pagas: r.totais.verdesPagas, pendentes: r.totais.pendentes })),
+        pagas: resultados.reduce((s, r) => s + r.totais.verdesPagas, 0),
+        revisao,
+        erros: resultados.filter(r => !r.ok).map(r => `${r.nomeArquivo}: ${r.error}`),
+      };
+
+      if (preview.linhas.length === 0 && preview.erros.length > 0) {
+        toast.error(preview.erros[0]);
+        return;
+      }
+      setPreviewImport(preview);
     } finally {
       setImportando(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  /** Confirma a prévia: grava os pendentes como acordos Pix (nascem pendentes). */
+  async function confirmarImport() {
+    if (!empresa?.id || !previewImport) return;
+    setConfirmandoImport(true);
+    try {
+      const r = await criarAcordosPixLote(empresa.id, previewImport.linhas);
+      if (!r.ok) { toast.error('Erro ao importar: ' + r.error); return; }
+      toast.success(
+        `Adicionados: ${r.importados}` +
+        (r.duplicados ? ` · Duplicados ignorados: ${r.duplicados}` : '') +
+        (r.ignorados ? ` · Inválidos ignorados: ${r.ignorados}` : ''),
+      );
+      setPreviewImport(null);
+      await carregar();
+    } finally {
+      setConfirmandoImport(false);
     }
   }
 
@@ -633,10 +697,10 @@ export function PixAutomatico() {
             className="gap-1.5 h-8 text-xs rounded-lg">
             <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} /> Atualizar
           </Button>
-          <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
-            onChange={e => { const f = e.target.files?.[0]; if (f) importarArquivo(f); }} />
+          <input ref={fileRef} type="file" accept=".xlsx" multiple className="hidden"
+            onChange={e => { if (e.target.files?.length) lerArquivos(e.target.files); }} />
           <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()} disabled={importando}
-            className="gap-1.5 h-8 text-xs rounded-lg" title="Importar planilha de Pix Automático">
+            className="gap-1.5 h-8 text-xs rounded-lg" title="Importar planilhas de operador (ex.: Luciana.xlsx) — puxa os pendentes por operador">
             {importando ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
             Importar
           </Button>
@@ -1076,6 +1140,107 @@ export function PixAutomatico() {
           )}
         </CardContent>
       </Card>
+
+      {/* ── Prévia da importação de planilhas de operador ── */}
+      <Dialog open={previewImport != null} onOpenChange={aberto => { if (!aberto && !confirmandoImport) setPreviewImport(null); }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5 text-violet-400" /> Prévia da importação
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Só os <strong>pendentes</strong> (azul/branco) viram acordos Pix, vinculados ao operador pelo Login.
+              Os já pagos (verde) são ignorados. O valor é o <strong>total do acordo</strong> (Valor de Nota) — a
+              comissão é calculada pelo % do setor. Confira antes de adicionar.
+            </DialogDescription>
+          </DialogHeader>
+
+          {previewImport && (
+            <div className="space-y-3">
+              {/* Resumo */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-lg border border-violet-500/25 bg-violet-500/5 p-2.5">
+                  <p className="text-lg font-bold text-violet-400">{previewImport.linhas.length}</p>
+                  <p className="text-[11px] text-muted-foreground">Pendentes a adicionar</p>
+                </div>
+                <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-2.5">
+                  <p className="text-lg font-bold text-emerald-400">{previewImport.pagas}</p>
+                  <p className="text-[11px] text-muted-foreground">Pagas (ignoradas)</p>
+                </div>
+                <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 p-2.5">
+                  <p className="text-lg font-bold text-amber-500">{previewImport.revisao.length}</p>
+                  <p className="text-[11px] text-muted-foreground">Sem operador / revisão</p>
+                </div>
+              </div>
+
+              {/* Arquivos lidos */}
+              {previewImport.arquivosOk.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {previewImport.arquivosOk.map(a => (
+                    <span key={a.nome} className="text-[11px] px-2 py-1 rounded-md bg-muted/40 border border-border">
+                      {a.nome} · {a.pendentes} pend.
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Por operador */}
+              <div className="max-h-[240px] overflow-y-auto rounded-lg border border-border divide-y divide-border">
+                {previewImport.porOperador.length === 0 ? (
+                  <p className="p-4 text-center text-xs text-muted-foreground">Nenhum pendente vinculado a operador.</p>
+                ) : previewImport.porOperador.map(op => (
+                  <div key={op.nome} className="flex items-center gap-3 px-3 py-2">
+                    <User className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="flex-1 text-xs font-medium truncate">{op.nome}</span>
+                    <Badge variant="outline" className="text-[10px]">{op.qtd} NR</Badge>
+                    <span className="text-xs font-mono font-semibold text-violet-400 w-24 text-right">{formatCurrency(op.total)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Erros de arquivo */}
+              {previewImport.erros.length > 0 && (
+                <div className="text-[11px] text-red-400 space-y-0.5">
+                  {previewImport.erros.map((e, i) => <p key={i}>⚠ {e}</p>)}
+                </div>
+              )}
+
+              {/* Revisão (sem operador / conflito) */}
+              {previewImport.revisao.length > 0 && (
+                <details className="text-[11px]">
+                  <summary className="cursor-pointer text-amber-500 font-medium">
+                    {previewImport.revisao.length} linha(s) não vinculadas (não serão adicionadas)
+                  </summary>
+                  <div className="mt-1 max-h-[140px] overflow-y-auto rounded-md border border-border">
+                    <table className="w-full">
+                      <tbody>
+                        {previewImport.revisao.slice(0, 100).map((r, i) => (
+                          <tr key={i} className="border-b border-border/40">
+                            <td className="px-2 py-1 text-muted-foreground">{r.arquivo}</td>
+                            <td className="px-2 py-1 font-mono">{r.login || '—'}</td>
+                            <td className="px-2 py-1 font-mono">{r.nr || '—'}</td>
+                            <td className="px-2 py-1 text-amber-500">{r.motivo}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </details>
+              )}
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPreviewImport(null)} disabled={confirmandoImport}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarImport} disabled={confirmandoImport || !previewImport?.linhas.length} className="gap-1.5">
+              {confirmandoImport ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              Adicionar {previewImport?.linhas.length ?? 0} acordo(s)
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
