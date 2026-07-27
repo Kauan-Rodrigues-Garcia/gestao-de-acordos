@@ -7,7 +7,7 @@
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
-import { CalendarDays, X, ListChecks, Trophy } from 'lucide-react';
+import { CalendarDays, X, ListChecks, Trophy, Wallet } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -15,9 +15,14 @@ import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
+import { useAuth } from '@/hooks/useAuth';
+import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { rotuloFormaPagamento, corFormaPagamento } from '@/lib/formaPagamento';
+import { supabase } from '@/lib/supabase';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { TabulacaoCell } from './TabulacaoCell';
 import { RankingView } from './RankingView';
+import { DetalhamentoFormaPagamento } from './DetalhamentoFormaPagamento';
 import {
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
@@ -45,17 +50,26 @@ interface AnaliticoOperadorProps {
 }
 
 function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: string | null) {
-  const isCartao = forma === 'cartao';
-  // BookPlay traz o rótulo real (Boleto, Pix, Pix Automático…); PaguePlay usa o genérico.
-  const texto = detalhe || (isCartao ? 'Cartão' : 'Boleto/Pix');
+  // Rótulo e cor canônicos (fonte única) — BookPlay usa forma_detalhe.
+  const texto = rotuloFormaPagamento(forma, detalhe);
+  const cor = corFormaPagamento(texto);
   return (
-    <Badge variant="outline" className={cn(
-      'text-xs',
-      isCartao
-        ? 'border-purple-300 text-purple-700 dark:text-purple-400'
-        : 'border-blue-300 text-blue-700 dark:text-blue-400',
-    )}>
+    <Badge variant="outline" className="text-xs font-semibold rounded-full px-2.5 py-0.5"
+      style={{ background: cor + '1e', borderColor: cor + '55', color: cor }}>
       {texto}
+    </Badge>
+  );
+}
+
+/** Badge de tipo de vínculo (Direto/Extra) — só quando o setor usa a lógica. */
+function chipTipo(tipo: 'direto' | 'extra') {
+  const isExtra = tipo === 'extra';
+  return (
+    <Badge variant="outline" className="text-[10px] font-bold uppercase tracking-wide"
+      style={isExtra
+        ? { borderColor: '#f59e0b66', color: '#f59e0b' }
+        : { borderColor: '#3b82f666', color: '#3b82f6' }}>
+      {isExtra ? 'Extra' : 'Direto'}
     </Badge>
   );
 }
@@ -66,10 +80,42 @@ export function AnaliticoOperador({
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
   const mostrarHO = tenant.isPaguePlay;   // HO só existe no relatório PaguePlay
+  const { perfil } = useAuth();
+  const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const [, setForceRender] = useState(0);
   const [filtroInicio, setFiltroInicio] = useState('');
   const [filtroFim, setFiltroFim] = useState('');
-  const [abaOp, setAbaOp] = useState<'meus' | 'ranking'>('meus');
+  const [abaOp, setAbaOp] = useState<'meus' | 'detalhado' | 'ranking'>('meus');
+
+  // Setor do operador usa direto/extra? → controla o badge de tipo
+  const temDiretoExtra = isAtivoParaUsuario(
+    perfil?.id ?? '',
+    perfil?.setor_id ?? null,
+    (perfil as { equipe_id?: string | null } | null)?.equipe_id ?? null,
+  );
+
+  // tipo_vinculo por acordo vinculado (para o badge Direto/Extra) — busca em lote
+  const [tipoPorAcordo, setTipoPorAcordo] = useState<Record<string, 'direto' | 'extra'>>({});
+  useEffect(() => {
+    if (!temDiretoExtra) { setTipoPorAcordo({}); return; }
+    const ids = [...new Set(dados.map(d => d.acordo_id).filter((x): x is string => !!x))];
+    if (!ids.length) { setTipoPorAcordo({}); return; }
+    let cancelado = false;
+    void supabase.from('acordos').select('id, tipo_vinculo').in('id', ids)
+      .then(({ data }) => {
+        if (cancelado || !data) return;
+        const map: Record<string, 'direto' | 'extra'> = {};
+        for (const a of data as { id: string; tipo_vinculo: 'direto' | 'extra' | null }[]) {
+          if (a.tipo_vinculo) map[a.id] = a.tipo_vinculo;
+        }
+        setTipoPorAcordo(map);
+      });
+    return () => { cancelado = true; };
+  }, [dados, temDiretoExtra]);
+
+  /** Badge de tipo da linha, quando aplicável. */
+  const tipoDaLinha = (l: AnaliticoRecebimento) =>
+    temDiretoExtra && l.acordo_id ? (tipoPorAcordo[l.acordo_id] ?? null) : null;
 
   // ── Ranking (carregado sob demanda ao abrir a aba / trocar de mês) ──────────
   const [ranking, setRanking] = useState<ResumoOperadorAnalitico[]>([]);
@@ -118,8 +164,9 @@ export function AnaliticoOperador({
       {/* Abas internas: Meus recebimentos × Ranking */}
       <div className="flex items-center gap-1 border-b border-border">
         {([
-          { key: 'meus',    label: 'Meus recebimentos', Icon: ListChecks },
-          { key: 'ranking', label: 'Ranking',           Icon: Trophy },
+          { key: 'meus',      label: 'Meus recebimentos',  Icon: ListChecks },
+          { key: 'detalhado', label: 'Detalhado',          Icon: Wallet },
+          { key: 'ranking',   label: 'Ranking',            Icon: Trophy },
         ] as const).map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setAbaOp(key)}
             className={cn(
@@ -210,113 +257,94 @@ export function AnaliticoOperador({
               </div>
             )}
 
-            {/* Tabela */}
+            {/* Tabela detalhada — cliente em destaque, Nr documento, forma, tipo */}
             {dadosFiltrados.length > 0 && (
-              <Card className="border-border">
+              <Card className="border-border overflow-hidden">
                 <CardContent className="p-0">
                   <div className="overflow-x-auto">
                     <table className="w-full text-xs">
                       <thead>
-                        <tr className="border-b border-border bg-muted/30">
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">CÓDIGO</th>
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">RECEBIDO</th>
-                          {mostrarHO && <th className="text-right px-3 py-3 font-semibold text-muted-foreground">TOTAL HO</th>}
-                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground">DATA PGT.</th>
-                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground">AÇÃO</th>
+                        <tr className="border-b border-border bg-muted/40">
+                          <th className="text-left px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Cliente</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Nr Documento</th>
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Forma</th>
+                          {temDiretoExtra && <th className="text-left px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Tipo</th>}
+                          <th className="text-left px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Dt.Pgto</th>
+                          <th className="text-right px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Recebido</th>
+                          {mostrarHO && <th className="text-right px-3 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Total HO</th>}
+                          <th className="text-right px-4 py-3 font-semibold text-muted-foreground uppercase tracking-wide">Ação</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
                         {dadosFiltrados.flatMap(linha => {
-                          const rowClass = cn('hover:bg-muted/30 transition-colors', !linha.visto && 'bg-primary/3');
+                          const rowClass = cn('hover:bg-muted/40 transition-colors', !linha.visto && 'bg-primary/[0.04]');
                           const pagamentos = linha.pagamentos_detalhados;
+                          const tipo = tipoDaLinha(linha);
+
+                          // Célula de cliente em destaque (nome grande + instituição)
+                          const celulaCliente = (
+                            <div className="flex items-start gap-1.5">
+                              {!linha.visto && (
+                                <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-1.5" title="Novo" />
+                              )}
+                              <div className="min-w-0">
+                                <span className="block font-semibold text-sm text-foreground leading-tight truncate max-w-[240px]">
+                                  {linha.nome_cliente ?? '—'}
+                                </span>
+                                {linha.instituicao && (
+                                  <span className="block text-[10px] text-muted-foreground/70 uppercase tracking-wide leading-tight mt-0.5">
+                                    {linha.instituicao}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                          const celulaDoc = <span className="font-mono font-semibold text-primary">{linha.codigo}</span>;
+                          const celulaAcao = (
+                            <TabulacaoCell
+                              linha={linha} empresaId={empresaId}
+                              operadorId={operadorId} operadorNome={operadorNome}
+                              liderId={liderId}
+                              onAbrirNovoAcordo={onAbrirNovoAcordo}
+                              onVerAcordo={onVerAcordo}
+                              onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
+                            />
+                          );
 
                           if (!pagamentos || pagamentos.length <= 1) {
                             return [
                               <tr key={linha.id} className={rowClass}>
-                                <td className="px-3 py-2.5">
-                                  <div className="flex items-center gap-1.5">
-                                    {!linha.visto && (
-                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
-                                    )}
-                                    <div>
-                                      <span className="font-semibold">{linha.codigo}</span>
-                                      {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
-                                          {linha.nome_cliente}
-                                        </span>
-                                      )}
-                                      {linha.instituicao && (
-                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
-                                          {linha.instituicao}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </td>
-                                <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
-                                <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(linha.valor_recebido)}</td>
-                                {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
-                                <td className="px-3 py-2.5 tabular-nums">
+                                <td className="px-4 py-3">{celulaCliente}</td>
+                                <td className="px-3 py-3">{celulaDoc}</td>
+                                <td className="px-3 py-3">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
+                                {temDiretoExtra && <td className="px-3 py-3">{tipo ? chipTipo(tipo) : <span className="text-muted-foreground/50">—</span>}</td>}
+                                <td className="px-3 py-3 tabular-nums text-muted-foreground">
                                   {new Date(linha.data_pagamento + 'T12:00:00').toLocaleDateString('pt-BR')}
                                 </td>
-                                <td className="px-3 py-2.5 text-right">
-                                  <TabulacaoCell
-                                    linha={linha} empresaId={empresaId}
-                                    operadorId={operadorId} operadorNome={operadorNome}
-                                    liderId={liderId}
-                                    onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                    onVerAcordo={onVerAcordo}
-                                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
-                                  />
-                                </td>
+                                <td className="px-3 py-3 text-right font-mono font-bold text-foreground">{formatBRL(linha.valor_recebido)}</td>
+                                {mostrarHO && <td className="px-3 py-3 text-right font-mono text-muted-foreground">{formatBRL(linha.total_ho)}</td>}
+                                <td className="px-4 py-3 text-right">{celulaAcao}</td>
                               </tr>,
                             ];
                           }
 
-                          // Múltiplos pagamentos: uma linha por pagamento, código e ação com rowSpan
+                          // Múltiplos pagamentos: cliente/doc/forma/tipo/ação com rowSpan; valor+data por pagamento
                           return pagamentos.map((p, idx) => (
                             <tr key={`${linha.id}::${idx}`} className={rowClass}>
-                              {idx === 0 && (
-                                <td rowSpan={pagamentos.length} className="px-3 py-2.5 align-top">
-                                  <div className="flex items-center gap-1.5">
-                                    {!linha.visto && (
-                                      <span className="inline-block w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo" />
-                                    )}
-                                    <div>
-                                      <span className="font-semibold">{linha.codigo}</span>
-                                      {linha.nome_cliente && (
-                                        <span className="block text-muted-foreground leading-tight truncate max-w-[150px]">
-                                          {linha.nome_cliente}
-                                        </span>
-                                      )}
-                                      {linha.instituicao && (
-                                        <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[150px]">
-                                          {linha.instituicao}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
+                              {idx === 0 && <td rowSpan={pagamentos.length} className="px-4 py-3 align-top">{celulaCliente}</td>}
+                              {idx === 0 && <td rowSpan={pagamentos.length} className="px-3 py-3 align-top">{celulaDoc}</td>}
+                              {idx === 0 && <td rowSpan={pagamentos.length} className="px-3 py-3 align-top">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>}
+                              {idx === 0 && temDiretoExtra && (
+                                <td rowSpan={pagamentos.length} className="px-3 py-3 align-top">
+                                  {tipo ? chipTipo(tipo) : <span className="text-muted-foreground/50">—</span>}
                                 </td>
                               )}
-                              <td className="px-3 py-2.5">{chipForma(linha.forma_pagamento, linha.forma_detalhe)}</td>
-                              <td className="px-3 py-2.5 text-right font-mono font-medium">{formatBRL(p.valor)}</td>
-                              {mostrarHO && <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
-                              <td className="px-3 py-2.5 tabular-nums">
+                              <td className="px-3 py-3 tabular-nums text-muted-foreground">
                                 {new Date(p.data + 'T12:00:00').toLocaleDateString('pt-BR')}
                               </td>
-                              {idx === 0 && (
-                                <td rowSpan={pagamentos.length} className="px-3 py-2.5 text-right align-top">
-                                  <TabulacaoCell
-                                    linha={linha} empresaId={empresaId}
-                                    operadorId={operadorId} operadorNome={operadorNome}
-                                    liderId={liderId}
-                                    onAbrirNovoAcordo={onAbrirNovoAcordo}
-                                    onVerAcordo={onVerAcordo}
-                                    onRefetch={() => { setForceRender(v => v + 1); onRefetch(); }}
-                                  />
-                                </td>
-                              )}
+                              <td className="px-3 py-3 text-right font-mono font-bold text-foreground">{formatBRL(p.valor)}</td>
+                              {mostrarHO && <td className="px-3 py-3 text-right font-mono text-muted-foreground">{formatBRL(p.total_ho)}</td>}
+                              {idx === 0 && <td rowSpan={pagamentos.length} className="px-4 py-3 text-right align-top">{celulaAcao}</td>}
                             </tr>
                           ));
                         })}
@@ -328,6 +356,16 @@ export function AnaliticoOperador({
             )}
           </div>
         )
+      )}
+
+      {/* ── Aba: Detalhado (forma de pagamento — só o próprio operador) ────── */}
+      {abaOp === 'detalhado' && (
+        <DetalhamentoFormaPagamento
+          modo="operador"
+          dados={dados}
+          loading={loading}
+          operadorNome={operadorNome}
+        />
       )}
 
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}
