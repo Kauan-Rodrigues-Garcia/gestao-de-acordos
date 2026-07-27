@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3, LineChart, Wallet,
+  TrendingUp, CreditCard, Calendar, BarChart3,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,10 +54,6 @@ import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
 import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
-import { DesempenhoEquipes } from './DesempenhoEquipes';
-import { QuartisOperadores } from './QuartisOperadores';
-import { GraficoRecebimento } from './GraficoRecebimento';
-import { DetalhamentoFormaPagamento } from './DetalhamentoFormaPagamento';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -97,7 +93,7 @@ export function AnaliticoLider({
   const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'formas' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -607,37 +603,31 @@ export function AnaliticoLider({
       </div>
 
       {/* Tabs + botão importar */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1 border-b border-border overflow-x-auto min-w-0">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1 border-b border-border">
           {([
             { key: 'operadores', label: 'Por operador',     Icon: Users },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // PaguePlay: Desempenho Equipes / Quartis / Gráfico moraram para o
-            // Painel Líder (alimentadas pelo recebimento diário). BookPlay
-            // continua com elas aqui, alimentadas pelo analítico.
-            ...(!isPP ? [
-              { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
-              { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
-              { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
-            ] as const : []),
-            { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet },
+            // Desempenho Equipes / Quartis / Gráfico moraram para o Painel Líder
+            // nos dois tenants (mudança de caminho — BookPlay 2026-07). Aqui
+            // ficam só as abas de conferência do relatório.
             { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px shrink-0 whitespace-nowrap',
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
                 abaAtiva === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
               )}
             >
-              <Icon className="w-3.5 h-3.5 shrink-0" /> {label}
+              <Icon className="w-3.5 h-3.5" /> {label}
             </button>
           ))}
         </div>
         {temPermissaoImportar && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2">
             <Button
               size="sm" variant="outline"
               className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
@@ -962,19 +952,6 @@ export function AnaliticoLider({
 
       {/* Desempenho Equipes / Quartis / Gráfico recebimento agora moram no
           Painel Líder (os dois tenants — mudança de caminho). */}
-
-      {/* ── Aba: Formas de pagamento (setor geral — líder+) ───────────────── */}
-      {abaAtiva === 'formas' && (
-        <DetalhamentoFormaPagamento
-          modo="lider"
-          empresaId={empresaId}
-          mes={mes}
-          setorId={setorId ?? null}
-          equipes={equipes}
-          operadorEquipeMap={operadorEquipeMap}
-          equipesExtrasPorOperador={equipesExtras}
-        />
-      )}
 
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
       {abaAtiva === 'orfaos' && (
