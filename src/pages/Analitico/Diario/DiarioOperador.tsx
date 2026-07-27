@@ -16,7 +16,8 @@ import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { useDiario } from '@/hooks/useDiario';
-import { fmtCPF, formaKindDiario } from '@/services/diario/diarioParser';
+import { AlertCircle } from 'lucide-react';
+import { fmtCPF, formaKindDiario, normDiario } from '@/services/diario/diarioParser';
 import {
   linhasVivas, consolidarItens, dataLabel, fmtDataISO, type ItemDiario,
 } from './helpers';
@@ -54,6 +55,15 @@ function LinhasTabela({ itens, destaque, mostrarNR }: { itens: ItemDiario[]; des
                 {item.instituicao && (
                   <span className="block text-[10px] text-muted-foreground/70 leading-tight truncate max-w-[200px]">
                     {item.instituicao}
+                  </span>
+                )}
+                {/* PaguePlay (CPF, não NR): acordo pago sem tabulação de
+                    "acordo fechado" — mesma indicação da visão do líder,
+                    agora visível também para o próprio operador. */}
+                {!mostrarNR && normDiario(item.tabulacao) !== 'acordofechado' && (
+                  <span className="mt-1 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400"
+                    title="Este acordo não está tabulado como Acordo Fechado">
+                    <AlertCircle className="w-2.5 h-2.5" /> Tabular Acordo Fechado
                   </span>
                 )}
               </div>
