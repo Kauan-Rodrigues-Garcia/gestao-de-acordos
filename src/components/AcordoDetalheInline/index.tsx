@@ -797,7 +797,6 @@ export function AcordoDetalheInline({
       {deveExibirParcelas && !isPaguePlay && (
         <ModalEditarAcordoParcelado
           acordo={acordoLocal}
-          isPaguePlay={isPaguePlay}
           registrosReais={registrosReais}
           open={modalEditParcOpen}
           onClose={() => setModalEditParcOpen(false)}

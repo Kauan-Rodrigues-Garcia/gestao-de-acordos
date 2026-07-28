@@ -16,7 +16,6 @@ import { _TIPO_LABELS_PP, _TIPO_LABELS_BK, _STATUS_LABELS_PP, _STATUS_LABELS_BK 
 
 interface ModalEditarParceladoProps {
   acordo: Acordo;
-  isPaguePlay: boolean;
   registrosReais: Acordo[];
   open: boolean;
   onClose: () => void;
@@ -24,7 +23,7 @@ interface ModalEditarParceladoProps {
 }
 
 export function ModalEditarAcordoParcelado({
-  acordo, isPaguePlay, registrosReais, open, onClose, onSaved,
+  acordo, registrosReais, open, onClose, onSaved,
 }: ModalEditarParceladoProps) {
   const [aba,    setAba]    = useState<'geral' | 'parcelas'>('geral');
   const [saving, setSaving] = useState(false);
@@ -69,7 +68,7 @@ export function ModalEditarAcordoParcelado({
       const camposGerais: Record<string, unknown> = {
         nome_cliente: nomeCliente.trim(),
         nr_cliente:   nrCliente.trim(),
-        whatsapp:     isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
+        whatsapp:     whatsapp.trim() || null,
         tipo,
         observacoes:  observacoes.trim() || null,
         instituicao:  instituicao.trim() || null,
@@ -129,7 +128,7 @@ export function ModalEditarAcordoParcelado({
     }
   }
 
-  const TIPO_LABELS_ALL = isPaguePlay ? _TIPO_LABELS_PP : _TIPO_LABELS_BK;
+  const TIPO_LABELS_ALL = _TIPO_LABELS_BK;
 
   return (
     <Dialog open={open} onOpenChange={v => !v && onClose()}>
@@ -167,19 +166,19 @@ export function ModalEditarAcordoParcelado({
         {aba === 'geral' && (
           <div className="grid grid-cols-2 gap-3 py-2">
             <div className="col-span-2 space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'Nome do Profissional' : 'Nome do Cliente'} *</Label>
+              <Label className="text-xs">Nome do Cliente *</Label>
               <Input value={nomeCliente} onChange={e => setNomeCliente(e.target.value)} className="h-8 text-xs" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'CPF' : 'NR'}</Label>
+              <Label className="text-xs">NR</Label>
               <Input value={nrCliente} onChange={e => setNrCliente(e.target.value)} className="h-8 text-xs font-mono" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'Número' : 'WhatsApp'}</Label>
+              <Label className="text-xs">WhatsApp</Label>
               <Input value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="(89) 99999-9999" className="h-8 text-xs font-mono" />
             </div>
             <div className="space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
+              <Label className="text-xs">Instituição</Label>
               <Input value={instituicao} onChange={e => setInstituicao(e.target.value)} className="h-8 text-xs" />
             </div>
             <div className="space-y-1">
@@ -194,7 +193,7 @@ export function ModalEditarAcordoParcelado({
               </Select>
             </div>
             <div className="col-span-2 space-y-1">
-              <Label className="text-xs">{isPaguePlay ? 'Link / Observações' : 'Observações'}</Label>
+              <Label className="text-xs">Observações</Label>
               <Input value={observacoes} onChange={e => setObservacoes(e.target.value)} className="h-8 text-xs" />
             </div>
           </div>
