@@ -3,13 +3,19 @@
  * Parse do relatório Excel de recebimento diário do ERP (PaguePlay).
  *
  * Colunas relevantes do relatório (entre outras):
- *   Data | Id.Baixa | CPF | Profissional | Cód.Acordo | Parcela |
+ *   Data | Id.Baixa | Cód.Cliente | Profissional | Cód.Acordo | Parcela |
  *   Forma Pgto | Valor Recebido | Operador | Próx. Contato | Tabulação
+ *
+ * O relatório ainda traz uma coluna CPF, mas ela é IGNORADA de propósito
+ * (2026-07-28, pedido da diretoria): nenhum CPF entra no projeto. A
+ * identificação do cliente passou a ser o Cód.Cliente, que é o mesmo código
+ * usado na tabulação — o que abre caminho para cruzar este relatório com os
+ * acordos dos operadores.
  *
  * Regras (mesmas do protótipo HTML):
  *   - Linhas sem Operador são descartadas (contadas para aviso)
  *   - Chave de dedupe entre importações do dia: Id.Baixa, ou composta
- *     cpf|acordo|forma|valor|data quando não houver Id.Baixa
+ *     codigo|acordo|forma|valor|data quando não houver Id.Baixa
  *   - Cartão consolida por Cód.Acordo apenas na EXIBIÇÃO (parcelas somadas);
  *     no banco cada pagamento é uma linha
  *   - Próx.Contato ≤ data do pagamento → acordo "ignorado" (fora dos totais e listas)
@@ -22,7 +28,8 @@ import { toDate } from '@/services/analitico/analiticoParser';
 
 export interface LinhaDiario {
   operador_usuario: string;
-  cpf: string;                    // somente dígitos ('' quando ausente)
+  /** Coluna "Cód.Cliente", só dígitos ('' quando ausente). Mesmo código da tabulação. */
+  cliente_codigo: string;
   nome_cliente: string;           // coluna Profissional
   acordo_codigo: string;
   /** Coluna "Empresa" (BookPlay). Opcional — não usado na PaguePlay. */
@@ -69,12 +76,15 @@ export function isCartaoDiario(forma: string): boolean {
   return formaKindDiario(forma) === 'cartao';
 }
 
-/** Formata CPF com máscara; aceita valores numéricos que perderam zero à esquerda */
-export function fmtCPF(v: unknown): string {
-  const d = String(v ?? '').replace(/\D/g, '');
-  if (d.length === 11) return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  if (d.length === 10) return ('0' + d).replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  return String(v ?? '').trim();
+/**
+ * Código do cliente: só os dígitos.
+ *
+ * O ERP exporta com separador de milhar — "2,651,454" neste relatório, e há
+ * exportações que usam ponto. Descartar tudo que não é dígito cobre os dois
+ * casos e devolve o código igual ao que aparece na tabulação.
+ */
+export function soDigitos(v: unknown): string {
+  return String(v ?? '').replace(/\D/g, '');
 }
 
 export function dayKeyDiario(d: Date): string {
@@ -90,11 +100,12 @@ function parsearValor(v: unknown): number {
 
 // ── Resolução de colunas ─────────────────────────────────────────────────────
 
-type ColKeysDiario = 'op' | 'cpf' | 'prof' | 'acordo' | 'forma' | 'valor' | 'idb' | 'prox' | 'dt' | 'tab';
+type ColKeysDiario = 'op' | 'cli' | 'prof' | 'acordo' | 'forma' | 'valor' | 'idb' | 'prox' | 'dt' | 'tab';
 
 const COL_EXATAS: Partial<Record<ColKeysDiario, string[]>> = {
   op:     ['operador', 'cobradora', 'cobrador'],
-  cpf:    ['cpf'],
+  // "Cód.Cliente" normaliza para "codcliente". Não confundir com "codacordo".
+  cli:    ['codcliente', 'codigocliente', 'clientecodigo', 'codcli'],
   prof:   ['profissional', 'nome', 'cliente'],
   acordo: ['codacordo', 'acordo'],
   forma:  ['formapgto', 'formapagamento', 'formadepagamento', 'tpdoc'],
@@ -105,6 +116,7 @@ const COL_EXATAS: Partial<Record<ColKeysDiario, string[]>> = {
 };
 
 const COL_PARCIAIS: Partial<Record<ColKeysDiario, string[]>> = {
+  cli:    ['codcliente'],   // específico: "codacordo" não casa
   acordo: ['acordo'],
   forma:  ['forma'],
   valor:  ['valorrecebido'],
@@ -196,11 +208,11 @@ export async function parseRelatorioDiario(
     const op = String(row[cols.op!] ?? '').trim();
     if (!op) {
       // Rodapé de totais do relatório: sem operador E sem nenhuma identificação
-      // (cliente/CPF/acordo/forma/data) — só os somatórios preenchidos. Nunca
+      // (cliente/código/acordo/forma/data) — só os somatórios preenchidos. Nunca
       // importa, senão o total geral do arquivo viraria uma linha "(sem vínculo)".
       const temIdentificacao =
         (cols.prof   != null && String(row[cols.prof]   ?? '').trim() !== '') ||
-        (cols.cpf    != null && String(row[cols.cpf]    ?? '').trim() !== '') ||
+        (cols.cli    != null && String(row[cols.cli]    ?? '').trim() !== '') ||
         (cols.acordo != null && String(row[cols.acordo] ?? '').trim() !== '') ||
         (cols.idb    != null && String(row[cols.idb]    ?? '').trim() !== '') ||
         (cols.forma  != null && String(row[cols.forma]  ?? '').trim() !== '') ||
@@ -213,7 +225,7 @@ export async function parseRelatorioDiario(
     const d        = cols.dt   != null ? toDate(row[cols.dt])   : null;
     const prox     = cols.prox != null ? toDate(row[cols.prox]) : null;
     const idBaixa  = cols.idb  != null ? String(row[cols.idb] ?? '').trim() : '';
-    const cpf      = String((cols.cpf != null ? row[cols.cpf] : '') ?? '').replace(/\.0$/, '').replace(/\D/g, '').trim();
+    const codigo   = soDigitos(cols.cli != null ? row[cols.cli] : '');
     const acordo   = cols.acordo != null ? String(row[cols.acordo] ?? '').trim() : '';
     const forma    = String((cols.forma != null ? row[cols.forma] : '—') ?? '—').trim() || '—';
     const valor    = parsearValor(row[cols.valor!]);
@@ -221,11 +233,11 @@ export async function parseRelatorioDiario(
     const prof     = cols.prof != null ? String(row[cols.prof] ?? '').trim() : '';
     const dk       = d ? dayKeyDiario(d) : '';
 
-    const chave = idBaixa || `${cpf}|${acordo}|${forma}|${valor}|${dk}`;
+    const chave = idBaixa || `${codigo}|${acordo}|${forma}|${valor}|${dk}`;
 
     linhas.push({
       operador_usuario: op,
-      cpf,
+      cliente_codigo:   codigo,
       nome_cliente:     prof,
       acordo_codigo:    acordo,
       forma_pagamento:  forma,

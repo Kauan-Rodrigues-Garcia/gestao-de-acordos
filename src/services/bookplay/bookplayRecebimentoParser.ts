@@ -196,7 +196,6 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     } else {
       mapD.set(chave, {
         operador_usuario: l.operador_usuario,
-        cpf:              '',
         nome_cliente:     l.nome_cliente,
         acordo_codigo:    l.codigo,
         instituicao:      l.instituicao,

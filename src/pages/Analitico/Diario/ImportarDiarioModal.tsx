@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
-import { fmtCPF, dayKeyDiario } from '@/services/diario/diarioParser';
+import { dayKeyDiario } from '@/services/diario/diarioParser';
 import { fmtDataISO } from './helpers';
 import { FormaChip } from './FormaChip';
 import type { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -299,7 +299,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Operador</th>
-                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">CPF / Profissional</th>
+                      <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Código / Profissional</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Forma</th>
                       <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Recebido</th>
                       <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Data</th>
@@ -315,7 +315,7 @@ export function ImportarDiarioModal({ aberto, onFechar, hook }: ImportarDiarioMo
                         <tr key={i} className="hover:bg-muted/30">
                           <td className="px-3 py-1.5 font-mono">{l.operador_usuario}</td>
                           <td className="px-3 py-1.5">
-                            <span className="font-medium tabular-nums">{fmtCPF(l.cpf) || '—'}</span>
+                            <span className="font-medium tabular-nums">{l.cliente_codigo || '—'}</span>
                             {l.nome_cliente && (
                               <span className="block text-muted-foreground truncate max-w-[140px]">
                                 {l.nome_cliente}

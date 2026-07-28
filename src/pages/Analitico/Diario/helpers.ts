@@ -8,7 +8,7 @@
  */
 
 import type { DiarioRecebimento } from '@/lib/supabase';
-import { formaKindDiario, isCartaoDiario, fmtCPF, normDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario, isCartaoDiario, normDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
 import { formatBRL } from '@/lib/money';
 
 // ── Ignorados (próximo contato ≤ data do pagamento) ──────────────────────────
@@ -40,8 +40,9 @@ export function acordoKey(row: DiarioRecebimento): string {
 
 export interface ItemDiario {
   key: string;
-  cpf: string;
-  /** Cód.Acordo (BookPlay: NR); usado no lugar do CPF na BookPlay */
+  /** Cód.Cliente do relatório, só dígitos. Substituiu o CPF em 2026-07-28. */
+  cliente_codigo: string;
+  /** Cód.Acordo (BookPlay: NR); usado no lugar do código na BookPlay */
   acordo_codigo: string;
   nome_cliente: string;
   /** Coluna "Empresa" (BookPlay); '' na PaguePlay */
@@ -99,7 +100,7 @@ export function consolidarItens(
     if (existente) {
       existente.valor += r.valor_recebido;
       existente.n     += 1;
-      if (!existente.cpf && r.cpf) existente.cpf = r.cpf;
+      if (!existente.cliente_codigo && r.cliente_codigo) existente.cliente_codigo = r.cliente_codigo;
       if (!existente.nome_cliente && r.nome_cliente) existente.nome_cliente = r.nome_cliente;
       if (!existente.instituicao && r.instituicao) existente.instituicao = r.instituicao;
       if (r.data_pagamento) {
@@ -111,7 +112,7 @@ export function consolidarItens(
 
     const item: ItemDiario = {
       key,
-      cpf:             r.cpf ?? '',
+      cliente_codigo:  r.cliente_codigo ?? '',
       acordo_codigo:   r.acordo_codigo ?? '',
       nome_cliente:    r.nome_cliente ?? '',
       instituicao:     r.instituicao ?? '',
@@ -133,7 +134,7 @@ export function consolidarItens(
   }
 
   itens.sort((a, b) =>
-    (a.minData ?? '').localeCompare(b.minData ?? '') || a.cpf.localeCompare(b.cpf));
+    (a.minData ?? '').localeCompare(b.minData ?? '') || a.cliente_codigo.localeCompare(b.cliente_codigo));
   return itens;
 }
 
@@ -152,7 +153,7 @@ export function montarTextoListaDiario(
   const aviso   = (it: ItemDiario) =>
     normDiario(it.tabulacao) === 'acordofechado' ? '' : ' (Tabular Acordo Fechado)';
   const fmtLine = (it: ItemDiario) =>
-    `${fmtCPF(it.cpf) || it.acordo_codigo || '—'} - ${it.forma_pagamento} - ${formatBRL(it.valor)}${aviso(it)}`;
+    `${it.cliente_codigo || it.acordo_codigo || '—'} - ${it.forma_pagamento} - ${formatBRL(it.valor)}${aviso(it)}`;
 
   const head = `*${nome}* — recebimentos${diaISO ? ` (${fmtDataISO(diaISO)})` : ''}`;
   const blocks: string[] = [];
@@ -248,7 +249,7 @@ export function agregarPorOperador(
 
 export interface ItemIgnorado {
   operador: string;
-  cpf: string;
+  cliente_codigo: string;
   acordo_codigo: string;
   nome_cliente: string;
   forma_pagamento: string;
@@ -272,7 +273,7 @@ export function consolidarIgnorados(
     if (existente) {
       existente.valor += r.valor_recebido;
       existente.n     += 1;
-      if (!existente.cpf && r.cpf) existente.cpf = r.cpf;
+      if (!existente.cliente_codigo && r.cliente_codigo) existente.cliente_codigo = r.cliente_codigo;
       if (r.prox_contato && (!existente.proxContato || r.prox_contato < existente.proxContato)) {
         existente.proxContato = r.prox_contato;
       }
@@ -280,7 +281,7 @@ export function consolidarIgnorados(
     }
     const item: ItemIgnorado = {
       operador:        r.perfis?.nome ?? r.operador_usuario,
-      cpf:             r.cpf ?? '',
+      cliente_codigo:  r.cliente_codigo ?? '',
       acordo_codigo:   r.acordo_codigo ?? '',
       nome_cliente:    r.nome_cliente ?? '',
       forma_pagamento: r.forma_pagamento,

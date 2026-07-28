@@ -3,7 +3,7 @@ import {
   normDiario,
   formaKindDiario,
   isCartaoDiario,
-  fmtCPF,
+  soDigitos,
   dayKeyDiario,
   resolveColsDiario,
   diaReferencia,
@@ -51,52 +51,77 @@ describe('isCartaoDiario', () => {
   });
 });
 
-// ── fmtCPF ───────────────────────────────────────────────────────────────────
+// ── soDigitos (código do cliente) ────────────────────────────────────────────
 
-describe('fmtCPF', () => {
-  it('formata CPF com 11 dígitos', () => {
-    expect(fmtCPF('09822174470')).toBe('098.221.744-70');
+describe('soDigitos', () => {
+  // O ERP exporta o Cód.Cliente com separador de milhar. No relatório de
+  // 28/07/2026 veio com vírgula; outras exportações usam ponto. Descartar tudo
+  // que não é dígito cobre os dois e devolve o código igual ao da tabulação.
+  it('remove separador de milhar com vírgula', () => {
+    expect(soDigitos('2,651,454')).toBe('2651454');
   });
 
-  it('completa zero à esquerda quando o Excel perde (10 dígitos)', () => {
-    expect(fmtCPF('9822174470')).toBe('098.221.744-70');
+  it('remove separador de milhar com ponto', () => {
+    expect(soDigitos('2.651.454')).toBe('2651454');
   });
 
-  it('remove máscara existente antes de reformatar', () => {
-    expect(fmtCPF('098.221.744-70')).toBe('098.221.744-70');
+  it('mantém o código quando já vem limpo', () => {
+    expect(soDigitos('2651454')).toBe('2651454');
+    expect(soDigitos(2651454)).toBe('2651454');
   });
 
-  it('retorna o valor bruto quando não é CPF', () => {
-    expect(fmtCPF('123')).toBe('123');
-    expect(fmtCPF(null)).toBe('');
+  it('devolve string vazia quando não há dígito', () => {
+    expect(soDigitos('')).toBe('');
+    expect(soDigitos(null)).toBe('');
+    expect(soDigitos('—')).toBe('');
   });
 });
 
 // ── resolveColsDiario ────────────────────────────────────────────────────────
 
 describe('resolveColsDiario', () => {
+  // Cabeçalho do relatório de 28/07/2026 — o T.I. incluiu "Cód.Cliente" (F).
   const headersReais = [
-    'Período', 'Data', 'Id.Baixa', 'Coren', 'Cód.Venda', 'Nr.Documento',
-    'Cód.Receber', 'CPF', 'Profissional', 'Cód.Acordo', 'Parcela', 'Forma Pgto',
-    'Referência', 'Valor Recebido', 'Valor Tarifa', 'Pague Play (24,96%)',
-    'Coren (56,28%)', 'Cofen (18,76%)', 'Dt.Baixa', 'Horário', 'Dt.Pagamento',
-    'Dt.Repasse', 'Conferido', 'IA', 'Dt. Inicio', 'Dt. Término', 'Operador',
-    'Dt. Prev. Pgto', 'Próx. Contato', 'Tabulação', 'Status',
+    'Período', 'Data', 'Id.Baixa', 'Coren', 'Cód.Venda', 'Cód.Cliente',
+    'Nr.Documento', 'Cód.Receber', 'CPF', 'Profissional', 'Cód.Acordo',
+    'Parcela', 'Forma Pgto', 'Referência', 'Valor Recebido', 'Valor Tarifa',
+    'Pague Play (24,96%)', 'Coren (56,28%)', 'Cofen (18,76%)', 'Dt.Baixa',
+    'Horário', 'Dt.Pagamento', 'Dt.Repasse', 'Conferido', 'IA', 'Dt. Inicio',
+    'Dt. Término', 'Operador', 'Dt. Prev. Pgto', 'Próx. Contato', 'Tabulação',
+    'Status',
   ];
 
   it('resolve as colunas do relatório real do ERP', () => {
     const cols = resolveColsDiario(headersReais);
     expect(cols).not.toBeNull();
-    expect(cols!.op).toBe(26);      // Operador
-    expect(cols!.cpf).toBe(7);      // CPF
-    expect(cols!.prof).toBe(8);     // Profissional
-    expect(cols!.acordo).toBe(9);   // Cód.Acordo
-    expect(cols!.forma).toBe(11);   // Forma Pgto
-    expect(cols!.valor).toBe(13);   // Valor Recebido
+    expect(cols!.op).toBe(27);      // Operador
+    expect(cols!.cli).toBe(5);      // Cód.Cliente
+    expect(cols!.prof).toBe(9);     // Profissional
+    expect(cols!.acordo).toBe(10);  // Cód.Acordo
+    expect(cols!.forma).toBe(12);   // Forma Pgto
+    expect(cols!.valor).toBe(14);   // Valor Recebido
     expect(cols!.idb).toBe(2);      // Id.Baixa
-    expect(cols!.prox).toBe(28);    // Próx. Contato
+    expect(cols!.prox).toBe(29);    // Próx. Contato
     expect(cols!.dt).toBe(1);       // Data
-    expect(cols!.tab).toBe(29);     // Tabulação
+    expect(cols!.tab).toBe(30);     // Tabulação
+  });
+
+  // "Cód.Cliente" e "Cód.Acordo" normalizam para strings parecidas; se a
+  // resolução confundir as duas, o código do cliente vira o do acordo e o
+  // cruzamento futuro com as tabulações sai errado sem ninguém perceber.
+  it('não confunde Cód.Cliente com Cód.Acordo', () => {
+    const cols = resolveColsDiario(headersReais)!;
+    expect(cols.cli).not.toBe(cols.acordo);
+  });
+
+  // Relatórios antigos (antes de 28/07/2026) não têm a coluna. Devem continuar
+  // importáveis — só ficam sem código.
+  it('aceita relatório antigo, sem Cód.Cliente', () => {
+    const antigos = headersReais.filter(h => h !== 'Cód.Cliente');
+    const cols = resolveColsDiario(antigos);
+    expect(cols).not.toBeNull();
+    expect(cols!.cli).toBeUndefined();
+    expect(cols!.valor).toBe(13);
   });
 
   it('retorna null quando faltam colunas obrigatórias', () => {
@@ -109,7 +134,7 @@ describe('resolveColsDiario', () => {
 
 function linha(data: Date | null): LinhaDiario {
   return {
-    operador_usuario: 'op', cpf: '', nome_cliente: '', acordo_codigo: '',
+    operador_usuario: 'op', cliente_codigo: '', nome_cliente: '', acordo_codigo: '',
     forma_pagamento: 'Pix', valor_recebido: 10, data_pagamento: data,
     prox_contato: null, tabulacao: '', id_baixa: '', chave_unica: 'k',
   };

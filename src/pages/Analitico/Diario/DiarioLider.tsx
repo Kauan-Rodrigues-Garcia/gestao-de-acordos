@@ -31,7 +31,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
-import { fmtCPF, normDiario } from '@/services/diario/diarioParser';
+import { normDiario } from '@/services/diario/diarioParser';
 import { copiarTexto } from '@/lib/clipboard';
 import { supabase } from '@/lib/supabase';
 import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';
@@ -63,7 +63,7 @@ export function DiarioLider({
   empresaId, dia, temPermissaoImportar, onDadosImportados,
 }: DiarioLiderProps) {
   const tenant = useTenant();
-  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
+  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do Cod.Cliente
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   // BookPlay: cargo escopado (líder/elite/gerência sem 'ver_todos_setores') vê
@@ -601,7 +601,7 @@ export function DiarioLider({
                     <thead>
                       <tr className="border-b border-border bg-muted/30">
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR</th>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}</th>
                         <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                         <th className="text-right px-3 py-2 font-semibold text-muted-foreground">PRÓX. CONTATO</th>
@@ -613,7 +613,7 @@ export function DiarioLider({
                           <td className="px-3 py-2 font-medium">{it.operador}</td>
                           <td className="px-3 py-2">
                             <span className="font-semibold tabular-nums">
-                              {mostrarNR ? (it.acordo_codigo || '—') : (fmtCPF(it.cpf) || '—')}
+                              {mostrarNR ? (it.acordo_codigo || '—') : (it.cliente_codigo || '—')}
                               {it.n > 1 && (
                                 <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{it.n}x</span>
                               )}
@@ -739,7 +739,7 @@ export function DiarioLider({
                       <thead>
                         <tr className="border-b border-border bg-muted/30">
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">OPERADOR (ARQUIVO)</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                           <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                           <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA</th>
@@ -753,7 +753,7 @@ export function DiarioLider({
                           <tr key={linha.id} className="hover:bg-muted/20">
                             <td className="px-3 py-2 font-mono text-amber-600">{linha.operador_usuario}</td>
                             <td className="px-3 py-2">
-                              <span className="font-semibold tabular-nums">{mostrarNR ? (linha.acordo_codigo || '—') : (fmtCPF(linha.cpf) || '—')}</span>
+                              <span className="font-semibold tabular-nums">{mostrarNR ? (linha.acordo_codigo || '—') : (linha.cliente_codigo || '—')}</span>
                               {linha.nome_cliente && (
                                 <span className="block text-muted-foreground truncate max-w-[160px]">{linha.nome_cliente}</span>
                               )}
@@ -951,7 +951,7 @@ function OperadorCardDiario({
             <table className="w-full text-xs">
               <thead>
                 <tr className="bg-muted/30">
-                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
+                  <th className="text-left px-3 py-2 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">FORMA</th>
                   <th className="text-right px-3 py-2 font-semibold text-muted-foreground">VALOR</th>
                   <th className="text-left px-3 py-2 font-semibold text-muted-foreground">DATA PGT.</th>
@@ -966,7 +966,7 @@ function OperadorCardDiario({
                           <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" title="Novo (último relatório)" />
                         )}
                         <span>
-                          {mostrarNR ? (item.acordo_codigo || '—') : (fmtCPF(item.cpf) || '—')}
+                          {mostrarNR ? (item.acordo_codigo || '—') : (item.cliente_codigo || '—')}
                           {item.n > 1 && (
                             <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">{item.n}x</span>
                           )}
@@ -978,7 +978,7 @@ function OperadorCardDiario({
                       {item.instituicao && (
                         <span className="block text-[10px] text-muted-foreground/70 truncate max-w-[200px]">{item.instituicao}</span>
                       )}
-                      {/* PaguePlay (CPF, não NR): acordo veio em negociação (não
+                      {/* PaguePlay (código, não NR): acordo veio em negociação (não
                           "acordo fechado") — mesma indicação do "Copiar lista",
                           agora visível na tabela. */}
                       {!mostrarNR && normDiario(item.tabulacao) !== 'acordofechado' && (

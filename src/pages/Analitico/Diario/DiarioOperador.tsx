@@ -1,7 +1,7 @@
 /**
  * DiarioOperador — visão do operador na aba Recebimento diário.
  *
- * Lista informativa dos próprios pagamentos do dia (CPF, nome, forma,
+ * Lista informativa dos próprios pagamentos do dia (código, nome, forma,
  * valor e data), com total ao final. Sem vínculo com acordos tabulados.
  *
  * "Novos": acordos que apareceram pela primeira vez na última importação do
@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { useDiario } from '@/hooks/useDiario';
 import { AlertCircle } from 'lucide-react';
-import { fmtCPF, formaKindDiario, normDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario, normDiario } from '@/services/diario/diarioParser';
 import {
   linhasVivas, consolidarItens, dataLabel, fmtDataISO, type ItemDiario,
 } from './helpers';
@@ -40,7 +40,7 @@ function LinhasTabela({ itens, destaque, mostrarNR }: { itens: ItemDiario[]; des
               )}
               <div>
                 <span className="font-semibold tabular-nums">
-                  {mostrarNR ? (item.acordo_codigo || '—') : (fmtCPF(item.cpf) || '—')}
+                  {mostrarNR ? (item.acordo_codigo || '—') : (item.cliente_codigo || '—')}
                   {item.n > 1 && (
                     <span className="ml-1.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400">
                       {item.n}x
@@ -57,7 +57,7 @@ function LinhasTabela({ itens, destaque, mostrarNR }: { itens: ItemDiario[]; des
                     {item.instituicao}
                   </span>
                 )}
-                {/* PaguePlay (CPF, não NR): acordo pago sem tabulação de
+                {/* PaguePlay (código, não NR): acordo pago sem tabulação de
                     "acordo fechado" — mesma indicação da visão do líder,
                     agora visível também para o próprio operador. */}
                 {!mostrarNR && normDiario(item.tabulacao) !== 'acordofechado' && (
@@ -80,7 +80,7 @@ function LinhasTabela({ itens, destaque, mostrarNR }: { itens: ItemDiario[]; des
 
 export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
   const tenant = useTenant();
-  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do CPF
+  const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do Cod.Cliente
   const { dados, loading } = useDiario({
     dia,
     operadorFiltro: operadorId,
@@ -181,7 +181,7 @@ export function DiarioOperador({ dia, operadorId }: DiarioOperadorProps) {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border bg-muted/30">
-                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CPF / NOME'}</th>
+                  <th className="text-left px-3 py-3 font-semibold text-muted-foreground">{mostrarNR ? 'NR / NOME' : 'CÓDIGO / NOME'}</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">FORMA</th>
                   <th className="text-right px-3 py-3 font-semibold text-muted-foreground">VALOR RECEBIDO</th>
                   <th className="text-left px-3 py-3 font-semibold text-muted-foreground">DATA PGT.</th>

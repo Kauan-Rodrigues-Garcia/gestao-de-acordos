@@ -111,7 +111,7 @@ export async function importarLoteDiario(
       empresa_id:       empresaId,
       operador_id:      operadoresMap[l.operador_usuario] ?? null,
       operador_usuario: l.operador_usuario,
-      cpf:              l.cpf || null,
+      cliente_codigo:   l.cliente_codigo || null,
       nome_cliente:     l.nome_cliente || null,
       acordo_codigo:    l.acordo_codigo || null,
       // Só envia `instituicao` quando há valor (BookPlay) — ver analitico.service.
@@ -281,7 +281,7 @@ export async function buscarDiario(
       .eq('empresa_id', filtros.empresaId)
       .eq('dia_referencia', filtros.dia)
       .order('data_pagamento', { ascending: true })
-      .order('cpf', { ascending: true })
+      .order('cliente_codigo', { ascending: true })
       .range(from, to);
 
     if (filtros.operadorId !== undefined) {

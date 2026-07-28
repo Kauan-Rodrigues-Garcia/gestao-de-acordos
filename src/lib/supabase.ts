@@ -254,7 +254,6 @@ export interface Profissional {
   empresa_id: string;
   codigo: string;
   nome: string;
-  cpf: string | null;
   telefone: string | null;
   estado_uf: string | null;
   criado_em: string;
@@ -308,7 +307,8 @@ export interface DiarioRecebimento {
   empresa_id: string;
   operador_id: string | null;
   operador_usuario: string;
-  cpf: string | null;
+  /** Coluna "Cód.Cliente" do relatório, só dígitos. Substituiu o CPF (20260728b). */
+  cliente_codigo: string | null;
   nome_cliente: string | null;
   acordo_codigo: string | null;
   /** Coluna "Empresa" do relatório BookPlay (bookplay, mundial editora...); null na PaguePlay */

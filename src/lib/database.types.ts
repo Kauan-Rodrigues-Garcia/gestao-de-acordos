@@ -439,7 +439,7 @@ export type Database = {
         Row: {
           acordo_codigo: string | null
           chave_unica: string
-          cpf: string | null
+          cliente_codigo: string | null
           data_pagamento: string | null
           dia_referencia: string
           empresa_id: string
@@ -463,7 +463,7 @@ export type Database = {
         Insert: {
           acordo_codigo?: string | null
           chave_unica: string
-          cpf?: string | null
+          cliente_codigo?: string | null
           data_pagamento?: string | null
           dia_referencia: string
           empresa_id: string
@@ -487,7 +487,7 @@ export type Database = {
         Update: {
           acordo_codigo?: string | null
           chave_unica?: string
-          cpf?: string | null
+          cliente_codigo?: string | null
           data_pagamento?: string | null
           dia_referencia?: string
           empresa_id?: string
@@ -1620,7 +1620,6 @@ export type Database = {
       profissionais: {
         Row: {
           atualizado_em: string
-          cpf: string | null
           criado_em: string
           codigo: string
           empresa_id: string
@@ -1631,7 +1630,6 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
-          cpf?: string | null
           criado_em?: string
           codigo: string
           empresa_id: string
@@ -1642,7 +1640,6 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
-          cpf?: string | null
           criado_em?: string
           codigo?: string
           empresa_id?: string

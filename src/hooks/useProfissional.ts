@@ -22,7 +22,7 @@ export function useProfissional(codigo: string, empresaId: string | undefined) {
     const timer = setTimeout(async () => {
       const { data, error } = await supabase
         .from('profissionais')
-        .select('id, empresa_id, codigo, nome, cpf, telefone, estado_uf, criado_em, atualizado_em')
+        .select('id, empresa_id, codigo, nome, telefone, estado_uf, criado_em, atualizado_em')
         .eq('codigo', codigoTrimmed)
         .eq('empresa_id', empresaId)
         .maybeSingle();
