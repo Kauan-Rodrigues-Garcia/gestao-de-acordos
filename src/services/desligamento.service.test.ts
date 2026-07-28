@@ -1,117 +1,128 @@
 /**
  * desligamento.service.test.ts
  * ─────────────────────────────────────────────────────────────────────────
- * Cobre as duas frentes da regra "acordo de desligado perde o vínculo":
+ * Depois do bug reportado em 2026-07-28, tudo que toca acordo alheio passa por
+ * RPC SECURITY DEFINER. O motivo está no coração destes testes:
  *
- *   1. situacaoDoOperador / operadorEstaDesligado — com atenção ao caso de
- *      FALHA de leitura, que precisa devolver 'ativo'. Se devolvesse
- *      'desligado' por engano, qualquer erro de rede viraria uma porta pra
- *      transferir acordo alheio sem autorização de líder.
+ *   • `perfis_select` deixa o operador ler só a PRÓPRIA linha, então descobrir
+ *     a situação de outro operador por SELECT voltava vazio — o desvio de
+ *     desligado nunca disparava.
+ *   • `acordos_select` (fail-closed, 20260723f) esconde o acordo alheio, então
+ *     o fluxo do líder morria em "Acordo anterior não encontrado" mesmo com a
+ *     senha certa, porque as queries saíam com a sessão do OPERADOR.
  *
- *   2. transferirAcordoDeDesligado — manda pra lixeira, exclui, loga e
- *      notifica; e aborta sem excluir quando o acordo não é encontrado.
- *
- * Tudo com mock do Supabase — nunca toca o banco real.
+ * Os testes travam as duas coisas: consulta por RPC (não por tabela) e repasse
+ * do TOKEN do líder (não do id — id qualquer um adivinha).
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const notificarMock = vi.fn();
-const lixeiraMock   = vi.fn();
 
 vi.mock('@/services/notificacoes.service', () => ({
   criarNotificacao: (...a: unknown[]) => notificarMock(...a),
-}));
-vi.mock('@/services/lixeira.service', () => ({
-  enviarParaLixeira: (...a: unknown[]) => lixeiraMock(...a),
 }));
 vi.mock('@/services/nr_registros.service', () => ({
   transferirNr: vi.fn(async () => ({ ok: true })),
 }));
 
-// ── Supabase encadeável ────────────────────────────────────────────────────
-type Resultado = { data: unknown; error: { message: string } | null };
-
-let perfilResult:  Resultado;
-let acordoResult:  Resultado;
-let deleteError:   { message: string } | null;
-
-const deleteCalls: Array<{ table: string; filtros: Array<[string, unknown]> }> = [];
-const insertCalls: Array<{ table: string; payload: Record<string, unknown> }> = [];
-
-function builder(table: string) {
-  const filtros: Array<[string, unknown]> = [];
-  const self: Record<string, unknown> = {};
-  const encadeia = (k: string) => {
-    self[k] = (...args: unknown[]) => {
-      if (args.length >= 2) filtros.push([String(args[0]), args[1]]);
-      return self;
-    };
-  };
-  ['select', 'eq', 'neq', 'not', 'limit', 'order'].forEach(encadeia);
-
-  self.maybeSingle = async () => (table === 'perfis' ? perfilResult : acordoResult);
-  self.delete = () => {
-    const d: Record<string, unknown> = {};
-    d.eq = (col: string, val: unknown) => {
-      deleteCalls.push({ table, filtros: [[col, val]] });
-      return Promise.resolve({ error: deleteError });
-    };
-    return d;
-  };
-  self.insert = (payload: Record<string, unknown>) => {
-    insertCalls.push({ table, payload });
-    return Promise.resolve({ error: null });
-  };
-  self.update = () => {
-    const u: Record<string, unknown> = {};
-    ['eq', 'not'].forEach(k => { u[k] = () => u; });
-    (u as { then: unknown }).then = (res: (v: unknown) => unknown) =>
-      Promise.resolve({ error: null, count: 0 }).then(res);
-    return u;
-  };
-  return self;
-}
+// Só o .rpc() importa. `from` explode de propósito: se algum caminho voltar a
+// tocar a tabela direto, o teste acusa em vez de passar silenciosamente.
+const rpcMock  = vi.fn();
+const fromMock = vi.fn(() => { throw new Error('não deve tocar tabela direto'); });
 
 vi.mock('@/lib/supabase', () => ({
-  supabase: { from: (t: string) => builder(t) },
+  supabase: {
+    rpc:  (...a: unknown[]) => rpcMock(...a),
+    from: (...a: unknown[]) => fromMock(...a),
+  },
 }));
 
 import {
   situacaoDoOperador, operadorEstaDesligado, transferirAcordoDeDesligado,
-  AUTOR_AUTOMATICO,
+  transferirAcordoNoServidor, mensagemErroTransferencia, AUTOR_AUTOMATICO,
 } from './desligamento.service';
+
+const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.clearAllMocks();
-  deleteCalls.length = 0;
-  insertCalls.length = 0;
-  perfilResult = { data: null, error: null };
-  acordoResult = { data: null, error: null };
-  deleteError  = null;
+  notificarMock.mockResolvedValue(undefined);
+  vi.stubGlobal('fetch', fetchMock);
 });
 
 describe('situacaoDoOperador', () => {
-  it('devolve a situação gravada no perfil', async () => {
-    perfilResult = { data: { situacao: 'desligado' }, error: null };
+  it('consulta por RPC, nunca lendo a tabela perfis', async () => {
+    rpcMock.mockResolvedValue({ data: 'desligado', error: null });
+
     await expect(situacaoDoOperador('op-1')).resolves.toBe('desligado');
+    expect(rpcMock).toHaveBeenCalledWith('fn_situacao_operador', { p_operador_id: 'op-1' });
+    expect(fromMock).not.toHaveBeenCalled();
     await expect(operadorEstaDesligado('op-1')).resolves.toBe(true);
   });
 
-  it('trata perfil sem situacao como ativo', async () => {
-    perfilResult = { data: {}, error: null };
-    await expect(situacaoDoOperador('op-1')).resolves.toBe('ativo');
-  });
-
-  // Este é o teste que protege a regra de negócio: erro de leitura NÃO pode
-  // abrir caminho pra transferência automática.
-  it('devolve ativo quando a leitura falha (fail-closed)', async () => {
-    perfilResult = { data: null, error: { message: 'timeout' } };
+  // Erro de leitura NÃO pode abrir caminho pra transferir acordo alheio.
+  it('devolve ativo quando a RPC falha (fail-closed)', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: 'timeout' } });
     await expect(situacaoDoOperador('op-1')).resolves.toBe('ativo');
     await expect(operadorEstaDesligado('op-1')).resolves.toBe(false);
   });
 
+  it('devolve ativo quando a RPC não acha o operador', async () => {
+    rpcMock.mockResolvedValue({ data: null, error: null });
+    await expect(situacaoDoOperador('op-1')).resolves.toBe('ativo');
+  });
+
   it('devolve ativo para id vazio, sem consultar', async () => {
     await expect(situacaoDoOperador('')).resolves.toBe('ativo');
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('transferirAcordoNoServidor', () => {
+  it('sem token usa a sessão atual', async () => {
+    rpcMock.mockResolvedValue({ data: { ok: true, base: 'dono_desligado' }, error: null });
+
+    const r = await transferirAcordoNoServidor({ acordoId: 'ac-1', novoOperadorId: 'op-novo' });
+
+    expect(r.ok).toBe(true);
+    expect(rpcMock).toHaveBeenCalledWith('fn_transferir_acordo_nr', {
+      p_acordo_id: 'ac-1', p_novo_operador_id: 'op-novo', p_motivo: 'transferencia_nr',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  // O ponto do bug 2: sem mandar o token, a RPC rodaria como o operador e a
+  // autorização de líder não valeria.
+  it('com token do líder chama a RPC com aquele Bearer', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true, status: 200, json: async () => ({ ok: true, base: 'lider', valor: 100 }),
+    });
+
+    const r = await transferirAcordoNoServidor({
+      acordoId: 'ac-1', novoOperadorId: 'op-novo', token: 'token-do-lider',
+    });
+
+    expect(r.ok).toBe(true);
+    expect(r.base).toBe('lider');
+    expect(rpcMock).not.toHaveBeenCalled();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/rest/v1/rpc/fn_transferir_acordo_nr');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer token-do-lider');
+  });
+
+  it('traduz o código de erro da RPC', async () => {
+    rpcMock.mockResolvedValue({ data: { ok: false, erro: 'nao_autorizado' }, error: null });
+    const r = await transferirAcordoNoServidor({ acordoId: 'ac-1' });
+    expect(r.ok).toBe(false);
+    expect(mensagemErroTransferencia(r.erro)).toBe('Sem autorização para assumir este acordo.');
+  });
+
+  it('não engole erro HTTP do fetch', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 403, json: async () => ({}) });
+    const r = await transferirAcordoNoServidor({ acordoId: 'ac-1', token: 't' });
+    expect(r.ok).toBe(false);
+    expect(r.erro).toContain('403');
   });
 });
 
@@ -127,48 +138,43 @@ describe('transferirAcordoDeDesligado', () => {
     valorNr:          '12345',
   };
 
-  it('envia para a lixeira, exclui, loga e notifica', async () => {
-    acordoResult = {
-      data: { id: 'ac-1', nome_cliente: 'Cliente X', valor: 250, operador_id: 'op-velho' },
+  it('delega pra RPC e notifica o operador anterior', async () => {
+    rpcMock.mockResolvedValue({
+      data: { ok: true, base: 'dono_desligado', nome_cliente: 'Cliente X', valor: 250 },
       error: null,
-    };
+    });
 
     const r = await transferirAcordoDeDesligado(params);
 
     expect(r.ok).toBe(true);
     expect(r.nomeClienteAnterior).toBe('Cliente X');
-
-    // lixeira registra que não houve líder no meio
-    expect(lixeiraMock).toHaveBeenCalledTimes(1);
-    const argLixeira = lixeiraMock.mock.calls[0][0] as Record<string, unknown>;
-    expect(argLixeira.motivo).toBe('transferencia_nr');
-    expect(argLixeira.autorizadoPorNome).toBe(AUTOR_AUTOMATICO);
-    expect(argLixeira.autorizadoPorId).toBeUndefined();
-    expect(argLixeira.transferidoParaId).toBe('op-novo');
-
-    expect(deleteCalls).toEqual([{ table: 'acordos', filtros: [['id', 'ac-1']] }]);
-
-    const log = insertCalls.find(c => c.table === 'logs_sistema');
-    expect(log?.payload.acao).toBe('transferencia_nr_desligado');
-    expect((log?.payload.detalhes as Record<string, unknown>).sem_autorizacao_lider).toBe(true);
+    expect(fromMock).not.toHaveBeenCalled();
 
     expect(notificarMock).toHaveBeenCalledTimes(1);
-    expect((notificarMock.mock.calls[0][0] as { usuario_id: string }).usuario_id).toBe('op-velho');
+    const aviso = notificarMock.mock.calls[0][0] as { usuario_id: string; mensagem: string };
+    expect(aviso.usuario_id).toBe('op-velho');
+    expect(aviso.mensagem).toContain('Beltrano');
   });
 
-  it('aborta sem excluir quando o acordo não existe', async () => {
-    acordoResult = { data: null, error: null };
+  it('devolve mensagem amigável quando a RPC nega', async () => {
+    rpcMock.mockResolvedValue({ data: { ok: false, erro: 'acordo_inexistente' }, error: null });
     const r = await transferirAcordoDeDesligado(params);
     expect(r.ok).toBe(false);
-    expect(deleteCalls).toHaveLength(0);
-    expect(lixeiraMock).not.toHaveBeenCalled();
+    expect(r.erro).toContain('não existe mais');
+    expect(notificarMock).not.toHaveBeenCalled();
   });
 
-  it('propaga erro do delete sem dar sucesso', async () => {
-    acordoResult = { data: { id: 'ac-1', nome_cliente: 'C', valor: 1 }, error: null };
-    deleteError  = { message: 'RLS negou' };
-    const r = await transferirAcordoDeDesligado(params);
-    expect(r.ok).toBe(false);
-    expect(r.erro).toBe('RLS negou');
+  it('não derruba a operação se a notificação falhar', async () => {
+    rpcMock.mockResolvedValue({ data: { ok: true, nome_cliente: 'C' }, error: null });
+    notificarMock.mockRejectedValue(new Error('sem rede'));
+    // Aqui o acordo antigo já foi excluído: falhar faria o chamador desistir de
+    // gravar o novo, e o registro sumiria dos dois lados.
+    await expect(transferirAcordoDeDesligado(params)).resolves.toMatchObject({ ok: true });
+  });
+});
+
+describe('AUTOR_AUTOMATICO', () => {
+  it('casa com o texto que a RPC grava na lixeira', () => {
+    expect(AUTOR_AUTOMATICO).toBe('Sistema — operador desligado');
   });
 });

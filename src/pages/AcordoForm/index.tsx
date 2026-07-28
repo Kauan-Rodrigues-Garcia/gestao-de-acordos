@@ -19,7 +19,10 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
-import { operadorEstaDesligado, transferirAcordoDeDesligado } from '@/services/desligamento.service';
+import {
+  operadorEstaDesligado, transferirAcordoDeDesligado,
+  transferirAcordoNoServidor, mensagemErroTransferencia,
+} from '@/services/desligamento.service';
 import { AcordoNovoInline, ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/components/AcordoNovoInline';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
@@ -616,46 +619,24 @@ export default function AcordoForm() {
       }
 
       // ── MODO transferencia_completa ───────────────────────────────────
-      const { data: acordoAntData, error: errBusca } = await supabase
-        .from('acordos')
-        .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
-        .eq('id', conflito.acordoId)
-        .maybeSingle();
-
-      if (errBusca) console.warn('[transferência] erro ao buscar acordo anterior:', errBusca.message);
-
-      const nomeClienteAnt = acordoAntData?.nome_cliente ?? '—';
-      const valorFmt       = acordoAntData?.valor != null
-        ? `R$ ${Number(acordoAntData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-      const vencimentoFmt  = acordoAntData?.vencimento
-        ? new Date(acordoAntData.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
-      const statusAnt      = acordoAntData?.status ?? '—';
-
-      if (acordoAntData) {
-        await enviarParaLixeira({
-          acordo: acordoAntData as import('@/lib/supabase').Acordo,
-          motivo: 'transferencia_nr',
-          operadorNome: conflito.operadorNome,
-          autorizadoPorId: liderUid,
-          autorizadoPorNome: liderPerfil.nome,
-          transferidoParaId: uid,
-          transferidoParaNome: nomeNovoOp,
-        });
-      }
-
-      const { error: errDelete } = await supabase.from('acordos').delete().eq('id', conflito.acordoId);
-      if (errDelete) { toast.error(`Erro ao remover acordo anterior: ${errDelete.message}`); return; }
-
-      await supabase.from('logs_sistema').insert({
-        usuario_id: uid, acao: 'transferencia_nr', tabela: 'acordos',
-        registro_id: conflito.acordoId, empresa_id: empresa?.id ?? null,
-        detalhes: {
-          nr: nrLogLabel, nome_cliente: nomeClienteAnt, valor: valorFmt, vencimento: vencimentoFmt,
-          status_anterior: statusAnt, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
-          operador_anterior: conflito.operadorId, operador_anterior_nome: conflito.operadorNome,
-          operador_novo: uid, operador_novo_nome: nomeNovoOp, empresa_id: empresa?.id ?? null,
-        },
+      //
+      // Vai pela RPC com o TOKEN DO LÍDER. Antes o select e o delete saíam com
+      // a sessão do operador, que a RLS fail-closed (20260723f) barra — o
+      // acordo alheio voltava nulo e a tela dizia "Acordo anterior não
+      // encontrado", mesmo com a senha do líder correta.
+      const rt = await transferirAcordoNoServidor({
+        acordoId:       conflito.acordoId,
+        novoOperadorId: uid,
+        token:          liderToken,
       });
+      if (!rt.ok) { toast.error(mensagemErroTransferencia(rt.erro)); return; }
+
+      const nomeClienteAnt = rt.nome_cliente ?? '—';
+      const valorFmt       = rt.valor != null
+        ? `R$ ${Number(rt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+      const vencimentoFmt  = rt.vencimento
+        ? new Date(rt.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—';
+      const statusAnt      = rt.status ?? '—';
 
       const resultError = await salvarAcordo(conflito.payload, uid);
       if (resultError) { toast.error(`Erro ao salvar: ${resultError.message}`); return; }

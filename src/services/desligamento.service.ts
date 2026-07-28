@@ -26,25 +26,34 @@
  */
 import { supabase, type Acordo, type SituacaoUsuario } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';
-import { enviarParaLixeira } from '@/services/lixeira.service';
 import { transferirNr, type NrCampo } from '@/services/nr_registros.service';
 
-/** Nome usado no lugar do líder autorizador nos registros automáticos. */
+/**
+ * Nome gravado no lugar do líder autorizador quando a transferência sai pela
+ * base "dono desligado". Quem escreve é a RPC — este valor existe aqui só para
+ * o teste conferir que os dois lados dizem a mesma coisa.
+ */
 export const AUTOR_AUTOMATICO = 'Sistema — operador desligado';
 
 /**
- * Situação de um operador. Devolve 'ativo' quando não encontra o perfil, para
- * que uma falha de leitura nunca libere transferência sem autorização.
+ * Situação de um operador.
+ *
+ * Vai por RPC, não por SELECT direto: a policy `perfis_select` deixa o operador
+ * ler só a PRÓPRIA linha, então consultar a situação de outro operador voltava
+ * vazio e o desvio de desligado nunca disparava. `fn_situacao_operador` é
+ * SECURITY DEFINER e escopada por empresa.
+ *
+ * Devolve 'ativo' quando não encontra ou falha, para que erro de leitura nunca
+ * libere transferência sem autorização. O servidor confere de novo na hora de
+ * transferir — isto aqui só decide qual tela mostrar.
  */
 export async function situacaoDoOperador(operadorId: string): Promise<SituacaoUsuario> {
   if (!operadorId) return 'ativo';
-  const { data, error } = await supabase
-    .from('perfis')
-    .select('situacao')
-    .eq('id', operadorId)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc('fn_situacao_operador', {
+    p_operador_id: operadorId,
+  });
   if (error || !data) return 'ativo';
-  return ((data as { situacao?: string }).situacao as SituacaoUsuario) ?? 'ativo';
+  return (data as SituacaoUsuario) ?? 'ativo';
 }
 
 /** Atalho de leitura no ponto de decisão. */
@@ -164,10 +173,89 @@ export interface TransferenciaAutomatica {
   nomeClienteAnterior?: string;
 }
 
+/** Retorno cru da RPC de transferência. */
+export interface RetornoTransferencia {
+  ok:                 boolean;
+  erro?:              string;
+  base?:              'dono_desligado' | 'lider';
+  operador_anterior?: string;
+  operador_ant_nome?: string;
+  nome_cliente?:      string | null;
+  valor?:             number | null;
+  vencimento?:        string | null;
+  status?:            string | null;
+  nr?:                string | null;
+}
+
+/** Mensagens amigáveis para os códigos de erro devolvidos pela RPC. */
+const ERROS: Record<string, string> = {
+  sem_sessao:            'Sessão expirada. Faça login novamente.',
+  acordo_inexistente:    'O acordo anterior não existe mais — ele pode já ter sido removido.',
+  empresa_negada:        'Este acordo é de outra empresa.',
+  destinatario_invalido: 'O operador de destino não pertence a esta empresa.',
+  nao_autorizado:        'Sem autorização para assumir este acordo.',
+};
+
+export function mensagemErroTransferencia(codigo?: string): string {
+  return (codigo && ERROS[codigo]) || codigo || 'Falha ao transferir o acordo';
+}
+
 /**
- * Move o acordo do desligado para a lixeira e o exclui, liberando o NR para o
- * novo operador. NÃO grava o acordo novo — quem chama segue com o próprio
- * fluxo de salvamento, que já sabe montar o payload.
+ * Executa a transferência no servidor.
+ *
+ * `token` opcional: quando informado, a RPC é chamada COM AQUELE token em vez
+ * da sessão atual. É assim que a autorização por líder funciona — o formulário
+ * autentica o líder por senha, recebe o token e o repassa aqui. Passar só o id
+ * do líder não serviria: qualquer operador saberia um id e burlaria a senha.
+ *
+ * Sem token, vale a sessão atual e a única base aceita é "dono desligado".
+ */
+export async function transferirAcordoNoServidor(params: {
+  acordoId:        string;
+  novoOperadorId?: string;
+  motivo?:         'transferencia_nr' | 'troca_extra';
+  token?:          string;
+}): Promise<RetornoTransferencia> {
+  const { acordoId, novoOperadorId, motivo = 'transferencia_nr', token } = params;
+  const corpo = {
+    p_acordo_id:        acordoId,
+    p_novo_operador_id: novoOperadorId ?? null,
+    p_motivo:           motivo,
+  };
+
+  if (!token) {
+    const { data, error } = await supabase.rpc('fn_transferir_acordo_nr', corpo);
+    if (error) return { ok: false, erro: error.message };
+    return (data as RetornoTransferencia) ?? { ok: false, erro: 'resposta_vazia' };
+  }
+
+  // Com token de líder: fetch direto, para não trocar a sessão do operador.
+  const url  = import.meta.env.VITE_SUPABASE_URL as string;
+  const anon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+  try {
+    const res = await fetch(`${url}/rest/v1/rpc/fn_transferir_acordo_nr`, {
+      method:  'POST',
+      headers: {
+        'Content-Type':  'application/json',
+        apikey:          anon,
+        Authorization:   `Bearer ${token}`,
+      },
+      body: JSON.stringify(corpo),
+    });
+    if (!res.ok) return { ok: false, erro: `Erro na transferência (${res.status})` };
+    return (await res.json()) as RetornoTransferencia;
+  } catch {
+    return { ok: false, erro: 'Falha de rede ao transferir o acordo' };
+  }
+}
+
+/**
+ * Assume para si o acordo de um operador desligado.
+ *
+ * O trabalho pesado (lixeira, exclusão, log) roda na RPC: nem o SELECT nem o
+ * DELETE do acordo alheio passam pela RLS do operador. NÃO grava o acordo novo
+ * — quem chama segue com o próprio fluxo de salvamento, que sabe montar o
+ * payload e tem permissão de inserir para si mesmo.
  *
  * A lixeira registra `autorizado_por_nome` como sistema, deixando claro na
  * auditoria que não houve líder no meio.
@@ -184,57 +272,19 @@ export async function transferirAcordoDeDesligado(params: {
   valorNr:  string;
 }): Promise<TransferenciaAutomatica> {
   const {
-    acordoAnteriorId, empresaId, operadorAntId, operadorAntNome,
+    acordoAnteriorId, empresaId, operadorAntId,
     novoOperadorId, novoOperadorNome, labelNr, valorNr,
   } = params;
 
-  const { data: anterior, error: errBusca } = await supabase
-    .from('acordos')
-    .select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
-    .eq('id', acordoAnteriorId)
-    .maybeSingle();
+  const r = await transferirAcordoNoServidor({
+    acordoId:       acordoAnteriorId,
+    novoOperadorId: novoOperadorId,
+  });
+  if (!r.ok) return { ok: false, erro: mensagemErroTransferencia(r.erro) };
 
-  if (errBusca) return { ok: false, erro: errBusca.message };
-  if (!anterior) return { ok: false, erro: 'Acordo anterior não encontrado' };
-
-  const acordo = anterior as Acordo;
-  const valorFmt = acordo.valor != null
-    ? `R$ ${Number(acordo.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+  const valorFmt = r.valor != null
+    ? `R$ ${Number(r.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
     : '—';
-
-  await enviarParaLixeira({
-    acordo,
-    motivo:              'transferencia_nr',
-    operadorNome:        operadorAntNome,
-    autorizadoPorNome:   AUTOR_AUTOMATICO,
-    transferidoParaId:   novoOperadorId,
-    transferidoParaNome: novoOperadorNome,
-  });
-
-  const { error: errDel } = await supabase.from('acordos').delete().eq('id', acordoAnteriorId);
-  if (errDel) return { ok: false, erro: errDel.message };
-
-  await supabase.from('logs_sistema').insert({
-    usuario_id:  novoOperadorId,
-    acao:        'transferencia_nr_desligado',
-    tabela:      'acordos',
-    registro_id: acordoAnteriorId,
-    empresa_id:  empresaId,
-    detalhes: {
-      nr:                     valorNr,
-      nome_cliente:           acordo.nome_cliente ?? '—',
-      valor:                  valorFmt,
-      motivo:                 'operador anterior desligado',
-      sem_autorizacao_lider:  true,
-      operador_anterior:      operadorAntId,
-      operador_anterior_nome: operadorAntNome,
-      operador_novo:          novoOperadorId,
-      operador_novo_nome:     novoOperadorNome,
-      empresa_id:             empresaId,
-    },
-  }).then(({ error }) => {
-    if (error) console.warn('[desligamento] falha ao registrar log:', error.message);
-  });
 
   // O desligado não acessa mais o sistema, mas a notificação fica no histórico
   // e aparece pra liderança que consulta o perfil dele.
@@ -249,12 +299,12 @@ export async function transferirAcordoDeDesligado(params: {
       titulo:     `${labelNr} "${valorNr}" reatribuído`,
       mensagem:
         `Como você está marcado como desligado, o ${labelNr} "${valorNr}" ` +
-        `(${acordo.nome_cliente ?? '—'}) foi assumido por ${novoOperadorNome}. ` +
+        `(${r.nome_cliente ?? '—'}) foi assumido por ${novoOperadorNome}. ` +
         `O acordo anterior foi movido para a lixeira. Valor: ${valorFmt}.`,
     });
   } catch (e) {
     console.warn('[desligamento] falha ao notificar operador desligado', e);
   }
 
-  return { ok: true, nomeClienteAnterior: acordo.nome_cliente ?? undefined };
+  return { ok: true, nomeClienteAnterior: r.nome_cliente ?? undefined };
 }

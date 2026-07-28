@@ -25,7 +25,10 @@ import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { resolverEmailDeLogin } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
-import { operadorEstaDesligado, transferirAcordoDeDesligado } from '@/services/desligamento.service';
+import {
+  operadorEstaDesligado, transferirAcordoDeDesligado,
+  transferirAcordoNoServidor, mensagemErroTransferencia,
+} from '@/services/desligamento.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
@@ -587,39 +590,27 @@ export function AcordoNovoInline({
       }
 
       // MODO: transferencia_completa
-      const { data: acordoAnt } = await supabase
-        .from('acordos').select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
-        .eq('id', conflito.acordoId).maybeSingle();
-
-      if (!acordoAnt) { toast.error('Acordo anterior não encontrado'); return; }
-
-      const valorFmt     = acordoAnt.valor != null ? `R$ ${Number(acordoAnt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-      const vencimentoFmt = acordoAnt.vencimento ? format(parseISO(acordoAnt.vencimento), 'dd/MM/yyyy', { locale: ptBR }) : '—';
-      const statusAnt     = acordoAnt.status ?? '—';
-
-      await enviarParaLixeira({
-        acordo: acordoAnt as Acordo, motivo: 'transferencia_nr',
-        operadorNome: conflito.operadorNome,
-        autorizadoPorId: liderUid, autorizadoPorNome: liderPerfil.nome,
-        transferidoParaId: perfil.id, transferidoParaNome: nomeNovoOp,
+      //
+      // Vai pela RPC com o TOKEN DO LÍDER. Antes o select e o delete saíam com
+      // a sessão do operador, que a RLS fail-closed (20260723f) barra — o
+      // acordo alheio voltava nulo e a tela dizia "Acordo anterior não
+      // encontrado", mesmo com a senha do líder correta. A RPC roda como
+      // definer e confere o cargo do portador do token no servidor.
+      const rt = await transferirAcordoNoServidor({
+        acordoId:       conflito.acordoId,
+        novoOperadorId: perfil.id,
+        token:          liderToken,
       });
+      if (!rt.ok) { toast.error(mensagemErroTransferencia(rt.erro)); return; }
 
-      const { error: errDel } = await supabase.from('acordos').delete().eq('id', conflito.acordoId);
-      if (errDel) { toast.error(`Erro ao remover acordo anterior: ${errDel.message}`); return; }
+      const valorFmt      = rt.valor != null ? `R$ ${Number(rt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
+      const vencimentoFmt = rt.vencimento ? format(parseISO(rt.vencimento), 'dd/MM/yyyy', { locale: ptBR }) : '—';
+      const statusAnt     = rt.status ?? '—';
+
       onAcordoRemovido?.(conflito.acordoId);
 
       const inserido = await executarSalvar(conflito.payload);
       if (!inserido) return;
-
-      await supabase.from('logs_sistema').insert({
-        usuario_id: perfil.id, acao: 'transferencia_nr', tabela: 'acordos', registro_id: conflito.acordoId,
-        empresa_id: empresa.id,
-        detalhes: {
-          nr: nrLogLabel, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
-          operador_anterior: conflito.operadorId, operador_anterior_nome: conflito.operadorNome,
-          operador_novo: perfil.id, operador_novo_nome: nomeNovoOp,
-        },
-      });
 
       await criarNotificacao({
         usuario_id: conflito.operadorId,
