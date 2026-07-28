@@ -25,6 +25,7 @@ import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { resolverEmailDeLogin } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
+import { operadorEstaDesligado, transferirAcordoDeDesligado } from '@/services/desligamento.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
@@ -351,6 +352,35 @@ export function AcordoNovoInline({
               }
             }
             toast.error(`${label} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
+            return;
+          }
+
+          // ── Dono desligado: assume direto, sem autorização de líder ─────
+          // Antes das regras de Direto/Extra: acordo de quem saiu da empresa
+          // não vira vínculo de ninguém, muda de dono.
+          if (await operadorEstaDesligado(conflitoFinal.operadorId)) {
+            const r = await transferirAcordoDeDesligado({
+              acordoAnteriorId: conflitoFinal.acordoId,
+              empresaId:        empresa.id,
+              operadorAntId:    conflitoFinal.operadorId,
+              operadorAntNome:  conflitoFinal.operadorNome,
+              novoOperadorId:   perfil.id,
+              novoOperadorNome: perfil.nome ?? 'Operador',
+              labelNr:          label,
+              valorNr:          nrParaVerificar,
+            });
+            if (!r.ok) {
+              toast.error(`Erro ao liberar o acordo do operador desligado: ${r.erro}`);
+              return;
+            }
+            onAcordoRemovido?.(conflitoFinal.acordoId);
+            const inserido = await executarSalvar(payload);
+            if (!inserido) return;
+            limparDraft();
+            onSaved(inserido);
+            toast.success(
+              `${label} "${nrParaVerificar}" reatribuído: ${conflitoFinal.operadorNome} está desligado.`,
+            );
             return;
           }
 

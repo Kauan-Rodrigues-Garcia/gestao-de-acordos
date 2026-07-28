@@ -19,6 +19,7 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro }      from '@/services/nr_registros.service';
+import { operadorEstaDesligado, transferirAcordoDeDesligado } from '@/services/desligamento.service';
 import { AcordoNovoInline, ModalAutorizacaoNR, ModalAvisoDiretoExtra, type ConflitNR } from '@/components/AcordoNovoInline';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
@@ -233,6 +234,35 @@ export default function AcordoForm() {
           if (conflitoFinal.operadorId === uid) {
             toast.error(`${labelNr} "${nrParaVerificar}" já existe na sua lista de acordos ativos.`);
             setLoading(false);
+            return;
+          }
+
+          // ── Dono desligado: assume direto, sem autorização de líder ─────
+          // Vem antes das regras de Direto/Extra de propósito: acordo de quem
+          // saiu da empresa não deve virar vínculo de ninguém, e sim mudar de
+          // dono. O acordo antigo vai pra lixeira e some da lista dele.
+          if (await operadorEstaDesligado(conflitoFinal.operadorId)) {
+            const r = await transferirAcordoDeDesligado({
+              acordoAnteriorId: conflitoFinal.acordoId,
+              empresaId:        empresa.id,
+              operadorAntId:    conflitoFinal.operadorId,
+              operadorAntNome:  conflitoFinal.operadorNome,
+              novoOperadorId:   uid,
+              novoOperadorNome: p?.nome ?? 'Operador',
+              labelNr,
+              valorNr:          nrParaVerificar,
+            });
+            if (!r.ok) {
+              toast.error(`Erro ao liberar o acordo do operador desligado: ${r.erro}`);
+              setLoading(false);
+              return;
+            }
+            const errSalvar = await salvarAcordo(payload, uid);
+            if (errSalvar) { toast.error(`Erro ao salvar: ${errSalvar.message}`); setLoading(false); return; }
+            toast.success(
+              `${labelNr} "${nrParaVerificar}" reatribuído: ${conflitoFinal.operadorNome} está desligado.`,
+            );
+            navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
             return;
           }
 

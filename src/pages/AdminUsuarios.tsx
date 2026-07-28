@@ -375,12 +375,15 @@ export default function AdminUsuarios() {
   // Item 5: define a situação (ativo/férias/desligado) com efeitos colaterais.
   async function handleSituacao(u: Perfil, sit: SituacaoUsuario) {
     if ((u.situacao ?? 'ativo') === sit) return;
-    const { error } = await definirSituacao(u.id, sit);
+    const { error } = await definirSituacao(u.id, sit, {
+      empresaId:   empresaAtual?.id ?? null,
+      isPaguePlay: tenant.isPaguePlay,
+    });
     if (error) { toast.error('Erro ao alterar situação'); return; }
     toast.success(
       sit === 'ativo' ? 'Usuário marcado como ativo'
       : sit === 'ferias' ? 'Usuário marcado como férias (sai de ranking e quartil)'
-      : 'Usuário desligado (sem acesso; sai de ranking e quartil)',
+      : 'Usuário desligado (sem acesso; acordos liberados para retabulação)',
     );
     fetchDados();
   }

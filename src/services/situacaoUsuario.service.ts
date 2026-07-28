@@ -11,13 +11,20 @@ import type { SituacaoUsuario } from '@/lib/supabase';
 
 /**
  * Define a situação de um usuário, ajustando os efeitos colaterais:
- *   • desligado → ativo=false, desligado_em=now (bloqueia login).
+ *   • desligado → ativo=false, desligado_em=now (bloqueia login) e os acordos
+ *     dele perdem o vínculo Direto/Extra (ver desligamento.service).
  *   • ativo/ferias → ativo=true, desligado_em=null, arquivado=false
  *     (reativar traz de volta às listas e ao login).
+ *
+ * A liberação de vínculos é best-effort e roda DEPOIS do update: se ela
+ * falhar, o desligamento em si continua valendo. Reverter o desligamento não
+ * refaz os pareamentos — eles são desfeitos em definitivo.
  */
 export async function definirSituacao(
   perfilId: string,
   situacao: SituacaoUsuario,
+  /** Necessário para liberar os vínculos ao desligar. */
+  contexto?: { empresaId?: string | null; isPaguePlay?: boolean },
 ): Promise<{ error: string | null }> {
   const patch: Record<string, unknown> = { situacao, atualizado_em: new Date().toISOString() };
   if (situacao === 'desligado') {
@@ -29,7 +36,21 @@ export async function definirSituacao(
     patch.arquivado = false;
   }
   const { error } = await supabase.from('perfis').update(patch).eq('id', perfilId);
-  return { error: error?.message ?? null };
+  if (error) return { error: error.message };
+
+  if (situacao === 'desligado' && contexto?.empresaId) {
+    try {
+      const { liberarVinculosDeDesligado } = await import('@/services/desligamento.service');
+      await liberarVinculosDeDesligado({
+        perfilId,
+        empresaId:   contexto.empresaId,
+        isPaguePlay: contexto.isPaguePlay ?? false,
+      });
+    } catch (e) {
+      console.warn('[situacaoUsuario] falha ao liberar vínculos do desligado', e);
+    }
+  }
+  return { error: null };
 }
 
 /** Arquiva desligados de meses anteriores (some das listas). Best-effort. */
