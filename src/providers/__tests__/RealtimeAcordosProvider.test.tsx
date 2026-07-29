@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 // ── 1. vi.hoisted: spies criados ANTES de qualquer import ────────────────────
@@ -187,10 +188,27 @@ const mockAcordo = {
   atualizado_em:  '2024-06-01T00:00:00Z',
 };
 
-/** Wrapper padrão que monta o provider */
+/**
+ * Wrapper padrão que monta o provider.
+ *
+ * O `QueryClientProvider` é obrigatório: `RealtimeAcordosProvider` usa
+ * `useQueryClient()` para invalidar o cache quando chega um evento de realtime.
+ * Sem ele o provider lança "No QueryClient set" no primeiro render — era a causa
+ * das 33 falhas deste arquivo. No app real o provider vem de `App.tsx`.
+ *
+ * Client novo por wrapper para não vazar cache entre casos; `retry: false` para
+ * o teste não aguardar retentativa quando uma query falha.
+ */
 function makeWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
   return function Wrapper({ children }: { children: ReactNode }) {
-    return <RealtimeAcordosProvider>{children}</RealtimeAcordosProvider>;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <RealtimeAcordosProvider>{children}</RealtimeAcordosProvider>
+      </QueryClientProvider>
+    );
   };
 }
 
@@ -225,11 +243,15 @@ describe('RealtimeAcordosProvider', () => {
   // ── Lifecycle do canal ─────────────────────────────────────────────────────
 
   describe('lifecycle do canal', () => {
+    // O nome do canal leva um sufixo com o contador de reconexão
+    // (`reconnectTick`, 0 no primeiro mount). Ele existe para FORÇAR o Supabase
+    // a criar um canal novo em vez de reaproveitar um que ficou CLOSED — sem o
+    // sufixo, o mesmo nome devolvia o canal morto e a reconexão nunca subia.
     it('cria canal com nome correto baseado no empresa_id', () => {
       renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
 
       expect(mockChannelSpy).toHaveBeenCalledTimes(1);
-      expect(mockChannelSpy).toHaveBeenCalledWith(`rt-acordos-central-${EMPRESA_ID}`);
+      expect(mockChannelSpy).toHaveBeenCalledWith(`rt-acordos-${EMPRESA_ID}-0`);
     });
 
     it('registra listener postgres_changes com filtro empresa_id correto', () => {
@@ -259,43 +281,62 @@ describe('RealtimeAcordosProvider', () => {
       });
     });
 
-    it('status vai para "error" quando channelStatus é CHANNEL_ERROR', async () => {
-      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
+    // ── Falha de canal: o status NÃO muda na hora ────────────────────────────
+    // CLOSED / CHANNEL_ERROR / TIMED_OUT passam por um grace timer de 3 s antes
+    // de virarem status visível. É deliberado: trocar de aba fecha o canal e o
+    // Supabase reconecta em ~1 s, então avisar o usuário imediatamente encheria
+    // a tela de "sem conexão" em situação normal.
+    //
+    // Os três casos abaixo verificam as DUAS metades da regra: dentro da janela
+    // o status continua `connected`; passados os 3 s ele assume o valor final.
+    const GRACE_MS = 3000;
 
-      act(() => {
-        capturedStatusCallbackRef.current?.('CHANNEL_ERROR', new Error('falha'));
-      });
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('error');
-      });
-    });
-
-    it('status vai para "error" quando channelStatus é TIMED_OUT', async () => {
-      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
-
-      act(() => {
-        capturedStatusCallbackRef.current?.('TIMED_OUT');
-      });
-
-      await waitFor(() => {
-        expect(result.current.status).toBe('error');
-      });
-    });
-
-    it('status vai para "off" quando channelStatus é CLOSED', async () => {
-      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
-
-      // Primeiro garante "connected"
+    /** Dispara o status do canal e avança o grace timer com timers falsos. */
+    async function dispararFalha(
+      result: { current: { status: string } },
+      channelStatus: string,
+      err?: unknown,
+    ): Promise<void> {
       await waitFor(() => expect(result.current.status).toBe('connected'));
 
-      act(() => {
-        capturedStatusCallbackRef.current?.('CLOSED');
-      });
+      vi.useFakeTimers();
+      try {
+        act(() => {
+          capturedStatusCallbackRef.current?.(channelStatus, err);
+        });
 
-      await waitFor(() => {
-        expect(result.current.status).toBe('off');
-      });
+        // Metade 1: ainda dentro da janela de tolerância.
+        expect(result.current.status).toBe('connected');
+
+        // Metade 2: estourou a janela.
+        act(() => { vi.advanceTimersByTime(GRACE_MS); });
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+
+    it('status só vai para "error" 3s após CHANNEL_ERROR (grace timer)', async () => {
+      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
+
+      await dispararFalha(result, 'CHANNEL_ERROR', new Error('falha'));
+
+      expect(result.current.status).toBe('error');
+    });
+
+    it('status só vai para "error" 3s após TIMED_OUT (grace timer)', async () => {
+      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
+
+      await dispararFalha(result, 'TIMED_OUT');
+
+      expect(result.current.status).toBe('error');
+    });
+
+    it('status só vai para "off" 3s após CLOSED (grace timer)', async () => {
+      const { result } = renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
+
+      await dispararFalha(result, 'CLOSED');
+
+      expect(result.current.status).toBe('off');
     });
 
     it('chama removeChannel no unmount (cleanup)', () => {
@@ -321,7 +362,7 @@ describe('RealtimeAcordosProvider', () => {
 
       renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
 
-      expect(mockChannelSpy).toHaveBeenCalledWith('rt-acordos-central-fallback-emp-99');
+      expect(mockChannelSpy).toHaveBeenCalledWith('rt-acordos-fallback-emp-99-0');
     });
 
     it('NÃO cria canal quando empresa e perfil são ambos null', () => {

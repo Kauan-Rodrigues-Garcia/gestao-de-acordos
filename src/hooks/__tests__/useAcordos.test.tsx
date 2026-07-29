@@ -19,7 +19,9 @@
  *    provider, não do hook de métricas.
  */
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
-import { renderHook, act, waitFor } from '@testing-library/react';
+import { renderHook as renderHookBase, act, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 
 // ── 1. vi.hoisted: cria todos os spies ANTES de qualquer import ───────────────
 
@@ -203,6 +205,61 @@ function fakeAcordo(overrides?: Partial<Acordo>): Acordo {
   };
 }
 
+// ── 4b. renderHook com QueryClientProvider ───────────────────────────────────
+// `useAcordos` e `useDashboardMetricas` usam React Query (useQuery /
+// useQueryClient). Sem um QueryClientProvider acima deles, o primeiro render
+// lança "No QueryClient set" — era a causa das 37 falhas deste arquivo. No app
+// real o provider vem de `App.tsx`.
+//
+// Em vez de repetir `{ wrapper }` em ~20 chamadas, `renderHook` é sombreado por
+// uma versão que injeta o provider. Cada render ganha um client novo (nada de
+// cache vazando entre casos) e `retry: false` evita que uma query com erro
+// proposital fique tentando de novo e estoure o timeout do teste.
+function renderHook<Resultado, Props>(
+  callback: (props: Props) => Resultado,
+  options?: Parameters<typeof renderHookBase<Resultado, Props>>[1],
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const Wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
+  return renderHookBase<Resultado, Props>(callback, { wrapper: Wrapper, ...options });
+}
+
+/**
+ * Espera o fetch inicial ASSENTAR no cache do React Query.
+ *
+ * `waitFor(() => expect(result.current.loading).toBe(false))` não serve: no
+ * primeiro tick a query enabled ainda está com fetchStatus 'idle', então
+ * `isLoading` é false por um instante e o waitFor resolvia ANTES dos dados
+ * entrarem no cache. As mutações otimistas (`patchAcordo`, `removeAcordo`,
+ * `addAcordo` e os handlers de realtime) usam `setQueryData` com
+ * `if (!old) return old` — em cache vazio elas eram descartadas em silêncio, e
+ * o teste falhava como se o hook estivesse errado.
+ *
+ * Aqui esperamos o fetch ter sido chamado, o loading baixar, e então drenamos
+ * as microtasks pendentes para garantir que o setState do React Query já rodou.
+ */
+async function esperarFetchInicial(result: { current: { loading: boolean } }) {
+  await waitFor(() => {
+    expect(mockFetchAcordos).toHaveBeenCalled();
+    expect(result.current.loading).toBe(false);
+  });
+  await act(async () => { await Promise.resolve(); });
+}
+
+/**
+ * Equivalente para `useDashboardMetricas`, que NÃO passa por `fetchAcordos` —
+ * ele consulta `supabase.from('acordos')` direto. Esperar por `mockFetchAcordos`
+ * aqui nunca resolveria.
+ */
+async function esperarMetricas(result: { current: { loading: boolean } }) {
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  await act(async () => { await Promise.resolve(); });
+}
+
 // ── 5. Setup / Teardown ───────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -270,7 +327,7 @@ describe('useAcordos', () => {
 
       const { result } = renderHook(() => useAcordos());
 
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       expect(result.current.acordos).toEqual(acordos);
       expect(result.current.totalCount).toBe(2);
@@ -326,7 +383,7 @@ describe('useAcordos', () => {
 
       const { result } = renderHook(() => useAcordos());
 
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       expect(result.current.error).toBe('Falha na rede');
       expect(result.current.acordos).toEqual([]);
@@ -339,7 +396,7 @@ describe('useAcordos', () => {
 
       const { result } = renderHook(() => useAcordos());
 
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
       expect(result.current.error).toBe('Erro ao carregar acordos');
     });
   });
@@ -358,34 +415,51 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
       expect(result.current.acordos).toEqual(initial);
 
       await act(async () => { await result.current.refetch(); });
 
-      expect(result.current.acordos).toEqual(updated);
-      expect(result.current.totalCount).toBe(2);
+      await waitFor(() => {
+        expect(result.current.acordos).toEqual(updated);
+        expect(result.current.totalCount).toBe(2);
+      });
       expect(mockFetchAcordos).toHaveBeenCalledTimes(2);
     });
 
-    it('seta loading=true durante o refetch', async () => {
+    // Refetch com dados já em tela NÃO liga `loading`.
+    //
+    // A tela de Acordos renderiza `{loading ? <TableSkeleton/> : tabela}`. Se um
+    // refetch manual ligasse `loading`, a lista inteira sumiria e voltaria a cada
+    // atualização — pior que mostrar o dado anterior por um instante. O React
+    // Query separa exatamente isso: `isLoading` é só a primeira carga (sem dado
+    // em cache); refetch em cima de dado existente é `isFetching`, que o hook
+    // não expõe justamente para a tabela não piscar.
+    it('refetch não liga loading quando já existem dados (lista não pisca)', async () => {
       let resolveSecond!: (v: { data: Acordo[]; count: number }) => void;
       const secondFetch = new Promise<{ data: Acordo[]; count: number }>(r => { resolveSecond = r; });
 
+      const inicial = [fakeAcordo({ id: 'a1' })];
       mockFetchAcordos
-        .mockResolvedValueOnce({ data: [], count: 0 })
+        .mockResolvedValueOnce({ data: inicial, count: 1 })
         .mockReturnValueOnce(secondFetch);
 
       mockPerfilValue.current  = fakePerfil();
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { void result.current.refetch(); });
-      expect(result.current.loading).toBe(true);
 
-      await act(async () => { resolveSecond({ data: [], count: 0 }); });
+      // Em voo: sem skeleton e ainda com o dado anterior na tela.
+      expect(result.current.loading).toBe(false);
+      expect(result.current.acordos).toEqual(inicial);
+
+      const atualizado = [fakeAcordo({ id: 'a1' }), fakeAcordo({ id: 'a2' })];
+      await act(async () => { resolveSecond({ data: atualizado, count: 2 }); });
+
+      await waitFor(() => expect(result.current.acordos).toEqual(atualizado));
       expect(result.current.loading).toBe(false);
     });
   });
@@ -400,13 +474,15 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.patchAcordo('a1', { status: 'pago', valor: 9999 }); });
 
-      const patched = result.current.acordos.find(a => a.id === 'a1')!;
-      expect(patched.status).toBe('pago');
-      expect(patched.valor).toBe(9999);
+      await waitFor(() => {
+        const patched = result.current.acordos.find(a => a.id === 'a1')!;
+        expect(patched.status).toBe('pago');
+        expect(patched.valor).toBe(9999);
+      });
       // a2 não foi alterado
       expect(result.current.acordos.find(a => a.id === 'a2')?.status).toBe('verificar_pendente');
     });
@@ -418,7 +494,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.patchAcordo('nao-existe', { status: 'pago' }); });
       expect(result.current.acordos).toEqual([a1]);
@@ -435,12 +511,14 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.removeAcordo('a1'); });
 
-      expect(result.current.acordos.map(a => a.id)).toEqual(['a2']);
-      expect(result.current.totalCount).toBe(1);
+      await waitFor(() => {
+        expect(result.current.acordos.map(a => a.id)).toEqual(['a2']);
+        expect(result.current.totalCount).toBe(1);
+      });
     });
 
     it('não decrementa totalCount se o id não existia na lista', async () => {
@@ -450,7 +528,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.removeAcordo('nao-existe'); });
       expect(result.current.totalCount).toBe(1);
@@ -463,7 +541,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.removeAcordo('a1'); });
       expect(result.current.totalCount).toBe(0);
@@ -480,13 +558,15 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.addAcordo(novo); });
 
-      expect(result.current.acordos[0].id).toBe('novo');
-      expect(result.current.acordos).toHaveLength(2);
-      expect(result.current.totalCount).toBe(2);
+      await waitFor(() => {
+        expect(result.current.acordos[0].id).toBe('novo');
+        expect(result.current.acordos).toHaveLength(2);
+        expect(result.current.totalCount).toBe(2);
+      });
     });
 
     it('dedup: não adiciona se id já existe', async () => {
@@ -496,7 +576,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       act(() => { result.current.addAcordo(a1); }); // mesmo id
       expect(result.current.acordos).toHaveLength(1);
@@ -560,7 +640,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       // Captura o handler registrado
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
@@ -572,9 +652,11 @@ describe('useAcordos', () => {
         });
       });
 
-      const updated = result.current.acordos.find(a => a.id === 'a1')!;
-      expect(updated.status).toBe('pago');
-      expect(updated.valor).toBe(200);
+      await waitFor(() => {
+        const updated = result.current.acordos.find(a => a.id === 'a1')!;
+        expect(updated.status).toBe('pago');
+        expect(updated.valor).toBe(200);
+      });
     });
 
     it('evento UPDATE: preserva joins locais quando payload não os inclui', async () => {
@@ -585,7 +667,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
 
@@ -597,9 +679,11 @@ describe('useAcordos', () => {
         });
       });
 
-      const updated = result.current.acordos.find(a => a.id === 'a1')!;
-      expect(updated.perfis).toEqual(perfisJoin); // join preservado
-      expect(updated.status).toBe('pago');
+      await waitFor(() => {
+        const updated = result.current.acordos.find(a => a.id === 'a1')!;
+        expect(updated.perfis).toEqual(perfisJoin); // join preservado
+        expect(updated.status).toBe('pago');
+      });
     });
 
     it('evento DELETE: remove o acordo da lista e decrementa totalCount', async () => {
@@ -610,7 +694,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
 
@@ -618,8 +702,10 @@ describe('useAcordos', () => {
         handler({ eventType: 'DELETE', oldRecord: { id: 'a1' } });
       });
 
-      expect(result.current.acordos.map(a => a.id)).toEqual(['a2']);
-      expect(result.current.totalCount).toBe(1);
+      await waitFor(() => {
+        expect(result.current.acordos.map(a => a.id)).toEqual(['a2']);
+        expect(result.current.totalCount).toBe(1);
+      });
     });
 
     it('evento DELETE sem id: não modifica a lista', async () => {
@@ -629,7 +715,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
 
@@ -644,17 +730,19 @@ describe('useAcordos', () => {
 
       // Sem filtros → matchesFiltros sempre retorna true
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
       const novo = fakeAcordo({ id: 'novo-rt' });
 
-      act(() => {
-        handler({ eventType: 'INSERT', newRecord: novo });
+      await act(async () => {
+        await handler({ eventType: 'INSERT', newRecord: novo });
       });
 
-      expect(result.current.acordos[0].id).toBe('novo-rt');
-      expect(result.current.totalCount).toBe(1);
+      await waitFor(() => {
+        expect(result.current.acordos[0]?.id).toBe('novo-rt');
+        expect(result.current.totalCount).toBe(1);
+      });
     });
 
     it('evento INSERT: ignora acordo que não passa no filtro de status', async () => {
@@ -663,7 +751,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos({ status: 'pago' }));
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
       const novo = fakeAcordo({ id: 'novo-rt', status: 'nao_pago' }); // não passa no filtro
@@ -682,7 +770,7 @@ describe('useAcordos', () => {
       mockEmpresaValue.current = fakeEmpresa();
 
       const { result } = renderHook(() => useAcordos());
-      await waitFor(() => expect(result.current.loading).toBe(false));
+      await esperarFetchInicial(result);
 
       const [, handler] = mockRealtimeSubscribe.mock.calls[0];
 
@@ -777,7 +865,7 @@ describe('useDashboardMetricas', () => {
 
     const { result } = renderHook(() => useDashboardMetricas());
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await esperarMetricas(result);
     // calcularMetricasDashboard mockado retorna { total_geral: data.length }
     expect(result.current.metricas.total_geral).toBe(2);
   });
@@ -792,7 +880,7 @@ describe('useDashboardMetricas', () => {
 
     const { result } = renderHook(() => useDashboardMetricas());
 
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await esperarMetricas(result);
     // metricas permanecem zeradas (o handler de erro faz return antes de setMetricas)
     expect(result.current.metricas.total_geral).toBe(0);
   });
@@ -832,7 +920,7 @@ describe('useDashboardMetricas', () => {
     ];
 
     const { result } = renderHook(() => useDashboardMetricas());
-    await waitFor(() => expect(result.current.loading).toBe(false));
+    await esperarMetricas(result);
     expect(result.current.metricas.total_geral).toBe(1);
 
     // Captura o subscriber e simula um evento

@@ -248,11 +248,24 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     return () => unsubscribe(instanceId);
   }, [enableRealtime, subscribe, unsubscribe, instanceId, queryClient, queryKey, removeAcordo]);
 
+  // ── loading: inclui a espera pela sessão ──────────────────────────────────
+  // `isLoading` do React Query é false enquanto a query está DESABILITADA
+  // (`enabled: !!perfil && !!empresaId`). Sem o termo abaixo, o intervalo entre
+  // montar a tela e o perfil/empresa chegarem reportava loading=false com lista
+  // vazia — e a tela de Acordos renderiza `{loading ? <TableSkeleton/> : tabela}`,
+  // ou seja, piscava "nenhum acordo" antes de buscar. Do ponto de vista de quem
+  // olha, ainda está carregando.
+  const aguardandoSessao = (!perfil || !empresaId) && !data;
+
   return {
     acordos:    data?.data   ?? [],
     totalCount: data?.count  ?? 0,
-    loading:    isLoading,
-    error:      error instanceof Error ? error.message : error ? String(error) : null,
+    loading:    isLoading || aguardandoSessao,
+    // Erro que não é Error (string lançada, objeto solto) não vai cru para a
+    // tela: `String(err)` já exibiu coisas como "string-error" para o usuário.
+    error:      error instanceof Error ? error.message
+              : error                  ? 'Erro ao carregar acordos'
+              : null,
     realtimeStatus,
     refetch:    async () => { await refetch(); },
     patchAcordo, removeAcordo, addAcordo,
@@ -305,5 +318,9 @@ export function useDashboardMetricas() {
     total_geral:         0,
   };
 
-  return { metricas: metricas ?? defaultMetricas, loading: isLoading };
+  // Mesma correção do useAcordos: query desabilitada (sem perfil/empresa ainda)
+  // tem isLoading=false, e os cards mostrariam zeros como se fossem o resultado.
+  const aguardandoSessao = (!perfil || !empresaId) && !metricas;
+
+  return { metricas: metricas ?? defaultMetricas, loading: isLoading || aguardandoSessao };
 }
