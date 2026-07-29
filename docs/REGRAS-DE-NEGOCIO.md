@@ -859,6 +859,8 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | `20260726a` | Performance da RLS de acordos (InitPlan + índices) |
 | `20260728a` | RPCs de situação e transferência de acordo |
 | `20260728b` | Fim do CPF · `cliente_codigo` (**destrutiva**) |
+| `20260729a` | Performance: RLS InitPlan em analítico/diário + índice `(empresa_id, data_pagamento)` |
+| `20260729b` | Performance: agregado do dashboard em um único JSONB (`fn_analitico_dashboard_mes_json`) |
 
 > O **status de aplicação** de cada migration no Supabase é controlado fora do
 > repositório. A presença do arquivo aqui não garante que ela rodou em produção.

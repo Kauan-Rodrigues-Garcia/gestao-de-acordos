@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { useDiario } from '@/hooks/useDiario';
 import { AlertCircle } from 'lucide-react';
-import { formaKindDiario, normDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario, normDiario } from '@/services/diario/diarioComum';
 import {
   linhasVivas, consolidarItens, dataLabel, fmtDataISO, type ItemDiario,
 } from './helpers';

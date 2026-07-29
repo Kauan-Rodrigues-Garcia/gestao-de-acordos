@@ -5,7 +5,7 @@
 
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { formaKindDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario } from '@/services/diario/diarioComum';
 
 const KIND_CLASS: Record<string, string> = {
   pix:    'border-emerald-300 text-emerald-700 dark:text-emerald-400',

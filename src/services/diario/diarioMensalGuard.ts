@@ -18,7 +18,7 @@
  * a menos.
  */
 
-import { dayKeyDiario, type LinhaDiario } from './diarioParser';
+import { dayKeyDiario, type LinhaDiario } from './diarioComum';
 
 function chaveMensalOk(empresaId: string, dia: string): string {
   return `diario-mensal-ok::${empresaId}::${dia}`;

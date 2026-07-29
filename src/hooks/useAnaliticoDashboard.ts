@@ -8,9 +8,26 @@
  * (fn_analitico_dashboard_mes): operador → próprias linhas; líder+ → empresa.
  *
  * Atualiza em tempo real quando um novo relatório analítico é importado.
+ *
+ * ## Deduplicação (performance)
+ *
+ * Dois componentes montam este hook ao mesmo tempo — `AnalyticsPanel` e
+ * `MetaProgressoHeader`. Na versão anterior (useState + useEffect) cada um fazia
+ * a SUA busca paginada do mês e abria o SEU canal de realtime: tudo em dobro, e
+ * em dobro outra vez a cada importação. O `canalId` aleatório que existia aqui
+ * tratava a colisão de tópico, não a duplicação do trabalho.
+ *
+ * Agora:
+ *   • os dados vêm de `useQuery` com a chave ['analitico-dashboard', empresa, mês]
+ *     — N consumidores da mesma chave compartilham UMA requisição e UM cache;
+ *   • o realtime é um único canal por empresa, com contagem de referências
+ *     (`assinarAnaliticoRealtime`), que invalida a chave em vez de refazer o
+ *     fetch por conta própria.
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -97,49 +114,118 @@ function mesAtualStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-export function useAnaliticoDashboard(ativo: boolean) {
-  const { empresa } = useEmpresa();
-  const [linhas, setLinhas]     = useState<AnaliticoDashboardLinha[]>([]);
-  const [carregado, setCarregado] = useState(false);
-  const [dbAtiva, setDbAtiva]   = useState(true);
-  const mes = mesAtualStr();
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Sufixo único por instância — evita colisão de tópico quando o Dashboard
-  // monta mais de um consumidor (painel + header de progresso)
-  const canalId = useRef(Math.random().toString(36).slice(2, 8)).current;
+// ── Realtime compartilhado, um canal por empresa ─────────────────────────────
+// A importação insere EM LOTE (um evento por linha), então o aviso aos ouvintes
+// é debounced: um único disparo por importação. Com contagem de referências, o
+// canal nasce no primeiro consumidor e é removido quando o último desmonta.
 
-  const fetchDados = useCallback(async () => {
-    if (!ativo || !empresa?.id) { setLinhas([]); setCarregado(true); return; }
-    const { data, dbAtiva: ok } = await buscarAnaliticoDashboardMes(empresa.id, mes);
-    setLinhas(data);
-    setDbAtiva(ok);
-    setCarregado(true);
-  }, [ativo, empresa?.id, mes]);
+type OuvinteAnalitico = () => void;
 
-  useEffect(() => { void fetchDados(); }, [fetchDados]);
+interface RegistroCanal {
+  channel:  RealtimeChannel;
+  ouvintes: Set<OuvinteAnalitico>;
+  debounce: ReturnType<typeof setTimeout> | null;
+}
 
-  // Realtime: novo relatório analítico importado → refetch (com debounce,
-  // pois a importação insere em lote)
-  useEffect(() => {
-    if (!ativo || !empresa?.id || !dbAtiva) return;
-    const channel = supabase
-      .channel(`analitico-dash-${empresa.id}-${canalId}`)
+const canaisAnalitico = new Map<string, RegistroCanal>();
+
+function assinarAnaliticoRealtime(empresaId: string, ouvinte: OuvinteAnalitico): () => void {
+  let registro = canaisAnalitico.get(empresaId);
+
+  if (!registro) {
+    const novo: RegistroCanal = {
+      channel:  null as unknown as RealtimeChannel,
+      ouvintes: new Set(),
+      debounce: null,
+    };
+    novo.channel = supabase
+      .channel(`analitico-dash-${empresaId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'analitico_recebimentos', filter: `empresa_id=eq.${empresa.id}` },
+        { event: '*', schema: 'public', table: 'analitico_recebimentos', filter: `empresa_id=eq.${empresaId}` },
         () => {
-          if (debounceRef.current) clearTimeout(debounceRef.current);
-          debounceRef.current = setTimeout(() => { void fetchDados(); }, 1500);
+          if (novo.debounce) clearTimeout(novo.debounce);
+          novo.debounce = setTimeout(() => {
+            novo.debounce = null;
+            for (const o of novo.ouvintes) o();
+          }, 1500);
         },
       )
       .subscribe();
-    return () => {
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      void supabase.removeChannel(channel);
-    };
-  }, [ativo, empresa?.id, dbAtiva, fetchDados, canalId]);
+    canaisAnalitico.set(empresaId, novo);
+    registro = novo;
+  }
 
-  const total = useMemo(() => agregarAnalitico(linhas), [linhas]);
+  registro.ouvintes.add(ouvinte);
 
-  return { linhas, total, carregado, dbAtiva, refetch: fetchDados };
+  return () => {
+    const atual = canaisAnalitico.get(empresaId);
+    if (!atual) return;
+    atual.ouvintes.delete(ouvinte);
+    if (atual.ouvintes.size > 0) return;
+    if (atual.debounce) clearTimeout(atual.debounce);
+    canaisAnalitico.delete(empresaId);
+    void supabase.removeChannel(atual.channel);
+  };
+}
+
+// ── Hook ─────────────────────────────────────────────────────────────────────
+
+interface ResultadoDashboard {
+  linhas:  AnaliticoDashboardLinha[];
+  dbAtiva: boolean;
+}
+
+/** Referência estável para o caso "sem dados" — evita novo array a cada render
+ *  (o que invalidaria o useMemo de `total` sem que nada tenha mudado). */
+const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
+
+export function useAnaliticoDashboard(ativo: boolean) {
+  const { empresa }  = useEmpresa();
+  const queryClient  = useQueryClient();
+  const mes          = mesAtualStr();
+  const empresaId    = empresa?.id ?? null;
+  const habilitado   = ativo && !!empresaId;
+
+  // Chave compartilhada: os dois consumidores caem na MESMA entrada de cache,
+  // então a busca paginada do mês acontece uma vez só.
+  const chave = useMemo(
+    () => ['analitico-dashboard', empresaId, mes] as const,
+    [empresaId, mes],
+  );
+
+  const query = useQuery<ResultadoDashboard>({
+    queryKey: chave,
+    enabled:  habilitado,
+    queryFn:  async () => {
+      const { data, dbAtiva } = await buscarAnaliticoDashboardMes(empresaId as string, mes);
+      return { linhas: data, dbAtiva };
+    },
+  });
+
+  const dbAtiva = query.data?.dbAtiva ?? true;
+
+  // Novo relatório importado → invalida a chave. Quem estiver montado refaz UMA
+  // busca (o React Query agrupa), em vez de uma por componente.
+  useEffect(() => {
+    if (!habilitado || !empresaId || !dbAtiva) return;
+    return assinarAnaliticoRealtime(empresaId, () => {
+      void queryClient.invalidateQueries({ queryKey: chave });
+    });
+  }, [habilitado, empresaId, dbAtiva, queryClient, chave]);
+
+  const linhas = query.data?.linhas ?? SEM_LINHAS;
+  const total  = useMemo(() => agregarAnalitico(linhas), [linhas]);
+
+  const refetch = useCallback(async () => { await query.refetch(); }, [query]);
+
+  return {
+    linhas,
+    total,
+    // Desabilitado conta como "carregado" — é o que a versão anterior fazia, e o
+    // consumidor usa isso para decidir quando esconder o skeleton.
+    carregado: habilitado ? query.isFetched : true,
+    dbAtiva,
+    refetch,
+  };
 }

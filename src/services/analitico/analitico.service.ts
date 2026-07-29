@@ -15,8 +15,8 @@ import { supabase } from '@/lib/supabase';
 import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
-import { mesReferencia } from './analiticoParser';
-import type { LinhaRelatorio } from './analiticoParser';
+import { mesReferencia } from './analiticoComum';
+import type { LinhaRelatorio } from './analiticoComum';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
 
@@ -31,6 +31,72 @@ function toISO(d: Date): string {
 /** Normaliza código (remove zeros à esquerda? Não — PaguePlay usa código como veio) */
 function normCodigo(c: string): string {
   return c.trim();
+}
+
+// ── Paginação ────────────────────────────────────────────────────────────────
+
+/** Limite padrão de linhas por resposta do PostgREST (`max_rows`). */
+export const PAGE_SUPABASE = 1000;
+
+/** Quantas páginas buscar simultaneamente por onda. */
+const PAGINAS_EM_PARALELO = 4;
+
+interface RespostaPagina<T> {
+  data:  T[] | null;
+  error: string | null;
+}
+
+/**
+ * Busca todas as páginas de uma consulta, em ONDAS PARALELAS.
+ *
+ * A versão anterior era um `while (true)` estritamente serial: cada bloco de
+ * 1000 linhas só era pedido depois que o anterior voltava. Com 20 mil linhas
+ * isso são 20 idas e voltas em fila, e o tempo total é 20 × latência mesmo com
+ * o banco respondendo rápido.
+ *
+ * Aqui a primeira página é buscada sozinha (o caso comum — mês pequeno — termina
+ * em uma requisição) e, se ela vier cheia, as seguintes são pedidas em ondas de
+ * `PAGINAS_EM_PARALELO`. Para 20 páginas: 1 + 5 ondas = 6 esperas em vez de 20.
+ *
+ * Não usa `count` de propósito: `count: 'exact'` faz o Postgres materializar o
+ * conjunto inteiro só para informar o total (o mesmo agravante que a migration
+ * 20260726a apontou), e `planned` é estimativa — arriscado quando o número é
+ * usado para decidir se ainda falta página, porque errar para baixo PERDE
+ * linhas e o total exibido fica menor que o relatório, sem nenhum sintoma.
+ *
+ * Detectar o fim por página incompleta é exato: com a paginação por range, se a
+ * página k volta com menos de PAGE linhas, não existe página k+1 com dados.
+ */
+async function paginarParalelo<T>(
+  buscarPagina: (de: number, ate: number) => Promise<RespostaPagina<T>>,
+): Promise<{ data: T[]; error: string | null }> {
+  const primeira = await buscarPagina(0, PAGE_SUPABASE - 1);
+  if (primeira.error) return { data: [], error: primeira.error };
+
+  const tudo: T[] = [...(primeira.data ?? [])];
+  if (tudo.length < PAGE_SUPABASE) return { data: tudo, error: null };
+
+  let proximo = PAGE_SUPABASE;
+  for (;;) {
+    const faixas: Array<[number, number]> = [];
+    for (let i = 0; i < PAGINAS_EM_PARALELO; i++) {
+      const de = proximo + i * PAGE_SUPABASE;
+      faixas.push([de, de + PAGE_SUPABASE - 1]);
+    }
+
+    const lotes = await Promise.all(faixas.map(([de, ate]) => buscarPagina(de, ate)));
+
+    const comErro = lotes.find(l => l.error);
+    if (comErro) return { data: [], error: comErro.error };
+
+    const paginas = lotes.map(l => l.data ?? []);
+    for (const p of paginas) tudo.push(...p);
+
+    // Qualquer página incompleta na onda significa que o conjunto acabou.
+    if (paginas.some(p => p.length < PAGE_SUPABASE)) return { data: tudo, error: null };
+
+    proximo += PAGINAS_EM_PARALELO * PAGE_SUPABASE;
+  }
 }
 
 // ── Resolução de operadores ───────────────────────────────────────────────────
@@ -396,38 +462,69 @@ export async function buscarAnaliticoDashboardMes(
   mes: string,   // 'yyyy-MM'
 ): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
   try {
-    // A RPC agrega por (dia, operador, forma, forma_detalhe, status). Num mês
-    // cheio esses grupos passam de 1000 linhas e o PostgREST corta a resposta
-    // — o "Total recebido" do dashboard vinha MENOR que o relatório. Pagina em
-    // blocos de 1000 (a RPC tem ORDER BY total desde a migration 20260726b, o
-    // que torna o range determinístico).
-    const PAGE = 1000;
-    let offset = 0;
-    const todas: AnaliticoDashboardLinha[] = [];
-    while (true) {
-      const { data, error } = await supabase
-        .rpc('fn_analitico_dashboard_mes', { p_empresa_id: empresaId, p_mes: mes })
-        // Ordem total explícita no wrapper do PostgREST — casa com o ORDER BY da
-        // RPC e torna o range determinístico entre as páginas.
-        .order('dia', { ascending: true })
-        .order('operador_id', { ascending: true, nullsFirst: false })
-        .order('forma_pagamento', { ascending: true, nullsFirst: false })
-        .order('forma_detalhe', { ascending: true, nullsFirst: false })
-        .order('status_tabulacao', { ascending: true, nullsFirst: false })
-        .range(offset, offset + PAGE - 1);
-      if (error) {
-        const faltando = /function|does not exist|schema cache/i.test(error.message);
-        return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
-      }
-      const lote = (data ?? []) as AnaliticoDashboardLinha[];
-      todas.push(...lote);
-      if (lote.length < PAGE) break;
-      offset += PAGE;
+    // Caminho novo (migration 20260729b): a RPC devolve TODOS os grupos num
+    // único JSONB. Uma linha só, então max_rows=1000 não corta e a agregação
+    // roda uma vez — contra uma agregação completa POR PÁGINA no caminho antigo.
+    const viaJson = await supabase.rpc('fn_analitico_dashboard_mes_json', {
+      p_empresa_id: empresaId,
+      p_mes:        mes,
+    });
+
+    if (!viaJson.error) {
+      const linhas = (viaJson.data ?? []) as unknown as AnaliticoDashboardLinha[];
+      return { data: Array.isArray(linhas) ? linhas : [], dbAtiva: true, error: null };
     }
-    return { data: todas, dbAtiva: true, error: null };
+
+    // A RPC nova ainda não existe no banco → cai no caminho paginado antigo.
+    // Qualquer outro erro é erro de verdade e deve subir.
+    const rpcAusente = /function|does not exist|schema cache/i.test(viaJson.error.message);
+    if (!rpcAusente) {
+      return { data: [], dbAtiva: true, error: viaJson.error.message };
+    }
+
+    return await buscarAnaliticoDashboardMesPaginado(empresaId, mes);
   } catch (err) {
     return { data: [], dbAtiva: false, error: err instanceof Error ? err.message : String(err) };
   }
+}
+
+/**
+ * Caminho legado, mantido para o intervalo entre publicar o build e aplicar a
+ * migration 20260729b (e vice-versa). Pode ser removido junto com
+ * `fn_analitico_dashboard_mes` quando as duas pontas estiverem em produção.
+ *
+ * Por que era lento: o PostgREST envelopa a RPC em
+ *   SELECT * FROM fn(...) ORDER BY ... LIMIT 1000 OFFSET n
+ * e a função plpgsql materializa o resultado completo a cada chamada — logo
+ * cada página re-executava a agregação do mês inteiro.
+ */
+async function buscarAnaliticoDashboardMesPaginado(
+  empresaId: string,
+  mes: string,
+): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
+  let offset = 0;
+  const todas: AnaliticoDashboardLinha[] = [];
+  while (true) {
+    const { data, error } = await supabase
+      .rpc('fn_analitico_dashboard_mes', { p_empresa_id: empresaId, p_mes: mes })
+      // Ordem total explícita no wrapper do PostgREST — casa com o ORDER BY da
+      // RPC e torna o range determinístico entre as páginas.
+      .order('dia', { ascending: true })
+      .order('operador_id', { ascending: true, nullsFirst: false })
+      .order('forma_pagamento', { ascending: true, nullsFirst: false })
+      .order('forma_detalhe', { ascending: true, nullsFirst: false })
+      .order('status_tabulacao', { ascending: true, nullsFirst: false })
+      .range(offset, offset + PAGE_SUPABASE - 1);
+    if (error) {
+      const faltando = /function|does not exist|schema cache/i.test(error.message);
+      return { data: [], dbAtiva: !faltando, error: faltando ? null : error.message };
+    }
+    const lote = (data ?? []) as AnaliticoDashboardLinha[];
+    todas.push(...lote);
+    if (lote.length < PAGE_SUPABASE) break;
+    offset += PAGE_SUPABASE;
+  }
+  return { data: todas, dbAtiva: true, error: null };
 }
 
 // ── Busca ────────────────────────────────────────────────────────────────────
@@ -470,22 +567,17 @@ export async function buscarAnalitico(
     return q;
   }
 
-  // Pagina em blocos de 1000 para superar o limite padrão do PostgREST (max_rows=1000).
-  // Sem isso, queries sem filtro de operador retornam apenas as primeiras 1000 linhas,
-  // causando totais incorretos na visão do líder.
-  const PAGE = 1000;
-  let allData: AnaliticoRecebimento[] = [];
-  let offset = 0;
-
-  while (true) {
-    const { data, error } = await buildQuery(offset, offset + PAGE - 1);
-    if (error) return { data: [], error: error.message };
-    if (data?.length) allData = allData.concat(data as unknown as AnaliticoRecebimento[]);
-    if (!data?.length || data.length < PAGE) break;
-    offset += PAGE;
-  }
-
-  return { data: allData, error: null };
+  // Pagina para superar o limite padrão do PostgREST (max_rows=1000). Sem isso,
+  // queries sem filtro de operador retornam apenas as primeiras 1000 linhas,
+  // causando totais incorretos na visão do líder. Em ondas paralelas — ver
+  // `paginarParalelo`.
+  return paginarParalelo<AnaliticoRecebimento>(async (de, ate) => {
+    const { data, error } = await buildQuery(de, ate);
+    return {
+      data:  (data as unknown as AnaliticoRecebimento[]) ?? [],
+      error: error?.message ?? null,
+    };
+  });
 }
 
 // ── Marcar como visto ─────────────────────────────────────────────────────────
@@ -637,6 +729,120 @@ export async function buscarDestaquesDoMes(
   return { data: (data ?? []) as DestaqueDiaAnalitico[], error: error?.message ?? null };
 }
 
+// ── Varredura única do mês (base das três agregações) ────────────────────────
+//
+// `buscarTotalOrfaosPorSetor`, `buscarTotalPorSetor` e `buscarRecebidoPorDia`
+// liam O MESMO mês, cada uma com a sua própria paginação — três downloads do
+// mesmo conjunto, sendo que os órfãos são um SUBCONJUNTO do total. E as três são
+// chamadas juntas nas mesmas telas (AnaliticoLider e PainelLider pedem duas num
+// Promise.all; o gráfico pede a terceira ao lado).
+//
+// Agora existe uma leitura só, com o superconjunto de colunas, e as três
+// funções derivam o resultado dela em memória. A deduplicação é por REQUISIÇÃO
+// EM VOO: enquanto a busca está pendente, chamadas simultâneas recebem a mesma
+// Promise; quando ela termina, a entrada é descartada. Isso elimina o trabalho
+// repetido sem criar cache com prazo de validade — nenhuma chamada futura corre
+// o risco de receber número velho.
+//
+// A agregação continua no CLIENTE de propósito. A regra "este recebimento conta
+// neste setor?" mora em `setoresDoOperador` (setor próprio + setores das equipes
+// clonadas) e não existe em SQL; uma RPC teria que duplicá-la e as duas versões
+// divergiriam — foi exatamente assim que o total do setor passou a discordar de
+// Desempenho Equipes.
+
+/** Superconjunto de colunas que as três agregações do mês consomem. */
+interface LinhaMesAnalitico {
+  operador_id:      string | null;
+  setor_id:         string | null;
+  importado_por_id: string | null;
+  valor_recebido:   number;
+  total_ho:         number | null;
+  data_pagamento:   string;   // 'yyyy-MM-dd'
+}
+
+interface MesCarregado {
+  /** null = falha na leitura. */
+  linhas: LinhaMesAnalitico[] | null;
+  /** perfil.id → setor_id, para resolver linha sem `setor_id` carimbado. */
+  setorDoPerfil: Map<string, string | null>;
+}
+
+/** Primeiro e último dia (ISO) do mês 'yyyy-MM'. */
+function limitesDoMes(mes: string): { primeiro: string; fim: string } {
+  const [y, m] = mes.split('-').map(Number);
+  return {
+    primeiro: `${mes}-01`,
+    fim:      `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`,
+  };
+}
+
+async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarregado> {
+  const { primeiro, fim } = limitesDoMes(mes);
+
+  const buscar = async (comSetor: boolean): Promise<LinhaMesAnalitico[] | null> => {
+    const cols = comSetor
+      ? 'operador_id, setor_id, importado_por_id, valor_recebido, total_ho, data_pagamento'
+      : 'operador_id, importado_por_id, valor_recebido, total_ho, data_pagamento';
+
+    const { data, error } = await paginarParalelo<LinhaMesAnalitico>(async (de, ate) => {
+      const r = await supabase
+        .from('analitico_recebimentos')
+        .select(cols)
+        .eq('empresa_id', empresaId)
+        .gte('data_pagamento', primeiro)
+        .lte('data_pagamento', fim)
+        .range(de, ate);
+      return {
+        data:  (r.data as unknown as LinhaMesAnalitico[]) ?? [],
+        error: r.error?.message ?? null,
+      };
+    });
+
+    if (error) return null;
+    return data;
+  };
+
+  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
+  const linhas = (await buscar(true)) ?? (await buscar(false));
+
+  const setorDoPerfil = new Map<string, string | null>();
+  if (linhas?.length) {
+    const { data: perfis } = await supabase
+      .from('perfis')
+      .select('id, setor_id')
+      .eq('empresa_id', empresaId);
+    for (const p of ((perfis ?? []) as { id: string; setor_id: string | null }[])) {
+      setorDoPerfil.set(p.id, p.setor_id);
+    }
+  }
+
+  return { linhas, setorDoPerfil };
+}
+
+const mesEmVoo = new Map<string, Promise<MesCarregado>>();
+
+/**
+ * Lê o mês uma vez, compartilhando a requisição entre chamadas simultâneas.
+ * Nunca rejeita: falha vira `linhas: null`, como as funções antigas faziam.
+ */
+function lerMesAnaliticoDedup(empresaId: string, mes: string): Promise<MesCarregado> {
+  const chave = `${empresaId}::${mes}`;
+  const emAndamento = mesEmVoo.get(chave);
+  if (emAndamento) return emAndamento;
+
+  const promessa = lerMesAnalitico(empresaId, mes)
+    .catch((): MesCarregado => ({ linhas: null, setorDoPerfil: new Map() }))
+    .finally(() => { mesEmVoo.delete(chave); });
+
+  mesEmVoo.set(chave, promessa);
+  return promessa;
+}
+
+/** Setor de uma linha: o carimbado na importação; senão o setor de quem importou. */
+function setorDaLinha(l: LinhaMesAnalitico, setorDoPerfil: Map<string, string | null>): string | null {
+  return l.setor_id ?? setorDoPerfil.get(l.importado_por_id ?? '') ?? null;
+}
+
 // ── Total dos órfãos (sem operador) por setor ─────────────────────────────────
 // Órfão pertence ao setor da importação (setor_id da linha; linhas antigas caem
 // no setor de quem importou). O card "Total recebido" do setor e o painel do
@@ -647,49 +853,13 @@ export async function buscarTotalOrfaosPorSetor(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<Record<string, { total: number; qtd: number }>> {
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-
-  interface RowOrfao { valor_recebido: number; setor_id?: string | null; importado_por_id: string | null }
-  const buscar = async (comSetor: boolean): Promise<RowOrfao[] | null> => {
-    const cols = comSetor
-      ? 'valor_recebido, setor_id, importado_por_id'
-      : 'valor_recebido, importado_por_id';
-    const PAGE = 1000;
-    const linhas: RowOrfao[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('analitico_recebimentos')
-        .select(cols)
-        .eq('empresa_id', empresaId)
-        .is('operador_id', null)
-        .gte('data_pagamento', primeiro)
-        .lte('data_pagamento', fim)
-        .range(offset, offset + PAGE - 1);
-      if (error) return null;
-      linhas.push(...((data ?? []) as unknown as RowOrfao[]));
-      if (!data?.length || data.length < PAGE) break;
-      offset += PAGE;
-    }
-    return linhas;
-  };
-
-  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
-  const linhas = (await buscar(true)) ?? (await buscar(false));
+  const { linhas, setorDoPerfil } = await lerMesAnaliticoDedup(empresaId, mes);
   if (!linhas?.length) return {};
-
-  const { data: perfis } = await supabase
-    .from('perfis')
-    .select('id, setor_id')
-    .eq('empresa_id', empresaId);
-  const setorDoPerfil = new Map(
-    ((perfis ?? []) as { id: string; setor_id: string | null }[]).map(p => [p.id, p.setor_id]));
 
   const porSetor: Record<string, { total: number; qtd: number }> = {};
   for (const l of linhas) {
-    const sid = l.setor_id ?? setorDoPerfil.get(l.importado_por_id ?? '') ?? null;
+    if (l.operador_id != null) continue;   // só órfãos
+    const sid = setorDaLinha(l, setorDoPerfil);
     if (!sid) continue;
     const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, qtd: 0 });
     acc.total += Number(l.valor_recebido) || 0;
@@ -708,48 +878,12 @@ export async function buscarTotalPorSetor(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<Record<string, { total: number; ho: number; qtd: number }>> {
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-
-  interface RowTot { valor_recebido: number; total_ho: number | null; setor_id?: string | null; importado_por_id: string | null }
-  const buscar = async (comSetor: boolean): Promise<RowTot[] | null> => {
-    const cols = comSetor
-      ? 'valor_recebido, total_ho, setor_id, importado_por_id'
-      : 'valor_recebido, total_ho, importado_por_id';
-    const PAGE = 1000;
-    const linhas: RowTot[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('analitico_recebimentos')
-        .select(cols)
-        .eq('empresa_id', empresaId)
-        .gte('data_pagamento', primeiro)
-        .lte('data_pagamento', fim)
-        .range(offset, offset + PAGE - 1);
-      if (error) return null;
-      linhas.push(...((data ?? []) as unknown as RowTot[]));
-      if (!data?.length || data.length < PAGE) break;
-      offset += PAGE;
-    }
-    return linhas;
-  };
-
-  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
-  const linhas = (await buscar(true)) ?? (await buscar(false));
+  const { linhas, setorDoPerfil } = await lerMesAnaliticoDedup(empresaId, mes);
   if (!linhas?.length) return {};
-
-  const { data: perfis } = await supabase
-    .from('perfis')
-    .select('id, setor_id')
-    .eq('empresa_id', empresaId);
-  const setorDoPerfil = new Map(
-    ((perfis ?? []) as { id: string; setor_id: string | null }[]).map(p => [p.id, p.setor_id]));
 
   const porSetor: Record<string, { total: number; ho: number; qtd: number }> = {};
   for (const l of linhas) {
-    const sid = l.setor_id ?? setorDoPerfil.get(l.importado_por_id ?? '') ?? null;
+    const sid = setorDaLinha(l, setorDoPerfil);
     if (!sid) continue;
     const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, ho: 0, qtd: 0 });
     acc.total += Number(l.valor_recebido) || 0;
@@ -773,48 +907,26 @@ export interface LinhaRecebidaDia {
 
 /**
  * Linhas cruas do mês, só com as colunas que o gráfico por dia precisa.
- *
- * Agrega no cliente, não no banco, de propósito: a regra de "este recebimento
- * conta neste setor?" mora em setoresDoOperador (setor próprio + setores das
- * equipes clonadas) e não existe em SQL. Uma RPC teria que duplicá-la e as
- * duas versões divergiriam — foi exatamente assim que o total do setor passou
- * a discordar de Desempenho Equipes.
+ * Vem da mesma varredura das duas funções acima (ver o bloco no início desta
+ * seção) — chamar as três lado a lado custa uma leitura, não três.
  */
 export async function buscarRecebidoPorDia(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<{ data: LinhaRecebidaDia[]; error: string | null }> {
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-
-  const buscar = async (comSetor: boolean): Promise<LinhaRecebidaDia[] | null> => {
-    const cols = comSetor
-      ? 'operador_id, setor_id, importado_por_id, valor_recebido, data_pagamento'
-      : 'operador_id, importado_por_id, valor_recebido, data_pagamento';
-    const PAGE = 1000;
-    const linhas: LinhaRecebidaDia[] = [];
-    let offset = 0;
-    while (true) {
-      const { data, error } = await supabase
-        .from('analitico_recebimentos')
-        .select(cols)
-        .eq('empresa_id', empresaId)
-        .gte('data_pagamento', primeiro)
-        .lte('data_pagamento', fim)
-        .range(offset, offset + PAGE - 1);
-      if (error) return null;
-      linhas.push(...((data ?? []) as unknown as LinhaRecebidaDia[]));
-      if (!data?.length || data.length < PAGE) break;
-      offset += PAGE;
-    }
-    return linhas;
-  };
-
-  // Coluna setor_id pode não existir ainda (migration 20260712a) → fallback
-  const linhas = (await buscar(true)) ?? (await buscar(false));
+  const { linhas } = await lerMesAnaliticoDedup(empresaId, mes);
   if (!linhas) return { data: [], error: 'Falha ao carregar os recebimentos do mês.' };
-  return { data: linhas, error: null };
+
+  return {
+    data: linhas.map(l => ({
+      operador_id:      l.operador_id,
+      setor_id:         l.setor_id ?? null,
+      importado_por_id: l.importado_por_id,
+      valor_recebido:   l.valor_recebido,
+      data_pagamento:   l.data_pagamento,
+    })),
+    error: null,
+  };
 }
 
 // ── Equipes e mapa operador→equipe ────────────────────────────────────────────

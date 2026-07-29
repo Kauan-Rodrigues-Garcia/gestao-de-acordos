@@ -8,7 +8,7 @@
  */
 
 import type { DiarioRecebimento } from '@/lib/supabase';
-import { formaKindDiario, isCartaoDiario, normDiario, type FormaKindDiario } from '@/services/diario/diarioParser';
+import { formaKindDiario, isCartaoDiario, normDiario, type FormaKindDiario } from '@/services/diario/diarioComum';
 import { formatBRL } from '@/lib/money';
 
 // ── Ignorados (próximo contato ≤ data do pagamento) ──────────────────────────

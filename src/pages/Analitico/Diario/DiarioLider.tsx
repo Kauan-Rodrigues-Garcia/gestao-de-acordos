@@ -31,7 +31,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
-import { normDiario } from '@/services/diario/diarioParser';
+import { normDiario } from '@/services/diario/diarioComum';
 import { copiarTexto } from '@/lib/clipboard';
 import { supabase } from '@/lib/supabase';
 import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';

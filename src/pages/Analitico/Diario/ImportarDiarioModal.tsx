@@ -19,7 +19,7 @@ import {
   ChevronDown, ChevronUp, ArrowRight,
 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
-import { dayKeyDiario } from '@/services/diario/diarioParser';
+import { dayKeyDiario } from '@/services/diario/diarioComum';
 import { fmtDataISO } from './helpers';
 import { FormaChip } from './FormaChip';
 import type { useDiarioImport } from '@/hooks/useDiarioImport';

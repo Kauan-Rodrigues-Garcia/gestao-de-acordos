@@ -3,14 +3,14 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { supabase } from '@/lib/supabase';
-import {
-  parseRelatorioExcel,
-  type LinhaRelatorio,
-} from '@/services/analitico/analiticoParser';
-import { parseRelatorioBookplay } from '@/services/bookplay/bookplayRecebimentoParser';
+// Tipos e helpers puros vêm dos módulos *Comum. Os parsers (que carregam xlsx,
+// ~484 KB) são importados dinamicamente nos handlers — só quando o usuário
+// escolhe de fato um arquivo. Sem isso o chunk do xlsx entraria no bundle da
+// aba Analítico, que apenas exibe dados.
+import type { LinhaRelatorio } from '@/services/analitico/analiticoComum';
 import {
   diaReferencia, dayKeyDiario, type LinhaDiario,
-} from '@/services/diario/diarioParser';
+} from '@/services/diario/diarioComum';
 import { toast } from 'sonner';
 import {
   resolverOperadores,
@@ -114,6 +114,8 @@ export function useAnaliticoImport() {
 
     // ── BookPlay: um único relatório alimenta Analítico + Recebimento diário ──
     if (!tenant.isPaguePlay) {
+      // xlsx entra aqui, sob demanda (ver comentário do import no topo).
+      const { parseRelatorioBookplay } = await import('@/services/bookplay/bookplayRecebimentoParser');
       const { analitico, diario, erros: errosBP } = await parseRelatorioBookplay(file);
       if (!analitico.length) {
         setErroGeral(errosBP.length ? errosBP.join('\n') : 'Nenhuma linha válida encontrada no arquivo.');
@@ -151,6 +153,8 @@ export function useAnaliticoImport() {
     }
 
     // ── PaguePlay: fluxo original (relatório analítico dedicado) ──
+    // xlsx entra aqui, sob demanda (ver comentário do import no topo).
+    const { parseRelatorioExcel } = await import('@/services/analitico/analiticoParser');
     const { linhas, erros } = await parseRelatorioExcel(file);
 
     if (!linhas.length) {

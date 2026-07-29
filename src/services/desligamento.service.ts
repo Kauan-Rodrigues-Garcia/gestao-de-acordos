@@ -226,7 +226,9 @@ export async function transferirAcordoNoServidor(params: {
   if (!token) {
     const { data, error } = await supabase.rpc('fn_transferir_acordo_nr', corpo);
     if (error) return { ok: false, erro: error.message };
-    return (data as RetornoTransferencia) ?? { ok: false, erro: 'resposta_vazia' };
+    // A RPC devolve JSONB; o tipo gerado é `Json`, então o passo por `unknown`
+    // é obrigatório para estreitar até a forma concreta do retorno.
+    return (data as unknown as RetornoTransferencia) ?? { ok: false, erro: 'resposta_vazia' };
   }
 
   // Com token de líder: fetch direto, para não trocar a sessão do operador.

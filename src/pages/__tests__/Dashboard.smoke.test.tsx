@@ -8,6 +8,7 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 // ── Subject under test ──────────────────────────────────────────────────────
 import Dashboard from '../Dashboard';
@@ -190,13 +191,33 @@ vi.mock('react-router-dom', async () => {
 
 // ── Tests ───────────────────────────────────────────────────────────────────
 
+/**
+ * O Dashboard monta `MetaProgressoHeader`, que consome `useAnaliticoDashboard` —
+ * e esse hook usa React Query para compartilhar uma única busca do mês entre os
+ * seus dois consumidores. O `QueryClientProvider` existe no App real (`App.tsx`);
+ * aqui ele precisa ser fornecido, senão o hook lança "No QueryClient set".
+ *
+ * `retry: false` para o teste não ficar esperando retentativa quando uma query
+ * falha, e um client novo por render para não vazar cache entre casos.
+ */
+function renderDashboard() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Dashboard />
+    </QueryClientProvider>,
+  );
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
 });
 
 describe('Dashboard (smoke)', () => {
   it('renders without crashing and shows greeting', async () => {
-    render(<Dashboard />);
+    renderDashboard();
     // Page shows a greeting ("Bom dia / Boa tarde / Boa noite")
     await waitFor(() => {
       expect(
@@ -206,7 +227,7 @@ describe('Dashboard (smoke)', () => {
   });
 
   it('shows analytics panel stub', async () => {
-    render(<Dashboard />);
+    renderDashboard();
     // AnalyticsPanel is mocked with data-testid="analytics-panel"
     await waitFor(() => {
       expect(screen.getByTestId('analytics-panel')).toBeInTheDocument();
@@ -214,7 +235,7 @@ describe('Dashboard (smoke)', () => {
   });
 
   it('shows link to acordos for Bookplay tenant', async () => {
-    render(<Dashboard />);
+    renderDashboard();
     await waitFor(() => {
       // For non-PaguePLAY tenants Dashboard renders a "Ver todos os acordos" link
       expect(screen.getByText(/ver todos os acordos/i)).toBeInTheDocument();

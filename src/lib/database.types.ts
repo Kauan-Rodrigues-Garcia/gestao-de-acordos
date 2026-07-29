@@ -1933,6 +1933,25 @@ export type Database = {
           qtd: number
         }[]
       }
+      // Migration 20260729b — mesmo agregado da função acima, num único JSONB
+      // (sem max_rows, sem paginação, uma agregação só).
+      fn_analitico_dashboard_mes_json: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: Json
+      }
+      // Migration 20260728a — situação do operador e transferência de acordo.
+      fn_situacao_operador: {
+        Args: { p_operador_id: string }
+        Returns: string
+      }
+      fn_transferir_acordo_nr: {
+        Args: {
+          p_acordo_id: string
+          p_novo_operador_id: string | null
+          p_motivo: string
+        }
+        Returns: Json
+      }
       fn_analitico_destaques_dia: {
         Args: {
           p_empresa_id: string

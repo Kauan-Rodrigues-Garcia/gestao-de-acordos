@@ -29,8 +29,8 @@
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
-import { norm, toDate, extrairNome, type LinhaRelatorio } from '@/services/analitico/analiticoParser';
-import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioParser';
+import { norm, toDate, extrairNome, type LinhaRelatorio } from '@/services/analitico/analiticoComum';
+import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioComum';
 import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 export interface ResultadoParseBookplay {

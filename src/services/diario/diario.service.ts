@@ -21,8 +21,8 @@ import type {
   ResumoOperadorAnalitico,
   LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
-import type { LinhaDiario } from './diarioParser';
-import { dayKeyDiario } from './diarioParser';
+import type { LinhaDiario } from './diarioComum';
+import { dayKeyDiario } from './diarioComum';
 
 // Reexporta a resolução de operadores do analítico — o fluxo de vínculo
 // (match automático case-insensitive + vínculo manual) é o mesmo.

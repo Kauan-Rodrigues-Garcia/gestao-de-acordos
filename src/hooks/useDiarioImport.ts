@@ -7,12 +7,15 @@ import { useState, useCallback } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
+// Helpers puros vêm de diarioComum; `parseRelatorioDiario` (que carrega xlsx,
+// ~484 KB) é importado dinamicamente no handler — só quando o usuário escolhe
+// de fato um arquivo. Sem isso o chunk do xlsx entraria no bundle da aba
+// Analítico, que apenas exibe dados.
 import {
-  parseRelatorioDiario,
   diaReferencia,
   dayKeyDiario,
   type LinhaDiario,
-} from '@/services/diario/diarioParser';
+} from '@/services/diario/diarioComum';
 import {
   resolverOperadores,
   importarLoteDiario,
@@ -82,6 +85,9 @@ export function useDiarioImport() {
     setEstado('parsing');
     setErroGeral(null);
     setVinculosManuais({});
+
+    // xlsx entra aqui, sob demanda (ver comentário do import no topo).
+    const { parseRelatorioDiario } = await import('@/services/diario/diarioParser');
 
     // PP: linhas sem operador entram como "(sem vínculo)" — somam no setor
     const { linhas, erros, descartadasSemOperador } = await parseRelatorioDiario(file, {
