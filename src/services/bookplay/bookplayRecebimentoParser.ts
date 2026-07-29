@@ -196,6 +196,12 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     } else {
       mapD.set(chave, {
         operador_usuario: l.operador_usuario,
+        // BookPlay não tem "Cód.Cliente": a chave da operação é o NR
+        // (NrDocumento), que vai em `acordo_codigo` e é o que as telas do diário
+        // exibem quando `mostrarNR` é true. O campo existe para a PaguePlay, cujo
+        // relatório traz a coluna Cód.Cliente — aqui fica vazio de propósito e o
+        // diario.service grava null.
+        cliente_codigo:   '',
         nome_cliente:     l.nome_cliente,
         acordo_codigo:    l.codigo,
         instituicao:      l.instituicao,

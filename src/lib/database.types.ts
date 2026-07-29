@@ -678,6 +678,35 @@ export type Database = {
           },
         ]
       }
+      // Migration 20260725b — líder por equipe (BookPlay). A equipe declara quem
+      // a comanda; um líder pode liderar várias equipes, de qualquer setor.
+      equipe_lideres: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          equipe_id: string
+          id: string
+          lider_id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          equipe_id: string
+          id?: string
+          lider_id: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          equipe_id?: string
+          id?: string
+          lider_id?: string
+        }
+        Relationships: []
+      }
       equipe_operadores_clones: {
         Row: {
           conta_recebimento: boolean
@@ -1733,29 +1762,38 @@ export type Database = {
       }
       setores: {
         Row: {
+          // Migration 20260724a — setor sem relatório próprio: acumulado = soma
+          // dos usuários (membros + clones) em vez do total importado.
+          alternativo: boolean
           ativo: boolean
           atualizado_em: string
           criado_em: string
           descricao: string | null
           empresa_id: string
+          // Migration 20260725a — foto exibida nos painéis.
+          foto_url: string | null
           id: string
           nome: string
         }
         Insert: {
+          alternativo?: boolean
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
           descricao?: string | null
           empresa_id: string
+          foto_url?: string | null
           id?: string
           nome: string
         }
         Update: {
+          alternativo?: boolean
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
           descricao?: string | null
           empresa_id?: string
+          foto_url?: string | null
           id?: string
           nome?: string
         }
