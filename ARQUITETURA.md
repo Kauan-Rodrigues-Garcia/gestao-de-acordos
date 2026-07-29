@@ -1,5 +1,10 @@
 # Gestão de Acordos — Arquitetura e Documentação
 
+> Este documento cobre **como o sistema é construído**. Para **como o sistema
+> decide** — permissões, RLS, tabulação de acordos, Direto/Extra, equipes,
+> metas, analítico e recebimento diário, nas duas operações (Pague Play e
+> Book Play) — consulte [docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md).
+
 ## Estrutura do Projeto
 
 ```

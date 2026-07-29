@@ -116,27 +116,34 @@ gestao-de-acordos/
 
 ## 🔐 Perfis de Acesso (RBAC)
 
-O sistema implementa **7 perfis** com níveis crescentes de acesso, protegidos por RLS no PostgreSQL e pelo componente `ProtectedRoute` no frontend.
+O sistema implementa **8 perfis** com níveis crescentes de acesso, protegidos por RLS no PostgreSQL e pelo componente `ProtectedRoute` no frontend. Os níveis abaixo são os de `PERFIL_NIVEL` em `src/lib/index.ts`.
 
 | Perfil | Nível | Permissões |
 |---|---|---|
 | **operador** | 1 | Acessa apenas seus próprios acordos |
+| **ouvidoria** | 2 | Herda os gates de líder; foco na aba Ouvidoria |
 | **lider** | 2 | Acessa acordos e operadores do seu setor; gerencia equipe |
-| **gerencia** | 3 | Visão multi-setor; relatórios gerenciais |
-| **elite** | 4 | Recursos avançados (toggle Elite); combinável com outros perfis |
-| **administrador** | 5 | Acesso total — todos os setores, acordos, configurações e logs |
-| **diretoria** | 6 | Painel estratégico com KPIs, projeções e comparativos mensais |
+| **elite** | 3 | Recursos avançados (toggle Elite); combinável com outros perfis |
+| **gerencia** | 4 | Visão multi-setor; relatórios gerenciais |
+| **diretoria** | 5 | Painel estratégico com KPIs, projeções e comparativos mensais |
+| **administrador** | 6 | Acesso total — todos os setores, acordos, configurações e logs |
 | **super_admin** | 7 | Cross-tenant — gerencia todas as empresas do sistema |
 
-> Para detalhes completos de cada perfil, consulte a seção **Perfis de Acesso (RBAC)** no [ARQUITETURA.md](./ARQUITETURA.md).
+> Para as regras completas de permissão, escopo por setor e RLS, consulte [docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md).
 
 ---
 
 ---
 
-## 📖 Documentação de Arquitetura
+## 📖 Documentação
 
-Para detalhes técnicos sobre a estrutura de componentes, camada de serviços, banco de dados e decisões de arquitetura, consulte o arquivo [ARQUITETURA.md](./ARQUITETURA.md).
+| Documento | Conteúdo |
+|---|---|
+| [ARQUITETURA.md](./ARQUITETURA.md) | Estrutura de componentes, camada de serviços, banco de dados e decisões de arquitetura |
+| [docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md) | **Regras de negócio das duas operações** (Pague Play e Book Play): permissões, RLS, tabulação de acordos, Direto/Extra, equipes, metas, analítico e recebimento diário |
+| [TESTING.md](./TESTING.md) | Guia de testes |
+| [SECURITY.md](./SECURITY.md) | Política de segurança e status de dependências |
+
 ---
 
 ## 🚀 Deploy em Produção
