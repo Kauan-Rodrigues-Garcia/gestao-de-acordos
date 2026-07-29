@@ -51,9 +51,19 @@ vi.mock('@/lib/supabase', () => {
     };
     return builder;
   };
+  // `channel`/`removeChannel` passaram a ser necessários: a árvore do componente
+  // assina realtime. Sem eles o render estoura com "supabase.channel is not a
+  // function" antes de qualquer asserção. Canal no-op — este arquivo testa as
+  // regras do formulário, não realtime.
+  const fakeChannel = {
+    on:        vi.fn(() => fakeChannel),
+    subscribe: vi.fn(() => fakeChannel),
+  };
   return {
     supabase: {
-      from: vi.fn((t: string) => makeBuilder(t)),
+      from:          vi.fn((t: string) => makeBuilder(t)),
+      channel:       vi.fn(() => fakeChannel),
+      removeChannel: vi.fn(),
     },
   };
 });
@@ -62,6 +72,26 @@ vi.mock('@/lib/supabase', () => {
 let empresaValue: { id: string } | null = { id: 'emp-1' };
 vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: empresaValue }),
+}));
+
+// 3b) useAuth — o componente passou a ler `perfil` (id/setor/equipe para resolver
+// a lógica Direto e Extra, e `tampermonkey_configured` para o botão do Chatplay).
+// Sem este mock o hook lança "useAuth deve ser usado dentro de AuthProvider" no
+// primeiro render, e TODO teste do arquivo morria antes de exercer qualquer regra.
+vi.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({
+    perfil: {
+      id:                      'perfil-1',
+      nome:                    'Operador Teste',
+      perfil:                  'operador',
+      empresa_id:              'emp-1',
+      setor_id:                null,
+      equipe_id:               null,
+      tampermonkey_configured: false,
+    },
+    user:    { id: 'perfil-1' },
+    loading: false,
+  }),
 }));
 
 // 4) toast do sonner — spies.

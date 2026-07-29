@@ -26,8 +26,15 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
   // - For um par deduplicado (_vinculoDuplo)
   // - OU for um acordo Direto que possui um operador vinculado (vinculo_operador_id)
   const isDireto = (a.tipo_vinculo === 'direto' || !a.tipo_vinculo);
-  const temVinculoExtra = Boolean(a.vinculo_operador_id) || Boolean(a._vinculoExtraOperadorId);
-  
+  // Vale como evidência de vínculo o id OU o nome do par. Na prática os dois são
+  // gravados juntos (e limpos juntos, em tratarExclusaoVinculo), mas exigir só o
+  // id fazia uma linha gravada pela metade esconder um vínculo que existe — e a
+  // tag é informativa, então errar para o lado de mostrar é o lado seguro.
+  const temVinculoExtra =
+    Boolean(a.vinculo_operador_id) ||
+    Boolean(a.vinculo_operador_nome) ||
+    Boolean(a._vinculoExtraOperadorId);
+
   if (a._vinculoDuplo || (isDireto && temVinculoExtra)) {
     const nomeOutro = a._vinculoExtraOperadorNome || a.vinculo_operador_nome || 'outro operador';
     return (
@@ -42,10 +49,14 @@ export function VinculoTag({ acordo, size = 'xs' }: Props) {
 
   // 2. Lógica de Extra isolado
   if (a.tipo_vinculo === 'extra') {
+    // No lado EXTRA, `vinculo_operador_nome` aponta para o dono do DIRETO. Dizer
+    // com quem é o vínculo é a mesma informação que a tag azul dá — antes o
+    // título era fixo e o operador não tinha como saber o par pela tag.
+    const nomeDireto = a._vinculoExtraOperadorNome || a.vinculo_operador_nome;
     return (
       <span
         className={`${TAG_BASE} ${sizeClasses} bg-amber-500/15 text-amber-700 border-amber-500/30`}
-        title="Acordo Extra"
+        title={nomeDireto ? `Acordo Extra — vínculo com ${nomeDireto}` : 'Acordo Extra'}
       >
         <Link2 className={iconSize} /> Extra
       </span>

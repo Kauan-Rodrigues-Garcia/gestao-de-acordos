@@ -289,9 +289,12 @@ describe('parseCurrencyInput', () => {
     expect(parseCurrencyInput('')).toBe(0);
   });
 
-  it('zera em strings com separador de milhar (limitação; usar parseBRL em money.ts)', () => {
-    // '1.234,56' → '1.234,56' → '1.234.56' → Number = NaN → 0
-    expect(parseCurrencyInput('1.234,56')).toBe(0);
+  // A limitação que este teste documentava deixou de existir:
+  // `parseCurrencyInput` é hoje um alias de `parseBRL` (lib/money.ts), que trata
+  // separador de milhar. Passou a verificar o comportamento correto.
+  it('interpreta separador de milhar corretamente', () => {
+    expect(parseCurrencyInput('1.234,56')).toBe(1234.56);
+    expect(parseCurrencyInput('1.234.567,89')).toBe(1234567.89);
   });
 });
 

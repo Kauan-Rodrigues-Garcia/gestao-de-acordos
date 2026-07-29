@@ -62,12 +62,15 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
       }
     }
 
-    // Fallback parcelas: "06 parcelas" no texto (aceita O no lugar de 0)
+    // Fallback parcelas: "06 parcelas" no texto (aceita O no lugar de 0).
+    // O último padrão cobre "em 4x de R$ ..." — fica por último de propósito,
+    // porque "4x" é genérico e só deve valer quando nada mais identificou.
     if (!out.parcelas) {
       const mParc =
         t.match(/([0O\d][0-9]|[1-9])\s+parcelas?\b/i) ||
         t.match(/parcelas?\s*[:-]?\s*(\d{1,2})/i) ||
-        t.match(/\b1\s*de\s*(\d{1,2})\b/i);
+        t.match(/\b1\s*de\s*(\d{1,2})\b/i) ||
+        t.match(/\b(\d{1,2})\s*x\b/i);
       if (mParc) {
         const n = parseInt(mParc[1].replace(/O/gi, '0'), 10);
         if (n >= 1 && n <= 12) out.parcelas = String(n);
@@ -94,8 +97,20 @@ export function extrairDadosPrintPP(textoOcr: string): DadosExtraidosPP {
     if (mDo) out.valor = norm(mDo[1]);
   }
 
+  // "Valor total: R$ 1.422,81" — rótulo que o ERP usa quando não há tabela de
+  // parcelas (cartão, ou boleto de parcela única). Sem isto o valor voltava
+  // undefined e o formulário abria em branco.
+  if (!out.valor) {
+    const mTotal = t.match(/valor\s+total\b[^\d\n]{0,20}(\d{1,3}(?:[.\s]\d{3})*,\d{2})/i);
+    if (mTotal) out.valor = norm(mTotal[1]);
+  }
+
   // ── Nome do cliente ───────────────────────────────────────────────────
-  const mNome = t.match(/(?:cliente|nome)\s*[:-]?\s*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú\s]{3,60})/i);
+  // A classe de caracteres NÃO pode usar \s: \s casa \n, então o match
+  // atravessava a quebra de linha e colava a primeira palavra da linha seguinte
+  // no nome ("SIMONE MARIA ... DE LIRA Boleto"). Espaço e tab explícitos param
+  // o casamento no fim da linha.
+  const mNome = t.match(/(?:cliente|nome)\s*[:-]?\s*([A-ZÀ-Ú][A-ZÀ-Úa-zà-ú \t]{3,60})/i);
   if (mNome) {
     out.nome_cliente = mNome[1].trim().replace(/\s{2,}/g, ' ');
   }

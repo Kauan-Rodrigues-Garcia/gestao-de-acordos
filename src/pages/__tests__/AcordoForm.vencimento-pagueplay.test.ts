@@ -4,72 +4,76 @@
  * Regressão do item #5: na tela cheia de "Novo acordo" da PaguePlay,
  * o input de Vencimento era um <input type="date"> digitável. O usuário
  * pediu para substituir pelo mesmo componente de calendário visual
- * (`DatePickerField`) já usado no `AcordoNovoInline` (e no branch
- * Bookplay do próprio `AcordoForm`).
+ * (`DatePickerField`) já usado no `AcordoNovoInline`.
  *
- * Este teste faz inspeção estática sobre `src/pages/AcordoForm.tsx`:
- *   1. Nenhum `<input type="date">` pode existir no arquivo todo.
- *   2. `DatePickerField` deve ser importado de `@/components/DatePickerField`.
- *   3. Devem existir DUAS renderizações de `DatePickerField` no JSX —
- *      uma no bloco `isPP ? (...)` (PaguePlay) e outra no `(...) : (...)`
- *      (Bookplay) — ambas ligadas ao campo `vencimento` via
- *      `watch('vencimento')` e `setValue('vencimento', ...)`.
- *   4. O ícone `Calendar` de lucide-react (usado apenas pelo input
- *      antigo) deve ter sido removido dos imports.
+ * Inspeção estática, não render: montar o AcordoForm exige
+ * supabase/auth/motion/useEmpresa + zodResolver com 2 schemas por tenant +
+ * carregamento assíncrono no modo edição. Para o que se quer garantir aqui —
+ * "não existe input de data digitável em nenhum dos dois formulários" — ler o
+ * fonte é mais estável e diz exatamente isso.
  *
- * Esta abordagem evita flakiness: renderizar o AcordoForm completo
- * requer supabase/auth/motion/useEmpresa/useEmpresaAtual + zodResolver
- * com 2 schemas por tenant + lazy loading de dados em modo edit.
+ * ⚠️  ATUALIZADO: o arquivo único `src/pages/AcordoForm.tsx` foi dividido em
+ *     `AcordoForm/index.tsx` (container) + `FormPP.tsx` + `FormBP.tsx`, um
+ *     formulário por tenant. O teste apontava para o caminho antigo e o arquivo
+ *     inteiro deixou de coletar (`ENOENT`), então nenhuma das garantias abaixo
+ *     estava valendo. Agora cada tenant é verificado no SEU arquivo — antes as
+ *     duas renderizações eram contadas no mesmo fonte.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const FILE = resolve(__dirname, '../AcordoForm.tsx');
-const src = readFileSync(FILE, 'utf-8');
+const FORMULARIOS = [
+  { tenant: 'PaguePlay', arquivo: 'FormPP.tsx' },
+  { tenant: 'Bookplay',  arquivo: 'FormBP.tsx' },
+] as const;
 
-describe('AcordoForm (tela cheia) — Vencimento migrado para DatePickerField (#5)', () => {
-  it('não possui mais nenhum <input type="date"> no arquivo', () => {
-    // Cobre aspas simples e duplas, e espaços variados
-    const regex = /<input\b[^>]*\btype\s*=\s*["']date["']/i;
-    expect(regex.test(src)).toBe(false);
-  });
+function lerFormulario(arquivo: string): string {
+  return readFileSync(resolve(__dirname, '../AcordoForm', arquivo), 'utf-8');
+}
 
-  it('importa DatePickerField do path compartilhado', () => {
-    expect(src).toMatch(
-      /import\s*\{\s*DatePickerField\s*\}\s*from\s*['"]@\/components\/DatePickerField['"]/,
-    );
-  });
+describe('AcordoForm (tela cheia) — Vencimento via DatePickerField (#5)', () => {
+  describe.each(FORMULARIOS)('$tenant ($arquivo)', ({ arquivo }) => {
+    const src = lerFormulario(arquivo);
 
-  it('renderiza DatePickerField em AMBOS os branches (PaguePlay e Bookplay)', () => {
-    const occurrences = src.match(/<DatePickerField\b/g) ?? [];
-    expect(occurrences.length).toBe(2);
-  });
+    it('não possui nenhum <input type="date">', () => {
+      // Cobre aspas simples e duplas, e espaços variados
+      const regex = /<input\b[^>]*\btype\s*=\s*["']date["']/i;
+      expect(regex.test(src)).toBe(false);
+    });
 
-  it('ambas renderizações de DatePickerField ligam ao campo "vencimento" do react-hook-form', () => {
-    // Captura cada bloco <DatePickerField ... /> e verifica vínculo RHF
-    const blocos = src.match(/<DatePickerField\b[\s\S]*?\/>/g) ?? [];
-    expect(blocos.length).toBe(2);
-    for (const bloco of blocos) {
+    it('importa DatePickerField do path compartilhado', () => {
+      expect(src).toMatch(
+        /import\s*\{\s*DatePickerField\s*\}\s*from\s*['"]@\/components\/DatePickerField['"]/,
+      );
+    });
+
+    it('renderiza exatamente um DatePickerField', () => {
+      const ocorrencias = src.match(/<DatePickerField\b/g) ?? [];
+      expect(ocorrencias).toHaveLength(1);
+    });
+
+    it('o DatePickerField está ligado ao campo "vencimento" do react-hook-form', () => {
+      const blocos = src.match(/<DatePickerField\b[\s\S]*?\/>/g) ?? [];
+      expect(blocos).toHaveLength(1);
+      const bloco = blocos[0];
       expect(bloco).toMatch(/watch\(\s*['"]vencimento['"]\s*\)/);
       expect(bloco).toMatch(/setValue\(\s*['"]vencimento['"]/);
       expect(bloco).toMatch(/label=["']Vencimento["']/);
       expect(bloco).toMatch(/required/);
       expect(bloco).toMatch(/minDate=["']2026-01-01["']/);
-    }
-  });
+    });
 
-  it('ícone Calendar de lucide-react foi removido dos imports (não há usos remanescentes)', () => {
-    // Não deve haver ", Calendar," ou ", Calendar\n" na linha de import de lucide-react
-    const importLucide = src.match(/import\s*\{[\s\S]*?\}\s*from\s*['"]lucide-react['"]/);
-    expect(importLucide).not.toBeNull();
-    // A regex \bCalendar\b pega a palavra exata, não CalendarIcon
-    expect(importLucide![0]).not.toMatch(/\bCalendar\b(?!Icon)/);
-  });
+    it('ícone Calendar de lucide-react não é mais importado', () => {
+      const importLucide = src.match(/import\s*\{[\s\S]*?\}\s*from\s*['"]lucide-react['"]/);
+      // A regex \bCalendar\b pega a palavra exata, não CalendarIcon
+      if (importLucide) {
+        expect(importLucide[0]).not.toMatch(/\bCalendar\b(?!Icon)/);
+      }
+    });
 
-  it('não há mais uso de register("vencimento") — controle agora é via watch/setValue', () => {
-    // register('vencimento') era o padrão do input legado. O DatePickerField
-    // usa value/onChange externos controlados por watch+setValue.
-    expect(src).not.toMatch(/register\(\s*['"]vencimento['"]\s*\)/);
+    it('não há mais register("vencimento") — controle é via watch/setValue', () => {
+      expect(src).not.toMatch(/register\(\s*['"]vencimento['"]\s*\)/);
+    });
   });
 });

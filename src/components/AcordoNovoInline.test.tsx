@@ -493,7 +493,12 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     // Campos já vêm preenchidos com o que foi digitado — basta confirmar.
     fireEvent.click(screen.getByRole('button', { name: /^Adicionar parcela$/i }));
 
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    // Timeout acima do padrão (1s): confirmar a parcela dispara uma cadeia de
+    // várias idas ao supabase (insert da parcela + update do total do grupo)
+    // antes de chamar onSaved. Rodando junto com a suíte inteira em workers
+    // paralelos, 1s era apertado e este era o único teste flaky do projeto —
+    // passava isolado e falhava com "chamado 0 vezes" sob carga.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 5000 });
 
     // Parcela inserida no MESMO grupo, com número e total incrementados.
     const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');

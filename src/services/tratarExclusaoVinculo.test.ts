@@ -233,8 +233,11 @@ describe('tratarExclusaoVinculo — exclusão do DIRETO promove o EXTRA', () => 
       campo: 'instituicao',
       nrValue: 'CR-123',
     }));
+    // A PaguePlay chama esse campo de "Código" (é o `instituicao` exibido como
+    // Código do cliente). O texto dizia "inscrição" numa versão anterior do
+    // vocabulário; a notificação acompanha o rótulo que o operador vê na tela.
     expect(notificarMock).toHaveBeenCalledWith(expect.objectContaining({
-      mensagem: expect.stringContaining('inscrição CR-123'),
+      mensagem: expect.stringContaining('Código CR-123'),
     }));
   });
 

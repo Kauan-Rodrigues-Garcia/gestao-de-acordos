@@ -158,7 +158,11 @@ describe('fetchAcordos', () => {
     });
 
     const c = calls[0];
-    expect(c.filters).toEqual([
+    // Comparado como CONJUNTO: a ordem em que os filtros entram no builder não
+    // muda a query que o PostgREST monta. Travar a ordem fazia o teste quebrar a
+    // cada reorganização do código, sem nenhum efeito real (foi o que aconteceu
+    // quando `vencimento` passou a ser aplicado depois do intervalo gte/lte).
+    const filtrosEsperados = [
       ['eq',  'status',      'pago'],
       ['eq',  'tipo',        'direto'],
       ['eq',  'operador_id', 'op-1'],
@@ -167,7 +171,11 @@ describe('fetchAcordos', () => {
       ['eq',  'vencimento',  '2026-04-22'],
       ['gte', 'vencimento',  '2026-04-01'],
       ['lte', 'vencimento',  '2026-04-30'],
-    ]);
+    ];
+    expect(c.filters).toHaveLength(filtrosEsperados.length);
+    for (const f of filtrosEsperados) {
+      expect(c.filters).toEqual(expect.arrayContaining([f]));
+    }
   });
 
   it('aplica filtro apenas_hoje usando a data de hoje (getTodayISO)', async () => {
@@ -182,14 +190,16 @@ describe('fetchAcordos', () => {
     expect(String(eqHoje?.[2])).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 
-  it('aplica busca textual com .or() combinando nome_cliente, nr_cliente e whatsapp', async () => {
+  // `instituicao` entra na busca porque é o campo que a PaguePlay usa como
+  // "Código" do cliente — sem ele, procurar pelo código não achava nada lá.
+  it('aplica busca textual com .or() combinando nome, NR, whatsapp e instituição', async () => {
     resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
 
     await fetchAcordos({ busca: 'maria' });
 
     const c = calls[0];
     expect(c.or).toBe(
-      'nome_cliente.ilike.%maria%,nr_cliente.ilike.%maria%,whatsapp.ilike.%maria%'
+      'nome_cliente.ilike.%maria%,nr_cliente.ilike.%maria%,whatsapp.ilike.%maria%,instituicao.ilike.%maria%'
     );
   });
 
@@ -208,26 +218,26 @@ describe('fetchAcordos', () => {
     expect(r.data).toHaveLength(20);
   });
 
-  it('equipe_id SEM membros retorna { data: [], count: 0 } e NÃO aguarda a query principal de acordos', async () => {
-    // A ordem real no código é:
-    //   1) supabase.from('acordos_deduplicados')  ← builder preparado (não awaitado ainda)
-    //   2) supabase.from('perfis')                ← awaitado dentro de resolverOperadoresDaEquipe
-    //   3) return antecipado se membros.length === 0 → a query de acordos NÃO é awaitada
-    //
-    // Então `calls[]` registra ambos builders (preparação), mas o resultado
-    // final vem apenas de 'perfis'. Isso prova que não há round-trip para a view.
+  // Resolver a equipe consulta DUAS tabelas: `perfis` (membros) e
+  // `equipe_operadores_clones` (operadores clonados nela). Os clones existem
+  // porque uma equipe pode ser formada só por clones — ex.: "Digital Amauri",
+  // que recebe via clones de Play 4 / Play 5. Sem eles o filtro por equipe
+  // devolveria vazio para essas equipes.
+  it('equipe_id SEM membros nem clones retorna { data: [], count: 0 } sem tocar na view', async () => {
     resultsByTable['perfis'] = [{ data: [], error: null }];
+    resultsByTable['equipe_operadores_clones'] = [{ data: [], error: null }];
 
     const r = await fetchAcordos({ equipe_id: 'eq-1', empresa_id: 'emp-1' });
 
     expect(r).toEqual({ data: [], count: 0 });
 
-    // Ambos builders são criados, mas só `perfis` é awaitado (defaultResult não é consumido).
-    expect(calls.map(c => c.table)).toEqual(['acordos_deduplicados', 'perfis']);
+    // Nenhum builder da view é criado — o retorno antecipado vem antes disso.
+    // (Antes o builder de acordos_deduplicados era preparado e descartado.)
+    expect(calls.map(c => c.table)).toEqual(['perfis', 'equipe_operadores_clones']);
     expect(resultsByTable['perfis']).toHaveLength(0); // fila de perfis foi consumida
 
     // E o filtro da equipe foi aplicado corretamente na query de perfis.
-    const perfisCall = calls[1];
+    const perfisCall = calls[0];
     expect(perfisCall.filters).toEqual([
       ['eq', 'equipe_id',  'eq-1'],
       ['eq', 'empresa_id', 'emp-1'],
@@ -248,6 +258,7 @@ describe('fetchAcordos', () => {
       data: [{ id: 'op-a' }, { id: 'op-b' }],
       error: null,
     }];
+    resultsByTable['equipe_operadores_clones'] = [{ data: [], error: null }];
     resultsByTable['acordos_deduplicados'] = [{
       data: [{ id: 'acordo-1' }],
       error: null,
@@ -257,11 +268,49 @@ describe('fetchAcordos', () => {
     const r = await fetchAcordos({ equipe_id: 'eq-1' });
 
     expect(r.count).toBe(1);
-    // Ordem real: builder de acordos_deduplicados é preparado ANTES da resolução da equipe.
-    expect(calls.map(c => c.table)).toEqual(['acordos_deduplicados', 'perfis']);
+    // A equipe é resolvida ANTES de montar a query principal: membros, clones,
+    // e só então a view.
+    expect(calls.map(c => c.table)).toEqual([
+      'perfis', 'equipe_operadores_clones', 'acordos_deduplicados',
+    ]);
 
-    const acordosCall = calls[0];
+    const acordosCall = calls[2];
     expect(acordosCall.in).toEqual({ col: 'operador_id', values: ['op-a', 'op-b'] });
+  });
+
+  // Cobre o motivo de existir a consulta de clones: equipe formada SÓ por clones.
+  it('equipe_id só com clones (sem membros) filtra pelos operadores clonados', async () => {
+    resultsByTable['perfis'] = [{ data: [], error: null }];
+    resultsByTable['equipe_operadores_clones'] = [{
+      data: [{ operador_id: 'clone-1' }, { operador_id: 'clone-2' }],
+      error: null,
+    }];
+    resultsByTable['acordos_deduplicados'] = [{
+      data: [{ id: 'acordo-9' }],
+      error: null,
+      count: 1,
+    }];
+
+    const r = await fetchAcordos({ equipe_id: 'eq-digital' });
+
+    expect(r.count).toBe(1);
+    const acordosCall = calls[2];
+    expect(acordosCall.in).toEqual({ col: 'operador_id', values: ['clone-1', 'clone-2'] });
+  });
+
+  // Membro que também é clone da mesma equipe não pode duplicar no filtro
+  // (resolverOperadoresDaEquipe deduplica via Set).
+  it('equipe_id com membro que também é clone não duplica o id', async () => {
+    resultsByTable['perfis'] = [{ data: [{ id: 'op-a' }], error: null }];
+    resultsByTable['equipe_operadores_clones'] = [{
+      data: [{ operador_id: 'op-a' }, { operador_id: 'op-b' }],
+      error: null,
+    }];
+    resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
+
+    await fetchAcordos({ equipe_id: 'eq-1' });
+
+    expect(calls[2].in).toEqual({ col: 'operador_id', values: ['op-a', 'op-b'] });
   });
 
   it('propaga erro do Supabase via throw', async () => {

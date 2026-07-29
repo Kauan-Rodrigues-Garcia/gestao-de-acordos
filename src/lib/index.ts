@@ -114,13 +114,31 @@ export function isPerfilAdminOuLider(perfil: string): boolean {
 
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 
+/**
+ * Data de hoje (yyyy-MM-dd) no fuso de São Paulo, seja qual for o fuso da máquina.
+ *
+ * ⚠️  A versão anterior estava errada justamente nas máquinas dos usuários. Ela
+ * fazia `now.getTime() + (getTimezoneOffset() + (-180)) * 60000` e depois
+ * `toISOString()`. Mas `getTime()` já é um instante ABSOLUTO — somar o offset
+ * local a ele não converte fuso nenhum, só desloca o instante. Numa máquina em
+ * BRT (`getTimezoneOffset() === 180`) o termo zerava e o `toISOString()` devolvia
+ * a data em **UTC**: das 21h à meia-noite, "hoje" virava amanhã. Isso afetava
+ * `isAtrasado` (acordo do dia aparecia atrasado), o filtro "apenas hoje" e o dia
+ * inicial do recebimento diário.
+ *
+ * `Intl` com `timeZone` faz a conversão de verdade e continua correto se o fuso
+ * da máquina mudar (ou se o Brasil voltar a ter horário de verão).
+ */
 export function getTodayISO(): string {
-  // Usa timezone do Brasil (America/Sao_Paulo) para evitar diferença de data UTC vs local
-  const now = new Date();
-  const brtOffset = -3 * 60; // BRT = UTC-3
-  const localOffset = now.getTimezoneOffset(); // minutos atrás de UTC
-  const brtTime = new Date(now.getTime() + (localOffset + brtOffset) * 60 * 1000);
-  return brtTime.toISOString().split('T')[0];
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year:  'numeric',
+    month: '2-digit',
+    day:   '2-digit',
+  }).formatToParts(new Date());
+
+  const parte = (tipo: string): string => partes.find(p => p.type === tipo)?.value ?? '';
+  return `${parte('year')}-${parte('month')}-${parte('day')}`;
 }
 
 export function formatCurrency(value: unknown): string {
