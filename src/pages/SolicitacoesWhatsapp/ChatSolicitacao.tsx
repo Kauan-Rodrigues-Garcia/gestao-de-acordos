@@ -10,12 +10,13 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, X, Check, CheckCheck, MessageSquare, Loader2, Lock } from 'lucide-react';
+import { Send, X, Check, CheckCheck, MessageSquare, Loader2, Lock, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { useOnlineUsers } from '@/providers/PresenceProvider';
 import type { MensagemSolicitacao, PessoaResumo } from '@/services/solicitacoesWhatsapp.service';
 import { primeiroNome, iniciais } from './formatacao';
 
@@ -54,7 +55,7 @@ function PontinhosDigitando() {
 }
 
 export function ChatSolicitacao({
-  mensagens, loading, enviando, digitando, usuarioId, interlocutor, encerrado,
+  mensagens, loading, enviando, digitando, usuarioId, interlocutor, encerrado, podeFalar,
   onEnviar, onDigitando, onFechar,
 }: {
   mensagens:    MensagemSolicitacao[];
@@ -69,10 +70,16 @@ export function ChatSolicitacao({
    * nova, mas o histórico continua aqui — é anexo permanente do atendimento.
    */
   encerrado:    boolean;
+  /**
+   * Só os DOIS envolvidos escrevem (quem abriu e quem atende agora). Líder e
+   * demais responsáveis leem sem caixa de texto — espelha `fn_wpp_pode_falar`.
+   */
+  podeFalar:    boolean;
   onEnviar:     (texto: string) => Promise<boolean>;
   onDigitando:  () => void;
   onFechar:     () => void;
 }) {
+  const online = useOnlineUsers().onlineIds;
   const [texto, setTexto] = useState('');
   const fimRef = useRef<HTMLDivElement>(null);
 
@@ -95,14 +102,27 @@ export function ChatSolicitacao({
     <div className="flex flex-col h-[420px] rounded-xl border border-border bg-card overflow-hidden">
       {/* Cabeçalho: foto + primeiro nome do interlocutor */}
       <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-border bg-muted/40 shrink-0">
-        <Avatar className="w-8 h-8">
-          {interlocutor?.foto_url && (
-            <AvatarImage src={interlocutor.foto_url} alt={interlocutor.nome} className="object-cover" />
+        {/* Bolinha de presença: verde = online agora, cinza = offline.
+            Vem do PresenceProvider, o mesmo canal que o resto do sistema usa. */}
+        <span className="relative shrink-0">
+          <Avatar className="w-8 h-8">
+            {interlocutor?.foto_url && (
+              <AvatarImage src={interlocutor.foto_url} alt={interlocutor.nome} className="object-cover" />
+            )}
+            <AvatarFallback className="bg-primary text-primary-foreground text-[11px] font-bold">
+              {iniciais(interlocutor?.nome)}
+            </AvatarFallback>
+          </Avatar>
+          {interlocutor && (
+            <span
+              title={online.has(interlocutor.id) ? 'Online agora' : 'Offline'}
+              className={cn(
+                'absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-card',
+                online.has(interlocutor.id) ? 'bg-emerald-500' : 'bg-muted-foreground/50',
+              )}
+            />
           )}
-          <AvatarFallback className="bg-primary text-primary-foreground text-[11px] font-bold">
-            {iniciais(interlocutor?.nome)}
-          </AvatarFallback>
-        </Avatar>
+        </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-tight truncate">
             {interlocutor ? primeiroNome(interlocutor.nome) : 'Conversa'}
@@ -123,7 +143,9 @@ export function ChatSolicitacao({
                 </motion.span>
               ) : (
                 <motion.span key="sub" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                  Conversa desta solicitação
+                  {interlocutor
+                    ? (online.has(interlocutor.id) ? 'Online agora' : 'Offline')
+                    : 'Conversa desta solicitação'}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -217,8 +239,17 @@ export function ChatSolicitacao({
         </div>
       </ScrollArea>
 
-      {/* Caixa de envio — some quando a conversa encerra; o histórico acima fica */}
-      {encerrado ? (
+      {/* Caixa de envio — some quando a conversa encerra ou quando quem olha não
+          é um dos dois envolvidos; o histórico acima fica em qualquer caso. */}
+      {!podeFalar && !encerrado ? (
+        <div className="flex items-center gap-2 p-3 border-t border-border bg-muted/30 shrink-0 text-[11px] text-muted-foreground">
+          <Eye className="w-3.5 h-3.5 shrink-0" />
+          <p>
+            Você está acompanhando esta conversa. Só quem abriu o pedido e quem
+            está atendendo podem escrever aqui.
+          </p>
+        </div>
+      ) : encerrado ? (
         <div className="flex items-center gap-2 p-3 border-t border-border bg-muted/30 shrink-0 text-[11px] text-muted-foreground">
           <Lock className="w-3.5 h-3.5 shrink-0" />
           <p>

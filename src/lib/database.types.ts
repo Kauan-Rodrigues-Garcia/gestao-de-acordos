@@ -764,33 +764,43 @@ export type Database = {
         }
         Relationships: []
       }
+      // `tipo`/`responsavel_*` vieram da 20260730f (transferência de atendimento).
       solicitacoes_whatsapp_eventos: {
         Row: {
           autor_id: string | null
           criado_em: string
           empresa_id: string
           id: string
+          responsavel_anterior: string | null
+          responsavel_novo: string | null
           solicitacao_id: string
           status_anterior: string | null
           status_novo: string
+          tipo: 'status' | 'responsavel'
         }
         Insert: {
           autor_id?: string | null
           criado_em?: string
           empresa_id: string
           id?: string
+          responsavel_anterior?: string | null
+          responsavel_novo?: string | null
           solicitacao_id: string
           status_anterior?: string | null
           status_novo: string
+          tipo?: 'status' | 'responsavel'
         }
         Update: {
           autor_id?: string | null
           criado_em?: string
           empresa_id?: string
           id?: string
+          responsavel_anterior?: string | null
+          responsavel_novo?: string | null
           solicitacao_id?: string
           status_anterior?: string | null
           status_novo?: string
+          tipo?: 'status' | 'responsavel'
         }
         Relationships: []
       }

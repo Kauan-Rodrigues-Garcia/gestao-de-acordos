@@ -92,11 +92,18 @@ export interface SolicitacaoWhatsapp {
 export interface EventoSolicitacao {
   id:              string;
   solicitacao_id:  string;
+  /** 'status' = mudou o andamento; 'responsavel' = o atendimento trocou de dono. */
+  tipo:            'status' | 'responsavel';
   status_anterior: StatusSolicitacao | null;
   status_novo:     StatusSolicitacao;
+  responsavel_anterior: string | null;
+  responsavel_novo:     string | null;
   autor_id:        string | null;
   criado_em:       string;
   autor?:          PessoaResumo | null;
+  /** Resolvidos pelo diretório, como `autor`. */
+  de?:             PessoaResumo | null;
+  para?:           PessoaResumo | null;
 }
 
 export interface MensagemSolicitacao {
@@ -305,6 +312,43 @@ export async function atualizarStatus(params: {
   return { ok: true, erro: null };
 }
 
+/**
+ * Só os DOIS envolvidos escrevem na conversa: quem abriu e quem atende AGORA.
+ *
+ * Espelha `fn_wpp_pode_falar` (migration 20260730f). Líder e demais responsáveis
+ * continuam LENDO — a caixa de texto some para eles, o histórico não.
+ */
+export function podeFalarNaConversa(
+  s: Pick<SolicitacaoWhatsapp, 'solicitante_id' | 'responsavel_id'>,
+  usuarioId: string | null,
+): boolean {
+  if (!usuarioId) return false;
+  return s.solicitante_id === usuarioId || s.responsavel_id === usuarioId;
+}
+
+/**
+ * Transfere o atendimento para outra pessoa.
+ *
+ * O status não muda de propósito: transferir um 'falta_info' não deve reabrir o
+ * atendimento, só trocar quem responde. O trigger registra a troca no histórico
+ * e, com ela, a voz na conversa passa para quem assumiu.
+ */
+export async function transferirAtendimento(params: {
+  id:                string;
+  novoResponsavelId: string;
+}): Promise<{ ok: boolean; erro: string | null }> {
+  const { error } = await supabase
+    .from('solicitacoes_whatsapp')
+    .update({ responsavel_id: params.novoResponsavelId })
+    .eq('id', params.id);
+
+  if (error) {
+    console.warn('[solicitacoesWhatsapp] erro ao transferir:', error.message);
+    return { ok: false, erro: error.message };
+  }
+  return { ok: true, erro: null };
+}
+
 /** Edição dos campos do pedido (responsável/líder, ou o dono enquanto pode). */
 export async function atualizarSolicitacao(
   id: string,
@@ -350,6 +394,8 @@ export async function buscarEventos(
   return ((data ?? []) as unknown as EventoSolicitacao[]).map(e => ({
     ...e,
     autor: e.autor_id ? pessoas.get(e.autor_id) ?? null : null,
+    de:    e.responsavel_anterior ? pessoas.get(e.responsavel_anterior) ?? null : null,
+    para:  e.responsavel_novo     ? pessoas.get(e.responsavel_novo)     ?? null : null,
   }));
 }
 

@@ -40,7 +40,7 @@ import {
 import {
   criarSolicitacao, atualizarStatus, excluirSolicitacao,
   definirResponsavel, removerResponsavel, buscarEventos,
-  MAX_PENDENTES, chatAindaAberto,
+  MAX_PENDENTES, chatAindaAberto, podeFalarNaConversa, transferirAtendimento,
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
@@ -169,6 +169,17 @@ export default function SolicitacoesWhatsapp() {
     [ehLiderOuAcima, usuarioId],
   );
 
+  // Puxar para mim: o atendimento já tem dono, o dono não sou eu, e ainda não
+  // acabou. Em 'feito' não faz sentido — não há mais o que atender.
+  const podeTransferirParaMim = useCallback(
+    (s: SolicitacaoWhatsapp) =>
+      podeEditarPedidos
+      && !!s.responsavel_id
+      && s.responsavel_id !== usuarioId
+      && s.status !== 'feito',
+    [podeEditarPedidos, usuarioId],
+  );
+
   // ── Listas: em aberto × finalizados ────────────────────────────────────────
   const { emAberto, finalizados } = useMemo(() => {
     const abertos: SolicitacaoWhatsapp[] = [];
@@ -291,6 +302,21 @@ export default function SolicitacoesWhatsapp() {
     }
   }
 
+  async function aoTransferir(s: SolicitacaoWhatsapp) {
+    if (!usuarioId) return;
+    setSalvandoId(s.id);
+    try {
+      const { ok, erro: e } = await transferirAtendimento({
+        id: s.id, novoResponsavelId: usuarioId,
+      });
+      if (!ok) { toast.error(e ?? 'Não foi possível transferir o atendimento.'); return; }
+      toast.success('Atendimento transferido para você.');
+      await Promise.all([recarregar(), carregarEventos(s.id)]);
+    } finally {
+      setSalvandoId(null);
+    }
+  }
+
   async function aoExcluir(id: string) {
     setSalvandoId(id);
     try {
@@ -374,11 +400,13 @@ export default function SolicitacoesWhatsapp() {
         totalMensagens={totaisMensagens[s.id] ?? 0}
         podeEditar={podeEditarPedidos}
         podeExcluir={podeExcluirSolicitacao(s)}
+        podeTransferir={podeTransferirParaMim(s)}
         ehDono={s.solicitante_id === usuarioId}
         salvando={salvandoId === s.id}
         onAlternar={() => alternarCard(s.id)}
         onMudarStatus={status => void aoMudarStatus(s, status)}
         onExcluir={() => void aoExcluir(s.id)}
+        onTransferir={() => void aoTransferir(s)}
         onAbrirChat={() => abrirChat(s.id)}
         chatAberto={chatAbertoId === s.id}
       >
@@ -391,6 +419,7 @@ export default function SolicitacoesWhatsapp() {
             usuarioId={usuarioId}
             interlocutor={interlocutor}
             encerrado={!chatAindaAberto(s)}
+            podeFalar={podeFalarNaConversa(s, usuarioId)}
             onEnviar={chat.enviar}
             onDigitando={chat.avisarDigitando}
             onFechar={() => setChatAbertoId(null)}

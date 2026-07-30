@@ -75,6 +75,7 @@ import {
   marcarMensagensLidas, definirResponsavel, buscarClientePorCodigo, buscarResponsaveis,
   ehErroLimitePendentes, MAX_PENDENTES, STATUS_EM_ABERTO,
   chatAindaAberto, HORAS_CHAT_APOS_FECHAR,
+  podeFalarNaConversa, transferirAtendimento,
 } from './solicitacoesWhatsapp.service';
 
 const EMPRESA = 'emp-1';
@@ -160,6 +161,42 @@ describe('encerramento espelha a migration 20260730d', () => {
 
   it('o SELECT das mensagens NÃO é tocado — histórico é anexo permanente', () => {
     // Encerrar a conversa fecha a escrita, nunca a leitura.
+    expect(SQL).not.toContain('CREATE POLICY "sol_wpp_msg_select"');
+  });
+});
+
+describe('chat restrito espelha a migration 20260730f', () => {
+  const SQL = readFileSync(
+    resolve(__dirname, '../../supabase/migrations/20260730f_wpp_transferencia_e_chat_restrito.sql'),
+    'utf-8',
+  );
+
+  it('a policy de INSERT exige ser um dos dois envolvidos', () => {
+    const i = SQL.indexOf('CREATE POLICY "sol_wpp_msg_insert"');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = SQL.slice(i, SQL.indexOf(');', i));
+    // Caixa de texto escondida é sugestão; a garantia é a policy.
+    expect(corpo).toContain('fn_wpp_pode_falar');
+    // E a janela de 24h continua valendo junto.
+    expect(corpo).toContain('fn_wpp_chat_aberto');
+  });
+
+  it('fn_wpp_pode_falar considera solicitante OU responsável atual', () => {
+    const i = SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_wpp_pode_falar');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = SQL.slice(i, SQL.indexOf('$$;', i));
+    expect(corpo).toContain('s.solicitante_id = auth.uid()');
+    expect(corpo).toContain('s.responsavel_id = auth.uid()');
+  });
+
+  it('o histórico passa a registrar troca de responsável', () => {
+    const i = SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_wpp_registrar_evento');
+    const corpo = SQL.slice(i, SQL.indexOf('$$;', i));
+    expect(corpo).toContain('NEW.responsavel_id IS DISTINCT FROM OLD.responsavel_id');
+    expect(corpo).toContain("'responsavel'");
+  });
+
+  it('o SELECT das mensagens continua intocado', () => {
     expect(SQL).not.toContain('CREATE POLICY "sol_wpp_msg_select"');
   });
 });
@@ -375,6 +412,69 @@ describe('atualizarStatus', () => {
     nextResult = { data: null, error: null };
     await atualizarStatus({ id: 'sol-1', status: 'pendente', responsavelId: null });
     expect(calls[0].payload).toEqual({ status: 'pendente', responsavel_id: null });
+  });
+});
+
+// ── Transferência e voz na conversa ─────────────────────────────────────────
+
+describe('podeFalarNaConversa', () => {
+  const pedido = { solicitante_id: 'dono', responsavel_id: 'atende' };
+
+  it('quem abriu o pedido fala', () => {
+    expect(podeFalarNaConversa(pedido, 'dono')).toBe(true);
+  });
+
+  it('quem está atendendo AGORA fala', () => {
+    expect(podeFalarNaConversa(pedido, 'atende')).toBe(true);
+  });
+
+  it('líder e outros responsáveis NÃO falam — só leem', () => {
+    // A conversa é entre os dois envolvidos. Quem mais enxerga o pedido
+    // acompanha, mas não entra no meio.
+    expect(podeFalarNaConversa(pedido, 'lider')).toBe(false);
+  });
+
+  it('transferir o atendimento transfere a voz', () => {
+    const depois = { solicitante_id: 'dono', responsavel_id: 'novo' };
+    expect(podeFalarNaConversa(depois, 'atende')).toBe(false);
+    expect(podeFalarNaConversa(depois, 'novo')).toBe(true);
+    // O dono continua falando em qualquer cenário.
+    expect(podeFalarNaConversa(depois, 'dono')).toBe(true);
+  });
+
+  it('pedido sem responsável: só o dono fala', () => {
+    const semDono = { solicitante_id: 'dono', responsavel_id: null };
+    expect(podeFalarNaConversa(semDono, 'dono')).toBe(true);
+    expect(podeFalarNaConversa(semDono, 'qualquer')).toBe(false);
+  });
+
+  it('sem usuário logado ninguém fala', () => {
+    expect(podeFalarNaConversa(pedido, null)).toBe(false);
+  });
+});
+
+describe('transferirAtendimento', () => {
+  it('troca só o responsável, sem mexer no status', async () => {
+    nextResult = { data: null, error: null };
+
+    const r = await transferirAtendimento({ id: 'sol-1', novoResponsavelId: 'novo' });
+
+    expect(r.ok).toBe(true);
+    expect(calls[0].operation).toBe('update');
+    // Status intocado de propósito: transferir um 'falta_info' não deve
+    // reabrir o atendimento, só trocar quem responde.
+    expect(calls[0].payload).toEqual({ responsavel_id: 'novo' });
+    expect(calls[0].filters).toEqual([['eq', 'id', 'sol-1']]);
+  });
+
+  it('devolve false quando o banco recusa', async () => {
+    nextResult = { data: null, error: { message: 'row-level security' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const r = await transferirAtendimento({ id: 'sol-1', novoResponsavelId: 'novo' });
+
+    expect(r.ok).toBe(false);
+    warn.mockRestore();
   });
 });
 

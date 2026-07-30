@@ -8,7 +8,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, MessageSquare, Clock, User, MapPin, Hash, Phone,
-  Trash2, Loader2, PlayCircle, CheckCircle2, HelpCircle, RotateCcw,
+  Trash2, Loader2, PlayCircle, CheckCircle2, HelpCircle, RotateCcw, ArrowLeftRight,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,8 +54,8 @@ function Pessoa({ nome, foto, tamanho = 'w-5 h-5' }: { nome: string | null | und
 
 export function CardSolicitacao({
   solicitacao: s, expandido, eventos, naoLidas, totalMensagens,
-  podeEditar, podeExcluir, ehDono, salvando,
-  onAlternar, onMudarStatus, onExcluir, onAbrirChat, chatAberto, children,
+  podeEditar, podeExcluir, podeTransferir, ehDono, salvando,
+  onAlternar, onMudarStatus, onExcluir, onTransferir, onAbrirChat, chatAberto, children,
 }: {
   solicitacao: SolicitacaoWhatsapp;
   expandido:   boolean;
@@ -70,12 +70,15 @@ export function CardSolicitacao({
    * dono enquanto ninguém pegou. O responsável atende, não descarta o chamado.
    */
   podeExcluir: boolean;
+  /** O atendimento tem outro dono e eu posso puxá-lo para mim. */
+  podeTransferir: boolean;
   /** É o solicitante — vê o card como "meu pedido". */
   ehDono:      boolean;
   salvando:    boolean;
   onAlternar:  () => void;
   onMudarStatus: (status: StatusSolicitacao) => void;
   onExcluir:   () => void;
+  onTransferir: () => void;
   onAbrirChat: () => void;
   chatAberto:  boolean;
   /** O painel de chat, montado pelo pai só quando aberto. */
@@ -182,12 +185,17 @@ export function CardSolicitacao({
                   )}
                   {eventos.map(ev => (
                     <div key={ev.id} className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary/60 shrink-0" />
+                      <span className={cn(
+                        'w-1.5 h-1.5 rounded-full shrink-0',
+                        ev.tipo === 'responsavel' ? 'bg-amber-500' : 'bg-primary/60',
+                      )} />
                       <span className="tabular-nums shrink-0">{dataHora(ev.criado_em)}</span>
                       <span className="truncate">
-                        {ev.status_anterior
-                          ? `${STATUS_LABEL[ev.status_anterior]} → ${STATUS_LABEL[ev.status_novo]}`
-                          : `Aberta como ${STATUS_LABEL[ev.status_novo]}`}
+                        {ev.tipo === 'responsavel'
+                          ? `Atendimento ${ev.de ? `de ${primeiroNome(ev.de.nome)} ` : ''}para ${primeiroNome(ev.para?.nome)}`
+                          : ev.status_anterior
+                            ? `${STATUS_LABEL[ev.status_anterior]} → ${STATUS_LABEL[ev.status_novo]}`
+                            : `Aberta como ${STATUS_LABEL[ev.status_novo]}`}
                         {ev.autor?.nome && ` · ${primeiroNome(ev.autor.nome)}`}
                       </span>
                     </div>
@@ -226,6 +234,18 @@ export function CardSolicitacao({
                     disabled={salvando} onClick={() => onMudarStatus('em_andamento')}>
                     {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <PlayCircle className="w-3.5 h-3.5" />}
                     Assumir
+                  </Button>
+                )}
+
+                {/* Transferir para mim: aparece quando o atendimento já tem dono
+                    e o dono não sou eu. Trocar o responsável troca também quem
+                    fala na conversa — por isso o aviso no título. */}
+                {podeTransferir && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1.5"
+                    disabled={salvando} onClick={onTransferir}
+                    title={`Assumir o atendimento de ${primeiroNome(s.responsavel?.nome)} — a conversa passa para você`}>
+                    {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowLeftRight className="w-3.5 h-3.5" />}
+                    Transferir para mim
                   </Button>
                 )}
                 {podeEditar && s.status !== 'falta_info' && s.status !== 'feito' && (
