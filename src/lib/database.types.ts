@@ -678,6 +678,45 @@ export type Database = {
           },
         ]
       }
+      // Migration 20260730a — Contribuição Receptivo por setor/mês (BookPlay).
+      // Uma linha por (empresa_id, setor_id, mes); `mes` é 'yyyy-MM'. Substitui o
+      // localStorage por onde esse valor passava, para que seja compartilhado.
+      contribuicao_receptivo: {
+        Row: {
+          acumulado: number
+          atualizado_em: string
+          atualizado_por: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          mes: string
+          meta: number
+          setor_id: string
+        }
+        Insert: {
+          acumulado?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          mes: string
+          meta?: number
+          setor_id: string
+        }
+        Update: {
+          acumulado?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          mes?: string
+          meta?: number
+          setor_id?: string
+        }
+        Relationships: []
+      }
       // Migration 20260725b — líder por equipe (BookPlay). A equipe declara quem
       // a comanda; um líder pode liderar várias equipes, de qualquer setor.
       equipe_lideres: {

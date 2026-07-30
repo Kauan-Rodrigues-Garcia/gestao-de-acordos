@@ -21,7 +21,12 @@ import { formatBRL } from '@/lib/money';
 import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
+import { assinarTabela } from '@/lib/realtime';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import {
+  buscarContribuicoesReceptivo, salvarContribuicaoReceptivo,
+  type ContribuicaoReceptivo,
+} from '@/services/analitico/contribuicaoReceptivo.service';
 import { diasUteisDoMes, diasUteisDecorridos, corProjecao } from '@/lib/diasUteis';
 import {
   mapaSetorDaEquipe, setoresDoOperador,
@@ -234,23 +239,57 @@ function PainelPlacar({
 }
 
 // ── Contribuição Receptivo (card manual por setor — BookPlay) ─────────────────
-// Card visual idêntico ao placar, preenchido À MÃO (acumulado + meta) pelo
-// botão de editar ao lado. Sem banco: fica no localStorage, por setor e mês.
+// Card visual idêntico ao placar, preenchido À MÃO (acumulado + meta).
+//
+// O valor agora vive no banco (`contribuicao_receptivo`, migration 20260730a):
+// uma linha por (empresa, setor, mês), compartilhada — se um líder edita, todos
+// veem, na hora, via realtime. Antes ficava em `localStorage`, então existia só
+// no navegador de quem digitou: dois líderes do mesmo setor viam números
+// diferentes e trocar de máquina zerava o card.
+//
+// O localStorage sobrevive apenas como fallback enquanto a migration não é
+// aplicada — o card continua funcionando como antes em vez de ficar vazio.
 
-interface ContribReceptivo { acumulado: number; meta: number }
+/**
+ * Quem pode editar. Espelha EXATAMENTE o array das policies de escrita da
+ * migration 20260730a — os dois precisam mudar juntos, senão o botão aparece e
+ * o salvamento é recusado pela RLS.
+ *
+ * Não usa `isPerfilAdminOuLider`: aquele helper inclui `ouvidoria` (outra
+ * trilha) e deixa `diretoria` de fora.
+ */
+const PERFIS_EDITA_RECEPTIVO = [
+  'lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin',
+] as const;
 
-function chaveContribuicao(empresaId: string, setorId: string, mes: string): string {
+function podeEditarReceptivo(perfil: string | null | undefined): boolean {
+  return !!perfil && (PERFIS_EDITA_RECEPTIVO as readonly string[]).includes(perfil);
+}
+
+// ── Fallback local (só enquanto a migration 20260730a não é aplicada) ─────────
+
+function chaveContribuicaoLocal(empresaId: string, setorId: string, mes: string): string {
   return `contribuicao-receptivo::${empresaId}::${setorId}::${mes}`;
 }
 
-function lerContribuicao(chave: string): ContribReceptivo | null {
+function lerContribuicaoLocal(
+  empresaId: string, setorId: string, mes: string,
+): ContribuicaoReceptivo | null {
   try {
-    const raw = localStorage.getItem(chave);
+    const raw = localStorage.getItem(chaveContribuicaoLocal(empresaId, setorId, mes));
     if (!raw) return null;
-    const v = JSON.parse(raw) as ContribReceptivo;
+    const v = JSON.parse(raw) as ContribuicaoReceptivo;
     if (typeof v?.acumulado !== 'number') return null;
     return { acumulado: v.acumulado, meta: Number(v.meta) || 0 };
   } catch { return null; }
+}
+
+function gravarContribuicaoLocal(
+  empresaId: string, setorId: string, mes: string, valores: ContribuicaoReceptivo,
+): void {
+  try {
+    localStorage.setItem(chaveContribuicaoLocal(empresaId, setorId, mes), JSON.stringify(valores));
+  } catch { /* noop */ }
 }
 
 /** Aceita "12.345,67", "12345,67" ou "12345.67". */
@@ -264,106 +303,110 @@ function parseValorBR(s: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+/** Número → string editável no formato BR ("1234.5" → "1234,5"). */
+function paraInput(v: number): string {
+  return v > 0 ? String(v).replace('.', ',') : '';
+}
+
 function CardContribuicaoReceptivo({
-  empresaId, setorId, mes, totalUteis, decorridos, onReport,
+  dados, totalUteis, decorridos, podeEditar, salvando, somenteLocal, onSalvar,
 }: {
-  empresaId: string; setorId: string; mes: string; totalUteis: number; decorridos: number;
-  /** Reporta o acumulado ao pai para somar no card consolidado do setor. */
-  onReport?: (setorId: string, acumulado: number) => void;
+  dados: ContribuicaoReceptivo | undefined;
+  totalUteis: number;
+  decorridos: number;
+  podeEditar: boolean;
+  salvando: boolean;
+  /** true = migration pendente, o valor não é compartilhado ainda. */
+  somenteLocal: boolean;
+  onSalvar: (valores: ContribuicaoReceptivo) => void;
 }) {
-  const chave = chaveContribuicao(empresaId, setorId, mes);
-  const [dados, setDados]         = useState<ContribReceptivo | null>(() => lerContribuicao(chave));
-  const [editando, setEditando]   = useState(false);
+  const [editando, setEditando]         = useState(false);
   const [acumuladoStr, setAcumuladoStr] = useState('');
   const [metaStr, setMetaStr]           = useState('');
 
-  // Troca de setor/mês → recarrega o valor salvo daquela chave e reporta ao pai
-  useEffect(() => {
-    const salvo = lerContribuicao(chave);
-    setDados(salvo);
-    setEditando(false);
-    onReport?.(setorId, salvo?.acumulado ?? 0);
-  }, [chave, setorId, onReport]);
-
   function abrirEdicao() {
-    setAcumuladoStr(dados ? String(dados.acumulado).replace('.', ',') : '');
-    setMetaStr(dados && dados.meta > 0 ? String(dados.meta).replace('.', ',') : '');
+    setAcumuladoStr(paraInput(dados?.acumulado ?? 0));
+    setMetaStr(paraInput(dados?.meta ?? 0));
     setEditando(true);
   }
 
   function salvar() {
-    const novo: ContribReceptivo = {
-      acumulado: parseValorBR(acumuladoStr),
-      meta:      parseValorBR(metaStr),
-    };
-    try { localStorage.setItem(chave, JSON.stringify(novo)); } catch { /* noop */ }
-    setDados(novo);
+    onSalvar({ acumulado: parseValorBR(acumuladoStr), meta: parseValorBR(metaStr) });
     setEditando(false);
-    onReport?.(setorId, novo.acumulado);
   }
 
+  // `relative` + botão absoluto: o card ocupa a largura TODA, igual aos outros.
+  // Antes o botão era um irmão em flex, então roubava largura e este card ficava
+  // visivelmente menor que os do setor e das equipes.
   return (
-    <div className="flex items-start gap-2">
-      <div className="flex-1 min-w-0">
-        <PainelPlacar
-          titulo="Contribuição Receptivo"
-          subtitulo="Preenchido manualmente"
-          acumulado={dados?.acumulado ?? 0}
-          meta={dados && dados.meta > 0 ? dados.meta : null}
-          totalUteis={totalUteis}
-          decorridos={decorridos}
-        />
-      </div>
-      {/* Botão de editar ao lado (fora) do card */}
-      <div className="flex flex-col gap-2 shrink-0 pt-4">
-        {!editando ? (
-          <Button
-            variant="outline" size="icon" className="h-8 w-8"
-            title="Preencher Contribuição Receptivo"
-            onClick={abrirEdicao}
-          >
-            <Pencil className="w-3.5 h-3.5" />
-          </Button>
-        ) : (
-          <div className="w-44 rounded-xl border border-border bg-card p-3 space-y-2 shadow-sm">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <Headset className="w-3 h-3" /> Receptivo
-            </p>
-            <div className="space-y-1">
-              <label className="text-[11px] text-muted-foreground">Acumulado (R$)</label>
-              <Input
-                autoFocus
-                inputMode="decimal"
-                placeholder="0,00"
-                value={acumuladoStr}
-                onChange={e => setAcumuladoStr(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
-                className="h-7 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] text-muted-foreground">Meta (R$)</label>
-              <Input
-                inputMode="decimal"
-                placeholder="0,00"
-                value={metaStr}
-                onChange={e => setMetaStr(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
-                className="h-7 text-xs"
-              />
-            </div>
-            <div className="flex items-center gap-1.5 pt-0.5">
-              <Button size="sm" className="h-6 px-2 text-[11px] gap-1 flex-1" onClick={salvar}>
-                <Check className="w-3 h-3" /> Salvar
-              </Button>
-              <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] gap-1"
-                onClick={() => setEditando(false)}>
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
+    <div className="relative">
+      <PainelPlacar
+        titulo="Contribuição Receptivo"
+        subtitulo={somenteLocal ? 'Manual · só neste navegador' : 'Preenchido manualmente'}
+        acumulado={dados?.acumulado ?? 0}
+        meta={dados && dados.meta > 0 ? dados.meta : null}
+        totalUteis={totalUteis}
+        decorridos={decorridos}
+      />
+
+      {/* Botão fora do card: sentado no canto superior direito, para além da
+          borda. Some para quem não pode editar (a RLS recusaria de todo jeito). */}
+      {podeEditar && !editando && (
+        <Button
+          variant="outline"
+          size="icon"
+          className="absolute -top-3 -right-3 h-8 w-8 rounded-full shadow-md bg-card z-10"
+          title="Preencher Contribuição Receptivo"
+          onClick={abrirEdicao}
+          disabled={salvando}
+        >
+          {salvando
+            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            : <Pencil className="w-3.5 h-3.5" />}
+        </Button>
+      )}
+
+      {/* Formulário como camada sobreposta, não como irmão em flex: abrir a
+          edição não muda mais o tamanho do card. */}
+      {podeEditar && editando && (
+        <div className="absolute top-3 right-3 z-20 w-48 rounded-xl border border-border bg-card p-3 space-y-2 shadow-xl">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <Headset className="w-3 h-3" /> Receptivo
+          </p>
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">Acumulado (R$)</label>
+            <Input
+              autoFocus
+              inputMode="decimal"
+              placeholder="0,00"
+              value={acumuladoStr}
+              onChange={e => setAcumuladoStr(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+              className="h-7 text-xs"
+            />
           </div>
-        )}
-      </div>
+          <div className="space-y-1">
+            <label className="text-[11px] text-muted-foreground">Meta (R$)</label>
+            <Input
+              inputMode="decimal"
+              placeholder="0,00"
+              value={metaStr}
+              onChange={e => setMetaStr(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') salvar(); if (e.key === 'Escape') setEditando(false); }}
+              className="h-7 text-xs"
+            />
+          </div>
+          <div className="flex items-center gap-1.5 pt-0.5">
+            <Button size="sm" className="h-6 px-2 text-[11px] gap-1 flex-1" onClick={salvar}>
+              <Check className="w-3 h-3" /> Salvar
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px] gap-1"
+              onClick={() => setEditando(false)}>
+              <X className="w-3 h-3" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -393,12 +436,80 @@ export function DesempenhoEquipes({
   const [uploadSetorId, setUploadSetorId] = useState<string | null>(null);
   const [salvandoFotoSetor, setSalvandoFotoSetor] = useState(false);
   const [carregado, setCarregado] = useState(false);
-  // Contribuição Receptivo (manual, localStorage) reportada por cada card-filho;
-  // soma no acumulado do card consolidado do setor.
-  const [contribPorSetor, setContribPorSetor] = useState<Record<string, number>>({});
-  const reportContrib = useCallback((sid: string, acumulado: number) => {
-    setContribPorSetor(prev => (prev[sid] === acumulado ? prev : { ...prev, [sid]: acumulado }));
-  }, []);
+
+  // ── Contribuição Receptivo (BookPlay) ─────────────────────────────────────
+  // O dado é do PAI, não de cada card: uma query cobre o mês inteiro (a aba
+  // renderiza vários setores para admin/diretoria sem setor) e uma assinatura de
+  // realtime serve a aba toda. Na versão anterior cada card lia o próprio
+  // localStorage e reportava de volta pelo `onReport`.
+  const [contrib, setContrib]               = useState<Record<string, ContribuicaoReceptivo>>({});
+  const [contribDbAtiva, setContribDbAtiva] = useState(true);
+  const [salvandoContrib, setSalvandoContrib] = useState<string | null>(null);
+  const podeEditarContrib = podeEditarReceptivo(perfil?.perfil);
+
+  const recarregarContrib = useCallback(async () => {
+    if (isPP) return;
+    const { porSetor, dbAtiva } = await buscarContribuicoesReceptivo(empresaId, mes);
+    setContribDbAtiva(dbAtiva);
+    if (dbAtiva) { setContrib(porSetor); return; }
+    // Migration pendente → localStorage antigo, setor por setor.
+    const local: Record<string, ContribuicaoReceptivo> = {};
+    for (const sid of Object.keys(setores)) {
+      const v = lerContribuicaoLocal(empresaId, sid, mes);
+      if (v) local[sid] = v;
+    }
+    setContrib(local);
+  }, [isPP, empresaId, mes, setores]);
+
+  // Lido por ref na assinatura de realtime: `recarregarContrib` muda quando os
+  // setores carregam, e isso não deve derrubar e recriar o canal.
+  const recarregarContribRef = useRef(recarregarContrib);
+  recarregarContribRef.current = recarregarContrib;
+
+  useEffect(() => { void recarregarContrib(); }, [recarregarContrib]);
+
+  // "Se um editar, edita para todos": o evento chega por WebSocket e a aba relê.
+  useEffect(() => {
+    if (isPP || !contribDbAtiva) return;
+    return assinarTabela(
+      {
+        topico:  `rt-contrib-receptivo-${empresaId}`,
+        escutas: [{ tabela: 'contribuicao_receptivo', filtro: `empresa_id=eq.${empresaId}` }],
+      },
+      {
+        onEvento:      () => { void recarregarContribRef.current(); },
+        onReconectado: () => { void recarregarContribRef.current(); },
+      },
+    );
+  }, [isPP, contribDbAtiva, empresaId]);
+
+  const salvarContrib = useCallback(async (sid: string, valores: ContribuicaoReceptivo) => {
+    setSalvandoContrib(sid);
+    try {
+      if (!contribDbAtiva) {
+        gravarContribuicaoLocal(empresaId, sid, mes, valores);
+        setContrib(prev => ({ ...prev, [sid]: valores }));
+        toast.warning('Salvo só neste navegador — migration 20260730a pendente.');
+        return;
+      }
+      // Otimista: a tela de quem editou reage na hora; o realtime leva aos outros.
+      setContrib(prev => ({ ...prev, [sid]: valores }));
+      const ok = await salvarContribuicaoReceptivo({
+        empresaId, setorId: sid, mes,
+        acumulado: valores.acumulado, meta: valores.meta,
+        atualizadoPor: perfil?.id ?? null,
+      });
+      if (!ok) {
+        // Desfaz o otimismo relendo do banco — RLS pode ter recusado.
+        await recarregarContribRef.current();
+        toast.error('Não foi possível salvar a Contribuição Receptivo.');
+        return;
+      }
+      toast.success('Contribuição Receptivo salva para todos.');
+    } finally {
+      setSalvandoContrib(null);
+    }
+  }, [contribDbAtiva, empresaId, mes, perfil?.id]);
   // Equipes de treinamento: equipe_id → data de início (só as treinamento=true).
   // Fetch isolado e tolerante — coluna ausente não quebra o painel principal.
   const [treinoMap, setTreinoMap] = useState<Record<string, string | null>>({});
@@ -625,7 +736,9 @@ export function DesempenhoEquipes({
             onEditarFotoSetor={sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid) : undefined}
             salvandoFoto={salvandoFotoSetor && uploadSetorId === sid}
             mostrarHO={isPP}
-            acumulado={baseSetor + (contribPorSetor[sid] ?? 0)}
+            // Só o ACUMULADO do Receptivo soma aqui; a meta do setor segue
+            // sendo a da aba Metas (decisão do usuário em 30/07/2026).
+            acumulado={baseSetor + (contrib[sid]?.acumulado ?? 0)}
             acumuladoHO={baseSetorHO}
             meta={dados.metaDe('setor', sid)}
             totalUteis={dados.totalUteis}
@@ -634,12 +747,13 @@ export function DesempenhoEquipes({
           {/* Contribuição Receptivo — card manual do setor (BookPlay) */}
           {!isPP && sid !== 'sem_setor' && (
             <CardContribuicaoReceptivo
-              empresaId={empresaId}
-              setorId={sid}
-              mes={mes}
+              dados={contrib[sid]}
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
-              onReport={reportContrib}
+              podeEditar={podeEditarContrib}
+              salvando={salvandoContrib === sid}
+              somenteLocal={!contribDbAtiva}
+              onSalvar={valores => { void salvarContrib(sid, valores); }}
             />
           )}
           {/* Equipes do setor, maiores acumulados primeiro */}
