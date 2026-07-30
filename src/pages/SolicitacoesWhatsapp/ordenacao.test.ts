@@ -47,20 +47,20 @@ function pedido(over: {
 const ids = (l: SolicitacaoWhatsapp[]) => l.map(s => s.id);
 
 describe('faixaPrioridade', () => {
-  it('pendente assumido por mim é faixa 0', () => {
-    expect(faixaPrioridade({ status: 'pendente', responsavel_id: EU }, EU)).toBe(0);
-  });
-  it('falta_info assumido por mim também é faixa 0', () => {
-    expect(faixaPrioridade({ status: 'falta_info', responsavel_id: EU }, EU)).toBe(0);
-  });
-  it('em_andamento meu NÃO é faixa 0 — já está andando', () => {
-    expect(faixaPrioridade({ status: 'em_andamento', responsavel_id: EU }, EU)).toBe(2);
-  });
+  // Faixa 0 é "assumido por mim", em qualquer status em aberto.
+  it.each(['pendente', 'em_andamento', 'falta_info'] as StatusSolicitacao[])(
+    '%s assumido por mim é faixa 0',
+    status => { expect(faixaPrioridade({ status, responsavel_id: EU }, EU)).toBe(0); },
+  );
+
   it('pendente sem dono é faixa 1', () => {
     expect(faixaPrioridade({ status: 'pendente', responsavel_id: null }, EU)).toBe(1);
   });
   it('pendente assumido por outro cai na fila comum', () => {
     expect(faixaPrioridade({ status: 'pendente', responsavel_id: OUTRO }, EU)).toBe(1);
+  });
+  it('em_andamento de outro é faixa 2', () => {
+    expect(faixaPrioridade({ status: 'em_andamento', responsavel_id: OUTRO }, EU)).toBe(2);
   });
   it('falta_info de outro é faixa 2', () => {
     expect(faixaPrioridade({ status: 'falta_info', responsavel_id: OUTRO }, EU)).toBe(2);
@@ -108,26 +108,43 @@ describe('ordenarEmAberto', () => {
     expect(ids(ordenarEmAberto(lista, EU))).toEqual(['eu-abri', 'de-outro']);
   });
 
-  it('em_andamento fica abaixo de qualquer pendente', () => {
+  it('em_andamento MEU sobe acima da fila de pendentes', () => {
     const lista = [
-      pedido({ id: 'andando-meu', status: 'em_andamento', responsavel_id: EU }),
+      pedido({ id: 'pendente-outro', status: 'pendente' }),
+      pedido({ id: 'andando-meu',    status: 'em_andamento', responsavel_id: EU }),
+    ];
+    expect(ids(ordenarEmAberto(lista, EU))).toEqual(['andando-meu', 'pendente-outro']);
+  });
+
+  it('em_andamento de OUTRO continua embaixo dos pendentes', () => {
+    const lista = [
+      pedido({ id: 'andando-outro',  status: 'em_andamento', responsavel_id: OUTRO }),
       pedido({ id: 'pendente-outro', status: 'pendente' }),
     ];
-    expect(ids(ordenarEmAberto(lista, EU))).toEqual(['pendente-outro', 'andando-meu']);
+    expect(ids(ordenarEmAberto(lista, EU))).toEqual(['pendente-outro', 'andando-outro']);
   });
 
   it('ordem completa das três faixas', () => {
     const lista = [
-      pedido({ id: '5-andando-outro', status: 'em_andamento', responsavel_id: OUTRO }),
-      pedido({ id: '4-andando-meu',   status: 'em_andamento', responsavel_id: EU }),
-      pedido({ id: '3-fila',          status: 'pendente' }),
-      pedido({ id: '2-meu-novo',      status: 'pendente',   responsavel_id: EU,
+      // Datas distintas: na mesma faixa quem decide é a idade, e sem isto a
+      // ordem entre estes dois seria só a de entrada.
+      pedido({ id: '6-andando-outro', status: 'em_andamento', responsavel_id: OUTRO,
+               criado_em: '2026-07-28T10:00:00.000Z' }),
+      pedido({ id: '5-faltainfo-outro', status: 'falta_info', responsavel_id: OUTRO,
+               criado_em: '2026-07-27T10:00:00.000Z' }),
+      pedido({ id: '4-fila',          status: 'pendente' }),
+      // Os três meus, do mais antigo para o mais novo, sem olhar o status.
+      pedido({ id: '3-meu-novo',      status: 'pendente',     responsavel_id: EU,
                criado_em: '2026-07-30T10:00:00.000Z' }),
-      pedido({ id: '1-meu-velho',     status: 'falta_info', responsavel_id: EU,
+      pedido({ id: '2-meu-meio',      status: 'em_andamento', responsavel_id: EU,
+               criado_em: '2026-07-29T10:00:00.000Z' }),
+      pedido({ id: '1-meu-velho',     status: 'falta_info',   responsavel_id: EU,
                criado_em: '2026-07-28T10:00:00.000Z' }),
     ];
-    expect(ids(ordenarEmAberto(lista, EU)))
-      .toEqual(['1-meu-velho', '2-meu-novo', '3-fila', '4-andando-meu', '5-andando-outro']);
+    expect(ids(ordenarEmAberto(lista, EU))).toEqual([
+      '1-meu-velho', '2-meu-meio', '3-meu-novo',
+      '4-fila', '5-faltainfo-outro', '6-andando-outro',
+    ]);
   });
 
   it('não altera o array recebido', () => {

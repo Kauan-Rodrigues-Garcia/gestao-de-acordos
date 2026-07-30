@@ -9,17 +9,19 @@ import type { SolicitacaoWhatsapp } from '@/services/solicitacoesWhatsapp.servic
 /**
  * Faixa de prioridade. Quanto menor, mais alto na lista.
  *
- * 0 — **assumido por mim** e ainda pedindo ação (`pendente` ou `falta_info`).
- *     Sobe acima da fila inteira: é trabalho que já é meu e está parado.
- * 1 — o resto dos `pendente`: a fila por pegar.
- * 2 — todo o resto (`em_andamento`, e `falta_info` de outro).
+ * 0 — **assumido por mim**, qualquer status. Em andamento, falta informação ou
+ *     pendente: se o atendimento é meu, é a primeira coisa que eu preciso ver.
+ * 1 — os `pendente` dos outros: a fila por pegar.
+ * 2 — o resto (em andamento e falta informação de outra pessoa).
+ *
+ * Só recebe pedido EM ABERTO — `feito` sai da lista antes de chegar aqui, então
+ * "assumido por mim" nunca traz para o topo algo já concluído.
  */
 export function faixaPrioridade(
   s: Pick<SolicitacaoWhatsapp, 'status' | 'responsavel_id'>,
   usuarioId: string | null,
 ): 0 | 1 | 2 {
-  const assumidoPorMim = !!usuarioId && s.responsavel_id === usuarioId;
-  if (assumidoPorMim && (s.status === 'pendente' || s.status === 'falta_info')) return 0;
+  if (!!usuarioId && s.responsavel_id === usuarioId) return 0;
   if (s.status === 'pendente') return 1;
   return 2;
 }
@@ -27,7 +29,7 @@ export function faixaPrioridade(
 /**
  * Ordena a lista em aberto. A precedência é, nesta ordem:
  *
- *   1. faixa de prioridade (ver acima) — o que assumi vem antes da fila;
+ *   1. faixa de prioridade (ver acima) — o que eu assumi vem antes da fila;
  *   2. o que me envolve (abri ou estou atendendo) antes do que é de outro;
  *   3. **o mais antigo primeiro** — o mais atrasado sobe.
  *
