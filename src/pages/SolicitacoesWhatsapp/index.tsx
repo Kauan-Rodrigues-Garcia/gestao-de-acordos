@@ -13,7 +13,7 @@
  * Aberta a todos os cargos desde 30/07/2026. O operador enxerga só os pedidos
  * dele porque a policy `sol_wpp_select` decide isso — não porque a tela esconde.
  */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   MessageSquarePlus, Inbox, CheckCircle2, Filter, RefreshCw, ShieldAlert, Loader2,
@@ -22,6 +22,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
@@ -34,7 +35,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import {
-  useSolicitacoesWhatsapp, useChatSolicitacao,
+  useSolicitacoesWhatsapp, useChatSolicitacao, useResponsaveisAtendimento,
 } from '@/hooks/useSolicitacoesWhatsapp';
 import {
   criarSolicitacao, atualizarStatus, excluirSolicitacao,
@@ -52,6 +53,32 @@ import { ChatSolicitacao } from './ChatSolicitacao';
 const TODOS = '__todos__';
 
 interface OpcaoSimples { id: string; nome: string }
+
+interface GrupoOperador {
+  id:     string;
+  pessoa: PessoaResumo | null;
+  itens:  SolicitacaoWhatsapp[];
+}
+
+/**
+ * Agrupa os pedidos por quem os abriu, preservando a ordem em que chegaram
+ * (mais recentes primeiro, como a query devolve). Grupos ordenados pelo nome.
+ */
+function agruparPorSolicitante(lista: SolicitacaoWhatsapp[]): GrupoOperador[] {
+  const mapa = new Map<string, GrupoOperador>();
+  for (const s of lista) {
+    const id = s.solicitante_id;
+    let grupo = mapa.get(id);
+    if (!grupo) {
+      grupo = { id, pessoa: s.solicitante ?? null, itens: [] };
+      mapa.set(id, grupo);
+    }
+    grupo.itens.push(s);
+  }
+  return [...mapa.values()].sort((a, b) =>
+    (a.pessoa?.nome ?? '').localeCompare(b.pessoa?.nome ?? '', 'pt-BR'),
+  );
+}
 
 export default function SolicitacoesWhatsapp() {
   const { perfil }  = useAuth();
@@ -105,31 +132,32 @@ export default function SolicitacoesWhatsapp() {
 
   const habilitado = ehPaguePlay && temAcessoAba && !!empresaId;
 
-  const {
-    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas, totaisMensagens,
-    recarregar, recarregarResponsaveis, limparNaoLidas,
-  } = useSolicitacoesWhatsapp(
-    empresaId,
-    usuarioId,
-    // Filtro de setor/equipe é ferramenta de líder. Dois motivos para não valer
-    // para os demais:
-    //   • operador comum — a RLS já devolve só os dele, e filtrar por setor o
-    //     faria PERDER os próprios pedidos antigos se mudasse de setor (o setor
-    //     é congelado na abertura do chamado);
-    //   • responsável — atende a fila da empresa inteira; preso ao próprio setor
-    //     ele não enxergaria justamente os pedidos que veio atender.
-    ehLiderOuAcima
-      ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
-      : {},
-    habilitado,
-  );
+  // Carregado ANTES da lista: ser responsável dá visão geral, e a visão geral
+  // decide se os filtros de setor/equipe valem. Se viesse junto com a lista, a
+  // página precisaria do resultado do hook para montar os argumentos dele.
+  const { responsaveis, recarregarResponsaveis } =
+    useResponsaveisAtendimento(empresaId, habilitado);
 
-  // Ser responsável dá visão geral mesmo sem cargo de liderança.
   const souResponsavel = useMemo(
     () => !!usuarioId && responsaveis.some(r => r.id === usuarioId),
     [responsaveis, usuarioId],
   );
-  const temVisaoGeral = temVisaoGeralPorCargo(cargo) || souResponsavel;
+  const temVisaoGeral = ehLiderOuAcima || souResponsavel;
+
+  const {
+    solicitacoes, loading, dbAtiva, erro, naoLidas, totaisMensagens,
+    recarregar, limparNaoLidas,
+  } = useSolicitacoesWhatsapp(
+    empresaId,
+    usuarioId,
+    // Filtro só para quem enxerga os pedidos dos outros. Para o operador comum a
+    // RLS já devolve só os dele, e filtrar por setor o faria PERDER os próprios
+    // pedidos antigos se mudasse de setor (o setor é congelado na abertura).
+    temVisaoGeral
+      ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
+      : {},
+    habilitado,
+  );
   // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;
   // Excluir é MAIS restrito que editar: apaga para todos. O responsável atende
@@ -153,6 +181,25 @@ export default function SolicitacoesWhatsapp() {
     () => solicitacoes.filter(s => s.solicitante_id === usuarioId && s.status === 'pendente').length,
     [solicitacoes, usuarioId],
   );
+
+  // O responsável atende a fila da empresa inteira, então não pode nascer preso
+  // ao próprio setor como um líder nasce. Roda uma vez, quando descobrimos que
+  // ele é responsável — depois o filtro é dele para mexer.
+  const ajustouSetorRef = useRef(false);
+  useEffect(() => {
+    if (ajustouSetorRef.current) return;
+    if (souResponsavel && !ehLiderOuAcima) {
+      ajustouSetorRef.current = true;
+      setSetorSel(null);
+    }
+  }, [souResponsavel, ehLiderOuAcima]);
+
+  /**
+   * Escolher uma equipe separa a lista por operador. Sem equipe, a lista corre
+   * direto — agrupar a empresa inteira por pessoa daria dezenas de blocos de
+   * uma linha cada.
+   */
+  const agruparPorOperador = temVisaoGeral && equipeSel !== TODOS;
 
   const equipesDoSetor = useMemo(
     () => (setorSel ? equipes.filter(e => e.setor_id === setorSel) : equipes),
@@ -315,45 +362,80 @@ export default function SolicitacoesWhatsapp() {
 
   const precisaEscolherSetor = veMaisDeUmSetor && !setorSel;
 
+  function renderCard(s: SolicitacaoWhatsapp) {
+    return (
+      <CardSolicitacao
+        key={s.id}
+        solicitacao={s}
+        expandido={expandidoId === s.id}
+        eventos={eventos[s.id] ?? []}
+        naoLidas={naoLidas[s.id] ?? 0}
+        totalMensagens={totaisMensagens[s.id] ?? 0}
+        podeEditar={podeEditarPedidos}
+        podeExcluir={podeExcluirSolicitacao(s)}
+        ehDono={s.solicitante_id === usuarioId}
+        salvando={salvandoId === s.id}
+        onAlternar={() => alternarCard(s.id)}
+        onMudarStatus={status => void aoMudarStatus(s, status)}
+        onExcluir={() => void aoExcluir(s.id)}
+        onAbrirChat={() => abrirChat(s.id)}
+        chatAberto={chatAbertoId === s.id}
+      >
+        {chatAbertoId === s.id && (
+          <ChatSolicitacao
+            mensagens={chat.mensagens}
+            loading={chat.loading}
+            enviando={chat.enviando}
+            digitando={chat.digitando}
+            usuarioId={usuarioId}
+            interlocutor={interlocutor}
+            encerrado={!chatAindaAberto(s)}
+            onEnviar={chat.enviar}
+            onDigitando={chat.avisarDigitando}
+            onFechar={() => setChatAbertoId(null)}
+          />
+        )}
+      </CardSolicitacao>
+    );
+  }
+
   function renderLista(lista: SolicitacaoWhatsapp[], vazio: string) {
     if (lista.length === 0) {
       return <p className="text-xs text-muted-foreground py-6 text-center">{vazio}</p>;
     }
+
+    // Sem equipe escolhida, lista corrida.
+    if (!agruparPorOperador) {
+      return <div className="space-y-2">{lista.map(renderCard)}</div>;
+    }
+
+    // Com equipe escolhida: um bloco por operador da equipe. É a visão que o
+    // líder quer nesse recorte — quem pediu o quê, e quanto cada um tem aberto.
     return (
-      <div className="space-y-2">
-        {lista.map(s => (
-          <CardSolicitacao
-            key={s.id}
-            solicitacao={s}
-            expandido={expandidoId === s.id}
-            eventos={eventos[s.id] ?? []}
-            naoLidas={naoLidas[s.id] ?? 0}
-            totalMensagens={totaisMensagens[s.id] ?? 0}
-            podeEditar={podeEditarPedidos}
-            podeExcluir={podeExcluirSolicitacao(s)}
-            ehDono={s.solicitante_id === usuarioId}
-            salvando={salvandoId === s.id}
-            onAlternar={() => alternarCard(s.id)}
-            onMudarStatus={status => void aoMudarStatus(s, status)}
-            onExcluir={() => void aoExcluir(s.id)}
-            onAbrirChat={() => abrirChat(s.id)}
-            chatAberto={chatAbertoId === s.id}
-          >
-            {chatAbertoId === s.id && (
-              <ChatSolicitacao
-                mensagens={chat.mensagens}
-                loading={chat.loading}
-                enviando={chat.enviando}
-                digitando={chat.digitando}
-                usuarioId={usuarioId}
-                interlocutor={interlocutor}
-                encerrado={!chatAindaAberto(s)}
-                onEnviar={chat.enviar}
-                onDigitando={chat.avisarDigitando}
-                onFechar={() => setChatAbertoId(null)}
-              />
-            )}
-          </CardSolicitacao>
+      <div className="space-y-4">
+        {agruparPorSolicitante(lista).map(grupo => (
+          <div key={grupo.id} className="space-y-2">
+            <div className="flex items-center gap-2 px-0.5">
+              <Avatar className="w-6 h-6 shrink-0">
+                {grupo.pessoa?.foto_url && (
+                  <AvatarImage src={grupo.pessoa.foto_url} alt={grupo.pessoa.nome} className="object-cover" />
+                )}
+                <AvatarFallback className="bg-muted text-[9px] font-bold">
+                  {(grupo.pessoa?.nome ?? '?').charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <p className="text-xs font-semibold truncate">
+                {grupo.pessoa?.nome ?? 'Sem operador'}
+              </p>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                {grupo.itens.length}
+              </Badge>
+              <div className="flex-1 h-px bg-border" />
+            </div>
+            <div className="space-y-2 sm:pl-8">
+              {grupo.itens.map(renderCard)}
+            </div>
+          </div>
         ))}
       </div>
     );
@@ -400,22 +482,29 @@ export default function SolicitacoesWhatsapp() {
         onRemover={uid => void aoRemoverResponsavel(uid)}
       />
 
-      {/* Filtros: ferramenta de líder (ver comentário na chamada do hook) */}
-      {ehLiderOuAcima && (
+      {/* Filtros — para quem enxerga os pedidos dos outros (líder+ ou responsável) */}
+      {temVisaoGeral && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
             <Filter className="w-3.5 h-3.5" /> Filtros
           </span>
 
-          {veMaisDeUmSetor && (
+          {/* Seletor de setor: obrigatório para quem não tem setor próprio
+              (admin/diretoria); opcional para o responsável, que atende a fila
+              inteira e por isso ganha a opção "Todos os setores". */}
+          {(veMaisDeUmSetor || souResponsavel) && (
             <Select
-              value={setorSel ?? ''}
-              onValueChange={v => { setSetorSel(v); setEquipeSel(TODOS); }}
+              value={setorSel ?? TODOS}
+              onValueChange={v => {
+                setSetorSel(v === TODOS ? null : v);
+                setEquipeSel(TODOS);
+              }}
             >
               <SelectTrigger className="h-8 w-52 text-xs">
                 <SelectValue placeholder="Escolha um setor…" />
               </SelectTrigger>
               <SelectContent>
+                {!veMaisDeUmSetor && <SelectItem value={TODOS}>Todos os setores</SelectItem>}
                 {setores.map(s => (
                   <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                 ))}

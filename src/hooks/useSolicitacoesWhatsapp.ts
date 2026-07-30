@@ -53,6 +53,34 @@ export interface FiltrosSolicitacoes {
   equipeId?: string | null;
 }
 
+/**
+ * Responsáveis pelo atendimento — hook SEPARADO de propósito.
+ *
+ * Ser responsável dá visão geral, e a visão geral decide se os filtros de
+ * setor/equipe valem. Se esta lista viesse de dentro de `useSolicitacoesWhatsapp`,
+ * a página precisaria do resultado do hook para montar os argumentos do próprio
+ * hook — circular. Carregando à parte, `souResponsavel` já é conhecido antes.
+ */
+export function useResponsaveisAtendimento(empresaId: string | null, habilitado = true) {
+  const [responsaveis, setResponsaveis] = useState<PessoaResumo[]>([]);
+  const montadoRef = useRef(true);
+
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => { montadoRef.current = false; };
+  }, []);
+
+  const recarregar = useCallback(async () => {
+    if (!empresaId || !habilitado) return;
+    const lista = await buscarResponsaveis(empresaId);
+    if (montadoRef.current) setResponsaveis(lista);
+  }, [empresaId, habilitado]);
+
+  useEffect(() => { void recarregar(); }, [recarregar]);
+
+  return { responsaveis, recarregarResponsaveis: recarregar };
+}
+
 export function useSolicitacoesWhatsapp(
   empresaId:   string | null,
   usuarioId:   string | null,
@@ -61,7 +89,6 @@ export function useSolicitacoesWhatsapp(
   habilitado = true,
 ) {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoWhatsapp[]>([]);
-  const [responsaveis, setResponsaveis] = useState<PessoaResumo[]>([]);
   const [loading, setLoading]           = useState(true);
   const [dbAtiva, setDbAtiva]           = useState(true);
   const [erro, setErro]                 = useState<string | null>(null);
@@ -93,15 +120,6 @@ export function useSolicitacoesWhatsapp(
   recarregarRef.current = recarregar;
 
   useEffect(() => { setLoading(true); void recarregar(); }, [recarregar]);
-
-  // Responsáveis (muda pouco; recarrega junto com a lista).
-  const recarregarResponsaveis = useCallback(async () => {
-    if (!empresaId || !habilitado) return;
-    const lista = await buscarResponsaveis(empresaId);
-    if (montadoRef.current) setResponsaveis(lista);
-  }, [empresaId, habilitado]);
-
-  useEffect(() => { void recarregarResponsaveis(); }, [recarregarResponsaveis]);
 
   useEffect(() => { if (habilitado) pedirPermissaoNotificacao(); }, [habilitado]);
 
@@ -213,8 +231,8 @@ export function useSolicitacoesWhatsapp(
   }, []);
 
   return {
-    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas, totaisMensagens,
-    recarregar, recarregarResponsaveis, limparNaoLidas,
+    solicitacoes, loading, dbAtiva, erro, naoLidas, totaisMensagens,
+    recarregar, limparNaoLidas,
   };
 }
 
