@@ -16,6 +16,7 @@
 import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { ROTA_DIARIO } from '@/lib/notificacoes-rota';
 import type {
   OperadorResolvidoMap,
   ResumoOperadorAnalitico,
@@ -406,6 +407,8 @@ export async function notificarImportacaoDiario(
       `${n.novosPagamentos} pagamento${n.novosPagamentos !== 1 ? 's' : ''} novo${n.novosPagamentos !== 1 ? 's' : ''}. ` +
       'Acesse Analítico › Recebimento diário para conferir.',
     lida: false,
+    // Destino do clique: já abre na sub-aba certa (migration 20260731a).
+    rota: ROTA_DIARIO,
   }));
 
   const CHUNK = 100;

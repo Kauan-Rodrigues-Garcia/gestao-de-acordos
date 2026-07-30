@@ -16,6 +16,7 @@ import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabul
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { mesReferencia } from './analiticoComum';
+import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import type { LinhaRelatorio } from './analiticoComum';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
@@ -1292,6 +1293,8 @@ export async function notificarImportacaoAnalitico(
     titulo:     'Analítico atualizado',
     mensagem:   `${importadorNome} importou os recebimentos de ${mes}. Acesse a aba Analítico para ver seus pagamentos.`,
     lida:       false,
+    // Destino do clique (migration 20260731a).
+    rota:       ROTA_ANALITICO,
   }));
 
   // Inserir em chunks para não exceder limites

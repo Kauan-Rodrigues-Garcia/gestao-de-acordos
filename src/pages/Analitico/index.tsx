@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -45,7 +45,20 @@ export default function PaginaAnalitico() {
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
   const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
-  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario'>('analitico');
+  // `?aba=diario` abre direto no Recebimento diário. É o destino da notificação
+  // de importação do diário — sem isto ela largava o usuário na aba errada.
+  const [searchParams] = useSearchParams();
+  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario'>(
+    () => (searchParams.get('aba') === 'diario' ? 'diario' : 'analitico'),
+  );
+
+  // Clicar em outra notificação de diário já estando na página só troca a query;
+  // o estado inicial não roda de novo, então a aba precisa acompanhar.
+  const abaDaUrl = searchParams.get('aba');
+  useEffect(() => {
+    if (abaDaUrl === 'diario')    setAbaPrincipal('diario');
+    if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
+  }, [abaDaUrl]);
 
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();

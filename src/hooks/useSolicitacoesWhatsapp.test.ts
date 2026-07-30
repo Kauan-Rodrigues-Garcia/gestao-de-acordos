@@ -1,9 +1,11 @@
 /**
  * useSolicitacoesWhatsapp.test.ts — aviso de mensagem nova.
  *
- * Regra pedida: notificar sempre que chegar mensagem de outra pessoa E o
- * destinatário estiver com o chat daquele pedido FECHADO. Com o chat aberto na
- * frente do usuário a notificação é ruído — ele já está lendo.
+ * A notificação do SO virou o aviso de ÚLTIMO recurso: desde a migration
+ * 20260731a a mensagem do chat vira linha em `notificacoes`, então com a janela
+ * à frente o usuário já recebe o card no canto e o sino. O aviso do sistema
+ * operacional só dispara com a janela do navegador ATRÁS de outra coisa — senão
+ * seriam três avisos da mesma mensagem.
  *
  * O realtime é mockado: guardamos o `onEvento` que o hook registra e disparamos
  * o payload à mão, que é o que o Supabase faria.
@@ -92,15 +94,19 @@ beforeEach(() => {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
-function montar(chatAbertoId: string | null = null) {
-  return renderHook(() =>
-    useSolicitacoesWhatsapp('emp', 'eu', {}, true, chatAbertoId),
-  );
+function montar() {
+  return renderHook(() => useSolicitacoesWhatsapp('emp', 'eu', {}, true));
+}
+
+/** Coloca a janela do navegador atrás de outra coisa. */
+function janelaAtras() {
+  Object.defineProperty(document, 'hidden', { configurable: true, value: true });
 }
 
 describe('notificação de mensagem nova', () => {
-  it('notifica quando o chat daquele pedido está FECHADO', async () => {
-    const { result } = montar(null);
+  it('notifica quando a janela do navegador está atrás', async () => {
+    janelaAtras();
+    const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem(); });
@@ -111,36 +117,20 @@ describe('notificação de mensagem nova', () => {
     expect(result.current.naoLidas['sol-1']).toBe(1);
   });
 
-  it('NÃO notifica quando o chat daquele pedido está aberto na frente do usuário', async () => {
-    const { result } = montar('sol-1');
+  it('NÃO notifica com a janela à frente — o card e o sino já avisam', async () => {
+    const { result } = montar();          // document.hidden = false
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem(); });
 
     expect(notificacoes).toHaveLength(0);
-  });
-
-  it('notifica mesmo com o chat aberto se a aba do navegador está em segundo plano', async () => {
-    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
-    const { result } = montar('sol-1');
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => { chegaMensagem(); });
-
-    expect(notificacoes).toHaveLength(1);
-  });
-
-  it('chat aberto de OUTRO pedido não silencia a mensagem deste', async () => {
-    const { result } = montar('sol-999');
-    await waitFor(() => expect(result.current.loading).toBe(false));
-
-    act(() => { chegaMensagem(); });
-
-    expect(notificacoes).toHaveLength(1);
+    // ...mas a mensagem continua contando no badge da aba
+    expect(result.current.naoLidas['sol-1']).toBe(1);
   });
 
   it('não notifica o eco da própria mensagem', async () => {
-    const { result } = montar(null);
+    janelaAtras();
+    const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem({ autor_id: 'eu' }); });
@@ -152,7 +142,8 @@ describe('notificação de mensagem nova', () => {
   });
 
   it('notifica a cada mensagem que chega, não só a primeira', async () => {
-    const { result } = montar(null);
+    janelaAtras();
+    const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem({ id: 'msg-1', conteudo: 'primeira' }); });
@@ -163,8 +154,9 @@ describe('notificação de mensagem nova', () => {
   });
 
   it('sem permissão do SO, a contagem continua subindo', async () => {
+    janelaAtras();
     (Notification as unknown as { permission: string }).permission = 'denied';
-    const { result } = montar(null);
+    const { result } = montar();
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     act(() => { chegaMensagem(); });

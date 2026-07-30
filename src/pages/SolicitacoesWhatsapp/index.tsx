@@ -173,8 +173,6 @@ export default function SolicitacoesWhatsapp() {
       ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
       : {},
     habilitado,
-    // Silencia a notificação do SO da conversa que já está aberta na tela.
-    chatAbertoId,
   );
   // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;

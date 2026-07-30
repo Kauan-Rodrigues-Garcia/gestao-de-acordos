@@ -87,11 +87,6 @@ export function useSolicitacoesWhatsapp(
   filtros:     FiltrosSolicitacoes,
   /** false enquanto a aba não está visível — evita buscar e assinar à toa. */
   habilitado = true,
-  /**
-   * Thread aberta neste momento, ou null. Silencia a notificação do SO para ela:
-   * com a conversa na frente do usuário o aviso é ruído, ele já está lendo.
-   */
-  chatAbertoId: string | null = null,
 ) {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoWhatsapp[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -172,22 +167,23 @@ export function useSolicitacoesWhatsapp(
 
   useEffect(() => { void recarregarContagens(); }, [recarregarContagens]);
 
-  // Lidos pelo handler de realtime sem virarem dependência do efeito — trocar a
-  // thread aberta não pode derrubar e reassinar o canal.
+  // Lida pelo handler de realtime sem virar dependência do efeito.
   const solicitacoesRef = useRef(solicitacoes);
   solicitacoesRef.current = solicitacoes;
-  const chatAbertoRef = useRef(chatAbertoId);
-  chatAbertoRef.current = chatAbertoId;
 
   /**
-   * A conversa está aberta E na frente do usuário?
+   * A janela do navegador está atrás de outra coisa?
    *
-   * Só o painel aberto não basta: com a aba do navegador em segundo plano ele
-   * não está lendo nada, e é justamente aí que a notificação serve.
+   * É a única situação em que a notificação do SO ainda faz sentido. Desde a
+   * migration 20260731a a mensagem do chat vira linha em `notificacoes`, então
+   * com a janela à frente o usuário já recebe o card no canto e o sino — um
+   * aviso do sistema operacional em cima disso seria o terceiro da MESMA
+   * mensagem.
+   *
+   * Com a conversa aberta na tela nada dispara: janela à frente já barra aqui.
    */
-  const lendoAgora = useCallback((solicitacaoId: string) => {
-    if (chatAbertoRef.current !== solicitacaoId) return false;
-    return typeof document === 'undefined' || !document.hidden;
+  const janelaAtras = useCallback(() => {
+    return typeof document !== 'undefined' && document.hidden;
   }, []);
 
   // ── Realtime das mensagens: badge + notificação do SO ──────────────────────
@@ -224,9 +220,8 @@ export function useSolicitacoesWhatsapp(
               [nova.solicitacao_id]: (prev[nova.solicitacao_id] ?? 0) + 1,
             }));
 
-            // Com a thread aberta na tela o usuário já está lendo: o badge some
-            // sozinho e a notificação seria ruído.
-            if (lendoAgora(nova.solicitacao_id)) return;
+            // Com a janela à frente quem avisa é o card + sino (ver janelaAtras).
+            if (!janelaAtras()) return;
 
             // O nome do autor não vem no payload do realtime (é join); a lista
             // já tem o pedido, então usamos o cliente para dar contexto.
@@ -246,7 +241,7 @@ export function useSolicitacoesWhatsapp(
         onReconectado: () => { void recarregarContagensRef.current(); },
       },
     );
-  }, [empresaId, usuarioId, habilitado, dbAtiva, lendoAgora]);
+  }, [empresaId, usuarioId, habilitado, dbAtiva, janelaAtras]);
 
   /** Zera o badge local ao abrir a thread (o banco é carimbado pelo chat). */
   const limparNaoLidas = useCallback((solicitacaoId: string) => {

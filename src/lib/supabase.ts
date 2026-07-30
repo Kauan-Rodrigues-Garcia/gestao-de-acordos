@@ -210,6 +210,11 @@ export interface Notificacao {
   lida: boolean;
   empresa_id?: string;
   acordo_id?: string | null;
+  /**
+   * Para onde o clique leva (caminho interno, ex: `/analitico?aba=diario`).
+   * Migration 20260731a. Nulo nas linhas antigas — ver `rotaDaNotificacao`.
+   */
+  rota?: string | null;
   criado_em: string;
 }
 

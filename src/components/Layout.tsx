@@ -50,6 +50,7 @@ import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetNomeVotacaoLembrete } from './pet/PetNomeVotacaoLembrete';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
+import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 import { useTermoUso } from '@/hooks/useTermoUso';
@@ -712,6 +713,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           onConfirmed={() => setChatplayOnboardingOpen(false)}
         />
       )}
+
+      {/* Aviso rápido de notificação nova — um card por vez, canto superior */}
+      <NotificacaoToast />
 
       {/* Lembrete de votação do nome do mascote — só abre pós termos + tour */}
       <PetNomeVotacaoLembrete pronto={votacaoNomePronta} />

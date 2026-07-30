@@ -22,6 +22,7 @@ import type { Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
+import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
 import { cn } from '@/lib/utils';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -230,22 +231,30 @@ export function ChatNotificacoes() {
     await limparTodasNoProvider();
   }, [limparTodasNoProvider]);
 
-  function navigateToAcordo(n: Notificacao) {
-    if (!n.acordo_id) return;
+  /** Vai para onde a notificação aponta. `null` = não há destino. */
+  function navegarPara(n: Notificacao): boolean {
+    const destino = rotaDaNotificacao(n, tenant.isPaguePlay);
+    if (!destino) return false;
     setAberto(false);
     setDetalhe(null);
-    const path = tenant.isPaguePlay
-      ? `/?highlight=${n.acordo_id}`
-      : `/acordos?highlight=${n.acordo_id}`;
-    navigate(path);
+    navigate(destino);
+    return true;
   }
 
+  function navigateToAcordo(n: Notificacao) {
+    if (!n.acordo_id) return;
+    navegarPara(n);
+  }
+
+  /**
+   * Clique na notificação: leva para a aba de origem.
+   *
+   * Toda notificação com destino navega — analítico, recebimento diário e chat
+   * inclusive. O painel de detalhe fica só para as que não têm para onde ir.
+   */
   function abrirDetalhe(n: Notificacao) {
     if (!n.lida) marcarLida(n.id);
-    if (n.acordo_id) {
-      navigateToAcordo(n);
-      return;
-    }
+    if (navegarPara(n)) return;
     setDetalhe(n);
   }
 
