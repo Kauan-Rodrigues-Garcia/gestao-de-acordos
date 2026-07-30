@@ -10,9 +10,8 @@
  *   operador            → só os próprios pedidos
  *   líder+ / responsável → todos os da empresa, com edição
  *
- * ⚠️  A aba está em teste: só admin/super_admin conseguem abrir. O gate é uma
- *     constante em `permissoes.ts` (PERFIS_ACESSO_ABA_WPP) — trocar por `null`
- *     libera para todos, e a RLS já está no formato final.
+ * Aberta a todos os cargos desde 30/07/2026. O operador enxerga só os pedidos
+ * dele porque a policy `sol_wpp_select` decide isso — não porque a tela esconde.
  */
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
@@ -66,11 +65,13 @@ export default function SolicitacoesWhatsapp() {
   // ── Gates ──────────────────────────────────────────────────────────────────
   const ehPaguePlay  = tenant.isPaguePlay;
   const temAcessoAba = podeAcessarAbaWpp(cargo);
+  /** Visão geral por CARGO. Depende só do perfil, então já vale antes do hook. */
+  const ehLiderOuAcima = temVisaoGeralPorCargo(cargo);
 
   // Quem enxerga mais de um setor precisa escolher um — pedido explícito: nunca
   // misturar setores na mesma lista.
   const setorDoPerfil    = perfil?.setor_id ?? null;
-  const veMaisDeUmSetor  = !setorDoPerfil && temVisaoGeralPorCargo(cargo);
+  const veMaisDeUmSetor  = !setorDoPerfil && ehLiderOuAcima;
 
   const [setores, setSetores]   = useState<OpcaoSimples[]>([]);
   const [equipes, setEquipes]   = useState<(OpcaoSimples & { setor_id: string | null })[]>([]);
@@ -110,7 +111,16 @@ export default function SolicitacoesWhatsapp() {
   } = useSolicitacoesWhatsapp(
     empresaId,
     usuarioId,
-    { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel },
+    // Filtro de setor/equipe é ferramenta de líder. Dois motivos para não valer
+    // para os demais:
+    //   • operador comum — a RLS já devolve só os dele, e filtrar por setor o
+    //     faria PERDER os próprios pedidos antigos se mudasse de setor (o setor
+    //     é congelado na abertura do chamado);
+    //   • responsável — atende a fila da empresa inteira; preso ao próprio setor
+    //     ele não enxergaria justamente os pedidos que veio atender.
+    ehLiderOuAcima
+      ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
+      : {},
     habilitado,
   );
 
@@ -125,7 +135,6 @@ export default function SolicitacoesWhatsapp() {
   // Excluir é MAIS restrito que editar: apaga para todos. O responsável atende
   // o chamado, não o descarta. Espelha a policy `sol_wpp_delete`, que dá DELETE
   // só a líder+ e ao dono enquanto ninguém pegou.
-  const ehLiderOuAcima = temVisaoGeralPorCargo(cargo);
   const podeExcluirSolicitacao = useCallback(
     (s: SolicitacaoWhatsapp) =>
       ehLiderOuAcima || (s.solicitante_id === usuarioId && s.status === 'pendente'),
@@ -363,7 +372,7 @@ export default function SolicitacoesWhatsapp() {
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
             <MessageSquarePlus className="w-5 h-5 text-primary" />
-            Solicitações de WhatsApp
+            Solicitar Atendimento
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Peça ao time do digital para enviar uma mensagem ao cliente.
@@ -391,8 +400,8 @@ export default function SolicitacoesWhatsapp() {
         onRemover={uid => void aoRemoverResponsavel(uid)}
       />
 
-      {/* Filtros (só para quem tem visão geral) */}
-      {temVisaoGeral && (
+      {/* Filtros: ferramenta de líder (ver comentário na chamada do hook) */}
+      {ehLiderOuAcima && (
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
             <Filter className="w-3.5 h-3.5" /> Filtros

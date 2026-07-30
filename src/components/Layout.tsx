@@ -76,7 +76,7 @@ const NAV_ITEMS: NavItem[] = [
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
-  { label: 'Solicitações WhatsApp', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP },
+  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
@@ -269,8 +269,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return isPP && ouvidoriaAcesso.podeVer;
     }
 
-    // Solicitações de WhatsApp: PaguePlay, e por enquanto só admin/super_admin
-    // (aba em teste). O gate é a constante PERFIS_ACESSO_ABA_WPP.
+    // Solicitar Atendimento: PaguePlay. Aberta a todos os cargos — o operador
+    // enxerga só os pedidos dele, e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
       return isPP && podeAcessarAbaWpp(userRole);
     }

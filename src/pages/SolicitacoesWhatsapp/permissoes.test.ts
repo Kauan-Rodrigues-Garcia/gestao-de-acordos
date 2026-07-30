@@ -87,25 +87,24 @@ describe('permissões espelham a migration 20260730b', () => {
 // ── Gate de rollout ─────────────────────────────────────────────────────────
 
 describe('gate de rollout da aba', () => {
-  it('hoje só admin e super_admin abrem a aba', () => {
-    // Este teste MUDA quando a aba for liberada — é o lembrete de que o gate
-    // ainda está ligado. Ao abrir para todos, troque PERFIS_ACESSO_ABA_WPP por
-    // null e ajuste as duas expectativas abaixo.
-    expect(PERFIS_ACESSO_ABA_WPP).toEqual(['administrador', 'super_admin']);
-    expect(podeAcessarAbaWpp('administrador')).toBe(true);
-    expect(podeAcessarAbaWpp('super_admin')).toBe(true);
+  it('a aba está liberada para todos os cargos', () => {
+    expect(PERFIS_ACESSO_ABA_WPP).toBeNull();
+    for (const cargo of ['operador', 'lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin']) {
+      expect(podeAcessarAbaWpp(cargo)).toBe(true);
+    }
   });
 
-  it('líder e operador ainda NÃO abrem a aba', () => {
-    expect(podeAcessarAbaWpp('lider')).toBe(false);
-    expect(podeAcessarAbaWpp('operador')).toBe(false);
-    expect(podeAcessarAbaWpp('gerencia')).toBe(false);
+  it('abrir o gate NÃO deu visão geral ao operador', () => {
+    // O ponto da separação: o gate diz quem ABRE a aba; a visão geral diz quem
+    // vê os pedidos dos outros. Operador abre e enxerga só os dele — quem
+    // garante é a policy sol_wpp_select, este teste só fixa a intenção.
+    expect(podeAcessarAbaWpp('operador')).toBe(true);
+    expect(temVisaoGeralPorCargo('operador')).toBe(false);
+    expect(podeDefinirResponsavel('operador')).toBe(false);
   });
 
-  it('o gate é independente da visão geral — líder tem uma e não a outra', () => {
-    // Separar os dois conceitos é o que permite liberar a aba mexendo em UMA
-    // constante, sem tocar nas regras de quem vê o quê.
-    expect(temVisaoGeralPorCargo('lider')).toBe(true);
-    expect(podeAcessarAbaWpp('lider')).toBe(false);
+  it('ainda dá para fechar a aba voltando um array de cargos', () => {
+    // Rollback rápido continua sendo uma linha só.
+    expect(podeAcessarAbaWpp(null)).toBe(false);
   });
 });

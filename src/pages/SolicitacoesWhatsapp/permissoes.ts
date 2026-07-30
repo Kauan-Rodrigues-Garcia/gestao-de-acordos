@@ -23,18 +23,16 @@ export const PERFIS_VISAO_GERAL_WPP = [
 export const PERFIS_DEFINE_RESPONSAVEL_WPP = PERFIS_VISAO_GERAL_WPP;
 
 /**
- * ⚠️  GATE DE ROLLOUT — TEMPORÁRIO.
+ * Gate de rollout da aba. `null` = aberta a todos os cargos.
  *
- * A aba está liberada só para admin/super_admin enquanto é testada. A RLS já
- * está no formato FINAL (operador vê o dele, líder+ e responsável veem tudo),
- * então o teste exercita as regras de verdade.
+ * Ficou em `['administrador','super_admin']` durante o teste (30/07/2026) e foi
+ * liberada depois. A RLS sempre esteve no formato final, então abrir o gate não
+ * mudou regra de visibilidade nenhuma: o operador continua enxergando só os
+ * próprios pedidos porque a policy `sol_wpp_select` decide isso, não esta lista.
  *
- * Para abrir para todo mundo, troque por `null` — o gate some e a visibilidade
- * passa a ser só a da RLS. É a única linha a mudar.
+ * Para fechar de novo (rollback rápido), basta voltar um array de cargos aqui.
  */
-export const PERFIS_ACESSO_ABA_WPP: readonly string[] | null = [
-  'administrador', 'super_admin',
-];
+export const PERFIS_ACESSO_ABA_WPP: readonly string[] | null = null;
 
 /** Pode abrir a aba (gate de rollout + tenant são checados por quem chama). */
 export function podeAcessarAbaWpp(perfil: string | null | undefined): boolean {
