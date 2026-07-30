@@ -11,6 +11,8 @@
  *   • definir responsável duas vezes não é erro para quem clicou.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // ── Mock do Supabase (padrão thenable do projeto) ───────────────────────────
 
@@ -66,6 +68,7 @@ import {
   buscarSolicitacoes, criarSolicitacao, atualizarStatus,
   marcarMensagensLidas, definirResponsavel, buscarClientePorCodigo,
   ehErroLimitePendentes, MAX_PENDENTES, STATUS_EM_ABERTO,
+  chatAindaAberto, HORAS_CHAT_APOS_FECHAR,
 } from './solicitacoesWhatsapp.service';
 
 const EMPRESA = 'emp-1';
@@ -88,6 +91,70 @@ describe('constantes', () => {
 
   it('o teto de pendentes é 10, igual ao trigger', () => {
     expect(MAX_PENDENTES).toBe(10);
+  });
+});
+
+// ── Encerramento da conversa ────────────────────────────────────────────────
+
+describe('chatAindaAberto', () => {
+  const horasAtras = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
+
+  it('a janela é de 24 h, igual a fn_wpp_chat_aberto', () => {
+    expect(HORAS_CHAT_APOS_FECHAR).toBe(24);
+  });
+
+  it('chamado não finalizado: conversa aberta', () => {
+    for (const status of ['pendente', 'em_andamento', 'falta_info'] as const) {
+      expect(chatAindaAberto({ status, finalizado_em: null })).toBe(true);
+    }
+  });
+
+  it('finalizado há menos de 24 h: ainda aberta', () => {
+    expect(chatAindaAberto({ status: 'feito', finalizado_em: horasAtras(23) })).toBe(true);
+  });
+
+  it('finalizado há mais de 24 h: encerrada', () => {
+    expect(chatAindaAberto({ status: 'feito', finalizado_em: horasAtras(25) })).toBe(false);
+  });
+
+  it('feito sem carimbo erra para o lado aberto', () => {
+    // Não deveria acontecer (o trigger fn_wpp_carimbos preenche). Se acontecer,
+    // deixar as pessoas se comunicarem é o erro menos danoso.
+    expect(chatAindaAberto({ status: 'feito', finalizado_em: null })).toBe(true);
+  });
+
+  it('reabrir um chamado antigo reabre a conversa', () => {
+    // O trigger limpa `finalizado_em` ao sair de 'feito'; mesmo que não
+    // limpasse, o status já basta.
+    expect(chatAindaAberto({ status: 'em_andamento', finalizado_em: horasAtras(100) })).toBe(true);
+  });
+});
+
+// ── A regra do front bate com a da policy ───────────────────────────────────
+// Caixa de texto desabilitada é sugestão; a garantia é a policy. Se as duas
+// divergirem, o usuário digita e o banco recusa.
+
+describe('encerramento espelha a migration 20260730d', () => {
+  const SQL = readFileSync(
+    resolve(__dirname, '../../supabase/migrations/20260730d_wpp_chat_encerra_24h.sql'),
+    'utf-8',
+  );
+
+  it('a janela do front é o mesmo INTERVAL da função', () => {
+    const m = SQL.match(/INTERVAL\s+'(\d+)\s+hours?'/i);
+    expect(m).not.toBeNull();
+    expect(Number(m![1])).toBe(HORAS_CHAT_APOS_FECHAR);
+  });
+
+  it('a policy de INSERT exige a conversa aberta', () => {
+    const i = SQL.indexOf('CREATE POLICY "sol_wpp_msg_insert"');
+    expect(i).toBeGreaterThan(-1);
+    expect(SQL.slice(i, SQL.indexOf(');', i))).toContain('fn_wpp_chat_aberto');
+  });
+
+  it('o SELECT das mensagens NÃO é tocado — histórico é anexo permanente', () => {
+    // Encerrar a conversa fecha a escrita, nunca a leitura.
+    expect(SQL).not.toContain('CREATE POLICY "sol_wpp_msg_select"');
   });
 });
 

@@ -53,15 +53,23 @@ function Pessoa({ nome, foto, tamanho = 'w-5 h-5' }: { nome: string | null | und
 }
 
 export function CardSolicitacao({
-  solicitacao: s, expandido, eventos, naoLidas, podeEditar, ehDono, salvando,
+  solicitacao: s, expandido, eventos, naoLidas, totalMensagens,
+  podeEditar, podeExcluir, ehDono, salvando,
   onAlternar, onMudarStatus, onExcluir, onAbrirChat, chatAberto, children,
 }: {
   solicitacao: SolicitacaoWhatsapp;
   expandido:   boolean;
   eventos:     EventoSolicitacao[];
   naoLidas:    number;
-  /** Responsável ou líder+: pode mudar status e excluir. */
+  /** Mensagens já trocadas — mostra que existe histórico sem abrir a conversa. */
+  totalMensagens: number;
+  /** Responsável ou líder+: pode mudar status. NÃO implica poder excluir. */
   podeEditar:  boolean;
+  /**
+   * Excluir apaga para TODOS, então é mais restrito que editar: só líder+ ou o
+   * dono enquanto ninguém pegou. O responsável atende, não descarta o chamado.
+   */
+  podeExcluir: boolean;
   /** É o solicitante — vê o card como "meu pedido". */
   ehDono:      boolean;
   salvando:    boolean;
@@ -201,7 +209,11 @@ export function CardSolicitacao({
                   onClick={onAbrirChat}
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
-                  {chatAberto ? 'Fechar conversa' : 'Conversar'}
+                  {/* Rótulo muda quando já houve conversa: o histórico é anexo do
+                      atendimento e continua acessível mesmo encerrado. */}
+                  {chatAberto ? 'Fechar conversa'
+                    : totalMensagens > 0 ? `Conversa (${totalMensagens})`
+                    : 'Conversar'}
                   {naoLidas > 0 && !chatAberto && (
                     <span className="ml-0.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white">
                       {naoLidas > 9 ? '9+' : naoLidas}
@@ -237,7 +249,7 @@ export function CardSolicitacao({
 
                 {/* Excluir: o dono só enquanto ninguém pegou; líder+ sempre.
                     A RLS decide de verdade — aqui é só não oferecer em vão. */}
-                {(podeEditar || (ehDono && s.status === 'pendente')) && (
+                {podeExcluir && (
                   confirmandoExclusao ? (
                     <span className="inline-flex items-center gap-1.5 ml-auto">
                       <span className="text-[11px] text-muted-foreground">Excluir?</span>

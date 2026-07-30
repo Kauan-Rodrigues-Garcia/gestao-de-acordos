@@ -10,7 +10,7 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, X, Check, CheckCheck, MessageSquare, Loader2 } from 'lucide-react';
+import { Send, X, Check, CheckCheck, MessageSquare, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -54,7 +54,7 @@ function PontinhosDigitando() {
 }
 
 export function ChatSolicitacao({
-  mensagens, loading, enviando, digitando, usuarioId, interlocutor,
+  mensagens, loading, enviando, digitando, usuarioId, interlocutor, encerrado,
   onEnviar, onDigitando, onFechar,
 }: {
   mensagens:    MensagemSolicitacao[];
@@ -64,6 +64,11 @@ export function ChatSolicitacao({
   usuarioId:    string | null;
   /** Quem está do outro lado (solicitante ou responsável, conforme quem olha). */
   interlocutor: PessoaResumo | null;
+  /**
+   * Conversa encerrada (24 h depois de o chamado fechar): não aceita mensagem
+   * nova, mas o histórico continua aqui — é anexo permanente do atendimento.
+   */
+  encerrado:    boolean;
   onEnviar:     (texto: string) => Promise<boolean>;
   onDigitando:  () => void;
   onFechar:     () => void;
@@ -104,7 +109,11 @@ export function ChatSolicitacao({
           </p>
           <p className="text-[11px] text-muted-foreground h-3.5">
             <AnimatePresence mode="wait">
-              {digitando ? (
+              {encerrado ? (
+                <motion.span key="encerrado" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                  Conversa encerrada · histórico mantido
+                </motion.span>
+              ) : digitando ? (
                 <motion.span
                   key="digitando"
                   initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -208,31 +217,41 @@ export function ChatSolicitacao({
         </div>
       </ScrollArea>
 
-      {/* Caixa de envio */}
-      <div className="flex items-end gap-2 p-2.5 border-t border-border bg-muted/20 shrink-0">
-        <Textarea
-          value={texto}
-          onChange={e => { setTexto(e.target.value); onDigitando(); }}
-          onKeyDown={e => {
-            // Enter envia, Shift+Enter quebra linha — igual ao WhatsApp.
-            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar(); }
-          }}
-          placeholder="Escreva uma mensagem…"
-          rows={1}
-          className="min-h-[38px] max-h-28 resize-none text-[13px] bg-card"
-        />
-        <Button
-          size="icon"
-          className="h-9 w-9 shrink-0"
-          onClick={() => void enviar()}
-          disabled={!texto.trim() || enviando}
-          title="Enviar (Enter)"
-        >
-          {enviando
-            ? <Loader2 className="w-4 h-4 animate-spin" />
-            : <Send className="w-4 h-4" />}
-        </Button>
-      </div>
+      {/* Caixa de envio — some quando a conversa encerra; o histórico acima fica */}
+      {encerrado ? (
+        <div className="flex items-center gap-2 p-3 border-t border-border bg-muted/30 shrink-0 text-[11px] text-muted-foreground">
+          <Lock className="w-3.5 h-3.5 shrink-0" />
+          <p>
+            Conversa encerrada 24 h após o chamado ser finalizado. O histórico
+            acima fica anexado ao atendimento.
+          </p>
+        </div>
+      ) : (
+        <div className="flex items-end gap-2 p-2.5 border-t border-border bg-muted/20 shrink-0">
+          <Textarea
+            value={texto}
+            onChange={e => { setTexto(e.target.value); onDigitando(); }}
+            onKeyDown={e => {
+              // Enter envia, Shift+Enter quebra linha — igual ao WhatsApp.
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar(); }
+            }}
+            placeholder="Escreva uma mensagem…"
+            rows={1}
+            className="min-h-[38px] max-h-28 resize-none text-[13px] bg-card"
+          />
+          <Button
+            size="icon"
+            className="h-9 w-9 shrink-0"
+            onClick={() => void enviar()}
+            disabled={!texto.trim() || enviando}
+            title="Enviar (Enter)"
+          >
+            {enviando
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Send className="w-4 h-4" />}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

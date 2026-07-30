@@ -40,7 +40,7 @@ import {
 import {
   criarSolicitacao, atualizarStatus, excluirSolicitacao,
   definirResponsavel, removerResponsavel, buscarEventos,
-  MAX_PENDENTES,
+  MAX_PENDENTES, chatAindaAberto,
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
@@ -105,7 +105,7 @@ export default function SolicitacoesWhatsapp() {
   const habilitado = ehPaguePlay && temAcessoAba && !!empresaId;
 
   const {
-    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas,
+    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas, totaisMensagens,
     recarregar, recarregarResponsaveis, limparNaoLidas,
   } = useSolicitacoesWhatsapp(
     empresaId,
@@ -120,7 +120,17 @@ export default function SolicitacoesWhatsapp() {
     [responsaveis, usuarioId],
   );
   const temVisaoGeral = temVisaoGeralPorCargo(cargo) || souResponsavel;
+  // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;
+  // Excluir é MAIS restrito que editar: apaga para todos. O responsável atende
+  // o chamado, não o descarta. Espelha a policy `sol_wpp_delete`, que dá DELETE
+  // só a líder+ e ao dono enquanto ninguém pegou.
+  const ehLiderOuAcima = temVisaoGeralPorCargo(cargo);
+  const podeExcluirSolicitacao = useCallback(
+    (s: SolicitacaoWhatsapp) =>
+      ehLiderOuAcima || (s.solicitante_id === usuarioId && s.status === 'pendente'),
+    [ehLiderOuAcima, usuarioId],
+  );
 
   // ── Listas: em aberto × finalizados ────────────────────────────────────────
   const { emAberto, finalizados } = useMemo(() => {
@@ -267,7 +277,7 @@ export default function SolicitacoesWhatsapp() {
   // ── Portas de entrada ──────────────────────────────────────────────────────
   if (!ehPaguePlay) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-16">
+      <p className="p-6 text-sm text-muted-foreground text-center py-16">
         Esta aba existe apenas na PaguePlay.
       </p>
     );
@@ -275,7 +285,7 @@ export default function SolicitacoesWhatsapp() {
 
   if (!temAcessoAba) {
     return (
-      <div className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+      <div className="p-6 flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
         <ShieldAlert className="w-8 h-8 opacity-50" />
         <p className="text-sm">Esta aba está em teste e ainda não foi liberada para o seu perfil.</p>
       </div>
@@ -284,7 +294,7 @@ export default function SolicitacoesWhatsapp() {
 
   if (!dbAtiva) {
     return (
-      <div className="flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
+      <div className="p-6 flex flex-col items-center gap-2 py-16 text-center text-muted-foreground">
         <ShieldAlert className="w-8 h-8 opacity-50" />
         <p className="text-sm max-w-sm">
           A migration <code className="font-mono text-xs">20260730b_solicitacoes_whatsapp.sql</code> ainda
@@ -309,7 +319,9 @@ export default function SolicitacoesWhatsapp() {
             expandido={expandidoId === s.id}
             eventos={eventos[s.id] ?? []}
             naoLidas={naoLidas[s.id] ?? 0}
+            totalMensagens={totaisMensagens[s.id] ?? 0}
             podeEditar={podeEditarPedidos}
+            podeExcluir={podeExcluirSolicitacao(s)}
             ehDono={s.solicitante_id === usuarioId}
             salvando={salvandoId === s.id}
             onAlternar={() => alternarCard(s.id)}
@@ -326,6 +338,7 @@ export default function SolicitacoesWhatsapp() {
                 digitando={chat.digitando}
                 usuarioId={usuarioId}
                 interlocutor={interlocutor}
+                encerrado={!chatAindaAberto(s)}
                 onEnviar={chat.enviar}
                 onDigitando={chat.avisarDigitando}
                 onFechar={() => setChatAbertoId(null)}
@@ -338,10 +351,12 @@ export default function SolicitacoesWhatsapp() {
   }
 
   return (
+    // `p-6` como as outras páginas: o <main> do Layout não tem padding, então
+    // sem isto o conteúdo encosta na borda do menu lateral.
     <motion.div
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      className="space-y-4 max-w-5xl"
+      className="p-6 max-w-5xl space-y-4"
     >
       {/* Cabeçalho */}
       <div className="flex items-start justify-between gap-3 flex-wrap">

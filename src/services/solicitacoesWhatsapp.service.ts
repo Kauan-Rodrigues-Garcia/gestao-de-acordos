@@ -40,6 +40,25 @@ export const STATUS_EM_ABERTO: StatusSolicitacao[] = ['pendente', 'em_andamento'
 /** Teto de pendentes por operador. Espelha o trigger; a tela avisa antes. */
 export const MAX_PENDENTES = 10;
 
+/**
+ * Janela em que a conversa continua aceitando mensagem depois de o chamado ser
+ * fechado. Espelha `fn_wpp_chat_aberto` (migration 20260730d) — mudar aqui sem
+ * mudar lá faz a tela oferecer uma caixa de texto que a policy recusa.
+ */
+export const HORAS_CHAT_APOS_FECHAR = 24;
+
+/**
+ * A conversa ainda aceita mensagem nova?
+ *
+ * O histórico segue LEGÍVEL para sempre — isto governa só a escrita.
+ */
+export function chatAindaAberto(s: Pick<SolicitacaoWhatsapp, 'status' | 'finalizado_em'>): boolean {
+  if (s.status !== 'feito') return true;
+  if (!s.finalizado_em) return true;   // carimbo ausente: erra para o lado aberto
+  const limite = new Date(s.finalizado_em).getTime() + HORAS_CHAT_APOS_FECHAR * 3_600_000;
+  return Date.now() < limite;
+}
+
 export interface PessoaResumo {
   id:       string;
   nome:     string;

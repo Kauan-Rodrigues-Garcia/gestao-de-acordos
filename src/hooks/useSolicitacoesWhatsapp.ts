@@ -67,6 +67,8 @@ export function useSolicitacoesWhatsapp(
   const [erro, setErro]                 = useState<string | null>(null);
   /** solicitacao_id → nº de mensagens não lidas de outra pessoa. */
   const [naoLidas, setNaoLidas]         = useState<Record<string, number>>({});
+  /** solicitacao_id → total de mensagens da thread (histórico anexado). */
+  const [totaisMensagens, setTotaisMensagens] = useState<Record<string, number>>({});
 
   const montadoRef = useRef(true);
   useEffect(() => {
@@ -118,27 +120,34 @@ export function useSolicitacoesWhatsapp(
     );
   }, [empresaId, habilitado, dbAtiva]);
 
-  // ── Contagem inicial de não lidas ──────────────────────────────────────────
-  const recarregarNaoLidas = useCallback(async () => {
+  // ── Contagens: total da thread e não lidas ─────────────────────────────────
+  // Uma query só devolve as duas: o total mostra que existe histórico anexado
+  // sem precisar abrir a conversa, e as não lidas alimentam o badge.
+  const recarregarContagens = useCallback(async () => {
     if (!empresaId || !usuarioId || !habilitado) return;
     const { data, error } = await supabase
       .from('solicitacoes_whatsapp_mensagens')
-      .select('solicitacao_id')
-      .eq('empresa_id', empresaId)
-      .is('lida_em', null)
-      .neq('autor_id', usuarioId);
+      .select('solicitacao_id, autor_id, lida_em')
+      .eq('empresa_id', empresaId);
     if (error || !montadoRef.current) return;
-    const mapa: Record<string, number> = {};
-    for (const m of (data ?? []) as { solicitacao_id: string }[]) {
-      mapa[m.solicitacao_id] = (mapa[m.solicitacao_id] ?? 0) + 1;
+
+    const totais: Record<string, number> = {};
+    const naoLidasMapa: Record<string, number> = {};
+    for (const m of (data ?? []) as { solicitacao_id: string; autor_id: string; lida_em: string | null }[]) {
+      totais[m.solicitacao_id] = (totais[m.solicitacao_id] ?? 0) + 1;
+      // Não lida = de outra pessoa e sem carimbo. A própria mensagem nunca conta.
+      if (m.autor_id !== usuarioId && !m.lida_em) {
+        naoLidasMapa[m.solicitacao_id] = (naoLidasMapa[m.solicitacao_id] ?? 0) + 1;
+      }
     }
-    setNaoLidas(mapa);
+    setTotaisMensagens(totais);
+    setNaoLidas(naoLidasMapa);
   }, [empresaId, usuarioId, habilitado]);
 
-  const recarregarNaoLidasRef = useRef(recarregarNaoLidas);
-  recarregarNaoLidasRef.current = recarregarNaoLidas;
+  const recarregarContagensRef = useRef(recarregarContagens);
+  recarregarContagensRef.current = recarregarContagens;
 
-  useEffect(() => { void recarregarNaoLidas(); }, [recarregarNaoLidas]);
+  useEffect(() => { void recarregarContagens(); }, [recarregarContagens]);
 
   // Lida pelo handler de realtime sem virar dependência do efeito.
   const solicitacoesRef = useRef(solicitacoes);
@@ -163,6 +172,14 @@ export function useSolicitacoesWhatsapp(
 
           if (payload.eventType === 'INSERT') {
             const nova = payload.new as unknown as MensagemSolicitacao;
+
+            // O total conta TODA mensagem, inclusive a minha: é o tamanho do
+            // histórico anexado ao atendimento, não um contador de pendências.
+            setTotaisMensagens(prev => ({
+              ...prev,
+              [nova.solicitacao_id]: (prev[nova.solicitacao_id] ?? 0) + 1,
+            }));
+
             if (nova.autor_id === usuarioId) return;   // eco do próprio envio
 
             setNaoLidas(prev => ({
@@ -183,9 +200,9 @@ export function useSolicitacoesWhatsapp(
           }
 
           // UPDATE = carimbo de leitura; a contagem precisa ser refeita.
-          void recarregarNaoLidasRef.current();
+          void recarregarContagensRef.current();
         },
-        onReconectado: () => { void recarregarNaoLidasRef.current(); },
+        onReconectado: () => { void recarregarContagensRef.current(); },
       },
     );
   }, [empresaId, usuarioId, habilitado, dbAtiva]);
@@ -196,7 +213,7 @@ export function useSolicitacoesWhatsapp(
   }, []);
 
   return {
-    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas,
+    solicitacoes, responsaveis, loading, dbAtiva, erro, naoLidas, totaisMensagens,
     recarregar, recarregarResponsaveis, limparNaoLidas,
   };
 }
