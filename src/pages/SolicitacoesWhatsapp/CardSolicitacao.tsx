@@ -4,12 +4,15 @@
  * Fechado mostra o essencial (cliente, categoria, status, quem atende).
  * Aberto mostra a mensagem completa, a linha do tempo de status e a conversa.
  */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, MessageSquare, Clock, User, MapPin, Hash, Phone,
   Trash2, Loader2, PlayCircle, CheckCircle2, HelpCircle, RotateCcw, ArrowLeftRight,
+  Copy, Check,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { copiarTextoSilencioso } from '@/lib/clipboard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -19,7 +22,9 @@ import {
   CATEGORIA_LABEL, STATUS_LABEL,
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
 } from '@/services/solicitacoesWhatsapp.service';
-import { primeiroNome } from './formatacao';
+import {
+  primeiroNome, esperaMs, formatarEspera, nivelEspera, type NivelEspera,
+} from './formatacao';
 
 const STATUS_ESTILO: Record<StatusSolicitacao, string> = {
   pendente:     'bg-sky-500/10 text-sky-500 border-sky-500/30',
@@ -27,6 +32,71 @@ const STATUS_ESTILO: Record<StatusSolicitacao, string> = {
   feito:        'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
   falta_info:   'bg-destructive/10 text-destructive border-destructive/30',
 };
+
+const ESPERA_ESTILO: Record<NivelEspera, string> = {
+  normal:  'text-muted-foreground border-border',
+  atencao: 'bg-amber-500/10 text-amber-500 border-amber-500/40',
+  critico: 'bg-destructive/10 text-destructive border-destructive/40',
+};
+
+/**
+ * Copia o WhatsApp do cliente.
+ *
+ * Copia os **dígitos crus**, não o número formatado na tela: o destino é a busca
+ * do WhatsApp ou o discador, que engasgam com parênteses e traço.
+ *
+ * Sem toast no sucesso — o próprio botão vira ✓. O erro avisa, senão o clique
+ * falha calado (é o que `copiarTextoSilencioso` deixa por conta de quem chama).
+ */
+function BotaoCopiarWhatsapp({ numero }: { numero: string }) {
+  const [copiado, setCopiado] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  async function copiar() {
+    if (!await copiarTextoSilencioso(numero)) {
+      toast.error('Não foi possível copiar o número.');
+      return;
+    }
+    setCopiado(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setCopiado(false), 1800);
+  }
+
+  return (
+    <Button
+      size="sm" variant="ghost"
+      className="h-6 px-1.5 gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+      onClick={() => void copiar()}
+      title={copiado ? 'Copiado!' : 'Copiar o número'}
+      aria-label="Copiar o número do WhatsApp"
+    >
+      {copiado
+        ? <><Check className="w-3.5 h-3.5 text-emerald-500" /> Copiado</>
+        : <><Copy  className="w-3.5 h-3.5" /> Copiar</>}
+    </Button>
+  );
+}
+
+/** Tempo de espera do pedido. Já vem calculado do pai, que tem o relógio. */
+function SeloEspera({ ms, encerrado }: { ms: number; encerrado: boolean }) {
+  const nivel = nivelEspera(ms);
+  return (
+    <span
+      className={cn(
+        'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+        ESPERA_ESTILO[nivel],
+      )}
+      title={encerrado
+        ? `Levou ${formatarEspera(ms)} entre a abertura e a conclusão`
+        : `Esperando há ${formatarEspera(ms)}`}
+    >
+      <Clock className="w-2.5 h-2.5" />
+      {formatarEspera(ms)}
+    </span>
+  );
+}
 
 function dataHora(iso: string | null): string {
   if (!iso) return '—';
@@ -53,12 +123,17 @@ function Pessoa({ nome, foto, tamanho = 'w-5 h-5' }: { nome: string | null | und
 }
 
 export function CardSolicitacao({
-  solicitacao: s, expandido, eventos, naoLidas, totalMensagens,
+  solicitacao: s, expandido, eventos, naoLidas, totalMensagens, agora,
   podeEditar, podeExcluir, podeTransferir, ehDono, salvando,
   onAlternar, onMudarStatus, onExcluir, onTransferir, onAbrirChat, chatAberto, children,
 }: {
   solicitacao: SolicitacaoWhatsapp;
   expandido:   boolean;
+  /**
+   * "Agora" em ms, vindo do pai. Um relógio só para a lista inteira em vez de um
+   * timer por card — com dezenas de pedidos abertos a diferença aparece.
+   */
+  agora:       number;
   eventos:     EventoSolicitacao[];
   naoLidas:    number;
   /** Mensagens já trocadas — mostra que existe histórico sem abrir a conversa. */
@@ -85,6 +160,7 @@ export function CardSolicitacao({
   children?:   React.ReactNode;
 }) {
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const espera = esperaMs(s, agora);
 
   return (
     <div className={cn(
@@ -132,6 +208,7 @@ export function CardSolicitacao({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          <SeloEspera ms={espera} encerrado={s.status === 'feito'} />
           {naoLidas > 0 && (
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-[10px] font-bold text-white">
               {naoLidas > 9 ? '9+' : naoLidas}
@@ -162,6 +239,7 @@ export function CardSolicitacao({
               <div className="flex items-center gap-2 text-sm">
                 <Phone className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 <span className="font-mono">{formatarTelefonePP(s.whatsapp) || s.whatsapp}</span>
+                <BotaoCopiarWhatsapp numero={s.whatsapp} />
               </div>
 
               {/* Mensagem pedida */}

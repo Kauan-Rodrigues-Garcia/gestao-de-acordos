@@ -17,6 +17,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   MessageSquarePlus, Inbox, CheckCircle2, Filter, RefreshCw, ShieldAlert, Loader2,
+  Search, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -45,6 +46,8 @@ import {
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
 import { podeAcessarAbaWpp, temVisaoGeralPorCargo, podeDefinirResponsavel } from './permissoes';
+import { combinaBusca } from './formatacao';
+import { Input } from '@/components/ui/input';
 import { FormNovaSolicitacao, type DadosNovaSolicitacao } from './FormNovaSolicitacao';
 import { CardSolicitacao } from './CardSolicitacao';
 import { PainelResponsaveis } from './PainelResponsaveis';
@@ -58,6 +61,41 @@ interface GrupoOperador {
   id:     string;
   pessoa: PessoaResumo | null;
   itens:  SolicitacaoWhatsapp[];
+}
+
+/** De quanto em quanto tempo o "tempo de espera" dos cards é redesenhado. */
+const PASSO_RELOGIO_MS = 30_000;
+
+/**
+ * Ordena a lista em aberto: pendentes no topo, os meus na frente, e dentro de
+ * cada grupo o mais antigo primeiro.
+ *
+ * O mais antigo em cima é o que faz o alarme de cor servir: o card vermelho é
+ * justamente o que está esperando há mais tempo, e ele precisa estar onde se
+ * olha. Inverte a ordem que a query devolve (mais novo primeiro), de propósito.
+ *
+ * "Meu" = abri o pedido ou estou atendendo ele. Serve aos dois lados da tela
+ * sem duas regras: o operador acha o próprio pedido parado, e quem atende acha
+ * o que pegou.
+ */
+function ordenarEmAberto(
+  lista: SolicitacaoWhatsapp[],
+  usuarioId: string | null,
+): SolicitacaoWhatsapp[] {
+  const meu = (s: SolicitacaoWhatsapp) =>
+    !!usuarioId && (s.solicitante_id === usuarioId || s.responsavel_id === usuarioId);
+
+  return [...lista].sort((a, b) => {
+    const pa = a.status === 'pendente' ? 0 : 1;
+    const pb = b.status === 'pendente' ? 0 : 1;
+    if (pa !== pb) return pa - pb;
+
+    const ma = meu(a) ? 0 : 1;
+    const mb = meu(b) ? 0 : 1;
+    if (ma !== mb) return ma - mb;
+
+    return a.criado_em.localeCompare(b.criado_em);   // mais antigo primeiro
+  });
 }
 
 /**
@@ -113,6 +151,15 @@ export default function SolicitacoesWhatsapp() {
   const [expandidoId, setExpandidoId] = useState<string | null>(null);
   const [chatAbertoId, setChatAbertoId] = useState<string | null>(null);
   const [eventos, setEventos] = useState<Record<string, EventoSolicitacao[]>>({});
+  const [busca, setBusca] = useState('');
+
+  // Um relógio para a lista toda. Sem ele o "tempo de espera" dos cards só
+  // mudaria quando algo mais provocasse um render.
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), PASSO_RELOGIO_MS);
+    return () => clearInterval(t);
+  }, []);
 
   // ── Setores e equipes (filtros) ────────────────────────────────────────────
   useEffect(() => {
@@ -181,12 +228,19 @@ export default function SolicitacoesWhatsapp() {
   );
 
   // ── Listas: em aberto × finalizados ────────────────────────────────────────
+  // A busca corta antes de separar, então os dois blocos e os contadores falam
+  // do mesmo recorte.
   const { emAberto, finalizados } = useMemo(() => {
     const abertos: SolicitacaoWhatsapp[] = [];
     const feitos:  SolicitacaoWhatsapp[] = [];
-    for (const s of solicitacoes) (s.status === 'feito' ? feitos : abertos).push(s);
-    return { emAberto: abertos, finalizados: feitos };
-  }, [solicitacoes]);
+    for (const s of solicitacoes) {
+      if (!combinaBusca(s, busca)) continue;
+      (s.status === 'feito' ? feitos : abertos).push(s);
+    }
+    // Finalizados seguem do mais novo para o mais antigo: é histórico, e o de
+    // ontem interessa mais que o do mês passado.
+    return { emAberto: ordenarEmAberto(abertos, usuarioId), finalizados: feitos };
+  }, [solicitacoes, busca, usuarioId]);
 
   const meusPendentes = useMemo(
     () => solicitacoes.filter(s => s.solicitante_id === usuarioId && s.status === 'pendente').length,
@@ -398,6 +452,7 @@ export default function SolicitacoesWhatsapp() {
         eventos={eventos[s.id] ?? []}
         naoLidas={naoLidas[s.id] ?? 0}
         totalMensagens={totaisMensagens[s.id] ?? 0}
+        agora={agora}
         podeEditar={podeEditarPedidos}
         podeExcluir={podeExcluirSolicitacao(s)}
         podeTransferir={podeTransferirParaMim(s)}
@@ -512,6 +567,27 @@ export default function SolicitacoesWhatsapp() {
         onRemover={uid => void aoRemoverResponsavel(uid)}
       />
 
+      {/* Busca — vale para todo mundo, inclusive o operador que só vê os dele */}
+      <div className="relative">
+        <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <Input
+          value={busca}
+          onChange={e => setBusca(e.target.value)}
+          placeholder="Buscar por código, nome ou WhatsApp…"
+          className="h-9 pl-9 pr-9 text-sm"
+        />
+        {busca && (
+          <button
+            type="button"
+            onClick={() => setBusca('')}
+            title="Limpar busca"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+
       {/* Filtros — para quem enxerga os pedidos dos outros (líder+ ou responsável) */}
       {temVisaoGeral && (
         <div className="flex items-center gap-2 flex-wrap">
@@ -587,9 +663,11 @@ export default function SolicitacoesWhatsapp() {
                 {emAberto.length}
               </Badge>
             </div>
-            {renderLista(emAberto, temVisaoGeral
-              ? 'Nenhuma solicitação em aberto.'
-              : 'Você não tem solicitações em aberto.')}
+            {renderLista(emAberto, busca
+              ? 'Nenhum pedido em aberto para essa busca.'
+              : temVisaoGeral
+                ? 'Nenhuma solicitação em aberto.'
+                : 'Você não tem solicitações em aberto.')}
           </section>
 
           {/* Finalizados */}
@@ -601,7 +679,9 @@ export default function SolicitacoesWhatsapp() {
                 {finalizados.length}
               </Badge>
             </div>
-            {renderLista(finalizados, 'Nada finalizado ainda.')}
+            {renderLista(finalizados, busca
+              ? 'Nenhum finalizado para essa busca.'
+              : 'Nada finalizado ainda.')}
           </section>
         </div>
       )}
