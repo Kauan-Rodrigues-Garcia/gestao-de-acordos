@@ -27,9 +27,8 @@
 
 import { useEffect, useCallback, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarAnaliticoDashboardMes } from '@/services/analitico/analitico.service';
 
@@ -114,60 +113,12 @@ function mesAtualStr(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
-// ── Realtime compartilhado, um canal por empresa ─────────────────────────────
-// A importação insere EM LOTE (um evento por linha), então o aviso aos ouvintes
-// é debounced: um único disparo por importação. Com contagem de referências, o
-// canal nasce no primeiro consumidor e é removido quando o último desmonta.
-
-type OuvinteAnalitico = () => void;
-
-interface RegistroCanal {
-  channel:  RealtimeChannel;
-  ouvintes: Set<OuvinteAnalitico>;
-  debounce: ReturnType<typeof setTimeout> | null;
-}
-
-const canaisAnalitico = new Map<string, RegistroCanal>();
-
-function assinarAnaliticoRealtime(empresaId: string, ouvinte: OuvinteAnalitico): () => void {
-  let registro = canaisAnalitico.get(empresaId);
-
-  if (!registro) {
-    const novo: RegistroCanal = {
-      channel:  null as unknown as RealtimeChannel,
-      ouvintes: new Set(),
-      debounce: null,
-    };
-    novo.channel = supabase
-      .channel(`analitico-dash-${empresaId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'analitico_recebimentos', filter: `empresa_id=eq.${empresaId}` },
-        () => {
-          if (novo.debounce) clearTimeout(novo.debounce);
-          novo.debounce = setTimeout(() => {
-            novo.debounce = null;
-            for (const o of novo.ouvintes) o();
-          }, 1500);
-        },
-      )
-      .subscribe();
-    canaisAnalitico.set(empresaId, novo);
-    registro = novo;
-  }
-
-  registro.ouvintes.add(ouvinte);
-
-  return () => {
-    const atual = canaisAnalitico.get(empresaId);
-    if (!atual) return;
-    atual.ouvintes.delete(ouvinte);
-    if (atual.ouvintes.size > 0) return;
-    if (atual.debounce) clearTimeout(atual.debounce);
-    canaisAnalitico.delete(empresaId);
-    void supabase.removeChannel(atual.channel);
-  };
-}
+// ── Realtime compartilhado ───────────────────────────────────────────────────
+// A dedução por tópico e a contagem de referências que existiam aqui viraram
+// `assinarTabela` (src/lib/realtime.ts), que faz o mesmo para todo o app e ainda
+// reconecta. Sobra o debounce, que é específico daqui: a importação insere EM
+// LOTE (um evento por linha) e queremos um único disparo por importação.
+const DEBOUNCE_IMPORTACAO_MS = 1_500;
 
 // ── Hook ─────────────────────────────────────────────────────────────────────
 
@@ -209,9 +160,32 @@ export function useAnaliticoDashboard(ativo: boolean) {
   // busca (o React Query agrupa), em vez de uma por componente.
   useEffect(() => {
     if (!habilitado || !empresaId || !dbAtiva) return;
-    return assinarAnaliticoRealtime(empresaId, () => {
-      void queryClient.invalidateQueries({ queryKey: chave });
-    });
+
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
+
+    const cancelar = assinarTabela(
+      {
+        topico:  `analitico-dash-${empresaId}`,
+        escutas: [{
+          tabela: 'analitico_recebimentos',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento: () => {
+          if (debounce) clearTimeout(debounce);
+          debounce = setTimeout(() => { debounce = null; invalidar(); }, DEBOUNCE_IMPORTACAO_MS);
+        },
+        // Já é uma invalidação — sem debounce, é evento único.
+        onReconectado: invalidar,
+      },
+    );
+
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      cancelar();
+    };
   }, [habilitado, empresaId, dbAtiva, queryClient, chave]);
 
   const linhas = query.data?.linhas ?? SEM_LINHAS;

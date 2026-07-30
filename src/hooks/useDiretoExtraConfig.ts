@@ -6,7 +6,7 @@
  * lógica ativada.
  */
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { supabase } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   fetchDiretoExtraConfigs,
@@ -42,18 +42,24 @@ export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
 
   useEffect(() => { refetch(); }, [refetch]);
 
-  // Realtime
+  // Realtime — canal compartilhado (dedup por tópico + reconexão automática).
+  // `onReconectado` relê: as mudanças de configuração ocorridas durante a queda
+  // não voltam como evento, e config errada em cache muda o vínculo do acordo.
   useEffect(() => {
     if (!empresaId) return;
-    const channel = supabase
-      .channel(`rt-direto-extra-${empresaId}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'direto_extra_config', filter: `empresa_id=eq.${empresaId}` },
-        () => { refetch(); },
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return assinarTabela(
+      {
+        topico:  `rt-direto-extra-${empresaId}`,
+        escutas: [{
+          tabela: 'direto_extra_config',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento:      () => { void refetch(); },
+        onReconectado: () => { void refetch(); },
+      },
+    );
   }, [empresaId, refetch]);
 
   const isAtivoParaUsuario = useCallback(

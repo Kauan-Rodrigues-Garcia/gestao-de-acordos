@@ -7,8 +7,8 @@
  * o pet segue funcionando exatamente como antes, só sem moedas.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { supabase } from '@/lib/supabase';
 import type { PetItem } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { petStorageKey, ROUPAS_VALIDAS, type PetRoupa } from './petConfig';
@@ -110,20 +110,33 @@ export function usePetEstado(ativo: boolean): UsePetEstado {
   }, [ativo, perfil?.id, storageKey]);
 
   // ── Realtime: saldo atualiza entre as abas do próprio usuário ───────────
+  // Canal compartilhado: o widget do pet monta em mais de um lugar, e o tópico
+  // fixo por usuário fazia o primeiro a desmontar derrubar o canal do outro.
   useEffect(() => {
     if (!ativo || !dbAtiva || !perfil?.id) return;
-    const channel = supabase
-      .channel(`pet-estado-${perfil.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'pet_estado', filter: `usuario_id=eq.${perfil.id}` },
-        (payload) => {
+    return assinarTabela(
+      {
+        topico:  `pet-estado-${perfil.id}`,
+        escutas: [{
+          tabela: 'pet_estado',
+          evento: 'UPDATE',
+          filtro: `usuario_id=eq.${perfil.id}`,
+        }],
+      },
+      {
+        onEvento: (payload) => {
           const nova = payload.new as { moedas?: number } | null;
           if (typeof nova?.moedas === 'number') setMoedas(nova.moedas);
         },
-      )
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
+        // Saldo é dinheiro: depois de uma queda, releia em vez de confiar no
+        // último valor recebido (pode ter havido resgate/compra no intervalo).
+        onReconectado: () => {
+          void getPetEstado().then(e => {
+            if (e && typeof e.moedas === 'number') setMoedas(e.moedas);
+          });
+        },
+      },
+    );
   }, [ativo, dbAtiva, perfil?.id]);
 
   // ── Poll da recompensa disponível ──────────────────────────────────────

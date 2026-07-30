@@ -74,8 +74,6 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const reconnectAttemptsRef = useRef(0);
   const mountedRef          = useRef(true);
 
-  const MAX_RECONNECTS = 5;
-
   // ── Extrai IDs do presenceState ────────────────────────────────────────────
   // Object.keys(state) retorna a `key` configurada no canal — que definimos
   // como o userId. Lemos também o campo user_id do payload como fallback.
@@ -92,6 +90,31 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     },
     [],
   );
+
+  // ── Recuperação ao voltar para a aba / a rede voltar ──────────────────────
+  // O canal de presença não tinha nada disso: suspender a máquina ou perder o
+  // wi-fi deixava o usuário invisível para todos até um F5.
+  useEffect(() => {
+    const reviver = () => {
+      if (!mountedRef.current) return;
+      if (channelRef.current?.state === 'joined') return;
+      reconnectAttemptsRef.current = 0;   // usuário está de volta: sem backoff
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      setReconnectKey(k => k + 1);
+    };
+    const aoTrocarVisibilidade = () => {
+      if (document.visibilityState === 'visible') reviver();
+    };
+    document.addEventListener('visibilitychange', aoTrocarVisibilidade);
+    window.addEventListener('online', reviver);
+    return () => {
+      document.removeEventListener('visibilitychange', aoTrocarVisibilidade);
+      window.removeEventListener('online', reviver);
+    };
+  }, []);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -155,16 +178,20 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           }, HEARTBEAT_MS);
         }
 
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-          console.warn('[Realtime] channel error:', err);
-          if (reconnectAttemptsRef.current < MAX_RECONNECTS) {
-            const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
-            reconnectAttemptsRef.current += 1;
-            if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-            reconnectTimerRef.current = setTimeout(() => {
-              if (mountedRef.current) setReconnectKey(k => k + 1);
-            }, delay);
-          }
+        // CLOSED entra aqui de propósito: era o caso NÃO tratado, e é o mais
+        // comum de todos (o servidor encerra o socket ocioso). Sem isso, a
+        // presença ficava morta em silêncio e todo mundo aparecia offline.
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          if (status !== 'CLOSED') console.warn('[Realtime] presence:', status, err);
+          // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta
+          // deve continuar tentando. O limite antigo de 5 tentativas fazia a
+          // presença morrer de vez depois de suspender a máquina.
+          const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
+          reconnectAttemptsRef.current += 1;
+          if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+          reconnectTimerRef.current = setTimeout(() => {
+            if (mountedRef.current) setReconnectKey(k => k + 1);
+          }, delay);
         }
       });
 
@@ -197,28 +224,38 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       setOutrasEmpresasIds(new Set());
       return;
     }
+    // Esperar a empresa resolver. Sem esta guarda, `filter(e => e.id !== undefined)`
+    // não excluía nada e abríamos um SEGUNDO canal com o tópico
+    // `presence-empresa-{própria}` — exatamente a duplicação que o cabeçalho
+    // deste arquivo descreve, e que fazia o super_admin ver a si mesmo sozinho.
+    if (!empresa?.id) return;
+    const empresaAtualId = empresa.id;
 
     let ativo = true;
     const canaisExtras: ReturnType<typeof supabase.channel>[] = [];
 
-    fetchEmpresas().then((empresas) => {
-      if (!ativo) return;
-      const outras = empresas.filter((e) => e.id !== empresa?.id);
-      const acumulado = new Set<string>();
+    fetchEmpresas()
+      .then((empresas) => {
+        if (!ativo) return;
+        const outras = empresas.filter((e) => e.id !== empresaAtualId);
+        const acumulado = new Set<string>();
 
-      outras.forEach((emp) => {
-        const canal = supabase.channel(`presence-empresa-${emp.id}`);
-        canaisExtras.push(canal);
-        canal
-          .on('presence', { event: 'sync' }, () => {
-            if (!ativo) return;
-            const state = canal.presenceState<PresencePayload>();
-            Object.keys(state).forEach((id) => acumulado.add(id));
-            setOutrasEmpresasIds(new Set(acumulado));
-          })
-          .subscribe();
-      });
-    });
+        outras.forEach((emp) => {
+          const canal = supabase.channel(`presence-empresa-${emp.id}`);
+          canaisExtras.push(canal);
+          canal
+            .on('presence', { event: 'sync' }, () => {
+              if (!ativo) return;
+              const state = canal.presenceState<PresencePayload>();
+              Object.keys(state).forEach((id) => acumulado.add(id));
+              setOutrasEmpresasIds(new Set(acumulado));
+            })
+            .subscribe();
+        });
+      })
+      // Sem o catch, uma falha de rede aqui virava unhandled rejection —
+      // presença de outras empresas é enfeite, não deve quebrar nada.
+      .catch((e) => { console.warn('[PresenceProvider] fetchEmpresas falhou:', e); });
 
     return () => {
       ativo = false;

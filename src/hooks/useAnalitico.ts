@@ -7,8 +7,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarAnalitico, marcarVistoAnalitico } from '@/services/analitico/analitico.service';
@@ -78,23 +78,34 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   // Realtime: a importação insere EM LOTE (1 evento por linha), então o
   // refetch/toast é debounced — um único aviso por importação, e nunca para
   // quem importou (o próprio fluxo de importar já dá o feedback).
-  const rtDebounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rtToastRef     = useRef(false);
+  const rtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rtToastRef    = useRef(false);
+
+  // `fetchDados` muda a cada troca de filtro. Lido por ref para que a assinatura
+  // dependa só de (empresa, mês): trocar de operador no filtro não precisa
+  // derrubar e recriar o canal.
+  const fetchRef  = useRef(fetchDados);
+  fetchRef.current = fetchDados;
+  const perfilRef = useRef(perfil?.id);
+  perfilRef.current = perfil?.id;
+
   useEffect(() => {
     if (!empresa?.id) return;
-    const channel = supabase
-      .channel(`analitico-${empresa.id}-${options.mes}`)
-      .on(
-        'postgres_changes',
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'analitico_recebimentos',
-          filter: `empresa_id=eq.${empresa.id}`,
-        },
-        (payload) => {
+    const empresaId = empresa.id;
+
+    return assinarTabela(
+      {
+        topico:  `analitico-${empresaId}-${options.mes}`,
+        escutas: [{
+          tabela: 'analitico_recebimentos',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento: (payload) => {
           const importadoPorMim =
-            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id === perfil?.id;
+            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id
+              === perfilRef.current;
           if (hasLoadedOnce.current && payload.eventType === 'INSERT' && !importadoPorMim) {
             rtToastRef.current = true;
           }
@@ -108,17 +119,19 @@ export function useAnalitico(options: UseAnaliticoOptions) {
                 duration: 4000,
               });
             }
-            void fetchDados();
+            void fetchRef.current();
           }, 1500);
         },
-      )
-      .subscribe();
+        // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
+        onReconectado: () => { void fetchRef.current(); },
+      },
+    );
+  }, [empresa?.id, options.mes]);
 
-    return () => {
-      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
-      void supabase.removeChannel(channel);
-    };
-  }, [empresa?.id, perfil?.id, options.mes, fetchDados]);
+  // Debounce pendente não deve sobreviver ao unmount do hook.
+  useEffect(() => () => {
+    if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+  }, []);
 
   return { dados, loading, error, novosCount, refetch: fetchDados };
 }

@@ -10,8 +10,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarDiario, marcarVistoDiario } from '@/services/diario/diario.service';
@@ -79,8 +79,18 @@ export function useDiario(options: UseDiarioOptions) {
   // um único aviso por importação, e nunca para quem importou.
   const rtDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rtToastRef    = useRef(false);
+
+  // Lidos por ref: `fetchDados` muda a cada troca de filtro, e o canal não
+  // precisa ser derrubado por isso. O tópico passa a depender só de (empresa, dia).
+  const fetchRef    = useRef(fetchDados);
+  fetchRef.current  = fetchDados;
+  const perfilRef   = useRef(perfil?.id);
+  perfilRef.current = perfil?.id;
+
   useEffect(() => {
     if (!empresa?.id || !options.dia) return;
+    const empresaId = empresa.id;
+
     const agendarRefetch = () => {
       if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
       rtDebounceRef.current = setTimeout(() => {
@@ -92,42 +102,49 @@ export function useDiario(options: UseDiarioOptions) {
             duration: 4000,
           });
         }
-        void fetchDados();
+        void fetchRef.current();
       }, 1500);
     };
-    const channel = supabase
-      .channel(`diario-${empresa.id}-${options.dia}-${options.operadorFiltro ?? 'all'}`)
-      .on(
-        'postgres_changes',
-        {
-          event:  'INSERT',
-          schema: 'public',
-          table:  'diario_recebimentos',
-          filter: `empresa_id=eq.${empresa.id}`,
-        },
-        (payload) => {
-          const importadoPorMim =
-            (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id === perfil?.id;
-          if (hasLoadedOnce.current && !importadoPorMim) rtToastRef.current = true;
+
+    return assinarTabela(
+      {
+        topico:  `diario-${empresaId}-${options.dia}`,
+        escutas: [
+          {
+            tabela: 'diario_recebimentos',
+            evento: 'INSERT',
+            filtro: `empresa_id=eq.${empresaId}`,
+          },
+          {
+            // DELETE sem filtro de propósito: o payload de DELETE só traz a
+            // replica identity, então `empresa_id=eq.…` nunca casaria e o evento
+            // não chegaria. O custo é um refetch a mais quando a OUTRA empresa
+            // apaga linhas — a RLS garante que o dado em si não cruza.
+            tabela: 'diario_recebimentos',
+            evento: 'DELETE',
+          },
+        ],
+      },
+      {
+        onEvento: (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const importadoPorMim =
+              (payload.new as { importado_por_id?: string | null } | null)?.importado_por_id
+                === perfilRef.current;
+            if (hasLoadedOnce.current && !importadoPorMim) rtToastRef.current = true;
+          }
           agendarRefetch();
         },
-      )
-      .on(
-        'postgres_changes',
-        {
-          event:  'DELETE',
-          schema: 'public',
-          table:  'diario_recebimentos',
-        },
-        () => { agendarRefetch(); },
-      )
-      .subscribe();
+        // Sem toast: reconexão não é "chegou importação nova".
+        onReconectado: () => { void fetchRef.current(); },
+      },
+    );
+  }, [empresa?.id, options.dia]);
 
-    return () => {
-      if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
-      void supabase.removeChannel(channel);
-    };
-  }, [empresa?.id, perfil?.id, options.dia, options.operadorFiltro, fetchDados]);
+  // Debounce pendente não deve sobreviver ao unmount do hook.
+  useEffect(() => () => {
+    if (rtDebounceRef.current) clearTimeout(rtDebounceRef.current);
+  }, []);
 
   return { dados, loading, error, novosIds, refetch: fetchDados };
 }

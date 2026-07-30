@@ -14,8 +14,7 @@
 import {
   useEffect, useRef, useState, useCallback, useMemo,
 } from 'react';
-import type { RealtimeChannel } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { useAuth }    from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
@@ -94,22 +93,21 @@ export function useNrRegistros(): UseNrRegistrosResult {
   }, [empresaId, refetch]);
 
   // ── Canal Realtime para nr_registros ────────────────────────────────────
+  // Canal compartilhado. Este hook monta em dois lugares (AcordoForm e
+  // AcordoNovoInline) com o MESMO nome de tópico: sem deduplicação, o primeiro a
+  // desmontar removia o canal que o outro ainda usava, e o cache de conflitos
+  // congelava sem aviso — resultado prático: dois operadores conseguiam tabular
+  // o mesmo NR.
   useEffect(() => {
     if (!empresaId) return;
 
-    const channelName = `rt-nr-registros-${empresaId}`;
-
-    const channel: RealtimeChannel = supabase
-      .channel(channelName)
-      .on(
-        'postgres_changes',
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'nr_registros',
-          filter: `empresa_id=eq.${empresaId}`,
-        },
-        (payload) => {
+    return assinarTabela(
+      {
+        topico:  `rt-nr-registros-${empresaId}`,
+        escutas: [{ tabela: 'nr_registros', filtro: `empresa_id=eq.${empresaId}` }],
+      },
+      {
+        onEvento: (payload) => {
           if (!mountedRef.current) return;
 
           const eventType = payload.eventType as 'INSERT' | 'UPDATE' | 'DELETE';
@@ -118,6 +116,8 @@ export function useNrRegistros(): UseNrRegistrosResult {
             const next = new Map(prev);
 
             if (eventType === 'DELETE') {
+              // Só chega preenchido porque nr_registros está em REPLICA IDENTITY
+              // FULL; sem isso o payload teria apenas a PK.
               const old = payload.old as Partial<NrRegistro>;
               if (old.empresa_id && old.campo && old.nr_value) {
                 next.delete(cacheKey(old.empresa_id, old.campo as NrCampo, old.nr_value));
@@ -125,21 +125,19 @@ export function useNrRegistros(): UseNrRegistrosResult {
               return next;
             }
 
-            // INSERT ou UPDATE
-            const rec = (eventType === 'INSERT' ? payload.new : payload.new) as NrRegistro;
+            const rec = payload.new as NrRegistro;
             if (rec?.empresa_id && rec.campo && rec.nr_value) {
               next.set(cacheKey(rec.empresa_id, rec.campo as NrCampo, rec.nr_value), rec);
             }
             return next;
           });
         },
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [empresaId]);
+        // Cache de NR desatualizado libera tabulação duplicada — relê sempre que
+        // o canal volta de uma queda.
+        onReconectado: () => { void refetch(); },
+      },
+    );
+  }, [empresaId, refetch]);
 
   // ── verificarConflito (leitura do cache local — zero latência) ──────────
   const verificarConflito = useCallback(
