@@ -12,6 +12,8 @@ import {
   getEstadoFromAcordo, ROUTE_PATHS,
 } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
 import { useAnalitico } from '@/hooks/useAnalitico';
 import { AnaliticoOperador } from '@/pages/Dashboard/Analitico/AnaliticoOperador';
 import { AnaliticoLider } from '@/pages/Dashboard/Analitico/AnaliticoLider';
@@ -196,20 +198,29 @@ export default function PaginaAnalitico() {
 
   async function confirmarTabularAnalitico(r: RespostaTabulacaoAnalitico) {
     if (!tabularPendente) return;
-    const { dados, profissionalId, estadoConhecido } = tabularPendente;
+    // `profissionalId` não é mais lido aqui: a RPC resolve sozinha se o cadastro
+    // existe, e resolver no banco evita a corrida entre dois operadores.
+    const { dados, estadoConhecido } = tabularPendente;
     const estadoFinal = r.estado || estadoConhecido || '';
 
-    // Salva a UF respondida no cadastro do código (próximas tabulações já vêm completas)
+    // Salva a UF respondida no cadastro do código (próximas tabulações já vêm
+    // completas). Vai por RPC porque `profissionais` não aceita escrita direta:
+    // é o cadastro canônico do cliente e uma policy de UPDATE aberta deixaria
+    // qualquer operador reescrever nome e telefone. A função grava só a UF, e
+    // só quando está faltando — migration 20260731b.
     if (r.estado && !estadoConhecido) {
-      if (profissionalId) {
-        await supabase.from('profissionais').update({ estado_uf: r.estado }).eq('id', profissionalId);
-      } else {
-        await supabase.from('profissionais').insert({
-          empresa_id: empresa!.id,
-          codigo:     dados.instituicao.trim(),
-          nome:       dados.nomeCliente || dados.instituicao.trim(),
-          estado_uf:  r.estado,
-        });
+      const { error } = await supabase.rpc('fn_profissional_registrar_uf', {
+        p_empresa_id: empresa!.id,
+        p_codigo:     dados.instituicao.trim(),
+        p_estado_uf:  r.estado,
+        p_nome:       dados.nomeCliente || dados.instituicao.trim(),
+      });
+      // Antes o retorno era ignorado: a RLS recusava, a tela seguia como se
+      // tivesse salvo, e a UF digitada era perdida em silêncio — a tabulação
+      // seguinte do mesmo cliente perguntava de novo.
+      if (error) {
+        logger.warn('[Analitico] falha ao salvar a UF do cliente:', error.message);
+        toast.warning('Não foi possível salvar o estado no cadastro do cliente. A tabulação segue normalmente.');
       }
     }
 

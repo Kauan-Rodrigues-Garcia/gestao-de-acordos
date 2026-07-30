@@ -2300,6 +2300,15 @@ export type Database = {
         Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
         Returns: { ok: boolean; erro: string | null }[]
       }
+      fn_profissional_registrar_uf: {
+        Args: {
+          p_empresa_id: string
+          p_codigo: string
+          p_estado_uf: string
+          p_nome?: string | null
+        }
+        Returns: string
+      }
       fn_pet_admin_ajustar_moedas: {
         Args: { p_usuario: string; p_delta: number; p_motivo: string }
         Returns: { ok: boolean; moedas_total: number }[]
