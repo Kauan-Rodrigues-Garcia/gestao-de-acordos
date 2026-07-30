@@ -9,6 +9,7 @@
     "build:dev": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --mode development --sourcemap",
     "build:map": "VITE_ENABLE_ROUTE_MESSAGING=true vite build --sourcemap",
     "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
     "preview": "vite preview",
     "preview:dev": "npm run build:dev && npm run preview",
     "test": "vitest run",

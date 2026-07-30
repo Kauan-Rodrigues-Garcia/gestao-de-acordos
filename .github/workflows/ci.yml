@@ -32,8 +32,12 @@ jobs:
       - name: Run ESLint
         run: npm run lint
 
+      # `npx tsc --noEmit` NÃO checava nada: o tsconfig.json da raiz tem
+      # "files": [] e só referencia os projetos reais, e sem `-b` o tsc não
+      # segue as referências — checava zero arquivo e passava sempre.
+      # Verificado com um erro deliberado (string em number): saída vazia.
       - name: TypeScript type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Run tests (Vitest) with coverage
         run: npm run test:coverage -- --run

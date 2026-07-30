@@ -41,8 +41,9 @@ jobs:
             echo "No TypeScript/TSX files changed."
           fi
 
+      # Ver nota em ci.yml: `npx tsc --noEmit` na raiz não checa arquivo nenhum.
       - name: TypeScript type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Check for console.log (warn)
         run: |
