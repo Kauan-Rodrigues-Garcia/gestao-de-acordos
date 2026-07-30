@@ -1,0 +1,21 @@
+-- ═══════════════════════════════════════════════════════════════════════════
+-- 20260730c — Correção: o auto-preenchimento vem de `profissionais`
+-- ═══════════════════════════════════════════════════════════════════════════
+-- A 20260730b criou `fn_wpp_buscar_cliente`, que lia o cadastro do cliente a
+-- partir de `acordos`. FONTE ERRADA.
+--
+-- O código do cliente é o `profissionais.codigo`, e `profissionais` é o cadastro
+-- canônico (nome, telefone, estado_uf) — tanto que a migration
+-- 20260621_backfill_profissionais preencheu `acordos` A PARTIR dela. Buscar em
+-- `acordos` significava não achar cliente nenhum que ainda não tivesse acordo,
+-- que é justamente o caso comum nesta aba: o operador pede a mensagem ANTES de
+-- existir acordo.
+--
+-- A aba passa a consultar `profissionais` direto, do mesmo jeito que o
+-- formulário de novo acordo já fazia (hook `useProfissional`). Sem RPC: a tabela
+-- é legível por qualquer usuário da empresa, então não havia nada a contornar —
+-- a RPC SECURITY DEFINER só existia por causa da RLS de `acordos`.
+--
+-- Idempotente. Só remove a função morta.
+
+DROP FUNCTION IF EXISTS public.fn_wpp_buscar_cliente(TEXT);

@@ -472,11 +472,12 @@ export default function SolicitacoesWhatsapp() {
               Nova solicitação
             </DialogTitle>
             <DialogDescription>
-              Digite o código do cliente para puxar os dados do acordo. Confira o
-              WhatsApp antes de abrir o pedido.
+              Digite o código do cliente para puxar os dados do cadastro. Confira
+              o WhatsApp antes de abrir o pedido.
             </DialogDescription>
           </DialogHeader>
           <FormNovaSolicitacao
+            empresaId={empresaId as string}
             pendentesAtuais={meusPendentes}
             enviando={criando}
             onSubmit={dados => void aoCriar(dados)}

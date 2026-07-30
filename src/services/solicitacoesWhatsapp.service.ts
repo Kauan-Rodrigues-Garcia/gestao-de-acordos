@@ -94,8 +94,6 @@ export interface ClienteEncontrado {
   nome_cliente: string | null;
   estado_uf:    string | null;
   whatsapp:     string | null;
-  /** >1 significa mais de um acordo com esse código: conferir o WhatsApp. */
-  qtd_acordos:  number;
 }
 
 /** Erro de "tabela/função não existe" — migration pendente, não falha real. */
@@ -387,32 +385,44 @@ export async function removerResponsavel(params: {
 // ── Auto-preenchimento pelo código do cliente ────────────────────────────────
 
 /**
- * Busca nome/estado/WhatsApp pelo código (o `instituicao` do acordo).
+ * Busca nome/estado/telefone pelo código, na tabela `profissionais`.
  *
- * Via RPC `SECURITY DEFINER`: a RLS de `acordos` mostra ao operador apenas os
- * acordos DELE, então uma consulta direta voltaria vazia para o código de um
- * cliente de outro operador — parecendo defeito. A função devolve só estes
- * quatro campos.
+ * ⚠️  `profissionais` é o cadastro CANÔNICO do cliente — `acordos` é cópia (a
+ * migration 20260621_backfill_profissionais preencheu `acordos` a partir dela).
+ * A primeira versão desta função lia `acordos`, e por isso não achava nenhum
+ * cliente que ainda não tivesse acordo: exatamente o caso comum aqui, já que o
+ * operador pede a mensagem ANTES de fechar acordo. Corrigido na 20260730c.
+ *
+ * É a mesma consulta do formulário de novo acordo (hook `useProfissional`).
  */
-export async function buscarClientePorCodigo(codigo: string): Promise<ClienteEncontrado | null> {
+export async function buscarClientePorCodigo(
+  codigo: string,
+  empresaId: string,
+): Promise<ClienteEncontrado | null> {
   const limpo = codigo.trim();
-  if (!limpo) return null;
+  if (!limpo || !empresaId) return null;
 
   try {
-    const { data, error } = await supabase.rpc('fn_wpp_buscar_cliente', { p_codigo: limpo });
+    const { data, error } = await supabase
+      .from('profissionais')
+      .select('nome, estado_uf, telefone')
+      .eq('codigo', limpo)
+      .eq('empresa_id', empresaId)
+      .maybeSingle();
+
     if (error) {
       if (!ehMigrationAusente(error.message)) {
         console.warn('[solicitacoesWhatsapp] erro na busca do cliente:', error.message);
       }
       return null;
     }
-    const linha = (Array.isArray(data) ? data[0] : data) as ClienteEncontrado | undefined;
-    if (!linha) return null;
+    if (!data) return null;
+
+    const linha = data as { nome: string | null; estado_uf: string | null; telefone: string | null };
     return {
-      nome_cliente: linha.nome_cliente ?? null,
+      nome_cliente: linha.nome ?? null,
       estado_uf:    linha.estado_uf ?? null,
-      whatsapp:     linha.whatsapp ?? null,
-      qtd_acordos:  Number(linha.qtd_acordos) || 0,
+      whatsapp:     linha.telefone ?? null,
     };
   } catch {
     return null;

@@ -44,6 +44,8 @@ function createBuilder(table: string) {
     neq:    vi.fn((c: string, v: unknown) => { currentCall!.filters.push(['neq', c, v]); return builder; }),
     is:     vi.fn((c: string, v: unknown) => { currentCall!.filters.push(['is', c, v]); return builder; }),
     order:  vi.fn((c: string) => { currentCall!.order = { col: c }; return builder; }),
+    // Encerra a cadeia (busca do cliente no cadastro) em vez de devolver builder.
+    maybeSingle: vi.fn(() => Promise.resolve(nextResult)),
     then: (resolve: (v: MockResult) => unknown, reject?: (e: unknown) => unknown) =>
       Promise.resolve(nextResult).then(resolve, reject),
   };
@@ -291,45 +293,61 @@ describe('definirResponsavel', () => {
 // ── Auto-preenchimento ──────────────────────────────────────────────────────
 
 describe('buscarClientePorCodigo', () => {
-  it('chama a RPC com o código sem espaços', async () => {
-    nextRpcResult = { data: [], error: null };
+  it('lê `profissionais`, NÃO `acordos`', async () => {
+    // Regressão do erro da 20260730b: buscar em `acordos` não achava cliente
+    // nenhum que ainda não tivesse acordo — justamente o caso comum nesta aba,
+    // onde a mensagem costuma ser pedida ANTES de existir acordo.
+    nextResult = { data: null, error: null };
 
-    await buscarClientePorCodigo('  777  ');
+    await buscarClientePorCodigo('7777', EMPRESA);
 
-    expect(rpcCalls[0]).toEqual({ fn: 'fn_wpp_buscar_cliente', args: { p_codigo: '777' } });
-  });
-
-  it('código vazio nem chama o banco', async () => {
-    const r = await buscarClientePorCodigo('   ');
-    expect(r).toBeNull();
+    expect(calls[0].table).toBe('profissionais');
+    expect(calls.some(c => c.table === 'acordos')).toBe(false);
     expect(rpcCalls).toHaveLength(0);
   });
 
-  it('normaliza qtd_acordos vindo como string', async () => {
-    // COUNT(*) volta como string; sem Number() o aviso de "vários acordos"
-    // compararia string com número e nunca dispararia.
-    nextRpcResult = {
-      data: [{ nome_cliente: 'Fulano', estado_uf: 'SP', whatsapp: '119', qtd_acordos: '3' }],
+  it('filtra por código e empresa, com trim', async () => {
+    nextResult = { data: null, error: null };
+
+    await buscarClientePorCodigo('  7777  ', EMPRESA);
+
+    expect(calls[0].filters).toEqual([
+      ['eq', 'codigo', '7777'],
+      ['eq', 'empresa_id', EMPRESA],
+    ]);
+  });
+
+  it('mapeia telefone → whatsapp e nome → nome_cliente', async () => {
+    nextResult = {
+      data: { nome: 'Fulano', estado_uf: 'SP', telefone: '11999998888' },
       error: null,
     };
 
-    const r = await buscarClientePorCodigo('777');
+    const r = await buscarClientePorCodigo('7777', EMPRESA);
 
-    expect(r?.qtd_acordos).toBe(3);
-    expect(r?.nome_cliente).toBe('Fulano');
+    expect(r).toEqual({
+      nome_cliente: 'Fulano',
+      estado_uf:    'SP',
+      whatsapp:     '11999998888',
+    });
   });
 
-  it('código sem acordo devolve null', async () => {
-    nextRpcResult = { data: [], error: null };
-    expect(await buscarClientePorCodigo('999')).toBeNull();
+  it('código vazio ou sem empresa nem chama o banco', async () => {
+    expect(await buscarClientePorCodigo('   ', EMPRESA)).toBeNull();
+    expect(await buscarClientePorCodigo('7777', '')).toBeNull();
+    expect(calls).toHaveLength(0);
   });
 
-  it('RPC ausente (migration pendente) devolve null sem barulho', async () => {
-    nextRpcResult = { data: null, error: { message: 'function fn_wpp_buscar_cliente does not exist' } };
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  it('código não cadastrado devolve null', async () => {
+    nextResult = { data: null, error: null };
+    expect(await buscarClientePorCodigo('9999', EMPRESA)).toBeNull();
+  });
 
-    expect(await buscarClientePorCodigo('777')).toBeNull();
-    expect(warn).not.toHaveBeenCalled();
-    warn.mockRestore();
+  it('campos nulos no cadastro não viram undefined', async () => {
+    nextResult = { data: { nome: 'Fulano', estado_uf: null, telefone: null }, error: null };
+
+    const r = await buscarClientePorCodigo('7777', EMPRESA);
+
+    expect(r).toEqual({ nome_cliente: 'Fulano', estado_uf: null, whatsapp: null });
   });
 });

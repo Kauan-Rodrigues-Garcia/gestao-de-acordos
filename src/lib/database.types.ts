@@ -2162,18 +2162,9 @@ export type Database = {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: Json
       }
-      // Migration 20260730b — auto-preenchimento do formulário de solicitação.
-      // SECURITY DEFINER: devolve só estes 4 campos, contornando a RLS de
-      // `acordos` (que esconderia o cliente de outro operador).
-      fn_wpp_buscar_cliente: {
-        Args: { p_codigo: string }
-        Returns: {
-          nome_cliente: string | null
-          estado_uf: string | null
-          whatsapp: string | null
-          qtd_acordos: number
-        }[]
-      }
+      // (fn_wpp_buscar_cliente existiu na 20260730b e foi removida na 20260730c:
+      //  o auto-preenchimento passou a ler `profissionais` direto, que é o
+      //  cadastro canônico do cliente e não exige contornar RLS nenhuma.)
       // Migration 20260728a — situação do operador e transferência de acordo.
       fn_situacao_operador: {
         Args: { p_operador_id: string }
