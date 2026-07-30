@@ -11,6 +11,7 @@ import {
   getEstadoFromAcordo, extractLinkAcordo,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { copiarTexto } from '@/lib/clipboard';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
@@ -229,7 +230,12 @@ export function AcordosTableBody({
                       <button
                         type="button"
                         title="Clique para copiar o NR"
-                        onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(a.nr_cliente); }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          // Antes: writeText solto — sem toast e sem catch, o
+                          // clique podia não copiar nada sem avisar ninguém.
+                          void copiarTexto(a.nr_cliente, 'NR copiado', 'Não foi possível copiar o NR.');
+                        }}
                         className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
                       >
                         <Hash className="w-2.5 h-2.5" />{a.nr_cliente}

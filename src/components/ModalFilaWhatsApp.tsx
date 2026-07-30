@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
+import { copiarTexto } from '@/lib/clipboard';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
@@ -118,14 +119,18 @@ export function ModalFilaWhatsApp({
   }
 
   function copiarMensagem(msg: string) {
-    navigator.clipboard.writeText(msg).then(() => toast.success('Mensagem copiada!'));
+    void copiarTexto(msg, 'Mensagem copiada!', 'Não foi possível copiar a mensagem.');
   }
 
   function copiarTodasMensagens() {
     const texto = filaLocal
       .map((i, idx) => `[${idx + 1}/${total}] ${i.nome_cliente}\n${i.mensagem}`)
       .join('\n\n---\n\n');
-    navigator.clipboard.writeText(texto).then(() => toast.success(`${total} mensagens copiadas!`));
+    void copiarTexto(
+      texto,
+      `${total} mensagens copiadas!`,
+      'Não foi possível copiar as mensagens.',
+    );
   }
 
   return (

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { copiarTexto } from '@/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText, PawPrint } from 'lucide-react';
@@ -15,7 +16,6 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { isPerfilAdmin } from '@/lib/index';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminCargos from '@/pages/AdminCargos';
 import AdminLogs from '@/pages/AdminLogs';
@@ -60,11 +60,23 @@ export default function AdminConfiguracoes() {
     })();
   }, [podeVerBancoDados]);
 
-  function copiarSQL() {
-    navigator.clipboard.writeText(MIGRATION_SQL).then(() => {
-      setSqlCopiado(true);
-      setTimeout(() => setSqlCopiado(false), 3000);
-    });
+  // Timer guardado em ref: antes era um setTimeout solto que dava setState depois
+  // de sair da página, e o `.then()` sem catch deixava o botão mudo quando a
+  // cópia falhava.
+  const timerCopiadoRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (timerCopiadoRef.current) clearTimeout(timerCopiadoRef.current);
+  }, []);
+
+  async function copiarSQL() {
+    const ok = await copiarTexto(MIGRATION_SQL, 'SQL copiado', 'Não foi possível copiar o SQL.');
+    if (!ok) return;
+    setSqlCopiado(true);
+    if (timerCopiadoRef.current) clearTimeout(timerCopiadoRef.current);
+    timerCopiadoRef.current = setTimeout(() => {
+      timerCopiadoRef.current = null;
+      setSqlCopiado(false);
+    }, 3000);
   }
 
   async function fetchModelos(empresaId?: string) {

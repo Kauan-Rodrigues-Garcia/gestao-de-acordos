@@ -43,6 +43,7 @@ import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
 import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { copiarTexto } from '@/lib/clipboard';
 import { diasUteisDoMes, diasUteisDecorridos, quartilAtual } from '@/lib/diasUteis';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
@@ -53,16 +54,6 @@ import {
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarLinhaPix, criarAcordosPixLote, type LinhaPixLote,
 } from '@/services/pix_automatico.service';
-
-/** Copia texto para a área de transferência com feedback via toast. */
-async function copiarTexto(texto: string, msgOk: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(texto);
-    toast.success(msgOk);
-  } catch {
-    toast.error('Não foi possível copiar (área de transferência indisponível).');
-  }
-}
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
   pendente:    { label: 'Pendente',    cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },

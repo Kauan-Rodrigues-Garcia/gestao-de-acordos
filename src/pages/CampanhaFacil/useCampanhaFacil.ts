@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { copiarTexto } from '@/lib/clipboard';
 import { CampaignCore, type Discounts, type ParsedResult, type Template, type CampaignItem } from './lib/campaign-core';
 import { CampaignXlsx } from './lib/xlsx-export';
 import { parseSpreadsheetReport } from './lib/readSpreadsheet';
@@ -450,19 +451,10 @@ export function useCampanhaFacil() {
 
   const copyMessage = useCallback(async (item: CampaignItem | null) => {
     if (!item) return;
-    try {
-      await navigator.clipboard.writeText(item.message);
-    } catch {
-      const fallback = document.createElement('textarea');
-      fallback.value = item.message;
-      fallback.style.position = 'fixed';
-      fallback.style.opacity = '0';
-      document.body.append(fallback);
-      fallback.select();
-      document.execCommand('copy');
-      fallback.remove();
-    }
-    toast.success('Mensagem copiada.');
+    // O fallback duplicado que existia aqui virou `copiarTexto`. De passagem
+    // conserta o toast: ele estava FORA do try/catch, então anunciava
+    // "Mensagem copiada." mesmo quando os dois caminhos de cópia falhavam.
+    await copiarTexto(item.message, 'Mensagem copiada.', 'Não foi possível copiar a mensagem.');
   }, []);
 
   return {
