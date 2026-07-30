@@ -29,7 +29,7 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
-  LifeBuoy, Megaphone,
+  LifeBuoy, Megaphone, MessageSquarePlus,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -51,6 +51,7 @@ import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetNomeVotacaoLembrete } from './pet/PetNomeVotacaoLembrete';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
+import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -74,6 +75,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA },
+  // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
+  { label: 'Solicitações WhatsApp', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP },
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
@@ -264,6 +267,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // usuários com acesso concedido em ouvidoria_acessos.
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
       return isPP && ouvidoriaAcesso.podeVer;
+    }
+
+    // Solicitações de WhatsApp: PaguePlay, e por enquanto só admin/super_admin
+    // (aba em teste). O gate é a constante PERFIS_ACESSO_ABA_WPP.
+    if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
+      return isPP && podeAcessarAbaWpp(userRole);
     }
 
     if (item.permissaoKey) {

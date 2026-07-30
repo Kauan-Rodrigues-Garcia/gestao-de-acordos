@@ -21,6 +21,7 @@ export const ROUTE_PATHS = {
   ANALITICO: '/analitico',
   OUVIDORIA: '/ouvidoria',
   CAMPANHA_FACIL: '/campanha-facil',
+  SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

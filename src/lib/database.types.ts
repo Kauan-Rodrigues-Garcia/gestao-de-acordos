@@ -678,6 +678,152 @@ export type Database = {
           },
         ]
       }
+      // ── Migration 20260730b — Solicitações de WhatsApp (PaguePlay) ──────────
+      // Setor que só atende por ligação pede ao digital que mande mensagem.
+      atendimento_responsaveis: {
+        Row: {
+          criado_em: string
+          definido_por: string | null
+          empresa_id: string
+          id: string
+          usuario_id: string
+        }
+        Insert: {
+          criado_em?: string
+          definido_por?: string | null
+          empresa_id: string
+          id?: string
+          usuario_id: string
+        }
+        Update: {
+          criado_em?: string
+          definido_por?: string | null
+          empresa_id?: string
+          id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      solicitacoes_whatsapp: {
+        Row: {
+          atualizado_em: string
+          categoria: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
+          codigo_cliente: string
+          criado_em: string
+          empresa_id: string
+          equipe_id: string | null
+          estado_uf: string | null
+          finalizado_em: string | null
+          id: string
+          iniciado_em: string | null
+          mensagem: string
+          nome_cliente: string | null
+          responsavel_id: string | null
+          setor_id: string | null
+          solicitante_id: string
+          status: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
+          whatsapp: string
+        }
+        Insert: {
+          atualizado_em?: string
+          categoria: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
+          codigo_cliente: string
+          criado_em?: string
+          empresa_id: string
+          equipe_id?: string | null
+          estado_uf?: string | null
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string | null
+          mensagem: string
+          nome_cliente?: string | null
+          responsavel_id?: string | null
+          setor_id?: string | null
+          solicitante_id: string
+          status?: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
+          whatsapp: string
+        }
+        Update: {
+          atualizado_em?: string
+          categoria?: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
+          codigo_cliente?: string
+          criado_em?: string
+          empresa_id?: string
+          equipe_id?: string | null
+          estado_uf?: string | null
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string | null
+          mensagem?: string
+          nome_cliente?: string | null
+          responsavel_id?: string | null
+          setor_id?: string | null
+          solicitante_id?: string
+          status?: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
+          whatsapp?: string
+        }
+        Relationships: []
+      }
+      solicitacoes_whatsapp_eventos: {
+        Row: {
+          autor_id: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          solicitacao_id: string
+          status_anterior: string | null
+          status_novo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          solicitacao_id: string
+          status_anterior?: string | null
+          status_novo: string
+        }
+        Update: {
+          autor_id?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          solicitacao_id?: string
+          status_anterior?: string | null
+          status_novo?: string
+        }
+        Relationships: []
+      }
+      solicitacoes_whatsapp_mensagens: {
+        Row: {
+          autor_id: string
+          conteudo: string
+          criado_em: string
+          empresa_id: string
+          id: string
+          lida_em: string | null
+          solicitacao_id: string
+        }
+        Insert: {
+          autor_id: string
+          conteudo: string
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          lida_em?: string | null
+          solicitacao_id: string
+        }
+        Update: {
+          autor_id?: string
+          conteudo?: string
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          lida_em?: string | null
+          solicitacao_id?: string
+        }
+        Relationships: []
+      }
       // Migration 20260730a — Contribuição Receptivo por setor/mês (BookPlay).
       // Uma linha por (empresa_id, setor_id, mes); `mes` é 'yyyy-MM'. Substitui o
       // localStorage por onde esse valor passava, para que seja compartilhado.
@@ -2015,6 +2161,18 @@ export type Database = {
       fn_analitico_dashboard_mes_json: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: Json
+      }
+      // Migration 20260730b — auto-preenchimento do formulário de solicitação.
+      // SECURITY DEFINER: devolve só estes 4 campos, contornando a RLS de
+      // `acordos` (que esconderia o cliente de outro operador).
+      fn_wpp_buscar_cliente: {
+        Args: { p_codigo: string }
+        Returns: {
+          nome_cliente: string | null
+          estado_uf: string | null
+          whatsapp: string | null
+          qtd_acordos: number
+        }[]
       }
       // Migration 20260728a — situação do operador e transferência de acordo.
       fn_situacao_operador: {

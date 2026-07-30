@@ -50,6 +50,7 @@ const PainelDiretoria   = lazy(() => import('@/pages/PainelDiretoria'));
 const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
+const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 
 function PageLoader() {
   return (
@@ -247,6 +248,12 @@ export default function App() {
               {/* Campanha Fácil (BookPlay — gate por slug dentro da página) */}
               <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
                 <LayoutWrapper><CampanhaFacil /></LayoutWrapper>
+              } />
+
+              {/* Solicitações de WhatsApp (PaguePlay — gate por slug e por
+                  cargo dentro da página; em teste, só admin/super_admin) */}
+              <Route path={ROUTE_PATHS.SOLICITACOES_WHATSAPP} element={
+                <LayoutWrapper><SolicitacoesWpp /></LayoutWrapper>
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
