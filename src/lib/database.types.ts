@@ -2162,6 +2162,18 @@ export type Database = {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: Json
       }
+      // Migration 20260730e — diretório mínimo de pessoas da empresa.
+      // SECURITY DEFINER: `perfis_select` só deixa lider/administrador lerem o
+      // perfil de outra pessoa, então join em `perfis` volta nulo para os demais.
+      // Devolve SÓ id/nome/foto — nada de e-mail, cargo ou setor.
+      fn_wpp_diretorio: {
+        Args: Record<string, never>
+        Returns: {
+          id: string
+          nome: string
+          foto_url: string | null
+        }[]
+      }
       // (fn_wpp_buscar_cliente existiu na 20260730b e foi removida na 20260730c:
       //  o auto-preenchimento passou a ler `profissionais` direto, que é o
       //  cadastro canônico do cliente e não exige contornar RLS nenhuma.)

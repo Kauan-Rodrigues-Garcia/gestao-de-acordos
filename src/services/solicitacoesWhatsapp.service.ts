@@ -125,13 +125,56 @@ export function ehErroLimitePendentes(mensagem: string): boolean {
   return mensagem.includes('LIMITE_PENDENTES');
 }
 
-// Joins nomeados: `perfis` entra duas vezes, então cada um precisa do apelido
-// com o nome da FK, senão o PostgREST não sabe qual coluna usar.
-const SELECT_COM_PESSOAS = `
-  *,
-  solicitante:perfis!solicitacoes_whatsapp_solicitante_id_fkey (id, nome, foto_url),
-  responsavel:perfis!solicitacoes_whatsapp_responsavel_id_fkey (id, nome, foto_url)
-`;
+// ── Diretório de pessoas ─────────────────────────────────────────────────────
+//
+// Nome e foto NÃO vêm mais de join em `perfis`. A policy `perfis_select` só
+// deixa 'lider' e 'administrador' lerem o perfil de outra pessoa, e join no
+// PostgREST respeita a RLS da tabela juntada — então para operador, elite,
+// gerência e diretoria o join voltava NULO e o card ficava sem dono.
+//
+// A RPC `fn_wpp_diretorio` (migration 20260730e) devolve só id/nome/foto da
+// empresa do chamador. Ver o comentário da migration para o raciocínio de
+// segurança.
+
+/** Cache por empresa: a lista muda pouco e várias telas pedem ao mesmo tempo. */
+const diretorioEmVoo = new Map<string, Promise<Map<string, PessoaResumo>>>();
+
+// Sem parâmetro: a RPC resolve a empresa pela sessão (`fn_user_empresa_id()`),
+// então não há o que passar. O `empresaId` do `buscarDiretorio` serve só de
+// chave de cache — se o usuário trocar de empresa (impersonação), a chave muda
+// e a lista é buscada de novo.
+async function carregarDiretorio(): Promise<Map<string, PessoaResumo>> {
+  const { data, error } = await supabase.rpc('fn_wpp_diretorio');
+  if (error) {
+    if (!ehMigrationAusente(error.message)) {
+      console.warn('[solicitacoesWhatsapp] erro no diretório:', error.message);
+    }
+    return new Map();
+  }
+  const mapa = new Map<string, PessoaResumo>();
+  for (const p of (data ?? []) as PessoaResumo[]) {
+    mapa.set(p.id, { id: p.id, nome: p.nome, foto_url: p.foto_url ?? null });
+  }
+  return mapa;
+}
+
+/**
+ * Diretório da empresa: `id → { nome, foto_url }`.
+ *
+ * Deduplicado por empresa enquanto a requisição está em voo, para que a lista e
+ * o chat não peçam a mesma coisa duas vezes ao abrir a aba.
+ */
+export function buscarDiretorio(empresaId: string): Promise<Map<string, PessoaResumo>> {
+  const emVoo = diretorioEmVoo.get(empresaId);
+  if (emVoo) return emVoo;
+
+  const promessa = carregarDiretorio()
+    .catch(() => new Map<string, PessoaResumo>())
+    .finally(() => { diretorioEmVoo.delete(empresaId); });
+
+  diretorioEmVoo.set(empresaId, promessa);
+  return promessa;
+}
 
 // ── Solicitações ─────────────────────────────────────────────────────────────
 
@@ -159,21 +202,32 @@ export async function buscarSolicitacoes(params: {
   try {
     let q = supabase
       .from('solicitacoes_whatsapp')
-      .select(SELECT_COM_PESSOAS)
+      .select('*')
       .eq('empresa_id', params.empresaId)
       .order('criado_em', { ascending: false });
 
     if (params.setorId)  q = q.eq('setor_id',  params.setorId);
     if (params.equipeId) q = q.eq('equipe_id', params.equipeId);
 
-    const { data, error } = await q;
+    // O diretório vai junto: sem ele o card não sabe de quem é o pedido.
+    const [{ data, error }, pessoas] = await Promise.all([
+      q,
+      buscarDiretorio(params.empresaId),
+    ]);
 
     if (error) {
       const pendente = ehMigrationAusente(error.message);
       if (!pendente) console.warn('[solicitacoesWhatsapp] erro na listagem:', error.message);
       return { data: [], dbAtiva: !pendente, erro: pendente ? null : error.message };
     }
-    return { data: (data ?? []) as unknown as SolicitacaoWhatsapp[], dbAtiva: true, erro: null };
+
+    const linhas = ((data ?? []) as unknown as SolicitacaoWhatsapp[]).map(s => ({
+      ...s,
+      solicitante: pessoas.get(s.solicitante_id) ?? null,
+      responsavel: s.responsavel_id ? pessoas.get(s.responsavel_id) ?? null : null,
+    }));
+
+    return { data: linhas, dbAtiva: true, erro: null };
   } catch (e) {
     return { data: [], dbAtiva: false, erro: e instanceof Error ? e.message : 'Falha de rede' };
   }
@@ -276,34 +330,52 @@ export async function excluirSolicitacao(id: string): Promise<{ ok: boolean; err
 
 // ── Histórico ────────────────────────────────────────────────────────────────
 
-export async function buscarEventos(solicitacaoId: string): Promise<EventoSolicitacao[]> {
-  const { data, error } = await supabase
-    .from('solicitacoes_whatsapp_eventos')
-    .select('*, autor:perfis!solicitacoes_whatsapp_eventos_autor_id_fkey (id, nome, foto_url)')
-    .eq('solicitacao_id', solicitacaoId)
-    .order('criado_em', { ascending: true });
+export async function buscarEventos(
+  solicitacaoId: string,
+  empresaId: string,
+): Promise<EventoSolicitacao[]> {
+  const [{ data, error }, pessoas] = await Promise.all([
+    supabase
+      .from('solicitacoes_whatsapp_eventos')
+      .select('*')
+      .eq('solicitacao_id', solicitacaoId)
+      .order('criado_em', { ascending: true }),
+    buscarDiretorio(empresaId),
+  ]);
 
   if (error) {
     console.warn('[solicitacoesWhatsapp] erro no histórico:', error.message);
     return [];
   }
-  return (data ?? []) as unknown as EventoSolicitacao[];
+  return ((data ?? []) as unknown as EventoSolicitacao[]).map(e => ({
+    ...e,
+    autor: e.autor_id ? pessoas.get(e.autor_id) ?? null : null,
+  }));
 }
 
 // ── Mensagens da thread ──────────────────────────────────────────────────────
 
-export async function buscarMensagens(solicitacaoId: string): Promise<MensagemSolicitacao[]> {
-  const { data, error } = await supabase
-    .from('solicitacoes_whatsapp_mensagens')
-    .select('*, autor:perfis!solicitacoes_whatsapp_mensagens_autor_id_fkey (id, nome, foto_url)')
-    .eq('solicitacao_id', solicitacaoId)
-    .order('criado_em', { ascending: true });
+export async function buscarMensagens(
+  solicitacaoId: string,
+  empresaId: string,
+): Promise<MensagemSolicitacao[]> {
+  const [{ data, error }, pessoas] = await Promise.all([
+    supabase
+      .from('solicitacoes_whatsapp_mensagens')
+      .select('*')
+      .eq('solicitacao_id', solicitacaoId)
+      .order('criado_em', { ascending: true }),
+    buscarDiretorio(empresaId),
+  ]);
 
   if (error) {
     console.warn('[solicitacoesWhatsapp] erro nas mensagens:', error.message);
     return [];
   }
-  return (data ?? []) as unknown as MensagemSolicitacao[];
+  return ((data ?? []) as unknown as MensagemSolicitacao[]).map(m => ({
+    ...m,
+    autor: pessoas.get(m.autor_id) ?? null,
+  }));
 }
 
 export async function enviarMensagem(params: {
@@ -352,18 +424,25 @@ export async function marcarMensagensLidas(params: {
 // ── Responsáveis ─────────────────────────────────────────────────────────────
 
 export async function buscarResponsaveis(empresaId: string): Promise<PessoaResumo[]> {
-  const { data, error } = await supabase
-    .from('atendimento_responsaveis')
-    .select('usuario:perfis!atendimento_responsaveis_usuario_id_fkey (id, nome, foto_url)')
-    .eq('empresa_id', empresaId);
+  // Mesmo motivo da listagem: o join em `perfis` voltava nulo para quem não é
+  // lider/administrador, e o painel de responsáveis aparecia vazio justamente
+  // para o operador que precisa saber a quem recorrer.
+  const [{ data, error }, pessoas] = await Promise.all([
+    supabase
+      .from('atendimento_responsaveis')
+      .select('usuario_id')
+      .eq('empresa_id', empresaId),
+    buscarDiretorio(empresaId),
+  ]);
 
   if (error) {
     console.warn('[solicitacoesWhatsapp] erro ao listar responsáveis:', error.message);
     return [];
   }
-  return ((data ?? []) as unknown as { usuario: PessoaResumo | null }[])
-    .map(r => r.usuario)
-    .filter((p): p is PessoaResumo => !!p);
+  return ((data ?? []) as { usuario_id: string }[])
+    .map(r => pessoas.get(r.usuario_id))
+    .filter((p): p is PessoaResumo => !!p)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
 export async function definirResponsavel(params: {

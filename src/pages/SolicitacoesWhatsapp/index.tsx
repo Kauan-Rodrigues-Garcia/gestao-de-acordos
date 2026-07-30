@@ -208,9 +208,10 @@ export default function SolicitacoesWhatsapp() {
 
   // ── Histórico sob demanda (ao expandir) ────────────────────────────────────
   const carregarEventos = useCallback(async (id: string) => {
-    const lista = await buscarEventos(id);
+    if (!empresaId) return;
+    const lista = await buscarEventos(id, empresaId);
     setEventos(prev => ({ ...prev, [id]: lista }));
-  }, []);
+  }, [empresaId]);
 
   function alternarCard(id: string) {
     const abrindo = expandidoId !== id;

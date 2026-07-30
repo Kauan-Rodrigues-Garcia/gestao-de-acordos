@@ -24,6 +24,8 @@ let nextRpcResult: MockResult = { data: null, error: null };
 interface BuilderCall {
   table: string;
   operation: 'select' | 'insert' | 'update' | 'delete' | null;
+  /** Colunas pedidas — usado para provar que o join em `perfis` sumiu. */
+  colunas?: string;
   payload?: unknown;
   filters: Array<[string, string, unknown]>;
   order?: { col: string };
@@ -38,7 +40,11 @@ function createBuilder(table: string) {
   calls.push(currentCall);
 
   const builder = {
-    select: vi.fn(() => { currentCall!.operation = 'select'; return builder; }),
+    select: vi.fn((cols?: string) => {
+      currentCall!.operation = 'select';
+      currentCall!.colunas   = cols;
+      return builder;
+    }),
     insert: vi.fn((p: unknown) => { currentCall!.operation = 'insert'; currentCall!.payload = p; return builder; }),
     update: vi.fn((p: unknown) => { currentCall!.operation = 'update'; currentCall!.payload = p; return builder; }),
     delete: vi.fn(() => { currentCall!.operation = 'delete'; return builder; }),
@@ -66,7 +72,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import {
   buscarSolicitacoes, criarSolicitacao, atualizarStatus,
-  marcarMensagensLidas, definirResponsavel, buscarClientePorCodigo,
+  marcarMensagensLidas, definirResponsavel, buscarClientePorCodigo, buscarResponsaveis,
   ehErroLimitePendentes, MAX_PENDENTES, STATUS_EM_ABERTO,
   chatAindaAberto, HORAS_CHAT_APOS_FECHAR,
 } from './solicitacoesWhatsapp.service';
@@ -209,6 +215,84 @@ describe('buscarSolicitacoes', () => {
 
     expect(r.dbAtiva).toBe(true);
     expect(r.erro).toBe('permission denied');
+    warn.mockRestore();
+  });
+});
+
+// ── Diretório: nome e foto sem depender da RLS de `perfis` ──────────────────
+
+describe('nome e foto vêm do diretório, não de join em perfis', () => {
+  const DIRETORIO = [
+    { id: 'u1', nome: 'Ana Paula',  foto_url: 'ana.jpg' },
+    { id: 'u2', nome: 'Bruno Reis', foto_url: null },
+  ];
+
+  it('a listagem NÃO faz join em perfis', async () => {
+    // Regressão: join no PostgREST respeita a RLS da tabela juntada, e
+    // `perfis_select` só deixa lider/administrador lerem outro perfil. Com o
+    // join, operador/elite/gerência/diretoria viam o card sem dono.
+    nextResult    = { data: [], error: null };
+    nextRpcResult = { data: DIRETORIO, error: null };
+
+    await buscarSolicitacoes({ empresaId: EMPRESA });
+
+    const listagem = calls.find(c => c.table === 'solicitacoes_whatsapp');
+    expect(listagem?.colunas).toBe('*');
+    expect(listagem?.colunas).not.toContain('perfis');
+  });
+
+  it('preenche solicitante e responsável a partir do diretório', async () => {
+    nextResult = {
+      data: [{ id: 's1', solicitante_id: 'u1', responsavel_id: 'u2' }],
+      error: null,
+    };
+    nextRpcResult = { data: DIRETORIO, error: null };
+
+    const { data } = await buscarSolicitacoes({ empresaId: EMPRESA });
+
+    expect(data[0].solicitante).toEqual({ id: 'u1', nome: 'Ana Paula', foto_url: 'ana.jpg' });
+    expect(data[0].responsavel).toEqual({ id: 'u2', nome: 'Bruno Reis', foto_url: null });
+  });
+
+  it('pedido sem responsável fica com responsavel null, não undefined', async () => {
+    nextResult    = { data: [{ id: 's1', solicitante_id: 'u1', responsavel_id: null }], error: null };
+    nextRpcResult = { data: DIRETORIO, error: null };
+
+    const { data } = await buscarSolicitacoes({ empresaId: EMPRESA });
+
+    expect(data[0].responsavel).toBeNull();
+  });
+
+  it('pessoa fora do diretório não quebra a listagem', async () => {
+    // Ex.: perfil apagado. O card mostra "sem nome" em vez de estourar.
+    nextResult    = { data: [{ id: 's1', solicitante_id: 'fantasma', responsavel_id: null }], error: null };
+    nextRpcResult = { data: DIRETORIO, error: null };
+
+    const { data } = await buscarSolicitacoes({ empresaId: EMPRESA });
+
+    expect(data[0].solicitante).toBeNull();
+  });
+
+  it('responsáveis também saem do diretório, ordenados por nome', async () => {
+    nextResult    = { data: [{ usuario_id: 'u2' }, { usuario_id: 'u1' }], error: null };
+    nextRpcResult = { data: DIRETORIO, error: null };
+
+    const lista = await buscarResponsaveis(EMPRESA);
+
+    expect(lista.map(p => p.nome)).toEqual(['Ana Paula', 'Bruno Reis']);
+    const consulta = calls.find(c => c.table === 'atendimento_responsaveis');
+    expect(consulta?.colunas).toBe('usuario_id');
+  });
+
+  it('RPC do diretório ausente devolve lista sem gente, sem estourar', async () => {
+    nextResult    = { data: [{ id: 's1', solicitante_id: 'u1', responsavel_id: null }], error: null };
+    nextRpcResult = { data: null, error: { message: 'function fn_wpp_diretorio does not exist' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const { data } = await buscarSolicitacoes({ empresaId: EMPRESA });
+
+    expect(data).toHaveLength(1);
+    expect(data[0].solicitante).toBeNull();
     warn.mockRestore();
   });
 });

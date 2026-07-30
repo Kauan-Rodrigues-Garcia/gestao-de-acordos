@@ -275,16 +275,16 @@ export function useChatSolicitacao(params: {
 
   // ── Carga da thread ────────────────────────────────────────────────────────
   const recarregar = useCallback(async () => {
-    if (!solicitacaoId) { setMensagens([]); setEventos([]); return; }
+    if (!solicitacaoId || !empresaId) { setMensagens([]); setEventos([]); return; }
     const [msgs, evts] = await Promise.all([
-      buscarMensagens(solicitacaoId),
-      buscarEventos(solicitacaoId),
+      buscarMensagens(solicitacaoId, empresaId),
+      buscarEventos(solicitacaoId, empresaId),
     ]);
     if (!montadoRef.current) return;
     setMensagens(msgs);
     setEventos(evts);
     setLoading(false);
-  }, [solicitacaoId]);
+  }, [solicitacaoId, empresaId]);
 
   const recarregarRef = useRef(recarregar);
   recarregarRef.current = recarregar;
