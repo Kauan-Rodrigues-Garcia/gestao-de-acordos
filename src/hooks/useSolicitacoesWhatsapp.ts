@@ -87,6 +87,11 @@ export function useSolicitacoesWhatsapp(
   filtros:     FiltrosSolicitacoes,
   /** false enquanto a aba não está visível — evita buscar e assinar à toa. */
   habilitado = true,
+  /**
+   * Thread aberta neste momento, ou null. Silencia a notificação do SO para ela:
+   * com a conversa na frente do usuário o aviso é ruído, ele já está lendo.
+   */
+  chatAbertoId: string | null = null,
 ) {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoWhatsapp[]>([]);
   const [loading, setLoading]           = useState(true);
@@ -167,9 +172,23 @@ export function useSolicitacoesWhatsapp(
 
   useEffect(() => { void recarregarContagens(); }, [recarregarContagens]);
 
-  // Lida pelo handler de realtime sem virar dependência do efeito.
+  // Lidos pelo handler de realtime sem virarem dependência do efeito — trocar a
+  // thread aberta não pode derrubar e reassinar o canal.
   const solicitacoesRef = useRef(solicitacoes);
   solicitacoesRef.current = solicitacoes;
+  const chatAbertoRef = useRef(chatAbertoId);
+  chatAbertoRef.current = chatAbertoId;
+
+  /**
+   * A conversa está aberta E na frente do usuário?
+   *
+   * Só o painel aberto não basta: com a aba do navegador em segundo plano ele
+   * não está lendo nada, e é justamente aí que a notificação serve.
+   */
+  const lendoAgora = useCallback((solicitacaoId: string) => {
+    if (chatAbertoRef.current !== solicitacaoId) return false;
+    return typeof document === 'undefined' || !document.hidden;
+  }, []);
 
   // ── Realtime das mensagens: badge + notificação do SO ──────────────────────
   // A RLS do realtime já filtra: só chega mensagem de thread que o usuário pode
@@ -205,6 +224,10 @@ export function useSolicitacoesWhatsapp(
               [nova.solicitacao_id]: (prev[nova.solicitacao_id] ?? 0) + 1,
             }));
 
+            // Com a thread aberta na tela o usuário já está lendo: o badge some
+            // sozinho e a notificação seria ruído.
+            if (lendoAgora(nova.solicitacao_id)) return;
+
             // O nome do autor não vem no payload do realtime (é join); a lista
             // já tem o pedido, então usamos o cliente para dar contexto.
             const pedido = solicitacoesRef.current.find(s => s.id === nova.solicitacao_id);
@@ -223,7 +246,7 @@ export function useSolicitacoesWhatsapp(
         onReconectado: () => { void recarregarContagensRef.current(); },
       },
     );
-  }, [empresaId, usuarioId, habilitado, dbAtiva]);
+  }, [empresaId, usuarioId, habilitado, dbAtiva, lendoAgora]);
 
   /** Zera o badge local ao abrir a thread (o banco é carimbado pelo chat). */
   const limparNaoLidas = useCallback((solicitacaoId: string) => {

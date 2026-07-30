@@ -47,6 +47,7 @@ import {
 } from '@/services/solicitacoesWhatsapp.service';
 import { podeAcessarAbaWpp, temVisaoGeralPorCargo, podeDefinirResponsavel } from './permissoes';
 import { combinaBusca } from './formatacao';
+import { ordenarEmAberto } from './ordenacao';
 import { Input } from '@/components/ui/input';
 import { FormNovaSolicitacao, type DadosNovaSolicitacao } from './FormNovaSolicitacao';
 import { CardSolicitacao } from './CardSolicitacao';
@@ -65,38 +66,6 @@ interface GrupoOperador {
 
 /** De quanto em quanto tempo o "tempo de espera" dos cards é redesenhado. */
 const PASSO_RELOGIO_MS = 30_000;
-
-/**
- * Ordena a lista em aberto: pendentes no topo, os meus na frente, e dentro de
- * cada grupo o mais antigo primeiro.
- *
- * O mais antigo em cima é o que faz o alarme de cor servir: o card vermelho é
- * justamente o que está esperando há mais tempo, e ele precisa estar onde se
- * olha. Inverte a ordem que a query devolve (mais novo primeiro), de propósito.
- *
- * "Meu" = abri o pedido ou estou atendendo ele. Serve aos dois lados da tela
- * sem duas regras: o operador acha o próprio pedido parado, e quem atende acha
- * o que pegou.
- */
-function ordenarEmAberto(
-  lista: SolicitacaoWhatsapp[],
-  usuarioId: string | null,
-): SolicitacaoWhatsapp[] {
-  const meu = (s: SolicitacaoWhatsapp) =>
-    !!usuarioId && (s.solicitante_id === usuarioId || s.responsavel_id === usuarioId);
-
-  return [...lista].sort((a, b) => {
-    const pa = a.status === 'pendente' ? 0 : 1;
-    const pb = b.status === 'pendente' ? 0 : 1;
-    if (pa !== pb) return pa - pb;
-
-    const ma = meu(a) ? 0 : 1;
-    const mb = meu(b) ? 0 : 1;
-    if (ma !== mb) return ma - mb;
-
-    return a.criado_em.localeCompare(b.criado_em);   // mais antigo primeiro
-  });
-}
 
 /**
  * Agrupa os pedidos por quem os abriu, preservando a ordem em que chegaram
@@ -204,6 +173,8 @@ export default function SolicitacoesWhatsapp() {
       ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
       : {},
     habilitado,
+    // Silencia a notificação do SO da conversa que já está aberta na tela.
+    chatAbertoId,
   );
   // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;
