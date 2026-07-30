@@ -18,8 +18,9 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { supabase, Notificacao } from '@/lib/supabase';
+import type { Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 
@@ -169,100 +170,29 @@ export function ChatNotificacoes() {
   const { user } = useAuth();
   const navigate  = useNavigate();
   const tenant    = useTenant();
-  const [aberto, setAberto]             = useState(false);
-  const [expandido, setExpandido]       = useState(false);
-  const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
-  const [loading, setLoading]           = useState(false);
-  const [, setAnimarBadge]              = useState(false);
-  const [detalhe, setDetalhe]           = useState<Notificacao | null>(null);
+  const [aberto, setAberto]       = useState(false);
+  const [expandido, setExpandido] = useState(false);
+  const [detalhe, setDetalhe]     = useState<Notificacao | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const naoLidas = notificacoes.filter(n => !n.lida).length;
+  // Lista, contagem e canal vêm do NotificacoesProvider — este componente e o
+  // sino do header leem o MESMO estado, então não podem divergir.
+  const {
+    notificacoes, naoLidas, loading, refresh,
+    marcarLida, marcarTodasLidas, excluir, limparTodas: limparTodasNoProvider,
+  } = useNotificacoes();
 
-  // ── Carregar notificações ─────────────────────────────────────────────
-  const carregar = useCallback(async () => {
-    if (!user?.id) return;
-    setLoading(true);
-    try {
-      const { data } = await supabase
-        .from('notificacoes')
-        .select('*')
-        .eq('usuario_id', user.id)
-        .order('criado_em', { ascending: false })
-        .limit(200);
-      setNotificacoes((data as Notificacao[]) || []);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
-
-  useEffect(() => { carregar(); }, [carregar]);
-
-  // ── Realtime: INSERT, UPDATE e DELETE em notificacoes ─────────────────
-  // Requer REPLICA IDENTITY FULL na tabela notificacoes (já aplicado via SQL)
+  // O modal de detalhe guarda uma cópia da notificação; segue a lista para não
+  // exibir dado velho (ou continuar aberto depois de a notificação ser apagada).
   useEffect(() => {
-    if (!user?.id) return;
-
-    const channel = supabase
-      .channel(`chat-notif-v2-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'notificacoes',
-          filter: `usuario_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const nova = payload.new as Notificacao;
-          setNotificacoes(prev => {
-            if (prev.some(n => n.id === nova.id)) return prev;
-            return [nova, ...prev];
-          });
-          // Badge animado
-          setAnimarBadge(true);
-          setTimeout(() => setAnimarBadge(false), 1000);
-          // Vibração (mobile)
-          try { navigator.vibrate?.([50, 30, 50]); } catch { /* noop */ }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'notificacoes',
-          filter: `usuario_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const atualizada = payload.new as Notificacao;
-          setNotificacoes(prev =>
-            prev.map(n => n.id === atualizada.id ? atualizada : n)
-          );
-          // Atualiza o modal de detalhe se estiver aberto para essa notificação
-          setDetalhe(d => d?.id === atualizada.id ? atualizada : d);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'notificacoes',
-          filter: `usuario_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const removida = payload.old as { id?: string };
-          if (removida?.id) {
-            setNotificacoes(prev => prev.filter(n => n.id !== removida.id));
-            setDetalhe(d => d?.id === removida.id ? null : d);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [user?.id]);
+    setDetalhe(atual => {
+      if (!atual) return atual;
+      const naLista = notificacoes.find(n => n.id === atual.id);
+      if (!naLista)          return null;
+      if (naLista === atual) return atual;
+      return naLista;
+    });
+  }, [notificacoes]);
 
   // ── Fechar ao clicar fora ─────────────────────────────────────────────
   useEffect(() => {
@@ -278,40 +208,27 @@ export function ChatNotificacoes() {
   }, [aberto]);
 
   // ── Ações ─────────────────────────────────────────────────────────────
-  async function marcarLida(id: string) {
-    setNotificacoes(prev => prev.map(n => n.id === id ? { ...n, lida: true } : n));
-    setDetalhe(d => d?.id === id ? { ...d, lida: true } : d);
-    await supabase.from('notificacoes').update({ lida: true }).eq('id', id);
-  }
-
-  const marcarTodasLidas = useCallback(async () => {
-    if (!user?.id) return;
-    setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
-    await supabase.from('notificacoes').update({ lida: true })
-      .eq('usuario_id', user.id).eq('lida', false);
-  }, [user?.id]);
+  // As mutações (otimistas + persistência) vivem no provider; aqui só sobra o
+  // que é da janela, como fechar o modal de detalhe.
 
   // Janela aberta por 2s → marca tudo como lida, para não acumular não lidas.
   // Depende de naoLidas: notificação que chegar com a janela aberta também é
   // marcada 2s depois. Fechar antes cancela o timer.
   useEffect(() => {
     if (!aberto || naoLidas === 0) return;
-    const t = setTimeout(() => { marcarTodasLidas(); }, 2000);
+    const t = setTimeout(() => { void marcarTodasLidas(); }, 2000);
     return () => clearTimeout(t);
   }, [aberto, naoLidas, marcarTodasLidas]);
 
-  async function excluirNotificacao(id: string) {
-    setNotificacoes(prev => prev.filter(n => n.id !== id));
-    setDetalhe(d => d?.id === id ? null : d);
-    await supabase.from('notificacoes').delete().eq('id', id);
-  }
+  const excluirNotificacao = useCallback(async (id: string) => {
+    setDetalhe(d => (d?.id === id ? null : d));
+    await excluir(id);
+  }, [excluir]);
 
-  async function limparTodas() {
-    if (!user?.id) return;
-    setNotificacoes([]);
+  const limparTodas = useCallback(async () => {
     setDetalhe(null);
-    await supabase.from('notificacoes').delete().eq('usuario_id', user.id);
-  }
+    await limparTodasNoProvider();
+  }, [limparTodasNoProvider]);
 
   function navigateToAcordo(n: Notificacao) {
     if (!n.acordo_id) return;
@@ -541,7 +458,7 @@ export function ChatNotificacoes() {
         onClick={() => {
           const abrindo = !aberto;
           setAberto(abrindo);
-          if (abrindo) { carregar(); setDetalhe(null); }
+          if (abrindo) { void refresh(); setDetalhe(null); }
         }}
       />
     </div>

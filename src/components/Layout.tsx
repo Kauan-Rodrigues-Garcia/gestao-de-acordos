@@ -42,6 +42,7 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/lib/supabase';
+import { assinarTabela } from '@/lib/realtime';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
@@ -49,7 +50,7 @@ import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetNomeVotacaoLembrete } from './pet/PetNomeVotacaoLembrete';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
-import { useNotificacoesCount } from '@/hooks/useNotificacoesCount';
+import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
@@ -143,23 +144,31 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Garante que a foto atualiza em tempo real para TODOS os usuários conectados
   useEffect(() => {
     if (!perfil?.id) return;
-    // Sincronizar foto inicial do banco
-    supabase.from('perfis').select('foto_url').eq('id', perfil.id).single().then(({ data }) => {
-      if (data?.foto_url) setFotoUrl(data.foto_url as string);
-    });
-    // Subscription para mudanças em tempo real
-    const channel = supabase
-      .channel(`perfil-foto-${perfil.id}`)
-      .on(
-        'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'perfis', filter: `id=eq.${perfil.id}` },
-        (payload) => {
-          const newFoto = (payload.new as { foto_url?: string | null } | null)?.foto_url ?? null;
-          setFotoUrl(newFoto ? newFoto + '?t=' + Date.now() : null);
-        }
-      )
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    const perfilId = perfil.id;
+
+    const sincronizar = () => {
+      void supabase.from('perfis').select('foto_url').eq('id', perfilId).single()
+        .then(({ data }) => {
+          if (data?.foto_url) setFotoUrl(data.foto_url as string);
+        });
+    };
+
+    sincronizar();
+
+    // Canal compartilhado: dedup por tópico + reconexão automática.
+    return assinarTabela(
+      {
+        topico:  `perfil-foto-${perfilId}`,
+        escutas: [{ tabela: 'perfis', evento: 'UPDATE', filtro: `id=eq.${perfilId}` }],
+      },
+      {
+        onEvento: (payload) => {
+          const novaFoto = (payload.new as { foto_url?: string | null } | null)?.foto_url ?? null;
+          setFotoUrl(novaFoto ? novaFoto + '?t=' + Date.now() : null);
+        },
+        onReconectado: sincronizar,
+      },
+    );
   }, [perfil?.id]);
 
   async function handleFotoUpload(file: File) {
@@ -211,7 +220,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const ouvidoriaAcesso = useOuvidoriaAcesso();
-  const { naoLidas, animarBadge } = useNotificacoesCount();
+  // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
+  // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
+  const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
 

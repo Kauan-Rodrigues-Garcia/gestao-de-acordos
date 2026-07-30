@@ -66,6 +66,7 @@ import {
   marcarComoLida,
   marcarTodasLidas,
   limparTodasNotificacoes,
+  excluirNotificacao,
   criarNotificacao,
 } from './notificacoes.service';
 
@@ -78,7 +79,7 @@ beforeEach(() => {
 // ── fetchNotificacoes ───────────────────────────────────────────────────────
 
 describe('fetchNotificacoes', () => {
-  it('retorna lista ordenada por criado_em desc com limit 50', async () => {
+  it('retorna lista ordenada por criado_em desc com limit 200', async () => {
     nextResult = {
       data: [
         { id: 'n1', titulo: 'A', lida: false },
@@ -94,7 +95,15 @@ describe('fetchNotificacoes', () => {
     expect(calls[0].operation).toBe('select');
     expect(calls[0].filters).toEqual([['eq', 'usuario_id', 'user-1']]);
     expect(calls[0].order).toEqual({ col: 'criado_em', opts: { ascending: false } });
-    expect(calls[0].limit).toBe(50);
+    // 200 (não 50): o NotificacoesProvider deriva a contagem de não lidas desta
+    // mesma lista, então ela precisa cobrir o que o painel exibe.
+    expect(calls[0].limit).toBe(200);
+  });
+
+  it('aceita um limite explícito', async () => {
+    nextResult = { data: [], error: null };
+    await fetchNotificacoes('user-1', 10);
+    expect(calls[0].limit).toBe(10);
   });
 
   it('retorna [] quando há erro', async () => {
@@ -172,20 +181,45 @@ describe('marcarTodasLidas', () => {
 // ── limparTodasNotificacoes ─────────────────────────────────────────────────
 
 describe('limparTodasNotificacoes', () => {
-  it('deleta todas as notificações do usuário', async () => {
+  it('deleta todas as notificações do usuário e devolve true', async () => {
     nextResult = { data: null, error: null };
 
-    await limparTodasNotificacoes('user-1');
+    await expect(limparTodasNotificacoes('user-1')).resolves.toBe(true);
 
     expect(calls[0].operation).toBe('delete');
     expect(calls[0].filters).toEqual([['eq', 'usuario_id', 'user-1']]);
   });
 
-  it('loga warning sem lançar quando delete falha', async () => {
+  it('loga warning e devolve false quando o delete falha', async () => {
     nextResult = { data: null, error: { message: 'fail' } };
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    await expect(limparTodasNotificacoes('user-1')).resolves.toBeUndefined();
+    // O retorno booleano existe para o provider poder restaurar a lista: sem
+    // isso, uma recusa da RLS deixava a tela vazia como se tivesse limpado.
+    await expect(limparTodasNotificacoes('user-1')).resolves.toBe(false);
+
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+// ── excluirNotificacao ──────────────────────────────────────────────────────
+
+describe('excluirNotificacao', () => {
+  it('deleta pelo id e devolve true', async () => {
+    nextResult = { data: null, error: null };
+
+    await expect(excluirNotificacao('n1')).resolves.toBe(true);
+
+    expect(calls[0].operation).toBe('delete');
+    expect(calls[0].filters).toEqual([['eq', 'id', 'n1']]);
+  });
+
+  it('devolve false quando o delete falha', async () => {
+    nextResult = { data: null, error: { message: 'fail' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await expect(excluirNotificacao('n1')).resolves.toBe(false);
 
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();

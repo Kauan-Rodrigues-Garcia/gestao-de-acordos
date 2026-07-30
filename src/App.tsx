@@ -17,6 +17,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
+import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
@@ -127,6 +128,9 @@ export default function App() {
         <EmpresaProvider>
           <RealtimeAcordosProvider>
           <PresenceProvider>
+          {/* Acima do Router: o sino do header (Layout) e o painel
+              (ChatNotificacoes) precisam do MESMO estado de notificações. */}
+          <NotificacoesProvider>
         <TenantThemeApplier />
         <VersionWatcher />
         <Router>
@@ -254,6 +258,7 @@ export default function App() {
           <ImpersonacaoBanner />
           <Toaster richColors position="top-right" />
         </Router>
+          </NotificacoesProvider>
           </PresenceProvider>
           </RealtimeAcordosProvider>
         </EmpresaProvider>
