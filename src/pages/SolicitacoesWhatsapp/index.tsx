@@ -176,12 +176,20 @@ export default function SolicitacoesWhatsapp() {
   );
   // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;
-  // Excluir é MAIS restrito que editar: apaga para todos. O responsável atende
-  // o chamado, não o descarta. Espelha a policy `sol_wpp_delete`, que dá DELETE
-  // só a líder+ e ao dono enquanto ninguém pegou.
+  /**
+   * Excluir: o DONO do pedido, em qualquer status, e líder+.
+   *
+   * Até 31/07/2026 o dono perdia o botão assim que alguém assumia. Na prática o
+   * pedido que precisa sumir é justamente o que já andou — cliente que ligou de
+   * volta, código errado descoberto depois. Quem abriu é quem sabe que não vale
+   * mais, e ficava dependendo de um líder para apagar.
+   *
+   * O responsável continua de fora: ele atende o chamado, não o descarta. E
+   * quem estava com o atendimento é avisado — trigger `trg_wpp_notificar_exclusao`
+   * (migration 20260731c). Espelha a policy `sol_wpp_delete`.
+   */
   const podeExcluirSolicitacao = useCallback(
-    (s: SolicitacaoWhatsapp) =>
-      ehLiderOuAcima || (s.solicitante_id === usuarioId && s.status === 'pendente'),
+    (s: SolicitacaoWhatsapp) => ehLiderOuAcima || s.solicitante_id === usuarioId,
     [ehLiderOuAcima, usuarioId],
   );
 
@@ -425,6 +433,7 @@ export default function SolicitacoesWhatsapp() {
         podeEditar={podeEditarPedidos}
         podeExcluir={podeExcluirSolicitacao(s)}
         podeTransferir={podeTransferirParaMim(s)}
+        avisaResponsavel={!!s.responsavel_id && s.responsavel_id !== usuarioId}
         ehDono={s.solicitante_id === usuarioId}
         salvando={salvandoId === s.id}
         onAlternar={() => alternarCard(s.id)}

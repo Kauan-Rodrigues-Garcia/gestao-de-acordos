@@ -124,7 +124,7 @@ function Pessoa({ nome, foto, tamanho = 'w-5 h-5' }: { nome: string | null | und
 
 export function CardSolicitacao({
   solicitacao: s, expandido, eventos, naoLidas, totalMensagens, agora,
-  podeEditar, podeExcluir, podeTransferir, ehDono, salvando,
+  podeEditar, podeExcluir, podeTransferir, avisaResponsavel, ehDono, salvando,
   onAlternar, onMudarStatus, onExcluir, onTransferir, onAbrirChat, chatAberto, children,
 }: {
   solicitacao: SolicitacaoWhatsapp;
@@ -141,12 +141,18 @@ export function CardSolicitacao({
   /** Responsável ou líder+: pode mudar status. NÃO implica poder excluir. */
   podeEditar:  boolean;
   /**
-   * Excluir apaga para TODOS, então é mais restrito que editar: só líder+ ou o
-   * dono enquanto ninguém pegou. O responsável atende, não descarta o chamado.
+   * Excluir apaga para TODOS: só o dono do pedido e líder+. O responsável
+   * atende, não descarta o chamado.
    */
   podeExcluir: boolean;
   /** O atendimento tem outro dono e eu posso puxá-lo para mim. */
   podeTransferir: boolean;
+  /**
+   * Excluir vai avisar OUTRA pessoa (o atendimento está com alguém que não sou
+   * eu). Some quando o responsável sou eu — ninguém precisa ser avisado do
+   * próprio clique.
+   */
+  avisaResponsavel: boolean;
   /** É o solicitante — vê o card como "meu pedido". */
   ehDono:      boolean;
   salvando:    boolean;
@@ -345,12 +351,18 @@ export function CardSolicitacao({
                   </Button>
                 )}
 
-                {/* Excluir: o dono só enquanto ninguém pegou; líder+ sempre.
+                {/* Excluir: o dono do pedido e líder+.
                     A RLS decide de verdade — aqui é só não oferecer em vão. */}
                 {podeExcluir && (
                   confirmandoExclusao ? (
                     <span className="inline-flex items-center gap-1.5 ml-auto">
-                      <span className="text-[11px] text-muted-foreground">Excluir?</span>
+                      {/* Quem está atendendo perde o trabalho de vista; dizer o
+                          nome antes do clique evita a exclusão distraída. */}
+                      <span className="text-[11px] text-muted-foreground">
+                        {avisaResponsavel
+                          ? `Excluir? ${primeiroNome(s.responsavel?.nome)} será avisado.`
+                          : 'Excluir?'}
+                      </span>
                       <Button size="sm" variant="destructive" className="h-7 text-xs"
                         onClick={() => { setConfirmandoExclusao(false); onExcluir(); }}>
                         Sim
