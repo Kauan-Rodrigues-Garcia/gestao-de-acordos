@@ -17,6 +17,7 @@ function comemoracao(over: Partial<ComemoracaoTeste> = {}): ComemoracaoTeste {
     som: 'fanfarra',
     gifUrl: null,
     somUrl: null,
+    somInicioS: 0,
     layout: {},
     duracaoS: 20,
     ...over,
@@ -61,12 +62,15 @@ describe('dispararTeste', () => {
       layout: { titulo: { x: 20, y: 30, escala: 1.2 } },
       gifUrl: 'https://exemplo/gif.gif',
       somUrl: 'https://exemplo/som.mp3',
+      somInicioS: 45,
     }));
 
     const c = recebido.mock.calls[0][0] as ComemoracaoTeste;
     expect(c.layout.titulo).toEqual({ x: 20, y: 30, escala: 1.2 });
     expect(c.gifUrl).toBe('https://exemplo/gif.gif');
     expect(c.somUrl).toBe('https://exemplo/som.mp3');
+    // O ensaio leva o ponto de partida da música; a duração é a da animação.
+    expect(c.somInicioS).toBe(45);
     parar();
   });
 

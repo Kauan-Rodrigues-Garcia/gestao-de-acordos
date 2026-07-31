@@ -1,83 +1,72 @@
 /**
- * trechoAudio.test.ts — o pedaço da música que toca.
+ * trechoAudio.test.ts — de onde a música começa.
  *
- * O erro que estes casos evitam é silencioso: um trecho que começa perto do
- * fim da música e dura mais do que sobra toca silêncio, e ninguém descobre até
- * a comemoração acontecer na frente do time.
+ * O líder escolhe só o ponto de partida; quanto tempo toca é a duração da
+ * comemoração. O erro que estes casos evitam é silencioso: um ponto colado no
+ * fim faz a comemoração rodar em silêncio, e ninguém descobre até a festa
+ * acontecer na frente do time.
  */
 import { describe, it, expect } from 'vitest';
-import {
-  limitarTrecho, trechoSugerido, fimDoTrecho, formatarSegundos,
-  TRECHO_MAX_S, TRECHO_MIN_S,
-} from './trechoAudio';
+import { limitarInicio, sobraApos, formatarSegundos, SOBRA_MIN_S } from './trechoAudio';
 
-describe('limitarTrecho', () => {
-  it('trecho normal passa intacto', () => {
-    expect(limitarTrecho({ inicio: 30, duracao: 20 }, 180))
-      .toEqual({ inicio: 30, duracao: 20 });
+describe('limitarInicio', () => {
+  it('ponto normal passa intacto', () => {
+    expect(limitarInicio(30, 180)).toBe(30);
   });
 
-  it('corta a duração pelo que sobra da música', () => {
-    // Começa em 50 s numa música de 60 s: só há 10 s pela frente.
-    expect(limitarTrecho({ inicio: 50, duracao: 60 }, 60))
-      .toEqual({ inicio: 50, duracao: 10 });
+  it('começo da música', () => {
+    expect(limitarInicio(0, 180)).toBe(0);
   });
 
-  it('respeita o teto de 60 s', () => {
-    expect(limitarTrecho({ inicio: 0, duracao: 200 }, 600).duracao).toBe(TRECHO_MAX_S);
+  it('negativo vira zero', () => {
+    expect(limitarInicio(-10, 180)).toBe(0);
   });
 
-  it('não deixa a duração ficar abaixo do mínimo', () => {
-    expect(limitarTrecho({ inicio: 0, duracao: 0 }, 180).duracao).toBe(TRECHO_MIN_S);
-    expect(limitarTrecho({ inicio: 0, duracao: -5 }, 180).duracao).toBe(TRECHO_MIN_S);
+  it('não deixa colar no fim', () => {
+    // Colado no fim, sobraria menos de um segundo de música.
+    expect(limitarInicio(999, 60)).toBe(60 - SOBRA_MIN_S);
+    expect(limitarInicio(59.8, 60)).toBe(59);
   });
 
-  it('início negativo vira zero', () => {
-    expect(limitarTrecho({ inicio: -10, duracao: 20 }, 180).inicio).toBe(0);
-  });
-
-  it('início além do fim é puxado para caber o mínimo', () => {
-    const r = limitarTrecho({ inicio: 999, duracao: 20 }, 60);
-    expect(r.inicio).toBe(60 - TRECHO_MIN_S);
-    expect(fimDoTrecho(r)).toBeLessThanOrEqual(60);
-  });
-
-  it('o trecho NUNCA passa do fim da música', () => {
-    // A regra que importa: passar do fim toca silêncio.
-    for (const [inicio, duracao, total] of [
-      [50, 60, 60], [170, 30, 180], [0, 500, 12], [11.5, 45, 12],
-    ] as const) {
-      expect(fimDoTrecho(limitarTrecho({ inicio, duracao }, total)))
-        .toBeLessThanOrEqual(total + 0.05);
-    }
-  });
-
-  it('música de duração desconhecida vira o trecho mínimo', () => {
+  it('música de duração desconhecida começa do zero', () => {
     // `audio.duration` vem NaN ou Infinity em stream e arquivo corrompido.
     for (const total of [0, NaN, Infinity, -3]) {
-      expect(limitarTrecho({ inicio: 10, duracao: 30 }, total))
-        .toEqual({ inicio: 0, duracao: TRECHO_MIN_S });
+      expect(limitarInicio(30, total)).toBe(0);
     }
+  });
+
+  it('ponto inválido vira zero', () => {
+    expect(limitarInicio(NaN, 180)).toBe(0);
   });
 
   it('arredonda para uma casa, para não gravar dízima no banco', () => {
-    const r = limitarTrecho({ inicio: 12.3456, duracao: 20.9876 }, 180);
-    expect(r.inicio).toBe(12.3);
-    expect(r.duracao).toBe(21);
+    expect(limitarInicio(12.3456, 180)).toBe(12.3);
   });
 });
 
-describe('trechoSugerido', () => {
-  it('música longa: começa do zero, 30 s', () => {
-    expect(trechoSugerido(180)).toEqual({ inicio: 0, duracao: 30 });
+describe('sobraApos', () => {
+  it('conta o que resta de música', () => {
+    expect(sobraApos(30, 180)).toBe(150);
   });
 
-  it('música curta: usa o que tem', () => {
-    expect(trechoSugerido(12)).toEqual({ inicio: 0, duracao: 12 });
+  it('do começo, sobra tudo', () => {
+    expect(sobraApos(0, 180)).toBe(180);
   });
 
-  it('sem duração conhecida não estoura', () => {
-    expect(trechoSugerido(NaN)).toEqual({ inicio: 0, duracao: TRECHO_MIN_S });
+  it('ponto além do fim é puxado antes de contar', () => {
+    expect(sobraApos(999, 60)).toBe(SOBRA_MIN_S);
+  });
+
+  it('sem duração conhecida, sobra zero', () => {
+    expect(sobraApos(10, NaN)).toBe(0);
+  });
+
+  it('serve para avisar que a comemoração é mais longa que a música', () => {
+    // 40 s de comemoração começando aos 150 s de uma música de 180: 30 s de
+    // som e 10 s de silêncio.
+    const sobra = sobraApos(150, 180);
+    expect(sobra).toBe(30);
+    expect(sobra).toBeLessThan(40);
   });
 });
 

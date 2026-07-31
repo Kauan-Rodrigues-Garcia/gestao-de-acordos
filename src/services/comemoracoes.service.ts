@@ -40,8 +40,11 @@ export interface Comemoracao {
   /** URLs resolvidas pelo service a partir de `comemoracao_midias`. */
   gif_url:       string | null;
   som_url:       string | null;
-  /** Trecho do som escolhido pelo líder. null = arquivo inteiro. */
-  som_trecho:    { inicio: number; duracao: number } | null;
+  /**
+   * Segundo em que a música começa. Quanto tempo toca é `duracao_s`, a duração
+   * da própria comemoração — o som termina junto com o card.
+   */
+  som_inicio_s:  number;
   layout:        LayoutComemoracao;
   inicia_em:     string;
   duracao_s:     number;
@@ -148,7 +151,7 @@ export async function buscarComemoracoes(
 
   type Linha = Omit<
     Comemoracao,
-    'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_trecho'
+    'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
   > & {
     layout?: unknown;
     comemoracao_homenageados?: { operador_id: string }[] | null;
@@ -166,11 +169,7 @@ export async function buscarComemoracoes(
       layout: layoutDoJson(linha.layout),
       gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
       som_url: som?.url ?? null,
-      // Sem `trecho_s` a música toca inteira — é o caso de tudo que foi
-      // enviado antes da migration 20260731g.
-      som_trecho: som?.trecho_s
-        ? { inicio: Number(som.inicio_s ?? 0), duracao: Number(som.trecho_s) }
-        : null,
+      som_inicio_s: Number(som?.inicio_s ?? 0),
       homenageados: (linha.comemoracao_homenageados ?? [])
         .map((h) => pessoas.get(h.operador_id))
         .filter((p): p is PessoaComemoracao => !!p),

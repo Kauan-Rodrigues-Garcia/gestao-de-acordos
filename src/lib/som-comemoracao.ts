@@ -148,52 +148,102 @@ export function tocarSomComemoracao(som: SomId, forcar = false): void {
   }
 }
 
-/** Pedaço da música que toca. Ausente = arquivo inteiro. */
-export interface TrechoSom {
-  inicio:  number;
-  duracao: number;
+/**
+ * Volume da música enviada pelo líder.
+ *
+ * Bem mais baixo que o padrão: o arquivo já vem masterizado alto, e isto toca
+ * em cima de gente em ligação. Os sons do catálogo são sintetizados no volume
+ * certo, então não usam este valor.
+ */
+const VOLUME_ARQUIVO = 0.35;
+
+/** Quanto dura o esmaecimento no fim. Curto — não é fim de show. */
+const FADE_MS = 700;
+
+export interface OpcoesSom {
+  /** Segundo em que a música começa. */
+  inicio?:  number;
+  /**
+   * Por quantos segundos toca. É a DURAÇÃO DA COMEMORAÇÃO — o som termina
+   * junto com o card, não antes nem depois.
+   */
+  duracao?: number;
 }
 
 /**
- * Toca um arquivo de som enviado pelo líder, ou só o trecho escolhido.
+ * Toca um arquivo de som enviado pelo líder.
  *
  * Não passa pelo WebAudio: um `<audio>` avulso basta e evita baixar e decodar o
  * arquivo à mão. Como o Storage responde a Range request, pular para o segundo
  * 40 não baixa os 40 primeiros.
  *
- * @returns função que interrompe a reprodução, para quem precisar cancelar.
+ * @returns função que interrompe a reprodução com um esmaecimento curto. Quem
+ *          exibe a comemoração PRECISA chamá-la ao tirar o card da tela —
+ *          senão a música continua tocando depois da festa acabar.
  */
 export function tocarArquivoDeSom(
   url: string,
   forcar = false,
-  trecho?: TrechoSom | null,
+  opcoes?: OpcoesSom | null,
 ): () => void {
   if (!forcar && estaMudo()) return () => {};
 
   try {
     const audio = new Audio(url);
-    audio.volume = 0.7;
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    audio.volume = VOLUME_ARQUIVO;
 
-    const parar = () => {
-      if (timer) { clearTimeout(timer); timer = null; }
-      try { audio.pause(); } catch { /* já parou */ }
+    let timerFim:  ReturnType<typeof setTimeout>  | null = null;
+    let timerFade: ReturnType<typeof setInterval> | null = null;
+    let encerrado = false;
+
+    const limparTimers = () => {
+      if (timerFim)  { clearTimeout(timerFim);   timerFim = null; }
+      if (timerFade) { clearInterval(timerFade); timerFade = null; }
     };
 
-    if (trecho && trecho.duracao > 0) {
-      // O `seek` só vale depois de o navegador conhecer a duração; antes disso
-      // atribuir `currentTime` é ignorado em silêncio.
-      const aoPoderBuscar = () => {
-        audio.currentTime = trecho.inicio;
-        void audio.play().catch(() => {});
-        timer = setTimeout(parar, trecho.duracao * 1000);
-      };
-      audio.addEventListener('loadedmetadata', aoPoderBuscar, { once: true });
+    /** Baixa o volume aos poucos e pausa. Cortar seco soa como falha. */
+    const esmaecer = (ms = FADE_MS) => {
+      if (encerrado) return;
+      encerrado = true;
+      if (timerFim) { clearTimeout(timerFim); timerFim = null; }
+
+      const passo = 50;
+      const queda = audio.volume / Math.max(1, ms / passo);
+      timerFade = setInterval(() => {
+        const proximo = audio.volume - queda;
+        if (proximo <= 0.01) {
+          limparTimers();
+          try { audio.pause(); } catch { /* já parou */ }
+          return;
+        }
+        audio.volume = proximo;
+      }, passo);
+    };
+
+    /** Corte rápido — usado quando o card sai antes da hora. */
+    const parar = () => esmaecer(250);
+
+    const comecar = () => {
+      const inicio = opcoes?.inicio ?? 0;
+      if (inicio > 0) audio.currentTime = inicio;
+      void audio.play().catch(() => {});
+
+      const duracao = opcoes?.duracao ?? 0;
+      if (duracao > 0) {
+        // Começa a esmaecer ANTES do fim, para o silêncio coincidir com a
+        // saída do card em vez de vir depois dela.
+        const ateOFade = Math.max(0, duracao * 1000 - FADE_MS);
+        timerFim = setTimeout(() => esmaecer(), ateOFade);
+      }
+    };
+
+    // O `seek` só vale depois de o navegador conhecer a duração; antes disso
+    // atribuir `currentTime` é ignorado em silêncio.
+    if ((opcoes?.inicio ?? 0) > 0) {
+      audio.addEventListener('loadedmetadata', comecar, { once: true });
       audio.load();
     } else {
-      // `catch` obrigatório: o navegador rejeita a promessa quando o áudio é
-      // barrado por autoplay, e sem tratar isso vira unhandled rejection.
-      void audio.play().catch(() => {});
+      comecar();
     }
 
     return parar;

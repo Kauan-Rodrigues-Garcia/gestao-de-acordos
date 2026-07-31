@@ -16,7 +16,7 @@ import {
   type MidiaComemoracao, type TipoMidia,
 } from '@/services/comemoracaoMidias.service';
 import { EditorTrecho } from './EditorTrecho';
-import { formatarSegundos, type Trecho } from './trechoAudio';
+import { formatarSegundos } from './trechoAudio';
 
 const ACEITA: Record<TipoMidia, string> = {
   gif: 'image/gif,image/png,image/webp',
@@ -28,7 +28,8 @@ function limiteEmMB(tipo: TipoMidia): string {
 }
 
 export function BibliotecaMidia({
-  tipo, midias, empresaId, usuarioId, selecionadaId, onSelecionar, onMudou,
+  tipo, midias, empresaId, usuarioId, selecionadaId,
+  duracaoComemoracaoS = 20, onSelecionar, onMudou,
 }: {
   tipo:          TipoMidia;
   /** null = migration pendente; o componente não renderiza. */
@@ -36,6 +37,8 @@ export function BibliotecaMidia({
   empresaId:     string;
   usuarioId:     string;
   selecionadaId: string | null;
+  /** Só para som: por quanto tempo a música vai tocar, na prévia do editor. */
+  duracaoComemoracaoS?: number;
   onSelecionar:  (m: MidiaComemoracao | null) => void;
   onMudou:       () => void;
 }) {
@@ -49,11 +52,11 @@ export function BibliotecaMidia({
 
   const doTipo = midias.filter((m) => m.tipo === tipo);
 
-  async function subir(arquivo: File, trecho?: Trecho | null) {
+  async function subir(arquivo: File, inicio?: number) {
     setEnviando(true);
     try {
       const { ok, erro, dados } = await enviarMidia({
-        empresaId, criadoPor: usuarioId, tipo, arquivo, trecho,
+        empresaId, criadoPor: usuarioId, tipo, arquivo, inicioS: inicio,
       });
       if (!ok || !dados) { toast.error(erro ?? 'Não foi possível enviar.'); return; }
       toast.success(`${tipo === 'gif' ? 'GIF' : 'Som'} salvo na biblioteca.`);
@@ -106,7 +109,8 @@ export function BibliotecaMidia({
         <EditorTrecho
           arquivo={aguardandoTrecho}
           enviando={enviando}
-          onConfirmar={(trecho) => void subir(aguardandoTrecho, trecho)}
+          duracaoComemoracaoS={duracaoComemoracaoS}
+          onConfirmar={(inicio) => void subir(aguardandoTrecho, inicio)}
           onCancelar={() => setAguardandoTrecho(null)}
         />
       )}
@@ -127,21 +131,21 @@ export function BibliotecaMidia({
                     ? <img src={m.url} alt="" className="h-6 w-6 rounded object-cover" />
                     : <Music className="h-3.5 w-3.5 text-muted-foreground" />}
                   <span className="max-w-[110px] truncate">{m.nome}</span>
-                  {/* Trecho salvo: mostra o pedaço que vai tocar. */}
-                  {tipo === 'som' && !!m.trecho_s && (
+                  {/* De onde a música começa, quando não é do zero. */}
+                  {tipo === 'som' && !!m.inicio_s && (
                     <span className="text-[10px] text-muted-foreground">
-                      {formatarSegundos(m.inicio_s ?? 0)} · {Math.round(m.trecho_s)}s
+                      de {formatarSegundos(m.inicio_s)}
                     </span>
                   )}
                   {escolhida && <Check className="h-3 w-3 text-primary" />}
                 </button>
 
                 {tipo === 'som' && (
-                  <button type="button" title="Ouvir o trecho"
-                    onClick={() => tocarArquivoDeSom(
-                      m.url, true,
-                      m.trecho_s ? { inicio: m.inicio_s ?? 0, duracao: m.trecho_s } : null,
-                    )}
+                  <button type="button" title="Ouvir como vai tocar"
+                    onClick={() => tocarArquivoDeSom(m.url, true, {
+                      inicio: m.inicio_s ?? 0,
+                      duracao: duracaoComemoracaoS,
+                    })}
                     className="text-muted-foreground hover:text-foreground">
                     <Play className="h-3 w-3" />
                   </button>

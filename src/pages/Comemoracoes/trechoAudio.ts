@@ -1,64 +1,50 @@
 /**
- * trechoAudio.ts — qual pedaço da música toca na comemoração.
+ * trechoAudio.ts — de onde a música começa.
  *
- * O arquivo vai inteiro para o Storage; o que se guarda é a MARCAÇÃO do trecho
- * (onde começa e quanto dura). Recortar o arquivo de verdade exigiria decodar e
- * re-codificar o áudio no navegador — biblioteca nova, minutos de CPU e perda
- * de qualidade, para um resultado que o `currentTime` entrega de graça.
+ * O líder escolhe só o PONTO DE PARTIDA. Quanto tempo toca é a duração da
+ * comemoração, escolhida no formulário — não faz sentido a música ter uma
+ * duração própria e o card outra: uma das duas ficaria sobrando.
  *
- * Como o Storage responde a Range request, o navegador do operador busca só o
- * pedaço que vai tocar, e não o arquivo todo.
+ * O arquivo vai inteiro para o Storage; o que se guarda é a marcação. Recortar
+ * o áudio de verdade exigiria decodar e re-codificar no navegador, para um
+ * resultado que o `currentTime` do player entrega de graça. Como o Storage
+ * responde a Range request, o navegador busca só o pedaço que vai tocar.
  */
 
-/** Nenhuma comemoração passa de 1 minuto, então o trecho também não. */
+/** Nenhuma comemoração passa de 1 minuto, então o som também não. */
 export const TRECHO_MAX_S = 60;
-/** Abaixo disso não dá tempo de reconhecer a música. */
-export const TRECHO_MIN_S = 1;
-
-export interface Trecho {
-  /** Segundo em que a música começa a tocar. */
-  inicio: number;
-  /** Quantos segundos toca a partir dali. */
-  duracao: number;
-}
+/** Sobra mínima depois do ponto escolhido — abaixo disso não dá para ouvir. */
+export const SOBRA_MIN_S = 1;
 
 function arredondar(n: number): number {
   return Math.round(n * 10) / 10;
 }
 
 /**
- * Prende o trecho dentro do arquivo e dos limites.
+ * Prende o ponto de partida dentro da música.
  *
- * A duração é cortada pelo que sobra depois do início: escolher o segundo 50 de
- * uma música de 60 s não pode gerar um trecho de 1 minuto que ultrapassa o fim
- * do arquivo — tocaria silêncio.
+ * Não deixa escolher um ponto colado no fim: o som teria menos de um segundo
+ * antes de o arquivo acabar, e a comemoração rodaria em silêncio.
  */
-export function limitarTrecho(trecho: Trecho, duracaoTotalS: number): Trecho {
+export function limitarInicio(inicio: number, duracaoTotalS: number): number {
   const total = Number.isFinite(duracaoTotalS) && duracaoTotalS > 0 ? duracaoTotalS : 0;
-  if (!total) return { inicio: 0, duracao: TRECHO_MIN_S };
-
-  const inicio = Math.min(Math.max(0, arredondar(trecho.inicio) || 0), Math.max(0, total - TRECHO_MIN_S));
-  const restante = total - inicio;
-
-  const duracao = Math.min(
-    Math.max(TRECHO_MIN_S, arredondar(trecho.duracao) || TRECHO_MIN_S),
-    Math.min(TRECHO_MAX_S, restante),
-  );
-
-  return { inicio: arredondar(inicio), duracao: arredondar(duracao) };
+  if (!total) return 0;
+  const bruto = Number.isFinite(inicio) ? inicio : 0;
+  return arredondar(Math.min(Math.max(0, bruto), Math.max(0, total - SOBRA_MIN_S)));
 }
 
-/** Trecho inicial sugerido: do começo, até 30 s ou o que a música tiver. */
-export function trechoSugerido(duracaoTotalS: number): Trecho {
-  return limitarTrecho({ inicio: 0, duracao: 30 }, duracaoTotalS);
+/**
+ * Quanto de música ainda existe depois do ponto escolhido.
+ *
+ * Serve para avisar o líder quando a comemoração é mais longa do que o que
+ * sobra da música — aí o fim toca em silêncio.
+ */
+export function sobraApos(inicio: number, duracaoTotalS: number): number {
+  const total = Number.isFinite(duracaoTotalS) && duracaoTotalS > 0 ? duracaoTotalS : 0;
+  return Math.max(0, arredondar(total - limitarInicio(inicio, total)));
 }
 
-/** Instante em que o trecho termina. */
-export function fimDoTrecho(trecho: Trecho): number {
-  return arredondar(trecho.inicio + trecho.duracao);
-}
-
-/** `95` → `1:35`. Para mostrar tempo de música em cima do slider. */
+/** `95` → `1:35`. Para mostrar tempo de música em cima do controle. */
 export function formatarSegundos(s: number): string {
   if (!Number.isFinite(s) || s < 0) return '0:00';
   const total = Math.round(s);

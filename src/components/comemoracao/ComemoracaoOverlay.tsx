@@ -10,7 +10,7 @@
  *   • dá para silenciar, e a preferência fica no navegador de cada um;
  *   • uma comemoração por vez — duas sobrepostas seriam ilegíveis.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -41,6 +41,19 @@ export function ComemoracaoOverlay() {
   const [mudo, setMudo] = useState(() => estaMudo());
   /** Evita tocar duas vezes a mesma comemoração se o efeito reexecutar. */
   const tocadoRef = useRef<string | null>(null);
+  /**
+   * Como parar a música que está tocando.
+   *
+   * Sem isto, fechar o card no × ou trocar de comemoração deixava a música
+   * seguindo sozinha até o arquivo acabar — dez minutos de rádio em cima de
+   * quem está atendendo.
+   */
+  const pararSomRef = useRef<(() => void) | null>(null);
+
+  const pararSom = useCallback(() => {
+    pararSomRef.current?.();
+    pararSomRef.current = null;
+  }, []);
 
   /**
    * Ensaio local do botão "Testar" — nunca vem do banco, nunca vai para os
@@ -51,26 +64,46 @@ export function ComemoracaoOverlay() {
 
   useEffect(() => ouvirTeste((c) => {
     if (timerTesteRef.current) clearTimeout(timerTesteRef.current);
+    pararSom();
     setTeste(c);
     // Ensaio ignora o mudo: quem clicou em Testar pediu para ver E ouvir.
-    if (c.somUrl) tocarArquivoDeSom(c.somUrl, true, c.somTrecho);
-    else tocarSomComemoracao(somValido(c.som), true);
+    if (c.somUrl) {
+      pararSomRef.current = tocarArquivoDeSom(c.somUrl, true, {
+        inicio: c.somInicioS, duracao: c.duracaoS,
+      });
+    } else {
+      tocarSomComemoracao(somValido(c.som), true);
+    }
     timerTesteRef.current = setTimeout(() => setTeste(null), c.duracaoS * 1000);
-  }), []);
+  }), [pararSom]);
 
   useEffect(() => () => {
     if (timerTesteRef.current) clearTimeout(timerTesteRef.current);
+    pararSomRef.current?.();
   }, []);
 
   useEffect(() => {
     if (!atual) { tocadoRef.current = null; return; }
     if (tocadoRef.current === atual.id) return;
     tocadoRef.current = atual.id;
-    // O som enviado pelo líder tem precedência sobre o do catálogo, e toca só
-    // o trecho que ele escolheu.
-    if (atual.som_url) tocarArquivoDeSom(atual.som_url, false, atual.som_trecho);
-    else tocarSomComemoracao(somValido(atual.som));
-  }, [atual]);
+
+    pararSom();
+    // O som enviado pelo líder tem precedência sobre o do catálogo, e toca a
+    // partir do ponto escolhido PELO TEMPO DA COMEMORAÇÃO.
+    if (atual.som_url) {
+      pararSomRef.current = tocarArquivoDeSom(atual.som_url, false, {
+        inicio: atual.som_inicio_s, duracao: atual.duracao_s,
+      });
+    } else {
+      tocarSomComemoracao(somValido(atual.som));
+    }
+  }, [atual, pararSom]);
+
+  // Card saiu da tela (acabou, foi fechado, ou o ensaio terminou): a música
+  // para junto. O `esmaecer` do player evita o corte seco.
+  useEffect(() => {
+    if (!atual && !teste) pararSom();
+  }, [atual, teste, pararSom]);
 
   function alternarMudo() {
     const novo = !mudo;

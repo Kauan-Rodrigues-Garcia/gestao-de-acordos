@@ -23,10 +23,14 @@ export interface MidiaComemoracao {
   caminho:    string;
   criado_por: string | null;
   criado_em:  string;
-  /** Só para som: onde o trecho começa. */
+  /**
+   * Só para som: segundo em que a música começa.
+   *
+   * Quanto tempo toca NÃO fica aqui — é a duração da comemoração. A coluna
+   * `trecho_s` do banco existe da 20260731g e ficou sem uso pelo mesmo motivo:
+   * duas durações concorrentes deixariam uma delas sobrando.
+   */
   inicio_s?:  number;
-  /** Só para som: quanto o trecho dura. null = arquivo inteiro. */
-  trecho_s?:  number | null;
 }
 
 export const BUCKET = 'comemoracoes';
@@ -116,8 +120,8 @@ export async function enviarMidia(params: {
   tipo:      TipoMidia;
   arquivo:   File;
   nome?:     string;
-  /** Trecho escolhido (só som). Ausente = arquivo inteiro. */
-  trecho?:   { inicio: number; duracao: number } | null;
+  /** Segundo em que a música começa (só som). Ausente = do início. */
+  inicioS?:  number;
 }): Promise<Resultado<MidiaComemoracao>> {
   const problema = validarArquivo(params.arquivo, params.tipo);
   if (problema) return { ok: false, erro: problema, dados: null };
@@ -150,11 +154,9 @@ export async function enviarMidia(params: {
       nome:       (params.nome ?? params.arquivo.name).slice(0, 60),
       url:        publicUrl,
       caminho,
-      // Só grava o trecho quando ele existe: assim a coluna continua NULL para
-      // GIF e para som enviado antes da 20260731g, que toca inteiro.
-      ...(params.trecho
-        ? { inicio_s: params.trecho.inicio, trecho_s: params.trecho.duracao }
-        : {}),
+      // `trecho_s` fica NULL de propósito: quanto tempo a música toca é a
+      // duração da comemoração, decidida na hora de exibir.
+      ...(params.inicioS ? { inicio_s: params.inicioS } : {}),
     })
     .select('*')
     .single();

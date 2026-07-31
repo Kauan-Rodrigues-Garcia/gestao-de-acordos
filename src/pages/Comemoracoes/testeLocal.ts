@@ -26,8 +26,8 @@ export interface ComemoracaoTeste {
   som:          SomId;
   gifUrl:       string | null;
   somUrl:       string | null;
-  /** Trecho do som próprio. null = arquivo inteiro. */
-  somTrecho:    { inicio: number; duracao: number } | null;
+  /** Segundo em que a música começa. Toca por `duracaoS`. */
+  somInicioS:   number;
   layout:       LayoutComemoracao;
   duracaoS:     number;
 }

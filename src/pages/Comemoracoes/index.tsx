@@ -156,9 +156,7 @@ export default function Comemoracoes() {
       efeito, som,
       gifUrl: gifEscolhido?.url ?? null,
       somUrl: somEscolhido?.url ?? null,
-      somTrecho: somEscolhido?.trecho_s
-        ? { inicio: Number(somEscolhido.inicio_s ?? 0), duracao: Number(somEscolhido.trecho_s) }
-        : null,
+      somInicioS: Number(somEscolhido?.inicio_s ?? 0),
       layout,
       duracaoS: duracao,
     });
@@ -400,6 +398,7 @@ export default function Comemoracoes() {
                 tipo="som" midias={midias}
                 empresaId={empresaId as string} usuarioId={usuarioId as string}
                 selecionadaId={somEscolhido?.id ?? null}
+                duracaoComemoracaoS={duracao}
                 onSelecionar={setSomEscolhido}
                 onMudou={() => void recarregarMidias()}
               />
