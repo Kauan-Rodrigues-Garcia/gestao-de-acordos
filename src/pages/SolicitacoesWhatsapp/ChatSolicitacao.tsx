@@ -19,6 +19,7 @@ import { cn } from '@/lib/utils';
 import { useOnlineUsers } from '@/providers/PresenceProvider';
 import type { MensagemSolicitacao, PessoaResumo } from '@/services/solicitacoesWhatsapp.service';
 import { primeiroNome, iniciais } from './formatacao';
+import { estaNoFim, viewportDaArea, rolarAoFim, deveRolar } from './scroll-conversa';
 
 function horaCurta(iso: string): string {
   try {
@@ -81,12 +82,61 @@ export function ChatSolicitacao({
 }) {
   const online = useOnlineUsers().onlineIds;
   const [texto, setTexto] = useState('');
-  const fimRef = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLDivElement>(null);
 
-  // Rola para a última mensagem quando chega algo novo ou quando o outro digita.
+  /** O leitor está no fim? Ref, não state: muda a cada pixel de rolagem. */
+  const grudadoRef = useRef(true);
+  /** A conversa ainda não foi posicionada nesta abertura. */
+  const primeiraCargaRef = useRef(true);
+  /**
+   * Id da última mensagem já processada.
+   *
+   * O hook relê a thread inteira a cada evento de realtime — inclusive nos
+   * UPDATEs de "lida", que não trazem mensagem nenhuma. Sem esta comparação, um
+   * simples ✓✓ do outro lado remontaria a lista e reposicionaria a rolagem.
+   */
+  const ultimaVistaRef = useRef<string | null>(null);
+
+  // Acompanha a rolagem manual para saber se o leitor subiu para ver o
+  // histórico. Quem subiu não é arrastado de volta por mensagem dos outros.
   useEffect(() => {
-    fimRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [mensagens.length, digitando]);
+    const viewport = viewportDaArea(areaRef.current);
+    if (!viewport) return;
+    const aoRolar = () => { grudadoRef.current = estaNoFim(viewport); };
+    viewport.addEventListener('scroll', aoRolar, { passive: true });
+    return () => viewport.removeEventListener('scroll', aoRolar);
+  }, []);
+
+  // Posiciona a conversa quando a lista muda.
+  //
+  // `digitando` NÃO entra aqui de propósito: os pontinhos ficam no cabeçalho,
+  // fora da área rolável, e o sinal pisca várias vezes por rajada de digitação
+  // — reagir a ele fazia a tela se mexer sozinha sem nada ter chegado.
+  useEffect(() => {
+    if (loading) return;
+    const viewport = viewportDaArea(areaRef.current);
+    if (!viewport) return;
+
+    const primeiraCarga = primeiraCargaRef.current;
+    const ultima = mensagens[mensagens.length - 1];
+    const idUltima = ultima?.id ?? null;
+
+    // Nada novo chegou: releitura da mesma thread não move a rolagem.
+    if (!primeiraCarga && idUltima === ultimaVistaRef.current) return;
+    ultimaVistaRef.current = idUltima;
+
+    if (!deveRolar({
+      primeiraCarga,
+      ultimaEhMinha: !!ultima && ultima.autor_id === usuarioId,
+      grudadoNoFim:  grudadoRef.current,
+    })) return;
+
+    primeiraCargaRef.current = false;
+    grudadoRef.current = true;
+    // Abrir a conversa já no fim é posição inicial, não movimento: animar isso
+    // seria a tela deslizando sozinha assim que o card abre.
+    rolarAoFim(viewport, primeiraCarga ? 'auto' : 'smooth');
+  }, [mensagens, loading, usuarioId]);
 
   async function enviar() {
     const conteudo = texto.trim();
@@ -157,7 +207,7 @@ export function ChatSolicitacao({
       </div>
 
       {/* Mensagens */}
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea ref={areaRef} className="flex-1 min-h-0">
         <div className="px-3 py-3 space-y-2">
           {loading && (
             <div className="flex justify-center py-6 text-muted-foreground">
@@ -234,8 +284,6 @@ export function ChatSolicitacao({
               </div>
             );
           })}
-
-          <div ref={fimRef} />
         </div>
       </ScrollArea>
 
