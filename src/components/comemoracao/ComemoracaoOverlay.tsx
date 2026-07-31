@@ -53,7 +53,7 @@ export function ComemoracaoOverlay() {
     if (timerTesteRef.current) clearTimeout(timerTesteRef.current);
     setTeste(c);
     // Ensaio ignora o mudo: quem clicou em Testar pediu para ver E ouvir.
-    if (c.somUrl) tocarArquivoDeSom(c.somUrl, true);
+    if (c.somUrl) tocarArquivoDeSom(c.somUrl, true, c.somTrecho);
     else tocarSomComemoracao(somValido(c.som), true);
     timerTesteRef.current = setTimeout(() => setTeste(null), c.duracaoS * 1000);
   }), []);
@@ -66,8 +66,9 @@ export function ComemoracaoOverlay() {
     if (!atual) { tocadoRef.current = null; return; }
     if (tocadoRef.current === atual.id) return;
     tocadoRef.current = atual.id;
-    // O som enviado pelo líder tem precedência sobre o do catálogo.
-    if (atual.som_url) tocarArquivoDeSom(atual.som_url);
+    // O som enviado pelo líder tem precedência sobre o do catálogo, e toca só
+    // o trecho que ele escolheu.
+    if (atual.som_url) tocarArquivoDeSom(atual.som_url, false, atual.som_trecho);
     else tocarSomComemoracao(somValido(atual.som));
   }, [atual]);
 

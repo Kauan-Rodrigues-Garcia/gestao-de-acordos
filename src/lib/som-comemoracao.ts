@@ -148,23 +148,58 @@ export function tocarSomComemoracao(som: SomId, forcar = false): void {
   }
 }
 
+/** Pedaço da música que toca. Ausente = arquivo inteiro. */
+export interface TrechoSom {
+  inicio:  number;
+  duracao: number;
+}
+
 /**
- * Toca um arquivo de som enviado pelo líder.
+ * Toca um arquivo de som enviado pelo líder, ou só o trecho escolhido.
  *
  * Não passa pelo WebAudio: um `<audio>` avulso basta e evita baixar e decodar o
- * arquivo à mão. Sem referência guardada — o elemento morre sozinho quando
- * termina, e comemoração é curta demais para valer um controle de reprodução.
+ * arquivo à mão. Como o Storage responde a Range request, pular para o segundo
+ * 40 não baixa os 40 primeiros.
+ *
+ * @returns função que interrompe a reprodução, para quem precisar cancelar.
  */
-export function tocarArquivoDeSom(url: string, forcar = false): void {
-  if (!forcar && estaMudo()) return;
+export function tocarArquivoDeSom(
+  url: string,
+  forcar = false,
+  trecho?: TrechoSom | null,
+): () => void {
+  if (!forcar && estaMudo()) return () => {};
+
   try {
     const audio = new Audio(url);
     audio.volume = 0.7;
-    // `catch` obrigatório: o navegador rejeita a promessa quando o áudio é
-    // barrado por autoplay, e sem tratar isso vira unhandled rejection.
-    void audio.play().catch(() => {});
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const parar = () => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      try { audio.pause(); } catch { /* já parou */ }
+    };
+
+    if (trecho && trecho.duracao > 0) {
+      // O `seek` só vale depois de o navegador conhecer a duração; antes disso
+      // atribuir `currentTime` é ignorado em silêncio.
+      const aoPoderBuscar = () => {
+        audio.currentTime = trecho.inicio;
+        void audio.play().catch(() => {});
+        timer = setTimeout(parar, trecho.duracao * 1000);
+      };
+      audio.addEventListener('loadedmetadata', aoPoderBuscar, { once: true });
+      audio.load();
+    } else {
+      // `catch` obrigatório: o navegador rejeita a promessa quando o áudio é
+      // barrado por autoplay, e sem tratar isso vira unhandled rejection.
+      void audio.play().catch(() => {});
+    }
+
+    return parar;
   } catch {
     // Sem som. A comemoração segue.
+    return () => {};
   }
 }
 

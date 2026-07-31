@@ -156,6 +156,9 @@ export default function Comemoracoes() {
       efeito, som,
       gifUrl: gifEscolhido?.url ?? null,
       somUrl: somEscolhido?.url ?? null,
+      somTrecho: somEscolhido?.trecho_s
+        ? { inicio: Number(somEscolhido.inicio_s ?? 0), duracao: Number(somEscolhido.trecho_s) }
+        : null,
       layout,
       duracaoS: duracao,
     });

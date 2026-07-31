@@ -40,6 +40,8 @@ export interface Comemoracao {
   /** URLs resolvidas pelo service a partir de `comemoracao_midias`. */
   gif_url:       string | null;
   som_url:       string | null;
+  /** Trecho do som escolhido pelo líder. null = arquivo inteiro. */
+  som_trecho:    { inicio: number; duracao: number } | null;
   layout:        LayoutComemoracao;
   inicia_em:     string;
   duracao_s:     number;
@@ -144,25 +146,37 @@ export async function buscarComemoracoes(
     return { data: [], dbAtiva: true, erro: 'Não foi possível carregar as comemorações.', agoraServidor: null };
   }
 
-  type Linha = Omit<Comemoracao, 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url'> & {
+  type Linha = Omit<
+    Comemoracao,
+    'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_trecho'
+  > & {
     layout?: unknown;
     comemoracao_homenageados?: { operador_id: string }[] | null;
   };
 
-  const urlPorMidia = new Map((midias ?? []).map((m) => [m.id, m.url]));
+  const porId = new Map((midias ?? []).map((m) => [m.id, m]));
+  const somDe = (id: string | null) => (id ? porId.get(id) ?? null : null);
 
-  const lista = ((data ?? []) as unknown as Linha[]).map((linha) => ({
-    ...linha,
-    // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
-    // é saneado antes de chegar à tela.
-    layout: layoutDoJson(linha.layout),
-    gif_url: linha.gif_midia_id ? urlPorMidia.get(linha.gif_midia_id) ?? null : null,
-    som_url: linha.som_midia_id ? urlPorMidia.get(linha.som_midia_id) ?? null : null,
-    homenageados: (linha.comemoracao_homenageados ?? [])
-      .map((h) => pessoas.get(h.operador_id))
-      .filter((p): p is PessoaComemoracao => !!p),
-    autor: linha.criado_por ? pessoas.get(linha.criado_por) ?? null : null,
-  }));
+  const lista = ((data ?? []) as unknown as Linha[]).map((linha) => {
+    const som = somDe(linha.som_midia_id);
+    return {
+      ...linha,
+      // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
+      // é saneado antes de chegar à tela.
+      layout: layoutDoJson(linha.layout),
+      gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
+      som_url: som?.url ?? null,
+      // Sem `trecho_s` a música toca inteira — é o caso de tudo que foi
+      // enviado antes da migration 20260731g.
+      som_trecho: som?.trecho_s
+        ? { inicio: Number(som.inicio_s ?? 0), duracao: Number(som.trecho_s) }
+        : null,
+      homenageados: (linha.comemoracao_homenageados ?? [])
+        .map((h) => pessoas.get(h.operador_id))
+        .filter((p): p is PessoaComemoracao => !!p),
+      autor: linha.criado_por ? pessoas.get(linha.criado_por) ?? null : null,
+    };
+  });
 
   return {
     data: lista,

@@ -907,8 +907,11 @@ export type Database = {
           criado_por: string | null
           empresa_id: string
           id: string
+          // Migration 20260731g — trecho do som. `trecho_s` NULL = inteiro.
+          inicio_s: number
           nome: string
           tipo: string
+          trecho_s: number | null
           url: string
         }
         Insert: {
@@ -917,8 +920,10 @@ export type Database = {
           criado_por?: string | null
           empresa_id: string
           id?: string
+          inicio_s?: number
           nome: string
           tipo: string
+          trecho_s?: number | null
           url: string
         }
         Update: {
@@ -927,8 +932,10 @@ export type Database = {
           criado_por?: string | null
           empresa_id?: string
           id?: string
+          inicio_s?: number
           nome?: string
           tipo?: string
+          trecho_s?: number | null
           url?: string
         }
         Relationships: []

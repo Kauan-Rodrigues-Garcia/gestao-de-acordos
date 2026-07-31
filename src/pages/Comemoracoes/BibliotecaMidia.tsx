@@ -6,15 +6,17 @@
  * enviar que só resultaria em erro.
  */
 import { useRef, useState } from 'react';
-import { Upload, Trash2, Loader2, Play, Check } from 'lucide-react';
+import { Upload, Trash2, Loader2, Play, Check, Music } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { tocarArquivoDeSom } from '@/lib/som-comemoracao';
 import {
-  enviarMidia, excluirMidia, LIMITE_GIF_BYTES, LIMITE_SOM_BYTES,
+  enviarMidia, excluirMidia, validarArquivo, LIMITE_GIF_BYTES, LIMITE_SOM_BYTES,
   type MidiaComemoracao, type TipoMidia,
 } from '@/services/comemoracaoMidias.service';
+import { EditorTrecho } from './EditorTrecho';
+import { formatarSegundos, type Trecho } from './trechoAudio';
 
 const ACEITA: Record<TipoMidia, string> = {
   gif: 'image/gif,image/png,image/webp',
@@ -40,23 +42,40 @@ export function BibliotecaMidia({
   const inputRef = useRef<HTMLInputElement>(null);
   const [enviando, setEnviando] = useState(false);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
+  /** Som aguardando a escolha do trecho — ainda não subiu. */
+  const [aguardandoTrecho, setAguardandoTrecho] = useState<File | null>(null);
 
   if (midias === null) return null;
 
   const doTipo = midias.filter((m) => m.tipo === tipo);
 
-  async function aoEscolherArquivo(arquivo: File | undefined) {
-    if (!arquivo) return;
+  async function subir(arquivo: File, trecho?: Trecho | null) {
     setEnviando(true);
     try {
-      const { ok, erro, dados } = await enviarMidia({ empresaId, criadoPor: usuarioId, tipo, arquivo });
+      const { ok, erro, dados } = await enviarMidia({
+        empresaId, criadoPor: usuarioId, tipo, arquivo, trecho,
+      });
       if (!ok || !dados) { toast.error(erro ?? 'Não foi possível enviar.'); return; }
       toast.success(`${tipo === 'gif' ? 'GIF' : 'Som'} salvo na biblioteca.`);
       onSelecionar(dados);
       onMudou();
+      setAguardandoTrecho(null);
     } finally {
       setEnviando(false);
     }
+  }
+
+  function aoEscolherArquivo(arquivo: File | undefined) {
+    if (!arquivo) return;
+
+    // Valida ANTES de abrir o editor de trecho: não faz sentido escolher o
+    // pedaço de um arquivo que vai ser recusado por tamanho ou formato.
+    const problema = validarArquivo(arquivo, tipo);
+    if (problema) { toast.error(problema); return; }
+
+    // Som passa pelo editor de trecho; GIF sobe direto.
+    if (tipo === 'som') { setAguardandoTrecho(arquivo); return; }
+    void subir(arquivo);
   }
 
   async function aoExcluir(m: MidiaComemoracao) {
@@ -80,8 +99,17 @@ export function BibliotecaMidia({
         type="file"
         accept={ACEITA[tipo]}
         className="hidden"
-        onChange={(e) => { void aoEscolherArquivo(e.target.files?.[0]); e.target.value = ''; }}
+        onChange={(e) => { aoEscolherArquivo(e.target.files?.[0]); e.target.value = ''; }}
       />
+
+      {aguardandoTrecho && (
+        <EditorTrecho
+          arquivo={aguardandoTrecho}
+          enviando={enviando}
+          onConfirmar={(trecho) => void subir(aguardandoTrecho, trecho)}
+          onCancelar={() => setAguardandoTrecho(null)}
+        />
+      )}
 
       {doTipo.length > 0 && (
         <div className="flex flex-wrap gap-1.5">
@@ -97,14 +125,23 @@ export function BibliotecaMidia({
                   className="flex items-center gap-1.5">
                   {tipo === 'gif'
                     ? <img src={m.url} alt="" className="h-6 w-6 rounded object-cover" />
-                    : <Play className="h-3.5 w-3.5 text-muted-foreground" />}
+                    : <Music className="h-3.5 w-3.5 text-muted-foreground" />}
                   <span className="max-w-[110px] truncate">{m.nome}</span>
+                  {/* Trecho salvo: mostra o pedaço que vai tocar. */}
+                  {tipo === 'som' && !!m.trecho_s && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {formatarSegundos(m.inicio_s ?? 0)} · {Math.round(m.trecho_s)}s
+                    </span>
+                  )}
                   {escolhida && <Check className="h-3 w-3 text-primary" />}
                 </button>
 
                 {tipo === 'som' && (
-                  <button type="button" title="Ouvir"
-                    onClick={() => tocarArquivoDeSom(m.url, true)}
+                  <button type="button" title="Ouvir o trecho"
+                    onClick={() => tocarArquivoDeSom(
+                      m.url, true,
+                      m.trecho_s ? { inicio: m.inicio_s ?? 0, duracao: m.trecho_s } : null,
+                    )}
                     className="text-muted-foreground hover:text-foreground">
                     <Play className="h-3 w-3" />
                   </button>

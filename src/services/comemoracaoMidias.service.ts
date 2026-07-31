@@ -23,13 +23,20 @@ export interface MidiaComemoracao {
   caminho:    string;
   criado_por: string | null;
   criado_em:  string;
+  /** Só para som: onde o trecho começa. */
+  inicio_s?:  number;
+  /** Só para som: quanto o trecho dura. null = arquivo inteiro. */
+  trecho_s?:  number | null;
 }
 
 export const BUCKET = 'comemoracoes';
 
-/** Espelha `file_size_limit` do bucket. Ver a migration. */
+/**
+ * Espelha `file_size_limit` do bucket (migration 20260731g). O teto de verdade
+ * é o do bucket; isto existe para dar erro legível antes de gastar a subida.
+ */
 export const LIMITE_GIF_BYTES = 5 * 1024 * 1024;
-export const LIMITE_SOM_BYTES = 1 * 1024 * 1024;
+export const LIMITE_SOM_BYTES = 10 * 1024 * 1024;
 
 const MIME_GIF = ['image/gif', 'image/png', 'image/webp'];
 const MIME_SOM = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
@@ -109,6 +116,8 @@ export async function enviarMidia(params: {
   tipo:      TipoMidia;
   arquivo:   File;
   nome?:     string;
+  /** Trecho escolhido (só som). Ausente = arquivo inteiro. */
+  trecho?:   { inicio: number; duracao: number } | null;
 }): Promise<Resultado<MidiaComemoracao>> {
   const problema = validarArquivo(params.arquivo, params.tipo);
   if (problema) return { ok: false, erro: problema, dados: null };
@@ -141,6 +150,11 @@ export async function enviarMidia(params: {
       nome:       (params.nome ?? params.arquivo.name).slice(0, 60),
       url:        publicUrl,
       caminho,
+      // Só grava o trecho quando ele existe: assim a coluna continua NULL para
+      // GIF e para som enviado antes da 20260731g, que toca inteiro.
+      ...(params.trecho
+        ? { inicio_s: params.trecho.inicio, trecho_s: params.trecho.duracao }
+        : {}),
     })
     .select('*')
     .single();
