@@ -71,10 +71,14 @@ ou
       id: "preventivo",
       name: "MENSAGEM DE PREVENTIVO",
       category: "Preventivo",
-      description: "Lembrete amigável para pagamento agendado.",
+      description: "Contato do dia para auxiliar o cliente sobre o contrato.",
+      // Não afirma que o pagamento está agendado para hoje: o relatório
+      // cadastral não traz data de pagamento, então a frase antiga afirmava um
+      // fato que ninguém conferiu — e o cliente respondia dizendo que não tinha
+      // agendado nada.
       body: `📌*LEMBRETE DE PAGAMENTO*
 
-Olá *{{nome}}*, tudo bem? Só lembrando que o pagamento do seu contrato *{{contrato}}* com a *{{empresa}}* está agendado para *HOJE.*
+Olá *{{nome}}*, tudo bem? Estou entrando em contato hoje para te auxiliar com o seu contrato *{{contrato}}* da *{{empresa}}*.
 
 Para facilitar, caso ainda não tenha realizado o pagamento posso encaminhar o link PIX?
 
@@ -663,6 +667,63 @@ Contrato: *{{contrato}}*
     return `${dddDigits}${numberDigits}`;
   }
 
+  /**
+   * Motivo para tirar a linha da campanha, ou null se ela fica.
+   *
+   * Compartilhada pelos DOIS relatórios. Antes vivia só dentro do de cobrança,
+   * e por isso o cadastral (245) saía sem filtro nenhum: mandava mensagem para
+   * Manutenção, Marília-COFEN, Jornada e para quem já tinha pagado.
+   *
+   * Coluna ausente não exclui ninguém: `reportValue` devolve string vazia e a
+   * regra correspondente não dispara. É o que faz a função servir aos dois
+   * layouts sem exigir que o cadastral tenha todas as colunas do de cobrança.
+   */
+  function motivoExclusao(reportValue) {
+    const group = normalizeHeader(reportValue("Grupo"));
+    const user = normalizeHeader(reportValue("Usuário"));
+    const paymentDate = reportValue("Dt.Pagamento");
+
+    if (group.includes("MANUTENCAO")) {
+      return { statKey: "maintenance", reasonCode: "maintenance", reason: "Setor Manutenção" };
+    }
+    if (group.includes("MARILIA") && group.includes("COFEN")) {
+      return { statKey: "cofen", reasonCode: "cofen", reason: "Setor Marília - COFEN" };
+    }
+    if (group.includes("JORNADA")) {
+      return { statKey: "jornada", reasonCode: "jornada", reason: "Setor Jornada" };
+    }
+    if (group === "COBRANCAGERAL" && user !== "PAGUEPLAY") {
+      return {
+        statKey: "generalUsers",
+        reasonCode: "general-user",
+        reason: "Cobrança Geral: usuário diferente de Pagueplay",
+      };
+    }
+    if (paymentDate !== "") {
+      return { statKey: "paid", reasonCode: "paid", reason: "Data de pagamento preenchida" };
+    }
+
+    const clientName = reportValue("Cliente");
+    const contract = reportValue("Nr.Documento");
+    if (!clientName || !contract) {
+      const missing = [!clientName ? "cliente" : "", !contract ? "contrato" : ""].filter(Boolean).join(" e ");
+      return {
+        statKey: "invalid",
+        reasonCode: "invalid-registration",
+        reason: `Cadastro incompleto: ${missing} ausente${missing.includes(" e ") ? "s" : ""}`,
+      };
+    }
+
+    return null;
+  }
+
+  function estatisticasVazias() {
+    return {
+      total: 0, included: 0, removed: 0,
+      maintenance: 0, cofen: 0, jornada: 0, generalUsers: 0, paid: 0, invalid: 0,
+    };
+  }
+
   function parseCollectionsReport(rows) {
     const headerRowIndex = findCollectionsReportHeaderRow(rows);
     if (headerRowIndex < 0) {
@@ -686,17 +747,7 @@ Contrato: *{{contrato}}*
       "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1",
       "Whats Titular", "Aniversariante", "Operador",
     ];
-    const stats = {
-      total: 0,
-      included: 0,
-      removed: 0,
-      maintenance: 0,
-      cofen: 0,
-      jornada: 0,
-      generalUsers: 0,
-      paid: 0,
-      invalid: 0,
-    };
+    const stats = estatisticasVazias();
     const records = [];
     const excludedRecords = [];
 
@@ -723,45 +774,14 @@ Contrato: *{{contrato}}*
       stats.total += 1;
       const rowNumber = headerRowIndex + relativeIndex + 2;
 
-      const group = normalizeHeader(reportValue(row, "Grupo"));
-      const user = normalizeHeader(reportValue(row, "Usuário"));
-      const paymentDate = reportValue(row, "Dt.Pagamento");
-
-      if (group.includes("MANUTENCAO")) {
-        excludeRecord(row, rowNumber, "maintenance", "maintenance", "Setor Manutenção");
-        return;
-      }
-      if (group.includes("MARILIA") && group.includes("COFEN")) {
-        excludeRecord(row, rowNumber, "cofen", "cofen", "Setor Marília - COFEN");
-        return;
-      }
-      if (group.includes("JORNADA")) {
-        excludeRecord(row, rowNumber, "jornada", "jornada", "Setor Jornada");
-        return;
-      }
-      if (group === "COBRANCAGERAL" && user !== "PAGUEPLAY") {
-        excludeRecord(row, rowNumber, "generalUsers", "general-user", "Cobrança Geral: usuário diferente de Pagueplay");
-        return;
-      }
-      if (paymentDate !== "") {
-        excludeRecord(row, rowNumber, "paid", "paid", "Data de pagamento preenchida");
+      const motivo = motivoExclusao((header) => reportValue(row, header));
+      if (motivo) {
+        excludeRecord(row, rowNumber, motivo.statKey, motivo.reasonCode, motivo.reason);
         return;
       }
 
       const clientName = reportValue(row, "Cliente");
       const contract = reportValue(row, "Nr.Documento");
-      if (!clientName || !contract) {
-        const missing = [!clientName ? "cliente" : "", !contract ? "contrato" : ""].filter(Boolean).join(" e ");
-        excludeRecord(
-          row,
-          rowNumber,
-          "invalid",
-          "invalid-registration",
-          `Cadastro incompleto: ${missing} ausente${missing.includes(" e ") ? "s" : ""}`,
-        );
-        return;
-      }
-
       const openValue = reportValue(row, "Valor Aberto");
       const originalValue = reportValue(row, "Valor Original") || openValue;
       const phone = combineReportPhone(reportValue(row, "DDD 1"), reportValue(row, "Telefone 1"));
@@ -838,10 +858,39 @@ Contrato: *{{contrato}}*
       "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1",
       "Whats Titular", "Aniversariante", "Operador",
     ];
-    const records = rows.slice(headerRowIndex + 1)
+    const stats = estatisticasVazias();
+    const records = [];
+    const excludedRecords = [];
+
+    rows.slice(headerRowIndex + 1)
       .map((row, relativeIndex) => ({ row: row || [], relativeIndex }))
       .filter(({ row }) => row.some((cell) => String(cell ?? "").trim() !== ""))
-      .map(({ row, relativeIndex }) => {
+      .forEach(({ row, relativeIndex }) => {
+        stats.total += 1;
+        const rowNumber = headerRowIndex + relativeIndex + 2;
+
+        // Os mesmos filtros do relatório de cobrança. Faltavam aqui, e o
+        // preventivo saía mandando mensagem para Manutenção, Marília-COFEN,
+        // Jornada e para quem já tinha pagado.
+        const motivo = motivoExclusao((header) => reportValue(row, header));
+        if (motivo) {
+          const originalRow = originalHeaders.map((_, index) => row[index] ?? "");
+          const originalValues = {};
+          originalHeaders.forEach((header, index) => {
+            originalValues[header || `COLUNA_${index + 1}`] = originalRow[index];
+          });
+          excludedRecords.push({
+            rowNumber,
+            reasonCode: motivo.reasonCode,
+            reason: motivo.reason,
+            originalValues,
+            originalRow,
+          });
+          stats[motivo.statKey] += 1;
+          stats.removed += 1;
+          return;
+        }
+
         const phone = combineReportPhone(
           reportValue(row, "DDD 1"),
           reportValue(row, "Telefone 1"),
@@ -866,17 +915,18 @@ Contrato: *{{contrato}}*
         headers.forEach((header) => {
           normalized[normalizeHeader(header)] = values[header];
         });
-        return {
-          rowNumber: headerRowIndex + relativeIndex + 2,
+        records.push({
+          rowNumber,
           values,
           normalized,
           sourceType: "report-245",
           financialDataAvailable: false,
-        };
+        });
+        stats.included += 1;
       });
 
     if (!records.length) {
-      throw new Error("O relatório 245 não contém clientes para a campanha.");
+      throw new Error("O relatório 245 não contém clientes para a campanha depois dos filtros automáticos.");
     }
 
     return {
@@ -888,9 +938,12 @@ Contrato: *{{contrato}}*
       missingHeaders: [],
       sourceType: "report-245",
       reportCode: "245",
-      campaignPurpose: "pagueplay-unpaid-discounts",
+      // Campanha PREVENTIVA, não de descontos: é isso que faz a tela escolher a
+      // mensagem de preventivo sozinha ao importar.
+      campaignPurpose: "preventivo",
       financialDataAvailable: false,
-      excludedRecords: [],
+      filterStats: stats,
+      excludedRecords,
     };
   }
 
@@ -1305,18 +1358,21 @@ Contrato: *{{contrato}}*
     const relatorioSemValoresCampaign = items.length > 0
       && items.every((item) => item.sourceType === "report-245");
     if (relatorioSemValoresCampaign) {
+      // Nenhum campo financeiro, mas COM o WhatsApp — sem o número a campanha
+      // preventiva não tem como ser enviada.
       const headers = [
         "NOME",
         "NR. DOCUMENTO",
         "EMPRESA",
         ...(hasReview ? ["STATUS", "PENDÊNCIAS"] : []),
+        "WHATSAPP",
         "MENSAGEM",
         "ENCAMINHADA POR",
       ];
       const rows = items.map((item) => {
         const row = [item.name, item.contract, item.company];
         if (hasReview) row.push(item.status === "Pronto" ? "" : "Revisar", item.issues.join(", "));
-        row.push(item.message, item.sender);
+        row.push(item.phone, item.message, item.sender);
         return row;
       });
       return `\uFEFF${[headers, ...rows].map((row) => row.map(csvCell).join(";")).join("\r\n")}`;

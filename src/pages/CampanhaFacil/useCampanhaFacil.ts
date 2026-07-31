@@ -49,9 +49,17 @@ function userMessageToTemplate(m: CampanhaMensagem): Template {
   };
 }
 
-// Ao importar um relatório 245 (sem valores), se a mensagem escolhida exigir
-// dados financeiros, cai numa mensagem compatível — igual ao app original.
-const PREFERRED_SEM_VALORES_IDS = ['regularizacao-um-minuto', 'em-dia', 'preventivo', 'negociacao-recebida', 'negociacao-nao-concluida'];
+/**
+ * Ordem de preferência da mensagem ao importar o relatório 245 (cadastral).
+ *
+ * `preventivo` PRIMEIRO: o 245 é a campanha preventiva, e a mensagem certa para
+ * ela é a "MENSAGEM DE PREVENTIVO". Antes o primeiro da lista era
+ * `regularizacao-um-minuto`, então o preventivo só era escolhido se as duas
+ * anteriores tivessem sido excluídas da biblioteca — na prática, nunca.
+ *
+ * As demais são reserva, para o caso de o líder ter apagado a de preventivo.
+ */
+const PREFERRED_SEM_VALORES_IDS = ['preventivo', 'regularizacao-um-minuto', 'em-dia', 'negociacao-recebida', 'negociacao-nao-concluida'];
 
 export function useCampanhaFacil() {
   const { perfil } = useAuth();
@@ -284,15 +292,23 @@ export function useCampanhaFacil() {
         detail: compact ? 'Aplicando a mensagem e os responsáveis, sem criar valores financeiros.' : 'Aplicando responsáveis, descontos e validações.',
       });
 
-      // Relatório cadastral: troca sozinho para uma mensagem sem valores, para
-      // a tela não abrir já num estado que a exportação vai recusar. Daqui em
-      // diante `templatesBloqueados` impede voltar para as que usam valores.
+      // O 245 É a campanha preventiva, então a mensagem de preventivo entra
+      // SEMPRE — não só quando a que estava escolhida usava valores, que era o
+      // comportamento antigo e deixava o líder com "REGULARIZAÇÃO EM 1 MINUTO"
+      // numa campanha que não é de regularização.
+      //
+      // `templatesBloqueados` cuida do resto: daqui em diante nenhuma mensagem
+      // com valores pode ser escolhida.
       let changedTemplate = false;
-      if (compact && CampaignCore.templateRequiresFinancialData(selectedTemplateBody)) {
-        const compatible =
-          PREFERRED_SEM_VALORES_IDS.map((id) => templates.find((t) => t.id === id)).find((t) => t && !CampaignCore.templateRequiresFinancialData(corpoDoTemplate(t)))
-          || templates.find((t) => !CampaignCore.templateRequiresFinancialData(corpoDoTemplate(t)));
-        if (compatible) { setTemplateId(compatible.id); changedTemplate = true; }
+      if (compact) {
+        const semValores = (t: Template) => !CampaignCore.templateRequiresFinancialData(corpoDoTemplate(t));
+        const escolhida =
+          PREFERRED_SEM_VALORES_IDS.map((id) => templates.find((t) => t.id === id)).find((t) => t && semValores(t))
+          || templates.find(semValores);
+        if (escolhida && escolhida.id !== templateId) {
+          setTemplateId(escolhida.id);
+          changedTemplate = true;
+        }
       }
 
       setParsed(result);
@@ -305,7 +321,7 @@ export function useCampanhaFacil() {
 
       toast.success(
         compact
-          ? `${result.records.length.toLocaleString('pt-BR')} registros do relatório 245 preparados sem cálculos financeiros.${changedTemplate ? ' Uma mensagem compatível foi selecionada.' : ''}`
+          ? `${result.records.length.toLocaleString('pt-BR')} registros do relatório 245 prontos para o preventivo${(result.filterStats?.removed ?? 0) > 0 ? ` · ${result.filterStats!.removed.toLocaleString('pt-BR')} removidos pelos filtros` : ''}.${changedTemplate ? ' Mensagem de preventivo selecionada.' : ''}`
           : result.sourceType === 'collections-report'
             ? `${result.records.length.toLocaleString('pt-BR')} cobranças prontas após os filtros automáticos.`
             : `${result.records.length.toLocaleString('pt-BR')} contatos processados.`,
@@ -317,7 +333,7 @@ export function useCampanhaFacil() {
       setIsProcessing(false);
       setTimeout(() => setImportProgress(null), 400);
     }
-  }, [isProcessing, selectedTemplateBody, templates, corpoDoTemplate]);
+  }, [isProcessing, templates, corpoDoTemplate, templateId]);
 
   const removeMailing = useCallback(() => {
     setParsed(null);

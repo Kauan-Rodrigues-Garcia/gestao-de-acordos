@@ -46,11 +46,15 @@
       (item) => item.financialDataAvailable === false || item.sourceType === "report-245",
     );
     const headers = compactReport
+      // Sem nenhum campo financeiro — mas COM o WhatsApp, montado por DDD 1 +
+      // Telefone 1. Ele faltava aqui, e sem o número a planilha do preventivo
+      // não servia para enviar nada.
       ? [
         "NOME",
         "NR. DOCUMENTO",
         "EMPRESA",
         ...(hasReview ? ["STATUS", "PENDÊNCIAS"] : []),
+        "WHATSAPP",
         "MENSAGEM",
         "ENCAMINHADA POR",
       ]
@@ -73,7 +77,7 @@
         "ENCAMINHADA POR",
       ];
     const widths = compactReport
-      ? [31, 18, 23, ...(hasReview ? [13, 29] : []), 86, 25]
+      ? [31, 18, 23, ...(hasReview ? [13, 29] : []), 19, 86, 25]
       : [
         31, 16, 15, 23, 13, 22, 16, 19, 15, 15, 23, 20,
         ...(hasReview ? [13, 29] : []),
@@ -99,6 +103,8 @@
           cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.issues.join(", "), 2));
           columnIndex += 1;
         }
+        cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.phone, 2));
+        columnIndex += 1;
         cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.message, 7));
         columnIndex += 1;
         cells.push(inlineCell(`${columnLetter(columnIndex)}${rowNumber}`, item.sender, 8));

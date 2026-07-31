@@ -212,7 +212,7 @@ export default function CampanhaFacil() {
                     <p className="truncate text-sm font-semibold">{cf.fileName || 'mailing'}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       {cf.relatorioSemValores
-                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} registros · relatório 245 · sem valores`
+                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} registros · preventivo · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidos`
                         : cf.parsed.sourceType === 'collections-report'
                           ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidas`
                           : `${cf.parsed.records.length.toLocaleString('pt-BR')} contatos · ${cf.parsed.encoding} · ${cf.parsed.headers.length} colunas`}
@@ -224,7 +224,9 @@ export default function CampanhaFacil() {
                 </div>
               )}
 
-              {cf.parsed?.sourceType === 'collections-report' && cf.parsed.filterStats && (
+              {/* Vale para os DOIS relatórios: os filtros passaram a ser os
+                  mesmos, e o cadastral também precisa dizer o que tirou. */}
+              {cf.parsed?.filterStats && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
                   <p className="font-semibold text-amber-600 dark:text-amber-400">Relatório filtrado automaticamente</p>
                   <p className="mt-0.5 text-muted-foreground">
@@ -780,7 +782,7 @@ function StatCard({ icon, value, label, tone }: { icon: React.ReactNode; value: 
 
 function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignItem | null; relatorioSemValores: boolean; onCopy: () => void }) {
   const initials = item?.name?.split(/\s+/).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || 'C';
-  const waEnabled = !!item && !relatorioSemValores && CampaignCore.isValidPhone(item.phone) && !!item.sender;
+  const waEnabled = !!item && CampaignCore.isValidPhone(item.phone) && !!item.sender;
   return (
     <Card className="h-fit">
       <CardContent className="space-y-3 p-4">
@@ -800,7 +802,7 @@ function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignI
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{item?.name || 'Cliente'}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {item ? (relatorioSemValores ? `Nr. documento ${item.contract || '—'}` : item.phone || 'WhatsApp não informado') : 'WhatsApp'}
+                {item ? (item.phone || 'WhatsApp não informado') : 'WhatsApp'}
               </p>
             </div>
           </div>
@@ -816,22 +818,23 @@ function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignI
           <span className="text-right font-medium">{item?.company || '—'}</span>
         </div>
 
-        <div className={cn('grid gap-2', relatorioSemValores ? 'grid-cols-1' : 'grid-cols-2')}>
+        {/* O preventivo também abre o WhatsApp: o número existe (DDD 1 +
+            Telefone 1) e é justamente o que a campanha precisa. Estava
+            escondido só porque o relatório não tem valores. */}
+        <div className="grid grid-cols-2 gap-2">
           <Button variant="outline" size="sm" className="gap-1.5" disabled={!item?.sender} onClick={onCopy}>
             <Copy className="h-3.5 w-3.5" /> Copiar
           </Button>
-          {!relatorioSemValores && (
-            waEnabled ? (
-              <Button asChild size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700">
-                <a href={`https://wa.me/${item!.whatsAppPhone}?text=${encodeURIComponent(item!.message)}`} target="_blank" rel="noopener noreferrer">
-                  <Send className="h-3.5 w-3.5" /> Abrir WhatsApp
-                </a>
-              </Button>
-            ) : (
-              <Button size="sm" className="gap-1.5" disabled variant="outline">
-                <Lock className="h-3.5 w-3.5" /> WhatsApp
-              </Button>
-            )
+          {waEnabled ? (
+            <Button asChild size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700">
+              <a href={`https://wa.me/${item!.whatsAppPhone}?text=${encodeURIComponent(item!.message)}`} target="_blank" rel="noopener noreferrer">
+                <Send className="h-3.5 w-3.5" /> Abrir WhatsApp
+              </a>
+            </Button>
+          ) : (
+            <Button size="sm" className="gap-1.5" disabled variant="outline">
+              <Lock className="h-3.5 w-3.5" /> WhatsApp
+            </Button>
           )}
         </div>
       </CardContent>
