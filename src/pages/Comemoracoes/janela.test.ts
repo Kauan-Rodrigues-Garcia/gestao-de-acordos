@@ -7,7 +7,9 @@
 import { describe, it, expect } from 'vitest';
 import {
   estaNoAr, fimMs, inicioMs, msAteComecar, proximaDaFila, vaiComecar,
-  desvioDoServidor, HORIZONTE_TIMER_MS, type Exibivel,
+  desvioDoServidor, estaAgendada, jaPassou, validarAgendamento,
+  HORIZONTE_TIMER_MS, MAX_DIAS_AGENDAMENTO, TOLERANCIA_PASSADO_MS,
+  type Exibivel,
 } from './janela';
 
 const T0 = new Date('2026-07-31T14:00:00.000Z').getTime();
@@ -118,6 +120,58 @@ describe('proximaDaFila', () => {
 
   it('cancelada não entra', () => {
     expect(proximaDaFila([c({ cancelada_em: 'x' })], T0 + 1000, new Set())).toBeNull();
+  });
+});
+
+describe('estaAgendada / jaPassou', () => {
+  it('futura está agendada', () => {
+    expect(estaAgendada(c({ inicia_em: new Date(T0 + 60_000).toISOString() }), T0)).toBe(true);
+  });
+
+  it('no ar não é agendada', () => {
+    expect(estaAgendada(c(), T0 + 1_000)).toBe(false);
+  });
+
+  it('cancelada some da agenda', () => {
+    const futura = c({ inicia_em: new Date(T0 + 60_000).toISOString(), cancelada_em: 'x' });
+    expect(estaAgendada(futura, T0)).toBe(false);
+  });
+
+  it('jaPassou só depois do fim', () => {
+    expect(jaPassou(c(), T0 + 19_999)).toBe(false);
+    expect(jaPassou(c(), T0 + 20_000)).toBe(true);
+  });
+});
+
+describe('validarAgendamento', () => {
+  it('daqui a uma hora está bom', () => {
+    expect(validarAgendamento(new Date(T0 + 3_600_000).toISOString(), T0)).toBeNull();
+  });
+
+  it('recusa o passado', () => {
+    const ontem = new Date(T0 - 24 * 3_600_000).toISOString();
+    expect(validarAgendamento(ontem, T0)).toMatch(/passado/i);
+  });
+
+  it('aceita o minuto corrente, pela tolerância', () => {
+    // Escolher "agora" e levar 20 s preenchendo o resto não pode ser recusado.
+    expect(validarAgendamento(new Date(T0 - 30_000).toISOString(), T0)).toBeNull();
+    expect(validarAgendamento(new Date(T0 - TOLERANCIA_PASSADO_MS - 1_000).toISOString(), T0))
+      .toMatch(/passado/i);
+  });
+
+  it('recusa longe demais', () => {
+    const longe = new Date(T0 + (MAX_DIAS_AGENDAMENTO + 1) * 24 * 3_600_000).toISOString();
+    expect(validarAgendamento(longe, T0)).toMatch(/dias/i);
+  });
+
+  it('aceita o último dia permitido', () => {
+    const limite = new Date(T0 + MAX_DIAS_AGENDAMENTO * 24 * 3_600_000 - 1_000).toISOString();
+    expect(validarAgendamento(limite, T0)).toBeNull();
+  });
+
+  it('data inválida tem mensagem própria', () => {
+    expect(validarAgendamento('qualquer coisa', T0)).toMatch(/válidas/i);
   });
 });
 

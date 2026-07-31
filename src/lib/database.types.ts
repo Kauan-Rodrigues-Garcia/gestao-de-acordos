@@ -846,12 +846,14 @@ export type Database = {
           duracao_s: number
           efeito: string
           empresa_id: string
+          gif_midia_id: string | null
           id: string
           inicia_em: string
           layout: Json
           mensagem: string | null
           setores_alvo: string[]
           som: string
+          som_midia_id: string | null
           titulo: string
         }
         Insert: {
@@ -861,12 +863,14 @@ export type Database = {
           duracao_s?: number
           efeito?: string
           empresa_id: string
+          gif_midia_id?: string | null
           id?: string
           inicia_em?: string
           layout?: Json
           mensagem?: string | null
           setores_alvo?: string[]
           som?: string
+          som_midia_id?: string | null
           titulo: string
         }
         Update: {
@@ -876,12 +880,14 @@ export type Database = {
           duracao_s?: number
           efeito?: string
           empresa_id?: string
+          gif_midia_id?: string | null
           id?: string
           inicia_em?: string
           layout?: Json
           mensagem?: string | null
           setores_alvo?: string[]
           som?: string
+          som_midia_id?: string | null
           titulo?: string
         }
         Relationships: []
@@ -890,6 +896,41 @@ export type Database = {
         Row: { comemoracao_id: string; operador_id: string }
         Insert: { comemoracao_id: string; operador_id: string }
         Update: { comemoracao_id?: string; operador_id?: string }
+        Relationships: []
+      }
+      // Migration 20260731f — GIFs e sons enviados pelo líder. O catálogo
+      // padrão vive em código e NÃO passa por aqui.
+      comemoracao_midias: {
+        Row: {
+          caminho: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          id: string
+          nome: string
+          tipo: string
+          url: string
+        }
+        Insert: {
+          caminho: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          id?: string
+          nome: string
+          tipo: string
+          url: string
+        }
+        Update: {
+          caminho?: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          id?: string
+          nome?: string
+          tipo?: string
+          url?: string
+        }
         Relationships: []
       }
       comemoracao_parabens: {

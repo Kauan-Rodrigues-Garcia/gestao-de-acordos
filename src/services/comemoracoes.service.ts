@@ -12,6 +12,11 @@
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 import type { EfeitoId, SomId } from '@/pages/Comemoracoes/catalogo';
+import { validarAgendamento } from '@/pages/Comemoracoes/janela';
+import {
+  layoutDoJson, layoutParaJson, ehLayoutPadrao, type LayoutComemoracao,
+} from '@/pages/Comemoracoes/layout';
+import { listarMidias } from './comemoracaoMidias.service';
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -29,6 +34,13 @@ export interface Comemoracao {
   mensagem:      string | null;
   efeito:        EfeitoId;
   som:           SomId;
+  /** Mídia própria (migration 20260731f). NULL = usa o catálogo. */
+  gif_midia_id:  string | null;
+  som_midia_id:  string | null;
+  /** URLs resolvidas pelo service a partir de `comemoracao_midias`. */
+  gif_url:       string | null;
+  som_url:       string | null;
+  layout:        LayoutComemoracao;
   inicia_em:     string;
   duracao_s:     number;
   setores_alvo:  string[];
@@ -55,6 +67,10 @@ export interface NovaComemoracao {
   operadorIds: string[];
   /** Ausente = agora. */
   iniciaEm?:   string;
+  /** Mídia própria. Ausente = catálogo. */
+  gifMidiaId?: string | null;
+  somMidiaId?: string | null;
+  layout?:     LayoutComemoracao;
 }
 
 interface Resultado<T = null> {
@@ -107,7 +123,7 @@ export async function buscarComemoracoes(
 ): Promise<ListaComemoracoes> {
   const desde = new Date(Date.now() - desdeMs).toISOString();
 
-  const [{ data, error }, pessoas] = await Promise.all([
+  const [{ data, error }, pessoas, midias] = await Promise.all([
     supabase
       .from('comemoracoes')
       .select('*, comemoracao_homenageados(operador_id)')
@@ -115,6 +131,9 @@ export async function buscarComemoracoes(
       .gte('inicia_em', desde)
       .order('inicia_em', { ascending: false }),
     buscarPessoas(empresaId),
+    // null = migration da fase 2 ainda não aplicada; sem mídia própria, o
+    // catálogo cobre tudo e a tela não muda.
+    listarMidias(empresaId),
   ]);
 
   if (error) {
@@ -125,12 +144,20 @@ export async function buscarComemoracoes(
     return { data: [], dbAtiva: true, erro: 'Não foi possível carregar as comemorações.', agoraServidor: null };
   }
 
-  type Linha = Omit<Comemoracao, 'homenageados' | 'autor'> & {
+  type Linha = Omit<Comemoracao, 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url'> & {
+    layout?: unknown;
     comemoracao_homenageados?: { operador_id: string }[] | null;
   };
 
+  const urlPorMidia = new Map((midias ?? []).map((m) => [m.id, m.url]));
+
   const lista = ((data ?? []) as unknown as Linha[]).map((linha) => ({
     ...linha,
+    // O layout vem de uma coluna JSONB: pode ter qualquer coisa dentro, então
+    // é saneado antes de chegar à tela.
+    layout: layoutDoJson(linha.layout),
+    gif_url: linha.gif_midia_id ? urlPorMidia.get(linha.gif_midia_id) ?? null : null,
+    som_url: linha.som_midia_id ? urlPorMidia.get(linha.som_midia_id) ?? null : null,
     homenageados: (linha.comemoracao_homenageados ?? [])
       .map((h) => pessoas.get(h.operador_id))
       .filter((p): p is PessoaComemoracao => !!p),
@@ -160,6 +187,12 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
   if (p.duracaoS < DURACAO_MIN_S || p.duracaoS > DURACAO_MAX_S) {
     return { ok: false, erro: `A duração vai de ${DURACAO_MIN_S} a ${DURACAO_MAX_S} segundos.`, dados: null };
   }
+  if (p.iniciaEm) {
+    // Validado aqui também, e não só na tela: a data pode chegar de um
+    // formulário que ficou aberto meia hora antes do clique.
+    const erroData = validarAgendamento(p.iniciaEm, Date.now());
+    if (erroData) return { ok: false, erro: erroData, dados: null };
+  }
 
   const { data, error } = await supabase
     .from('comemoracoes')
@@ -172,6 +205,11 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       som:        p.som,
       duracao_s:  p.duracaoS,
       ...(p.iniciaEm ? { inicia_em: p.iniciaEm } : {}),
+      // Layout de fábrica não vira JSON no banco: a coluna fica `{}` e a tela
+      // cai no padrão, que é o que uma comemoração antiga também faz.
+      ...(p.layout && !ehLayoutPadrao(p.layout) ? { layout: layoutParaJson(p.layout) } : {}),
+      ...(p.gifMidiaId ? { gif_midia_id: p.gifMidiaId } : {}),
+      ...(p.somMidiaId ? { som_midia_id: p.somMidiaId } : {}),
     })
     .select('id')
     .single();

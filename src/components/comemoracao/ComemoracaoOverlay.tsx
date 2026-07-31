@@ -16,8 +16,9 @@ import { Volume2, VolumeX } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useComemoracoes, useComemoracaoNoAr } from '@/hooks/useComemoracoes';
-import { tocarSomComemoracao, estaMudo, definirMudo } from '@/lib/som-comemoracao';
+import { tocarSomComemoracao, tocarArquivoDeSom, estaMudo, definirMudo } from '@/lib/som-comemoracao';
 import { efeitoValido, somValido } from '@/pages/Comemoracoes/catalogo';
+import { ouvirTeste, type ComemoracaoTeste } from '@/pages/Comemoracoes/testeLocal';
 import { CardComemoracao } from './CardComemoracao';
 import { EfeitoComemoracao } from './EfeitoComemoracao';
 
@@ -41,11 +42,33 @@ export function ComemoracaoOverlay() {
   /** Evita tocar duas vezes a mesma comemoração se o efeito reexecutar. */
   const tocadoRef = useRef<string | null>(null);
 
+  /**
+   * Ensaio local do botão "Testar" — nunca vem do banco, nunca vai para os
+   * outros. Ver `testeLocal.ts`.
+   */
+  const [teste, setTeste] = useState<ComemoracaoTeste | null>(null);
+  const timerTesteRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => ouvirTeste((c) => {
+    if (timerTesteRef.current) clearTimeout(timerTesteRef.current);
+    setTeste(c);
+    // Ensaio ignora o mudo: quem clicou em Testar pediu para ver E ouvir.
+    if (c.somUrl) tocarArquivoDeSom(c.somUrl, true);
+    else tocarSomComemoracao(somValido(c.som), true);
+    timerTesteRef.current = setTimeout(() => setTeste(null), c.duracaoS * 1000);
+  }), []);
+
+  useEffect(() => () => {
+    if (timerTesteRef.current) clearTimeout(timerTesteRef.current);
+  }, []);
+
   useEffect(() => {
     if (!atual) { tocadoRef.current = null; return; }
     if (tocadoRef.current === atual.id) return;
     tocadoRef.current = atual.id;
-    tocarSomComemoracao(somValido(atual.som));
+    // O som enviado pelo líder tem precedência sobre o do catálogo.
+    if (atual.som_url) tocarArquivoDeSom(atual.som_url);
+    else tocarSomComemoracao(somValido(atual.som));
   }, [atual]);
 
   function alternarMudo() {
@@ -54,11 +77,41 @@ export function ComemoracaoOverlay() {
     definirMudo(novo);
   }
 
+  // O ensaio tem precedência: quem clicou em Testar quer ver o ensaio, não uma
+  // comemoração de verdade que entrou no meio.
+  const emCena = teste
+    ? {
+        chave:    'teste',
+        titulo:   teste.titulo,
+        mensagem: teste.mensagem,
+        homenageados: teste.homenageados,
+        gifUrl:   teste.gifUrl,
+        layout:   teste.layout,
+        efeito:   efeitoValido(teste.efeito),
+        duracaoS: teste.duracaoS,
+        fechar:   () => setTeste(null),
+        ehTeste:  true,
+      }
+    : atual
+      ? {
+          chave:    atual.id,
+          titulo:   atual.titulo,
+          mensagem: atual.mensagem,
+          homenageados: atual.homenageados,
+          gifUrl:   atual.gif_url,
+          layout:   atual.layout,
+          efeito:   efeitoValido(atual.efeito),
+          duracaoS: atual.duracao_s,
+          fechar,
+          ehTeste:  false,
+        }
+      : null;
+
   return (
     <AnimatePresence>
-      {atual && (
+      {emCena && (
         <motion.div
-          key={atual.id}
+          key={emCena.chave}
           // O container inteiro ignora o mouse: sem isto a comemoração de um
           // minuto travaria quem está tabulando embaixo dela.
           className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex justify-center px-3 pt-4"
@@ -69,15 +122,24 @@ export function ComemoracaoOverlay() {
           role="status"
           aria-live="polite"
         >
-          <EfeitoComemoracao efeito={efeitoValido(atual.efeito)} id={atual.id} />
+          <EfeitoComemoracao efeito={emCena.efeito} id={emCena.chave} />
 
           <div className="relative w-full max-w-lg">
+            {emCena.ehTeste && (
+              // Deixa claro que ninguém mais está vendo isto.
+              <span className="pointer-events-none absolute -top-2 left-1/2 z-20 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow">
+                Teste · só você vê
+              </span>
+            )}
+
             <CardComemoracao
-              titulo={atual.titulo}
-              mensagem={atual.mensagem}
-              homenageados={atual.homenageados}
-              tempoTotalS={atual.duracao_s}
-              onFechar={fechar}
+              titulo={emCena.titulo}
+              mensagem={emCena.mensagem}
+              homenageados={emCena.homenageados}
+              gifUrl={emCena.gifUrl}
+              layout={emCena.layout}
+              tempoTotalS={emCena.duracaoS}
+              onFechar={emCena.fechar}
             />
 
             <button

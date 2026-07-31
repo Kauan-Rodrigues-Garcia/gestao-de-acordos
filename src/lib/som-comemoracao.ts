@@ -148,6 +148,26 @@ export function tocarSomComemoracao(som: SomId, forcar = false): void {
   }
 }
 
+/**
+ * Toca um arquivo de som enviado pelo líder.
+ *
+ * Não passa pelo WebAudio: um `<audio>` avulso basta e evita baixar e decodar o
+ * arquivo à mão. Sem referência guardada — o elemento morre sozinho quando
+ * termina, e comemoração é curta demais para valer um controle de reprodução.
+ */
+export function tocarArquivoDeSom(url: string, forcar = false): void {
+  if (!forcar && estaMudo()) return;
+  try {
+    const audio = new Audio(url);
+    audio.volume = 0.7;
+    // `catch` obrigatório: o navegador rejeita a promessa quando o áudio é
+    // barrado por autoplay, e sem tratar isso vira unhandled rejection.
+    void audio.play().catch(() => {});
+  } catch {
+    // Sem som. A comemoração segue.
+  }
+}
+
 /** Só para teste: descarta o contexto guardado entre casos. */
 export function __resetarContextoDeAudio(): void {
   contexto = null;

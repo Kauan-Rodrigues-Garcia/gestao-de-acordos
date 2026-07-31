@@ -70,6 +70,50 @@ export function proximaDaFila<T extends Exibivel>(
   return candidatas[0] ?? null;
 }
 
+/** Ainda não começou — está na agenda. */
+export function estaAgendada(c: Exibivel, agora: number): boolean {
+  if (c.cancelada_em) return false;
+  const inicio = inicioMs(c);
+  return !!inicio && inicio > agora;
+}
+
+/** Já começou e terminou. */
+export function jaPassou(c: Exibivel, agora: number): boolean {
+  const inicio = inicioMs(c);
+  return !!inicio && agora >= fimMs(c);
+}
+
+// ── Agendamento ──────────────────────────────────────────────────────────────
+
+/**
+ * Até onde no futuro dá para agendar.
+ *
+ * Agendar para daqui a três meses é esquecer, não agendar: ninguém lembra de
+ * conferir, e o time que bateu a meta já mudou de composição.
+ */
+export const MAX_DIAS_AGENDAMENTO = 7;
+
+/**
+ * Folga para o horário "agora" não ser recusado pelo tempo do clique.
+ *
+ * Sem ela, escolher o minuto corrente e levar 20 s preenchendo o resto do
+ * formulário faria o envio falhar com "não dá para agendar no passado".
+ */
+export const TOLERANCIA_PASSADO_MS = 2 * 60_000;
+
+/** Mensagem de erro do agendamento, ou null se estiver válido. */
+export function validarAgendamento(iso: string, agora: number): string | null {
+  const quando = new Date(iso).getTime();
+  if (!Number.isFinite(quando)) return 'Escolha uma data e hora válidas.';
+  if (quando < agora - TOLERANCIA_PASSADO_MS) {
+    return 'Não dá para agendar no passado.';
+  }
+  if (quando > agora + MAX_DIAS_AGENDAMENTO * 24 * 3_600_000) {
+    return `O agendamento vai até ${MAX_DIAS_AGENDAMENTO} dias à frente.`;
+  }
+  return null;
+}
+
 /**
  * Desvio entre o relógio do banco e o do navegador, em ms.
  *
