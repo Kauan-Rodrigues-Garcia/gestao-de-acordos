@@ -55,7 +55,12 @@ export interface ParsedResult {
   encoding: string;
   missingHeaders: string[];
   originalHeaders?: string[];
-  sourceType?: 'mailing' | 'collections-report' | 'report-245';
+  /**
+   * `report-245` = .xls de ligações, campanha PREVENTIVA (ignora os valores que
+   * o arquivo traz). `report-247` = mailing com colunas de valor, campanha de
+   * desconto. `mailing` = CSV de contatos sem valores.
+   */
+  sourceType?: 'mailing' | 'report-247' | 'report-245';
   reportCode?: string;
   campaignPurpose?: string;
   financialDataAvailable?: boolean;
@@ -117,8 +122,6 @@ export interface CampaignCoreApi {
   detectDelimiter(text: string): string;
   decodeBytes(input: ArrayBuffer | Uint8Array): { text: string; encoding: string };
   parseMailing(input: string | ArrayBuffer | Uint8Array): ParsedResult;
-  isCollectionsReportRows(rows: unknown[][]): boolean;
-  parseCollectionsReport(rows: unknown[][]): ParsedResult;
   isReport245Rows(rows: unknown[][]): boolean;
   parseReport245(rows: unknown[][]): ParsedResult;
   parseNumber(value: unknown): number;

@@ -205,16 +205,16 @@ export default function CampanhaFacil() {
               {cf.parsed && !cf.importProgress && (
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
                   <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
-                    {/* 245 é o cadastral (sem valores); 247 é o de cobrança. */}
-                    {cf.relatorioSemValores ? '245' : cf.parsed.sourceType === 'collections-report' ? '247' : 'CSV'}
+                    {/* 245 = .xls de ligações, preventivo; 247 = .csv com valores. */}
+                    {cf.relatorioSemValores ? '245' : cf.parsed.sourceType === 'report-247' ? '247' : 'CSV'}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{cf.fileName || 'mailing'}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       {cf.relatorioSemValores
-                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} registros · preventivo · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidos`
-                        : cf.parsed.sourceType === 'collections-report'
-                          ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidas`
+                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} clientes · preventivo · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidos`
+                        : cf.parsed.sourceType === 'report-247'
+                          ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · com valores · ${cf.parsed.encoding}`
                           : `${cf.parsed.records.length.toLocaleString('pt-BR')} contatos · ${cf.parsed.encoding} · ${cf.parsed.headers.length} colunas`}
                     </p>
                   </div>

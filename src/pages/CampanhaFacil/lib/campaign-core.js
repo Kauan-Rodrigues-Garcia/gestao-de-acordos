@@ -588,16 +588,39 @@ Contrato: *{{contrato}}*
     const required = ["NOME", "CONTRATOS", "VALOR", "VALORABERTO", "VALORATUALIZADO"];
     const missingHeaders = required.filter((header) => !normalizedHeaders.includes(header));
 
+    // Mailing com as colunas de valor É o relatório 247 — a campanha de
+    // desconto. O arquivo real vem em .csv separado por pipe e em Windows-1252,
+    // e os dois já são detectados acima. Sem as colunas de valor continua sendo
+    // um CSV de contatos qualquer.
+    const ehRelatorio247 = temColunasFinanceiras(headers);
+
     return {
       headers,
       records,
       delimiter,
       encoding: decoded.encoding,
       missingHeaders,
+      ...(ehRelatorio247
+        ? { sourceType: "report-247", reportCode: "247", campaignPurpose: "desconto", financialDataAvailable: true }
+        : {}),
     };
   }
 
-  const COLLECTIONS_REPORT_REQUIRED_HEADERS = Object.freeze([
+  /**
+   * Cabeçalho do relatório 245 — o arquivo .xls de ligações.
+   *
+   * Conferido contra o arquivo real da operação (31/07/2026), cujas colunas são
+   * CodGrupo, Grupo, SubGrupo, Usuário, Dt.Ult.Ligação, ..., Dt.Pagamento,
+   * Cód.Cliente, Cliente, ..., Nr.Documento, Empresa, Valor Aberto, ...,
+   * DDD 1, Telefone 1, ...
+   *
+   * ATENÇÃO: o 245 TEM colunas de valor. Ele não é um cadastro "sem valores" —
+   * é a campanha preventiva, que IGNORA os valores que o arquivo traz. Houve
+   * um detector que exigia a AUSÊNCIA de colunas financeiras para reconhecer o
+   * 245; nenhum arquivo real batia com ele, e o 245 de verdade caía no parser
+   * de cobrança e saía com desconto calculado em cima de valor zerado.
+   */
+  const REPORT_245_REQUIRED_HEADERS = Object.freeze([
     "GRUPO",
     "USUARIO",
     "DTPAGAMENTO",
@@ -610,53 +633,34 @@ Contrato: *{{contrato}}*
     "TELEFONE1",
   ]);
 
-  const REPORT_245_REQUIRED_HEADERS = Object.freeze([
-    "CLIENTE",
-    "NRDOCUMENTO",
-    "EMPRESA",
-  ]);
-
-  // O relatório 245 é propositalmente um cadastro sem valores. Excluir
-  // qualquer cabeçalho financeiro da detecção impede que o mailing comum ou
-  // o relatório 247 sejam classificados como 245 por compartilharem nomes.
-  const REPORT_245_DISALLOWED_HEADERS = Object.freeze([
-    "VALOR",
+  /**
+   * Colunas de valor do mailing 247 (.csv). A presença delas é o que separa o
+   * 247 — campanha COM valores — de um CSV de contatos qualquer.
+   */
+  const REPORT_247_FINANCIAL_HEADERS = Object.freeze([
     "VALORABERTO",
     "VALORATUALIZADO",
-    "VALORORIGINAL",
-    "VALORRECEBIDO",
-    "PARCELASEMATRASO",
   ]);
 
-  function findCollectionsReportHeaderRow(rows) {
+  function findReport245HeaderRow(rows) {
     const limit = Math.min(Array.isArray(rows) ? rows.length : 0, 20);
     for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
       const normalized = (rows[rowIndex] || []).map(normalizeHeader);
-      if (COLLECTIONS_REPORT_REQUIRED_HEADERS.every((header) => normalized.includes(header))) {
+      if (REPORT_245_REQUIRED_HEADERS.every((header) => normalized.includes(header))) {
         return rowIndex;
       }
     }
     return -1;
   }
 
-  function isCollectionsReportRows(rows) {
-    return findCollectionsReportHeaderRow(rows) >= 0;
-  }
-
-  function findReport245HeaderRow(rows) {
-    const limit = Math.min(Array.isArray(rows) ? rows.length : 0, 20);
-    for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
-      const normalized = (rows[rowIndex] || []).map(normalizeHeader).filter(Boolean);
-      const headerSet = new Set(normalized);
-      const hasRequiredHeaders = REPORT_245_REQUIRED_HEADERS.every((header) => headerSet.has(header));
-      const hasFinancialHeaders = REPORT_245_DISALLOWED_HEADERS.some((header) => headerSet.has(header));
-      if (hasRequiredHeaders && !hasFinancialHeaders) return rowIndex;
-    }
-    return -1;
-  }
-
   function isReport245Rows(rows) {
     return findReport245HeaderRow(rows) >= 0;
+  }
+
+  /** O mailing traz as colunas de valor do 247? */
+  function temColunasFinanceiras(headers) {
+    const conjunto = new Set((headers || []).map(normalizeHeader));
+    return REPORT_247_FINANCIAL_HEADERS.every((header) => conjunto.has(header));
   }
 
   function combineReportPhone(ddd, number) {
@@ -724,10 +728,19 @@ Contrato: *{{contrato}}*
     };
   }
 
-  function parseCollectionsReport(rows) {
-    const headerRowIndex = findCollectionsReportHeaderRow(rows);
+  /**
+   * Relatório 245 (.xls) — a campanha PREVENTIVA.
+   *
+   * O arquivo traz Valor Aberto, Valor Original e Valor Recebido, mas a
+   * campanha preventiva IGNORA tudo isso: ela só avisa o cliente sobre o
+   * contrato. Por isso os campos financeiros saem vazios e o registro nasce
+   * com `financialDataAvailable: false` — que é o que impede a tela de
+   * oferecer uma mensagem de desconto e mandar "R$ 0,00" para o cliente.
+   */
+  function parseReport245(rows) {
+    const headerRowIndex = findReport245HeaderRow(rows);
     if (headerRowIndex < 0) {
-      throw new Error("Este Excel não tem as colunas esperadas do relatório de cobranças.");
+      throw new Error("Este Excel não tem as colunas esperadas do relatório 245.");
     }
 
     const originalHeaders = (rows[headerRowIndex] || []).map((header) => String(header ?? "").trim());
@@ -782,24 +795,24 @@ Contrato: *{{contrato}}*
 
       const clientName = reportValue(row, "Cliente");
       const contract = reportValue(row, "Nr.Documento");
-      const openValue = reportValue(row, "Valor Aberto");
-      const originalValue = reportValue(row, "Valor Original") || openValue;
       const phone = combineReportPhone(reportValue(row, "DDD 1"), reportValue(row, "Telefone 1"));
+      // Só o que o preventivo usa: nome, contrato, empresa e WhatsApp. Os
+      // valores do arquivo ficam de fora — a campanha não fala de dinheiro.
       const values = {
         "Código": reportValue(row, "Cód.Cliente"),
         "Nome": clientName,
         "CPF": "",
         "Contratos": contract,
-        "Parcelas em atraso": "1",
-        "Protesto": "0",
-        "Valor": originalValue,
-        "Valor Aberto": openValue,
-        "Valor Atualizado": openValue,
+        "Parcelas em atraso": "",
+        "Protesto": "",
+        "Valor": "",
+        "Valor Aberto": "",
+        "Valor Atualizado": "",
         "Tp. Venda": reportValue(row, "Empresa"),
         "1": phone,
         "Whats Titular": phone,
         "Aniversariante": "",
-        "Operador": reportValue(row, "Usuário"),
+        "Operador": "",
       };
       const normalized = {};
       headers.forEach((header) => {
@@ -809,124 +822,14 @@ Contrato: *{{contrato}}*
         rowNumber,
         values,
         normalized,
+        sourceType: "report-245",
+        financialDataAvailable: false,
       });
       stats.included += 1;
     });
 
     if (!records.length) {
-      throw new Error("Nenhuma cobrança ficou disponível depois dos filtros automáticos.");
-    }
-
-    return {
-      headers,
-      originalHeaders,
-      records,
-      delimiter: null,
-      encoding: "Excel",
-      missingHeaders: [],
-      sourceType: "collections-report",
-      filterStats: stats,
-      excludedRecords,
-    };
-  }
-
-  function parseReport245(rows) {
-    const headerRowIndex = findReport245HeaderRow(rows);
-    if (headerRowIndex < 0) {
-      throw new Error("Este arquivo não tem as colunas esperadas do relatório 245: Cliente, Nr.Documento e Empresa.");
-    }
-
-    const originalHeaders = (rows[headerRowIndex] || []).map((header) => String(header ?? "").trim());
-    const headerIndexes = new Map();
-    originalHeaders.forEach((header, index) => {
-      const normalized = normalizeHeader(header);
-      if (normalized && !headerIndexes.has(normalized)) headerIndexes.set(normalized, index);
-    });
-
-    const reportValue = (row, ...headers) => {
-      for (const header of headers) {
-        const index = headerIndexes.get(normalizeHeader(header));
-        if (index === undefined) continue;
-        const value = String(row[index] ?? "").trim();
-        if (value !== "") return value;
-      }
-      return "";
-    };
-
-    const headers = [
-      "Código", "Nome", "CPF", "Contratos", "Parcelas em atraso", "Protesto",
-      "Valor", "Valor Aberto", "Valor Atualizado", "Tp. Venda", "1",
-      "Whats Titular", "Aniversariante", "Operador",
-    ];
-    const stats = estatisticasVazias();
-    const records = [];
-    const excludedRecords = [];
-
-    rows.slice(headerRowIndex + 1)
-      .map((row, relativeIndex) => ({ row: row || [], relativeIndex }))
-      .filter(({ row }) => row.some((cell) => String(cell ?? "").trim() !== ""))
-      .forEach(({ row, relativeIndex }) => {
-        stats.total += 1;
-        const rowNumber = headerRowIndex + relativeIndex + 2;
-
-        // Os mesmos filtros do relatório de cobrança. Faltavam aqui, e o
-        // preventivo saía mandando mensagem para Manutenção, Marília-COFEN,
-        // Jornada e para quem já tinha pagado.
-        const motivo = motivoExclusao((header) => reportValue(row, header));
-        if (motivo) {
-          const originalRow = originalHeaders.map((_, index) => row[index] ?? "");
-          const originalValues = {};
-          originalHeaders.forEach((header, index) => {
-            originalValues[header || `COLUNA_${index + 1}`] = originalRow[index];
-          });
-          excludedRecords.push({
-            rowNumber,
-            reasonCode: motivo.reasonCode,
-            reason: motivo.reason,
-            originalValues,
-            originalRow,
-          });
-          stats[motivo.statKey] += 1;
-          stats.removed += 1;
-          return;
-        }
-
-        const phone = combineReportPhone(
-          reportValue(row, "DDD 1"),
-          reportValue(row, "Telefone 1"),
-        );
-        const values = {
-          "Código": reportValue(row, "Cód.Cliente", "Código"),
-          "Nome": reportValue(row, "Cliente"),
-          "CPF": reportValue(row, "CPF"),
-          "Contratos": reportValue(row, "Nr.Documento"),
-          "Parcelas em atraso": "",
-          "Protesto": "",
-          "Valor": "",
-          "Valor Aberto": "",
-          "Valor Atualizado": "",
-          "Tp. Venda": reportValue(row, "Empresa"),
-          "1": phone,
-          "Whats Titular": phone,
-          "Aniversariante": "",
-          "Operador": "",
-        };
-        const normalized = {};
-        headers.forEach((header) => {
-          normalized[normalizeHeader(header)] = values[header];
-        });
-        records.push({
-          rowNumber,
-          values,
-          normalized,
-          sourceType: "report-245",
-          financialDataAvailable: false,
-        });
-        stats.included += 1;
-      });
-
-    if (!records.length) {
-      throw new Error("O relatório 245 não contém clientes para a campanha depois dos filtros automáticos.");
+      throw new Error("Nenhum cliente ficou disponível depois dos filtros automáticos.");
     }
 
     return {
@@ -938,8 +841,8 @@ Contrato: *{{contrato}}*
       missingHeaders: [],
       sourceType: "report-245",
       reportCode: "245",
-      // Campanha PREVENTIVA, não de descontos: é isso que faz a tela escolher a
-      // mensagem de preventivo sozinha ao importar.
+      // Campanha PREVENTIVA: é isto que faz a tela escolher a mensagem de
+      // preventivo sozinha e travar as que usam valores.
       campaignPurpose: "preventivo",
       financialDataAvailable: false,
       filterStats: stats,
@@ -1420,8 +1323,6 @@ Contrato: *{{contrato}}*
     detectDelimiter,
     decodeBytes,
     parseMailing,
-    isCollectionsReportRows,
-    parseCollectionsReport,
     isReport245Rows,
     parseReport245,
     parseNumber,

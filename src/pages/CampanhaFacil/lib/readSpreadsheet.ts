@@ -21,7 +21,9 @@ export function parseSpreadsheetReport(buffer: ArrayBuffer, onProgress?: Progres
   const workbook = xlsxRead(buffer, { type: 'array', cellDates: false });
   progress(46, 'Localizando os dados', 'Conferindo as colunas necessárias.');
 
-  let collectionsSheet: { sheetName: string; rows: unknown[][] } | null = null;
+  // Em Excel só entra o 245 — o 247 é .csv e vai por `parseMailing`. A aba do
+  // arquivo real se chama "Informações", mas o nome não é usado: o que vale é
+  // achar a linha de cabeçalho com as colunas esperadas.
   let report245Sheet: { sheetName: string; rows: unknown[][] } | null = null;
 
   for (const candidateSheetName of workbook.SheetNames) {
@@ -34,37 +36,22 @@ export function parseSpreadsheetReport(buffer: ArrayBuffer, onProgress?: Progres
     if (rows.length > 100001) {
       throw new Error('O relatório ultrapassa o limite de 100 mil linhas. Divida o arquivo antes de continuar.');
     }
-    if (CampaignCore.isCollectionsReportRows(rows)) {
-      collectionsSheet = { sheetName: candidateSheetName, rows };
+    if (CampaignCore.isReport245Rows(rows)) {
+      report245Sheet = { sheetName: candidateSheetName, rows };
       break;
     }
-    if (!report245Sheet && CampaignCore.isReport245Rows(rows)) {
-      report245Sheet = { sheetName: candidateSheetName, rows };
-    }
   }
 
-  // Os dois relatórios compartilham cabeçalhos (Cliente, Nr.Documento, Empresa).
-  // Por isso todas as abas são varridas antes de aceitar o candidato cadastral
-  // encontrado primeiro: o de cobrança, que traz valores, tem prioridade.
-  let parsed: ParsedResult | null = null;
-  let sheetName = '';
-  if (collectionsSheet) {
-    progress(68, 'Aplicando os filtros', 'Removendo setores, pagamentos e linhas fora da campanha.');
-    parsed = CampaignCore.parseCollectionsReport(collectionsSheet.rows);
-    sheetName = collectionsSheet.sheetName;
-    progress(90, 'Preparando a campanha', 'Organizando contatos e telefones válidos.');
-  } else if (report245Sheet) {
-    progress(68, 'Validando o relatório 245', 'Conferindo Cliente, Nr.Documento e Empresa sem exigir valores financeiros.');
-    parsed = CampaignCore.parseReport245(report245Sheet.rows);
-    sheetName = report245Sheet.sheetName;
-    progress(90, 'Preparando a campanha sem valores', 'Organizando clientes, documentos e empresas.');
-  }
-
-  if (!parsed) {
+  if (!report245Sheet) {
     throw new Error(
-      'Nenhuma aba compatível foi encontrada. Use o relatório 247 (com valores) ou o 245 (cadastral), com Cliente, Nr.Documento e Empresa.',
+      'Nenhuma aba compatível foi encontrada. Em Excel, use o relatório 245 (com Grupo, Usuário, Dt.Pagamento, Cliente, Nr.Documento, Empresa e DDD 1/Telefone 1). O relatório 247 é importado em CSV.',
     );
   }
+
+  progress(68, 'Aplicando os filtros', 'Removendo setores, pagamentos e linhas fora da campanha.');
+  const parsed: ParsedResult = CampaignCore.parseReport245(report245Sheet.rows);
+  progress(90, 'Preparando o preventivo', 'Organizando clientes, contratos e telefones.');
+  const sheetName = report245Sheet.sheetName;
 
   parsed.sheetName = sheetName;
   return parsed;

@@ -322,8 +322,8 @@ export function useCampanhaFacil() {
       toast.success(
         compact
           ? `${result.records.length.toLocaleString('pt-BR')} registros do relatório 245 prontos para o preventivo${(result.filterStats?.removed ?? 0) > 0 ? ` · ${result.filterStats!.removed.toLocaleString('pt-BR')} removidos pelos filtros` : ''}.${changedTemplate ? ' Mensagem de preventivo selecionada.' : ''}`
-          : result.sourceType === 'collections-report'
-            ? `${result.records.length.toLocaleString('pt-BR')} cobranças prontas após os filtros automáticos.`
+          : result.sourceType === 'report-247'
+            ? `${result.records.length.toLocaleString('pt-BR')} cobranças do relatório 247 prontas, com valores e descontos.`
             : `${result.records.length.toLocaleString('pt-BR')} contatos processados.`,
       );
     } catch (error) {
