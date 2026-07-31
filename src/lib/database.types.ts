@@ -834,6 +834,70 @@ export type Database = {
         }
         Relationships: []
       }
+      // Migration 20260731e — comemoração de meta (popup estilo alerta de live).
+      // `setores_alvo` é preenchido por trigger a partir dos homenageados, e
+      // congela o público na criação. `efeito`/`som` são ids do catálogo em
+      // código (src/pages/Comemoracoes/catalogo.ts).
+      comemoracoes: {
+        Row: {
+          cancelada_em: string | null
+          criado_em: string
+          criado_por: string | null
+          duracao_s: number
+          efeito: string
+          empresa_id: string
+          id: string
+          inicia_em: string
+          layout: Json
+          mensagem: string | null
+          setores_alvo: string[]
+          som: string
+          titulo: string
+        }
+        Insert: {
+          cancelada_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_s?: number
+          efeito?: string
+          empresa_id: string
+          id?: string
+          inicia_em?: string
+          layout?: Json
+          mensagem?: string | null
+          setores_alvo?: string[]
+          som?: string
+          titulo: string
+        }
+        Update: {
+          cancelada_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_s?: number
+          efeito?: string
+          empresa_id?: string
+          id?: string
+          inicia_em?: string
+          layout?: Json
+          mensagem?: string | null
+          setores_alvo?: string[]
+          som?: string
+          titulo?: string
+        }
+        Relationships: []
+      }
+      comemoracao_homenageados: {
+        Row: { comemoracao_id: string; operador_id: string }
+        Insert: { comemoracao_id: string; operador_id: string }
+        Update: { comemoracao_id?: string; operador_id?: string }
+        Relationships: []
+      }
+      comemoracao_parabens: {
+        Row: { comemoracao_id: string; criado_em: string; frase: string; usuario_id: string }
+        Insert: { comemoracao_id: string; criado_em?: string; frase: string; usuario_id: string }
+        Update: { comemoracao_id?: string; criado_em?: string; frase?: string; usuario_id?: string }
+        Relationships: []
+      }
       // Migration 20260731d — até onde CADA pessoa leu CADA conversa.
       // PK composta (solicitacao_id, usuario_id). Substituiu, para efeito de
       // "não lidas", o carimbo único `mensagens.lida_em`, que sumia para todos

@@ -51,6 +51,7 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
+const Comemoracoes      = lazy(() => import('@/pages/Comemoracoes'));
 
 function PageLoader() {
   return (
@@ -254,6 +255,11 @@ export default function App() {
                   cargo dentro da página; em teste, só admin/super_admin) */}
               <Route path={ROUTE_PATHS.SOLICITACOES_WHATSAPP} element={
                 <LayoutWrapper><SolicitacoesWpp /></LayoutWrapper>
+              } />
+
+              {/* Comemoração de meta (gate por cargo dentro da página) */}
+              <Route path={ROUTE_PATHS.COMEMORACOES} element={
+                <LayoutWrapper><Comemoracoes /></LayoutWrapper>
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}

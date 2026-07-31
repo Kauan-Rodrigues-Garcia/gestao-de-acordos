@@ -22,6 +22,7 @@ export const ROUTE_PATHS = {
   OUVIDORIA: '/ouvidoria',
   CAMPANHA_FACIL: '/campanha-facil',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
+  COMEMORACOES: '/comemoracoes',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {
