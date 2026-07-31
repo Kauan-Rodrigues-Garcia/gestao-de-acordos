@@ -21,6 +21,7 @@ import type { Notificacao } from '@/lib/supabase';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
 import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
+import { tocarSomNotificacao } from '@/lib/som-notificacao';
 import { cn } from '@/lib/utils';
 
 /** Quanto tempo cada card fica na tela. */
@@ -67,6 +68,9 @@ export function NotificacaoToast() {
   // ── Relógio do card ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!atual) return;
+    // Um som por card, não por notificação: a fila garante que duas chegando
+    // juntas toquem separadas, em vez de virar um estalo só.
+    tocarSomNotificacao();
     timerRef.current = setTimeout(() => setAtual(null), DURACAO_TOAST_MS);
     return () => {
       if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }

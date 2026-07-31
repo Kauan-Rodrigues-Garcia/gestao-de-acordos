@@ -10,7 +10,11 @@ import type { Notificacao } from '@/lib/supabase';
 
 const navigateMock = vi.fn();
 const marcarLidaMock = vi.fn(() => Promise.resolve());
+const somMock = vi.fn();
 
+// A arrow adia a leitura de `somMock`: `vi.mock` é içado para o topo do arquivo
+// e passar a referência direta a leria antes da inicialização.
+vi.mock('@/lib/som-notificacao', () => ({ tocarSomNotificacao: () => somMock() }));
 vi.mock('react-router-dom', () => ({ useNavigate: () => navigateMock }));
 vi.mock('@/lib/tenant-config', () => ({ useTenant: () => ({ isPaguePlay: true }) }));
 
@@ -55,6 +59,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   navigateMock.mockClear();
   marcarLidaMock.mockClear();
+  somMock.mockClear();
   estado = { notificacoes: [] };
 });
 afterEach(() => { vi.useRealTimers(); });
@@ -113,6 +118,29 @@ describe('NotificacaoToast', () => {
 
     expect(navigateMock).toHaveBeenCalledWith('/analitico?aba=diario');
     expect(marcarLidaMock).toHaveBeenCalledWith('n1');
+  });
+
+  it('toca o som ao abrir o card', () => {
+    const { rerender } = renderizar();
+    // Nada apareceu ainda: o histórico da montagem não pode tocar nada.
+    expect(somMock).not.toHaveBeenCalled();
+
+    estado = { notificacoes: [notif({ id: 'n1', titulo: 'Com som' })] };
+    act(() => { rerender(React.createElement(NotificacaoToast)); });
+    expect(somMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('duas na fila tocam uma vez cada, não um estalo só', () => {
+    const { rerender } = renderizar();
+    estado = { notificacoes: [
+      notif({ id: 'n2', titulo: 'Segunda' }),
+      notif({ id: 'n1', titulo: 'Primeira' }),
+    ] };
+    act(() => { rerender(React.createElement(NotificacaoToast)); });
+    expect(somMock).toHaveBeenCalledTimes(1);
+
+    act(() => { vi.advanceTimersByTime(DURACAO_TOAST_MS + 50); });
+    expect(somMock).toHaveBeenCalledTimes(2);
   });
 
   it('notificação já lida não vira card', () => {
