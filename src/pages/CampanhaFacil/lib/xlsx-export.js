@@ -43,7 +43,7 @@
   function buildCampaignSheet(items) {
     const hasReview = items.some((item) => item.status !== "Pronto" || item.issues.length > 0);
     const compactReport = items.length > 0 && items.every(
-      (item) => item.financialDataAvailable === false || item.sourceType === "report-247",
+      (item) => item.financialDataAvailable === false || item.sourceType === "report-245",
     );
     const headers = compactReport
       ? [

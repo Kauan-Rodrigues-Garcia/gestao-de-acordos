@@ -205,13 +205,14 @@ export default function CampanhaFacil() {
               {cf.parsed && !cf.importProgress && (
                 <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-3">
                   <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md bg-primary/10 text-[10px] font-bold text-primary">
-                    {cf.isReport247 ? '247' : cf.parsed.sourceType === 'collections-report' ? '245' : 'CSV'}
+                    {/* 245 é o cadastral (sem valores); 247 é o de cobrança. */}
+                    {cf.relatorioSemValores ? '245' : cf.parsed.sourceType === 'collections-report' ? '247' : 'CSV'}
                   </span>
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold">{cf.fileName || 'mailing'}</p>
                     <p className="truncate text-xs text-muted-foreground">
-                      {cf.isReport247
-                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} registros · relatório 247 · sem valores`
+                      {cf.relatorioSemValores
+                        ? `${cf.parsed.records.length.toLocaleString('pt-BR')} registros · relatório 245 · sem valores`
                         : cf.parsed.sourceType === 'collections-report'
                           ? `${cf.parsed.records.length.toLocaleString('pt-BR')} cobranças · ${(cf.parsed.filterStats?.removed ?? 0).toLocaleString('pt-BR')} removidas`
                           : `${cf.parsed.records.length.toLocaleString('pt-BR')} contatos · ${cf.parsed.encoding} · ${cf.parsed.headers.length} colunas`}
@@ -243,19 +244,51 @@ export default function CampanhaFacil() {
           <Card>
             <CardContent className="space-y-3 p-4">
               <StepTitle n={2} title="Escolher mensagem" subtitle="Modelo aplicado a todos os contatos" />
+              {/* Relatório cadastral não tem valores: as mensagens que citam
+                  parcela, quitação ou cartão sairiam com buracos no lugar dos
+                  números, então ficam travadas na lista. */}
+              {cf.relatorioSemValores && cf.templatesBloqueados.size > 0 && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
+                  <p className="font-semibold text-amber-600 dark:text-amber-400">
+                    Relatório sem valores
+                  </p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    {cf.templatesBloqueados.size === 1
+                      ? '1 mensagem que usa valores está indisponível.'
+                      : `${cf.templatesBloqueados.size} mensagens que usam valores estão indisponíveis.`}
+                    {' '}Este arquivo não traz parcela, quitação nem plano anual.
+                  </p>
+                </div>
+              )}
               <Select value={cf.templateId} onValueChange={cf.setTemplateId}>
                 <SelectTrigger><SelectValue placeholder="Selecione uma mensagem" /></SelectTrigger>
                 <SelectContent>
                   {categorias.map((cat) => (
                     <SelectGroup key={cat}>
                       <SelectLabel>{cat}</SelectLabel>
-                      {cf.templates.filter((t) => t.category === cat).map((t) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                      ))}
+                      {cf.templates.filter((t) => t.category === cat).map((t) => {
+                        const bloqueada = cf.templatesBloqueados.has(t.id);
+                        return (
+                          <SelectItem key={t.id} value={t.id} disabled={bloqueada}>
+                            {t.name}
+                            {bloqueada && (
+                              <span className="ml-2 text-[10px] text-muted-foreground">
+                                usa valores
+                              </span>
+                            )}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectGroup>
                   ))}
                 </SelectContent>
               </Select>
+              {cf.mensagemBloqueada && (
+                <p className="text-xs text-destructive">
+                  A mensagem selecionada usa valores que este relatório não tem.
+                  Escolha uma mensagem sem valores para poder exportar.
+                </p>
+              )}
               <div className="flex items-center gap-2">
                 <Badge variant="secondary">{cf.selectedTemplate.category}</Badge>
                 <p className="text-xs text-muted-foreground">{cf.selectedTemplate.description}</p>
@@ -307,8 +340,8 @@ export default function CampanhaFacil() {
             </CardContent>
           </Card>
 
-          {/* Descontos (ocultos no relatório 247) */}
-          {!cf.isReport247 && (
+          {/* Descontos (ocultos no relatório 245) */}
+          {!cf.relatorioSemValores && (
             <Card>
               <CardContent className="space-y-3 p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold">
@@ -419,7 +452,7 @@ export default function CampanhaFacil() {
 
               {/* Estatísticas */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <StatCard icon={<Users className="h-4 w-4" />} value={cf.stats.total} label={cf.isReport247 ? 'registros importados' : 'contatos importados'} tone="blue" />
+                <StatCard icon={<Users className="h-4 w-4" />} value={cf.stats.total} label={cf.relatorioSemValores ? 'registros importados' : 'contatos importados'} tone="blue" />
                 {cf.stats.review > 0 && (
                   <StatCard icon={<AlertTriangle className="h-4 w-4" />} value={cf.stats.review} label="precisam de revisão" tone="amber" />
                 )}
@@ -432,7 +465,7 @@ export default function CampanhaFacil() {
                   <CardContent className="p-4">
                     <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                       <div>
-                        <h3 className="text-sm font-semibold">{cf.isReport247 ? 'Registros da campanha' : 'Contatos da campanha'}</h3>
+                        <h3 className="text-sm font-semibold">{cf.relatorioSemValores ? 'Registros da campanha' : 'Contatos da campanha'}</h3>
                         <p className="text-xs text-muted-foreground">{cf.filtered.length.toLocaleString('pt-BR')} {cf.filtered.length === 1 ? 'registro' : 'registros'}</p>
                       </div>
                       <div className="flex items-center gap-2">
@@ -441,7 +474,7 @@ export default function CampanhaFacil() {
                           <Input
                             value={cf.search}
                             onChange={(e) => cf.setSearch(e.target.value)}
-                            placeholder={cf.isReport247 ? 'Buscar nome, documento…' : 'Buscar nome, CPF, telefone…'}
+                            placeholder={cf.relatorioSemValores ? 'Buscar nome, documento…' : 'Buscar nome, CPF, telefone…'}
                             className="h-8 w-44 pl-8 text-xs"
                           />
                         </div>
@@ -462,8 +495,8 @@ export default function CampanhaFacil() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Cliente</TableHead>
-                            {cf.isReport247 ? <TableHead>Nr. documento</TableHead> : <TableHead>WhatsApp</TableHead>}
-                            {cf.isReport247 ? <TableHead>Empresa</TableHead> : <TableHead>Quitação</TableHead>}
+                            {cf.relatorioSemValores ? <TableHead>Nr. documento</TableHead> : <TableHead>WhatsApp</TableHead>}
+                            {cf.relatorioSemValores ? <TableHead>Empresa</TableHead> : <TableHead>Quitação</TableHead>}
                             <TableHead>Encaminhada por</TableHead>
                             {cf.stats.review > 0 && <TableHead>Revisão</TableHead>}
                             <TableHead className="w-9" />
@@ -478,9 +511,9 @@ export default function CampanhaFacil() {
                             >
                               <TableCell>
                                 <div className="font-medium">{item.name || 'Nome não informado'}</div>
-                                {!cf.isReport247 && <div className="text-xs text-muted-foreground">Contrato {item.contract || '—'}</div>}
+                                {!cf.relatorioSemValores && <div className="text-xs text-muted-foreground">Contrato {item.contract || '—'}</div>}
                               </TableCell>
-                              {cf.isReport247 ? (
+                              {cf.relatorioSemValores ? (
                                 <TableCell className="font-medium">{item.contract || 'Não informado'}</TableCell>
                               ) : (
                                 <TableCell>
@@ -488,7 +521,7 @@ export default function CampanhaFacil() {
                                   <div className="text-xs text-muted-foreground">{item.company}</div>
                                 </TableCell>
                               )}
-                              {cf.isReport247 ? (
+                              {cf.relatorioSemValores ? (
                                 <TableCell>{item.company || 'Não informada'}</TableCell>
                               ) : (
                                 <TableCell className="text-right font-medium tabular-nums">{CampaignCore.formatCurrency(item.settlement)}</TableCell>
@@ -539,7 +572,7 @@ export default function CampanhaFacil() {
                 </Card>
 
                 {/* Prévia */}
-                <MessagePreview item={cf.selectedItem} isReport247={cf.isReport247} onCopy={() => cf.copyMessage(cf.selectedItem)} />
+                <MessagePreview item={cf.selectedItem} relatorioSemValores={cf.relatorioSemValores} onCopy={() => cf.copyMessage(cf.selectedItem)} />
               </div>
             </div>
           )}
@@ -745,9 +778,9 @@ function StatCard({ icon, value, label, tone }: { icon: React.ReactNode; value: 
   );
 }
 
-function MessagePreview({ item, isReport247, onCopy }: { item: CampaignItem | null; isReport247: boolean; onCopy: () => void }) {
+function MessagePreview({ item, relatorioSemValores, onCopy }: { item: CampaignItem | null; relatorioSemValores: boolean; onCopy: () => void }) {
   const initials = item?.name?.split(/\s+/).slice(0, 2).map((p) => p[0] || '').join('').toUpperCase() || 'C';
-  const waEnabled = !!item && !isReport247 && CampaignCore.isValidPhone(item.phone) && !!item.sender;
+  const waEnabled = !!item && !relatorioSemValores && CampaignCore.isValidPhone(item.phone) && !!item.sender;
   return (
     <Card className="h-fit">
       <CardContent className="space-y-3 p-4">
@@ -755,7 +788,7 @@ function MessagePreview({ item, isReport247, onCopy }: { item: CampaignItem | nu
           <div>
             <h3 className="text-sm font-semibold">Prévia da mensagem</h3>
             <p className="text-xs text-muted-foreground">
-              {item ? `Linha ${item.rowNumber} do ${isReport247 ? 'relatório 247' : 'mailing'}` : 'Selecione um contato'}
+              {item ? `Linha ${item.rowNumber} do ${relatorioSemValores ? 'relatório 245' : 'mailing'}` : 'Selecione um contato'}
             </p>
           </div>
           <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -767,7 +800,7 @@ function MessagePreview({ item, isReport247, onCopy }: { item: CampaignItem | nu
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{item?.name || 'Cliente'}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {item ? (isReport247 ? `Nr. documento ${item.contract || '—'}` : item.phone || 'WhatsApp não informado') : 'WhatsApp'}
+                {item ? (relatorioSemValores ? `Nr. documento ${item.contract || '—'}` : item.phone || 'WhatsApp não informado') : 'WhatsApp'}
               </p>
             </div>
           </div>
@@ -783,11 +816,11 @@ function MessagePreview({ item, isReport247, onCopy }: { item: CampaignItem | nu
           <span className="text-right font-medium">{item?.company || '—'}</span>
         </div>
 
-        <div className={cn('grid gap-2', isReport247 ? 'grid-cols-1' : 'grid-cols-2')}>
+        <div className={cn('grid gap-2', relatorioSemValores ? 'grid-cols-1' : 'grid-cols-2')}>
           <Button variant="outline" size="sm" className="gap-1.5" disabled={!item?.sender} onClick={onCopy}>
             <Copy className="h-3.5 w-3.5" /> Copiar
           </Button>
-          {!isReport247 && (
+          {!relatorioSemValores && (
             waEnabled ? (
               <Button asChild size="sm" className="gap-1.5 bg-emerald-600 text-white hover:bg-emerald-700">
                 <a href={`https://wa.me/${item!.whatsAppPhone}?text=${encodeURIComponent(item!.message)}`} target="_blank" rel="noopener noreferrer">

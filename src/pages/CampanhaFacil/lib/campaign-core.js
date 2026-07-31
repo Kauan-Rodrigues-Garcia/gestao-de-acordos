@@ -556,9 +556,9 @@ Contrato: *{{contrato}}*
     const parsed = parseDelimited(decoded.text, delimiter);
     if (parsed.length < 2) throw new Error("O arquivo não contém linhas de mailing suficientes.");
 
-    if (isReport247Rows(parsed)) {
+    if (isReport245Rows(parsed)) {
       return {
-        ...parseReport247(parsed),
+        ...parseReport245(parsed),
         delimiter,
         encoding: decoded.encoding,
       };
@@ -606,16 +606,16 @@ Contrato: *{{contrato}}*
     "TELEFONE1",
   ]);
 
-  const REPORT_247_REQUIRED_HEADERS = Object.freeze([
+  const REPORT_245_REQUIRED_HEADERS = Object.freeze([
     "CLIENTE",
     "NRDOCUMENTO",
     "EMPRESA",
   ]);
 
-  // O relatório 247 é propositalmente um cadastro sem valores. Excluir
+  // O relatório 245 é propositalmente um cadastro sem valores. Excluir
   // qualquer cabeçalho financeiro da detecção impede que o mailing comum ou
-  // o relatório 245 sejam classificados como 247 por compartilharem nomes.
-  const REPORT_247_DISALLOWED_HEADERS = Object.freeze([
+  // o relatório 247 sejam classificados como 245 por compartilharem nomes.
+  const REPORT_245_DISALLOWED_HEADERS = Object.freeze([
     "VALOR",
     "VALORABERTO",
     "VALORATUALIZADO",
@@ -639,20 +639,20 @@ Contrato: *{{contrato}}*
     return findCollectionsReportHeaderRow(rows) >= 0;
   }
 
-  function findReport247HeaderRow(rows) {
+  function findReport245HeaderRow(rows) {
     const limit = Math.min(Array.isArray(rows) ? rows.length : 0, 20);
     for (let rowIndex = 0; rowIndex < limit; rowIndex += 1) {
       const normalized = (rows[rowIndex] || []).map(normalizeHeader).filter(Boolean);
       const headerSet = new Set(normalized);
-      const hasRequiredHeaders = REPORT_247_REQUIRED_HEADERS.every((header) => headerSet.has(header));
-      const hasFinancialHeaders = REPORT_247_DISALLOWED_HEADERS.some((header) => headerSet.has(header));
+      const hasRequiredHeaders = REPORT_245_REQUIRED_HEADERS.every((header) => headerSet.has(header));
+      const hasFinancialHeaders = REPORT_245_DISALLOWED_HEADERS.some((header) => headerSet.has(header));
       if (hasRequiredHeaders && !hasFinancialHeaders) return rowIndex;
     }
     return -1;
   }
 
-  function isReport247Rows(rows) {
-    return findReport247HeaderRow(rows) >= 0;
+  function isReport245Rows(rows) {
+    return findReport245HeaderRow(rows) >= 0;
   }
 
   function combineReportPhone(ddd, number) {
@@ -810,10 +810,10 @@ Contrato: *{{contrato}}*
     };
   }
 
-  function parseReport247(rows) {
-    const headerRowIndex = findReport247HeaderRow(rows);
+  function parseReport245(rows) {
+    const headerRowIndex = findReport245HeaderRow(rows);
     if (headerRowIndex < 0) {
-      throw new Error("Este arquivo não tem as colunas esperadas do relatório 247: Cliente, Nr.Documento e Empresa.");
+      throw new Error("Este arquivo não tem as colunas esperadas do relatório 245: Cliente, Nr.Documento e Empresa.");
     }
 
     const originalHeaders = (rows[headerRowIndex] || []).map((header) => String(header ?? "").trim());
@@ -870,13 +870,13 @@ Contrato: *{{contrato}}*
           rowNumber: headerRowIndex + relativeIndex + 2,
           values,
           normalized,
-          sourceType: "report-247",
+          sourceType: "report-245",
           financialDataAvailable: false,
         };
       });
 
     if (!records.length) {
-      throw new Error("O relatório 247 não contém clientes para a campanha.");
+      throw new Error("O relatório 245 não contém clientes para a campanha.");
     }
 
     return {
@@ -886,8 +886,8 @@ Contrato: *{{contrato}}*
       delimiter: null,
       encoding: "Excel",
       missingHeaders: [],
-      sourceType: "report-247",
-      reportCode: "247",
+      sourceType: "report-245",
+      reportCode: "245",
       campaignPurpose: "pagueplay-unpaid-discounts",
       financialDataAvailable: false,
       excludedRecords: [],
@@ -1067,7 +1067,7 @@ Contrato: *{{contrato}}*
 
   function deriveRecord(record, discounts = DEFAULT_DISCOUNTS) {
     const financialDataAvailable = record?.financialDataAvailable !== false
-      && record?.sourceType !== "report-247";
+      && record?.sourceType !== "report-245";
     const name = getField(record, "Nome");
     const cpf = getField(record, "CPF");
     const contract = getField(record, "Contratos", "Contrato");
@@ -1162,7 +1162,7 @@ Contrato: *{{contrato}}*
     if (!name) issues.push("Nome ausente");
     if (!contract) issues.push("Contrato ausente");
     if (!saleType && !financialDataAvailable) issues.push("Empresa ausente");
-    if (record.sourceType !== "report-247" && !isValidPhone(contact)) issues.push("WhatsApp ausente");
+    if (record.sourceType !== "report-245" && !isValidPhone(contact)) issues.push("WhatsApp ausente");
 
     return {
       rowNumber: record.rowNumber,
@@ -1258,7 +1258,7 @@ Contrato: *{{contrato}}*
     return records.map((record, index) => {
       const item = deriveRecord(record, discounts);
       if (!item.financialDataAvailable && requiresFinancialData) {
-        const issue = "O modelo selecionado exige valores financeiros indisponíveis no relatório 247";
+        const issue = "O modelo selecionado exige valores financeiros indisponíveis no relatório 245";
         if (!item.issues.includes(issue)) item.issues.push(issue);
         if (!item.blockingIssues.includes(issue)) item.blockingIssues.push(issue);
         item.hasBlockingIssues = true;
@@ -1302,9 +1302,9 @@ Contrato: *{{contrato}}*
 
   function campaignToCsv(items) {
     const hasReview = items.some((item) => item.status !== "Pronto" || item.issues.length > 0);
-    const isReport247Campaign = items.length > 0
-      && items.every((item) => item.sourceType === "report-247");
-    if (isReport247Campaign) {
+    const relatorioSemValoresCampaign = items.length > 0
+      && items.every((item) => item.sourceType === "report-245");
+    if (relatorioSemValoresCampaign) {
       const headers = [
         "NOME",
         "NR. DOCUMENTO",
@@ -1366,8 +1366,8 @@ Contrato: *{{contrato}}*
     parseMailing,
     isCollectionsReportRows,
     parseCollectionsReport,
-    isReport247Rows,
-    parseReport247,
+    isReport245Rows,
+    parseReport245,
     parseNumber,
     parseNumberStrict,
     percentToRate,

@@ -14,6 +14,7 @@ import { copiarTexto } from '@/lib/clipboard';
 import { CampaignCore, type Discounts, type ParsedResult, type Template, type CampaignItem } from './lib/campaign-core';
 import { CampaignXlsx } from './lib/xlsx-export';
 import { parseSpreadsheetReport } from './lib/readSpreadsheet';
+import { idsDeMensagensBloqueadas } from './regras-mensagem';
 import {
   fetchMensagens, criarMensagem, atualizarMensagemCorpo, excluirMensagem,
   fetchDescontos, salvarDesconto, excluirDesconto,
@@ -48,9 +49,9 @@ function userMessageToTemplate(m: CampanhaMensagem): Template {
   };
 }
 
-// Ao importar um relatório 247 (sem valores), se a mensagem escolhida exigir
+// Ao importar um relatório 245 (sem valores), se a mensagem escolhida exigir
 // dados financeiros, cai numa mensagem compatível — igual ao app original.
-const PREFERRED_247_IDS = ['regularizacao-um-minuto', 'em-dia', 'preventivo', 'negociacao-recebida', 'negociacao-nao-concluida'];
+const PREFERRED_SEM_VALORES_IDS = ['regularizacao-um-minuto', 'em-dia', 'preventivo', 'negociacao-recebida', 'negociacao-nao-concluida'];
 
 export function useCampanhaFacil() {
   const { perfil } = useAuth();
@@ -138,7 +139,55 @@ export function useCampanhaFacil() {
     return customBodies.get(selectedTemplate.id) ?? selectedTemplate.body;
   }, [selectedTemplate, customBodies, isUserTemplate]);
 
-  const isReport247 = parsed?.sourceType === 'report-247';
+  /**
+   * O relatório importado é o CADASTRAL (245) — vem sem coluna de valor nenhuma.
+   *
+   * O nome não cita o número de propósito: quem manda é a ausência de valores no
+   * arquivo, não o rótulo. O identificador `report-245` já foi `report-247` até
+   * 31/07/2026, quando se descobriu que os dois estavam trocados no sistema — o
+   * cadastral é o 245, e o 247 é o de cobrança, que traz os valores.
+   */
+  const relatorioSemValores = parsed?.sourceType === 'report-245';
+
+  /** Corpo em vigor de um modelo (o editado pelo usuário, se houver). */
+  const corpoDoTemplate = useCallback(
+    (t: Template) => (isUserTemplate(t.id) ? t.body : (customBodies.get(t.id) ?? t.body)),
+    [customBodies, isUserTemplate],
+  );
+
+  /**
+   * Modelos que não servem ao relatório cadastral.
+   *
+   * Toda mensagem que cita parcela, quitação, junção, plano anual ou cartão
+   * depende de valores que este arquivo não tem — o texto sairia com buracos no
+   * lugar dos números. Vazio quando o relatório traz valores.
+   */
+  const templatesBloqueados = useMemo<Set<string>>(
+    () => idsDeMensagensBloqueadas(
+      templates.map((t) => ({ id: t.id, corpo: corpoDoTemplate(t) })),
+      relatorioSemValores,
+    ),
+    [relatorioSemValores, templates, corpoDoTemplate],
+  );
+
+  /** O modelo escolhido agora é incompatível com o relatório carregado. */
+  const mensagemBloqueada = templatesBloqueados.has(selectedTemplate.id);
+
+  /**
+   * Porta pública da troca de mensagem — recusa as bloqueadas.
+   *
+   * A lista já mostra esses itens desabilitados; isto é a segunda tranca, para
+   * o caso de a escolha vir do teclado ou de qualquer caminho que não passe
+   * pelo clique. O `setTemplateId` cru segue existindo para uso interno
+   * (saneamento após exclusão, seleção da mensagem recém-criada).
+   */
+  const escolherTemplate = useCallback((id: string) => {
+    if (templatesBloqueados.has(id)) {
+      toast.error('Essa mensagem usa valores, e o relatório importado não tem valores. Escolha uma mensagem sem valores.');
+      return;
+    }
+    setTemplateId(id);
+  }, [templatesBloqueados]);
 
   // ── Geração da campanha (pura, memoizada) ──────────────────────────────────
   const sendersList = useMemo(() => CampaignCore.normalizeSenders(sendersApplied), [sendersApplied]);
@@ -228,20 +277,21 @@ export function useCampanhaFacil() {
         throw new Error('O arquivo ultrapassa o limite de 100 mil contatos. Divida-o antes de continuar.');
       }
 
-      const compact = result.sourceType === 'report-247';
+      const compact = result.sourceType === 'report-245';
       setImportProgress({
         value: 94,
         label: 'Gerando as mensagens',
         detail: compact ? 'Aplicando a mensagem e os responsáveis, sem criar valores financeiros.' : 'Aplicando responsáveis, descontos e validações.',
       });
 
-      // Mensagem compatível para o 247 (que não tem valores financeiros).
+      // Relatório cadastral: troca sozinho para uma mensagem sem valores, para
+      // a tela não abrir já num estado que a exportação vai recusar. Daqui em
+      // diante `templatesBloqueados` impede voltar para as que usam valores.
       let changedTemplate = false;
       if (compact && CampaignCore.templateRequiresFinancialData(selectedTemplateBody)) {
-        const bodyOf = (t: Template) => (isUserTemplate(t.id) ? t.body : (customBodies.get(t.id) ?? t.body));
         const compatible =
-          PREFERRED_247_IDS.map((id) => templates.find((t) => t.id === id)).find((t) => t && !CampaignCore.templateRequiresFinancialData(bodyOf(t)))
-          || templates.find((t) => !CampaignCore.templateRequiresFinancialData(bodyOf(t)));
+          PREFERRED_SEM_VALORES_IDS.map((id) => templates.find((t) => t.id === id)).find((t) => t && !CampaignCore.templateRequiresFinancialData(corpoDoTemplate(t)))
+          || templates.find((t) => !CampaignCore.templateRequiresFinancialData(corpoDoTemplate(t)));
         if (compatible) { setTemplateId(compatible.id); changedTemplate = true; }
       }
 
@@ -255,7 +305,7 @@ export function useCampanhaFacil() {
 
       toast.success(
         compact
-          ? `${result.records.length.toLocaleString('pt-BR')} registros do relatório 247 preparados sem cálculos financeiros.${changedTemplate ? ' Uma mensagem compatível foi selecionada.' : ''}`
+          ? `${result.records.length.toLocaleString('pt-BR')} registros do relatório 245 preparados sem cálculos financeiros.${changedTemplate ? ' Uma mensagem compatível foi selecionada.' : ''}`
           : result.sourceType === 'collections-report'
             ? `${result.records.length.toLocaleString('pt-BR')} cobranças prontas após os filtros automáticos.`
             : `${result.records.length.toLocaleString('pt-BR')} contatos processados.`,
@@ -267,7 +317,7 @@ export function useCampanhaFacil() {
       setIsProcessing(false);
       setTimeout(() => setImportProgress(null), 400);
     }
-  }, [isProcessing, selectedTemplateBody, templates, customBodies, isUserTemplate]);
+  }, [isProcessing, selectedTemplateBody, templates, corpoDoTemplate]);
 
   const removeMailing = useCallback(() => {
     setParsed(null);
@@ -426,7 +476,7 @@ export function useCampanhaFacil() {
     if (!campaign.length) return false;
     if (sendersList.length === 0) { toast.error('Informe quem encaminhará a campanha antes de exportar.'); return false; }
     if (campaign.some((i) => i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0)) {
-      toast.error(isReport247 ? 'Corrija as pendências do relatório 247 antes de exportar.' : 'Corrija os registros com valores inválidos antes de exportar.');
+      toast.error(relatorioSemValores ? 'Corrija as pendências do relatório 245 antes de exportar.' : 'Corrija os registros com valores inválidos antes de exportar.');
       return false;
     }
     const nome = normalizeExportFileName(rawFileName);
@@ -441,7 +491,7 @@ export function useCampanhaFacil() {
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a campanha.');
       return false;
     }
-  }, [campaign, sendersList, isReport247]);
+  }, [campaign, sendersList, relatorioSemValores]);
 
   const defaultExportFileName = useCallback(() => {
     const date = new Date().toISOString().slice(0, 10);
@@ -463,11 +513,14 @@ export function useCampanhaFacil() {
     selectedItem, selectedIndex, selectedRowNumber, setSelectedRowNumber,
     page: safePage, pageCount, pageStart, setPage,
     search, setSearch, statusFilter, setStatusFilter,
-    isProcessing, importProgress, isReport247,
+    isProcessing, importProgress, relatorioSemValores,
     stats, workspaceState,
     // templates
-    templates, templateId, setTemplateId, selectedTemplate, selectedTemplateBody,
+    // `setTemplateId` exposto é o `escolherTemplate`, que recusa as bloqueadas.
+    // O cru fica interno de propósito — a tela não deve ter como burlar a regra.
+    templates, templateId, setTemplateId: escolherTemplate, selectedTemplate, selectedTemplateBody,
     isUserTemplate, hiddenCount: hiddenIds.size,
+    templatesBloqueados, mensagemBloqueada,
     // config
     sendersInput, setSendersInput, sendersList,
     discountsInput, setDiscount, discountPresets, selectedDiscountPresetId,

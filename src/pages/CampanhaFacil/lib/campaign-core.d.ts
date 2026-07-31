@@ -55,7 +55,7 @@ export interface ParsedResult {
   encoding: string;
   missingHeaders: string[];
   originalHeaders?: string[];
-  sourceType?: 'mailing' | 'collections-report' | 'report-247';
+  sourceType?: 'mailing' | 'collections-report' | 'report-245';
   reportCode?: string;
   campaignPurpose?: string;
   financialDataAvailable?: boolean;
@@ -119,8 +119,8 @@ export interface CampaignCoreApi {
   parseMailing(input: string | ArrayBuffer | Uint8Array): ParsedResult;
   isCollectionsReportRows(rows: unknown[][]): boolean;
   parseCollectionsReport(rows: unknown[][]): ParsedResult;
-  isReport247Rows(rows: unknown[][]): boolean;
-  parseReport247(rows: unknown[][]): ParsedResult;
+  isReport245Rows(rows: unknown[][]): boolean;
+  parseReport245(rows: unknown[][]): ParsedResult;
   parseNumber(value: unknown): number;
   percentToRate(value: unknown): number;
   mapCompany(saleType: unknown): string;
