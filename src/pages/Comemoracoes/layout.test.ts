@@ -7,8 +7,9 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  posicaoDe, limitarNoCard, moverElemento, escalarElemento, ehLayoutPadrao,
-  layoutDoJson, layoutParaJson, LAYOUT_PADRAO, MARGEM_PCT, ESCALA_MIN, ESCALA_MAX,
+  posicaoDe, limitarNoCard, posicaoArrastada, definirPosicao, escalarElemento,
+  ehLayoutPadrao, layoutDoJson, layoutParaJson, LAYOUT_PADRAO, ELEMENTOS,
+  MARGEM_PCT, ESCALA_MIN, ESCALA_MAX,
   type LayoutComemoracao,
 } from './layout';
 
@@ -51,43 +52,80 @@ describe('limitarNoCard', () => {
   });
 });
 
-describe('moverElemento', () => {
+describe('posicaoArrastada', () => {
+  const origem = { x: 50, y: 50, escala: 1 };
+
   it('converte pixels em porcentagem do card', () => {
     // 64 px num card de 640 = 10%.
-    const r = moverElemento({}, 'titulo', { dx: 64, dy: 36 }, CARD);
-    expect(r.titulo).toEqual({
-      x: LAYOUT_PADRAO.titulo.x + 10,
-      y: LAYOUT_PADRAO.titulo.y + 10,
-      escala: 1,
-    });
+    expect(posicaoArrastada(origem, { dx: 64, dy: 36 }, CARD))
+      .toEqual({ x: 60, y: 60, escala: 1 });
   });
 
-  it('mover para a esquerda diminui o x', () => {
-    const r = moverElemento({}, 'titulo', { dx: -64, dy: 0 }, CARD);
-    expect(r.titulo!.x).toBe(LAYOUT_PADRAO.titulo.x - 10);
+  it('arrastar para a esquerda diminui o x', () => {
+    expect(posicaoArrastada(origem, { dx: -64, dy: 0 }, CARD).x).toBe(40);
   });
 
   it('não deixa sair do card', () => {
-    const r = moverElemento({}, 'titulo', { dx: -9999, dy: -9999 }, CARD);
-    expect(r.titulo).toEqual({ x: MARGEM_PCT, y: MARGEM_PCT, escala: 1 });
+    expect(posicaoArrastada(origem, { dx: -9999, dy: -9999 }, CARD))
+      .toEqual({ x: MARGEM_PCT, y: MARGEM_PCT, escala: 1 });
+  });
+
+  it('O BUG: encostar na margem não trava o arrasto', () => {
+    // A versão antiga somava o incremento à posição JÁ PRESA pelo limite, então
+    // o elemento parava de andar assim que raspava na borda, mesmo com o mouse
+    // continuando. Aqui a conta parte sempre da origem do arrasto.
+    const naMargem = posicaoArrastada(origem, { dx: -9999, dy: 0 }, CARD);
+    expect(naMargem.x).toBe(MARGEM_PCT);
+    // Mouse volta para a direita: o elemento acompanha na hora.
+    expect(posicaoArrastada(origem, { dx: 64, dy: 0 }, CARD).x).toBe(60);
+  });
+
+  it('deslocamento zero devolve a origem', () => {
+    expect(posicaoArrastada(origem, { dx: 0, dy: 0 }, CARD)).toEqual(origem);
   });
 
   it('card de tamanho zero não vira Infinity', () => {
-    // Acontece no primeiro frame, antes de o layout medir o elemento.
-    const antes: LayoutComemoracao = { titulo: { x: 50, y: 50, escala: 1 } };
-    expect(moverElemento(antes, 'titulo', { dx: 10, dy: 10 }, { largura: 0, altura: 0 }))
-      .toBe(antes);
+    // Acontece no primeiro frame, antes de o card ser medido.
+    expect(posicaoArrastada(origem, { dx: 10, dy: 10 }, { largura: 0, altura: 0 }))
+      .toEqual(origem);
   });
 
-  it('mexe só no elemento arrastado', () => {
+  it('preserva a escala', () => {
+    expect(posicaoArrastada({ ...origem, escala: 1.5 }, { dx: 32, dy: 0 }, CARD).escala).toBe(1.5);
+  });
+});
+
+describe('definirPosicao', () => {
+  it('grava o elemento e prende no card', () => {
+    const r = definirPosicao({}, 'titulo', { x: 999, y: 20, escala: 1 });
+    expect(r.titulo).toEqual({ x: 100 - MARGEM_PCT, y: 20, escala: 1 });
+  });
+
+  it('mexe só no elemento indicado', () => {
     const antes: LayoutComemoracao = { midia: { x: 10, y: 10, escala: 1 } };
-    const r = moverElemento(antes, 'titulo', { dx: 32, dy: 0 }, CARD);
+    const r = definirPosicao(antes, 'titulo', { x: 30, y: 30, escala: 1 });
     expect(r.midia).toEqual({ x: 10, y: 10, escala: 1 });
   });
+});
 
-  it('preserva a escala ao mover', () => {
-    const antes: LayoutComemoracao = { titulo: { x: 50, y: 50, escala: 1.5 } };
-    expect(moverElemento(antes, 'titulo', { dx: 32, dy: 0 }, CARD).titulo!.escala).toBe(1.5);
+describe('ordem de fábrica', () => {
+  it('empilha GIF, título, pessoas e mensagem, de cima para baixo', () => {
+    const { midia, titulo, pessoas, mensagem } = LAYOUT_PADRAO;
+    expect(midia.y).toBeLessThan(titulo.y);
+    expect(titulo.y).toBeLessThan(pessoas.y);
+    expect(pessoas.y).toBeLessThan(mensagem.y);
+  });
+
+  it('tudo centralizado na horizontal', () => {
+    for (const { id } of ELEMENTOS) {
+      expect(LAYOUT_PADRAO[id].x).toBe(50);
+    }
+  });
+
+  it('nada nasce fora do card', () => {
+    for (const { id } of ELEMENTOS) {
+      expect(LAYOUT_PADRAO[id]).toEqual(limitarNoCard(LAYOUT_PADRAO[id]));
+    }
   });
 });
 

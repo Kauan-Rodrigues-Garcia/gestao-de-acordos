@@ -81,13 +81,21 @@ describe('catálogo', () => {
     expect(SONS.some((s) => s.id === 'fanfarra')).toBe(true);
   });
 
-  it('valor desconhecido cai no padrão em vez de quebrar a tela', () => {
+  it('o fundo tem as duas chuvas e a opção de não ter nenhuma', () => {
+    expect(EFEITOS.map((e) => e.id).sort()).toEqual(['chuva-moedas', 'confete', 'nenhum']);
+  });
+
+  it('fundo removido numa versão nova vira confete, não tela quebrada', () => {
+    // 'fogos' e 'estrelas' existiram e saíram do catálogo; comemoração antiga
+    // gravada com eles ainda precisa aparecer.
+    expect(efeitoValido('fogos')).toBe('confete');
+    expect(efeitoValido('estrelas')).toBe('confete');
     expect(efeitoValido('efeito-de-versao-futura')).toBe('confete');
     expect(somValido(null)).toBe('fanfarra');
   });
 
   it('valor conhecido é preservado', () => {
-    expect(efeitoValido('fogos')).toBe('fogos');
+    expect(efeitoValido('chuva-moedas')).toBe('chuva-moedas');
     expect(somValido('sino')).toBe('sino');
   });
 });

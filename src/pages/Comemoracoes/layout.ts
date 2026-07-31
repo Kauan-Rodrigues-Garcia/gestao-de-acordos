@@ -23,24 +23,28 @@ export interface PosicaoElemento {
 
 export type LayoutComemoracao = Partial<Record<ElementoId, PosicaoElemento>>;
 
+/** Na ordem em que aparecem no card, de cima para baixo. */
 export const ELEMENTOS: readonly { id: ElementoId; nome: string }[] = [
-  { id: 'titulo',   nome: 'Título' },
-  { id: 'mensagem', nome: 'Mensagem' },
   { id: 'midia',    nome: 'GIF / troféu' },
+  { id: 'titulo',   nome: 'Título' },
   { id: 'pessoas',  nome: 'Fotos e nomes' },
+  { id: 'mensagem', nome: 'Mensagem' },
 ];
 
 /**
- * Arranjo de fábrica — a pilha central que a fase 1 usava.
+ * Arranjo de fábrica, de cima para baixo:
  *
- * Comemoração criada antes do editor tem `layout` vazio e cai aqui, então
- * continua aparecendo igual.
+ *     GIF  →  título  →  foto e nome  →  mensagem
+ *
+ * A ordem é a da leitura: a imagem chama a atenção, o título diz o que
+ * aconteceu, a foto diz de quem é a conquista, e a mensagem fecha com o
+ * detalhe. Comemoração criada sem editar o layout cai aqui.
  */
 export const LAYOUT_PADRAO: Required<LayoutComemoracao> = {
-  midia:    { x: 50, y: 24, escala: 1 },
-  titulo:   { x: 50, y: 45, escala: 1 },
-  mensagem: { x: 50, y: 60, escala: 1 },
-  pessoas:  { x: 50, y: 79, escala: 1 },
+  midia:    { x: 50, y: 22, escala: 1 },
+  titulo:   { x: 50, y: 48, escala: 1 },
+  pessoas:  { x: 50, y: 68, escala: 1 },
+  mensagem: { x: 50, y: 89, escala: 1 },
 };
 
 /**
@@ -73,30 +77,37 @@ export function posicaoDe(layout: LayoutComemoracao | null | undefined, elemento
   return limitarNoCard(layout?.[elemento] ?? LAYOUT_PADRAO[elemento]);
 }
 
-/**
- * Move um elemento por um deslocamento em pixels.
- *
- * O deslocamento chega em pixels (é o que o mouse dá) e sai em % — por isso
- * precisa do tamanho renderizado do card. Card de largura zero devolveria
- * Infinity, então a conversão é ignorada nesse caso.
- */
-export function moverElemento(
+/** Grava a posição de um elemento, presa ao card. */
+export function definirPosicao(
   layout: LayoutComemoracao,
   elemento: ElementoId,
+  pos: PosicaoElemento,
+): LayoutComemoracao {
+  return { ...layout, [elemento]: limitarNoCard(pos) };
+}
+
+/**
+ * Onde o elemento fica depois de arrastar `dx`/`dy` pixels a partir de `origem`.
+ *
+ * Recebe a posição de ONDE O ARRASTO COMEÇOU e o deslocamento TOTAL do mouse,
+ * não o incremento desde o último evento. A versão incremental acumulava o
+ * erro do arredondamento a cada `pointermove` e travava assim que o elemento
+ * encostava na margem: o valor preso pelo limite virava a base do próximo
+ * passo, e o arrasto "parava" mesmo com o mouse ainda andando.
+ *
+ * Card de tamanho zero devolveria Infinity — nesse caso a origem é mantida.
+ */
+export function posicaoArrastada(
+  origem: PosicaoElemento,
   deslocamento: { dx: number; dy: number },
   tamanhoCard: { largura: number; altura: number },
-): LayoutComemoracao {
-  const atual = posicaoDe(layout, elemento);
-  if (tamanhoCard.largura <= 0 || tamanhoCard.altura <= 0) return layout;
-
-  return {
-    ...layout,
-    [elemento]: limitarNoCard({
-      x: atual.x + (deslocamento.dx / tamanhoCard.largura) * 100,
-      y: atual.y + (deslocamento.dy / tamanhoCard.altura) * 100,
-      escala: atual.escala,
-    }),
-  };
+): PosicaoElemento {
+  if (tamanhoCard.largura <= 0 || tamanhoCard.altura <= 0) return limitarNoCard(origem);
+  return limitarNoCard({
+    x: origem.x + (deslocamento.dx / tamanhoCard.largura) * 100,
+    y: origem.y + (deslocamento.dy / tamanhoCard.altura) * 100,
+    escala: origem.escala,
+  });
 }
 
 /** Troca a escala de um elemento, respeitando os limites. */

@@ -1,10 +1,12 @@
 /**
- * EfeitoComemoracao — a animação de fundo da comemoração.
+ * EfeitoComemoracao — a chuva que cai atrás da comemoração.
  *
- * Feito em código, não em GIF: são partículas simples, e um GIF para isso seria
- * um asset a versionar, servir e cachear, além de pesar na tela de quem tem
- * internet ruim. A fase 2 acrescenta o GIF que o líder enviar — este efeito
- * continua valendo como opção do catálogo.
+ * É o FUNDO, e não se confunde com o GIF: o GIF é a imagem dentro do card,
+ * acima do texto; isto ocupa a tela inteira, por trás de tudo.
+ *
+ * Animado em código, não em GIF: são partículas simples, e um arquivo para
+ * isso seria mais um asset a versionar, servir e cachear — além de pesar na
+ * tela de quem tem internet ruim.
  *
  * `pointer-events: none` em tudo: isto passa por cima de gente trabalhando e
  * não pode roubar um clique.
@@ -47,49 +49,8 @@ export function EfeitoComemoracao({ efeito, id }: { efeito: EfeitoId; id: string
   return (
     <div className="pointer-events-none fixed inset-0 z-[99] overflow-hidden" aria-hidden="true">
       {particulas.map((p) => {
-        if (efeito === 'estrelas') {
-          return (
-            <motion.span
-              key={p.id}
-              className="absolute rounded-full"
-              style={{
-                left: `${p.esquerda}%`,
-                top: `${10 + (p.giro + 360) % 60}%`,
-                width: p.tamanho, height: p.tamanho,
-                background: p.cor,
-                boxShadow: `0 0 ${p.tamanho}px ${p.cor}`,
-              }}
-              initial={{ opacity: 0, scale: 0 }}
-              animate={{ opacity: [0, 1, 0], scale: [0, 1.4, 0] }}
-              transition={{ duration: 1.6, delay: p.atraso, repeat: Infinity, repeatDelay: 0.6 }}
-            />
-          );
-        }
-
-        if (efeito === 'fogos') {
-          return (
-            <motion.span
-              key={p.id}
-              className="absolute rounded-full"
-              style={{
-                left: `${p.esquerda}%`, top: '50%',
-                width: p.tamanho / 2, height: p.tamanho / 2,
-                background: p.cor,
-              }}
-              initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
-              animate={{
-                opacity: [0, 1, 0],
-                x: [(p.giro / 6), (p.giro / 2)],
-                y: [0, (p.tamanho * 6) - 40],
-                scale: [0, 1, 0.4],
-              }}
-              transition={{ duration: 1.4, delay: p.atraso, repeat: Infinity, repeatDelay: 0.8 }}
-            />
-          );
-        }
-
-        // confete e chuva-moedas: caem do topo. A moeda é redonda e dourada;
-        // o confete é um retângulo colorido que gira.
+        // Os dois caem do topo. A moeda é redonda e dourada; o confete é um
+        // retângulo colorido que gira enquanto desce.
         const moeda = efeito === 'chuva-moedas';
         return (
           <motion.span

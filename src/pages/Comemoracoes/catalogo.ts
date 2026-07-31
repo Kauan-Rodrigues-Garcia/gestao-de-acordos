@@ -11,7 +11,13 @@
  * própria entra em colunas separadas, sem quebrar o que já foi criado.
  */
 
-export type EfeitoId = 'confete' | 'fogos' | 'estrelas' | 'chuva-moedas' | 'nenhum';
+/**
+ * O FUNDO da comemoração — a chuva que cai atrás do card, na tela inteira.
+ *
+ * Não confundir com o GIF: o GIF é a imagem que aparece ACIMA do texto, dentro
+ * do card. O fundo é ambiente, e é sempre animado em código.
+ */
+export type EfeitoId = 'confete' | 'chuva-moedas' | 'nenhum';
 export type SomId    = 'fanfarra' | 'conquista' | 'moedas' | 'sino' | 'nenhum';
 
 export interface OpcaoCatalogo<T extends string> {
@@ -21,11 +27,9 @@ export interface OpcaoCatalogo<T extends string> {
 }
 
 export const EFEITOS: readonly OpcaoCatalogo<EfeitoId>[] = [
-  { id: 'confete',      nome: 'Confete',        descricao: 'Papelotes coloridos caindo.' },
-  { id: 'fogos',        nome: 'Fogos',          descricao: 'Estouros que abrem em leque.' },
-  { id: 'estrelas',     nome: 'Estrelas',       descricao: 'Brilhos surgindo em volta do card.' },
-  { id: 'chuva-moedas', nome: 'Chuva de moedas', descricao: 'Moedas caindo — combina com meta batida.' },
-  { id: 'nenhum',       nome: 'Sem efeito',     descricao: 'Só o card, sem animação de fundo.' },
+  { id: 'confete',      nome: 'Confete',         descricao: 'Papelotes coloridos caindo pela tela.' },
+  { id: 'chuva-moedas', nome: 'Chuva de moedas', descricao: 'Moedas douradas caindo pela tela.' },
+  { id: 'nenhum',       nome: 'Sem fundo',       descricao: 'Só o card, sem chuva atrás.' },
 ];
 
 export const SONS: readonly OpcaoCatalogo<SomId>[] = [

@@ -124,10 +124,12 @@ export function ComemoracaoOverlay() {
         >
           <EfeitoComemoracao efeito={emCena.efeito} id={emCena.chave} />
 
-          <div className="relative w-full max-w-lg">
+          {/* Sem caixa colorida, o card precisa de largura para o texto
+              respirar sobre a tela de trabalho. */}
+          <div className="relative w-full max-w-xl">
             {emCena.ehTeste && (
               // Deixa claro que ninguém mais está vendo isto.
-              <span className="pointer-events-none absolute -top-2 left-1/2 z-20 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow">
+              <span className="pointer-events-none absolute -top-1 left-1/2 z-20 -translate-x-1/2 rounded-full bg-primary px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary-foreground shadow-lg">
                 Teste · só você vê
               </span>
             )}
@@ -147,7 +149,7 @@ export function ComemoracaoOverlay() {
               onClick={alternarMudo}
               aria-label={mudo ? 'Ligar o som das comemorações' : 'Silenciar as comemorações'}
               title={mudo ? 'Som desligado' : 'Silenciar comemorações'}
-              className="pointer-events-auto absolute left-2 top-2 z-10 rounded-full bg-black/20 p-1 text-white/80 transition-colors hover:bg-black/40 hover:text-white"
+              className="pointer-events-auto absolute left-0 top-0 z-20 rounded-full bg-black/40 p-1 text-white/90 transition-colors hover:bg-black/70"
             >
               {mudo ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>

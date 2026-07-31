@@ -14,6 +14,7 @@ import { motion } from 'framer-motion';
 import {
   PartyPopper, Sparkles, Trophy, Users, Loader2, Trash2, Ban, Volume2,
   ShieldAlert, RefreshCw, Search, X, CalendarClock, Play, RotateCcw, Clock,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -338,29 +339,41 @@ export default function Comemoracoes() {
             </p>
           </div>
 
-          {/* Visual */}
+          {/* Fundo — a chuva que cai na tela inteira, atrás do card */}
           <div className="space-y-1.5">
-            <Label className="flex items-center gap-1.5 text-xs"><Sparkles className="h-3.5 w-3.5" /> Visual</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Select value={efeito} onValueChange={(v) => setEfeito(v as EfeitoId)}>
-                <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {EFEITOS.map((e) => <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <BibliotecaMidia
-                tipo="gif" midias={midias}
-                empresaId={empresaId as string} usuarioId={usuarioId as string}
-                selecionadaId={gifEscolhido?.id ?? null}
-                onSelecionar={setGifEscolhido}
-                onMudou={() => void recarregarMidias()}
-              />
-            </div>
-            {gifEscolhido && (
-              <p className="text-[11px] text-muted-foreground">
-                Usando <strong>{gifEscolhido.nome}</strong> no lugar do troféu.
-              </p>
-            )}
+            <Label className="flex items-center gap-1.5 text-xs">
+              <Sparkles className="h-3.5 w-3.5" /> Fundo
+            </Label>
+            <Select value={efeito} onValueChange={(v) => setEfeito(v as EfeitoId)}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {EFEITOS.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.nome}
+                    <span className="ml-2 text-[11px] text-muted-foreground">{e.descricao}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* GIF — a imagem que aparece acima do texto, dentro do card */}
+          <div className="space-y-1.5">
+            <Label className="flex items-center gap-1.5 text-xs">
+              <ImageIcon className="h-3.5 w-3.5" /> GIF
+            </Label>
+            <BibliotecaMidia
+              tipo="gif" midias={midias}
+              empresaId={empresaId as string} usuarioId={usuarioId as string}
+              selecionadaId={gifEscolhido?.id ?? null}
+              onSelecionar={setGifEscolhido}
+              onMudou={() => void recarregarMidias()}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              {gifEscolhido
+                ? <>Usando <strong>{gifEscolhido.nome}</strong> no topo do card.</>
+                : 'Sem GIF, aparece um troféu no lugar.'}
+            </p>
           </div>
 
           {/* Som */}
