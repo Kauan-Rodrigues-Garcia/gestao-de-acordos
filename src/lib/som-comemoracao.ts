@@ -155,7 +155,7 @@ export function tocarSomComemoracao(som: SomId, forcar = false): void {
  * em cima de gente em ligação. Os sons do catálogo são sintetizados no volume
  * certo, então não usam este valor.
  */
-const VOLUME_ARQUIVO = 0.35;
+const VOLUME_ARQUIVO = 0.25;
 
 /** Quanto dura o esmaecimento no fim. Curto — não é fim de show. */
 const FADE_MS = 700;
