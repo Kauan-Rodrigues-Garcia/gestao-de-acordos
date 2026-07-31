@@ -14,6 +14,9 @@
  *   • carimbos iniciado_em/finalizado_em   → trigger fn_wpp_carimbos
  */
 import { supabase } from '@/lib/supabase';
+import type { Leitura } from '@/pages/SolicitacoesWhatsapp/leitura';
+
+export type { Leitura };
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -447,24 +450,47 @@ export async function enviarMensagem(params: {
   return { ok: true, erro: null };
 }
 
+// ── Leitura por pessoa (migration 20260731d) ─────────────────────────────────
+
 /**
- * Carimba como lidas as mensagens da thread escritas por OUTRA pessoa.
+ * Avança o MEU cursor de leitura desta conversa até agora.
  *
- * O filtro `autor_id <> eu` é o mesmo da policy de UPDATE: sem ele o autor
- * marcaria a própria mensagem e o recibo de leitura viraria mentira.
+ * Substituiu o carimbo `lida_em`, que era por mensagem: bastava um líder abrir
+ * a conversa para a bolinha sumir da tela do responsável, que não tinha lido
+ * nada. Agora cada pessoa tem a própria linha e ninguém mexe na do outro — a
+ * policy `sol_wpp_leitura_insert/update` exige `usuario_id = auth.uid()`.
  */
-export async function marcarMensagensLidas(params: {
+export async function marcarConversaLida(params: {
+  empresaId:     string;
   solicitacaoId: string;
   usuarioId:     string;
 }): Promise<void> {
+  const agora = new Date().toISOString();
   const { error } = await supabase
-    .from('solicitacoes_whatsapp_mensagens')
-    .update({ lida_em: new Date().toISOString() })
-    .eq('solicitacao_id', params.solicitacaoId)
-    .neq('autor_id', params.usuarioId)
-    .is('lida_em', null);
+    .from('solicitacoes_whatsapp_leitura')
+    .upsert({
+      empresa_id:     params.empresaId,
+      solicitacao_id: params.solicitacaoId,
+      usuario_id:     params.usuarioId,
+      lido_ate:       agora,
+      atualizado_em:  agora,
+    }, { onConflict: 'solicitacao_id,usuario_id' });
 
-  if (error) console.warn('[solicitacoesWhatsapp] erro ao marcar lidas:', error.message);
+  if (error) console.warn('[solicitacoesWhatsapp] erro ao marcar conversa lida:', error.message);
+}
+
+/** Cursores de leitura da empresa — os meus alimentam o badge, os outros o ✓✓. */
+export async function buscarLeituras(empresaId: string): Promise<Leitura[]> {
+  const { data, error } = await supabase
+    .from('solicitacoes_whatsapp_leitura')
+    .select('solicitacao_id, usuario_id, lido_ate')
+    .eq('empresa_id', empresaId);
+
+  if (error) {
+    console.warn('[solicitacoesWhatsapp] erro nas leituras:', error.message);
+    return [];
+  }
+  return (data ?? []) as Leitura[];
 }
 
 // ── Responsáveis ─────────────────────────────────────────────────────────────

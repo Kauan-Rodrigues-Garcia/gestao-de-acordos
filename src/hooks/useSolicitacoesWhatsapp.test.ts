@@ -31,13 +31,19 @@ vi.mock('@/lib/realtime', () => ({
   },
 }));
 
+/** Mensagens que a query de contagem enxerga. Cada teste ajusta se precisar. */
+let mensagensNoBanco: unknown[] = [];
+
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     from: () => ({
-      select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }),
+      select: () => ({ eq: () => Promise.resolve({ data: mensagensNoBanco, error: null }) }),
     }),
   },
 }));
+
+/** Cursores de leitura que o service devolve. */
+let leiturasNoBanco: unknown[] = [];
 
 vi.mock('@/services/solicitacoesWhatsapp.service', () => ({
   buscarSolicitacoes: vi.fn(() => Promise.resolve({
@@ -50,7 +56,8 @@ vi.mock('@/services/solicitacoesWhatsapp.service', () => ({
   })),
   buscarMensagens: vi.fn(() => Promise.resolve([])),
   enviarMensagem:  vi.fn(),
-  marcarMensagensLidas: vi.fn(),
+  marcarConversaLida: vi.fn(() => Promise.resolve()),
+  buscarLeituras: vi.fn(() => Promise.resolve(leiturasNoBanco)),
   buscarResponsaveis: vi.fn(() => Promise.resolve([])),
   buscarEventos: vi.fn(() => Promise.resolve([])),
 }));
@@ -80,6 +87,8 @@ let notificacoes: { titulo: string; corpo: string; tag: string }[] = [];
 beforeEach(() => {
   ouvintesPorTopico.clear();
   notificacoes = [];
+  mensagensNoBanco = [];
+  leiturasNoBanco = [];
   class FakeNotification {
     static permission = 'granted';
     static requestPermission = vi.fn(() => Promise.resolve('granted'));
@@ -163,5 +172,46 @@ describe('notificação de mensagem nova', () => {
 
     expect(notificacoes).toHaveLength(0);
     expect(result.current.naoLidas['sol-1']).toBe(1);
+  });
+});
+
+describe('badge de não lidas é de cada um (migration 20260731d)', () => {
+  const MSG = {
+    solicitacao_id: 'sol-1',
+    autor_id:       'outro',
+    criado_em:      '2026-07-31T10:00:00.000Z',
+  };
+
+  it('o líder abrir a conversa NÃO apaga o meu badge', async () => {
+    // Era o bug: `lida_em` era um carimbo por mensagem, então a leitura de
+    // qualquer pessoa limpava o aviso de todas as outras.
+    mensagensNoBanco = [MSG];
+    const { result } = montar();
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
+
+    // O líder lê depois da mensagem e o realtime avisa a minha tela.
+    leiturasNoBanco = [{
+      solicitacao_id: 'sol-1', usuario_id: 'lider', lido_ate: '2026-07-31T23:00:00.000Z',
+    }];
+    await act(async () => {
+      for (const o of ouvintesPorTopico.get('rt-sol-wpp-leitura-emp') ?? []) o.onEvento?.({});
+    });
+
+    expect(result.current.naoLidas['sol-1']).toBe(1);
+  });
+
+  it('o meu próprio cursor zera o meu badge', async () => {
+    mensagensNoBanco = [MSG];
+    const { result } = montar();
+    await waitFor(() => expect(result.current.naoLidas['sol-1']).toBe(1));
+
+    leiturasNoBanco = [{
+      solicitacao_id: 'sol-1', usuario_id: 'eu', lido_ate: '2026-07-31T23:00:00.000Z',
+    }];
+    await act(async () => {
+      for (const o of ouvintesPorTopico.get('rt-sol-wpp-leitura-emp') ?? []) o.onEvento?.({});
+    });
+
+    expect(result.current.naoLidas['sol-1']).toBeUndefined();
   });
 });

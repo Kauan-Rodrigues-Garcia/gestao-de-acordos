@@ -834,6 +834,34 @@ export type Database = {
         }
         Relationships: []
       }
+      // Migration 20260731d — até onde CADA pessoa leu CADA conversa.
+      // PK composta (solicitacao_id, usuario_id). Substituiu, para efeito de
+      // "não lidas", o carimbo único `mensagens.lida_em`, que sumia para todos
+      // quando qualquer um abria a thread.
+      solicitacoes_whatsapp_leitura: {
+        Row: {
+          atualizado_em: string
+          empresa_id: string
+          lido_ate: string
+          solicitacao_id: string
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          empresa_id: string
+          lido_ate?: string
+          solicitacao_id: string
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          empresa_id?: string
+          lido_ate?: string
+          solicitacao_id?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       // Migration 20260730a — Contribuição Receptivo por setor/mês (BookPlay).
       // Uma linha por (empresa_id, setor_id, mes); `mes` é 'yyyy-MM'. Substitui o
       // localStorage por onde esse valor passava, para que seja compartilhado.

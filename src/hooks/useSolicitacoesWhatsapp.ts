@@ -17,11 +17,12 @@ import { supabase } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { logger } from '@/lib/logger';
 import {
-  buscarSolicitacoes, buscarMensagens, enviarMensagem, marcarMensagensLidas,
-  buscarResponsaveis, buscarEventos,
+  buscarSolicitacoes, buscarMensagens, enviarMensagem, marcarConversaLida,
+  buscarLeituras, buscarResponsaveis, buscarEventos,
   type SolicitacaoWhatsapp, type MensagemSolicitacao, type EventoSolicitacao,
-  type PessoaResumo,
+  type PessoaResumo, type Leitura,
 } from '@/services/solicitacoesWhatsapp.service';
+import { contarNaoLidas } from '@/pages/SolicitacoesWhatsapp/leitura';
 
 // ── Notificação do sistema operacional ───────────────────────────────────────
 
@@ -139,27 +140,32 @@ export function useSolicitacoesWhatsapp(
   }, [empresaId, habilitado, dbAtiva]);
 
   // ── Contagens: total da thread e não lidas ─────────────────────────────────
-  // Uma query só devolve as duas: o total mostra que existe histórico anexado
-  // sem precisar abrir a conversa, e as não lidas alimentam o badge.
+  // O total mostra que existe histórico anexado sem precisar abrir a conversa;
+  // as não lidas alimentam o badge.
+  //
+  // As não lidas saem do MEU cursor de leitura (migration 20260731d), não mais
+  // do carimbo `lida_em` da mensagem. Aquele era um só para a thread inteira, e
+  // por isso a bolinha sumia da tela de todos quando qualquer um — um líder,
+  // por exemplo — abria a conversa.
   const recarregarContagens = useCallback(async () => {
     if (!empresaId || !usuarioId || !habilitado) return;
-    const { data, error } = await supabase
-      .from('solicitacoes_whatsapp_mensagens')
-      .select('solicitacao_id, autor_id, lida_em')
-      .eq('empresa_id', empresaId);
+    const [{ data, error }, leituras] = await Promise.all([
+      supabase
+        .from('solicitacoes_whatsapp_mensagens')
+        .select('solicitacao_id, autor_id, criado_em')
+        .eq('empresa_id', empresaId),
+      buscarLeituras(empresaId),
+    ]);
     if (error || !montadoRef.current) return;
 
+    const mensagens = (data ?? []) as { solicitacao_id: string; autor_id: string; criado_em: string }[];
+
     const totais: Record<string, number> = {};
-    const naoLidasMapa: Record<string, number> = {};
-    for (const m of (data ?? []) as { solicitacao_id: string; autor_id: string; lida_em: string | null }[]) {
+    for (const m of mensagens) {
       totais[m.solicitacao_id] = (totais[m.solicitacao_id] ?? 0) + 1;
-      // Não lida = de outra pessoa e sem carimbo. A própria mensagem nunca conta.
-      if (m.autor_id !== usuarioId && !m.lida_em) {
-        naoLidasMapa[m.solicitacao_id] = (naoLidasMapa[m.solicitacao_id] ?? 0) + 1;
-      }
     }
     setTotaisMensagens(totais);
-    setNaoLidas(naoLidasMapa);
+    setNaoLidas(contarNaoLidas(mensagens, leituras, usuarioId));
   }, [empresaId, usuarioId, habilitado]);
 
   const recarregarContagensRef = useRef(recarregarContagens);
@@ -235,7 +241,7 @@ export function useSolicitacoesWhatsapp(
             return;
           }
 
-          // UPDATE = carimbo de leitura; a contagem precisa ser refeita.
+          // UPDATE/DELETE de mensagem é raro (correção manual); reler é barato.
           void recarregarContagensRef.current();
         },
         onReconectado: () => { void recarregarContagensRef.current(); },
@@ -243,7 +249,36 @@ export function useSolicitacoesWhatsapp(
     );
   }, [empresaId, usuarioId, habilitado, dbAtiva, janelaAtras]);
 
-  /** Zera o badge local ao abrir a thread (o banco é carimbado pelo chat). */
+  // ── Realtime dos cursores de leitura ───────────────────────────────────────
+  // Tópico próprio: `assinarTabela` avisa em DEV quando o mesmo tópico é
+  // reutilizado com escutas diferentes, e este ouve outra tabela.
+  //
+  // O que chega aqui é quase sempre a leitura de OUTRA pessoa. Recontar mesmo
+  // assim é o que mantém o badge honesto quando eu abro a conversa numa segunda
+  // aba: o cursor anda no banco e as duas telas acompanham.
+  useEffect(() => {
+    if (!empresaId || !usuarioId || !habilitado || !dbAtiva) return;
+    return assinarTabela(
+      {
+        topico:  `rt-sol-wpp-leitura-${empresaId}`,
+        escutas: [{
+          tabela: 'solicitacoes_whatsapp_leitura',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento:      () => { void recarregarContagensRef.current(); },
+        onReconectado: () => { void recarregarContagensRef.current(); },
+      },
+    );
+  }, [empresaId, usuarioId, habilitado, dbAtiva]);
+
+  /**
+   * Zera o badge local ao abrir a thread.
+   *
+   * Adianta o que o banco confirma logo em seguida (o chat grava o cursor).
+   * Sem isto a bolinha ficaria acesa pelo tempo de ida e volta da gravação.
+   */
   const limparNaoLidas = useCallback((solicitacaoId: string) => {
     setNaoLidas(prev => (prev[solicitacaoId] ? { ...prev, [solicitacaoId]: 0 } : prev));
   }, []);
@@ -266,6 +301,8 @@ export interface UseChatSolicitacao {
   enviar:    (conteudo: string) => Promise<boolean>;
   /** Avisa o outro lado que estou digitando. Chame a cada tecla. */
   avisarDigitando: () => void;
+  /** Cursores de leitura desta conversa — alimentam o ✓✓ das minhas mensagens. */
+  leituras:  Leitura[];
 }
 
 /** Silêncio após o qual o "digitando" some sozinho. */
@@ -281,6 +318,7 @@ export function useChatSolicitacao(params: {
 
   const [mensagens, setMensagens] = useState<MensagemSolicitacao[]>([]);
   const [eventos, setEventos]     = useState<EventoSolicitacao[]>([]);
+  const [leituras, setLeituras]   = useState<Leitura[]>([]);
   const [loading, setLoading]     = useState(false);
   const [enviando, setEnviando]   = useState(false);
   const [digitando, setDigitando] = useState<string | null>(null);
@@ -293,14 +331,20 @@ export function useChatSolicitacao(params: {
 
   // ── Carga da thread ────────────────────────────────────────────────────────
   const recarregar = useCallback(async () => {
-    if (!solicitacaoId || !empresaId) { setMensagens([]); setEventos([]); return; }
-    const [msgs, evts] = await Promise.all([
+    if (!solicitacaoId || !empresaId) {
+      setMensagens([]); setEventos([]); setLeituras([]);
+      return;
+    }
+    const [msgs, evts, lidos] = await Promise.all([
       buscarMensagens(solicitacaoId, empresaId),
       buscarEventos(solicitacaoId, empresaId),
+      buscarLeituras(empresaId),
     ]);
     if (!montadoRef.current) return;
     setMensagens(msgs);
     setEventos(evts);
+    // Só os cursores desta conversa: o ✓✓ pergunta sobre esta thread.
+    setLeituras(lidos.filter(l => l.solicitacao_id === solicitacaoId));
     setLoading(false);
   }, [solicitacaoId, empresaId]);
 
@@ -313,13 +357,19 @@ export function useChatSolicitacao(params: {
     void recarregar();
   }, [solicitacaoId, recarregar]);
 
-  // ── Marcar como lidas ao abrir e a cada mensagem nova ──────────────────────
+  // ── Avança o MEU cursor ao abrir e a cada mensagem nova ────────────────────
+  // Marca só o meu (a policy exige `usuario_id = auth.uid()`), então abrir a
+  // conversa não apaga mais o aviso de ninguém.
+  //
+  // A guarda evita gravar à toa: sem ela, todo render da thread bateria no
+  // banco. Só grava quando existe mensagem de outra pessoa depois de onde eu
+  // parei — que é justamente quando o cursor precisa andar.
   useEffect(() => {
-    if (!solicitacaoId || !usuarioId || loading) return;
-    const temNaoLidaDeOutro = mensagens.some(m => m.autor_id !== usuarioId && !m.lida_em);
-    if (!temNaoLidaDeOutro) return;
-    void marcarMensagensLidas({ solicitacaoId, usuarioId });
-  }, [solicitacaoId, usuarioId, mensagens, loading]);
+    if (!solicitacaoId || !usuarioId || !empresaId || loading) return;
+    const naoLidas = contarNaoLidas(mensagens, leituras, usuarioId);
+    if (!naoLidas[solicitacaoId]) return;
+    void marcarConversaLida({ empresaId, solicitacaoId, usuarioId });
+  }, [solicitacaoId, usuarioId, empresaId, mensagens, leituras, loading]);
 
   // ── Realtime das mensagens (mesmo tópico da lista — deduplica) ─────────────
   useEffect(() => {
@@ -341,6 +391,31 @@ export function useChatSolicitacao(params: {
           if (linha?.solicitacao_id !== solicitacaoId) return;
           // Relê em vez de aplicar o payload: precisamos do join do autor
           // (nome e foto), que o realtime não manda.
+          void recarregarRef.current();
+        },
+        onReconectado: () => { void recarregarRef.current(); },
+      },
+    );
+  }, [empresaId, solicitacaoId]);
+
+  // ── Realtime dos cursores: o ✓✓ acende quando o outro lê ───────────────────
+  // Mesmo tópico da lista, que o `assinarTabela` deduplica em um canal só.
+  useEffect(() => {
+    if (!empresaId || !solicitacaoId) return;
+    return assinarTabela(
+      {
+        topico:  `rt-sol-wpp-leitura-${empresaId}`,
+        escutas: [{
+          tabela: 'solicitacoes_whatsapp_leitura',
+          filtro: `empresa_id=eq.${empresaId}`,
+        }],
+      },
+      {
+        onEvento: (payload) => {
+          if (!montadoRef.current) return;
+          const linha = (payload.new ?? payload.old) as unknown as
+            { solicitacao_id?: string } | null;
+          if (linha?.solicitacao_id !== solicitacaoId) return;
           void recarregarRef.current();
         },
         onReconectado: () => { void recarregarRef.current(); },
@@ -421,7 +496,7 @@ export function useChatSolicitacao(params: {
   }, [empresaId, solicitacaoId, usuarioId]);
 
   return useMemo(
-    () => ({ mensagens, eventos, loading, enviando, digitando, enviar, avisarDigitando }),
-    [mensagens, eventos, loading, enviando, digitando, enviar, avisarDigitando],
+    () => ({ mensagens, eventos, leituras, loading, enviando, digitando, enviar, avisarDigitando }),
+    [mensagens, eventos, leituras, loading, enviando, digitando, enviar, avisarDigitando],
   );
 }

@@ -20,6 +20,7 @@ import { useOnlineUsers } from '@/providers/PresenceProvider';
 import type { MensagemSolicitacao, PessoaResumo } from '@/services/solicitacoesWhatsapp.service';
 import { primeiroNome, iniciais } from './formatacao';
 import { estaNoFim, viewportDaArea, rolarAoFim, deveRolar } from './scroll-conversa';
+import { foiLidaPorOutro, type Leitura } from './leitura';
 
 function horaCurta(iso: string): string {
   try {
@@ -56,10 +57,15 @@ function PontinhosDigitando() {
 }
 
 export function ChatSolicitacao({
-  mensagens, loading, enviando, digitando, usuarioId, interlocutor, encerrado, podeFalar,
+  mensagens, leituras, loading, enviando, digitando, usuarioId, interlocutor, encerrado, podeFalar,
   onEnviar, onDigitando, onFechar,
 }: {
   mensagens:    MensagemSolicitacao[];
+  /**
+   * Até onde cada participante leu esta conversa. É o que sustenta o ✓✓ — antes
+   * ele saía de um carimbo único por mensagem, que dizia só "alguém leu".
+   */
+  leituras:     Leitura[];
   loading:      boolean;
   enviando:     boolean;
   digitando:    string | null;
@@ -274,7 +280,7 @@ export function ChatSolicitacao({
                       <span className="tabular-nums">{horaCurta(m.criado_em)}</span>
                       {/* Recibo só nas minhas: ✓ enviado, ✓✓ lido pelo outro. */}
                       {minha && (
-                        m.lida_em
+                        foiLidaPorOutro(m, leituras, usuarioId ?? '')
                           ? <CheckCheck className="w-3 h-3" aria-label="Lida" />
                           : <Check className="w-3 h-3" aria-label="Enviada" />
                       )}

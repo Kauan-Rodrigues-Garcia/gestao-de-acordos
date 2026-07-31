@@ -446,6 +446,7 @@ export default function SolicitacoesWhatsapp() {
         {chatAbertoId === s.id && (
           <ChatSolicitacao
             mensagens={chat.mensagens}
+            leituras={chat.leituras}
             loading={chat.loading}
             enviando={chat.enviando}
             digitando={chat.digitando}

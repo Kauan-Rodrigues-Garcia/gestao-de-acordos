@@ -5,8 +5,8 @@
  *
  *   • o erro do trigger de limite vira mensagem legível (senão o operador leva
  *     um texto de exceção do postgres na cara);
- *   • `marcarMensagensLidas` NUNCA marca a própria mensagem — é o que mantém o
- *     recibo de leitura honesto, e espelha a policy de UPDATE;
+ *   • `marcarConversaLida` grava SÓ o cursor de quem chamou — é o que impede a
+ *     bolinha de sumir da tela dos outros, e espelha a policy da tabela;
  *   • `dbAtiva` separa "migration pendente" de "erro real";
  *   • definir responsável duas vezes não é erro para quem clicou.
  */
@@ -23,10 +23,12 @@ let nextRpcResult: MockResult = { data: null, error: null };
 
 interface BuilderCall {
   table: string;
-  operation: 'select' | 'insert' | 'update' | 'delete' | null;
+  operation: 'select' | 'insert' | 'update' | 'upsert' | 'delete' | null;
   /** Colunas pedidas — usado para provar que o join em `perfis` sumiu. */
   colunas?: string;
   payload?: unknown;
+  /** Segundo argumento do upsert (onConflict). */
+  opcoes?: unknown;
   filters: Array<[string, string, unknown]>;
   order?: { col: string };
 }
@@ -47,6 +49,12 @@ function createBuilder(table: string) {
     }),
     insert: vi.fn((p: unknown) => { currentCall!.operation = 'insert'; currentCall!.payload = p; return builder; }),
     update: vi.fn((p: unknown) => { currentCall!.operation = 'update'; currentCall!.payload = p; return builder; }),
+    upsert: vi.fn((p: unknown, o?: unknown) => {
+      currentCall!.operation = 'upsert';
+      currentCall!.payload   = p;
+      currentCall!.opcoes    = o;
+      return builder;
+    }),
     delete: vi.fn(() => { currentCall!.operation = 'delete'; return builder; }),
     eq:     vi.fn((c: string, v: unknown) => { currentCall!.filters.push(['eq', c, v]); return builder; }),
     neq:    vi.fn((c: string, v: unknown) => { currentCall!.filters.push(['neq', c, v]); return builder; }),
@@ -72,7 +80,7 @@ vi.mock('@/lib/supabase', () => ({
 
 import {
   buscarSolicitacoes, criarSolicitacao, atualizarStatus,
-  marcarMensagensLidas, definirResponsavel, buscarClientePorCodigo, buscarResponsaveis,
+  marcarConversaLida, buscarLeituras, definirResponsavel, buscarClientePorCodigo, buscarResponsaveis,
   ehErroLimitePendentes, MAX_PENDENTES, STATUS_EM_ABERTO,
   chatAindaAberto, HORAS_CHAT_APOS_FECHAR,
   podeFalarNaConversa, transferirAtendimento,
@@ -478,29 +486,62 @@ describe('transferirAtendimento', () => {
   });
 });
 
-// ── Recibo de leitura ───────────────────────────────────────────────────────
+// ── Recibo de leitura (migration 20260731d) ─────────────────────────────────
 
-describe('marcarMensagensLidas', () => {
-  it('nunca marca a própria mensagem como lida', async () => {
+describe('marcarConversaLida', () => {
+  it('grava SÓ o próprio cursor', async () => {
     nextResult = { data: null, error: null };
 
-    await marcarMensagensLidas({ solicitacaoId: 'sol-1', usuarioId: 'u1' });
+    await marcarConversaLida({ empresaId: 'emp', solicitacaoId: 'sol-1', usuarioId: 'u1' });
 
-    expect(calls[0].operation).toBe('update');
-    // O `neq autor_id` é o que impede o autor de inflar o próprio ✓✓ — e é o
-    // mesmo predicado da policy de UPDATE.
-    expect(calls[0].filters).toEqual([
-      ['eq',  'solicitacao_id', 'sol-1'],
-      ['neq', 'autor_id',       'u1'],
-      ['is',  'lida_em',        null],
-    ]);
+    expect(calls[0].table).toBe('solicitacoes_whatsapp_leitura');
+    expect(calls[0].operation).toBe('upsert');
+
+    // `usuario_id` no payload é o que impede marcar a conversa como lida para
+    // outra pessoa — o defeito que esta tabela existe para tirar. A policy
+    // `sol_wpp_leitura_insert/update` exige o mesmo no banco.
+    const payload = calls[0].payload as { usuario_id: string; solicitacao_id: string; empresa_id: string };
+    expect(payload.usuario_id).toBe('u1');
+    expect(payload.solicitacao_id).toBe('sol-1');
+    expect(payload.empresa_id).toBe('emp');
   });
 
-  it('carimba lida_em com um ISO', async () => {
+  it('faz upsert pela chave composta, não insert', async () => {
     nextResult = { data: null, error: null };
-    await marcarMensagensLidas({ solicitacaoId: 'sol-1', usuarioId: 'u1' });
-    const payload = calls[0].payload as { lida_em: string };
-    expect(new Date(payload.lida_em).toString()).not.toBe('Invalid Date');
+    await marcarConversaLida({ empresaId: 'emp', solicitacaoId: 'sol-1', usuarioId: 'u1' });
+    // Sem o onConflict certo, a segunda leitura da mesma conversa violaria a PK.
+    expect(calls[0].opcoes).toEqual({ onConflict: 'solicitacao_id,usuario_id' });
+  });
+
+  it('carimba lido_ate com um ISO válido', async () => {
+    nextResult = { data: null, error: null };
+    await marcarConversaLida({ empresaId: 'emp', solicitacaoId: 'sol-1', usuarioId: 'u1' });
+    const payload = calls[0].payload as { lido_ate: string };
+    expect(new Date(payload.lido_ate).toString()).not.toBe('Invalid Date');
+  });
+});
+
+describe('buscarLeituras', () => {
+  it('traz os cursores da empresa', async () => {
+    nextResult = {
+      data: [{ solicitacao_id: 'sol-1', usuario_id: 'u1', lido_ate: '2026-07-31T10:00:00.000Z' }],
+      error: null,
+    };
+
+    const r = await buscarLeituras('emp');
+
+    expect(calls[0].table).toBe('solicitacoes_whatsapp_leitura');
+    expect(calls[0].filters).toEqual([['eq', 'empresa_id', 'emp']]);
+    expect(r).toHaveLength(1);
+  });
+
+  it('erro devolve lista vazia em vez de estourar', async () => {
+    nextResult = { data: null, error: { message: 'permission denied' } };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // O badge some, a tela não quebra.
+    expect(await buscarLeituras('emp')).toEqual([]);
+    warn.mockRestore();
   });
 });
 
