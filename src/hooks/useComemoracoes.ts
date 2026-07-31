@@ -12,8 +12,10 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assinarTabela } from '@/lib/realtime';
 import {
-  buscarComemoracoes, type Comemoracao,
+  buscarComemoracoes, buscarParabens, parabenizar,
+  type Comemoracao, type ParabensComemoracao,
 } from '@/services/comemoracoes.service';
+import { sortearFrase } from '@/pages/Comemoracoes/frases';
 import {
   estaNoAr, fimMs, msAteComecar, proximaDaFila, vaiComecar, desvioDoServidor,
 } from '@/pages/Comemoracoes/janela';
@@ -161,4 +163,81 @@ export function useComemoracaoNoAr(params: {
   }, []);
 
   return { atual, fechar, estaNoAr: !!atual && estaNoAr(atual, agoraCorrigido()) };
+}
+
+// ── Parabéns ─────────────────────────────────────────────────────────────────
+
+/**
+ * Os parabéns de UMA comemoração, ao vivo.
+ *
+ * Tópico por comemoração, e não por empresa: `comemoracao_parabens` não tem
+ * `empresa_id`, então é por `comemoracao_id` que o realtime consegue filtrar.
+ * O canal vive o tempo do card — segundos — e some junto com ele.
+ */
+export function useParabens(params: {
+  comemoracaoId: string | null;
+  empresaId:     string | null;
+  usuarioId:     string | null;
+}) {
+  const { comemoracaoId, empresaId, usuarioId } = params;
+
+  const [parabens, setParabens] = useState<ParabensComemoracao[]>([]);
+  const [enviando, setEnviando] = useState(false);
+
+  const montadoRef = useRef(true);
+  useEffect(() => {
+    montadoRef.current = true;
+    return () => { montadoRef.current = false; };
+  }, []);
+
+  const recarregar = useCallback(async () => {
+    if (!comemoracaoId || !empresaId) { setParabens([]); return; }
+    const lista = await buscarParabens(comemoracaoId, empresaId);
+    if (montadoRef.current) setParabens(lista);
+  }, [comemoracaoId, empresaId]);
+
+  const recarregarRef = useRef(recarregar);
+  recarregarRef.current = recarregar;
+
+  useEffect(() => { void recarregar(); }, [recarregar]);
+
+  useEffect(() => {
+    if (!comemoracaoId) return;
+    return assinarTabela(
+      {
+        topico:  `rt-parabens-${comemoracaoId}`,
+        escutas: [{
+          tabela: 'comemoracao_parabens',
+          filtro: `comemoracao_id=eq.${comemoracaoId}`,
+        }],
+      },
+      {
+        // Relê em vez de aplicar o payload: o nome e a foto de quem
+        // parabenizou vêm de outra tabela, e o realtime não faz join.
+        onEvento:      () => { void recarregarRef.current(); },
+        onReconectado: () => { void recarregarRef.current(); },
+      },
+    );
+  }, [comemoracaoId]);
+
+  /** Eu já parabenizei esta comemoração? */
+  const jaParabenizei = useMemo(
+    () => !!usuarioId && parabens.some((p) => p.usuario_id === usuarioId),
+    [parabens, usuarioId],
+  );
+
+  const enviarParabens = useCallback(async () => {
+    if (!comemoracaoId || !usuarioId || jaParabenizei) return;
+    setEnviando(true);
+    try {
+      // A frase é sorteada AQUI e gravada na linha, para todo mundo ver a
+      // mesma. Sortear na exibição faria cada tela mostrar uma diferente.
+      await parabenizar({ comemoracaoId, usuarioId, frase: sortearFrase() });
+      await recarregarRef.current();
+    } finally {
+      if (montadoRef.current) setEnviando(false);
+    }
+  }, [comemoracaoId, usuarioId, jaParabenizei]);
+
+  return { parabens, jaParabenizei, enviando, enviarParabens };
 }

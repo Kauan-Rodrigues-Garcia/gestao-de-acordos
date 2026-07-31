@@ -12,15 +12,17 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Volume2, VolumeX, PartyPopper, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useComemoracoes, useComemoracaoNoAr } from '@/hooks/useComemoracoes';
+import { useComemoracoes, useComemoracaoNoAr, useParabens } from '@/hooks/useComemoracoes';
 import { tocarSomComemoracao, tocarArquivoDeSom, estaMudo, definirMudo } from '@/lib/som-comemoracao';
+import { cn } from '@/lib/utils';
 import { efeitoValido, somValido } from '@/pages/Comemoracoes/catalogo';
 import { ouvirTeste, type ComemoracaoTeste } from '@/pages/Comemoracoes/testeLocal';
 import { CardComemoracao } from './CardComemoracao';
 import { EfeitoComemoracao } from './EfeitoComemoracao';
+import { BaloesParabens } from './BaloesParabens';
 
 export function ComemoracaoOverlay() {
   const { perfil }  = useAuth();
@@ -111,6 +113,32 @@ export function ComemoracaoOverlay() {
     definirMudo(novo);
   }
 
+  // ── Parabéns ───────────────────────────────────────────────────────────────
+  // Só para comemoração de verdade: no ensaio não há a quem parabenizar, e
+  // gravar parabéns de teste sujaria o histórico.
+  const { parabens, jaParabenizei, enviando, enviarParabens } = useParabens({
+    comemoracaoId: atual?.id ?? null,
+    empresaId,
+    usuarioId,
+  });
+
+  /**
+   * Ninguém parabeniza a si mesmo.
+   *
+   * Sem isto o homenageado veria um botão para se aplaudir, e o próprio nome
+   * subiria entre os balões dos colegas.
+   */
+  const souHomenageado = !!usuarioId && !!atual?.homenageados.some((p) => p.id === usuarioId);
+  const podeParabenizar = !!atual && !!usuarioId && !souHomenageado;
+
+  /** Nome que aparece no botão: um só, ou "o time". */
+  const quemParabenizar = (() => {
+    const nomes = atual?.homenageados ?? [];
+    if (!nomes.length) return '';
+    if (nomes.length === 1) return nomes[0].nome.split(' ')[0];
+    return 'o time';
+  })();
+
   // O ensaio tem precedência: quem clicou em Testar quer ver o ensaio, não uma
   // comemoração de verdade que entrou no meio.
   const emCena = teste
@@ -142,6 +170,11 @@ export function ComemoracaoOverlay() {
       : null;
 
   return (
+    <>
+      {/* Fora do AnimatePresence: os balões continuam subindo enquanto o card
+          faz a animação de saída. */}
+      {atual && <BaloesParabens parabens={parabens} />}
+
     <AnimatePresence>
       {emCena && (
         <motion.div
@@ -187,9 +220,47 @@ export function ComemoracaoOverlay() {
             >
               {mudo ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
             </button>
+
+            {/* Parabenizar — só na comemoração de verdade, e não para quem
+                está sendo homenageado. */}
+            {!emCena.ehTeste && podeParabenizar && (
+              <div className="absolute inset-x-0 -bottom-2 flex justify-center">
+                <motion.button
+                  type="button"
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                  disabled={jaParabenizei || enviando}
+                  onClick={() => void enviarParabens()}
+                  className={cn(
+                    'pointer-events-auto inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5',
+                    'text-xs font-bold shadow-lg transition-colors',
+                    jaParabenizei
+                      ? 'cursor-default bg-emerald-600 text-white'
+                      : 'bg-amber-400 text-black hover:bg-amber-300',
+                  )}
+                >
+                  {enviando
+                    ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    : jaParabenizei
+                      ? <Check className="h-3.5 w-3.5" />
+                      : <PartyPopper className="h-3.5 w-3.5" />}
+                  {jaParabenizei ? 'Parabenizado!' : `Parabenizar ${quemParabenizar}`}
+                  {parabens.length > 0 && (
+                    <span className={cn(
+                      'ml-0.5 rounded-full px-1.5 text-[10px]',
+                      jaParabenizei ? 'bg-white/25' : 'bg-black/15',
+                    )}>
+                      {parabens.length}
+                    </span>
+                  )}
+                </motion.button>
+              </div>
+            )}
           </div>
         </motion.div>
       )}
     </AnimatePresence>
+    </>
   );
 }

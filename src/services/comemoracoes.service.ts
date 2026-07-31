@@ -265,6 +265,70 @@ export async function cancelarComemoracao(id: string): Promise<Resultado> {
   return { ok: true, erro: null, dados: null };
 }
 
+// ── Parabéns ─────────────────────────────────────────────────────────────────
+
+export interface ParabensComemoracao {
+  comemoracao_id: string;
+  usuario_id:     string;
+  frase:          string;
+  criado_em:      string;
+  /** Resolvido pelo service; o realtime não traz join. */
+  pessoa?:        PessoaComemoracao | null;
+}
+
+/**
+ * Registra o parabéns de quem clicou.
+ *
+ * Um por pessoa, garantido pela PK composta da tabela. Clicar de novo devolve
+ * `ok` em vez de erro: para quem clicou não houve falha nenhuma, e o botão já
+ * mostra que o parabéns foi dado.
+ */
+export async function parabenizar(params: {
+  comemoracaoId: string;
+  usuarioId:     string;
+  frase:         string;
+}): Promise<Resultado> {
+  const { error } = await supabase
+    .from('comemoracao_parabens')
+    .insert({
+      comemoracao_id: params.comemoracaoId,
+      usuario_id:     params.usuarioId,
+      frase:          params.frase,
+    });
+
+  if (error) {
+    // 23505 = violação de unicidade, ou seja, já tinha parabenizado.
+    if (error.code === '23505') return { ok: true, erro: null, dados: null };
+    logger.warn('[comemoracoes] erro ao parabenizar:', error.message);
+    return { ok: false, erro: 'Não foi possível registrar o parabéns.', dados: null };
+  }
+  return { ok: true, erro: null, dados: null };
+}
+
+/** Parabéns já dados numa comemoração, com nome e foto de quem deu. */
+export async function buscarParabens(
+  comemoracaoId: string,
+  empresaId: string,
+): Promise<ParabensComemoracao[]> {
+  const [{ data, error }, pessoas] = await Promise.all([
+    supabase
+      .from('comemoracao_parabens')
+      .select('*')
+      .eq('comemoracao_id', comemoracaoId)
+      .order('criado_em', { ascending: true }),
+    buscarPessoas(empresaId),
+  ]);
+
+  if (error) {
+    logger.warn('[comemoracoes] erro ao listar parabéns:', error.message);
+    return [];
+  }
+  return ((data ?? []) as ParabensComemoracao[]).map((p) => ({
+    ...p,
+    pessoa: pessoas.get(p.usuario_id) ?? null,
+  }));
+}
+
 export async function excluirComemoracao(id: string): Promise<Resultado> {
   const { error } = await supabase.from('comemoracoes').delete().eq('id', id);
   if (error) {

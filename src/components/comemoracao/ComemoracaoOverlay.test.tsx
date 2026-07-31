@@ -27,24 +27,41 @@ interface LinhaFake {
   homenageados: { id: string; nome: string; foto_url: string | null }[];
 }
 
+interface ParabensFake {
+  comemoracao_id: string;
+  usuario_id: string;
+  frase: string;
+  criado_em: string;
+  pessoa: { id: string; nome: string; foto_url: string | null } | null;
+}
+
 let linhas: LinhaFake[] = [];
+let parabensNoBanco: ParabensFake[] = [];
+const parabenizarMock = vi.fn(() => Promise.resolve({ ok: true, erro: null, dados: null }));
+
 vi.mock('@/services/comemoracoes.service', () => ({
   buscarComemoracoes: () => Promise.resolve({
     data: linhas, dbAtiva: true, erro: null, agoraServidor: new Date().toISOString(),
   }),
+  buscarParabens: () => Promise.resolve(parabensNoBanco),
+  parabenizar: (...a: unknown[]) => parabenizarMock(...(a as [])),
 }));
 
 vi.mock('@/lib/realtime', () => ({ assinarTabela: () => () => {} }));
 
 // framer-motion com fake timers trava o teste; aqui só a estrutura importa.
+//
+// A TAG é preservada (`motion.button` vira `<button>`, não `<div>`): sem isso
+// o botão de parabenizar perderia o papel de botão e sumiria das buscas por
+// role — que é como o leitor de tela também o encontraria.
 vi.mock('framer-motion', () => ({
   AnimatePresence: ({ children }: { children?: unknown }) => children as never,
   motion: new Proxy({}, {
-    get: () => ({ children, ...p }: Record<string, unknown> & { children?: unknown }) => {
+    get: (_alvo, tag: string) => ({ children, ...p }: Record<string, unknown> & { children?: unknown }) => {
       const limpo = Object.fromEntries(
         Object.entries(p).filter(([k]) => !['initial', 'animate', 'exit', 'transition'].includes(k)),
       );
-      return React.createElement('div', limpo as never, children as never);
+      return React.createElement(tag, limpo as never, children as never);
     },
   }),
 }));
@@ -65,7 +82,9 @@ function linha(over: Partial<LinhaFake> = {}): LinhaFake {
 
 beforeEach(() => {
   somMock.mockClear();
+  parabenizarMock.mockClear();
   linhas = [];
+  parabensNoBanco = [];
   perfilAtual = { id: 'eu', setor_id: 's-a' };
 });
 
@@ -147,5 +166,78 @@ describe('ComemoracaoOverlay', () => {
     linhas = [linha()];
     await montar();
     expect(screen.queryByText('META BATIDA!')).toBeNull();
+  });
+});
+
+describe('parabéns', () => {
+  it('quem assiste vê o botão com o nome do homenageado', async () => {
+    linhas = [linha()];
+    await montar();
+    expect(screen.getByRole('button', { name: /Parabenizar Ana/i })).toBeTruthy();
+  });
+
+  it('com vários homenageados, o botão fala do time', async () => {
+    linhas = [linha({
+      homenageados: [
+        { id: 'op1', nome: 'Ana Silva', foto_url: null },
+        { id: 'op2', nome: 'Bruno Costa', foto_url: null },
+      ],
+    })];
+    await montar();
+    expect(screen.getByRole('button', { name: /Parabenizar o time/i })).toBeTruthy();
+  });
+
+  it('O HOMENAGEADO NÃO se parabeniza', async () => {
+    // Sem esta regra a pessoa veria um botão para se aplaudir, e o próprio
+    // nome subiria entre os balões dos colegas.
+    perfilAtual = { id: 'op1', setor_id: 's-a' };
+    linhas = [linha({ homenageados: [{ id: 'op1', nome: 'Ana Silva', foto_url: null }] })];
+    await montar();
+    expect(screen.queryByRole('button', { name: /Parabenizar/i })).toBeNull();
+  });
+
+  it('clicar registra o parabéns com uma frase', async () => {
+    linhas = [linha()];
+    await montar();
+
+    await act(async () => {
+      screen.getByRole('button', { name: /Parabenizar/i }).click();
+      await Promise.resolve();
+    });
+
+    expect(parabenizarMock).toHaveBeenCalledTimes(1);
+    const args = parabenizarMock.mock.calls[0][0] as { frase: string; usuarioId: string };
+    expect(args.usuarioId).toBe('eu');
+    expect(args.frase.length).toBeGreaterThan(0);
+  });
+
+  it('quem já parabenizou vê o botão travado', async () => {
+    parabensNoBanco = [{
+      comemoracao_id: 'c1', usuario_id: 'eu', frase: 'Que orgulho!',
+      criado_em: new Date().toISOString(),
+      pessoa: { id: 'eu', nome: 'Eu Mesmo', foto_url: null },
+    }];
+    linhas = [linha()];
+    await montar();
+
+    expect(screen.getByRole('button', { name: /Parabenizado/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Parabenizar Ana/i })).toBeNull();
+  });
+
+  it('o contador mostra quantos parabenizaram', async () => {
+    parabensNoBanco = [
+      { comemoracao_id: 'c1', usuario_id: 'u1', frase: 'Show!', criado_em: new Date().toISOString(), pessoa: null },
+      { comemoracao_id: 'c1', usuario_id: 'u2', frase: 'Boa!',  criado_em: new Date().toISOString(), pessoa: null },
+    ];
+    linhas = [linha()];
+    await montar();
+    expect(screen.getByRole('button', { name: /Parabenizar Ana/i }).textContent).toContain('2');
+  });
+
+  it('o ensaio não oferece parabenizar', async () => {
+    // Parabéns de teste sujariam o histórico da comemoração.
+    linhas = [];
+    await montar();
+    expect(screen.queryByRole('button', { name: /Parabenizar/i })).toBeNull();
   });
 });
