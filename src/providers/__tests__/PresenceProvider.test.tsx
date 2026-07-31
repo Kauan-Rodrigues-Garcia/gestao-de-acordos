@@ -175,7 +175,9 @@ describe('PresenceProvider + useOnlineUsers', () => {
     };
 
     mockChannelSpy.mockReturnValue(fakeChannel);
-    mockTrackSpy.mockResolvedValue(undefined);
+    // 'ok' é o que o track real devolve no caminho feliz; o código só repete
+    // quando vem 'timed out' ou 'error'.
+    mockTrackSpy.mockResolvedValue('ok');
     mockUntrackSpy.mockResolvedValue(undefined);
   });
 
@@ -393,9 +395,13 @@ describe('PresenceProvider + useOnlineUsers', () => {
     expect(result.current.onlineIds.size).toBe(1);
   });
 
-  // ─── Heartbeat ────────────────────────────────────────────────────────
+  // ─── Sem heartbeat de re-track ────────────────────────────────────────
 
-  it('heartbeat chama doTrack periodicamente após SUBSCRIBED', async () => {
+  it('NÃO faz re-track periódico — era o que estourava o rate limit', async () => {
+    // Havia um heartbeat de 20 s aqui. Cada track é difundido para todos os
+    // membros do canal, então com N pessoas online o custo crescia ao quadrado
+    // e o Realtime respondia `PresenceRateLimitReached`. A presença vive
+    // enquanto o socket viver; repetir o track não acrescentava nada.
     vi.useFakeTimers();
 
     mockPerfilRef.current  = { id: USER_ID, nome: 'Ana', perfil: 'lider' };
@@ -408,19 +414,48 @@ describe('PresenceProvider + useOnlineUsers', () => {
       await Promise.resolve();
     });
 
-    const callsAfterSubscribed = (mockTrackSpy as Mock).mock.calls.length;
-    expect(callsAfterSubscribed).toBeGreaterThanOrEqual(1);
+    const aposSubscribed = (mockTrackSpy as Mock).mock.calls.length;
+    expect(aposSubscribed).toBe(1);
 
-    // Avança 20s (HEARTBEAT_MS) → 1 heartbeat
-    act(() => {
-      vi.advanceTimersByTime(20_000);
-    });
+    // Cinco minutos depois, continua sendo um só.
+    act(() => { vi.advanceTimersByTime(300_000); });
+    await act(async () => { await Promise.resolve(); });
+
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
+
+    vi.useRealTimers();
+  });
+
+  it('track que falha é repetido — senão a pessoa fica invisível até um F5', async () => {
+    vi.useFakeTimers();
+
+    mockPerfilRef.current  = { id: USER_ID, nome: 'Ana', perfil: 'lider' };
+    mockEmpresaRef.current = { id: EMPRESA_ID };
+    (mockTrackSpy as Mock).mockResolvedValue('timed out');
+
+    renderHook(() => useOnlineUsers(), { wrapper });
 
     await act(async () => {
+      simulateSubscribeStatus('SUBSCRIBED');
       await Promise.resolve();
     });
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(1);
 
-    expect((mockTrackSpy as Mock).mock.calls.length).toBeGreaterThan(callsAfterSubscribed);
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+      await Promise.resolve();
+    });
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(2);
+
+    // ...mas com teto: não vira o heartbeat de novo por outro caminho.
+    await act(async () => {
+      vi.advanceTimersByTime(300_000);
+      await Promise.resolve();
+    });
+    expect((mockTrackSpy as Mock).mock.calls.length).toBeLessThanOrEqual(4);
+
+    (mockTrackSpy as Mock).mockResolvedValue('ok');
+    vi.useRealTimers();
   });
 
   // ─── Cleanup: untrack + removeChannel ────────────────────────────────
@@ -447,13 +482,14 @@ describe('PresenceProvider + useOnlineUsers', () => {
     expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
   });
 
-  // ─── Cleanup: heartbeat cancelado ────────────────────────────────────
+  // ─── Cleanup: retentativa cancelada ──────────────────────────────────
 
-  it('cleanup cancela o heartbeat ao desmontar', async () => {
+  it('cleanup cancela a retentativa pendente ao desmontar', async () => {
     vi.useFakeTimers();
 
     mockPerfilRef.current  = { id: USER_ID };
     mockEmpresaRef.current = { id: EMPRESA_ID };
+    (mockTrackSpy as Mock).mockResolvedValue('error');
 
     const { unmount } = renderHook(() => useOnlineUsers(), { wrapper });
 
@@ -462,17 +498,16 @@ describe('PresenceProvider + useOnlineUsers', () => {
       await Promise.resolve();
     });
 
-    const callsAtUnmount = (mockTrackSpy as Mock).mock.calls.length;
+    const chamadasAoDesmontar = (mockTrackSpy as Mock).mock.calls.length;
 
     unmount();
 
-    // Avança 40s (2 intervalos) → NÃO deve chamar track novamente
-    act(() => {
-      vi.advanceTimersByTime(40_000);
-    });
+    // Deslogou: nada mais deve bater no canal.
+    act(() => { vi.advanceTimersByTime(40_000); });
 
-    expect((mockTrackSpy as Mock).mock.calls.length).toBe(callsAtUnmount);
+    expect((mockTrackSpy as Mock).mock.calls.length).toBe(chamadasAoDesmontar);
 
+    (mockTrackSpy as Mock).mockResolvedValue('ok');
     vi.useRealTimers();
   });
 

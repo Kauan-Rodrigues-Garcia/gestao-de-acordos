@@ -16,10 +16,27 @@
  *
  * ── Ciclo de vida ─────────────────────────────────────────────────────────────
  * 1. Provider monta → cria canal `presence-empresa-{empresaId}`
- * 2. Após SUBSCRIBED → `channel.track({ user_id, nome, perfil_tipo })`
- * 3. Heartbeat 25 s → re-track para manter presença ativa
- * 4. Eventos sync/join/leave → atualiza `onlineIds` via setState
- * 5. Provider desmonta (logout) → `supabase.removeChannel(channel)`
+ * 2. Após SUBSCRIBED → `channel.track({ user_id, nome, perfil_tipo })`, UMA vez
+ * 3. Eventos sync/join/leave → atualiza `onlineIds` via setState
+ * 4. Provider desmonta (logout) → `supabase.removeChannel(channel)`
+ *
+ * ── Por que NÃO existe heartbeat de re-track ─────────────────────────────────
+ * Existiu um, de 20 em 20 segundos, e ele derrubava o Realtime:
+ *
+ *     PresenceRateLimitReached: Too many presence events per second
+ *
+ * Cada `track()` é difundido para TODOS os membros do canal. Com N pessoas
+ * logadas, um re-track por pessoa a cada 20 s gera N/20 tracks por segundo, e
+ * cada um deles notifica as outras N — o custo cresce ao quadrado. Numa
+ * operação com dezenas de pessoas online o limite estourava sem parar, e aí o
+ * ciclo se realimentava: o canal caía, o código reconectava, o SUBSCRIBED
+ * fazia track de novo e reabria o intervalo.
+ *
+ * O re-track periódico também não servia para nada: o Presence do Supabase
+ * mantém o estado enquanto o socket estiver vivo, e o socket já tem o próprio
+ * heartbeat de transporte, que não é evento de presence. Quem cobre queda de
+ * rede e máquina suspensa é a reconexão (CLOSED/CHANNEL_ERROR + visibilitychange),
+ * logo abaixo. O track só é repetido quando FALHA — ver `doTrack`.
  */
 import {
   createContext, useContext, useEffect, useRef,
@@ -52,8 +69,24 @@ const PresenceContext = createContext<PresenceContextValue>({
   loading: true,
 });
 
-// ── Intervalo de heartbeat (ms) ───────────────────────────────────────────────
-const HEARTBEAT_MS = 20_000;
+/**
+ * Espera antes de tentar o `track` de novo quando ele falha.
+ *
+ * Só vale para falha — não é heartbeat (ver o cabeçalho). Sem esta retentativa,
+ * um `track` que voltasse 'timed out' deixaria a pessoa invisível para todos
+ * até o próximo F5.
+ */
+const RETRY_TRACK_MS = 5_000;
+
+/** Teto de tentativas do track. Depois disso, a reconexão do canal reassume. */
+const MAX_TENTATIVAS_TRACK = 4;
+
+/** Dois conjuntos com os mesmos ids? Evita re-render do app inteiro à toa. */
+function mesmosIds(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of a) if (!b.has(id)) return false;
+  return true;
+}
 
 // ── Provider ──────────────────────────────────────────────────────────────────
 
@@ -69,7 +102,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
   const [reconnectKey, setReconnectKey] = useState(0);
 
   const channelRef          = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const heartbeatRef        = useRef<ReturnType<typeof setInterval> | null>(null);
+  const retryTrackRef       = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectTimerRef   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const mountedRef          = useRef(true);
@@ -135,47 +168,60 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
 
     channelRef.current = channel;
 
-    const doTrack = async () => {
+    /**
+     * Anuncia esta pessoa no canal. Chamado UMA vez por SUBSCRIBED.
+     *
+     * Repete só quando falha, com teto — nunca em intervalo fixo, que foi o que
+     * estourou o limite de presence do Realtime (ver cabeçalho).
+     */
+    const doTrack = async (tentativa = 0) => {
+      const repetir = () => {
+        if (tentativa + 1 >= MAX_TENTATIVAS_TRACK) return;
+        if (retryTrackRef.current) clearTimeout(retryTrackRef.current);
+        retryTrackRef.current = setTimeout(() => {
+          if (mountedRef.current) void doTrack(tentativa + 1);
+        }, RETRY_TRACK_MS);
+      };
+
       try {
-        await channel.track({
+        const resposta = await channel.track({
           user_id:     userId,
           nome:        perfil?.nome        ?? '',
           perfil_tipo: perfil?.perfil      ?? '',
         });
+        // 'ok' | 'timed out' | 'error' — só o primeiro colocou a pessoa no ar.
+        if (resposta !== 'ok') repetir();
       } catch (e) {
         console.warn('[PresenceProvider] track error:', e);
+        repetir();
       }
     };
 
     // ── Handlers ──────────────────────────────────────────────────────────
+    // Este Provider está no topo da árvore: trocar o Set faz o app inteiro
+    // re-renderizar. `mesmosIds` corta o render quando o evento não mudou nada
+    // — e sync/join/leave chegam bastante numa empresa com muita gente online.
+    const aplicarEstado = () => {
+      if (!mountedRef.current) return;
+      const novos = extractIds(channel.presenceState<PresencePayload>());
+      setOnlineIds(prev => (mesmosIds(prev, novos) ? prev : novos));
+    };
+
     channel
       .on('presence', { event: 'sync' }, () => {
-        if (!mountedRef.current) return;
-        const state = channel.presenceState<PresencePayload>();
-        setOnlineIds(extractIds(state));
-        setLoading(false);
+        aplicarEstado();
+        if (mountedRef.current) setLoading(false);
       })
-      .on('presence', { event: 'join' }, () => {
-        if (!mountedRef.current) return;
-        const state = channel.presenceState<PresencePayload>();
-        setOnlineIds(extractIds(state));
-      })
-      .on('presence', { event: 'leave' }, () => {
-        if (!mountedRef.current) return;
-        const state = channel.presenceState<PresencePayload>();
-        setOnlineIds(extractIds(state));
-      })
+      .on('presence', { event: 'join' },  aplicarEstado)
+      .on('presence', { event: 'leave' }, aplicarEstado)
       .subscribe(async (status, err) => {
         if (!mountedRef.current) return;
 
         if (status === 'SUBSCRIBED') {
           reconnectAttemptsRef.current = 0;
+          // Uma vez só. A presença vive enquanto o socket viver.
+          if (retryTrackRef.current) { clearTimeout(retryTrackRef.current); retryTrackRef.current = null; }
           await doTrack();
-
-          if (heartbeatRef.current) clearInterval(heartbeatRef.current);
-          heartbeatRef.current = setInterval(() => {
-            if (mountedRef.current) doTrack();
-          }, HEARTBEAT_MS);
         }
 
         // CLOSED entra aqui de propósito: era o caso NÃO tratado, e é o mais
@@ -198,9 +244,9 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
     // ── Cleanup ───────────────────────────────────────────────────────────
     return () => {
       mountedRef.current = false;
-      if (heartbeatRef.current) {
-        clearInterval(heartbeatRef.current);
-        heartbeatRef.current = null;
+      if (retryTrackRef.current) {
+        clearTimeout(retryTrackRef.current);
+        retryTrackRef.current = null;
       }
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
