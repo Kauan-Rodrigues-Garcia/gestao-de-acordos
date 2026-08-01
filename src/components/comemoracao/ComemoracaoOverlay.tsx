@@ -71,10 +71,10 @@ export function ComemoracaoOverlay() {
     // Ensaio ignora o mudo: quem clicou em Testar pediu para ver E ouvir.
     if (c.somUrl) {
       pararSomRef.current = tocarArquivoDeSom(c.somUrl, true, {
-        inicio: c.somInicioS, duracao: c.duracaoS,
+        inicio: c.somInicioS, duracao: c.duracaoS, volume: c.volume,
       });
     } else {
-      tocarSomComemoracao(somValido(c.som), true);
+      tocarSomComemoracao(somValido(c.som), true, c.volume ?? 100);
     }
     timerTesteRef.current = setTimeout(() => setTeste(null), c.duracaoS * 1000);
   }), [pararSom]);
@@ -92,12 +92,16 @@ export function ComemoracaoOverlay() {
     pararSom();
     // O som enviado pelo líder tem precedência sobre o do catálogo, e toca a
     // partir do ponto escolhido PELO TEMPO DA COMEMORAÇÃO.
+    // `?? 100` porque uma comemoração criada antes da 20260801a não tem a
+    // coluna: ela deve soar exatamente como soava.
+    const volume = atual.volume ?? 100;
+
     if (atual.som_url) {
       pararSomRef.current = tocarArquivoDeSom(atual.som_url, false, {
-        inicio: atual.som_inicio_s, duracao: atual.duracao_s,
+        inicio: atual.som_inicio_s, duracao: atual.duracao_s, volume,
       });
     } else {
-      tocarSomComemoracao(somValido(atual.som));
+      tocarSomComemoracao(somValido(atual.som), false, volume);
     }
   }, [atual, pararSom]);
 
@@ -107,10 +111,20 @@ export function ComemoracaoOverlay() {
     if (!atual && !teste) pararSom();
   }, [atual, teste, pararSom]);
 
+  /**
+   * Silenciar precisa CALAR o que já está tocando, não só gravar a preferência.
+   *
+   * Antes só gravava: quem clicava no meio de uma música de 30 s continuava
+   * ouvindo até o fim, que é justo quando alguém está em ligação e clica.
+   *
+   * Dessilenciar NÃO religa a música do meio: quem calou no meio da festa
+   * queria silêncio, e o som voltando sozinho seria pior que o problema.
+   */
   function alternarMudo() {
     const novo = !mudo;
     setMudo(novo);
     definirMudo(novo);
+    if (novo) pararSom();
   }
 
   // ── Parabéns ───────────────────────────────────────────────────────────────
@@ -149,6 +163,7 @@ export function ComemoracaoOverlay() {
         homenageados: teste.homenageados,
         gifUrl:   teste.gifUrl,
         layout:   teste.layout,
+        animTexto: teste.animTexto,
         efeito:   efeitoValido(teste.efeito),
         duracaoS: teste.duracaoS,
         fechar:   () => setTeste(null),
@@ -162,6 +177,7 @@ export function ComemoracaoOverlay() {
           homenageados: atual.homenageados,
           gifUrl:   atual.gif_url,
           layout:   atual.layout,
+          animTexto: atual.anim_texto,
           efeito:   efeitoValido(atual.efeito),
           duracaoS: atual.duracao_s,
           fechar,
@@ -207,6 +223,7 @@ export function ComemoracaoOverlay() {
               homenageados={emCena.homenageados}
               gifUrl={emCena.gifUrl}
               layout={emCena.layout}
+              animTexto={emCena.animTexto}
               tempoTotalS={emCena.duracaoS}
               onFechar={emCena.fechar}
             />

@@ -39,12 +39,16 @@ let linhas: LinhaFake[] = [];
 let parabensNoBanco: ParabensFake[] = [];
 const parabenizarMock = vi.fn(() => Promise.resolve({ ok: true, erro: null, dados: null }));
 
+const finalizarMock = vi.fn(() => Promise.resolve());
+
 vi.mock('@/services/comemoracoes.service', () => ({
   buscarComemoracoes: () => Promise.resolve({
     data: linhas, dbAtiva: true, erro: null, agoraServidor: new Date().toISOString(),
   }),
   buscarParabens: () => Promise.resolve(parabensNoBanco),
   parabenizar: (...a: unknown[]) => parabenizarMock(...(a as [])),
+  // Migration 20260801a: o cliente que exibiu fecha a comemoração para todos.
+  finalizarComemoracao: () => finalizarMock(),
 }));
 
 vi.mock('@/lib/realtime', () => ({ assinarTabela: () => () => {} }));
@@ -83,9 +87,14 @@ function linha(over: Partial<LinhaFake> = {}): LinhaFake {
 beforeEach(() => {
   somMock.mockClear();
   parabenizarMock.mockClear();
+  finalizarMock.mockClear();
   linhas = [];
   parabensNoBanco = [];
   perfilAtual = { id: 'eu', setor_id: 's-a' };
+  // "Já vi esta" agora mora no localStorage (20260801a) — é o que impede o F5
+  // de repetir a comemoração. Como todos os casos usam o id 'c1', sem limpar
+  // aqui o primeiro teste esconderia a festa de todos os seguintes.
+  localStorage.clear();
 });
 
 afterEach(() => { vi.useRealTimers(); });
@@ -138,7 +147,9 @@ describe('ComemoracaoOverlay', () => {
     linhas = [linha()];
     await montar();
     expect(somMock).toHaveBeenCalledTimes(1);
-    expect(somMock).toHaveBeenCalledWith('fanfarra');
+    // Assinatura da 20260801a: (som, forcar, volumePct). 100 = volume de
+    // sempre, que é onde cai comemoração criada antes da coluna existir.
+    expect(somMock).toHaveBeenCalledWith('fanfarra', false, 100);
   });
 
   it('uma de cada vez: a segunda espera', async () => {

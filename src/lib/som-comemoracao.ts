@@ -98,13 +98,31 @@ function obterContexto(): AudioContext | null {
 }
 
 /**
+ * O volume escolhido na comemoração, em PERCENTUAL do padrão de cada som.
+ *
+ * Não é ganho absoluto de propósito: a música do líder vem masterizada alta e
+ * é atenuada para 0,25, enquanto os sons sintetizados nascem calibrados em
+ * 0,22. Um número absoluto único obrigaria a escolher qual dos dois estragar.
+ *
+ * 100 (o padrão) reproduz exatamente o comportamento anterior nos dois casos.
+ */
+export function fatorDeVolume(percentual: number | null | undefined): number {
+  if (!Number.isFinite(percentual ?? NaN)) return 1;
+  return Math.min(100, Math.max(0, percentual as number)) / 100;
+}
+
+/**
  * Toca o som do catálogo. Não devolve nada e nunca lança.
  *
  * `forcar` ignora o mudo — usado pela prévia, onde a pessoa pediu para ouvir.
+ * `volumePct` é o percentual da comemoração (ver `fatorDeVolume`).
  */
-export function tocarSomComemoracao(som: SomId, forcar = false): void {
+export function tocarSomComemoracao(som: SomId, forcar = false, volumePct = 100): void {
   if (som === 'nenhum') return;
   if (!forcar && estaMudo()) return;
+
+  const fator = fatorDeVolume(volumePct);
+  if (fator <= 0) return;
 
   const sequencia = SEQUENCIAS[som];
   if (!sequencia) return;
@@ -134,7 +152,7 @@ export function tocarSomComemoracao(som: SomId, forcar = false): void {
       // Rampas curtas na entrada e na saída: sem elas o corte seco do
       // oscilador vira um clique audível.
       ganho.gain.setValueAtTime(0.0001, t0);
-      ganho.gain.exponentialRampToValueAtTime(VOLUME, t0 + 0.012);
+      ganho.gain.exponentialRampToValueAtTime(VOLUME * fator, t0 + 0.012);
       ganho.gain.exponentialRampToValueAtTime(0.0001, t0 + nota.duracao);
 
       oscilador.connect(ganho);
@@ -168,6 +186,8 @@ export interface OpcoesSom {
    * junto com o card, não antes nem depois.
    */
   duracao?: number;
+  /** Percentual do volume padrão (ver `fatorDeVolume`). Ausente = 100. */
+  volume?:  number;
 }
 
 /**
@@ -188,9 +208,12 @@ export function tocarArquivoDeSom(
 ): () => void {
   if (!forcar && estaMudo()) return () => {};
 
+  const fator = fatorDeVolume(opcoes?.volume ?? 100);
+  if (fator <= 0) return () => {};
+
   try {
     const audio = new Audio(url);
-    audio.volume = VOLUME_ARQUIVO;
+    audio.volume = VOLUME_ARQUIVO * fator;
 
     let timerFim:  ReturnType<typeof setTimeout>  | null = null;
     let timerFade: ReturnType<typeof setInterval> | null = null;

@@ -12,7 +12,30 @@
 import { supabase } from '@/lib/supabase';
 import { logger } from '@/lib/logger';
 
-export type TipoMidia = 'gif' | 'som';
+/**
+ * `imagem` separada de `gif` desde a 20260801a.
+ *
+ * PNG e WEBP já subiam antes, rotulados como gif — o card sempre teve um slot
+ * de mídia só. A separação é de organização: com 30 arquivos na biblioteca,
+ * procurar o troféu animado no meio das fotos da equipe é o que atrasa.
+ */
+export type TipoMidia = 'gif' | 'imagem' | 'som';
+
+/** Rótulo no singular, para as mensagens da tela. */
+export const NOME_TIPO: Record<TipoMidia, string> = {
+  gif:    'GIF',
+  imagem: 'imagem',
+  som:    'som',
+};
+
+/** Cota de "manter salvos" por tipo, POR EMPRESA (não por pessoa). */
+export const MAX_FIXADAS_POR_TIPO = 4;
+
+/** Teto total da biblioteca, por empresa. Espelha o trigger da 20260801a. */
+export const MAX_MIDIAS = 30;
+
+/** Quantos dias a mídia não fixada sobrevive. */
+export const DIAS_VALIDADE = 3;
 
 export interface MidiaComemoracao {
   id:         string;
@@ -31,19 +54,59 @@ export interface MidiaComemoracao {
    * duas durações concorrentes deixariam uma delas sobrando.
    */
   inicio_s?:  number;
+  /** Fixada não expira (20260801a). */
+  fixada?:    boolean;
+  /** Quando a faxina apaga. NULL = fixada. */
+  expira_em?: string | null;
 }
 
 export const BUCKET = 'comemoracoes';
 
 /**
- * Espelha `file_size_limit` do bucket (migration 20260731g). O teto de verdade
- * é o do bucket; isto existe para dar erro legível antes de gastar a subida.
+ * Espelha `file_size_limit` do bucket (10 MB desde a 20260731g). O teto de
+ * verdade é o do bucket; isto existe para dar erro legível antes de gastar a
+ * subida inteira.
  */
-export const LIMITE_GIF_BYTES = 5 * 1024 * 1024;
-export const LIMITE_SOM_BYTES = 10 * 1024 * 1024;
+export const LIMITE_BYTES = 10 * 1024 * 1024;
 
-const MIME_GIF = ['image/gif', 'image/png', 'image/webp'];
-const MIME_SOM = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
+const MIME_GIF    = ['image/gif'];
+const MIME_IMAGEM = ['image/png', 'image/webp', 'image/jpeg'];
+const MIME_SOM    = ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/ogg'];
+
+const MIME_POR_TIPO: Record<TipoMidia, readonly string[]> = {
+  gif:    MIME_GIF,
+  imagem: MIME_IMAGEM,
+  som:    MIME_SOM,
+};
+
+/** `accept` do input de arquivo. */
+export function mimesAceitos(tipo: TipoMidia): string {
+  return MIME_POR_TIPO[tipo].join(',');
+}
+
+/**
+ * Em qual gaveta o arquivo cai, pelo MIME.
+ *
+ * Pelo MIME e não pela extensão: `.gif` renomeado para `.png` continua sendo um
+ * GIF animado, e é assim que ele tem que aparecer na biblioteca.
+ */
+export function tipoDoArquivo(arquivo: File): TipoMidia | null {
+  if (MIME_GIF.includes(arquivo.type))    return 'gif';
+  if (MIME_IMAGEM.includes(arquivo.type)) return 'imagem';
+  if (MIME_SOM.includes(arquivo.type))    return 'som';
+  return null;
+}
+
+/** Dias que faltam até a faxina levar. `null` = fixada, não expira. */
+export function diasAteExpirar(
+  midia: MidiaComemoracao,
+  agora = Date.now(),
+): number | null {
+  if (midia.fixada || !midia.expira_em) return null;
+  const quando = new Date(midia.expira_em).getTime();
+  if (!Number.isFinite(quando)) return null;
+  return Math.max(0, Math.ceil((quando - agora) / 86_400_000));
+}
 
 interface Resultado<T = null> {
   ok:    boolean;
@@ -51,25 +114,29 @@ interface Resultado<T = null> {
   dados: T | null;
 }
 
-function limiteDe(tipo: TipoMidia): number {
-  return tipo === 'gif' ? LIMITE_GIF_BYTES : LIMITE_SOM_BYTES;
-}
-
 function emMB(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1).replace('.', ',')} MB`;
 }
 
+const ESPERADO: Record<TipoMidia, string> = {
+  gif:    'Envie um GIF.',
+  imagem: 'Envie um PNG, JPG ou WEBP.',
+  som:    'Envie um MP3, WAV ou OGG.',
+};
+
 /** Erro legível, ou null se o arquivo serve. */
 export function validarArquivo(arquivo: File, tipo: TipoMidia): string | null {
-  const permitidos = tipo === 'gif' ? MIME_GIF : MIME_SOM;
-  if (!permitidos.includes(arquivo.type)) {
-    return tipo === 'gif'
-      ? 'Envie um GIF, PNG ou WEBP.'
-      : 'Envie um MP3, WAV ou OGG.';
+  if (!MIME_POR_TIPO[tipo].includes(arquivo.type)) {
+    // Mensagem específica quando o arquivo é válido, só está na aba errada:
+    // "envie um GIF" não ajuda quem acabou de escolher um PNG na aba de GIFs.
+    const real = tipoDoArquivo(arquivo);
+    if (real && real !== tipo) {
+      return `Isso é ${real === 'som' ? 'um som' : `${real === 'gif' ? 'um GIF' : 'uma imagem'}`}. Use a aba ${NOME_TIPO[real]}.`;
+    }
+    return ESPERADO[tipo];
   }
-  const limite = limiteDe(tipo);
-  if (arquivo.size > limite) {
-    return `O arquivo tem ${emMB(arquivo.size)}. O limite é ${emMB(limite)}.`;
+  if (arquivo.size > LIMITE_BYTES) {
+    return `O arquivo tem ${emMB(arquivo.size)}. O limite é ${emMB(LIMITE_BYTES)}.`;
   }
   return null;
 }
@@ -165,10 +232,47 @@ export async function enviarMidia(params: {
     // O arquivo já subiu; sem a linha ele viraria lixo invisível no bucket.
     await supabase.storage.from(BUCKET).remove([caminho]);
     logger.warn('[comemoracaoMidias] erro ao registrar:', error?.message);
-    return { ok: false, erro: 'Não foi possível salvar a mídia.', dados: null };
+    return {
+      ok: false,
+      // O teto de 30 é um RAISE do trigger da 20260801a; a mensagem dele já é
+      // escrita para a pessoa ler, então é repassada em vez de mascarada.
+      erro: /biblioteca cheia/i.test(error?.message ?? '')
+        ? error?.message ?? null
+        : 'Não foi possível salvar a mídia.',
+      dados: null,
+    };
   }
 
   return { ok: true, erro: null, dados: data as MidiaComemoracao };
+}
+
+/**
+ * Fixa ou desafixa: mídia fixada não expira em 3 dias.
+ *
+ * A cota (4 por tipo, por empresa) é validada no BANCO, na própria RPC — não há
+ * policy de UPDATE em `comemoracao_midias`, então esta é a única escrita
+ * possível, e contar do lado de cá seria contornável e sujeito a corrida entre
+ * dois líderes fixando ao mesmo tempo.
+ */
+export async function fixarMidia(
+  id: string,
+  fixar: boolean,
+): Promise<Resultado<MidiaComemoracao>> {
+  const { data, error } = await supabase.rpc('fn_comemoracao_midia_fixar', {
+    p_id: id, p_fixar: fixar,
+  });
+
+  if (error) {
+    logger.warn('[comemoracaoMidias] erro ao fixar:', error.message);
+    // As mensagens de cota e de permissão da RPC já são legíveis.
+    const conhecida = /fixados|permissão|encontrada/i.test(error.message);
+    return {
+      ok: false,
+      erro: conhecida ? error.message : 'Não foi possível fixar a mídia.',
+      dados: null,
+    };
+  }
+  return { ok: true, erro: null, dados: (data ?? null) as MidiaComemoracao | null };
 }
 
 export async function excluirMidia(midia: MidiaComemoracao): Promise<Resultado> {

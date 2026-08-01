@@ -12,14 +12,16 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assinarTabela } from '@/lib/realtime';
 import {
-  buscarComemoracoes, buscarParabens, parabenizar,
+  buscarComemoracoes, buscarParabens, parabenizar, finalizarComemoracao,
   type Comemoracao, type ParabensComemoracao,
 } from '@/services/comemoracoes.service';
 import { sortearFrase } from '@/pages/Comemoracoes/frases';
 import {
-  estaNoAr, fimMs, msAteComecar, proximaDaFila, vaiComecar, desvioDoServidor,
+  estaNoAr, estaEncerrada, fimMs, msAteComecar, proximaDaFila, vaiComecar,
+  desvioDoServidor,
 } from '@/pages/Comemoracoes/janela';
 import { deveExplodir } from '@/pages/Comemoracoes/escopo';
+import { lerVistas, marcarVista } from '@/pages/Comemoracoes/vistas';
 
 // ── Lista ────────────────────────────────────────────────────────────────────
 
@@ -101,16 +103,30 @@ export function useComemoracaoNoAr(params: {
   const { comemoracoes, meuSetorId, meuUsuarioId, agoraCorrigido } = params;
 
   const [atual, setAtual] = useState<Comemoracao | null>(null);
-  /** Já apareceram nesta sessão — não voltam quando a lista é relida. */
-  const exibidasRef = useRef<Set<string>>(new Set());
+  /**
+   * Já apareceram para mim.
+   *
+   * Semeado do `localStorage` (`vistas.ts`) e não mais vazio a cada montagem:
+   * era isso que fazia um F5 dentro da janela repetir a mesma comemoração, e
+   * uma segunda aba repetir de novo.
+   */
+  const exibidasRef = useRef<Set<string>>(
+    new Set(lerVistas(meuUsuarioId).map((v) => v.id)),
+  );
   const timerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Forçar reavaliação quando um timer vence. */
   const [tick, setTick] = useState(0);
 
+  /** Some da minha tela e não volta — nesta aba nem na próxima. */
+  const encerrarParaMim = useCallback((id: string) => {
+    exibidasRef.current.add(id);
+    marcarVista(meuUsuarioId, id);
+  }, [meuUsuarioId]);
+
   // Só as que explodem para MIM. Líder+ enxerga todas na aba, mas o popup é do
   // setor — ver `escopo.ts`.
   const minhas = useMemo(
-    () => comemoracoes.filter((c) => !c.cancelada_em && deveExplodir(c, meuSetorId, meuUsuarioId)),
+    () => comemoracoes.filter((c) => !estaEncerrada(c) && deveExplodir(c, meuSetorId, meuUsuarioId)),
     [comemoracoes, meuSetorId, meuUsuarioId],
   );
 
@@ -123,14 +139,17 @@ export function useComemoracaoNoAr(params: {
       // Cancelada no meio da exibição: sai da tela de todo mundo na hora.
       const viva = minhas.find((c) => c.id === atual.id);
       if (!viva) {
-        exibidasRef.current.add(atual.id);
+        encerrarParaMim(atual.id);
         setAtual(null);
         return;
       }
       timerRef.current = setTimeout(() => {
-        exibidasRef.current.add(atual.id);
+        encerrarParaMim(atual.id);
         setAtual(null);
         setTick((t) => t + 1);
+        // Fecha para todo mundo. Best-effort: falhar aqui não atrapalha
+        // ninguém, e a faxina do pg_cron pega o que escapar.
+        void finalizarComemoracao(atual.id);
       }, Math.max(0, fimMs(atual) - agora));
       return;
     }
@@ -151,16 +170,21 @@ export function useComemoracaoNoAr(params: {
     return () => {
       if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null; }
     };
-  }, [minhas, atual, tick, agoraCorrigido]);
+  }, [minhas, atual, tick, agoraCorrigido, encerrarParaMim]);
 
-  /** Fecha antes da hora (botão ×). Não volta nesta sessão. */
+  /**
+   * Fecha antes da hora (botão ×). Não volta — nem num F5.
+   *
+   * Fecha só para MIM: quem clica no × está pedindo a própria tela de volta,
+   * não encerrando a festa do setor inteiro.
+   */
   const fechar = useCallback(() => {
     setAtual((anterior) => {
-      if (anterior) exibidasRef.current.add(anterior.id);
+      if (anterior) encerrarParaMim(anterior.id);
       return null;
     });
     setTick((t) => t + 1);
-  }, []);
+  }, [encerrarParaMim]);
 
   return { atual, fechar, estaNoAr: !!atual && estaNoAr(atual, agoraCorrigido()) };
 }

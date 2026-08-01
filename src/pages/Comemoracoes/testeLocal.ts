@@ -30,6 +30,10 @@ export interface ComemoracaoTeste {
   somInicioS:   number;
   layout:       LayoutComemoracao;
   duracaoS:     number;
+  /** Entrada do texto. Ausente = 'subir'. */
+  animTexto?:   string;
+  /** Percentual do volume padrão. Ausente = 100. */
+  volume?:      number;
 }
 
 /** Dispara o ensaio na própria tela. */

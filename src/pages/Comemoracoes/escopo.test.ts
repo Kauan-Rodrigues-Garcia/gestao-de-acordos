@@ -52,3 +52,26 @@ describe('deveExplodir', () => {
     expect(deveExplodir({ criado_por: null, setores_alvo: [SETOR_A] }, null, null)).toBe(false);
   });
 });
+
+describe('meta de setor: empresa inteira (20260801a)', () => {
+  it('explode para quem é de outro setor', () => {
+    expect(deveExplodir(
+      { empresa_inteira: true, setores_alvo: [SETOR_A] }, SETOR_B, EU,
+    )).toBe(true);
+  });
+
+  it('explode até para quem não tem setor — diretoria, administração', () => {
+    expect(deveExplodir({ empresa_inteira: true, setores_alvo: [] }, null, EU)).toBe(true);
+  });
+
+  it('quem barra outra empresa é a RLS, não isto: aqui só chega quem pode ler', () => {
+    // Sem `empresa_inteira`, a mesma linha não explodiria para o setor B.
+    expect(deveExplodir({ setores_alvo: [SETOR_A] }, SETOR_B, EU)).toBe(false);
+  });
+
+  it('false explícito se comporta como comemoração comum', () => {
+    expect(deveExplodir(
+      { empresa_inteira: false, setores_alvo: [SETOR_A] }, SETOR_B, EU,
+    )).toBe(false);
+  });
+});

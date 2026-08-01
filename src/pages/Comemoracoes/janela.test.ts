@@ -8,6 +8,7 @@ import { describe, it, expect } from 'vitest';
 import {
   estaNoAr, fimMs, inicioMs, msAteComecar, proximaDaFila, vaiComecar,
   desvioDoServidor, estaAgendada, jaPassou, validarAgendamento,
+  estaEncerrada, estadoDe,
   HORIZONTE_TIMER_MS, MAX_DIAS_AGENDAMENTO, TOLERANCIA_PASSADO_MS,
   type Exibivel,
 } from './janela';
@@ -187,5 +188,82 @@ describe('desvioDoServidor', () => {
 
   it('data inválida não desregula o relógio', () => {
     expect(desvioDoServidor('nao-e-data', T0)).toBe(0);
+  });
+});
+
+// ── 20260801a: finalizada e os três estados ─────────────────────────────────
+
+describe('estaEncerrada', () => {
+  it('cancelada está encerrada', () => {
+    expect(estaEncerrada(c({ cancelada_em: new Date(T0).toISOString() }))).toBe(true);
+  });
+
+  it('finalizada está encerrada', () => {
+    expect(estaEncerrada(c({ finalizada_em: new Date(T0).toISOString() }))).toBe(true);
+  });
+
+  it('comemoração de antes da migration (sem a coluna) não está encerrada', () => {
+    expect(estaEncerrada(c())).toBe(false);
+  });
+});
+
+describe('finalizada não volta ao ar', () => {
+  it('dentro da janela, mas finalizada: não está no ar', () => {
+    // É o caso que fazia a festa repetir: a janela ainda não venceu, mas a
+    // comemoração já acabou para todo mundo.
+    const finalizada = c({ finalizada_em: new Date(T0 + 5_000).toISOString() });
+    expect(estaNoAr(finalizada, T0 + 10_000)).toBe(false);
+  });
+
+  it('finalizada não entra na fila nem ganha timer', () => {
+    const futura = c({
+      inicia_em: new Date(T0 + 60_000).toISOString(),
+      finalizada_em: new Date(T0).toISOString(),
+    });
+    expect(vaiComecar(futura, T0)).toBe(false);
+    expect(estaAgendada(futura, T0)).toBe(false);
+    expect(proximaDaFila([futura], T0 + 60_001, new Set())).toBeNull();
+  });
+});
+
+describe('estadoDe', () => {
+  it('antes da hora: agendada', () => {
+    expect(estadoDe(c({ inicia_em: new Date(T0 + 60_000).toISOString() }), T0)).toBe('agendada');
+  });
+
+  it('dentro da janela: em andamento', () => {
+    expect(estadoDe(c(), T0 + 5_000)).toBe('em-andamento');
+  });
+
+  it('depois da janela: finalizada, mesmo sem ninguém ter marcado', () => {
+    // Ninguém estava logado para fechar e o pg_cron só roda de madrugada. Sem
+    // esta regra a comemoração não cairia em nenhuma das três listas da aba.
+    expect(estadoDe(c(), T0 + 999_000)).toBe('finalizada');
+  });
+
+  it('cancelada é finalizada, mesmo dentro da janela', () => {
+    const cancelada = c({ cancelada_em: new Date(T0).toISOString() });
+    expect(estadoDe(cancelada, T0 + 5_000)).toBe('finalizada');
+  });
+
+  it('cancelada antes de começar também é finalizada, não agendada', () => {
+    const cancelada = c({
+      inicia_em: new Date(T0 + 60_000).toISOString(),
+      cancelada_em: new Date(T0).toISOString(),
+    });
+    expect(estadoDe(cancelada, T0)).toBe('finalizada');
+  });
+
+  it('toda comemoração cai em exatamente um estado', () => {
+    const casos: Exibivel[] = [
+      c(),
+      c({ inicia_em: new Date(T0 + 60_000).toISOString() }),
+      c({ cancelada_em: new Date(T0).toISOString() }),
+      c({ finalizada_em: new Date(T0).toISOString() }),
+      c({ inicia_em: 'data-invalida' }),
+    ];
+    for (const caso of casos) {
+      expect(['agendada', 'em-andamento', 'finalizada']).toContain(estadoDe(caso, T0 + 5_000));
+    }
   });
 });

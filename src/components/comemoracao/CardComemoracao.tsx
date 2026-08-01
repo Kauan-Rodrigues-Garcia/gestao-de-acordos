@@ -14,21 +14,55 @@
  * fossem dois, divergiriam na primeira mudança — e o líder descobriria isso
  * com a comemoração já na tela de todo mundo.
  */
-import { useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  useLayoutEffect, useRef, useState,
+  type CSSProperties, type ReactNode, type RefObject,
+} from 'react';
 import { motion } from 'framer-motion';
 import { X, Trophy, Move } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import type { PessoaComemoracao } from '@/services/comemoracoes.service';
 import {
-  posicaoDe, definirPosicao, posicaoArrastada,
+  posicaoDe, definirPosicao, posicaoArrastada, escalaDoCard,
+  LARGURA_LOGICA, ALTURA_LOGICA,
   type ElementoId, type LayoutComemoracao, type PosicaoElemento,
 } from '@/pages/Comemoracoes/layout';
+import {
+  animTextoValida, propsAnimacaoTexto, type AnimTextoId,
+} from '@/pages/Comemoracoes/animacoesTexto';
 
-/** Card de referência, em unidades lógicas. As posições do editor são % disto. */
-export const LARGURA_LOGICA = 640;
-export const ALTURA_LOGICA  = 360;
-export const ASPECTO = `${LARGURA_LOGICA} / ${ALTURA_LOGICA}`;
+/**
+ * Mede a largura do card e devolve a escala do palco (ver `escalaDoCard`).
+ *
+ * A conta mora em `layout.ts`, junto do resto da geometria e com teste; aqui
+ * fica só a medição, que precisa de DOM.
+ */
+function useEscalaDoCard(ref: RefObject<HTMLElement | null>): number {
+  const [largura, setLargura] = useState(0);
+
+  // `useLayoutEffect` e não `useEffect`: mede antes da pintura, senão o
+  // primeiro quadro sai em 640 px e o card "salta" para o tamanho certo.
+  useLayoutEffect(() => {
+    const elemento = ref.current;
+    if (!elemento) return;
+
+    const medir = () => setLargura(elemento.getBoundingClientRect().width);
+    medir();
+
+    // ResizeObserver é universal nos navegadores, mas não no jsdom: sem a
+    // checagem os testes que montam o card quebrariam no `new`.
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', medir);
+      return () => window.removeEventListener('resize', medir);
+    }
+    const observador = new ResizeObserver(medir);
+    observador.observe(elemento);
+    return () => observador.disconnect();
+  }, [ref]);
+
+  return escalaDoCard(largura);
+}
 
 /**
  * Contorno escuro em volta do texto.
@@ -108,6 +142,8 @@ export interface CardComemoracaoProps {
   /** GIF enviado pelo líder. Ausente = troféu do catálogo. */
   gifUrl?:      string | null;
   layout?:      LayoutComemoracao;
+  /** Como o título e a mensagem entram. Ausente = 'subir', o de sempre. */
+  animTexto?:   AnimTextoId | string | null;
   /** 'editor' ganha alças de arrasto; 'exibicao' só anima. */
   modo?:        'editor' | 'exibicao';
   selecionado?: ElementoId | null;
@@ -119,12 +155,13 @@ export interface CardComemoracaoProps {
 }
 
 export function CardComemoracao({
-  titulo, mensagem, homenageados, gifUrl, layout = {},
+  titulo, mensagem, homenageados, gifUrl, layout = {}, animTexto,
   modo = 'exibicao', selecionado, onSelecionar, onMover, onFechar, tempoTotalS,
 }: CardComemoracaoProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [arrastando, setArrastando] = useState(false);
   const ehEditor = modo === 'editor';
+  const escala   = useEscalaDoCard(cardRef);
 
   /** Layout mais recente, para o arrasto não ler um valor velho do closure. */
   const layoutRef = useRef(layout);
@@ -132,6 +169,12 @@ export function CardComemoracao({
 
   // Com muita gente as fotos encolhem, senão a última linha sai do card.
   const muitos = homenageados.length > 6;
+
+  // Título e mensagem entram com a mesma animação, escalonadas — a mensagem é
+  // complemento e não deve competir com o título pela atenção.
+  const anim         = animTextoValida(animTexto);
+  const animTitulo   = propsAnimacaoTexto(anim, 0.1, titulo.length);
+  const animMensagem = propsAnimacaoTexto(anim, 0.3, mensagem?.length ?? 0);
 
   /**
    * Arrasto por ponteiro — mouse e toque no mesmo código.
@@ -195,7 +238,10 @@ export function CardComemoracao({
         ehEditor && 'rounded-xl bg-black/20 ring-1 ring-primary/40',
         arrastando && 'select-none',
       )}
-      style={{ aspectRatio: ASPECTO }}
+      // A altura acompanha a escala: o conteúdo é 360 lógicos encolhidos.
+      // `aspectRatio` sozinho não bastaria — o conteúdo tem tamanho fixo e
+      // precisa de uma caixa que reserve exatamente o espaço que ele ocupa.
+      style={{ height: ALTURA_LOGICA * escala }}
     >
       {onFechar && (
         <button
@@ -210,7 +256,20 @@ export function CardComemoracao({
         </button>
       )}
 
-      <div className="relative h-full w-full text-center text-white">
+      {/*
+        Palco de tamanho FIXO (640×360), encolhido por transform.
+        Absoluto para não empurrar o layout do pai com os 640 px lógicos —
+        `transform` não afeta o fluxo, mas `width` afeta.
+      */}
+      <div
+        className="absolute left-0 top-0 text-center text-white"
+        style={{
+          width:  LARGURA_LOGICA,
+          height: ALTURA_LOGICA,
+          transform: `scale(${escala})`,
+          transformOrigin: 'top left',
+        }}
+      >
         {/* 1. GIF (ou o troféu, quando não há imagem) */}
         <Posicionado id="midia" pos={posicaoDe(layout, 'midia')}
           selecionado={selecionado === 'midia'} {...comum}>
@@ -238,9 +297,7 @@ export function CardComemoracao({
         <Posicionado id="titulo" pos={posicaoDe(layout, 'titulo')}
           selecionado={selecionado === 'titulo'} {...comum}>
           <motion.h2
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+            {...animTitulo}
             style={SOMBRA_TEXTO}
             className="whitespace-pre-wrap text-3xl font-black uppercase leading-none tracking-tight text-amber-300"
           >
@@ -282,9 +339,7 @@ export function CardComemoracao({
           <Posicionado id="mensagem" pos={posicaoDe(layout, 'mensagem')}
             selecionado={selecionado === 'mensagem'} {...comum}>
             <motion.p
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
+              {...animMensagem}
               style={SOMBRA_TEXTO}
               className="text-sm font-semibold leading-snug"
             >

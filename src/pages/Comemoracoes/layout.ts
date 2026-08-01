@@ -58,6 +58,30 @@ export const MARGEM_PCT = 6;
 export const ESCALA_MIN = 0.5;
 export const ESCALA_MAX = 1.8;
 
+/** Card de referência: o conteúdo é sempre desenhado neste tamanho. */
+export const LARGURA_LOGICA = 640;
+export const ALTURA_LOGICA  = 360;
+
+/**
+ * Quanto o card encolhe para caber em `largura`.
+ *
+ * O conteúdo é desenhado em 640×360 e o conjunto INTEIRO é escalado por este
+ * fator — fonte, avatar, imagem e vãos juntos. É o que faz o preview do editor
+ * bater com a tela real.
+ *
+ * Antes só as posições eram proporcionais (% do card) e os tamanhos eram px
+ * fixos. Como o editor mede ~380 px e a exibição 576, o vão entre os elementos
+ * crescia 50% de um para o outro e o texto não: o líder colava a mensagem no
+ * GIF e ela saía descolada na tela de todo mundo.
+ *
+ * Largura não medida (jsdom, primeiro render sem layout) devolve 1 — o card
+ * aparece no tamanho natural em vez de sumir com `scale(0)`.
+ */
+export function escalaDoCard(largura: number): number {
+  if (!Number.isFinite(largura) || largura <= 0) return 1;
+  return largura / LARGURA_LOGICA;
+}
+
 function limitar(valor: number, minimo: number, maximo: number): number {
   if (!Number.isFinite(valor)) return minimo;
   return Math.min(maximo, Math.max(minimo, valor));

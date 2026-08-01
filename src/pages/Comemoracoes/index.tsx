@@ -36,20 +36,22 @@ import { tocarSomComemoracao } from '@/lib/som-comemoracao';
 import {
   criarComemoracao, cancelarComemoracao, excluirComemoracao,
   DURACAO_MIN_S, DURACAO_MAX_S, MAX_HOMENAGEADOS,
-  type Comemoracao, type PessoaComemoracao,
+  type Comemoracao, type PessoaComemoracao, type AlvoTipo,
 } from '@/services/comemoracoes.service';
 import { listarMidias, type MidiaComemoracao } from '@/services/comemoracaoMidias.service';
 import { EFEITOS, SONS, type EfeitoId, type SomId } from './catalogo';
+import { ANIMACOES_TEXTO, type AnimTextoId } from './animacoesTexto';
+import { MODELOS, layoutDoModelo, modeloDoLayout, type ModeloId } from './modelos';
 import { podeCriarComemoracao } from './permissoes';
 import {
-  estaNoAr, estaAgendada, validarAgendamento, MAX_DIAS_AGENDAMENTO,
+  estadoDe, validarAgendamento, MAX_DIAS_AGENDAMENTO,
 } from './janela';
 import {
-  ELEMENTOS, escalarElemento, posicaoDe, ehLayoutPadrao,
-  ESCALA_MIN, ESCALA_MAX, type ElementoId, type LayoutComemoracao,
+  ELEMENTOS, escalarElemento, posicaoDe, type ElementoId, type LayoutComemoracao,
+  ESCALA_MIN, ESCALA_MAX,
 } from './layout';
 import { dispararTeste } from './testeLocal';
-import { BibliotecaMidia } from './BibliotecaMidia';
+import { SeletorMidia } from './SeletorMidia';
 import { CardComemoracao } from '@/components/comemoracao/CardComemoracao';
 
 const DURACAO_PADRAO_S = 20;
@@ -97,8 +99,17 @@ export default function Comemoracoes() {
   const [quando, setQuando]       = useState(() => paraInputLocal(new Date(Date.now() + 10 * 60_000)));
 
   // Editor
-  const [layout, setLayout]       = useState<LayoutComemoracao>({});
+  const [layout, setLayout]       = useState<LayoutComemoracao>(() => layoutDoModelo('midia_topo'));
   const [selecionado, setSelecionado] = useState<ElementoId | null>(null);
+  const [animTexto, setAnimTexto] = useState<AnimTextoId>('subir');
+  const [volume, setVolume]       = useState(100);
+
+  // Alvo: pessoas (padrão), equipe ou setor inteiro
+  const [alvoTipo, setAlvoTipo]   = useState<AlvoTipo>('operadores');
+  const [equipeId, setEquipeId]   = useState<string>('');
+  const [setorId, setSetorId]     = useState<string>('');
+  const [equipes, setEquipes]     = useState<{ id: string; nome: string; setor_id: string | null }[]>([]);
+  const [setores, setSetores]     = useState<{ id: string; nome: string }[]>([]);
 
   // Biblioteca (null enquanto carrega ou se a migration 20260731f falta)
   const [midias, setMidias] = useState<MidiaComemoracao[] | null>(null);
@@ -126,6 +137,25 @@ export default function Comemoracoes() {
     return () => { ativo = false; };
   }, [empresaId, podeCriar]);
 
+  // Equipes e setores para o alvo. Sem `ativo` no filtro de equipes: a RLS já
+  // recorta o que este líder enxerga, e equipe some da lista quando é apagada.
+  useEffect(() => {
+    if (!empresaId || !podeCriar) return;
+    let ativo = true;
+    void (async () => {
+      const [eq, st] = await Promise.all([
+        supabase.from('equipes').select('id, nome, setor_id')
+          .eq('empresa_id', empresaId).order('nome'),
+        supabase.from('setores').select('id, nome')
+          .eq('ativo', true).order('nome'),
+      ]);
+      if (!ativo) return;
+      setEquipes((eq.data ?? []) as { id: string; nome: string; setor_id: string | null }[]);
+      setSetores((st.data ?? []) as { id: string; nome: string }[]);
+    })();
+    return () => { ativo = false; };
+  }, [empresaId, podeCriar]);
+
   const sugestoes = useMemo(() => {
     const termo = buscaPessoa.trim().toLowerCase();
     if (!termo) return [];
@@ -139,6 +169,9 @@ export default function Comemoracoes() {
     ? validarAgendamento(new Date(quando).toISOString(), agoraCorrigido())
     : null;
 
+  /** Modelo em vigor, ou null quando o layout foi mexido à mão. */
+  const modeloAtual: ModeloId | null = modeloDoLayout(layout);
+
   function adicionar(p: PessoaComemoracao) {
     if (escolhidos.length >= MAX_HOMENAGEADOS) {
       toast.error(`São no máximo ${MAX_HOMENAGEADOS} homenageados.`);
@@ -146,6 +179,33 @@ export default function Comemoracoes() {
     }
     setEscolhidos((atual) => [...atual, p]);
     setBuscaPessoa('');
+  }
+
+  /** Nome do alvo coletivo escolhido, para sugerir o título. */
+  function nomeDoAlvo(tipo: AlvoTipo, eq: string, st: string): string | null {
+    if (tipo === 'equipe') return equipes.find((e) => e.id === eq)?.nome ?? null;
+    if (tipo === 'setor')  return setores.find((s) => s.id === st)?.nome ?? null;
+    return null;
+  }
+
+  /**
+   * Escolher equipe ou setor sugere o título.
+   *
+   * Sugestão e não trava: o campo continua editável. Escolher o alvo é ação
+   * deliberada, então sobrescrever ali é o que a pessoa espera — diferente de
+   * sobrescrever enquanto ela digita.
+   */
+  function aplicarAlvo(tipo: AlvoTipo, eq = equipeId, st = setorId) {
+    setAlvoTipo(tipo);
+    setEquipeId(tipo === 'equipe' ? eq : '');
+    setSetorId(tipo === 'setor' ? st : '');
+
+    const nome = nomeDoAlvo(tipo, eq, st);
+    if (nome) {
+      setTitulo(`${tipo === 'equipe' ? 'Equipe' : 'Setor'} ${nome} bateu a meta!`);
+    } else if (tipo === 'operadores') {
+      setTitulo('META BATIDA!');
+    }
   }
 
   function testar() {
@@ -157,7 +217,7 @@ export default function Comemoracoes() {
       gifUrl: gifEscolhido?.url ?? null,
       somUrl: somEscolhido?.url ?? null,
       somInicioS: Number(somEscolhido?.inicio_s ?? 0),
-      layout,
+      layout, animTexto, volume,
       duracaoS: duracao,
     });
   }
@@ -177,6 +237,11 @@ export default function Comemoracoes() {
         gifMidiaId: gifEscolhido?.id ?? null,
         somMidiaId: somEscolhido?.id ?? null,
         layout,
+        modelo: modeloDoLayout(layout) ?? undefined,
+        animTexto, volume,
+        alvoTipo,
+        equipeId: alvoTipo === 'equipe' ? equipeId : null,
+        setorId:  alvoTipo === 'setor'  ? setorId  : null,
       });
       if (!ok) { toast.error(e ?? 'Não foi possível comemorar.'); return; }
       toast.success(agendar ? 'Comemoração agendada!' : 'Comemoração no ar!');
@@ -234,11 +299,18 @@ export default function Comemoracoes() {
     );
   }
 
+  // Um estado por comemoração, decidido num lugar só (`estadoDe`): assim
+  // nenhuma cai fora das três listas, que é o que acontecia quando cada filtro
+  // recortava por conta própria.
   const agora     = agoraCorrigido();
-  const noAr      = comemoracoes.filter((c) => !c.cancelada_em && estaNoAr(c, agora));
-  const agendadas = comemoracoes.filter((c) => !c.cancelada_em && estaAgendada(c, agora));
-  const passadas  = comemoracoes.filter((c) => !noAr.includes(c) && !agendadas.includes(c));
+  const noAr      = comemoracoes.filter((c) => estadoDe(c, agora) === 'em-andamento');
+  const agendadas = comemoracoes.filter((c) => estadoDe(c, agora) === 'agendada');
+  const passadas  = comemoracoes.filter((c) => estadoDe(c, agora) === 'finalizada');
   const posSel    = selecionado ? posicaoDe(layout, selecionado) : null;
+
+  /** Falta escolher a equipe ou o setor do alvo coletivo? */
+  const alvoIncompleto =
+    (alvoTipo === 'equipe' && !equipeId) || (alvoTipo === 'setor' && !setorId);
 
   return (
     <motion.div
@@ -284,14 +356,73 @@ export default function Comemoracoes() {
               placeholder="Time do Receptivo fechou o mês antes do prazo!" />
           </div>
 
-          {/* Homenageados */}
+          {/* Alvo: pessoas, equipe ou setor */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5 text-xs">
               <Users className="h-3.5 w-3.5" />
               Quem bateu a meta
-              <span className="text-muted-foreground">({escolhidos.length}/{MAX_HOMENAGEADOS})</span>
+              {alvoTipo === 'operadores' && (
+                <span className="text-muted-foreground">({escolhidos.length}/{MAX_HOMENAGEADOS})</span>
+              )}
             </Label>
 
+            <div className="flex gap-1.5">
+              {([
+                ['operadores', 'Pessoas'],
+                ['equipe',     'Equipe'],
+                ['setor',      'Setor'],
+              ] as const).map(([tipo, rotulo]) => (
+                <Button
+                  key={tipo} type="button" size="sm"
+                  variant={alvoTipo === tipo ? 'default' : 'outline'}
+                  className="h-8 flex-1 text-xs"
+                  onClick={() => aplicarAlvo(tipo)}
+                >
+                  {rotulo}
+                </Button>
+              ))}
+            </div>
+
+            {alvoTipo === 'equipe' && (
+              <>
+                <Select value={equipeId} onValueChange={(v) => aplicarAlvo('equipe', v)}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Escolha a equipe…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {equipes.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Explode para o setor inteiro da equipe. Não precisa escolher ninguém.
+                </p>
+              </>
+            )}
+
+            {alvoTipo === 'setor' && (
+              <>
+                <Select value={setorId} onValueChange={(v) => aplicarAlvo('setor', equipeId, v)}>
+                  <SelectTrigger className="h-9 text-xs">
+                    <SelectValue placeholder="Escolha o setor…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {setores.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">
+                  Meta de setor é notícia da empresa: explode para <strong>todo mundo</strong>.
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Homenageados — só quando o alvo é gente */}
+          {alvoTipo === 'operadores' && (
+          <div className="space-y-1.5">
             {escolhidos.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pb-1">
                 {escolhidos.map((p) => (
@@ -339,6 +470,7 @@ export default function Comemoracoes() {
               Quem vê é o setor de cada homenageado — e os setores onde ele tem clone.
             </p>
           </div>
+          )}
 
           {/* Fundo — a chuva que cai na tela inteira, atrás do card */}
           <div className="space-y-1.5">
@@ -358,56 +490,56 @@ export default function Comemoracoes() {
             </Select>
           </div>
 
-          {/* GIF — a imagem que aparece acima do texto, dentro do card */}
+          {/* Biblioteca: GIF, imagem e som no mesmo lugar */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5 text-xs">
-              <ImageIcon className="h-3.5 w-3.5" /> GIF
+              <ImageIcon className="h-3.5 w-3.5" /> Mídia
             </Label>
-            <BibliotecaMidia
-              tipo="gif" midias={midias}
+            <SeletorMidia
+              midias={midias}
               empresaId={empresaId as string} usuarioId={usuarioId as string}
-              selecionadaId={gifEscolhido?.id ?? null}
-              onSelecionar={setGifEscolhido}
+              visual={gifEscolhido} som={somEscolhido}
+              duracaoComemoracaoS={duracao}
+              onEscolherVisual={setGifEscolhido}
+              onEscolherSom={setSomEscolhido}
               onMudou={() => void recarregarMidias()}
             />
             <p className="text-[11px] text-muted-foreground">
               {gifEscolhido
-                ? <>Usando <strong>{gifEscolhido.nome}</strong> no topo do card.</>
-                : 'Sem GIF, aparece um troféu no lugar.'}
+                ? <>Usando <strong>{gifEscolhido.nome}</strong> no card.</>
+                : 'Sem imagem, aparece um troféu no lugar.'}
             </p>
           </div>
 
-          {/* Som */}
+          {/* Som do catálogo + volume */}
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5 text-xs"><Volume2 className="h-3.5 w-3.5" /> Som</Label>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <div className="flex gap-1.5">
-                <Select value={som} onValueChange={(v) => setSom(v as SomId)} disabled={!!somEscolhido}>
-                  <SelectTrigger className="h-9 flex-1 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {SONS.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                {/* Ouvir antes ignora o mudo: quem clicou pediu para ouvir. */}
-                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" title="Ouvir"
-                  onClick={() => tocarSomComemoracao(som, true)}>
-                  <Volume2 className="h-4 w-4" />
-                </Button>
-              </div>
-              <BibliotecaMidia
-                tipo="som" midias={midias}
-                empresaId={empresaId as string} usuarioId={usuarioId as string}
-                selecionadaId={somEscolhido?.id ?? null}
-                duracaoComemoracaoS={duracao}
-                onSelecionar={setSomEscolhido}
-                onMudou={() => void recarregarMidias()}
-              />
+            <div className="flex gap-1.5">
+              <Select value={som} onValueChange={(v) => setSom(v as SomId)} disabled={!!somEscolhido}>
+                <SelectTrigger className="h-9 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SONS.map((s) => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {/* Ouvir antes ignora o mudo: quem clicou pediu para ouvir. */}
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" title="Ouvir"
+                onClick={() => tocarSomComemoracao(som, true, volume)}>
+                <Volume2 className="h-4 w-4" />
+              </Button>
             </div>
             {somEscolhido && (
               <p className="text-[11px] text-muted-foreground">
                 Usando <strong>{somEscolhido.nome}</strong> no lugar do som do catálogo.
               </p>
             )}
+
+            <Label htmlFor="cm-vol" className="text-xs">Volume: {volume}%</Label>
+            <input id="cm-vol" type="range" min={0} max={100} step={5}
+              value={volume} onChange={(e) => setVolume(Number(e.target.value))}
+              className="h-6 w-full accent-primary" />
+            <p className="text-[11px] text-muted-foreground">
+              Percentual do volume normal. Vale para a música e para o som do catálogo.
+            </p>
           </div>
 
           {/* Duração e quando */}
@@ -452,7 +584,10 @@ export default function Comemoracoes() {
               <Play className="h-4 w-4" /> Testar
             </Button>
             <Button className="flex-1 gap-2"
-              disabled={criando || escolhidos.length === 0 || !titulo.trim() || !!erroAgendamento}
+              disabled={
+                criando || !titulo.trim() || !!erroAgendamento || alvoIncompleto
+                || (alvoTipo === 'operadores' && escolhidos.length === 0)
+              }
               onClick={() => void comemorar()}>
               {criando ? <Loader2 className="h-4 w-4 animate-spin" />
                 : agendar ? <CalendarClock className="h-4 w-4" /> : <PartyPopper className="h-4 w-4" />}
@@ -463,13 +598,47 @@ export default function Comemoracoes() {
 
         {/* ── Editor / prévia ── */}
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
+          {/* Modelo primeiro: quem só quer avisar que a equipe bateu a meta
+              resolve num clique e não precisa diagramar nada. */}
+          <div className="space-y-1.5">
+            <Label className="text-xs">Modelo</Label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {MODELOS.map((m) => (
+                <Button
+                  key={m.id} type="button" size="sm"
+                  variant={modeloAtual === m.id ? 'default' : 'outline'}
+                  className="h-auto whitespace-normal py-1.5 text-[11px] leading-tight"
+                  title={m.descricao}
+                  onClick={() => { setLayout(layoutDoModelo(m.id)); setSelecionado(null); }}
+                >
+                  {m.nome}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Animação do texto</Label>
+            <Select value={animTexto} onValueChange={(v) => setAnimTexto(v as AnimTextoId)}>
+              <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {ANIMACOES_TEXTO.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.nome}
+                    <span className="ml-2 text-[11px] text-muted-foreground">{a.descricao}</span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="flex items-center justify-between gap-2 pt-1">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Arraste para posicionar
+              {modeloAtual ? 'Arraste para ajustar' : 'Personalizado'}
             </p>
-            {!ehLayoutPadrao(layout) && (
+            {!modeloAtual && (
               <Button variant="ghost" size="sm" className="h-6 gap-1 px-1.5 text-[11px]"
-                onClick={() => { setLayout({}); setSelecionado(null); }}>
+                onClick={() => { setLayout(layoutDoModelo('midia_topo')); setSelecionado(null); }}>
                 <RotateCcw className="h-3 w-3" /> Restaurar
               </Button>
             )}
@@ -481,6 +650,7 @@ export default function Comemoracoes() {
             homenageados={escolhidos}
             gifUrl={gifEscolhido?.url ?? null}
             layout={layout}
+            animTexto={animTexto}
             modo="editor"
             selecionado={selecionado}
             onSelecionar={setSelecionado}
@@ -534,28 +704,44 @@ export default function Comemoracoes() {
         </section>
       )}
 
-      {/* ── Histórico ── */}
+      {/* ── Em andamento ── */}
+      {noAr.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <PartyPopper className="h-4 w-4 text-amber-500" />
+            <h2 className="text-sm font-semibold">Em andamento</h2>
+            <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">{noAr.length}</Badge>
+          </div>
+          <div className="space-y-2">
+            {noAr.map((c) => (
+              <LinhaComemoracao key={c.id} c={c} estado="no-ar"
+                meu={c.criado_por === usuarioId} salvando={salvandoId === c.id}
+                onCancelar={() => void aoCancelar(c)} onExcluir={() => void aoExcluir(c)} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Finalizadas ── */}
       <section className="space-y-2">
         <div className="flex items-center gap-2">
           <Trophy className="h-4 w-4 text-amber-500" />
-          <h2 className="text-sm font-semibold">Comemorações</h2>
-          <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">
-            {noAr.length + passadas.length}
-          </Badge>
+          <h2 className="text-sm font-semibold">Finalizadas</h2>
+          <Badge variant="outline" className="h-4 px-1.5 py-0 text-[10px]">{passadas.length}</Badge>
         </div>
 
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
           </div>
-        ) : noAr.length + passadas.length === 0 ? (
+        ) : passadas.length === 0 ? (
           <p className="py-8 text-center text-xs text-muted-foreground">
             Nenhuma comemoração ainda. Monte a primeira aí em cima.
           </p>
         ) : (
           <div className="space-y-2">
-            {[...noAr, ...passadas].map((c) => (
-              <LinhaComemoracao key={c.id} c={c} estado={noAr.includes(c) ? 'no-ar' : 'passada'}
+            {passadas.map((c) => (
+              <LinhaComemoracao key={c.id} c={c} estado="passada"
                 meu={c.criado_por === usuarioId} salvando={salvandoId === c.id}
                 onCancelar={() => void aoCancelar(c)} onExcluir={() => void aoExcluir(c)} />
             ))}

@@ -839,56 +839,82 @@ export type Database = {
       // congela o público na criação. `efeito`/`som` são ids do catálogo em
       // código (src/pages/Comemoracoes/catalogo.ts).
       comemoracoes: {
+        // Migration 20260801a acrescentou: modelo, anim_texto, volume,
+        // finalizada_em, alvo_tipo, equipe_id, setor_id, empresa_inteira.
         Row: {
+          alvo_tipo: string
+          anim_texto: string
           cancelada_em: string | null
           criado_em: string
           criado_por: string | null
           duracao_s: number
           efeito: string
           empresa_id: string
+          empresa_inteira: boolean
+          equipe_id: string | null
+          finalizada_em: string | null
           gif_midia_id: string | null
           id: string
           inicia_em: string
           layout: Json
           mensagem: string | null
+          modelo: string
+          setor_id: string | null
           setores_alvo: string[]
           som: string
           som_midia_id: string | null
           titulo: string
+          volume: number
         }
         Insert: {
+          alvo_tipo?: string
+          anim_texto?: string
           cancelada_em?: string | null
           criado_em?: string
           criado_por?: string | null
           duracao_s?: number
           efeito?: string
           empresa_id: string
+          empresa_inteira?: boolean
+          equipe_id?: string | null
+          finalizada_em?: string | null
           gif_midia_id?: string | null
           id?: string
           inicia_em?: string
           layout?: Json
           mensagem?: string | null
+          modelo?: string
+          setor_id?: string | null
           setores_alvo?: string[]
           som?: string
           som_midia_id?: string | null
           titulo: string
+          volume?: number
         }
         Update: {
+          alvo_tipo?: string
+          anim_texto?: string
           cancelada_em?: string | null
           criado_em?: string
           criado_por?: string | null
           duracao_s?: number
           efeito?: string
           empresa_id?: string
+          empresa_inteira?: boolean
+          equipe_id?: string | null
+          finalizada_em?: string | null
           gif_midia_id?: string | null
           id?: string
           inicia_em?: string
           layout?: Json
           mensagem?: string | null
+          modelo?: string
+          setor_id?: string | null
           setores_alvo?: string[]
           som?: string
           som_midia_id?: string | null
           titulo?: string
+          volume?: number
         }
         Relationships: []
       }
@@ -910,9 +936,13 @@ export type Database = {
           // Migration 20260731g — trecho do som. `trecho_s` NULL = inteiro.
           inicio_s: number
           nome: string
+          // Migration 20260801a — 'imagem' entra ao lado de 'gif' e 'som'.
           tipo: string
           trecho_s: number | null
           url: string
+          // Migration 20260801a — fixada não expira; as demais somem em 3 dias.
+          fixada: boolean
+          expira_em: string | null
         }
         Insert: {
           caminho: string
@@ -925,6 +955,8 @@ export type Database = {
           tipo: string
           trecho_s?: number | null
           url: string
+          fixada?: boolean
+          expira_em?: string | null
         }
         Update: {
           caminho?: string
@@ -937,6 +969,8 @@ export type Database = {
           tipo?: string
           trecho_s?: number | null
           url?: string
+          fixada?: boolean
+          expira_em?: string | null
         }
         Relationships: []
       }
@@ -2292,6 +2326,41 @@ export type Database = {
       fn_analitico_atualizar_resumo: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: undefined
+      }
+      // Migration 20260801a — comemorações v2.
+      // Fecha a comemoração. Dentro da janela, só quem criou; passada a
+      // janela, qualquer um que a enxergue (é o cliente que exibiu quem fecha).
+      fn_comemoracao_finalizar: {
+        Args: { p_id: string }
+        Returns: undefined
+      }
+      // Fixa/desafixa a mídia. Teto de 4 por tipo, por empresa — validado no
+      // banco porque não há policy de UPDATE em `comemoracao_midias`.
+      fn_comemoracao_midia_fixar: {
+        Args: { p_id: string; p_fixar: boolean }
+        Returns: {
+          id: string
+          empresa_id: string
+          tipo: string
+          nome: string
+          url: string
+          caminho: string
+          criado_por: string | null
+          criado_em: string
+          inicio_s: number | null
+          trecho_s: number | null
+          fixada: boolean
+          expira_em: string | null
+        }
+      }
+      // Apaga mídia vencida (linha + arquivo) e finaliza comemoração que passou
+      // da janela. Agendada no pg_cron; chamável à mão se a extensão faltar.
+      fn_comemoracao_faxina: {
+        Args: Record<string, never>
+        Returns: {
+          midias_apagadas: number
+          comemoracoes_finalizadas: number
+        }[]
       }
       fn_analitico_dashboard_mes: {
         Args: { p_empresa_id: string; p_mes: string }

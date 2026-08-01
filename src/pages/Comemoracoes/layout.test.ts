@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import {
   posicaoDe, limitarNoCard, posicaoArrastada, definirPosicao, escalarElemento,
   ehLayoutPadrao, layoutDoJson, layoutParaJson, LAYOUT_PADRAO, ELEMENTOS,
-  MARGEM_PCT, ESCALA_MIN, ESCALA_MAX,
+  MARGEM_PCT, ESCALA_MIN, ESCALA_MAX, escalaDoCard, LARGURA_LOGICA, ALTURA_LOGICA,
   type LayoutComemoracao,
 } from './layout';
 
@@ -202,5 +202,45 @@ describe('layoutParaJson', () => {
 
   it('vazio continua vazio', () => {
     expect(layoutParaJson({})).toEqual({});
+  });
+});
+
+// ── 20260801a: o palco de tamanho fixo ──────────────────────────────────────
+
+describe('escalaDoCard', () => {
+  it('na largura de referência a escala é 1', () => {
+    expect(escalaDoCard(LARGURA_LOGICA)).toBe(1);
+  });
+
+  it('card menor encolhe proporcionalmente', () => {
+    expect(escalaDoCard(320)).toBe(0.5);
+  });
+
+  it('card maior cresce proporcionalmente', () => {
+    expect(escalaDoCard(1280)).toBe(2);
+  });
+
+  it('largura zero devolve 1 em vez de sumir com o card', () => {
+    // É o caso do jsdom e do primeiro render sem layout: `scale(0)` deixaria a
+    // comemoração invisível sem ninguém entender por quê.
+    expect(escalaDoCard(0)).toBe(1);
+    expect(escalaDoCard(-10)).toBe(1);
+    expect(escalaDoCard(NaN)).toBe(1);
+  });
+
+  it('editor e exibição com larguras diferentes desenham o MESMO card', () => {
+    // A prova do defeito consertado: o que muda entre as duas telas é só o
+    // fator de escala, aplicado ao conjunto inteiro. Nenhum elemento se move
+    // em relação a outro, porque as posições continuam sendo % do mesmo palco.
+    const editor   = escalaDoCard(380);
+    const exibicao = escalaDoCard(576);
+
+    const vaoEditor   = (LAYOUT_PADRAO.titulo.y - LAYOUT_PADRAO.midia.y) / 100 * ALTURA_LOGICA * editor;
+    const vaoExibicao = (LAYOUT_PADRAO.titulo.y - LAYOUT_PADRAO.midia.y) / 100 * ALTURA_LOGICA * exibicao;
+
+    // O vão em px difere (a tela é maior), mas a razão vão/altura é idêntica —
+    // e é ela que o olho enxerga.
+    expect(vaoEditor / (ALTURA_LOGICA * editor))
+      .toBeCloseTo(vaoExibicao / (ALTURA_LOGICA * exibicao), 10);
   });
 });

@@ -26,6 +26,16 @@ export interface PessoaComemoracao {
   foto_url:  string | null;
 }
 
+/**
+ * Para quem a comemoração é.
+ *
+ * `operadores` — lista de homenageados; explode no setor de cada um.
+ * `equipe`     — sem homenageados; explode no setor daquela equipe.
+ * `setor`      — sem homenageados; explode na EMPRESA INTEIRA, porque meta de
+ *                setor é notícia para todo mundo, não só para o próprio setor.
+ */
+export type AlvoTipo = 'operadores' | 'equipe' | 'setor';
+
 export interface Comemoracao {
   id:            string;
   empresa_id:    string;
@@ -46,10 +56,23 @@ export interface Comemoracao {
    */
   som_inicio_s:  number;
   layout:        LayoutComemoracao;
+  /** Arranjo escolhido (20260801a). Só rótulo — quem manda é `layout`. */
+  modelo:        string;
+  anim_texto:    string;
+  /** Percentual do volume padrão de cada som. 100 = como sempre foi. */
+  volume:        number;
   inicia_em:     string;
   duracao_s:     number;
   setores_alvo:  string[];
+  /** Alvo (20260801a): operadores | equipe | setor. */
+  alvo_tipo:     AlvoTipo;
+  equipe_id:     string | null;
+  setor_id:      string | null;
+  /** Meta de setor aparece para a empresa toda, não só para o setor dela. */
+  empresa_inteira: boolean;
   cancelada_em:  string | null;
+  /** Preenchida ao terminar. Finalizada nunca mais dispara (20260801a). */
+  finalizada_em: string | null;
   criado_em:     string;
   /** Preenchido pelo service a partir de `comemoracao_homenageados`. */
   homenageados:  PessoaComemoracao[];
@@ -76,6 +99,16 @@ export interface NovaComemoracao {
   gifMidiaId?: string | null;
   somMidiaId?: string | null;
   layout?:     LayoutComemoracao;
+  /** Arranjo escolhido. Ausente = 'midia_topo'. */
+  modelo?:     string;
+  /** Entrada do texto. Ausente = 'subir'. */
+  animTexto?:  string;
+  /** Percentual do volume padrão. Ausente = 100. */
+  volume?:     number;
+  /** Ausente = 'operadores', o comportamento de sempre. */
+  alvoTipo?:   AlvoTipo;
+  equipeId?:   string | null;
+  setorId?:    string | null;
 }
 
 interface Resultado<T = null> {
@@ -88,6 +121,12 @@ interface Resultado<T = null> {
 function tabelaAusente(erro: { code?: string; message?: string } | null): boolean {
   if (!erro) return false;
   return erro.code === '42P01' || /relation .* does not exist/i.test(erro.message ?? '');
+}
+
+/** A tabela existe, mas é da versão anterior — falta a 20260801a. */
+function colunaAusente(erro: { code?: string; message?: string } | null): boolean {
+  if (!erro) return false;
+  return erro.code === '42703' || /column .* does not exist/i.test(erro.message ?? '');
 }
 
 // ── Leitura ──────────────────────────────────────────────────────────────────
@@ -149,11 +188,24 @@ export async function buscarComemoracoes(
     return { data: [], dbAtiva: true, erro: 'Não foi possível carregar as comemorações.', agoraServidor: null };
   }
 
+  // As colunas da 20260801a chegam ausentes num banco que ainda não migrou —
+  // daí serem opcionais aqui e ganharem padrão no mapa abaixo. A aba continua
+  // funcionando como a de ontem em vez de quebrar.
   type Linha = Omit<
     Comemoracao,
-    'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
+    | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
+    | 'modelo' | 'anim_texto' | 'volume' | 'alvo_tipo' | 'equipe_id' | 'setor_id'
+    | 'empresa_inteira' | 'finalizada_em'
   > & {
     layout?: unknown;
+    modelo?:          string | null;
+    anim_texto?:      string | null;
+    volume?:          number | null;
+    alvo_tipo?:       AlvoTipo | null;
+    equipe_id?:       string | null;
+    setor_id?:        string | null;
+    empresa_inteira?: boolean | null;
+    finalizada_em?:   string | null;
     comemoracao_homenageados?: { operador_id: string }[] | null;
   };
 
@@ -170,6 +222,15 @@ export async function buscarComemoracoes(
       gif_url: linha.gif_midia_id ? porId.get(linha.gif_midia_id)?.url ?? null : null,
       som_url: som?.url ?? null,
       som_inicio_s: Number(som?.inicio_s ?? 0),
+      modelo:     linha.modelo     ?? 'midia_topo',
+      anim_texto: linha.anim_texto ?? 'subir',
+      // 100 = volume padrão de cada som. Banco sem a coluna soa como sempre.
+      volume:     Number(linha.volume ?? 100),
+      alvo_tipo:  linha.alvo_tipo ?? 'operadores',
+      equipe_id:  linha.equipe_id ?? null,
+      setor_id:   linha.setor_id  ?? null,
+      empresa_inteira: linha.empresa_inteira ?? false,
+      finalizada_em:   linha.finalizada_em   ?? null,
       homenageados: (linha.comemoracao_homenageados ?? [])
         .map((h) => pessoas.get(h.operador_id))
         .filter((p): p is PessoaComemoracao => !!p),
@@ -192,10 +253,25 @@ export async function buscarComemoracoes(
 
 export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<string>> {
   const titulo = p.titulo.trim();
+  const alvo   = p.alvoTipo ?? 'operadores';
+
   if (!titulo) return { ok: false, erro: 'Escreva um título.', dados: null };
-  if (!p.operadorIds.length) return { ok: false, erro: 'Escolha quem vai ser homenageado.', dados: null };
-  if (p.operadorIds.length > MAX_HOMENAGEADOS) {
-    return { ok: false, erro: `São no máximo ${MAX_HOMENAGEADOS} homenageados por comemoração.`, dados: null };
+
+  // Equipe e setor dispensam homenageado: quem bateu a meta é o grupo, e
+  // listar 40 pessoas no card não diria nada que o nome da equipe já não diga.
+  if (alvo === 'equipe' && !p.equipeId) {
+    return { ok: false, erro: 'Escolha a equipe.', dados: null };
+  }
+  if (alvo === 'setor' && !p.setorId) {
+    return { ok: false, erro: 'Escolha o setor.', dados: null };
+  }
+  if (alvo === 'operadores') {
+    if (!p.operadorIds.length) {
+      return { ok: false, erro: 'Escolha quem vai ser homenageado.', dados: null };
+    }
+    if (p.operadorIds.length > MAX_HOMENAGEADOS) {
+      return { ok: false, erro: `São no máximo ${MAX_HOMENAGEADOS} homenageados por comemoração.`, dados: null };
+    }
   }
   if (p.duracaoS < DURACAO_MIN_S || p.duracaoS > DURACAO_MAX_S) {
     return { ok: false, erro: `A duração vai de ${DURACAO_MIN_S} a ${DURACAO_MAX_S} segundos.`, dados: null };
@@ -223,6 +299,14 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       ...(p.layout && !ehLayoutPadrao(p.layout) ? { layout: layoutParaJson(p.layout) } : {}),
       ...(p.gifMidiaId ? { gif_midia_id: p.gifMidiaId } : {}),
       ...(p.somMidiaId ? { som_midia_id: p.somMidiaId } : {}),
+      // Colunas da 20260801a só entram quando fogem do padrão: assim um banco
+      // que ainda não migrou continua criando comemoração comum sem erro, e só
+      // esbarra na coluna ausente quem usar as novidades.
+      ...(p.modelo    && p.modelo    !== 'midia_topo' ? { modelo: p.modelo } : {}),
+      ...(p.animTexto && p.animTexto !== 'subir'      ? { anim_texto: p.animTexto } : {}),
+      ...(p.volume !== undefined && p.volume !== 100  ? { volume: p.volume } : {}),
+      ...(alvo === 'equipe' ? { alvo_tipo: 'equipe', equipe_id: p.equipeId } : {}),
+      ...(alvo === 'setor'  ? { alvo_tipo: 'setor',  setor_id:  p.setorId  } : {}),
     })
     .select('id')
     .single();
@@ -231,9 +315,16 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
     if (tabelaAusente(error)) {
       return { ok: false, erro: 'A migration 20260731e ainda não foi aplicada no banco.', dados: null };
     }
+    if (colunaAusente(error)) {
+      return { ok: false, erro: 'A migration 20260801a ainda não foi aplicada no banco.', dados: null };
+    }
     logger.warn('[comemoracoes] erro ao criar:', error?.message);
     return { ok: false, erro: error?.message ?? 'Não foi possível criar a comemoração.', dados: null };
   }
+
+  // Equipe e setor já saíram do INSERT com a plateia resolvida pelo trigger
+  // `trg_comemoracao_alvo_direto`. Não há homenageado a gravar.
+  if (alvo !== 'operadores') return { ok: true, erro: null, dados: data.id };
 
   // Os homenageados vão depois, e é o INSERT deles que dispara o trigger de
   // `setores_alvo`. Se esta parte falhar, a comemoração existiria sem plateia —
@@ -249,6 +340,29 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
   }
 
   return { ok: true, erro: null, dados: data.id };
+}
+
+/**
+ * Marca a comemoração como finalizada.
+ *
+ * Chamada pelo cliente que exibiu o card quando a duração acaba. Idempotente e
+ * best-effort: falhar aqui não pode atrapalhar quem está trabalhando, e a
+ * faxina do pg_cron fecha o que escapar.
+ *
+ * A trava contra encerrar a festa dos outros mora na RPC: fora da janela
+ * qualquer um finaliza, dentro dela só quem criou.
+ */
+export async function finalizarComemoracao(id: string): Promise<void> {
+  const { error } = await supabase.rpc('fn_comemoracao_finalizar', { p_id: id });
+  if (error && !tabelaAusente(error) && !funcaoAusente(error)) {
+    logger.warn('[comemoracoes] erro ao finalizar:', error.message);
+  }
+}
+
+/** A RPC da 20260801a ainda não existe neste banco. */
+function funcaoAusente(erro: { code?: string; message?: string } | null): boolean {
+  if (!erro) return false;
+  return erro.code === 'PGRST202' || /could not find the function/i.test(erro.message ?? '');
 }
 
 /** Tira da tela de todo mundo. Não apaga: o histórico continua na aba. */

@@ -11,6 +11,20 @@ export interface Exibivel {
   inicia_em:    string;
   duracao_s:    number;
   cancelada_em?: string | null;
+  /**
+   * Preenchida quando a comemoração termina (20260801a).
+   *
+   * Antes o fim era só aritmética de relógio, e o conjunto de já-exibidas vivia
+   * na memória da aba: um F5 dentro da janela fazia a mesma comemoração
+   * explodir de novo. Isto fecha a comemoração para TODO MUNDO; o "não repetir
+   * para mim" é a outra metade e mora em `vistas.ts`.
+   */
+  finalizada_em?: string | null;
+}
+
+/** Encerrada de vez — por cancelamento ou por ter terminado. */
+export function estaEncerrada(c: Exibivel): boolean {
+  return !!c.cancelada_em || !!c.finalizada_em;
 }
 
 /**
@@ -33,7 +47,7 @@ export function fimMs(c: Exibivel): number {
 
 /** Já começou e ainda não acabou — quem entra no meio da festa vê. */
 export function estaNoAr(c: Exibivel, agora: number): boolean {
-  if (c.cancelada_em) return false;
+  if (estaEncerrada(c)) return false;
   const inicio = inicioMs(c);
   if (!inicio) return false;
   return agora >= inicio && agora < fimMs(c);
@@ -41,7 +55,7 @@ export function estaNoAr(c: Exibivel, agora: number): boolean {
 
 /** Começa daqui a pouco e merece um timer local. */
 export function vaiComecar(c: Exibivel, agora: number, horizonte = HORIZONTE_TIMER_MS): boolean {
-  if (c.cancelada_em) return false;
+  if (estaEncerrada(c)) return false;
   const inicio = inicioMs(c);
   if (!inicio) return false;
   return inicio > agora && inicio - agora <= horizonte;
@@ -72,7 +86,7 @@ export function proximaDaFila<T extends Exibivel>(
 
 /** Ainda não começou — está na agenda. */
 export function estaAgendada(c: Exibivel, agora: number): boolean {
-  if (c.cancelada_em) return false;
+  if (estaEncerrada(c)) return false;
   const inicio = inicioMs(c);
   return !!inicio && inicio > agora;
 }
@@ -81,6 +95,21 @@ export function estaAgendada(c: Exibivel, agora: number): boolean {
 export function jaPassou(c: Exibivel, agora: number): boolean {
   const inicio = inicioMs(c);
   return !!inicio && agora >= fimMs(c);
+}
+
+export type EstadoComemoracao = 'agendada' | 'em-andamento' | 'finalizada';
+
+/**
+ * Em qual dos três estados a comemoração está.
+ *
+ * **A ordem importa.** "Finalizada" é testada PRIMEIRO e inclui a janela
+ * vencida — sem isso, uma comemoração que passou da hora e que ninguém marcou
+ * ainda (o cliente fechou o navegador, o pg_cron só roda de madrugada) não se
+ * encaixaria em estado nenhum e sumiria das três listas da aba.
+ */
+export function estadoDe(c: Exibivel, agora: number): EstadoComemoracao {
+  if (estaEncerrada(c) || jaPassou(c, agora)) return 'finalizada';
+  return estaNoAr(c, agora) ? 'em-andamento' : 'agendada';
 }
 
 // ── Agendamento ──────────────────────────────────────────────────────────────
