@@ -415,6 +415,15 @@ export interface MetasConfigMes {
 export interface AnaliticoDashboardLinha {
   dia: string;               // 'yyyy-MM-dd'
   operador_id: string | null;
+  /**
+   * Setor carimbado na importação (migration 20260802a), já com o fallback no
+   * setor de quem importou. É o que permite ao dashboard somar o setor pela
+   * mesma regra da aba Analítico.
+   *
+   * `undefined` enquanto a 20260802a não estiver aplicada — ver
+   * `temCarimboDeSetor` em `escopoAnalitico.ts`.
+   */
+  setor_id?: string | null;
   forma_pagamento: 'boleto_pix' | 'cartao';
   /** Rótulo real da forma (BookPlay: Boleto, Pix, Pix Automático…); NULL na PaguePlay. */
   forma_detalhe: string | null;

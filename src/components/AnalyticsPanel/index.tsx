@@ -16,8 +16,17 @@ import {
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { supabase } from '@/lib/supabase';
+import {
+  buscarFontesDeEscopo, operadoresDaEquipe, operadoresDoSetor,
+  type FontesDeEscopo,
+} from '@/services/analitico/analitico.service';
+import {
+  escopoDeSetor, temCarimboDeSetor, veTodosOsSetores, ESCOPO_EMPRESA,
+  type EscopoAnalitico,
+} from '@/services/analitico/escopoAnalitico';
+import { buscarContribuicoesReceptivo } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
 } from '@/lib/index';
@@ -49,6 +58,7 @@ export function AnalyticsPanel({
 }: AnalyticsPanelProps = {}) {
   const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -116,67 +126,126 @@ export function AnalyticsPanel({
   // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
   const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
 
-  // Escopo dos filtros ativos (operador/equipe/setor) aplicado ao analítico.
-  // Para o operador a RPC já devolve só as próprias linhas.
-  const [opsEscopo, setOpsEscopo] = useState<Set<string> | string | null>(null);
-  // true quando o escopo ativo é um SETOR: linhas sem operador contam no total
-  const [escopoEhSetor, setEscopoEhSetor] = useState(false);
-  // Isolamento por setor: sem visão global (admin/diretoria/'ver_todos_setores'),
-  // o analítico do painel fica travado no setor do próprio usuário — os números
-  // de um setor nunca somam nos do outro.
-  const veTodosSetores =
-    temPermissao('ver_analiticos_global') || temPermissao('ver_todos_setores');
+  // ── Escopo do analítico ────────────────────────────────────────────────────
+  // Quem enxerga a empresa toda. Mesma função da aba Analítico: as duas telas
+  // discordavam (aba decidia por cargo, dashboard por permissão), e a diretoria
+  // via a empresa numa e só o próprio setor na outra.
+  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
+  // Sem visão global o painel fica travado no setor do usuário — os números de
+  // um setor nunca somam nos do outro.
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
-  useEffect(() => {
-    let cancelado = false;
-    async function resolver() {
-      if (!temAnalitico) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
-      if (operadorFiltroExterno) { setOpsEscopo(operadorFiltroExterno); setEscopoEhSetor(false); return; }
-      const eq = equipeFiltroExterno ?? null;
-      const st = (setorExterno ?? null) || setorTravado;
-      if (!eq && !st) { setOpsEscopo(null); setEscopoEhSetor(false); return; }
-      let q = supabase.from('perfis').select('id');
-      q = eq ? q.eq('equipe_id', eq) : q.eq('setor_id', st!);
-      const { data } = await q;
-      const ids = new Set(((data ?? []) as { id: string }[]).map(r => r.id));
-      // BookPlay: no escopo de SETOR, inclui os operadores CLONADOS em equipes
-      // desse setor (setor de origem diferente). Sem isso, um setor formado só
-      // por clones (ex.: Digital) tem o "Recebido" do analítico zerado.
-      if (isBookplay && !eq && st) {
-        const { data: eqs } = await supabase.from('equipes').select('id').eq('setor_id', st);
-        const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
-        if (eqIds.length) {
-          const { data: cl } = await supabase
-            .from('equipe_operadores_clones').select('operador_id').in('equipe_id', eqIds);
-          for (const c of ((cl as { operador_id: string }[]) ?? [])) ids.add(c.operador_id);
-        }
-      }
-      if (!cancelado) {
-        setOpsEscopo(ids);
-        setEscopoEhSetor(!eq && !!st);
-      }
-    }
-    void resolver();
-    return () => { cancelado = true; };
-  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorExterno, setorTravado, isBookplay]);
+  const setorEmFoco  = (setorExterno ?? null) || setorTravado;
 
-  // Linhas sem operador só entram no consolidado de setor da PP (setor único);
-  // na BookPlay elas nem são importadas (vários setores, sem atribuição)
+  // Membros, clones que contam (`conta_recebimento`) e setores alternativos.
+  // Vêm da MESMA fonte que a aba Analítico e o Painel Líder usam. A versão
+  // anterior montava esse conjunto à mão aqui e, com isso, somava clone com a
+  // caixinha desligada e desconhecia a flag de setor alternativo.
+  const [fontes, setFontes] = useState<FontesDeEscopo | null>(null);
+  useEffect(() => {
+    if (!temAnalitico || !empresa?.id) { setFontes(null); return; }
+    let cancelado = false;
+    void buscarFontesDeEscopo(empresa.id).then(f => { if (!cancelado) setFontes(f); });
+    return () => { cancelado = true; };
+  }, [temAnalitico, empresa?.id]);
+
+  /** true = o carimbo de setor chegou (migration 20260802a aplicada). */
+  const carimboDisponivel = useMemo(
+    () => temCarimboDeSetor(analiticoDash.linhas),
+    [analiticoDash.linhas],
+  );
+
+  const escopo = useMemo<EscopoAnalitico | null>(() => {
+    if (!temAnalitico) return ESCOPO_EMPRESA;
+    // Operador em visão individual: a RPC já devolve só as linhas dele, mas o
+    // filtro explícito mantém a conta correta para o líder que escolhe "ver um
+    // operador".
+    if (operadorFiltroExterno) {
+      return { tipo: 'operador', operadorId: operadorFiltroExterno };
+    }
+    if (!equipeFiltroExterno && !setorEmFoco) return ESCOPO_EMPRESA;
+    // Depende das fontes; até elas chegarem o escopo é indefinido (ver abaixo).
+    if (!fontes) return null;
+    if (equipeFiltroExterno) {
+      return { tipo: 'equipe', operadores: operadoresDaEquipe(equipeFiltroExterno, fontes) };
+    }
+    return escopoDeSetor({
+      setorId:     setorEmFoco!,
+      // PaguePlay tem um setor só e nunca usou o carimbo: soma pelos operadores,
+      // exatamente como já fazia (e como o Painel Líder faz com setorSomaMembros).
+      alternativo: isPP || fontes.setoresAlternativos.has(setorEmFoco!),
+      operadores:  operadoresDoSetor(setorEmFoco!, fontes),
+      temCarimbo:  carimboDisponivel,
+    });
+  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorEmFoco, fontes, isPP, carimboDisponivel]);
+
+  /**
+   * Escopo ainda sendo resolvido.
+   *
+   * Antes, enquanto as consultas não voltavam, o filtro era `null` — que
+   * significa "empresa inteira". Um líder via por um instante o total da
+   * empresa toda antes de ele cair para o do setor: número errado na tela,
+   * ainda que por meio segundo, num painel de dinheiro.
+   */
+  const escopoPendente = escopo === null;
+
   const anal = useMemo(
-    () => agregarAnalitico(analiticoDash.linhas, opsEscopo, escopoEhSetor && isPP),
-    [analiticoDash.linhas, opsEscopo, escopoEhSetor, isPP],
+    () => agregarAnalitico(analiticoDash.linhas, escopo ?? ESCOPO_EMPRESA),
+    [analiticoDash.linhas, escopo],
   );
   const usarAnalitico = temAnalitico && analiticoDash.dbAtiva;
 
-  // % da meta: bruto do analítico × meta total (PP). Fallback: tabulação.
+  // ── Contribuição Receptivo (BookPlay) ──────────────────────────────────────
+  // Valor digitado à mão por setor (`contribuicao_receptivo`, 20260730a). Não
+  // vem no relatório: soma POR CIMA do acumulado, como já faz o card de setor
+  // do Painel Líder. O dashboard ignorava esse dinheiro por completo.
+  const [receptivoPorSetor, setReceptivoPorSetor] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (isPP || !isBookplay || !empresa?.id) { setReceptivoPorSetor({}); return; }
+    let cancelado = false;
+    void buscarContribuicoesReceptivo(empresa.id, mesAnalise).then(({ porSetor }) => {
+      if (cancelado) return;
+      const mapa: Record<string, number> = {};
+      for (const [sid, v] of Object.entries(porSetor)) mapa[sid] = v.acumulado;
+      setReceptivoPorSetor(mapa);
+    });
+    return () => { cancelado = true; };
+  }, [isPP, isBookplay, empresa?.id, mesAnalise]);
+
+  /**
+   * Quanto do Receptivo entra no que está na tela.
+   *
+   * Ele pertence ao SETOR, então só soma quando o recorte é um setor (o dele)
+   * ou a empresa (todos). Num recorte de equipe ou de um operador seria
+   * creditar a alguém um valor que não é dele.
+   */
+  const receptivoNoEscopo = useMemo(() => {
+    if (!escopo) return 0;
+    if (escopo.tipo === 'empresa') {
+      return Object.values(receptivoPorSetor).reduce((s, v) => s + v, 0);
+    }
+    if (escopo.tipo === 'setor') return receptivoPorSetor[escopo.setorId] ?? 0;
+    return 0;
+  }, [escopo, receptivoPorSetor]);
+
+  /**
+   * O acumulado que a tela mostra: relatório + Receptivo.
+   *
+   * `anal.bruto` sozinho continua sendo o RELATÓRIO puro — é ele que o aviso de
+   * "não tabulado" cita, porque só o que veio no arquivo pode ser tabulado.
+   */
+  const brutoComReceptivo = anal.bruto + receptivoNoEscopo;
+
+  // % da meta: acumulado do analítico × meta total. Fallback: tabulação.
+  // Usa o acumulado COM Receptivo — mesma decisão do card de setor no Painel
+  // Líder: o Receptivo soma no realizado, a meta segue sendo a da aba Metas.
   const percMetaAnalitico = meta && meta.meta_valor > 0
-    ? Math.min(Math.round((anal.bruto / meta.meta_valor) * 100), 999)
+    ? Math.min(Math.round((brutoComReceptivo / meta.meta_valor) * 100), 999)
     : 0;
   const percMetaFinal = usarAnalitico && meta ? percMetaAnalitico : percMeta;
 
   const valorPrincipal  = isPP
     ? (usarAnalitico ? anal.ho : (temLogicaDiretoExtra ? valorHOMes : valorHODireto))
-    : (usarAnalitico ? anal.bruto : valorRecebidoMes);
+    : (usarAnalitico ? brutoComReceptivo : valorRecebidoMes);
   // Linha verde do gráfico: valor total do analítico por dia (o toggle H.O./Total
   // da PP é resolvido dentro do ChartsSection usando o campo `ho`)
   const porDiaChart = usarAnalitico
@@ -236,9 +305,19 @@ export function AnalyticsPanel({
     ? Math.round((totalPagosMes / totalAcordosMes) * 100)
     : 0;
 
-  const ticketMedio = totalPagosMes > 0
-    ? valorRecebidoMes / totalPagosMes
-    : 0;
+  /**
+   * Ticket médio — do ANALÍTICO quando ele está no ar.
+   *
+   * Antes dividia sempre pela tabulação (`valorRecebidoMes ÷ acordos pagos`)
+   * enquanto o card "Recebido no mês" logo acima já mostrava o analítico. Com a
+   * tabulação atrasada em relação ao relatório — que é o normal, é justamente o
+   * que o aviso de "não tabulado" denuncia — os dois números na mesma tela
+   * contavam histórias diferentes.
+   */
+  const ticketMedio = usarAnalitico
+    ? (anal.qtd > 0 ? anal.bruto / anal.qtd : 0)
+    : (totalPagosMes > 0 ? valorRecebidoMes / totalPagosMes : 0);
+  const ticketMedioSub = usarAnalitico ? 'por pagamento no analítico' : 'por acordo pago';
 
   /**
    * Projeção pelo ritmo: realizado ÷ dias corridos × dias do mês.
@@ -246,12 +325,16 @@ export function AnalyticsPanel({
    * Os "dias corridos" saem de `diasDecorridos`, que num mês FECHADO devolve o
    * mês inteiro. Sem isso, olhar julho no dia 02 de agosto dividiria o mês
    * inteiro por 2 e projetaria ~15× o valor real.
+   *
+   * A base é a mesma do card "Recebido no mês" — projetar a tabulação enquanto
+   * a tela toda fala do analítico dava uma projeção sistematicamente menor.
    */
+  const baseProjecao = usarAnalitico ? brutoComReceptivo : valorRecebidoMes;
   const projecaoMes = useMemo(() => {
     const decorridos = diasDecorridos(mesAnalise);
     if (decorridos <= 0) return 0;
-    return Math.round((valorRecebidoMes / decorridos) * diasNoMes(mesAnalise));
-  }, [valorRecebidoMes, mesAnalise]);
+    return Math.round((baseProjecao / decorridos) * diasNoMes(mesAnalise));
+  }, [baseProjecao, mesAnalise]);
 
   const donutColor = percMetaFinal >= 100
     ? '#22c55e'
@@ -269,6 +352,15 @@ export function AnalyticsPanel({
 
   const donutSublabel = meta ? 'da meta' : 'pagos';
   const sparklineData = porDiaChart.map(d => ({ value: d.recebido ?? 0 }));
+
+  /**
+   * Esqueleto enquanto QUALQUER peça do número ainda falta.
+   *
+   * Inclui o escopo: sem ele, o painel renderizava com o filtro em branco — que
+   * significa "empresa inteira" — e um líder via de relance o total da empresa
+   * antes de cair para o do setor dele.
+   */
+  const carregando = loading || escopoPendente;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -288,11 +380,11 @@ export function AnalyticsPanel({
             <div>
               <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
               <div className="mt-0.5 -ml-1.5">
-                <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={loading} />
+                <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
               </div>
             </div>
           </div>
-          {!loading && sparklineData.length > 0 && (
+          {!carregando && sparklineData.length > 0 && (
             <div className="hidden lg:flex items-center gap-2 ml-2 pl-3 border-l border-border/60">
               <MiniSparkline data={sparklineData} color={CHART_RECEBIDO} />
               <span className="text-[11px] text-muted-foreground">ritmo</span>
@@ -300,7 +392,7 @@ export function AnalyticsPanel({
           )}
         </div>
 
-        {!loading && (
+        {!carregando && (
           <div className="hidden md:flex items-center gap-5 text-xs">
             <div className="flex flex-col items-end">
               <span className="text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -353,10 +445,10 @@ export function AnalyticsPanel({
             size="icon"
             className="h-7 w-7 rounded-lg"
             onClick={refetch}
-            disabled={loading}
+            disabled={carregando}
             title="Atualizar dados"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-muted-foreground', loading && 'animate-spin')} />
+            <RefreshCw className={cn('w-3.5 h-3.5 text-muted-foreground', carregando && 'animate-spin')} />
           </Button>
           {!alwaysOpen && (
             <Button
@@ -393,7 +485,7 @@ export function AnalyticsPanel({
               className="space-y-4 pt-1"
             >
               {/* Metric cards */}
-              {loading ? (
+              {carregando ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
@@ -470,11 +562,12 @@ export function AnalyticsPanel({
                     trend="up"
                     value={
                       <span className="text-emerald-500">
-                        {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
+                        {formatCurrency(usarAnalitico ? brutoComReceptivo : valorRecebidoMes)}
                       </span>
                     }
                     sub={usarAnalitico
                       ? `${anal.qtd} pgtos no analítico`
+                        + (receptivoNoEscopo > 0 ? ` · + ${formatCurrency(receptivoNoEscopo)} receptivo` : '')
                       : `${totalPagosMes} acordos pagos`}
                   />
                   <MetricCard
@@ -531,7 +624,7 @@ export function AnalyticsPanel({
               )}
 
               {/* Charts row */}
-              {!loading && (
+              {!carregando && (
                 <ChartsSection
                   isPP={isPP}
                   porDiaChart={porDiaChart}
@@ -541,14 +634,14 @@ export function AnalyticsPanel({
                   donutSublabel={donutSublabel}
                   meta={meta}
                   percMeta={percMetaFinal}
-                  valorRecebidoMes={usarAnalitico ? anal.bruto : valorRecebidoMes}
+                  valorRecebidoMes={usarAnalitico ? brutoComReceptivo : valorRecebidoMes}
                   tickColor={tickColor}
                   gridColor={gridColor}
                 />
               )}
 
               {/* ROW 3 — Métricas adicionais */}
-              {!loading && (
+              {!carregando && (
                 <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <motion.div
                     variants={itemVariants}
@@ -607,7 +700,7 @@ export function AnalyticsPanel({
                     <span className="text-xl font-bold tabular-nums font-mono text-indigo-500 pl-1 leading-tight">
                       {formatCurrency(ticketMedio)}
                     </span>
-                    <span className="text-[11px] text-muted-foreground pl-1">por acordo pago</span>
+                    <span className="text-[11px] text-muted-foreground pl-1">{ticketMedioSub}</span>
                   </motion.div>
 
                   <motion.div

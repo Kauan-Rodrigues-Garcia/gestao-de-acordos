@@ -322,14 +322,38 @@ export async function importarLoteAnalitico(
   const codigos = [...new Set(rows.map(r => r.codigo))];
   const meses   = [...new Set(rows.map(r => r.mes_referencia))];
   const existentes: ExRow[] = [];
+  let leituraCompleta = true;
   for (let i = 0; i < codigos.length; i += CHUNK) {
-    const { data } = await supabase
-      .from('analitico_recebimentos')
-      .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
-      .eq('empresa_id', empresaId)
-      .in('mes_referencia', meses)
-      .in('codigo', codigos.slice(i, i + CHUNK));
-    existentes.push(...((data ?? []) as ExRow[]));
+    const fatia = codigos.slice(i, i + CHUNK);
+    // PAGINADO de propósito. A versão anterior fazia um `select` solto por
+    // fatia de códigos e confiava que caberia na resposta — mas o PostgREST
+    // corta em `max_rows` (1000). Um NR trabalhado por vários operadores, ou um
+    // mês com duplicatas antigas, estoura o limite e a página some sem aviso.
+    // O efeito é o pior possível: `somaDb` sai menor do que o banco realmente
+    // tem, a reconciliação enxerga um "falta" que não existe e SOMA a diferença
+    // numa linha — inflando o total do operador em silêncio.
+    // Ordem por `id` para o range ser determinístico entre as páginas.
+    const { data, error } = await paginarParalelo<ExRow>(async (de, ate) => {
+      const r = await supabase
+        .from('analitico_recebimentos')
+        .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
+        .eq('empresa_id', empresaId)
+        .in('mes_referencia', meses)
+        .in('codigo', fatia)
+        .order('id', { ascending: true })
+        .range(de, ate);
+      return { data: (r.data as unknown as ExRow[]) ?? [], error: r.error?.message ?? null };
+    });
+    if (error) { leituraCompleta = false; erros.push(`Leitura para conferência: ${error}`); break; }
+    existentes.push(...data);
+  }
+
+  // Reconciliar em cima de uma leitura incompleta é pior que não reconciliar:
+  // ajustaria valores comparando o relatório com metade do banco. As linhas
+  // novas já entraram; o líder reimporta e a conferência roda de novo.
+  if (!leituraCompleta) {
+    erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
+    return { inseridos, duplicados, atualizados, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
@@ -1054,6 +1078,76 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
   return { equipes, operadorEquipeMap, equipesExtrasPorOperador };
+}
+
+// ── Fontes para montar o escopo do analítico ─────────────────────────────────
+
+export interface FontesDeEscopo {
+  /** Setores com `alternativo = true`: somam pelos usuários, não pelo carimbo. */
+  setoresAlternativos: Set<string>;
+  operadorEquipeMap: Record<string, OperadorEquipeInfo>;
+  /** equipe_id em que cada operador é CLONE que conta (`conta_recebimento`). */
+  equipesExtrasPorOperador: Record<string, string[]>;
+  /** equipe_id → setor_id, para resolver o setor dono de uma equipe clonada. */
+  setorDaEquipe: Map<string, string>;
+}
+
+/**
+ * Tudo o que é preciso para responder "quem conta neste setor/equipe?".
+ *
+ * Junta `buscarEquipesComOperadores` (que já respeita `conta_recebimento` dos
+ * clones) com a flag `setores.alternativo`. Existe para o dashboard parar de
+ * montar esse conjunto à mão: ele lia `equipe_operadores_clones` cru, então
+ * somava até o clone com a caixinha "conta no recebimento" DESLIGADA, e nunca
+ * soube da flag de setor alternativo.
+ *
+ * Coluna `alternativo` ausente (migration 20260724a pendente) → conjunto vazio,
+ * isto é, todos os setores são normais. Mesmo comportamento do AnaliticoLider.
+ */
+export async function buscarFontesDeEscopo(empresaId: string): Promise<FontesDeEscopo> {
+  const [{ equipes, operadorEquipeMap, equipesExtrasPorOperador }, alt] = await Promise.all([
+    buscarEquipesComOperadores(empresaId),
+    supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
+  ]);
+
+  const setoresAlternativos = new Set<string>();
+  if (!alt.error) {
+    for (const s of ((alt.data ?? []) as { id: string; alternativo: boolean | null }[])) {
+      if (s.alternativo) setoresAlternativos.add(s.id);
+    }
+  }
+
+  return {
+    setoresAlternativos,
+    operadorEquipeMap,
+    equipesExtrasPorOperador,
+    setorDaEquipe: mapaSetorDaEquipe(equipes),
+  };
+}
+
+/** Operadores cujo recebimento conta no setor (membros + clones que contam). */
+export function operadoresDoSetor(setorId: string, fontes: FontesDeEscopo): Set<string> {
+  const out = new Set<string>();
+  for (const id of Object.keys(fontes.operadorEquipeMap)) {
+    if (setoresDoOperador(
+      id, fontes.operadorEquipeMap, fontes.equipesExtrasPorOperador, fontes.setorDaEquipe,
+    ).has(setorId)) {
+      out.add(id);
+    }
+  }
+  return out;
+}
+
+/** Operadores da equipe — os próprios e os clonados nela. */
+export function operadoresDaEquipe(equipeId: string, fontes: FontesDeEscopo): Set<string> {
+  const out = new Set<string>();
+  for (const [id, info] of Object.entries(fontes.operadorEquipeMap)) {
+    if (info.equipe_id === equipeId
+        || (fontes.equipesExtrasPorOperador[id] ?? []).includes(equipeId)) {
+      out.add(id);
+    }
+  }
+  return out;
 }
 
 // ── Resumo mensal (snapshot salvo na importação) ──────────────────────────────

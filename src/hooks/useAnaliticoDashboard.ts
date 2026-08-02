@@ -31,6 +31,9 @@ import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { normalizarMes } from '@/lib/mesReferencia';
+import {
+  linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
+} from '@/services/analitico/escopoAnalitico';
 import { buscarAnaliticoDashboardMes } from '@/services/analitico/analitico.service';
 
 export interface AgregadoAnalitico {
@@ -53,20 +56,19 @@ export interface AgregadoAnalitico {
 }
 
 /**
- * Agrega as linhas da RPC; `filtro` restringe a um operador ou a um conjunto
- * (equipe/setor). `incluirSemOperador` soma também as linhas órfãs
- * (operador_id null) — regra do consolidado de SETOR; equipe/operador não.
+ * Agrega as linhas da RPC dentro de um escopo.
+ *
+ * A decisão "esta linha conta aqui?" NÃO mora mais nesta função: ela vem de
+ * `escopoAnalitico.ts`, o mesmo módulo que a aba Analítico e o Painel Líder
+ * usam. A versão anterior recebia um conjunto solto de operadores e um
+ * booleano `incluirSemOperador`, o que não conseguia expressar a regra do
+ * setor normal (somar pelo carimbo do relatório) — e por isso o dashboard
+ * mostrava um total diferente do arquivo importado.
  */
 export function agregarAnalitico(
   linhas: AnaliticoDashboardLinha[],
-  filtro?: string | Set<string> | null,
-  incluirSemOperador = false,
+  escopo: EscopoAnalitico = ESCOPO_EMPRESA,
 ): AgregadoAnalitico {
-  const pertence = (id: string | null): boolean =>
-    !filtro ? true
-    : id === null ? incluirSemOperador
-    : typeof filtro === 'string' ? id === filtro
-    : filtro.has(id);
   const agg: AgregadoAnalitico = {
     bruto: 0, ho: 0, qtd: 0,
     pixBruto: 0, pixHO: 0, cartaoBruto: 0, cartaoHO: 0,
@@ -74,7 +76,7 @@ export function agregarAnalitico(
     porDia: {}, porOperador: {}, porForma: {},
   };
   for (const l of linhas) {
-    if (!pertence(l.operador_id)) continue;
+    if (!linhaNoEscopo(l, escopo)) continue;
     const total = Number(l.total) || 0;
     const ho    = Number(l.total_ho) || 0;
     const qtd   = Number(l.qtd) || 0;
