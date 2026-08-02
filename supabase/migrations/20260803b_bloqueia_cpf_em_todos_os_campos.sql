@@ -46,14 +46,25 @@ DECLARE
 BEGIN
   IF p_texto IS NULL OR p_texto = '' THEN RETURN FALSE; END IF;
 
-  -- Candidatos: 11 dígitos com separadores opcionais, cercados por não-dígito.
-  -- A fronteira é o que impede recortar um CPF de dentro de um número maior.
+  -- Varredura 1 — com separador: 529.982.247-25, 529 982 247 25. O formato
+  -- 3-3-3-2 é específico o bastante para não colar em número vizinho.
   FOR candidato IN
     SELECT (regexp_matches(
               p_texto,
-              '(?<![0-9])([0-9]{3}[.\s]?[0-9]{3}[.\s]?[0-9]{3}[-\s]?[0-9]{2})(?![0-9])',
+              '[0-9]{3}[.[:space:]][0-9]{3}[.[:space:]][0-9]{3}[-[:space:]][0-9]{2}',
               'g'
             ))[1]
+  LOOP
+    IF public.fn_eh_cpf(candidato) THEN RETURN TRUE; END IF;
+  END LOOP;
+
+  -- Varredura 2 — corrida de dígitos. `[0-9]+` é guloso e devolve a sequência
+  -- INTEIRA: um CNPJ de 14 dígitos chega como 14 e `fn_eh_cpf` recusa por
+  -- tamanho, e um CPF embutido num número maior nunca é recortado. É a
+  -- fronteira de graça, sem depender de lookbehind — que nem toda versão do
+  -- Postgres aceita e que era como esta função estava escrita.
+  FOR candidato IN
+    SELECT (regexp_matches(p_texto, '[0-9]+', 'g'))[1]
   LOOP
     IF public.fn_eh_cpf(candidato) THEN RETURN TRUE; END IF;
   END LOOP;

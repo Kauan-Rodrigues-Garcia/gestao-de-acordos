@@ -62,14 +62,24 @@ export const ERRO_CPF_NO_CODIGO =
 // ── CPF escondido no meio de um texto ────────────────────────────────────────
 
 /**
- * Candidatos a CPF dentro de um texto livre.
+ * Candidatos a CPF dentro de um texto livre — em duas varreduras.
  *
- * Duas formas: mascarada (`529.982.247-25`, com separadores opcionais) e onze
- * dígitos seguidos. As âncoras `(?<!\d)` e `(?!\d)` são o detalhe que importa —
- * sem elas, um CNPJ de 14 dígitos ou um número de protocolo longo teria
- * pedaços de 11 dígitos testados como se fossem CPF, e uma hora um passaria.
+ * 1. **Com separador**: `529.982.247-25`, `529 982 247 25`. O formato 3-3-3-2
+ *    é específico o bastante para não colar em número vizinho.
+ * 2. **Corrida de dígitos**: `\d+` é guloso e devolve a sequência INTEIRA. Um
+ *    CNPJ de 14 dígitos chega como 14 e `ehCpf` recusa por tamanho; um CPF
+ *    embutido num número maior nunca é recortado. É a fronteira de graça.
+ *
+ * A versão anterior usava lookbehind (`(?<!\d)`) para essa fronteira. Funciona,
+ * mas quebra no Safari anterior ao 16.4 — e não com um bug sutil: é erro de
+ * SINTAXE, avaliado quando o módulo carrega, então a tela inteira morre. Não
+ * vale o risco por algo que duas passadas resolvem.
  */
-const CANDIDATOS_CPF = /(?<!\d)\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}(?!\d)/g;
+const CPF_COM_SEPARADOR = /\d{3}[.\s]\d{3}[.\s]\d{3}[-\s]\d{2}/g;
+const CORRIDA_DE_DIGITOS = /\d+/g;
+
+/** Exportado só para o teste conferir que nenhuma delas usa lookbehind. */
+export const PADROES_CPF = [CPF_COM_SEPARADOR, CORRIDA_DE_DIGITOS] as const;
 
 /**
  * O texto contém um CPF em algum lugar?
@@ -80,9 +90,15 @@ const CANDIDATOS_CPF = /(?<!\d)\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}(?!\d)/g;
 export function contemCpf(texto: unknown): boolean {
   const s = String(texto ?? '');
   if (!s) return false;
-  const achados = s.match(CANDIDATOS_CPF);
-  if (!achados) return false;
-  return achados.some(ehCpf);
+  for (const candidato of s.match(CPF_COM_SEPARADOR) ?? []) {
+    if (ehCpf(candidato)) return true;
+  }
+  // `ehCpf` já exige exatamente 11 dígitos, então a corrida maior é recusada
+  // sozinha — é justamente isso que impede recortar CPF de dentro de um CNPJ.
+  for (const candidato of s.match(CORRIDA_DE_DIGITOS) ?? []) {
+    if (ehCpf(candidato)) return true;
+  }
+  return false;
 }
 
 /**

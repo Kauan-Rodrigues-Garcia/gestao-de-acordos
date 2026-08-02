@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ehCpf, apenasDigitos, contemCpf, camposComCpf, acordoTemCpf, avisoCpfDoAcordo,
+  PADROES_CPF,
 } from './cpf';
 
 // CPFs com dígitos verificadores válidos (gerados para o teste, não reais).
@@ -156,5 +157,26 @@ describe('camposComCpf / acordoTemCpf / avisoCpfDoAcordo', () => {
     expect(acordoTemCpf(undefined)).toBe(false);
     expect(camposComCpf(null)).toEqual([]);
     expect(avisoCpfDoAcordo(undefined)).toBeNull();
+  });
+});
+
+describe('contemCpf — sem lookbehind (compatibilidade)', () => {
+  it('nenhum dos padrões usa lookbehind', () => {
+    // Lookbehind quebra no Safari < 16.4 com erro de SINTAXE, avaliado quando
+    // o módulo carrega — a tela inteira morre, não só a checagem. Este teste
+    // existe para ninguém reintroduzir a construção "porque é mais curta".
+    //
+    // Olha o `.source` de cada padrão, não o corpo de `contemCpf`: as
+    // expressões são constantes de módulo e não apareceriam no toString().
+    for (const padrao of PADROES_CPF) {
+      expect(padrao.source).not.toMatch(/\(\?<[=!]/);
+    }
+  });
+
+  it('as duas varreduras cobrem os formatos que importam', () => {
+    expect(contemCpf('529.982.247-25')).toBe(true);   // com ponto e traço
+    expect(contemCpf('529 982 247 25')).toBe(true);   // com espaço
+    expect(contemCpf('52998224725')).toBe(true);      // corrido
+    expect(contemCpf('obs: 52998224725 fim')).toBe(true);
   });
 });
