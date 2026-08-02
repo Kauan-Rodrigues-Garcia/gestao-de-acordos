@@ -410,10 +410,21 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
     const valorHOAgendado = valorAgendadoMes * PP_HO_PERCENTUAL;
     const valorHONaoPago  = valorNaoPago * PP_HO_PERCENTUAL;
 
-    // Para PaguePlay: meta é baseada em H.O. (24,96% do bruto)
-    // Para Bookplay:  meta é baseada no valor bruto recebido
-    const basePercMeta   = isPP ? valorHOMes : valorRecebidoMes;
-    const percMeta       = calcPerc(basePercMeta, meta?.meta_valor ?? 0);
+    /**
+     * A meta é comparada com o BRUTO recebido — nos dois tenants.
+     *
+     * A versão anterior usava o H.O. na PaguePlay ("meta é baseada em H.O."),
+     * mas `metas.meta_valor` guarda o campo **Meta R$** da aba Metas, que é o
+     * total. O campo "Meta H.O. (24,96%)" ao lado é só um conversor de tela:
+     * `MetasConfig` o recalcula a partir do total ao carregar e NUNCA o
+     * persiste. Dividir o H.O. por uma meta em bruto devolvia ~1/4 do
+     * percentual real — a PaguePlay via 20% onde tinha 80%.
+     *
+     * As outras telas já comparavam bruto com bruto: `percMetaAnalitico` no
+     * AnalyticsPanel, `MetaProgressoHeader`, `DesempenhoEquipes` e as metas por
+     * equipe/operador logo abaixo. Esta linha era a única fora do compasso.
+     */
+    const percMeta       = calcPerc(valorRecebidoMes, meta?.meta_valor ?? 0);
     const percMetaAcordos = calcPerc(pagos.length, meta?.meta_acordos ?? 0);
 
     // Por status

@@ -49,6 +49,7 @@ import {
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
+import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
@@ -454,10 +455,15 @@ export function AnaliticoLider({
         periodoFim:      snapshot.periodo_fim,
       };
     }
-    // Filtro de SETOR (sem equipe): o total do setor vem do RELATÓRIO
-    // (soma carimbada por setor_id) — clones não afetam. Exceção: setor
-    // ALTERNATIVO (Digital), cujo total é a soma dos membros/clones.
-    if (setorId && !filtroEquipeId && !setoresAlternativos.has(setorId)) {
+    // Filtro de SETOR (sem equipe): o total do setor vem do RELATÓRIO (soma
+    // carimbada por setor_id) — clones não afetam. `setorSomaPorUsuarios` diz
+    // quando NÃO é assim (setor alternativo, PaguePlay); é a mesma função que o
+    // dashboard e o Painel Líder consultam, e antes esta tela era a única que
+    // usava o carimbo também na PaguePlay.
+    const somaPorUsuarios = setorId
+      ? setorSomaPorUsuarios({ isPaguePlay: isPP, alternativo: setoresAlternativos.has(setorId) })
+      : false;
+    if (setorId && !filtroEquipeId && !somaPorUsuarios) {
       const tot = totalPorSetor[setorId];
       return {
         totalRecebido:   tot?.total ?? 0,
@@ -481,7 +487,7 @@ export function AnaliticoLider({
       periodoInicio:   snapshot?.periodo_inicio ?? null,
       periodoFim:      snapshot?.periodo_fim ?? null,
     };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, orfaosPorSetor, totalPorSetor, setoresAlternativos]);
+  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');

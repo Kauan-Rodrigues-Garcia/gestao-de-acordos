@@ -23,8 +23,8 @@ import {
   type FontesDeEscopo,
 } from '@/services/analitico/analitico.service';
 import {
-  escopoDeSetor, temCarimboDeSetor, veTodosOsSetores, ESCOPO_EMPRESA,
-  type EscopoAnalitico,
+  escopoDeSetor, setorSomaPorUsuarios, temCarimboDeSetor, veTodosOsSetores,
+  ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
 import { buscarContribuicoesReceptivo } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
@@ -170,9 +170,10 @@ export function AnalyticsPanel({
     }
     return escopoDeSetor({
       setorId:     setorEmFoco!,
-      // PaguePlay tem um setor só e nunca usou o carimbo: soma pelos operadores,
-      // exatamente como já fazia (e como o Painel Líder faz com setorSomaMembros).
-      alternativo: isPP || fontes.setoresAlternativos.has(setorEmFoco!),
+      alternativo: setorSomaPorUsuarios({
+        isPaguePlay: isPP,
+        alternativo: fontes.setoresAlternativos.has(setorEmFoco!),
+      }),
       operadores:  operadoresDoSetor(setorEmFoco!, fontes),
       temCarimbo:  carimboDisponivel,
     });

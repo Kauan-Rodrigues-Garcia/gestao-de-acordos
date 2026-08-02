@@ -51,7 +51,8 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
-const Comemoracoes      = lazy(() => import('@/pages/Comemoracoes'));
+// Comemorações não tem mais rota própria: virou aba de /admin/usuarios e é
+// carregada de lá (lazy também, para não entrar no bundle de quem não abre).
 
 function PageLoader() {
   return (
@@ -257,9 +258,11 @@ export default function App() {
                 <LayoutWrapper><SolicitacoesWpp /></LayoutWrapper>
               } />
 
-              {/* Comemoração de meta (gate por cargo dentro da página) */}
+              {/* /comemoracoes agora é aba dentro de /admin/usuarios.
+                  Redireciona em vez de sumir: notificação antiga, link colado no
+                  WhatsApp e favorito continuam caindo na tela certa. */}
               <Route path={ROUTE_PATHS.COMEMORACOES} element={
-                <LayoutWrapper><Comemoracoes /></LayoutWrapper>
+                <Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=comemoracoes'} replace />
               } />
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}

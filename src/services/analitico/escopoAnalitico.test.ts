@@ -8,7 +8,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   linhaNoEscopo, escopoDeSetor, temCarimboDeSetor, veTodosOsSetores,
-  ESCOPO_EMPRESA, type EscopoAnalitico, type LinhaEscopavel,
+  setorSomaPorUsuarios, ESCOPO_EMPRESA,
+  type EscopoAnalitico, type LinhaEscopavel,
 } from './escopoAnalitico';
 
 const PLAY4 = 'setor-play4';
@@ -127,6 +128,24 @@ describe('salvaguarda: RPC antiga, sem a coluna setor_id', () => {
     });
     expect((escopo as { porRelatorio: boolean }).porRelatorio).toBe(false);
     expect(linhaNoEscopo({ operador_id: ANA }, escopo)).toBe(true);
+  });
+});
+
+describe('setorSomaPorUsuarios', () => {
+  it('BookPlay: setor normal soma pelo carimbo do relatório', () => {
+    expect(setorSomaPorUsuarios({ isPaguePlay: false, alternativo: false })).toBe(false);
+  });
+
+  it('BookPlay: setor alternativo soma pelos usuários', () => {
+    expect(setorSomaPorUsuarios({ isPaguePlay: false, alternativo: true })).toBe(true);
+  });
+
+  it('PaguePlay soma pelos usuários em QUALQUER setor', () => {
+    // Lá o carimbo não existe — a importação passa setorImportacaoId = null de
+    // propósito. Somar por carimbo jogaria tudo no setor de quem importou.
+    // Esta era a divergência: a aba Analítico usava carimbo, o Painel Líder não.
+    expect(setorSomaPorUsuarios({ isPaguePlay: true, alternativo: false })).toBe(true);
+    expect(setorSomaPorUsuarios({ isPaguePlay: true, alternativo: true })).toBe(true);
   });
 });
 

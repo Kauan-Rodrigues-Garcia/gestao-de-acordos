@@ -65,6 +65,29 @@ export type EscopoAnalitico =
 export const ESCOPO_EMPRESA: EscopoAnalitico = { tipo: 'empresa' };
 
 /**
+ * O total deste setor sai da soma dos usuários, em vez do carimbo do relatório?
+ *
+ * Dois casos dizem que sim:
+ *
+ *   • **setor alternativo** — não tem relatório próprio (o Digital recebe via
+ *     clones do Play 4/5), então só existe o que os usuários dele trouxeram;
+ *   • **PaguePlay** — o carimbo de setor simplesmente não existe lá: a
+ *     importação passa `setorImportacaoId = null` de propósito. Somar "por
+ *     carimbo" jogaria TODAS as linhas no setor de quem importou, qualquer que
+ *     fosse o setor de cada operador.
+ *
+ * Esta linha estava escrita três vezes — no dashboard, na aba Analítico e no
+ * Painel Líder — e as três não concordavam: a aba usava o carimbo também na
+ * PaguePlay, enquanto o Painel Líder já somava por usuários.
+ */
+export function setorSomaPorUsuarios(params: {
+  isPaguePlay: boolean;
+  alternativo: boolean;
+}): boolean {
+  return params.isPaguePlay || params.alternativo;
+}
+
+/**
  * Monta o escopo de um setor decidindo sozinho entre carimbo e soma.
  *
  * `temCarimbo` é a salvaguarda: enquanto a migration 20260802a não for

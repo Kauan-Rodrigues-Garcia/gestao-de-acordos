@@ -1,13 +1,14 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper } from 'lucide-react';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
+import { podeCriarComemoracao } from '@/pages/Comemoracoes/permissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,6 +33,11 @@ import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
+
+// Lazy: a aba Comemorações arrasta o editor de layout, o catálogo de sons e a
+// biblioteca de mídia. Enquanto era rota própria, só baixava para quem a abria;
+// o carregamento sob demanda mantém esse comportamento agora que virou aba.
+const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
 
 // Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
 const PERFIL_BADGE = PERFIL_COLORS;
@@ -71,6 +77,10 @@ export default function AdminUsuarios() {
   // Item 6: a aba Metas passa a viver dentro de Usuários (BookPlay e PaguePlay).
   // `tenant` é usado em outras partes; mantém a referência p/ clareza.
   const metasComoAba = tenant.slug === 'bookplay' || tenant.isPaguePlay;
+  // Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
+  // criação — quem só assiste não precisa da aba, a comemoração chega pelo
+  // overlay em qualquer página.
+  const podeVerComemoracoes = podeCriarComemoracao(perfilAtual?.perfil);
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
@@ -590,6 +600,14 @@ export default function AdminUsuarios() {
               <Target className="w-4 h-4" /> Metas
             </TabsTrigger>
             )}
+            {podeVerComemoracoes && (
+            <TabsTrigger
+              value="comemoracoes"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <PartyPopper className="w-4 h-4" /> Comemorações
+            </TabsTrigger>
+            )}
           </TabsList>
         </div>
 
@@ -802,6 +820,21 @@ export default function AdminUsuarios() {
         {metasComoAba && temPermissao('ver_metas') && (
           <TabsContent value="metas" className="flex-1 overflow-y-auto p-6 mt-0">
             <MetasConfig />
+          </TabsContent>
+        )}
+
+        {/* ─── Aba: Comemorações ─────────────────────────────────────── */}
+        {/* Sem `p-6` aqui: a página já traz o próprio espaçamento, como
+            Setores e Equipes. O Suspense é obrigatório — o import é lazy. */}
+        {podeVerComemoracoes && (
+          <TabsContent value="comemoracoes" className="flex-1 overflow-y-auto mt-0">
+            <Suspense fallback={
+              <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" /> Carregando…
+              </div>
+            }>
+              <Comemoracoes />
+            </Suspense>
           </TabsContent>
         )}
 

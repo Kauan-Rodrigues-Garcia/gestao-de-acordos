@@ -487,6 +487,30 @@ describe('useAnalytics', () => {
       expect(result.current.meta?.meta_valor).toBe(1000);
     });
 
+    it('PaguePlay compara o BRUTO com a meta, não o H.O.', async () => {
+      // `metas.meta_valor` guarda o campo "Meta R$" da aba Metas, que é o
+      // total. O campo "Meta H.O. (24,96%)" ao lado é só um conversor de tela e
+      // nunca é gravado. A versão anterior dividia o H.O. por essa meta em
+      // bruto e devolvia ~1/4 do percentual real — a PaguePlay via 12% onde
+      // tinha 50%, enquanto MetaProgressoHeader e Desempenho Equipes, na mesma
+      // hora, mostravam o número certo.
+      mockTenantSlugValue.current = 'pagueplay';
+      const metaData = {
+        id: 'meta-pp', tipo: 'operador', referencia_id: OPERADOR_ID,
+        meta_valor: 1000, meta_acordos: 10, mes: 4, ano: 2026,
+      };
+      setupOperadorResults(
+        [makeAcordo({ status: 'pago', valor: 500, vencimento: '2026-04-05' })],
+        metaData,
+      );
+
+      const { result } = renderHook(() => useAnalytics());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+
+      expect(result.current.percMeta).toBe(50);          // 500 / 1000
+      expect(result.current.valorHOMes).toBeCloseTo(124.8, 2); // H.O. segue exposto
+    });
+
     it('percMetaAcordos calculado sobre total de pagos', async () => {
       mockTenantSlugValue.current = 'bookplay';
       const metaData = {

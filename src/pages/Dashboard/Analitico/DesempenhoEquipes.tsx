@@ -32,6 +32,7 @@ import {
   mapaSetorDaEquipe, setoresDoOperador,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
+import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -715,10 +716,12 @@ export function DesempenhoEquipes({
       />
       {[...dados.grupos.entries()].map(([sid, eqs]) => {
         // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
-        // Setor ALTERNATIVO → soma dos membros/clones (Digital, sem relatório próprio).
-        // PaguePlay (setorSomaMembros) → soma dos operadores do analítico p/ todos.
+        // Quando NÃO é assim, quem decide é `setorSomaPorUsuarios` — a mesma
+        // função que o dashboard e a aba Analítico consultam.
         const ehAlternativo = setoresAlternativos.has(sid);
-        const usarSoma = setorSomaMembros || ehAlternativo;
+        const usarSoma = setorSomaPorUsuarios({
+          isPaguePlay: setorSomaMembros, alternativo: ehAlternativo,
+        });
         const baseSetor = usarSoma
           ? (dados.porSetor[sid]?.bruto ?? 0)
           : (totalPorSetor[sid]?.total ?? 0);

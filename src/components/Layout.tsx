@@ -29,7 +29,7 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
-  LifeBuoy, Megaphone, MessageSquarePlus, PartyPopper,
+  LifeBuoy, Megaphone, MessageSquarePlus,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -53,7 +53,8 @@ import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
-import { podeCriarComemoracao } from '@/pages/Comemoracoes/permissoes';
+// O overlay continua no Layout: a comemoração explode em QUALQUER página, não
+// só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
 import { useTermoUso } from '@/hooks/useTermoUso';
 import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
@@ -80,8 +81,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP },
-  // Visibilidade especial (líder+) — ver filtro abaixo
-  { label: 'Comemorações',     icon: PartyPopper,     to: ROUTE_PATHS.COMEMORACOES },
+  // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
+  // item de menu. A rota antiga redireciona para lá.
   { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
@@ -278,12 +279,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // enxerga só os pedidos dele, e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
       return isPP && podeAcessarAbaWpp(userRole);
-    }
-
-    // Comemorações: líder+ nos dois tenants. Quem só assiste não precisa da
-    // aba — a comemoração chega pelo overlay, em qualquer página.
-    if (item.to === ROUTE_PATHS.COMEMORACOES) {
-      return podeCriarComemoracao(userRole);
     }
 
     if (item.permissaoKey) {
