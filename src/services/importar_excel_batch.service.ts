@@ -19,7 +19,7 @@ import { supabase } from '@/lib/supabase';
 import type { Acordo } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 import { ufDoAcordo } from '@/lib/index';
-import { ehCpf } from '@/lib/cpf';
+import { acordoTemCpf } from '@/lib/cpf';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
 import type { ClassificacaoNR } from './classificar_nrs_import.service';
@@ -125,10 +125,10 @@ export async function processarImportacaoEmLote(
    * levaria junto as outras 49 do bloco.
    */
   const payloads = comEstado.filter(p => {
-    const reg = p.registro as { instituicao?: unknown; nr_cliente?: unknown };
-    if (!ehCpf(reg.instituicao) && !ehCpf(reg.nr_cliente)) return true;
+    if (!acordoTemCpf(p.registro)) return true;
     resultado.erros.push(
-      `Linha ${p.linhaOriginal}: o código informado é um CPF. Use o código do cliente no ERP — CPF não pode ser gravado no sistema.`,
+      `Linha ${p.linhaOriginal}: há um CPF no arquivo (código, NR, nome ou observações). ` +
+      'Use o código do cliente no ERP — CPF não pode ser gravado no sistema.',
     );
     return false;
   });

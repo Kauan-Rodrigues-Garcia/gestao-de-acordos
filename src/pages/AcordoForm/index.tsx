@@ -27,7 +27,7 @@ import { AcordoNovoInline, ModalAutorizacaoNR, ModalAvisoDiretoExtra, type Confl
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
-import { ehCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
+import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { schemaBase, schemaPP, type FormData } from './schemas';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -189,10 +189,16 @@ export default function AcordoForm() {
       toast.error('Selecione o estado (UF) do cliente');
       return;
     }
-    // CPF no campo de código — recusado no banco pelo `trg_acordos_recusa_cpf`
-    // nas duas empresas (migration 20260803a).
-    if (ehCpf(data.instituicao) || ehCpf(data.nr_cliente)) {
-      toast.error(ERRO_CPF_NO_CODIGO);
+    // CPF em qualquer campo de texto — recusado no banco pelo
+    // `trg_acordos_recusa_cpf` nas duas empresas (20260803a/b).
+    const comCpf = camposComCpf({
+      instituicao:  data.instituicao,
+      nr_cliente:   data.nr_cliente,
+      nome_cliente: data.nome_cliente,
+      observacoes:  data.observacoes,
+    });
+    if (comCpf.length) {
+      toast.error(`${ERRO_CPF_NO_CODIGO} Encontrado em: ${comCpf.join(', ')}.`);
       return;
     }
 

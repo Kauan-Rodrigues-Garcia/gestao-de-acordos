@@ -11,6 +11,8 @@ import {
   getEstadoFromAcordo, extractLinkAcordo,
 } from '@/lib/index';
 import { cn } from '@/lib/utils';
+import { acordoTemCpf } from '@/lib/cpf';
+import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { copiarTexto } from '@/lib/clipboard';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -142,6 +144,8 @@ export function AcordosTableBody({
           const sel           = selecionados.includes(a.id);
           const isEditingThis = editandoInlineId === a.id;
           const isDetailThis  = detalheInlineId === a.id;
+          /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
+          const temCpf        = acordoTemCpf(a);
           return (
             <>
               <motion.tr
@@ -158,6 +162,9 @@ export function AcordosTableBody({
                   isEditingThis && 'bg-primary/5',
                   isDetailThis  && 'bg-accent/50',
                   highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
+                  // Por último: vence os demais estados. Um acordo com CPF em
+                  // atraso continua vermelho de CPF, que é o que urge resolver.
+                  temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
                 )}
                 onClick={(e) => {
                   const target = e.target as HTMLElement;
@@ -332,6 +339,7 @@ export function AcordosTableBody({
                   </div>
                 </td>
               </motion.tr>
+              {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpanFull} />}
               {isEditingThis && (
                 <AcordoEditInline
                   key={`inline-${a.id}`}

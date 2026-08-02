@@ -58,3 +58,75 @@ export function ehCpf(valor: unknown): boolean {
 /** Mensagem única para as telas — a mesma frase em todos os formulários. */
 export const ERRO_CPF_NO_CODIGO =
   'Esse número é um CPF. Use o código do cliente no ERP — CPF não pode ser gravado no sistema.';
+
+// ── CPF escondido no meio de um texto ────────────────────────────────────────
+
+/**
+ * Candidatos a CPF dentro de um texto livre.
+ *
+ * Duas formas: mascarada (`529.982.247-25`, com separadores opcionais) e onze
+ * dígitos seguidos. As âncoras `(?<!\d)` e `(?!\d)` são o detalhe que importa —
+ * sem elas, um CNPJ de 14 dígitos ou um número de protocolo longo teria
+ * pedaços de 11 dígitos testados como se fossem CPF, e uma hora um passaria.
+ */
+const CANDIDATOS_CPF = /(?<!\d)\d{3}[.\s]?\d{3}[.\s]?\d{3}[-\s]?\d{2}(?!\d)/g;
+
+/**
+ * O texto contém um CPF em algum lugar?
+ *
+ * Para campos livres — nome do cliente, observações — onde o CPF não é o valor
+ * inteiro, mas aparece no meio ("cliente João, CPF 529.982.247-25").
+ */
+export function contemCpf(texto: unknown): boolean {
+  const s = String(texto ?? '');
+  if (!s) return false;
+  const achados = s.match(CANDIDATOS_CPF);
+  if (!achados) return false;
+  return achados.some(ehCpf);
+}
+
+/**
+ * Campos do acordo onde a busca por CPF é feita, com o rótulo que o usuário vê.
+ *
+ * **`whatsapp` está fora de propósito.** Celular brasileiro tem 11 dígitos
+ * (DDD + 9), exatamente o tamanho de um CPF: ~1% dos telefones cairia nos
+ * dígitos verificadores por acaso e seria recusado como se fosse CPF. Num
+ * cadastro de milhares de acordos isso são dezenas de bloqueios falsos, com o
+ * operador sem entender por que não consegue salvar um telefone correto. O
+ * campo é de telefone, e um CPF ali seria um telefone inválido de todo jeito.
+ */
+export const CAMPOS_VERIFICADOS_CPF = [
+  { campo: 'instituicao',  rotulo: 'Código' },
+  { campo: 'nr_cliente',   rotulo: 'NR' },
+  { campo: 'nome_cliente', rotulo: 'Nome do cliente' },
+  { campo: 'observacoes',  rotulo: 'Observações' },
+] as const;
+
+export type CampoVerificadoCpf = (typeof CAMPOS_VERIFICADOS_CPF)[number]['campo'];
+
+/** Registro com os campos de texto do acordo — o mínimo para a checagem. */
+export type AcordoVerificavel = Partial<Record<CampoVerificadoCpf, unknown>>;
+
+/** Rótulos dos campos onde há CPF. Vazio = acordo limpo. */
+export function camposComCpf(acordo: AcordoVerificavel | null | undefined): string[] {
+  if (!acordo) return [];
+  return CAMPOS_VERIFICADOS_CPF
+    .filter(({ campo }) => contemCpf(acordo[campo]))
+    .map(({ rotulo }) => rotulo);
+}
+
+/** Atalho para ordenar e destacar a linha na lista. */
+export function acordoTemCpf(acordo: AcordoVerificavel | null | undefined): boolean {
+  if (!acordo) return false;
+  return CAMPOS_VERIFICADOS_CPF.some(({ campo }) => contemCpf(acordo[campo]));
+}
+
+/** Aviso exibido na linha da lista, nomeando onde está o CPF. */
+export function avisoCpfDoAcordo(acordo: AcordoVerificavel | null | undefined): string | null {
+  const campos = camposComCpf(acordo);
+  if (!campos.length) return null;
+  const onde = campos.length === 1
+    ? campos[0]
+    : `${campos.slice(0, -1).join(', ')} e ${campos[campos.length - 1]}`;
+  return `CPF encontrado em ${onde}. Remova o CPF deste acordo — dado pessoal não pode ficar no sistema, e o acordo será apagado se continuar assim.`;
+}

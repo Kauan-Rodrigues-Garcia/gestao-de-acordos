@@ -13,6 +13,7 @@ import {
   isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
+import { acordoTemCpf } from '@/lib/cpf';
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
@@ -219,6 +220,13 @@ export default function Dashboard() {
       base = deduplicarVinculados(base, isPP);
     }
     return [...base].sort((a, b) => {
+      // Acordo com CPF vem SEMPRE primeiro, acima até dos que vencem hoje: é
+      // dado pessoal que precisa sair do sistema, e enterrado na página 7
+      // ninguém corrige (migrations 20260803a/b).
+      const aCpf = acordoTemCpf(a) ? 1 : 0;
+      const bCpf = acordoTemCpf(b) ? 1 : 0;
+      if (aCpf !== bCpf) return bCpf - aCpf;
+
       const aHoje = a.vencimento === hoje;
       const bHoje = b.vencimento === hoje;
       if (aHoje && bHoje) {

@@ -9,6 +9,8 @@ import {
   STATUS_LABELS_PAGUEPLAY, TIPO_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, isAtrasado,
 } from '@/lib/index';
+import { acordoTemCpf } from '@/lib/cpf';
+import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { VinculoTag } from '@/components/VinculoTag';
 import { OperadorCell } from '@/components/OperadorCell';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -113,6 +115,8 @@ export function PPTableBody({
         const sel = selecionados.includes(a.id);
         const isEditingThis = editandoInlineIdTabela === a.id;
         const isDetailThis = detalheInlineIdTabela === a.id;
+        /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
+        const temCpf = acordoTemCpf(a);
         return (
           <>
             <motion.tr
@@ -129,6 +133,9 @@ export function PPTableBody({
                 isEditingThis && 'bg-primary/5',
                 isDetailThis && 'bg-accent/50',
                 highlightedId === a.id && 'bg-primary/20 border-l-4 border-l-primary',
+                // Por último: vence os demais estados. Um acordo com CPF em
+                // atraso continua vermelho de CPF, que é o que urge resolver.
+                temCpf && 'bg-destructive/15 border-l-4 border-l-destructive hover:bg-destructive/20',
               )}
               onClick={(e) => {
                 const t = e.target as HTMLElement;
@@ -271,6 +278,7 @@ export function PPTableBody({
                 </div>
               </td>
             </motion.tr>
+            {temCpf && <AvisoCpfAcordo key={`cpf-${a.id}`} acordo={a} colSpan={colSpan} />}
             {isEditingThis && (
               <AcordoEditInline
                 key={`inline-${a.id}`}

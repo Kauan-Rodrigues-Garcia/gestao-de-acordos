@@ -25,7 +25,7 @@ import {
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
-import { ehCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
+import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { calcularParcelas } from '@/lib/money';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
@@ -89,8 +89,15 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
     // acordo JÁ tinha estado (para não travar dado histórico); aqui a edição
     // exige sempre, que é a regra que a diretoria pediu.
     if (isPaguePlay && !estado.trim()) { toast.error('Selecione o estado (UF) do cliente'); return; }
-    // CPF no campo de código — recusado no banco pelo `trg_acordos_recusa_cpf`.
-    if (ehCpf(instituicao) || ehCpf(nrCliente)) { toast.error(ERRO_CPF_NO_CODIGO); return; }
+    // CPF em qualquer campo de texto — recusado no banco pelo
+    // `trg_acordos_recusa_cpf`. Aqui a mensagem já diz ONDE está.
+    const comCpf = camposComCpf({
+      instituicao, nr_cliente: nrCliente, nome_cliente: nomeCliente, observacoes,
+    });
+    if (comCpf.length) {
+      toast.error(`${ERRO_CPF_NO_CODIGO} Encontrado em: ${comCpf.join(', ')}.`);
+      return;
+    }
     const parcelasNum = parseInt(parcelas || '1', 10);
 
     // ─── Bloqueio de NR/Inscrição duplicado (edição) ──────────────────────

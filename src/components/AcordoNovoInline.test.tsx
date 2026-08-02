@@ -515,7 +515,14 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     // antes de chamar onSaved. Rodando junto com a suíte inteira em workers
     // paralelos, 1s era apertado e este era o único teste flaky do projeto —
     // passava isolado e falhava com "chamado 0 vezes" sob carga.
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 5000 });
+    //
+    // Subiu de 5s para 15s em 03/08/2026: o arquivo cresceu (validações de
+    // estado e de CPF trouxeram testes novos) e 5s voltou a estourar sob a
+    // suíte inteira. O teste não ficou mais lento — a máquina é que tem menos
+    // fôlego por worker. Timeout generoso não mascara defeito aqui: se a cadeia
+    // quebrar, `onSaved` nunca é chamado e o teste falha do mesmo jeito, só
+    // demorando mais para dizer.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 15_000 });
 
     // Parcela inserida no MESMO grupo, com número e total incrementados.
     const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
@@ -537,7 +544,11 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     expect(toastSuccess).toHaveBeenCalled();
     const okMsgs = toastSuccess.mock.calls.map(c => String(c[0]));
     expect(okMsgs.some(m => /adicionada/i.test(m))).toBe(true);
-  });
+  // Timeout DO TESTE, não só do `waitFor`. Era esta a peça que faltava: o
+  // padrão do vitest é 5s, exatamente o valor que o `waitFor` usava — os dois
+  // corriam empatados, e o teste morria antes de a espera vencer. Subir só o
+  // `waitFor` não adiantava nada.
+  }, 20_000);
 
   it('PaguePlay: mantém o bloqueio original (toast, sem modal de parcela)', async () => {
     const onSaved = vi.fn();

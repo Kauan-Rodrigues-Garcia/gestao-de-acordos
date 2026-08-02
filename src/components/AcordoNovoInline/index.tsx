@@ -18,7 +18,7 @@ import {
   parseCurrencyInput,
 } from '@/lib/index';
 import { calcularParcelas } from '@/lib/money';
-import { ehCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
+import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
@@ -215,10 +215,16 @@ export function AcordoNovoInline({
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
     if (!isPaguePlay && !nrCliente.trim())  return 'NR é obrigatório';
-    // CPF no lugar do código: dado pessoal entrando por um campo de texto livre
-    // (achado em 03/08/2026). O gatilho `trg_acordos_recusa_cpf` recusa no banco
-    // nas duas empresas; aqui o operador descobre antes de perder o que digitou.
-    if (ehCpf(instituicao) || ehCpf(nrCliente)) return ERRO_CPF_NO_CODIGO;
+    // CPF em qualquer campo de texto: dado pessoal entrando pela porta de trás
+    // (achado em 03/08/2026 no campo de código). O gatilho
+    // `trg_acordos_recusa_cpf` recusa no banco nas duas empresas; aqui o
+    // operador descobre antes de perder o que digitou, e sabe ONDE está.
+    const comCpf = camposComCpf({
+      instituicao, nr_cliente: nrCliente, nome_cliente: nomeCliente,
+      // PP guarda o link/observação dentro de `observacoes`, junto do estado.
+      observacoes: isPaguePlay ? link : observacoes,
+    });
+    if (comCpf.length) return `${ERRO_CPF_NO_CODIGO} Encontrado em: ${comCpf.join(', ')}.`;
     // O gatilho `trg_acordos_exige_estado` recusa no banco de qualquer forma
     // (migration 20260802c); aqui o operador descobre antes de perder o que
     // digitou, e com uma frase que diz o que fazer.

@@ -21,6 +21,7 @@ import {
   isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
+import { acordoTemCpf } from '@/lib/cpf';
 import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
@@ -505,6 +506,13 @@ export default function Acordos() {
     // Prioriza SEMPRE (todas as abas) os acordos que vencem hoje no topo; entre
     // os de hoje, os já pagos vão por último — pendentes de hoje ficam primeiro.
     return [...filtrada].sort((a, b) => {
+      // Acordo com CPF vem SEMPRE primeiro, acima até dos que vencem hoje: é
+      // dado pessoal que precisa sair do sistema, e enterrado na página 7
+      // ninguém corrige (migrations 20260803a/b).
+      const aCpf = acordoTemCpf(a) ? 1 : 0;
+      const bCpf = acordoTemCpf(b) ? 1 : 0;
+      if (aCpf !== bCpf) return bCpf - aCpf;
+
       const aHoje = a.vencimento === hoje;
       const bHoje = b.vencimento === hoje;
       if (aHoje && bHoje) {
