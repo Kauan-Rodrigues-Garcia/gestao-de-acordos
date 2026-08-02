@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
 import { useTenant } from '@/lib/tenant-config';
 import { supabase } from '@/lib/supabase';
 // Tipos e helpers puros vêm dos módulos *Comum. Os parsers (que carregam xlsx,
@@ -68,6 +70,7 @@ function mesclarNovosPorOperador(...listas: NovoPorOperador[][]): NovoPorOperado
 export function useAnaliticoImport() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const tenant      = useTenant();
 
   const [estado,      setEstado]    = useState<EstadoImport>('idle');
@@ -78,11 +81,14 @@ export function useAnaliticoImport() {
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
   const [vinculosManuais, setVinculosManuais] = useState<Record<string, string>>({});
 
-  // ── Setor da importação (BookPlay) ────────────────────────────────────────
-  // Os órfãos (sem operador) pertencem ao setor de quem importa. Líder já tem
-  // setor no perfil; admin/diretoria (sem setor) escolhem no modal.
+  // ── Setor da importação ───────────────────────────────────────────────────
+  // O relatório é de UM setor. Quem só enxerga o próprio setor não tem o que
+  // escolher — é o dele. Quem enxerga mais de um PRECISA dizer de qual setor é
+  // o arquivo, senão o carimbo sai errado e o acumulado do setor vai junto.
   const setorAutomatico = perfil?.setor_id ?? null;
   const [setorEscolhido, setSetorEscolhido] = useState<string | null>(null);
+  /** Enxerga mais de um setor? Mesma definição da aba Analítico e do dashboard. */
+  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
 
   // Item 9: quando o setor do importador é ALTERNATIVO (ex.: Digital), o
   // relatório na verdade é de outro setor (Play 4/5). Ele deve escolher o setor
@@ -99,12 +105,23 @@ export function useAnaliticoImport() {
     return () => { cancel = true; };
   }, [tenant.isPaguePlay, setorAutomatico]);
 
-  // Usa o setor ESCOLHIDO quando o importador não tem setor (admin) OU quando o
-  // setor dele é alternativo; caso normal, usa o setor do próprio perfil.
-  const usarSetorEscolhido = !setorAutomatico || setorProprioAlternativo;
+  /**
+   * Quando o importador tem que escolher o setor:
+   *   • não tem setor no perfil (admin/diretoria);
+   *   • o setor dele é ALTERNATIVO (não tem relatório próprio — o arquivo é de
+   *     outro setor, e é esse outro que deve receber o carimbo);
+   *   • enxerga mais de um setor. Antes este caso passava batido: um líder com
+   *     `ver_todos_setores` importava o relatório do Play 5 e ele era carimbado
+   *     no setor DELE, calado.
+   *
+   * Vale para os dois tenants. A PaguePlay não usava carimbo nenhum (passava
+   * `null`), o que jogava os órfãos no setor de quem importou por fallback —
+   * agora eles caem no setor que o relatório realmente é.
+   */
+  const usarSetorEscolhido = !setorAutomatico || setorProprioAlternativo || veTodosSetores;
   const setorImportacao = usarSetorEscolhido ? setorEscolhido : setorAutomatico;
-  /** true quando o modal precisa exibir o seletor de setor (BookPlay). */
-  const precisaEscolherSetor = !tenant.isPaguePlay && usarSetorEscolhido;
+  /** true quando o modal precisa exibir o seletor de setor. */
+  const precisaEscolherSetor = usarSetorEscolhido;
 
   const carregarArquivo = useCallback(async (file: File) => {
     if (!empresa?.id) return;
@@ -224,8 +241,11 @@ export function useAnaliticoImport() {
       preview.loteId,
       preview.linhas,
       mapFinal,
-      // BookPlay: setor da importação (dá dono aos órfãos). PP não usa.
-      tenant.isPaguePlay ? null : setorImportacao,
+      // Setor da importação: dá dono às linhas sem operador (órfãs). Agora
+      // vale para os dois tenants — a PaguePlay passava `null` e os órfãos dela
+      // acabavam no setor de QUEM IMPORTOU, por fallback, em vez do setor a que
+      // o relatório pertence.
+      setorImportacao,
     );
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.

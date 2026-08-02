@@ -26,6 +26,13 @@
  *   - Pix Automático                      → "Pix Automático"
  *   - (contém "recorrente")               → "Cartão Recorrente"
  *   - EM BRANCO                           → "Cartão de Crédito"
+ *
+ * ⚠️  A última linha parece um chute e NÃO é. O ERP deixa o TpDoc vazio quando
+ *     o pagamento foi no cartão de crédito. No relatório de julho/2026 isso são
+ *     878 linhas somando R$ 889.164,62 — quase um terço do arquivo, o que faz a
+ *     regra parecer erro de parser quando se olha o número. Confirmado com a
+ *     BookPlay em 02/08/2026: é cartão de crédito mesmo. Não "corrija" isto
+ *     para "outros"/"desconhecido" sem falar com eles.
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';

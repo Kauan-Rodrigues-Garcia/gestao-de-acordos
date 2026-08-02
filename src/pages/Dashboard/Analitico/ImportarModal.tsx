@@ -34,16 +34,38 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [detectadosExpandido, setDetectadosExpandido] = useState(false);
 
-  // Setores para o admin escolher o dono da importação (BookPlay)
+  /**
+   * Setores que podem ser o dono do relatório.
+   *
+   * Setor ALTERNATIVO fica de fora: por definição ele não tem relatório próprio
+   * (recebe via clones de outros setores — migration 20260724a). Deixá-lo na
+   * lista é oferecer uma escolha que produz um carimbo impossível, e o
+   * acumulado dele passaria a somar duas vezes: pelo carimbo e pelos usuários.
+   *
+   * Se a coluna `alternativo` não existir (migration pendente), a consulta com
+   * ela falha e cai no select antigo — todos os setores, como era antes.
+   */
   const [setores, setSetores] = useState<{ id: string; nome: string }[]>([]);
   useEffect(() => {
     if (!aberto || !precisaEscolherSetor || !empresa?.id || setores.length) return;
-    supabase
-      .from('setores')
-      .select('id, nome')
-      .eq('empresa_id', empresa.id)
-      .order('nome')
-      .then(({ data }) => setSetores((data as { id: string; nome: string }[]) ?? []));
+    let cancelado = false;
+    void (async () => {
+      const comFlag = await supabase
+        .from('setores')
+        .select('id, nome, alternativo')
+        .eq('empresa_id', empresa.id)
+        .order('nome');
+      if (cancelado) return;
+      if (!comFlag.error) {
+        const lista = (comFlag.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? [];
+        setSetores(lista.filter(s => !s.alternativo).map(({ id, nome }) => ({ id, nome })));
+        return;
+      }
+      const semFlag = await supabase
+        .from('setores').select('id, nome').eq('empresa_id', empresa.id).order('nome');
+      if (!cancelado) setSetores((semFlag.data as { id: string; nome: string }[]) ?? []);
+    })();
+    return () => { cancelado = true; };
   }, [aberto, precisaEscolherSetor, empresa?.id, setores.length]);
 
   function handleFechar() {
@@ -208,12 +230,12 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             )}
 
-            {/* Setor da importação — admin BookPlay escolhe o dono dos órfãos */}
+            {/* Setor do relatório — obrigatório para quem enxerga mais de um */}
             {precisaEscolherSetor && (
               <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
                 <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                   <Building2 className="w-3.5 h-3.5 text-primary" />
-                  {setorProprioAlternativo ? 'Setor de origem do relatório' : 'Setor desta importação'}
+                  {setorProprioAlternativo ? 'Setor de origem do relatório' : 'De qual setor é este relatório? *'}
                 </p>
                 <Select
                   value={setorImportacao ?? '__nenhum__'}
@@ -233,8 +255,8 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 </Select>
                 <p className="text-[10px] text-muted-foreground">
                   {setorProprioAlternativo
-                    ? 'Seu setor é alternativo. Escolha de qual setor é este relatório (ex.: Play 5) — a importação é carimbada nele, como se alguém desse setor tivesse importado.'
-                    : 'Os pagamentos sem operador vinculado (órfãos) passam a contar no Total recebido deste setor.'}
+                    ? 'Seu setor é alternativo e não tem relatório próprio. Escolha de qual setor é este arquivo (ex.: Play 5) — a importação é carimbada nele, como se alguém desse setor tivesse importado.'
+                    : 'Você enxerga mais de um setor, então o sistema não tem como adivinhar de quem é o arquivo. O carimbo define o acumulado do setor e o dono dos pagamentos sem operador vinculado. Setores alternativos não aparecem: eles não têm relatório próprio.'}
                 </p>
               </div>
             )}
