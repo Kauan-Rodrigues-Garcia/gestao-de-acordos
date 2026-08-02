@@ -27,6 +27,7 @@ import { AcordoNovoInline, ModalAutorizacaoNR, ModalAvisoDiretoExtra, type Confl
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
+import { ehCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { schemaBase, schemaPP, type FormData } from './schemas';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -186,6 +187,12 @@ export default function AcordoForm() {
     // avisa antes de o operador perder o que digitou (migration 20260802c).
     if (isPP && !estadoSelecionado.trim()) {
       toast.error('Selecione o estado (UF) do cliente');
+      return;
+    }
+    // CPF no campo de código — recusado no banco pelo `trg_acordos_recusa_cpf`
+    // nas duas empresas (migration 20260803a).
+    if (ehCpf(data.instituicao) || ehCpf(data.nr_cliente)) {
+      toast.error(ERRO_CPF_NO_CODIGO);
       return;
     }
 

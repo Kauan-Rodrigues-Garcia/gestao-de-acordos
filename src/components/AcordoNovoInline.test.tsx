@@ -842,6 +842,59 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
   });
 
+  it('CPF no lugar do código: recusa antes de tocar no banco (BookPlay)', async () => {
+    // Achado em 03/08/2026: um operador digitou o CPF do cliente no campo de
+    // código. A diretoria já tinha decidido em 28/07 que nenhum CPF fica no
+    // banco (20260728b), mas este campo é texto livre e ninguém olhava.
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'nao-deve-existir' } as Acordo, error: null };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('529.982.247-25');
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(String(toastError.mock.calls[0][0])).toMatch(/CPF/);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
+  });
+
+  it('CPF no código da PaguePlay também é recusado', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'nao-deve-existir' } as Acordo, error: null };
+
+    semearEstadoPP();
+    renderInline({ onSaved, isPaguePlay: true });
+    fireEvent.change(screen.getByPlaceholderText(/Nome do profissional/i), { target: { value: 'Prof W' } });
+    fireEvent.change(screen.getByPlaceholderText(/^Código$/), { target: { value: '52998224725' } });
+    fireEvent.click(screen.getByTestId('pick-date'));
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '300' } });
+
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    const msgs = toastError.mock.calls.map(c => String(c[0]));
+    expect(msgs.some(m => /CPF/.test(m))).toBe(true);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
+  });
+
+  it('código real de 8 dígitos NÃO é confundido com CPF', async () => {
+    // A trava não pode bloquear trabalho legítimo: os códigos do ERP têm 7 ou
+    // 8 dígitos e precisam continuar passando.
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'ok-1' } as Acordo, error: null };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('12904826');
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
   it('BookPlay não exige estado — a regra é só da PaguePlay', async () => {
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue(null);

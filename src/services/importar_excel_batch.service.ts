@@ -19,6 +19,7 @@ import { supabase } from '@/lib/supabase';
 import type { Acordo } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 import { ufDoAcordo } from '@/lib/index';
+import { ehCpf } from '@/lib/cpf';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
 import type { ClassificacaoNR } from './classificar_nrs_import.service';
@@ -105,7 +106,7 @@ export async function processarImportacaoEmLote(
    * transforma isso num aviso por linha, com o número dela, e o resto do
    * arquivo importa normalmente.
    */
-  const payloads = params.isPaguePlay
+  const comEstado = params.isPaguePlay
     ? params.payloads.filter(p => {
         const reg = p.registro as { estado_uf?: string | null; observacoes?: string | null };
         if (ufDoAcordo(reg)) return true;
@@ -115,6 +116,22 @@ export async function processarImportacaoEmLote(
         return false;
       })
     : params.payloads;
+
+  /**
+   * CPF no campo de código não entra — nas duas empresas.
+   *
+   * Mesmo motivo da peneira acima: o `trg_acordos_recusa_cpf` recusaria, mas o
+   * insert é em lote e o erro aborta a instrução inteira. Uma linha com CPF
+   * levaria junto as outras 49 do bloco.
+   */
+  const payloads = comEstado.filter(p => {
+    const reg = p.registro as { instituicao?: unknown; nr_cliente?: unknown };
+    if (!ehCpf(reg.instituicao) && !ehCpf(reg.nr_cliente)) return true;
+    resultado.erros.push(
+      `Linha ${p.linhaOriginal}: o código informado é um CPF. Use o código do cliente no ERP — CPF não pode ser gravado no sistema.`,
+    );
+    return false;
+  });
 
   for (const p of payloads) {
     const classif = classifPorLinha.get(p.linhaOriginal);
