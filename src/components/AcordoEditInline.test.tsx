@@ -197,7 +197,10 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
   });
 
   it('(b) PaguePlay: usa campo "instituicao" como chave, não nr_cliente', async () => {
-    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '' });
+    // `estado_uf` preenchido de propósito: desde a 20260802c a PaguePlay não
+    // salva sem UF, e essa checagem roda ANTES da consulta de NR duplicado.
+    // Sem isso o teste passaria a medir a validação errada.
+    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'outro', operadorId: 'op2', operadorNome: 'Ana',
@@ -227,6 +230,22 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     expect(toastError).toHaveBeenCalled();
     const [msg] = toastError.mock.calls[0];
     expect(msg).toMatch(/Código/);
+  });
+
+  it('(b2) PaguePlay: editar sem estado (UF) é recusado antes de consultar o NR', async () => {
+    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: null });
+    const onSaved = vi.fn();
+
+    renderInline(
+      <AcordoEditInline acordo={acordo} isPaguePlay onSaved={onSaved} onCancel={vi.fn()} />,
+    );
+
+    clickSalvar();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    expect(String(toastError.mock.calls[0][0])).toMatch(/estado \(UF\)/i);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(verificarNrRegistroMock).not.toHaveBeenCalled();
   });
 });
 

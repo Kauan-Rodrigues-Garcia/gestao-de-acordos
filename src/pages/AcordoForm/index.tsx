@@ -180,6 +180,14 @@ export default function AcordoForm() {
     const uid = p?.id ?? user?.id;
     if (!uid) { toast.error('Não foi possível identificar o usuário. Recarregue a página.'); return; }
     if (!empresa?.id) { toast.error('Empresa não identificada. Recarregue a página.'); return; }
+    // O estado não vive no schema do react-hook-form (é state à parte, porque
+    // vai para dentro de `observacoes`), então a checagem é aqui. O gatilho
+    // `trg_acordos_exige_estado` recusa no banco de qualquer forma — isto só
+    // avisa antes de o operador perder o que digitou (migration 20260802c).
+    if (isPP && !estadoSelecionado.trim()) {
+      toast.error('Selecione o estado (UF) do cliente');
+      return;
+    }
 
     setLoading(true);
     try {

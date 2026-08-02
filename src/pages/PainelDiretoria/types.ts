@@ -48,3 +48,25 @@ export const TIPO_LABELS_DISPLAY: Record<string, string> = {
 export const PIE_COLORS = [
   '#6366f1', '#22c55e', '#f59e0b', '#ec4899', '#14b8a6',
 ];
+
+// ── Formas de pagamento do relatório analítico ───────────────────────────────
+// Os mapas acima são indexados pelo `tipo` do ACORDO (boleto, pix, cartao…).
+// O analítico traz outro vocabulário: `forma_detalhe` é o rótulo real do ERP
+// ("Pix Automático", "Boleto Negociação", "Cartão de Crédito"…) e varia entre
+// os dois tenants. Casar por palavra-chave é o que sobrevive a um rótulo novo
+// aparecer no relatório sem virar uma fatia cinza sem ícone no gráfico.
+
+export function corDaForma(rotulo: string): string {
+  const n = rotulo.toLowerCase();
+  if (n.includes('cart')) return n.includes('recorrente') ? '#f97316' : '#f59e0b';
+  if (n.includes('pix'))  return n.includes('autom')      ? '#10b981' : '#22c55e';
+  if (n.includes('boleto')) return '#6366f1';
+  return '#94a3b8';
+}
+
+export function iconeDaForma(rotulo: string): React.ComponentType<{ className?: string }> {
+  const n = rotulo.toLowerCase();
+  if (n.includes('cart')) return CreditCard;
+  if (n.includes('pix'))  return QrCode;
+  return Landmark;
+}

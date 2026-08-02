@@ -291,6 +291,8 @@ export function AcordoDetalheInline({
                 whatsapp:              parInst.whatsapp,
                 instituicao:           parInst.instituicao,
                 observacoes:           parInst.observacoes,
+                // A UF viaja explicitamente — ver 20260802c.
+                estado_uf:             parInst.estado_uf ?? null,
                 operador_id:           parInst.operador_id,
                 empresa_id:            parInst.empresa_id,
                 setor_id:              parInst.setor_id ?? null,

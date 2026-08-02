@@ -10,6 +10,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   ROUTE_PATHS,
+  ufDoAcordo,
   STATUS_LABELS,
   STATUS_COLORS,
   TIPO_LABELS,
@@ -435,5 +436,46 @@ describe('extractores de observações PaguePlay', () => {
 
   it('buildObservacoesComEstado tritmma o link', () => {
     expect(buildObservacoesComEstado('SP', '  link  ')).toBe('[ESTADO:SP]\nlink');
+  });
+});
+
+describe('ufDoAcordo — a UF que a obrigatoriedade da PaguePlay consulta', () => {
+  it('lê da coluna', () => {
+    expect(ufDoAcordo({ estado_uf: 'SP' })).toBe('SP');
+  });
+
+  it('coluna char(2) vem com espaço à direita', () => {
+    // O Postgres preenche char(2); sem o trim, 'SP ' passaria adiante e a
+    // comparação com a lista de UFs falharia em silêncio.
+    expect(ufDoAcordo({ estado_uf: 'SP ' })).toBe('SP');
+  });
+
+  it('normaliza para maiúsculas', () => {
+    expect(ufDoAcordo({ estado_uf: 'sp' })).toBe('SP');
+  });
+
+  it('cai no prefixo [ESTADO:XX] de observacoes', () => {
+    // É assim que a UF viaja nos fluxos de reagendamento, que copiam
+    // observacoes do acordo pai.
+    expect(ufDoAcordo({ observacoes: '[ESTADO:RJ]\nlink do acordo' })).toBe('RJ');
+  });
+
+  it('a coluna ganha do prefixo', () => {
+    expect(ufDoAcordo({ estado_uf: 'MG', observacoes: '[ESTADO:RJ]' })).toBe('MG');
+  });
+
+  it('string vazia é ausência, não estado', () => {
+    // O DEFEITO que este helper existe para evitar: getEstadoFromAcordo usa
+    // o operador ??, então estado_uf gravado como string vazia passava como se
+    // fosse um estado válido — e a checagem de obrigatoriedade deixava o
+    // acordo entrar sem UF.
+    expect(ufDoAcordo({ estado_uf: '' })).toBeNull();
+    expect(ufDoAcordo({ estado_uf: '  ' })).toBeNull();
+  });
+
+  it('sem nada devolve null', () => {
+    expect(ufDoAcordo({})).toBeNull();
+    expect(ufDoAcordo({ estado_uf: null, observacoes: null })).toBeNull();
+    expect(ufDoAcordo({ observacoes: 'sem prefixo' })).toBeNull();
   });
 });

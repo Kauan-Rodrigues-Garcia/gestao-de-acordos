@@ -228,6 +228,23 @@ function clickSalvarAcordo() {
   fireEvent.click(btn);
 }
 
+/**
+ * Semeia a UF no rascunho antes de montar o formulário PaguePlay.
+ *
+ * Desde a migration 20260802c a PaguePlay não salva acordo sem estado. O campo
+ * é um `Select` do shadcn, que abre por portal e não responde a `fireEvent` no
+ * happy-dom — então a UF entra pelo rascunho do sessionStorage, exatamente o
+ * caminho que o `ModalTabularAnalitico` usa em produção.
+ *
+ * Chame ANTES de `renderInline`: o rascunho é lido no primeiro render.
+ */
+function semearEstadoPP(extra: Record<string, string> = {}, estado = 'SP') {
+  sessionStorage.setItem(
+    'acordo-inline-draft::emp-1::me-1::pp',
+    JSON.stringify({ estadoSel: estado, ...extra }),
+  );
+}
+
 beforeEach(() => {
   verificarNrRegistroMock.mockReset();
   verificarConflitoCache.mockReset().mockReturnValue(null);
@@ -533,6 +550,7 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
       error: null,
     };
 
+    semearEstadoPP();
     renderInline({ onSaved, isPaguePlay: true });
     const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
     fireEvent.change(nomeCampo, { target: { value: 'Profissional X' } });
@@ -801,11 +819,47 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     expect(okMsgs.some(m => /Próxima agendada/i.test(m))).toBe(true);
   });
 
+  it('PaguePlay sem estado (UF): recusa antes de tocar no banco', async () => {
+    // Pedido da diretoria (02/08/2026): não se tabula sem estado. O gatilho
+    // `trg_acordos_exige_estado` recusa no banco; esta checagem existe para o
+    // operador não perder o que digitou — e para o insert nem sair.
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'nao-deve-existir' } as Acordo, error: null };
+
+    renderInline({ onSaved, isPaguePlay: true });   // sem semearEstadoPP()
+    fireEvent.change(screen.getByPlaceholderText(/Nome do profissional/i), { target: { value: 'Prof Z' } });
+    fireEvent.change(screen.getByPlaceholderText(/^Código$/), { target: { value: 'INS-3' } });
+    fireEvent.click(screen.getByTestId('pick-date'));
+    fireEvent.change(screen.getByPlaceholderText('0,00'), { target: { value: '500' } });
+
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalled());
+    const msgs = toastError.mock.calls.map(c => String(c[0]));
+    expect(msgs.some(m => /estado \(UF\)/i.test(m))).toBe(true);
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'insert')).toBe(false);
+  });
+
+  it('BookPlay não exige estado — a regra é só da PaguePlay', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = { data: { id: 'bp-1' } as Acordo, error: null };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('881');
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+  });
+
   it('fluxo manual PP (sem draft do analítico) continua criando só a parcela 1', async () => {
     const onSaved = vi.fn();
     verificarNrRegistroMock.mockResolvedValue(null);
     routes.insertAcordo = { data: { id: 'a2' } as Acordo, error: null };
 
+    semearEstadoPP();
     renderInline({ onSaved, isPaguePlay: true });
     const nomeCampo = screen.getByPlaceholderText(/Nome do profissional/i);
     fireEvent.change(nomeCampo, { target: { value: 'Prof Y' } });

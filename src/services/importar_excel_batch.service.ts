@@ -18,6 +18,7 @@
 import { supabase } from '@/lib/supabase';
 import type { Acordo } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
+import { ufDoAcordo } from '@/lib/index';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
 import type { ClassificacaoNR } from './classificar_nrs_import.service';
@@ -95,7 +96,27 @@ export async function processarImportacaoEmLote(
 
   const paraInserirSimples: PayloadAcordoImport[] = [];
 
-  for (const p of params.payloads) {
+  /**
+   * PaguePlay: linha sem estado (UF) não entra.
+   *
+   * O gatilho `trg_acordos_exige_estado` (migration 20260802c) recusaria de
+   * qualquer forma — mas o insert é EM LOTE, e um erro aborta a instrução
+   * inteira: uma linha sem UF derrubaria as outras 49 do bloco. Peneirar antes
+   * transforma isso num aviso por linha, com o número dela, e o resto do
+   * arquivo importa normalmente.
+   */
+  const payloads = params.isPaguePlay
+    ? params.payloads.filter(p => {
+        const reg = p.registro as { estado_uf?: string | null; observacoes?: string | null };
+        if (ufDoAcordo(reg)) return true;
+        resultado.erros.push(
+          `Linha ${p.linhaOriginal} (${p.nr}): sem estado (UF) — obrigatório na PaguePlay. Preencha a coluna de estado na planilha e reimporte.`,
+        );
+        return false;
+      })
+    : params.payloads;
+
+  for (const p of payloads) {
     const classif = classifPorLinha.get(p.linhaOriginal);
     // Fallback defensivo: se não achou classificação, trata como novo.
     const categoria = classif?.categoria ?? 'novo';

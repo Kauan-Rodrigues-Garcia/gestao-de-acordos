@@ -1,9 +1,24 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { safeNum } from '@/lib/money';
+import {
+  deslocarMes, normalizarMes, primeiroDiaDoMes, ultimoDiaDoMes,
+} from '@/lib/mesReferencia';
 import type { MesAnteriorData } from './types';
 
-export function useSetoresExtras(empresaId: string | undefined, isPP: boolean) {
+/**
+ * Acordos do mês por setor, o mês anterior para o comparativo e os
+ * recebimentos Extra (PaguePlay).
+ *
+ * Tudo aqui é TABULAÇÃO — é a fonte certa para agendado, pendente, não pago e
+ * quantidade de acordos. Os valores RECEBIDOS do painel não saem daqui: vêm do
+ * relatório analítico (ver `PainelDiretoria/index.tsx`).
+ *
+ * @param mesRef mês a carregar (`yyyy-MM`). Antes era sempre `new Date()`, o
+ *   que deixava o painel preso ao mês corrente — no dia 02 ele abre zerado e
+ *   não havia como conferir o mês que fechou.
+ */
+export function useSetoresExtras(empresaId: string | undefined, isPP: boolean, mesRef?: string | null) {
   const [setoresDetalhes, setSetoresDetalhes] = useState<{ id: string; nome: string; acordos: any[] }[]>([]);
   const [loadingSetores, setLoadingSetores] = useState(false);
   const [mesAnterior, setMesAnterior] = useState<MesAnteriorData | null>(null);
@@ -14,22 +29,17 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean) {
   const [extrasEquipesMap, setExtrasEquipesMap] = useState<Map<string, string>>(new Map());
   const [loadingExtras, setLoadingExtras] = useState(false);
 
+  const mes = normalizarMes(mesRef);
+
   const carregarSetoresDetalhes = useCallback(async () => {
     if (!empresaId) return;
     setLoadingSetores(true);
     try {
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth() + 1;
-      const anoAtual = hoje.getFullYear();
-      const inicio = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-01`;
-      const ultimoDia = new Date(anoAtual, mesAtual, 0).getDate();
-      const fim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
-
-      const mesPrev = mesAtual === 1 ? 12 : mesAtual - 1;
-      const anoPrev = mesAtual === 1 ? anoAtual - 1 : anoAtual;
-      const inicioPrev = `${anoPrev}-${String(mesPrev).padStart(2, '0')}-01`;
-      const ultimoDiaPrev = new Date(anoPrev, mesPrev, 0).getDate();
-      const fimPrev = `${anoPrev}-${String(mesPrev).padStart(2, '0')}-${String(ultimoDiaPrev).padStart(2, '0')}`;
+      const inicio = primeiroDiaDoMes(mes);
+      const fim    = ultimoDiaDoMes(mes);
+      const mesPrev    = deslocarMes(mes, -1);
+      const inicioPrev = primeiroDiaDoMes(mesPrev);
+      const fimPrev    = ultimoDiaDoMes(mesPrev);
 
       const [{ data: setoresData }, { data: acordosMesData }, { data: acordosPrevData }] = await Promise.all([
         supabase.from('setores').select('id, nome').eq('empresa_id', empresaId).order('nome'),
@@ -54,6 +64,8 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean) {
         const prevPagos = prev.filter(a => a.status === 'pago');
         setMesAnterior({
           valorAgendado: prev.reduce((s: number, a: any) => s + safeNum(a.valor), 0),
+          // Mantido para o fallback de quando o analítico não está disponível;
+          // o comparativo do painel usa o recebido do RELATÓRIO do mês anterior.
           valorRecebido: prevPagos.reduce((s: number, a: any) => s + safeNum(a.valor), 0),
           totalAcordos: prev.length,
         });
@@ -63,18 +75,14 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean) {
     } finally {
       setLoadingSetores(false);
     }
-  }, [empresaId]);
+  }, [empresaId, mes]);
 
   const carregarExtras = useCallback(async () => {
     if (!empresaId || !isPP) return;
     setLoadingExtras(true);
     try {
-      const hoje = new Date();
-      const mesAtual = hoje.getMonth() + 1;
-      const anoAtual = hoje.getFullYear();
-      const inicio = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-01`;
-      const ultimoDia = new Date(anoAtual, mesAtual, 0).getDate();
-      const fim = `${anoAtual}-${String(mesAtual).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+      const inicio = primeiroDiaDoMes(mes);
+      const fim    = ultimoDiaDoMes(mes);
 
       const { data: extrasData } = await supabase
         .from('acordos')
@@ -115,7 +123,7 @@ export function useSetoresExtras(empresaId: string | undefined, isPP: boolean) {
     } finally {
       setLoadingExtras(false);
     }
-  }, [empresaId, isPP]);
+  }, [empresaId, isPP, mes]);
 
   useEffect(() => { carregarSetoresDetalhes(); }, [carregarSetoresDetalhes]);
   useEffect(() => { carregarExtras(); }, [carregarExtras]);

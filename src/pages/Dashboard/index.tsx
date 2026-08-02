@@ -455,6 +455,11 @@ export default function Dashboard() {
         whatsapp:              parcelaAtual.whatsapp ?? null,
         instituicao:           parcelaAtual.instituicao ?? null,
         observacoes:           parcelaAtual.observacoes ?? null,
+        // A UF viaja explicitamente. Antes só o prefixo [ESTADO:XX] dentro de
+        // `observacoes` a carregava — e a fase 2 da migration 20260506 prevê
+        // remover esse prefixo, o que faria a parcela reagendada nascer sem
+        // estado (agora recusada pelo gatilho da 20260802c).
+        estado_uf:             parcelaAtual.estado_uf ?? null,
         operador_id:           parcelaAtual.operador_id,
         empresa_id:            parcelaAtual.empresa_id,
         setor_id:              parcelaAtual.setor_id ?? null,
@@ -501,6 +506,8 @@ export default function Dashboard() {
                 whatsapp:              (parInstall as Acordo).whatsapp ?? null,
                 instituicao:           (parInstall as Acordo).instituicao ?? null,
                 observacoes:           (parInstall as Acordo).observacoes ?? null,
+                // Ver nota em basePayload: a UF viaja explicitamente.
+                estado_uf:             (parInstall as Acordo).estado_uf ?? null,
                 operador_id:           (parInstall as Acordo).operador_id,
                 empresa_id:            (parInstall as Acordo).empresa_id,
                 setor_id:              (parInstall as Acordo).setor_id ?? null,

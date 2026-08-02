@@ -40,7 +40,6 @@ interface AcordoEditInlineProps {
   onCancel: () => void;
 }
 
-const SEM_ESTADO_VALUE = '__sem_estado__';
 
 export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, onSaved, onCancel }: AcordoEditInlineProps) {
   const { empresa } = useEmpresa();
@@ -85,6 +84,10 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
     const valorNum = parseCurrencyInput(valor);
     if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); return; }
+    // PaguePlay: estado obrigatório. O gatilho no banco só recusa quando o
+    // acordo JÁ tinha estado (para não travar dado histórico); aqui a edição
+    // exige sempre, que é a regra que a diretoria pediu.
+    if (isPaguePlay && !estado.trim()) { toast.error('Selecione o estado (UF) do cliente'); return; }
     const parcelasNum = parseInt(parcelas || '1', 10);
 
     // ─── Bloqueio de NR/Inscrição duplicado (edição) ──────────────────────
@@ -307,16 +310,16 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
                 {isPaguePlay && (
                   <div className="space-y-1">
-                    <Label className="text-xs font-medium">Estado</Label>
-                    <Select
-                      value={estado || SEM_ESTADO_VALUE}
-                      onValueChange={value => setEstado(value === SEM_ESTADO_VALUE ? '' : value)}
-                    >
+                    <Label className="text-xs font-medium">Estado *</Label>
+                    {/* Sem a opção "Nenhum": na PaguePlay o estado é
+                        obrigatório e o banco recusa quem tenta apagá-lo
+                        (migration 20260802c). Deixar a opção na tela seria
+                        oferecer um caminho que termina em erro. */}
+                    <Select value={estado} onValueChange={setEstado}>
                       <SelectTrigger className="h-8 text-xs">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={SEM_ESTADO_VALUE}>Nenhum</SelectItem>
                         {ESTADOS_BRASIL.map(uf => (
                           <SelectItem key={uf} value={uf}>{uf}</SelectItem>
                         ))}

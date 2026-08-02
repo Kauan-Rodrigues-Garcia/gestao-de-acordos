@@ -214,6 +214,10 @@ export function AcordoNovoInline({
     if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
     if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
     if (!isPaguePlay && !nrCliente.trim())  return 'NR é obrigatório';
+    // O gatilho `trg_acordos_exige_estado` recusa no banco de qualquer forma
+    // (migration 20260802c); aqui o operador descobre antes de perder o que
+    // digitou, e com uma frase que diz o que fazer.
+    if (isPaguePlay && !estadoSel.trim())   return 'Selecione o estado (UF) do cliente';
     return null;
   }
 
@@ -309,6 +313,10 @@ export function AcordoNovoInline({
           instituicao:           base.instituicao,
           whatsapp:              base.whatsapp,
           observacoes:           base.observacoes,
+          // A UF viaja explicitamente: o prefixo [ESTADO:XX] dentro de
+          // observacoes some na fase 2 da migration 20260506, e sem ela a
+          // proxima parcela nasceria sem estado (recusada pela 20260802c).
+          estado_uf:             base.estado_uf ?? null,
           operador_id:           base.operador_id,
           empresa_id:            base.empresa_id,
           setor_id:              base.setor_id ?? null,

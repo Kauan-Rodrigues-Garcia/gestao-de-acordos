@@ -18,14 +18,8 @@ import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDas
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import {
-  buscarFontesDeEscopo, operadoresDaEquipe, operadoresDoSetor,
-  type FontesDeEscopo,
-} from '@/services/analitico/analitico.service';
-import {
-  escopoDeSetor, setorSomaPorUsuarios, temCarimboDeSetor, veTodosOsSetores,
-  ESCOPO_EMPRESA, type EscopoAnalitico,
-} from '@/services/analitico/escopoAnalitico';
+import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
+import { veTodosOsSetores, ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { buscarContribuicoesReceptivo } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
@@ -136,58 +130,19 @@ export function AnalyticsPanel({
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
   const setorEmFoco  = (setorExterno ?? null) || setorTravado;
 
-  // Membros, clones que contam (`conta_recebimento`) e setores alternativos.
-  // Vêm da MESMA fonte que a aba Analítico e o Painel Líder usam. A versão
-  // anterior montava esse conjunto à mão aqui e, com isso, somava clone com a
-  // caixinha desligada e desconhecia a flag de setor alternativo.
-  const [fontes, setFontes] = useState<FontesDeEscopo | null>(null);
-  useEffect(() => {
-    if (!temAnalitico || !empresa?.id) { setFontes(null); return; }
-    let cancelado = false;
-    void buscarFontesDeEscopo(empresa.id).then(f => { if (!cancelado) setFontes(f); });
-    return () => { cancelado = true; };
-  }, [temAnalitico, empresa?.id]);
-
-  /** true = o carimbo de setor chegou (migration 20260802a aplicada). */
-  const carimboDisponivel = useMemo(
-    () => temCarimboDeSetor(analiticoDash.linhas),
-    [analiticoDash.linhas],
-  );
-
-  const escopo = useMemo<EscopoAnalitico | null>(() => {
-    if (!temAnalitico) return ESCOPO_EMPRESA;
-    // Operador em visão individual: a RPC já devolve só as linhas dele, mas o
-    // filtro explícito mantém a conta correta para o líder que escolhe "ver um
-    // operador".
-    if (operadorFiltroExterno) {
-      return { tipo: 'operador', operadorId: operadorFiltroExterno };
-    }
-    if (!equipeFiltroExterno && !setorEmFoco) return ESCOPO_EMPRESA;
-    // Depende das fontes; até elas chegarem o escopo é indefinido (ver abaixo).
-    if (!fontes) return null;
-    if (equipeFiltroExterno) {
-      return { tipo: 'equipe', operadores: operadoresDaEquipe(equipeFiltroExterno, fontes) };
-    }
-    return escopoDeSetor({
-      setorId:     setorEmFoco!,
-      alternativo: setorSomaPorUsuarios({
-        isPaguePlay: isPP,
-        alternativo: fontes.setoresAlternativos.has(setorEmFoco!),
-      }),
-      operadores:  operadoresDoSetor(setorEmFoco!, fontes),
-      temCarimbo:  carimboDisponivel,
-    });
-  }, [temAnalitico, operadorFiltroExterno, equipeFiltroExterno, setorEmFoco, fontes, isPP, carimboDisponivel]);
-
-  /**
-   * Escopo ainda sendo resolvido.
-   *
-   * Antes, enquanto as consultas não voltavam, o filtro era `null` — que
-   * significa "empresa inteira". Um líder via por um instante o total da
-   * empresa toda antes de ele cair para o do setor: número errado na tela,
-   * ainda que por meio segundo, num painel de dinheiro.
-   */
-  const escopoPendente = escopo === null;
+  // Membros, clones que contam (`conta_recebimento`) e setores alternativos —
+  // resolvidos pelo hook, que é o MESMO usado pelo Painel Diretoria. Enquanto
+  // cada painel montava esse conjunto à mão, um somava clone com a caixinha
+  // desligada e nenhum dos dois sabia da flag de setor alternativo.
+  const { escopo, pendente: escopoPendente } = useEscopoAnalitico({
+    ativo:       temAnalitico,
+    empresaId:   empresa?.id,
+    isPaguePlay: isPP,
+    setorId:     setorEmFoco,
+    equipeId:    equipeFiltroExterno,
+    operadorId:  operadorFiltroExterno,
+    linhas:      analiticoDash.linhas,
+  });
 
   const anal = useMemo(
     () => agregarAnalitico(analiticoDash.linhas, escopo ?? ESCOPO_EMPRESA),

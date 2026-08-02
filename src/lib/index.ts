@@ -301,6 +301,26 @@ export function getEstadoFromAcordo(
 }
 
 /**
+ * UF do acordo, ou `null` quando não há nenhuma.
+ *
+ * Diferente de `getEstadoFromAcordo`, que devolve `''` para "sem estado" e usa
+ * `??` — o que deixa passar `estado_uf: ''`, gravado como string vazia, como se
+ * fosse um estado válido. Aqui vazio e espaços contam como ausente, e a saída é
+ * `null`, que é o que uma checagem de obrigatoriedade precisa.
+ *
+ * A coluna é `char(2)`, então o Postgres devolve valor preenchido com espaço —
+ * o `trim` não é decorativo.
+ */
+export function ufDoAcordo(
+  acordo: { estado_uf?: string | null; observacoes?: string | null },
+): string | null {
+  const daColuna = (acordo.estado_uf ?? '').trim().toUpperCase();
+  if (daColuna) return daColuna;
+  const doPrefixo = extractEstado(acordo.observacoes).trim().toUpperCase();
+  return doPrefixo || null;
+}
+
+/**
  * Extracts the link/observation text from observacoes, stripping any estado prefix.
  */
 export function extractLinkAcordo(observacoes: string | null | undefined): string {
