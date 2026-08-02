@@ -9,6 +9,9 @@ import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
+import {
+  normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
+} from '@/lib/mesReferencia';
 import { useTenant } from '@/lib/tenant-config';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -88,22 +91,6 @@ export interface AnalyticsData {
   refetch: () => void;
 }
 
-function getMesAtual() {
-  const d = new Date();
-  return { mes: d.getMonth() + 1, ano: d.getFullYear() };
-}
-
-function primeiroDiaMes(): string {
-  const { mes, ano } = getMesAtual();
-  return `${ano}-${String(mes).padStart(2, '0')}-01`;
-}
-
-function ultimoDiaMes(): string {
-  const { mes, ano } = getMesAtual();
-  const ultimo = new Date(ano, mes, 0).getDate();
-  return `${ano}-${String(mes).padStart(2, '0')}-${String(ultimo).padStart(2, '0')}`;
-}
-
 function calcPerc(realizado: number, meta: number): number {
   if (!meta || meta <= 0) return 0;
   return Math.min(Math.round((realizado / meta) * 100), 999);
@@ -111,7 +98,11 @@ function calcPerc(realizado: number, meta: number): number {
 
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
-export function useAnalytics(): AnalyticsData {
+/**
+ * @param mesRef mês a analisar (`yyyy-MM`). Omitido = mês corrente, que é como
+ *   todos os consumidores antigos continuam se comportando.
+ */
+export function useAnalytics(mesRef?: string | null): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -141,9 +132,10 @@ export function useAnalytics(): AnalyticsData {
   // operador_id → equipe_id. Sem isto, todos os acordos caíam em "Sem equipe".
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
-  const { mes, ano } = getMesAtual();
-  const inicio = primeiroDiaMes();
-  const fim = ultimoDiaMes();
+  const mesAnalise  = normalizarMes(mesRef);
+  const { mes, ano } = partesDoMes(mesAnalise);
+  const inicio = primeiroDiaDoMes(mesAnalise);
+  const fim = ultimoDiaDoMes(mesAnalise);
   const hoje = getTodayISO();
 
   const fetchAll = useCallback(async () => {
@@ -432,8 +424,7 @@ export function useAnalytics(): AnalyticsData {
     ].filter(s => s.value > 0);
 
     // Por dia do mês
-    const diasNoMes = new Date(ano, mes, 0).getDate();
-    const porDia = Array.from({ length: diasNoMes }, (_, i) => {
+    const porDia = Array.from({ length: diasNoMes(mesAnalise) }, (_, i) => {
       const d = String(i + 1).padStart(2, '0');
       const iso = `${ano}-${String(mes).padStart(2, '0')}-${d}`;
       const doDia = acordosMesMetricas.filter(a => a.vencimento === iso);
@@ -518,7 +509,7 @@ export function useAnalytics(): AnalyticsData {
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
 
   return {
     ...derived,

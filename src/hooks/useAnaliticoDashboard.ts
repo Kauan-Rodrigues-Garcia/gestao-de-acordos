@@ -30,6 +30,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { normalizarMes } from '@/lib/mesReferencia';
 import { buscarAnaliticoDashboardMes } from '@/services/analitico/analitico.service';
 
 export interface AgregadoAnalitico {
@@ -108,10 +109,6 @@ export function agregarAnalitico(
   return agg;
 }
 
-function mesAtualStr(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
 
 // ── Realtime compartilhado ───────────────────────────────────────────────────
 // A dedução por tópico e a contagem de referências que existiam aqui viraram
@@ -131,10 +128,15 @@ interface ResultadoDashboard {
  *  (o que invalidaria o useMemo de `total` sem que nada tenha mudado). */
 const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
 
-export function useAnaliticoDashboard(ativo: boolean) {
+/**
+ * @param mesRef mês a buscar (`yyyy-MM`). Omitido = mês corrente. O mês entra na
+ *   chave do cache, então trocar de mês é uma entrada nova — voltar para o mês
+ *   anterior já visto é instantâneo, sem ida ao banco.
+ */
+export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   const { empresa }  = useEmpresa();
   const queryClient  = useQueryClient();
-  const mes          = mesAtualStr();
+  const mes          = normalizarMes(mesRef);
   const empresaId    = empresa?.id ?? null;
   const habilitado   = ativo && !!empresaId;
 

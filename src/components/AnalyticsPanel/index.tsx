@@ -22,9 +22,11 @@ import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
+import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { MESES, BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
+import { BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
+import { SeletorMes } from './SeletorMes';
 import { SkeletonCard, MetricCard, MiniSparkline, BannerNaoTabulado } from './SubComponents';
 import { PPMetrics } from './PPMetrics';
 import { ChartsSection } from './ChartsSection';
@@ -57,6 +59,14 @@ export function AnalyticsPanel({
   const alwaysOpen = !isPP;
   const [open, setOpen] = useState(() => !isPP);
 
+  /**
+   * Mês em análise. Nasce no corrente — quem não mexer no seletor vê exatamente
+   * o mesmo painel de antes. Vale para os dois tenants: este componente é o
+   * painel de métricas tanto da PaguePlay quanto da BookPlay.
+   */
+  const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
+  const noMesAtual = ehMesAtual(mesAnalise);
+
   const {
     valorRecebidoMes,
     valorAgendadoMes,
@@ -79,7 +89,7 @@ export function AnalyticsPanel({
     setSetorFiltro,
     setEquipeFiltro,
     setOperadorFiltro,
-  } = useAnalytics();
+  } = useAnalytics(mesAnalise);
 
   const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
     if (!isPP) {
@@ -104,7 +114,7 @@ export function AnalyticsPanel({
   // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a
   // vir do analitico_recebimentos. Se a migration ainda não foi aplicada
   // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
-  const analiticoDash = useAnaliticoDashboard(temAnalitico);
+  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
 
   // Escopo dos filtros ativos (operador/equipe/setor) aplicado ao analítico.
   // Para o operador a RPC já devolve só as próprias linhas.
@@ -189,11 +199,6 @@ export function AnalyticsPanel({
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
   }, [operadorFiltroExterno]);
 
-  const { mes, ano } = useMemo(() => {
-    const d = new Date();
-    return { mes: d.getMonth() + 1, ano: d.getFullYear() };
-  }, []);
-
   const porTipo = useMemo(() => {
     if (!acordosMes?.length) return [];
     const tipoLabels = isPP ? TIPO_LABELS_PAGUEPLAY : TIPO_LABELS;
@@ -235,12 +240,18 @@ export function AnalyticsPanel({
     ? valorRecebidoMes / totalPagosMes
     : 0;
 
+  /**
+   * Projeção pelo ritmo: realizado ÷ dias corridos × dias do mês.
+   *
+   * Os "dias corridos" saem de `diasDecorridos`, que num mês FECHADO devolve o
+   * mês inteiro. Sem isso, olhar julho no dia 02 de agosto dividiria o mês
+   * inteiro por 2 e projetaria ~15× o valor real.
+   */
   const projecaoMes = useMemo(() => {
-    const diaAtual = new Date().getDate();
-    const diasTotais = new Date(ano, mes, 0).getDate();
-    if (diaAtual === 0) return 0;
-    return Math.round((valorRecebidoMes / diaAtual) * diasTotais);
-  }, [valorRecebidoMes, mes, ano]);
+    const decorridos = diasDecorridos(mesAnalise);
+    if (decorridos <= 0) return 0;
+    return Math.round((valorRecebidoMes / decorridos) * diasNoMes(mesAnalise));
+  }, [valorRecebidoMes, mesAnalise]);
 
   const donutColor = percMetaFinal >= 100
     ? '#22c55e'
@@ -276,9 +287,9 @@ export function AnalyticsPanel({
             </div>
             <div>
               <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
-              <p className="text-[11px] text-muted-foreground leading-none mt-0.5">
-                {MESES[mes - 1]} {ano}
-              </p>
+              <div className="mt-0.5 -ml-1.5">
+                <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={loading} />
+              </div>
             </div>
           </div>
           {!loading && sparklineData.length > 0 && (
@@ -484,13 +495,18 @@ export function AnalyticsPanel({
                     value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
                     sub={`${totalNaoPagos} acordos`}
                   />
-                  <MetricCard
-                    label="Agendado hoje"
-                    icon={<Clock className="w-4 h-4" />}
-                    accentColor="#f59e0b"
-                    gradientFrom="#f59e0b"
-                    value={formatCurrency(valorAgendadoHoje)}
-                  />
+                  {/* "Hoje" só existe dentro do mês corrente. Num mês fechado
+                      este card seria sempre R$ 0,00 — um zero que parece dado
+                      real e não é. */}
+                  {noMesAtual && (
+                    <MetricCard
+                      label="Agendado hoje"
+                      icon={<Clock className="w-4 h-4" />}
+                      accentColor="#f59e0b"
+                      gradientFrom="#f59e0b"
+                      value={formatCurrency(valorAgendadoHoje)}
+                    />
+                  )}
                   <MetricCard
                     label="Acordos no mês"
                     icon={<BarChart2 className="w-4 h-4" />}
