@@ -70,6 +70,10 @@ export function normValor(v: unknown): number | null {
 export function normData(v: unknown): string | null {
   if (!v || v === '') return null;
   if (typeof v === 'number' && v > 36526 && v < 47848) {
+    // Serial do Excel: o número JÁ é uma data em UTC, não um instante local.
+    // Este é o único lugar do projeto onde `toISOString().split` está certo —
+    // em qualquer outro, use `getTodayISO()` (ver lib/index.ts). Ler com
+    // `getDate()` local é que estragaria a data aqui.
     const dt = new Date(Math.round((v - 25569) * 86400 * 1000));
     if (!isNaN(dt.getTime())) return dt.toISOString().split('T')[0];
   }

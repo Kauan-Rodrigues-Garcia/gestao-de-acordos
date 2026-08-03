@@ -25,7 +25,7 @@ import {
   formatCurrency, formatDate,
   STATUS_LABELS, STATUS_COLORS, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   TIPO_COLORS, STATUS_LABELS_PAGUEPLAY,
-  extractLinkAcordo, getEstadoFromAcordo, isAtrasado,
+  extractLinkAcordo, getEstadoFromAcordo, isAtrasado, getTodayISO,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
@@ -223,7 +223,7 @@ export function AcordoDetalheInline({
         operador_id:           parcelaAtual.operador_id,
         empresa_id:            parcelaAtual.empresa_id,
         setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         new Date().toISOString().split('T')[0],
+        data_cadastro:         getTodayISO(),
         acordo_grupo_id:       parcelaAtual.acordo_grupo_id,
         tipo_vinculo:          parcelaAtual.tipo_vinculo,
         vinculo_operador_id:   parcelaAtual.vinculo_operador_id,
@@ -296,7 +296,7 @@ export function AcordoDetalheInline({
                 operador_id:           parInst.operador_id,
                 empresa_id:            parInst.empresa_id,
                 setor_id:              parInst.setor_id ?? null,
-                data_cadastro:         new Date().toISOString().split('T')[0],
+                data_cadastro:         getTodayISO(),
                 acordo_grupo_id:       parInst.acordo_grupo_id,
                 tipo_vinculo:          parInst.tipo_vinculo,
                 vinculo_operador_id:   parInst.vinculo_operador_id,

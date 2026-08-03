@@ -14,6 +14,9 @@ import {
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
+import {
+  deslocarMes, mesAtual, primeiroDiaDoMes, ultimoDiaDoMes,
+} from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
@@ -27,7 +30,7 @@ import { enviarParaLixeira } from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { MetaProgressoHeader } from '@/components/MetaProgressoHeader';
-import { useAnalytics } from '@/hooks/useAnalytics';
+import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
   PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro,
@@ -46,7 +49,11 @@ export default function Dashboard() {
   const statusLabels = tenant.statusLabels;
   const tipoLabels   = tenant.tipoLabels;
 
-  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useAnalytics();
+  // Só as LISTAS de setor/equipe. Antes isto vinha de `useAnalytics()`, que
+  // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
+  // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
+  // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
+  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useSetoresEquipes();
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
   const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
   const isElite = perfil?.perfil === 'elite';
@@ -64,10 +71,7 @@ export default function Dashboard() {
 
   const [hojeMinimizado, setHojeMinimizado] = useState(false);
 
-  const [mesFiltro, setMesFiltro] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [mesFiltro, setMesFiltro] = useState<string>(() => mesAtual());
 
   const [searchParams, setSearchParams] = useSearchParams();
   const [busca,        setBusca]        = useState(searchParams.get('busca')  || '');
@@ -126,23 +130,15 @@ export default function Dashboard() {
     : activeTab === 'nao_pagos' ? 'nao_pago'
     : filtroStatus || undefined;
 
-  const mesFiltroInicio = mesFiltro ? `${mesFiltro}-01` : undefined;
-  const mesFiltroFim = mesFiltro
-    ? (() => {
-        const [y, m] = mesFiltro.split('-').map(Number);
-        const ultimo = new Date(y, m, 0).getDate();
-        return `${mesFiltro}-${String(ultimo).padStart(2, '0')}`;
-      })()
-    : undefined;
+  const mesFiltroInicio = mesFiltro ? primeiroDiaDoMes(mesFiltro) : undefined;
+  const mesFiltroFim    = mesFiltro ? ultimoDiaDoMes(mesFiltro)   : undefined;
 
   const nextMonthRange = useMemo(() => {
     if (!mesFiltro) return null;
-    const [y, m] = mesFiltro.split('-').map(Number);
-    const nextM = m === 12 ? 1 : m + 1;
-    const nextY = m === 12 ? y + 1 : y;
-    const start = `${nextY}-${String(nextM).padStart(2, '0')}-01`;
-    const end   = new Date(nextY, nextM, 0).toISOString().split('T')[0];
-    return { start, end };
+    // `deslocarMes` já cuida da virada de ano — a conta manual de mês 12 → 1
+    // que morava aqui era a quarta cópia da mesma aritmética no projeto.
+    const proximo = deslocarMes(mesFiltro, 1);
+    return { start: primeiroDiaDoMes(proximo), end: ultimoDiaDoMes(proximo) };
   }, [mesFiltro]);
 
   useEffect(() => {
@@ -471,7 +467,7 @@ export default function Dashboard() {
         operador_id:           parcelaAtual.operador_id,
         empresa_id:            parcelaAtual.empresa_id,
         setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         new Date().toISOString().split('T')[0],
+        data_cadastro:         getTodayISO(),
         acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
         tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
         vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
@@ -519,7 +515,7 @@ export default function Dashboard() {
                 operador_id:           (parInstall as Acordo).operador_id,
                 empresa_id:            (parInstall as Acordo).empresa_id,
                 setor_id:              (parInstall as Acordo).setor_id ?? null,
-                data_cadastro:         new Date().toISOString().split('T')[0],
+                data_cadastro:         getTodayISO(),
                 acordo_grupo_id:       (parInstall as Acordo).acordo_grupo_id ?? null,
                 tipo_vinculo:          (parInstall as Acordo).tipo_vinculo ?? null,
                 vinculo_operador_id:   (parInstall as Acordo).vinculo_operador_id ?? null,

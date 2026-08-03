@@ -22,6 +22,7 @@ import {
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
+import { deslocarMes, mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { cn } from '@/lib/utils';
 import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
@@ -119,10 +120,7 @@ export default function Acordos() {
   const highlightFoundRef  = useRef(false);
   const findAttemptsRef    = useRef(0);
 
-  const [mesFiltro, setMesFiltro] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [mesFiltro, setMesFiltro] = useState<string>(() => mesAtual());
 
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
@@ -166,13 +164,8 @@ export default function Acordos() {
     ? 'nao_pago'
     : filtroStatus || undefined;
 
-  const bpMesInicio = (!isPP && mesFiltro) ? `${mesFiltro}-01` : undefined;
-  const bpMesFim    = (!isPP && mesFiltro)
-    ? (() => {
-        const [y, m] = mesFiltro.split('-').map(Number);
-        return `${mesFiltro}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
-      })()
-    : undefined;
+  const bpMesInicio = (!isPP && mesFiltro) ? primeiroDiaDoMes(mesFiltro) : undefined;
+  const bpMesFim    = (!isPP && mesFiltro) ? ultimoDiaDoMes(mesFiltro)   : undefined;
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos({
     busca:        busca || undefined,
@@ -370,7 +363,7 @@ export default function Acordos() {
         operador_id:           parcelaAtual.operador_id,
         empresa_id:            parcelaAtual.empresa_id,
         setor_id:              parcelaAtual.setor_id ?? null,
-        data_cadastro:         new Date().toISOString().split('T')[0],
+        data_cadastro:         getTodayISO(),
         acordo_grupo_id:       parcelaAtual.acordo_grupo_id ?? null,
         tipo_vinculo:          parcelaAtual.tipo_vinculo ?? null,
         vinculo_operador_id:   parcelaAtual.vinculo_operador_id ?? null,
@@ -548,9 +541,7 @@ export default function Acordos() {
                 <Button
                   variant="outline" size="icon" className="h-6 w-6"
                   onClick={() => {
-                    const [y, m] = mesFiltro.split('-').map(Number);
-                    const prev   = new Date(y, m - 2, 1);
-                    setMesFiltro(`${prev.getFullYear()}-${String(prev.getMonth() + 1).padStart(2, '0')}`);
+                    setMesFiltro(deslocarMes(mesFiltro, -1));
                     setCurrentPage(1);
                   }}
                 >
@@ -562,9 +553,7 @@ export default function Acordos() {
                 <Button
                   variant="outline" size="icon" className="h-6 w-6"
                   onClick={() => {
-                    const [y, m] = mesFiltro.split('-').map(Number);
-                    const next   = new Date(y, m, 1);
-                    setMesFiltro(`${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`);
+                    setMesFiltro(deslocarMes(mesFiltro, 1));
                     setCurrentPage(1);
                   }}
                 >

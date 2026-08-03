@@ -5,6 +5,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { DatePickerField } from '@/components/DatePickerField';
+import { getTodayISO } from '@/lib/index';
 
 export interface ModalConfirmarPagamentoProps {
   aberto: boolean;
@@ -16,7 +17,10 @@ export interface ModalConfirmarPagamentoProps {
   onClose: () => void;
 }
 
-const hojeISO = () => new Date().toISOString().split('T')[0];
+// `getTodayISO` e não `new Date().toISOString()`: este valor vira a DATA DE
+// PAGAMENTO do acordo. Com o `toISOString`, um pagamento confirmado às 21h30
+// no Brasil nascia com a data de amanhã — ver o comentário em lib/index.ts.
+const hojeISO = () => getTodayISO();
 
 export function ModalConfirmarPagamento({
   aberto, salvando, dataInicial, onConfirm, onClose,

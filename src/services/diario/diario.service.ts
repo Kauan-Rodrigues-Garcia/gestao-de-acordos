@@ -16,6 +16,7 @@
 import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { ROTA_DIARIO } from '@/lib/notificacoes-rota';
 import type {
   OperadorResolvidoMap,
@@ -543,9 +544,8 @@ async function buscarResumoMensalDiarioLinhas(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
 ): Promise<ResumoMensalDiario> {
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const primeiro = primeiroDiaDoMes(mes);
+  const fim      = ultimoDiaDoMes(mes);
 
   interface Row {
     operador_id: string | null;

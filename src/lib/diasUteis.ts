@@ -9,6 +9,7 @@
  * (inclui o dia atual, pois o analítico do dia chega ao longo do dia).
  * O quartil é a faixa configurada cuja % mínima a projeção alcança.
  */
+import { diasNoMes } from '@/lib/mesReferencia';
 
 import type { QuartilConfig } from '@/lib/supabase';
 
@@ -34,7 +35,7 @@ export function listarDiasUteis(
   ano: number, mes: number, feriados: string[] = [], inicioISO?: string,
 ): string[] {
   const fSet = new Set(feriados);
-  const total = new Date(ano, mes, 0).getDate();
+  const total = diasNoMes(`${ano}-${String(mes).padStart(2, '0')}`);
   const dias: string[] = [];
   for (let d = 1; d <= total; d++) {
     const iso = isoDoDia(ano, mes, d);

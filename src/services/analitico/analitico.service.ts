@@ -16,6 +16,7 @@ import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabul
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { mesReferencia } from './analiticoComum';
+import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import type { LinhaRelatorio } from './analiticoComum';
 
@@ -651,9 +652,7 @@ export async function limparDadosDoMes(
   empresaId: string,
   mes: string,
 ): Promise<{ error: string | null }> {
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const { primeiro, fim } = limitesDoMes(mes);
 
   const { error } = await supabase
     .from('analitico_recebimentos')
@@ -677,9 +676,7 @@ export async function limparDadosDoMesSetor(
   perfilIdsDoSetor: string[],
 ): Promise<{ error: string | null }> {
   if (!perfilIdsDoSetor.length) return { error: null };
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const fim      = `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`;
+  const { primeiro, fim } = limitesDoMes(mes);
 
   const { error: errOps } = await supabase
     .from('analitico_recebimentos')
@@ -710,10 +707,7 @@ export async function removerOrfaosDoMes(
   importadorIds?: string[],
 ): Promise<{ error: string | null }> {
   if (importadorIds && !importadorIds.length) return { error: null };
-  const [y, m] = mes.split('-').map(Number);
-  const primeiro = `${mes}-01`;
-  const ultimo   = new Date(y, m, 0);
-  const fim      = `${mes}-${String(ultimo.getDate()).padStart(2, '0')}`;
+  const { primeiro, fim } = limitesDoMes(mes);
 
   let q = supabase
     .from('analitico_recebimentos')
@@ -794,11 +788,7 @@ interface MesCarregado {
 
 /** Primeiro e último dia (ISO) do mês 'yyyy-MM'. */
 function limitesDoMes(mes: string): { primeiro: string; fim: string } {
-  const [y, m] = mes.split('-').map(Number);
-  return {
-    primeiro: `${mes}-01`,
-    fim:      `${mes}-${String(new Date(y, m, 0).getDate()).padStart(2, '0')}`,
-  };
+  return { primeiro: primeiroDiaDoMes(mes), fim: ultimoDiaDoMes(mes) };
 }
 
 async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarregado> {

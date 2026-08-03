@@ -50,6 +50,8 @@ import {
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+import { getTodayISO } from '@/lib/index';
+import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
@@ -491,8 +493,12 @@ export function AnaliticoLider({
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
-  const diasNoMes    = new Date(Number(mesAnoStr), Number(mesNumStr), 0).getDate();
-  const hojeISO      = new Date().toISOString().split('T')[0];
+  const diasNoMes    = diasDoMes(mes);
+  // `getTodayISO` e não `new Date().toISOString()`: é este valor que decide
+  // quais dias aparecem como futuros na lista de Destaques. Com o toISOString,
+  // depois das 21h no Brasil o "hoje" virava amanhã e o dia corrente aparecia
+  // esmaecido como se ainda não tivesse chegado.
+  const hojeISO      = getTodayISO();
   const destaquesMap = useMemo(() => new Map(destaques.map(d => [d.dia, d])), [destaques]);
 
   // ── Seletor de equipe reutilizável ────────────────────────────────────────

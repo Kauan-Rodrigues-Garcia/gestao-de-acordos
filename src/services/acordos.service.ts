@@ -7,6 +7,7 @@
 import { supabase, Acordo } from '@/lib/supabase';
 import { safeNum, sumSafe } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
+import { mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 
 export interface FiltrosAcordo {
   status?: string;
@@ -236,9 +237,11 @@ export interface MetricasMes {
 /** Calcula métricas do mês corrente para uma lista de acordos */
 export function calcularMetricasMes(acordos: Acordo[]): MetricasMes {
   const hoje = getTodayISO();
-  const d = new Date();
-  const inicioMes = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-  const fimMes    = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+  // Mês corrente pelo fuso de São Paulo, não pelo da máquina — e pelo mesmo
+  // par de funções que o resto do sistema usa para recortar mês.
+  const mes = mesAtual();
+  const inicioMes = primeiroDiaDoMes(mes);
+  const fimMes    = ultimoDiaDoMes(mes);
 
   const noMes = acordos.filter(a =>
     a.vencimento >= inicioMes && a.vencimento <= fimMes

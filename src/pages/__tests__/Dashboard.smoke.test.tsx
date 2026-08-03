@@ -91,15 +91,14 @@ vi.mock('@/hooks/useEmpresaTags', () => ({
   useEmpresaTags: () => ({ tags: [], loading: false, refetch: vi.fn() }),
 }));
 
-vi.mock('@/hooks/useAnalytics', () => ({
-  useAnalytics: () => ({
-    meta: 0, loading: false, refetch: vi.fn(),
-    setores: [], setorFiltro: null, setSetorFiltro: vi.fn(),
-    equipeFiltro: null, setEquipeFiltro: vi.fn(),
-    equipesDoSetor: [], operadorFiltro: null, setOperadorFiltro: vi.fn(),
-    totalAcordosMes: 0, totalAcordosHoje: 0, totalPagosMes: 0,
-    totalNaoPagos: 0, totalPendentes: 0, percMeta: 0, percMetaAcordos: 0,
-    porStatus: [], porDia: [], porEquipe: [], porOperador: [], acordosMes: [],
+// O Dashboard não usa mais `useAnalytics` — as listas de setor/equipe saíram
+// para `useSetoresEquipes`, que não lê acordo nenhum. O painel de métricas, que
+// continua usando `useAnalytics`, já é mockado inteiro logo abaixo.
+const LISTAS_VAZIAS: { id: string; nome: string }[] = [];
+vi.mock('@/hooks/useSetoresEquipes', () => ({
+  useSetoresEquipes: () => ({
+    setores: LISTAS_VAZIAS, setorFiltro: null, setSetorFiltro: vi.fn(),
+    equipesDoSetor: LISTAS_VAZIAS, loading: false,
   }),
 }));
 

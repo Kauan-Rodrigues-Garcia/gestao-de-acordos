@@ -15,7 +15,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
   buildObservacoesComEstado, isPerfilAdminOuLider, formatarTelefonePP,
-  parseCurrencyInput,
+  parseCurrencyInput, getTodayISO,
 } from '@/lib/index';
 import { calcularParcelas } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
@@ -304,7 +304,7 @@ export function AcordoNovoInline({
         observacoes:     obsFinal,
         operador_id:     perfil.id,
         empresa_id:      empresa.id,
-        data_cadastro:   new Date().toISOString().split('T')[0],
+        data_cadastro:   getTodayISO(),
         acordo_grupo_id: grupoId,
         numero_parcela:  parcelaInicial,
         ...(isExtra ? { tipo_vinculo: 'extra' } : {}),
@@ -331,7 +331,7 @@ export function AcordoNovoInline({
           operador_id:           base.operador_id,
           empresa_id:            base.empresa_id,
           setor_id:              base.setor_id ?? null,
-          data_cadastro:         new Date().toISOString().split('T')[0],
+          data_cadastro:         getTodayISO(),
           acordo_grupo_id:       base.acordo_grupo_id ?? grupoId,
           tipo:                  base.tipo,
           parcelas:              base.parcelas,

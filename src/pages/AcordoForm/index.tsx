@@ -11,7 +11,7 @@ import { supabase, Perfil } from '@/lib/supabase';
 import {
   ROUTE_PATHS, parseCurrencyInput,
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado,
-  formatarTelefonePP,
+  formatarTelefonePP, getTodayISO,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { criarNotificacao }  from '@/services/notificacoes.service';
@@ -212,7 +212,7 @@ export default function AcordoForm() {
       const payload: Record<string, unknown> = {
         nome_cliente:  (data.nome_cliente ?? '').trim(),
         nr_cliente:    nrTrimmed,
-        data_cadastro: new Date().toISOString().split('T')[0],
+        data_cadastro: getTodayISO(),
         vencimento:    data.vencimento,
         valor:         valorNum,
         tipo:          data.tipo,
@@ -470,7 +470,7 @@ export default function AcordoForm() {
           parcelasParaCriar.push({
             nome_cliente:    payload.nome_cliente,
             nr_cliente:      payload.nr_cliente,
-            data_cadastro:   new Date().toISOString().split('T')[0],
+            data_cadastro:   getTodayISO(),
             vencimento:      vencimentoN,
             valor:           payload.valor,
             tipo:            payload.tipo,

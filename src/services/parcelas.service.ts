@@ -15,6 +15,7 @@
  *  • Porta B — botão "Adicionar parcela" no detalhe (AcordoDetalheInline).
  */
 import { supabase, type Acordo } from '@/lib/supabase';
+import { getTodayISO } from '@/lib/index';
 
 export interface NovaParcelaInput {
   /** yyyy-MM-dd */
@@ -46,7 +47,7 @@ function payloadNovaParcela(
     operador_id:           base.operador_id,
     empresa_id:            base.empresa_id,
     setor_id:              base.setor_id ?? null,
-    data_cadastro:         new Date().toISOString().split('T')[0],
+    data_cadastro:         getTodayISO(),
     acordo_grupo_id:       grupoId,
     numero_parcela:        numero,
     parcelas:              total,
