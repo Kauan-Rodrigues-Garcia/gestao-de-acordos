@@ -22,6 +22,7 @@ import {
   buscarClientePorCodigo, CATEGORIA_LABEL, MAX_PENDENTES,
   type CategoriaSolicitacao,
 } from '@/services/solicitacoesWhatsapp.service';
+import { errosCpfSolicitacao } from '@/lib/cpf';
 
 export interface DadosNovaSolicitacao {
   codigoCliente: string;
@@ -91,8 +92,21 @@ export function FormNovaSolicitacao({
     debounceRef.current = setTimeout(() => { void buscarCliente(valor); }, 400);
   }
 
+  // ── CPF: aqui é BLOQUEIO, não aviso ────────────────────────────────────────
+  //
+  // Diferente do chat, que deixa passar com prazo de 12 h. A diferença é que
+  // aqui existe substituto: o campo é justamente o CÓDIGO do cliente, e a
+  // mensagem é um texto que o operador escreve antes de existir conversa.
+  // Recusar não trava atendimento nenhum — só obriga a usar o campo certo.
+  //
+  // O banco recusa de todo jeito (migration 20260803e). Isto é a versão
+  // gentil: diz onde está o problema antes de a pessoa apertar enviar.
+  const { codigo: erroCpfCodigo, mensagem: erroCpfMensagem } =
+    errosCpfSolicitacao({ codigo, mensagem });
+
   const podeEnviar =
-    !!codigo.trim() && !!whatsapp.trim() && !!mensagem.trim() && !enviando && !noLimite;
+    !!codigo.trim() && !!whatsapp.trim() && !!mensagem.trim() && !enviando && !noLimite
+    && !erroCpfCodigo && !erroCpfMensagem;
 
   function enviar() {
     if (!podeEnviar) return;
@@ -137,6 +151,12 @@ export function FormNovaSolicitacao({
                 : <Search className="w-3.5 h-3.5" />}
             </span>
           </div>
+          {erroCpfCodigo && (
+            <p className="flex items-start gap-1.5 text-[11px] leading-tight text-destructive">
+              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+              <span>{erroCpfCodigo}</span>
+            </p>
+          )}
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
@@ -221,9 +241,16 @@ export function FormNovaSolicitacao({
           rows={6}
           className="resize-y"
         />
-        <p className="text-[11px] text-muted-foreground">
-          {mensagem.length} caracteres
-        </p>
+        {erroCpfMensagem ? (
+          <p className="flex items-start gap-1.5 text-[11px] leading-tight text-destructive">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+            <span>{erroCpfMensagem}</span>
+          </p>
+        ) : (
+          <p className="text-[11px] text-muted-foreground">
+            {mensagem.length} caracteres
+          </p>
+        )}
       </div>
 
       <div className="flex items-center justify-end gap-2 pt-1">

@@ -72,8 +72,7 @@ export function estadoCpfDaMensagem(
     estado: 'aguardando',
     horasRestantes,
     aviso:
-      `Esta mensagem contém CPF e, por segurança, será apagada em ${rotuloDeHoras(horasRestantes)}. `
-      + 'Dado pessoal de cliente não fica guardado no sistema.',
+      `Esta mensagem contém CPF e, por segurança, será apagada em ${rotuloDeHoras(horasRestantes)}.`,
   };
 }
 

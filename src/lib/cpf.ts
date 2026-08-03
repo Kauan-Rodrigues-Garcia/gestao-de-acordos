@@ -122,6 +122,40 @@ export function mascararCpf(texto: string): string {
     .replace(CORRIDA_DE_DIGITOS, trocar);
 }
 
+// ── Solicitar Atendimento: o formulário de abertura ──────────────────────────
+
+export const ERRO_CPF_NA_MENSAGEM =
+  'A mensagem contém um CPF. Use o código do cliente — CPF não pode ser gravado no sistema.';
+
+export interface ErrosCpfSolicitacao {
+  codigo: string | null;
+  mensagem: string | null;
+}
+
+/**
+ * Recusa CPF na abertura de uma solicitação de atendimento.
+ *
+ * **Aqui é bloqueio, e no chat é prazo de 12 h** — a diferença não é descuido.
+ * No chat existe conversa entre pessoas: recusar a mensagem trava o
+ * atendimento e empurra o dado para fora do sistema, onde não há prazo nenhum.
+ * Neste formulário existe substituto: o campo é literalmente o CÓDIGO do
+ * cliente, e a mensagem é redigida antes de existir conversa. Recusar não trava
+ * nada, só obriga a usar o campo certo.
+ *
+ * O banco recusa de todo jeito (migration 20260803e). Isto aqui é a versão
+ * gentil: aponta onde está o problema antes de a pessoa apertar enviar.
+ */
+export function errosCpfSolicitacao(dados: {
+  codigo: unknown;
+  mensagem: unknown;
+}): ErrosCpfSolicitacao {
+  return {
+    // No código o CPF é o valor INTEIRO; na mensagem ele vem no meio do texto.
+    codigo:   ehCpf(dados.codigo)        ? ERRO_CPF_NO_CODIGO  : null,
+    mensagem: contemCpf(dados.mensagem)  ? ERRO_CPF_NA_MENSAGEM : null,
+  };
+}
+
 /**
  * Campos do acordo onde a busca por CPF é feita, com o rótulo que o usuário vê.
  *

@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ehCpf, apenasDigitos, contemCpf, camposComCpf, acordoTemCpf, avisoCpfDoAcordo,
-  mascararCpf, PADROES_CPF,
+  mascararCpf, errosCpfSolicitacao, PADROES_CPF,
 } from './cpf';
 
 // CPFs com dígitos verificadores válidos (gerados para o teste, não reais).
@@ -178,6 +178,51 @@ describe('contemCpf — sem lookbehind (compatibilidade)', () => {
     expect(contemCpf('529 982 247 25')).toBe(true);   // com espaço
     expect(contemCpf('52998224725')).toBe(true);      // corrido
     expect(contemCpf('obs: 52998224725 fim')).toBe(true);
+  });
+});
+
+describe('errosCpfSolicitacao — abertura de Solicitar Atendimento', () => {
+  // Aqui é BLOQUEIO. No chat da mesma aba é prazo de 12 h, e a diferença não é
+  // descuido: no chat recusar trava conversa entre pessoas e empurra o dado
+  // para fora do sistema. Neste formulário existe substituto — o campo É o
+  // código do cliente. Este teste existe para ninguém "uniformizar" as duas.
+
+  it('formulário limpo passa', () => {
+    expect(errosCpfSolicitacao({ codigo: '4141294', mensagem: 'confirmar o acordo' }))
+      .toEqual({ codigo: null, mensagem: null });
+  });
+
+  it('CPF no lugar do código é recusado, com e sem pontuação', () => {
+    for (const codigo of [CPF_VALIDO, CPF_MASCARADO]) {
+      expect(errosCpfSolicitacao({ codigo, mensagem: 'ok' }).codigo).toMatch(/CPF/);
+    }
+  });
+
+  it('CPF no meio da mensagem é recusado', () => {
+    const erros = errosCpfSolicitacao({
+      codigo: '4141294', mensagem: `cliente Joao, CPF ${CPF_MASCARADO}, ligar hoje`,
+    });
+    expect(erros.mensagem).toMatch(/CPF/);
+    expect(erros.codigo).toBeNull();
+  });
+
+  it('os dois campos são apontados de uma vez', () => {
+    const erros = errosCpfSolicitacao({ codigo: CPF_VALIDO, mensagem: `doc ${CPF_VALIDO_2}` });
+    expect(erros.codigo).not.toBeNull();
+    expect(erros.mensagem).not.toBeNull();
+  });
+
+  it('código legítimo de 7 ou 8 dígitos não é confundido', () => {
+    // O preço de um bloqueio falso é o operador não conseguir abrir o pedido.
+    for (const codigo of ['4141294', '80332997', '12904826']) {
+      expect(errosCpfSolicitacao({ codigo, mensagem: 'ok' }).codigo).toBeNull();
+    }
+  });
+
+  it('mensagem com número que não é CPF passa inteira', () => {
+    expect(errosCpfSolicitacao({
+      codigo: '4141294', mensagem: 'acordo 8472913, valor 1.250,00, telefone 11987654321',
+    }).mensagem).toBeNull();
   });
 });
 
