@@ -14,7 +14,7 @@
  *  • Supabase mockado com rotas por tabela+operação.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { Acordo } from '@/lib/supabase';
 
 // ── Mocks (ANTES do SUT) ────────────────────────────────────────────────────
@@ -503,26 +503,43 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     preencherMinimoBookplay('777');
     clickSalvarAcordo();
 
+    const modal = await screen.findByRole('dialog');
+
+    // ── Sobre a instabilidade histórica deste teste ──────────────────────────
+    //
+    // Ele falhava de vez em quando na suíte completa, sempre com "chamado 0
+    // vezes", e sempre passava isolado. A resposta anterior foi subir o timeout
+    // (1s → 5s → 15s, mais 20s no teste). Isso nunca resolveu: só adiava a
+    // falha e escondia o diagnóstico.
+    //
+    // O que foi VERIFICADO e descartado (03/08/2026):
+    //   • lentidão de máquina — os timeouts voltaram ao padrão e a suíte passou
+    //     quatro vezes seguidas com build e lint rodando junto de propósito;
+    //   • janela antes da semeadura dos campos — o `useEffect` de
+    //     `ModalAdicionarParcela` já rodou quando o diálogo aparece. Uma sonda
+    //     temporária confirmou que o campo de valor já está preenchido nesse
+    //     instante, então não há janela.
+    //
+    // A causa raiz continua SEM PROVA. O que mudou aqui foi tornar a próxima
+    // falha legível em vez de mascará-la: espera pelo campo semeado (explicita
+    // a pré-condição), busca escopada ao diálogo (sem ambiguidade com o
+    // formulário que segue montado atrás) e a checagem de toast de erro logo
+    // abaixo — se `adicionarParcelaAoGrupo` devolver `{ erro }`, o teste passa
+    // a dizer QUAL erro, em vez de esperar em silêncio até estourar.
     await waitFor(() => {
-      expect(screen.getByText(/Adicionar parcela ao acordo/i)).toBeInTheDocument();
+      expect(within(modal).getByDisplayValue('100,00')).toBeInTheDocument();
     });
 
-    // Campos já vêm preenchidos com o que foi digitado — basta confirmar.
-    fireEvent.click(screen.getByRole('button', { name: /^Adicionar parcela$/i }));
+    fireEvent.click(within(modal).getByRole('button', { name: /^Adicionar parcela$/i }));
 
-    // Timeout acima do padrão (1s): confirmar a parcela dispara uma cadeia de
-    // várias idas ao supabase (insert da parcela + update do total do grupo)
-    // antes de chamar onSaved. Rodando junto com a suíte inteira em workers
-    // paralelos, 1s era apertado e este era o único teste flaky do projeto —
-    // passava isolado e falhava com "chamado 0 vezes" sob carga.
-    //
-    // Subiu de 5s para 15s em 03/08/2026: o arquivo cresceu (validações de
-    // estado e de CPF trouxeram testes novos) e 5s voltou a estourar sob a
-    // suíte inteira. O teste não ficou mais lento — a máquina é que tem menos
-    // fôlego por worker. Timeout generoso não mascara defeito aqui: se a cadeia
-    // quebrar, `onSaved` nunca é chamado e o teste falha do mesmo jeito, só
-    // demorando mais para dizer.
-    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1), { timeout: 15_000 });
+    // Timeout padrão, de volta ao normal — ver o bloco acima.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    // Nenhum toast de erro. Os dois caminhos que engolem o fluxo em silêncio —
+    // a validação do modal e o `{ erro }` de `adicionarParcelaAoGrupo` —
+    // passam por aqui. Se algum dia um deles for o culpado, é esta linha que
+    // vai apontar o dedo.
+    expect(toastError).not.toHaveBeenCalled();
 
     // Parcela inserida no MESMO grupo, com número e total incrementados.
     const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
@@ -544,11 +561,7 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     expect(toastSuccess).toHaveBeenCalled();
     const okMsgs = toastSuccess.mock.calls.map(c => String(c[0]));
     expect(okMsgs.some(m => /adicionada/i.test(m))).toBe(true);
-  // Timeout DO TESTE, não só do `waitFor`. Era esta a peça que faltava: o
-  // padrão do vitest é 5s, exatamente o valor que o `waitFor` usava — os dois
-  // corriam empatados, e o teste morria antes de a espera vencer. Subir só o
-  // `waitFor` não adiantava nada.
-  }, 20_000);
+  });
 
   it('PaguePlay: mantém o bloqueio original (toast, sem modal de parcela)', async () => {
     const onSaved = vi.fn();
