@@ -20,6 +20,7 @@ import {
   revincularOrfaosAnalitico,
   notificarImportacaoAnalitico,
   atualizarResumoMensal,
+  congelarComposicaoDoMes,
   sincronizarCartoesPagos,
   type OperadorResolvidoMap,
   type OperadorMatchDetalhe,
@@ -274,6 +275,14 @@ export function useAnaliticoImport() {
     // Salva snapshot de totais imediatamente após inserção + revínculo
     // (o revínculo altera a contagem de operadores distintos do mês)
     await atualizarResumoMensal(empresa.id, preview.mes);
+
+    // Refaz o retrato da composição daquele mês (migration 20260803c).
+    //
+    // A regra da diretoria: o retrato de um mês fechado é fato consumado, e a
+    // ÚNICA coisa de hoje que pode mexer nele é a reimportação do relatório
+    // daquele mês — que é exatamente este ponto. Mover alguém de equipe ou
+    // colocar em férias não mexe, e é o defeito que isto corrige.
+    await congelarComposicaoDoMes(empresa.id, preview.mes);
 
     if (!tenant.isPaguePlay && preview.linhasDiario && preview.dia) {
       // ── BookPlay: o MESMO relatório também alimenta o Recebimento diário ──

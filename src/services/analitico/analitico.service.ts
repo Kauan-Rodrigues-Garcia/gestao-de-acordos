@@ -16,8 +16,9 @@ import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabul
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { mesReferencia } from './analiticoComum';
-import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
+import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
+import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { LinhaRelatorio } from './analiticoComum';
 
 // ── Helpers internos ──────────────────────────────────────────────────────────
@@ -994,17 +995,110 @@ export function setoresDoOperador(
   return out;
 }
 
-/** Busca equipes da empresa e gera mapa operadorId → equipe (inclui setor_id).
- *  `equipesExtrasPorOperador` traz as equipes em que o operador é CLONE
- *  (equipe_operadores_clones): o recebimento dele conta nelas também. */
-export async function buscarEquipesComOperadores(empresaId: string): Promise<{
+export interface ComposicaoEquipes {
   equipes: EquipeAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
   equipesExtrasPorOperador: Record<string, string[]>;
-}> {
+  /** Situação de cada operador NAQUELE mês (ativo/férias/desligado). */
+  situacaoPorOperador: Record<string, string>;
+  /** true = veio do retrato congelado do mês; false = estado de hoje. */
+  doRetrato: boolean;
+}
+
+/**
+ * Quem estava em qual equipe e setor — NO MÊS PEDIDO.
+ *
+ * ## Por que o mês importa
+ *
+ * Os valores do analítico sempre foram históricos: cada linha tem o seu mês.
+ * Mas o AGRUPAMENTO era lido das tabelas de hoje, então mover alguém de equipe
+ * reescrevia o passado: ao filtrar julho, o operador aparecia na equipe de
+ * agosto. Pior com situação — colocar alguém de férias hoje o apagava do
+ * ranking de julho, um mês que ele trabalhou inteiro.
+ *
+ * Agora existe `composicao_mes` (migration 20260803c), um retrato por mês. Mês
+ * fechado lê o retrato; o mês corrente continua ao vivo, porque ele ainda está
+ * acontecendo — e o retrato dele é refeito todo dia às 23:50.
+ *
+ * Sem `mes`, ou sem retrato gravado para aquele mês, cai no estado de hoje: é o
+ * comportamento antigo, e é melhor que uma tela vazia.
+ */
+export async function buscarEquipesComOperadores(
+  empresaId: string,
+  mes?: string | null,
+): Promise<ComposicaoEquipes> {
+  if (mes && !ehMesAtual(mes)) {
+    const retrato = await buscarComposicaoDoRetrato(empresaId, mes);
+    if (retrato) return retrato;
+  }
+  return buscarComposicaoAoVivo(empresaId);
+}
+
+interface LinhaComposicao {
+  operador_id: string;
+  equipe_id: string | null;
+  equipe_nome: string | null;
+  setor_id: string | null;
+  situacao: string | null;
+  equipes_clone: string[] | null;
+}
+
+interface LinhaComposicaoEquipe {
+  equipe_id: string;
+  nome: string;
+  setor_id: string | null;
+}
+
+/** Lê o retrato congelado. `null` quando não há retrato para o mês. */
+async function buscarComposicaoDoRetrato(
+  empresaId: string, mes: string,
+): Promise<ComposicaoEquipes | null> {
+  const [pessoas, equipesRet] = await Promise.all([
+    tabelaSemTipo<LinhaComposicao>('composicao_mes')
+      .select('operador_id, equipe_id, equipe_nome, setor_id, situacao, equipes_clone')
+      .eq('empresa_id', empresaId).eq('mes', mes),
+    tabelaSemTipo<LinhaComposicaoEquipe>('composicao_mes_equipe')
+      .select('equipe_id, nome, setor_id')
+      .eq('empresa_id', empresaId).eq('mes', mes),
+  ]);
+  // Tabela ausente (migration pendente) ou mês sem retrato → caminho ao vivo.
+  if (pessoas.error || !pessoas.data?.length) return null;
+
+  const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
+  const equipesExtrasPorOperador: Record<string, string[]> = {};
+  const situacaoPorOperador: Record<string, string> = {};
+  const comGente = new Set<string>();
+
+  for (const p of pessoas.data) {
+    operadorEquipeMap[p.operador_id] = {
+      equipe_id:   p.equipe_id ?? null,
+      equipe_nome: p.equipe_nome ?? 'Sem equipe',
+      setor_id:    p.setor_id ?? null,
+    };
+    situacaoPorOperador[p.operador_id] = p.situacao ?? 'ativo';
+    if (p.equipe_id) comGente.add(p.equipe_id);
+    const clones = p.equipes_clone ?? [];
+    if (clones.length) {
+      equipesExtrasPorOperador[p.operador_id] = clones;
+      for (const eq of clones) comGente.add(eq);
+    }
+  }
+
+  const equipes: EquipeAnalitico[] = (equipesRet.data ?? [])
+    .filter(e => comGente.has(e.equipe_id))
+    .map(e => ({ id: e.equipe_id, nome: e.nome, setor_id: e.setor_id ?? null }))
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+
+  return {
+    equipes, operadorEquipeMap, equipesExtrasPorOperador,
+    situacaoPorOperador, doRetrato: true,
+  };
+}
+
+async function buscarComposicaoAoVivo(empresaId: string): Promise<ComposicaoEquipes> {
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, setor_id, equipes(id, nome, setor_id)')
+    .select('id, equipe_id, setor_id, situacao, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId)
     .eq('ativo', true);
 
@@ -1043,11 +1137,13 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
   }
 
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
+  const situacaoPorOperador: Record<string, string> = {};
 
   for (const p of (data ?? []) as {
     id: string;
     equipe_id: string | null;
     setor_id: string | null;
+    situacao: string | null;
     equipes: { id: string; nome: string; setor_id: string | null } | null;
   }[]) {
     const eq = p.equipes;
@@ -1057,6 +1153,7 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
       // Setor da equipe; quem não tem equipe usa o setor do próprio perfil
       setor_id:    eq?.setor_id ?? p.setor_id ?? null,
     };
+    situacaoPorOperador[p.id] = p.situacao ?? 'ativo';
     if (p.equipe_id) comGente.add(p.equipe_id);
   }
 
@@ -1067,7 +1164,22 @@ export async function buscarEquipesComOperadores(empresaId: string): Promise<{
     .map(e => ({ id: e.id, nome: e.nome, setor_id: e.setor_id ?? null }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
-  return { equipes, operadorEquipeMap, equipesExtrasPorOperador };
+  return {
+    equipes, operadorEquipeMap, equipesExtrasPorOperador,
+    situacaoPorOperador, doRetrato: false,
+  };
+}
+
+/** Congela o retrato do mês. Chamado depois de importar o analítico daquele
+ *  mês — a única mudança de hoje que a diretoria autoriza a mexer no passado. */
+export async function congelarComposicaoDoMes(
+  empresaId: string, mes: string,
+): Promise<void> {
+  const { error } = await rpcSemTipo('fn_composicao_mes_snapshot', {
+    p_empresa_id: empresaId, p_mes: mes,
+  });
+  // Migration pendente não pode derrubar a importação, que já terminou.
+  if (error) console.warn('[composicao_mes] retrato não gravado:', error.message);
 }
 
 // ── Fontes para montar o escopo do analítico ─────────────────────────────────
@@ -1094,9 +1206,11 @@ export interface FontesDeEscopo {
  * Coluna `alternativo` ausente (migration 20260724a pendente) → conjunto vazio,
  * isto é, todos os setores são normais. Mesmo comportamento do AnaliticoLider.
  */
-export async function buscarFontesDeEscopo(empresaId: string): Promise<FontesDeEscopo> {
+export async function buscarFontesDeEscopo(
+  empresaId: string, mes?: string | null,
+): Promise<FontesDeEscopo> {
   const [{ equipes, operadorEquipeMap, equipesExtrasPorOperador }, alt] = await Promise.all([
-    buscarEquipesComOperadores(empresaId),
+    buscarEquipesComOperadores(empresaId, mes),
     supabase.from('setores').select('id, alternativo').eq('empresa_id', empresaId),
   ]);
 

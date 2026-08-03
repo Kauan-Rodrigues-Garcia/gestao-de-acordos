@@ -83,7 +83,7 @@ export function AnaliticoOperador({
     setLoadingRanking(true);
     const [{ data, error }, situacaoMap] = await Promise.all([
       buscarResumoOperadoresAnalitico(empresaId, mes),
-      buscarSituacaoOperadores(empresaId),
+      buscarSituacaoOperadores(empresaId, mes),
     ]);
     if (error) toast.error(`Erro ao carregar ranking: ${error}`);
     setRanking(data);

@@ -219,15 +219,20 @@ export default function PainelLider() {
   // Incrementado pelo botão de recarregar do cabeçalho — força nova busca
   const [diarioReloadKey, setDiarioReloadKey] = useState(0);
 
-  // Equipes não dependem do mês — carrega uma vez no mount (os dois tenants).
+  // A composição DEPENDE do mês, e recarrega ao trocá-lo.
+  //
+  // Antes carregava uma vez só, lendo as equipes de hoje: ao filtrar o mês
+  // passado, o operador aparecia na equipe para a qual foi movido depois, e
+  // quem entrou de férias esta semana sumia do ranking de um mês que trabalhou
+  // inteiro. Agora mês fechado lê o retrato congelado (migration 20260803c).
   useEffect(() => {
     if (!mostrarAbasAnaliticas || !empresa?.id) return;
     let cancel = false;
-    void buscarEquipesComOperadores(empresa.id).then(eqs => {
+    void buscarEquipesComOperadores(empresa.id, mesStr).then(eqs => {
       if (!cancel) setEquipesInfo(eqs);
     });
     return () => { cancel = true; };
-  }, [mostrarAbasAnaliticas, empresa?.id]);
+  }, [mostrarAbasAnaliticas, empresa?.id, mesStr]);
 
   // Resumo mensal do diário: pré-carrega no mount (e ao trocar o mês) — quando
   // o usuário clica numa das abas, os dados já estão prontos. Antes a busca só

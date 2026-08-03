@@ -28,6 +28,12 @@ export interface ParametrosEscopo {
   setorId?: string | null;
   equipeId?: string | null;
   operadorId?: string | null;
+  /**
+   * Mês em foco ('yyyy-MM'). Mês fechado usa o retrato congelado da composição
+   * (migration 20260803c) em vez das equipes de hoje — sem isso, mover alguém
+   * de equipe agora mudaria o passado.
+   */
+  mes?: string | null;
   /** Linhas já carregadas — usadas só para saber se o carimbo veio. */
   linhas: readonly LinhaEscopavel[];
 }
@@ -53,15 +59,15 @@ export interface ResultadoEscopo {
 }
 
 export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
-  const { ativo, empresaId, isPaguePlay, setorId, equipeId, operadorId, linhas } = params;
+  const { ativo, empresaId, isPaguePlay, setorId, equipeId, operadorId, mes, linhas } = params;
 
   const [fontes, setFontes] = useState<FontesDeEscopo | null>(null);
   useEffect(() => {
     if (!ativo || !empresaId) { setFontes(null); return; }
     let cancelado = false;
-    void buscarFontesDeEscopo(empresaId).then(f => { if (!cancelado) setFontes(f); });
+    void buscarFontesDeEscopo(empresaId, mes).then(f => { if (!cancelado) setFontes(f); });
     return () => { cancelado = true; };
-  }, [ativo, empresaId]);
+  }, [ativo, empresaId, mes]);
 
   /** O carimbo de setor chegou? (migration 20260802a aplicada) */
   const carimboDisponivel = useMemo(() => temCarimboDeSetor(linhas), [linhas]);

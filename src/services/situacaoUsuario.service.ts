@@ -8,6 +8,8 @@
  */
 import { supabase } from '@/lib/supabase';
 import type { SituacaoUsuario } from '@/lib/supabase';
+import { ehMesAtual } from '@/lib/mesReferencia';
+import { tabelaSemTipo } from '@/lib/supabaseSemTipo';
 
 /**
  * Define a situação de um usuário, ajustando os efeitos colaterais:
@@ -67,7 +69,25 @@ export async function arquivarDesligadosAnteriores(empresaId: string): Promise<n
  */
 export async function buscarSituacaoOperadores(
   empresaId: string,
+  mes?: string | null,
 ): Promise<Record<string, SituacaoUsuario>> {
+  // Situação é um fato do MÊS, não de hoje: quem entrou de férias esta semana
+  // trabalhou julho inteiro e não pode sumir do ranking de julho. Mês fechado
+  // lê o retrato congelado (migration 20260803c); o corrente segue ao vivo.
+  if (mes && !ehMesAtual(mes)) {
+    const retrato = await tabelaSemTipo<{ operador_id: string; situacao: string | null }>('composicao_mes')
+      .select('operador_id, situacao')
+      .eq('empresa_id', empresaId).eq('mes', mes);
+    if (!retrato.error && retrato.data?.length) {
+      const doMes: Record<string, SituacaoUsuario> = {};
+      for (const r of retrato.data) {
+        doMes[r.operador_id] = (r.situacao as SituacaoUsuario) ?? 'ativo';
+      }
+      return doMes;
+    }
+    // Sem retrato (migration pendente ou mês antigo) → estado de hoje.
+  }
+
   const { data, error } = await supabase
     .from('perfis')
     .select('id, situacao')

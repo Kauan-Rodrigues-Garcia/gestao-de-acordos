@@ -99,6 +99,7 @@ export default function PainelDiretoria() {
     empresaId:   empresa?.id,
     isPaguePlay: isPP,
     setorId:     setorFiltro,
+    mes:         mesAnalise,
     linhas:      analiticoDash.linhas,
   });
 

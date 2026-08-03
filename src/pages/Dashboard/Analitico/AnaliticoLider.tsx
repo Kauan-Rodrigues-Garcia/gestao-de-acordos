@@ -62,7 +62,8 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
-import { buscarSituacaoOperadores, idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
+import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
 
 const ORFAOS_PAGE = 100;
@@ -136,15 +137,9 @@ export function AnaliticoLider({
   const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
   // Item 5: ids que somem do ranking/quartil (férias/desligado). Só exibição —
   // o recebimento deles continua nos totais de setor/equipe.
+  // Preenchido junto com a composição do mês, logo abaixo — a situação também
+  // é um fato do MÊS, não de hoje.
   const [operadoresOcultos, setOperadoresOcultos] = useState<Set<string>>(new Set());
-  useEffect(() => {
-    if (!empresaId) return;
-    let ativo = true;
-    buscarSituacaoOperadores(empresaId)
-      .then(m => { if (ativo) setOperadoresOcultos(idsOcultosRankingQuartil(m)); })
-      .catch(() => { /* sem situação — ninguém oculto */ });
-    return () => { ativo = false; };
-  }, [empresaId]);
 
   // ── Órfãos por setor (sem operador pertencem ao setor da importação) ──────
   const [orfaosPorSetor, setOrfaosPorSetor] = useState<Record<string, { total: number; qtd: number }>>({});
@@ -211,11 +206,17 @@ export function AnaliticoLider({
   }, [abaAtiva]);
 
   useEffect(() => {
-    buscarEquipesComOperadores(empresaId).then(({ equipes: eq, operadorEquipeMap: oem, equipesExtrasPorOperador }) => {
-      setEquipes(eq);
-      setOperadorEquipeMap(oem);
-      setEquipesExtras(equipesExtrasPorOperador);
-    });
+    // Passa o mês: fechado usa o retrato congelado da composição, senão mover
+    // alguém de equipe hoje reescreveria a lista do mês passado (20260803c).
+    buscarEquipesComOperadores(empresaId, mes).then(
+      ({ equipes: eq, operadorEquipeMap: oem, equipesExtrasPorOperador, situacaoPorOperador }) => {
+        setEquipes(eq);
+        setOperadorEquipeMap(oem);
+        setEquipesExtras(equipesExtrasPorOperador);
+        // Situação daquele mês — férias/desligamento de hoje não apagam alguém
+        // do ranking de um mês que ele trabalhou inteiro.
+        setOperadoresOcultos(idsOcultosRankingQuartil(situacaoPorOperador as Record<string, SituacaoUsuario>));
+      });
     // Setores alternativos (coluna pode não existir → todos normais)
     void (async () => {
       const comFlag = await supabase.from('setores')
@@ -227,7 +228,7 @@ export function AnaliticoLider({
       }
       setSetoresAlternativos(alt);
     })();
-  }, [empresaId]);
+  }, [empresaId, mes]);
 
   // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
   useEffect(() => {

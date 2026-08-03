@@ -141,6 +141,7 @@ export function AnalyticsPanel({
     setorId:     setorEmFoco,
     equipeId:    equipeFiltroExterno,
     operadorId:  operadorFiltroExterno,
+    mes:         mesAnalise,
     linhas:      analiticoDash.linhas,
   });
 
