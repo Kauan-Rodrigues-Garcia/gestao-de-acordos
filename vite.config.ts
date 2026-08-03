@@ -14,6 +14,13 @@ import { devApi } from './vite-plugins/dev-api';
 // para que o polling de atualização detecte novos deploys.
 const BUILD_VERSION = process.env.NODE_ENV === 'production' ? String(Date.now()) : 'dev';
 
+// Release do Sentry. O timestamp de BUILD_VERSION serve para detectar deploy
+// novo, mas não diz QUAL código está no ar — e é isso que se quer saber ao
+// olhar um erro. A Vercel expõe o commit no build; fora dela, o timestamp fica
+// como reserva para pelo menos separar um deploy do outro.
+const COMMIT = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7);
+const APP_RELEASE = COMMIT || BUILD_VERSION;
+
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   return {
@@ -67,6 +74,8 @@ export default defineConfig(({ mode }) => {
       ),
       // Versão do build — usada pelo hook useVersionCheck para detectar novos deploys
       __APP_VERSION__: JSON.stringify(BUILD_VERSION),
+      // Identifica o build no Sentry — ver `src/lib/observabilidade.ts`.
+      __APP_RELEASE__: JSON.stringify(APP_RELEASE),
     },
     build: {
       // Sobe o aviso de chunk-size só para bibliotecas realmente pesadas

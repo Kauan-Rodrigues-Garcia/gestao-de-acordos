@@ -22,6 +22,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Constantes que o `vite.config.ts` injeta no build. Sem elas aqui, qualquer
+  // módulo que as leia no topo do arquivo estoura com "is not defined" no teste.
+  // Constantes que o `vite.config.ts` injeta no build. Sem elas aqui, qualquer
+  // módulo que as leia no topo do arquivo estoura com "is not defined".
+  define: {
+    __APP_RELEASE__: JSON.stringify('teste'),
+  },
   test: {
     environment: 'happy-dom',
     globals: true,

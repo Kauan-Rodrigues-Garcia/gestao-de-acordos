@@ -10,7 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   ehCpf, apenasDigitos, contemCpf, camposComCpf, acordoTemCpf, avisoCpfDoAcordo,
-  PADROES_CPF,
+  mascararCpf, PADROES_CPF,
 } from './cpf';
 
 // CPFs com dígitos verificadores válidos (gerados para o teste, não reais).
@@ -178,5 +178,48 @@ describe('contemCpf — sem lookbehind (compatibilidade)', () => {
     expect(contemCpf('529 982 247 25')).toBe(true);   // com espaço
     expect(contemCpf('52998224725')).toBe(true);      // corrido
     expect(contemCpf('obs: 52998224725 fim')).toBe(true);
+  });
+});
+
+describe('mascararCpf — o que sai do sistema', () => {
+  // Usado no relatório de erro enviado ao Sentry. A regra de 28/07/2026 vale
+  // para o que é GUARDADO e, com mais razão, para o que é ENVIADO PARA FORA:
+  // dado que sai não volta e não dá para apagar depois.
+
+  it('troca o CPF pelo aviso, nos dois formatos', () => {
+    expect(mascararCpf(CPF_MASCARADO)).toBe('[CPF REMOVIDO]');
+    expect(mascararCpf(CPF_VALIDO)).toBe('[CPF REMOVIDO]');
+    expect(mascararCpf('529 982 247 25')).toBe('[CPF REMOVIDO]');
+  });
+
+  it('preserva o texto em volta — o relatório precisa continuar legível', () => {
+    expect(mascararCpf(`erro ao salvar cliente ${CPF_MASCARADO} no acordo 8472913`))
+      .toBe('erro ao salvar cliente [CPF REMOVIDO] no acordo 8472913');
+  });
+
+  it('troca mais de um CPF na mesma frase', () => {
+    const texto = `de ${CPF_VALIDO} para ${CPF_VALIDO_2}`;
+    expect(mascararCpf(texto)).toBe('de [CPF REMOVIDO] para [CPF REMOVIDO]');
+  });
+
+  it('não mexe em número que não é CPF', () => {
+    // Se estes fossem mascarados, a mensagem de erro perderia a utilidade.
+    const texto = 'acordo 8472913, valor 1.250,00, telefone 11987654321, data 2026-08-03';
+    expect(mascararCpf(texto)).toBe(texto);
+  });
+
+  it('CNPJ de 14 dígitos passa inteiro — não tem CPF recortado lá dentro', () => {
+    expect(mascararCpf('CNPJ 12345678000199')).toBe('CNPJ 12345678000199');
+  });
+
+  it('texto vazio continua vazio', () => {
+    expect(mascararCpf('')).toBe('');
+  });
+
+  it('chamar várias vezes dá o mesmo resultado (regex global não guarda posição)', () => {
+    // `lastIndex` de regex com /g já derrubou verificação parecida antes.
+    for (let i = 0; i < 3; i++) {
+      expect(mascararCpf(`x ${CPF_VALIDO} y`)).toBe('x [CPF REMOVIDO] y');
+    }
   });
 });

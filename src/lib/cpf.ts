@@ -102,6 +102,27 @@ export function contemCpf(texto: unknown): boolean {
 }
 
 /**
+ * Troca por `[CPF REMOVIDO]` todo CPF válido dentro de um texto, deixando o
+ * resto intacto.
+ *
+ * Existe para o que SAI do sistema — hoje, o relatório de erro enviado ao
+ * Sentry. Uma mensagem de exceção pode carregar o valor que causou o erro, e
+ * esse valor pode ser justamente o CPF que a regra de 28/07/2026 proíbe de
+ * guardar. Mandá-lo para um serviço externo seria pior que gravá-lo no banco:
+ * sai do nosso controle.
+ *
+ * Só substitui o que passa em `ehCpf` — número de acordo, valor e telefone
+ * ficam legíveis, senão o relatório de erro perde a utilidade.
+ */
+export function mascararCpf(texto: string): string {
+  if (!texto) return texto;
+  const trocar = (candidato: string) => (ehCpf(candidato) ? '[CPF REMOVIDO]' : candidato);
+  return texto
+    .replace(CPF_COM_SEPARADOR, trocar)
+    .replace(CORRIDA_DE_DIGITOS, trocar);
+}
+
+/**
  * Campos do acordo onde a busca por CPF é feita, com o rótulo que o usuário vê.
  *
  * **`whatsapp` está fora de propósito.** Celular brasileiro tem 11 dígitos

@@ -40,6 +40,7 @@ import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
 
 interface AuthContextType {
   user: User | null;
@@ -347,6 +348,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null);
     setAuthError(null);
   }
+
+  // Carimba no Sentry quem está usando o sistema. Sem isto um erro chega sem
+  // dono, e aqui quase todo problema é descoberto por um operador reclamando —
+  // é o que liga o relato ao relatório. Vai só id, usuário e cargo: nome e
+  // e-mail não são necessários para achar a pessoa e não precisam sair daqui.
+  useEffect(() => {
+    if (perfil?.id) {
+      identificarUsuario({ id: perfil.id, usuario: perfil.usuario, cargo: perfil.perfil });
+    } else {
+      limparUsuario();
+    }
+  }, [perfil?.id, perfil?.usuario, perfil?.perfil]);
 
   const value: AuthContextType = {
     user, session, perfil, empresa, loading, perfilLoading, authError, signIn, signOut, refreshPerfil,
