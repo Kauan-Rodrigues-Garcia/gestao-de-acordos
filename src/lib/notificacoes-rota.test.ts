@@ -7,7 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  rotaDaNotificacao, ROTA_ANALITICO, ROTA_DIARIO, ROTA_SOLICITACOES,
+  rotaDaNotificacao, caminhoInternoSeguro,
+  ROTA_ANALITICO, ROTA_DIARIO, ROTA_SOLICITACOES,
 } from './notificacoes-rota';
 
 const base = { titulo: '', rota: null as string | null, acordo_id: null as string | null };
@@ -65,5 +66,52 @@ describe('rotaDaNotificacao — linhas antigas, sem a coluna `rota`', () => {
 
   it('título desconhecido não inventa destino', () => {
     expect(rotaDaNotificacao({ ...base, titulo: 'Bem-vindo ao sistema' }, true)).toBeNull();
+  });
+});
+
+describe('caminhoInternoSeguro — a notificação não tira o operador do sistema', () => {
+  it.each([
+    ['/analitico'],
+    ['/analitico?aba=diario'],
+    ['/acordos?highlight=abc-123'],
+    ['/'],
+  ])('aceita caminho interno %s', (rota) => {
+    expect(caminhoInternoSeguro(rota)).toBe(rota);
+  });
+
+  it.each([
+    ['//site-falso.com',          'duas barras viram host'],
+    ['/\\site-falso.com',         'barra invertida — o desvio do CVE-2025-68470'],
+    ['\\\\site-falso.com',        'caminho UNC'],
+    ['https://site-falso.com',    'URL absoluta'],
+    ['javascript:alert(1)',       'esquema javascript'],
+    ['analitico',                 'relativo, sem barra inicial'],
+    ['',                          'vazio'],
+  ])('recusa %s (%s)', (rota) => {
+    expect(caminhoInternoSeguro(rota)).toBeNull();
+  });
+
+  it('recusa caractere de controle no meio, que o navegador descartaria', () => {
+    // O navegador tira o byte antes de resolver a URL: a checagem veria
+    // "/\x00/site-falso" e o navegador veria "//site-falso".
+    const comControle = '/' + String.fromCharCode(0) + '/site-falso.com';
+    expect(caminhoInternoSeguro(comControle)).toBeNull();
+    expect(caminhoInternoSeguro('/' + String.fromCharCode(9) + 'x')).toBeNull();
+  });
+
+  it.each([null, undefined, 42, {}])('recusa valor não-texto (%s)', (rota) => {
+    expect(caminhoInternoSeguro(rota)).toBeNull();
+  });
+
+  it('rota externa no banco não vira destino — cai no palpite pelo título', () => {
+    expect(rotaDaNotificacao(
+      { ...base, titulo: 'Analítico atualizado', rota: 'https://site-falso.com' }, true,
+    )).toBe(ROTA_ANALITICO);
+  });
+
+  it('rota externa sem título reconhecível não leva a lugar nenhum', () => {
+    expect(rotaDaNotificacao(
+      { ...base, titulo: 'Bem-vindo', rota: '//site-falso.com' }, true,
+    )).toBeNull();
   });
 });

@@ -40,13 +40,23 @@ export default defineConfig({
         'src/**/*.d.ts',
         'src/main.tsx',
         'src/vite-env.d.ts',
+        // Cola de build, não código de produto: só existe quando o alias de
+        // `vite.config.ts` está ativo, e o alias não existe aqui. Sem ele o
+        // import de 'react-router-dom-original' não resolve, a transformação
+        // falha, e o v8 acaba tentando ler o TSX cru como JavaScript:
+        // "RolldownError: Parse failed". O arquivo já ficava fora da conta —
+        // isto só troca o erro por uma exclusão declarada.
+        'src/lib/react-router-dom-proxy.tsx',
       ],
       thresholds: {
-        // Thresholds conservadores — aumentar gradualmente a cada sprint.
-        lines: 25,
-        functions: 20,
-        branches: 15,
-        statements: 25,
+        // Catraca: cada valor fica logo abaixo do que a suíte entrega hoje
+        // (26,98 / 21,74 / 20,51 / 25,87 em 2026-08-03). A folga é pequena de
+        // propósito — o portão só serve enquanto doer descer. Ao subir a
+        // cobertura, suba estes números junto, no mesmo commit.
+        lines: 26.5,
+        functions: 21,
+        branches: 20,
+        statements: 25.5,
       },
     },
   },

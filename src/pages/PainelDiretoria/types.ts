@@ -1,4 +1,4 @@
-import { Landmark, QrCode, CreditCard } from 'lucide-react';
+import { Landmark, QrCode, CreditCard, type LucideIcon } from 'lucide-react';
 
 export interface SetorAgendamento {
   id: string;
@@ -64,7 +64,12 @@ export function corDaForma(rotulo: string): string {
   return '#94a3b8';
 }
 
-export function iconeDaForma(rotulo: string): React.ComponentType<{ className?: string }> {
+/**
+ * O tipo é `LucideIcon`, não `ComponentType<{ className }>`: quem chama passa
+ * também `style` para colorir o ícone com a cor da forma de pagamento, e a
+ * assinatura estreita rejeitava isso.
+ */
+export function iconeDaForma(rotulo: string): LucideIcon {
   const n = rotulo.toLowerCase();
   if (n.includes('cart')) return CreditCard;
   if (n.includes('pix'))  return QrCode;

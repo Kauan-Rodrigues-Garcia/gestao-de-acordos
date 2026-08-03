@@ -27,6 +27,35 @@ export const ROTA_SOLICITACOES = ROUTE_PATHS.SOLICITACOES_WHATSAPP;
 /** Só o que o cálculo lê. */
 type Alvo = Pick<Notificacao, 'titulo' | 'rota' | 'acordo_id'>;
 
+/** Último código de caractere que o navegador descarta ao resolver uma URL. */
+const LIMITE_CONTROLE = 0x20;
+const DELETE_ASCII = 0x7f;
+
+/**
+ * `rota` vem do banco, e o clique na notificação chama `navigate(destino)`.
+ * Sem filtro isso é um redirecionamento aberto: uma linha com
+ * `rota = '//site-falso'` tira o operador do sistema — e ele sai de dentro da
+ * tela onde estava logado, que é justamente o cenário de phishing que dá certo.
+ * É a mesma classe do CVE-2025-68470 do react-router (a barra invertida como
+ * desvio), então o filtro fica aqui, não na versão da biblioteca.
+ *
+ * Só passa caminho interno: começa com uma barra, e o que vem depois não é
+ * outra barra nem barra invertida. Caractere de controle em qualquer posição
+ * também reprova — o navegador descarta esses bytes antes de resolver a URL,
+ * então o que a checagem vê e o que o navegador vê seriam coisas diferentes.
+ */
+export function caminhoInternoSeguro(rota: unknown): string | null {
+  if (typeof rota !== 'string') return null;
+  const limpo = rota.trim();
+  if (!limpo.startsWith('/')) return null;
+  if (limpo.length > 1 && (limpo[1] === '/' || limpo[1] === '\\')) return null;
+  for (let i = 0; i < limpo.length; i++) {
+    const codigo = limpo.charCodeAt(i);
+    if (codigo < LIMITE_CONTROLE || codigo === DELETE_ASCII) return null;
+  }
+  return limpo;
+}
+
 /**
  * Palpite para linhas gravadas antes da coluna `rota`.
  *
@@ -53,10 +82,14 @@ function palpitePeloTitulo(titulo: string): string | null {
  */
 export function rotaDaNotificacao(n: Alvo, isPaguePlay: boolean): string | null {
   if (n.acordo_id) {
+    const id = encodeURIComponent(n.acordo_id);
     return isPaguePlay
-      ? `${ROUTE_PATHS.DASHBOARD}?highlight=${n.acordo_id}`
-      : `${ROUTE_PATHS.ACORDOS}?highlight=${n.acordo_id}`;
+      ? `${ROUTE_PATHS.DASHBOARD}?highlight=${id}`
+      : `${ROUTE_PATHS.ACORDOS}?highlight=${id}`;
   }
-  if (n.rota) return n.rota;
+  // A rota do banco só vale se for interna; sendo externa, ainda resta o
+  // palpite pelo título, que sai de constantes do próprio código.
+  const interna = caminhoInternoSeguro(n.rota);
+  if (interna) return interna;
   return palpitePeloTitulo(n.titulo ?? '');
 }
