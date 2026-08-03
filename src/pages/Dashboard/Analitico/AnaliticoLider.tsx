@@ -42,14 +42,20 @@ import {
   limparDadosDoMesSetor,
   atualizarResumoMensal,
   mapaSetorDaEquipe,
-  setoresDoOperador,
   type ResumoOperadorAnalitico,
   type DestaqueDiaAnalitico,
   type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
-import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+// As contas desta tela vivem em `agregacaoLider`: são puras e têm teste
+// próprio, o que os `useMemo` que elas substituíram nunca tiveram.
+import {
+  filtrarResumos, agruparPorEquipe, calcularMetricas, perfilIdsDoSetor,
+  filtrarOrfaosDoSetor, filtrarLinhasPorData,
+  type VinculosOperador, type FiltroData,
+} from './agregacaoLider';
+import { montarTextoListaAnalitico } from './textoListaAnalitico';
 import { getTodayISO } from '@/lib/index';
 import { diasNoMes as diasDoMes } from '@/lib/mesReferencia';
 import { toast } from 'sonner';
@@ -82,8 +88,6 @@ interface AnaliticoLiderProps {
   onVerAcordo: (acordoId: string, codigo?: string) => void;
   onRefetch: () => void;
 }
-
-interface FiltroData { inicio: string; fim: string }
 
 export function AnaliticoLider({
   empresaId, mes, setorId, podeVerTodosSetores = true,
@@ -242,20 +246,15 @@ export function AnaliticoLider({
   const restritoAoSetor = !podeVerTodosSetores && !!setorId;
 
   /** Todos os perfis (ativos) do setor em foco — para limpar/remover escopado. */
-  const perfilIdsDoSetor = useMemo(() => {
-    if (!setorId) return [];
-    return Object.entries(operadorEquipeMap)
-      .filter(([, info]) => info.setor_id === setorId)
-      .map(([id]) => id);
-  }, [operadorEquipeMap, setorId]);
+  const idsDoSetor = useMemo(
+    () => perfilIdsDoSetor(operadorEquipeMap, setorId),
+    [operadorEquipeMap, setorId],
+  );
 
-  // Órfãos não têm operador: pertencem ao setor da importação (setor_id da
-  // linha; fallback: setor de quem importou). Restrito ao setor → só os dele.
-  const orfaosVisiveisSetor = useMemo(() => {
-    if (!restritoAoSetor) return orfaos;
-    return orfaos.filter(o =>
-      (o.setor_id ?? operadorEquipeMap[o.importado_por_id ?? '']?.setor_id) === setorId);
-  }, [orfaos, restritoAoSetor, operadorEquipeMap, setorId]);
+  const orfaosVisiveisSetor = useMemo(
+    () => filtrarOrfaosDoSetor(orfaos, restritoAoSetor, operadorEquipeMap, setorId),
+    [orfaos, restritoAoSetor, operadorEquipeMap, setorId],
+  );
 
   // ── Filtro de equipe ──────────────────────────────────────────────────────
   function mudarFiltroEquipe(equipeId: string | null) {
@@ -281,14 +280,7 @@ export function AnaliticoLider({
   }
 
   function getLinhasOp(opId: string): AnaliticoRecebimento[] {
-    const linhas = linhasMap.get(opId) ?? [];
-    const f = filtrosDatas.get(opId);
-    if (!f || (!f.inicio && !f.fim)) return linhas;
-    return linhas.filter(l => {
-      if (f.inicio && l.data_pagamento < f.inicio) return false;
-      if (f.fim   && l.data_pagamento > f.fim)     return false;
-      return true;
-    });
+    return filtrarLinhasPorData(linhasMap.get(opId) ?? [], filtrosDatas.get(opId));
   }
 
   function setFiltroData(opId: string, campo: 'inicio' | 'fim', valor: string) {
@@ -321,7 +313,7 @@ export function AnaliticoLider({
     setRemovendoTodos(true);
     // Restrito ao setor: remove só os órfãos importados por gente do setor
     const { error } = await removerOrfaosDoMes(
-      empresaId, mes, restritoAoSetor ? perfilIdsDoSetor : undefined);
+      empresaId, mes, restritoAoSetor ? idsDoSetor : undefined);
     if (error) toast.error(`Erro ao remover: ${error}`);
     else {
       toast.success('Todos os registros sem operador foram removidos.');
@@ -336,7 +328,7 @@ export function AnaliticoLider({
     setLimpando(true);
     // Líder/gerência limpam SÓ o próprio setor; diretoria/admin, a empresa toda
     const { error } = restritoAoSetor
-      ? await limparDadosDoMesSetor(empresaId, mes, perfilIdsDoSetor)
+      ? await limparDadosDoMesSetor(empresaId, mes, idsDoSetor)
       : await limparDadosDoMes(empresaId, mes);
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
@@ -370,126 +362,29 @@ export function AnaliticoLider({
     }
   }
 
-  // "Este operador conta neste setor?" — inclui os clonados de outro setor.
-  // Fonte única compartilhada com o card de setor de Desempenho Equipes.
-  const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
-  const contaNoSetor = useCallback(
-    (operadorId: string, sid: string) =>
-      setoresDoOperador(operadorId, operadorEquipeMap, equipesExtras, setorDaEquipe).has(sid),
-    [operadorEquipeMap, equipesExtras, setorDaEquipe],
+  // Os vínculos que respondem "este operador conta neste setor/equipe?" —
+  // inclui os clonados de outro setor. Ver `agregacaoLider`.
+  const vinculos: VinculosOperador = useMemo(() => ({
+    operadorEquipeMap,
+    equipesExtras,
+    setorDaEquipe: mapaSetorDaEquipe(equipes),
+  }), [operadorEquipeMap, equipesExtras, equipes]);
+
+  const resumosFiltrados = useMemo(
+    () => filtrarResumos(resumos, { setorId, equipeId: filtroEquipeId }, vinculos),
+    [resumos, setorId, filtroEquipeId, vinculos],
   );
 
-  // ── Resumos filtrados (ranking / métricas por setor ou equipe) ────────────
-  const resumosFiltrados = useMemo(() => {
-    let base = resumos;
-    if (setorId) {
-      // Inclui os clonados de outro setor — mesma regra do card de setor em
-      // Desempenho Equipes. Sem isso o "Total recebido" ficava menor que ele.
-      base = base.filter(r => contaNoSetor(r.operador_id, setorId));
-    }
-    if (filtroEquipeId) {
-      // Clones contam na equipe clonada também (equipe_operadores_clones)
-      base = base.filter(r =>
-        operadorEquipeMap[r.operador_id]?.equipe_id === filtroEquipeId
-        || (equipesExtras[r.operador_id] ?? []).includes(filtroEquipeId));
-    }
-    return base;
-  }, [resumos, contaNoSetor, operadorEquipeMap, equipesExtras, setorId, filtroEquipeId]);
+  const resumosPorEquipe = useMemo(
+    () => agruparPorEquipe(resumos, equipes, { setorId }, vinculos),
+    [resumos, equipes, setorId, vinculos],
+  );
 
-  // ── Agrupamento por equipe (Por operador) ─────────────────────────────────
-  // Um operador CLONADO aparece na(s) equipe(s) em que foi clonado, não só na
-  // própria. Com filtro de setor, cada operador só entra nas equipes daquele
-  // setor — assim um clone do Play 5 no Digital aparece sob "Digital", não sob
-  // "Play 5" (a equipe de origem, de outro setor).
-  const resumosPorEquipe = useMemo(() => {
-    const eqInfo = new Map(equipes.map(e => [e.id, e] as const));  // id → {nome, setor_id}
-    const baseResumos = setorId
-      ? resumos.filter(r => contaNoSetor(r.operador_id, setorId))
-      : resumos;
-    const groups = new Map<string, {
-      equipeId: string | null;
-      equipeNome: string;
-      items: ResumoOperadorAnalitico[];
-    }>();
-    const addTo = (key: string, equipeId: string | null, nome: string, r: ResumoOperadorAnalitico) => {
-      let g = groups.get(key);
-      if (!g) { g = { equipeId, equipeNome: nome, items: [] }; groups.set(key, g); }
-      if (!g.items.some(x => x.operador_id === r.operador_id)) g.items.push(r);
-    };
-    for (const r of baseResumos) {
-      const info = operadorEquipeMap[r.operador_id];
-      // Equipes candidatas: a própria + as clonadas.
-      const candidatas = new Set<string>();
-      if (info?.equipe_id) candidatas.add(info.equipe_id);
-      for (const ex of equipesExtras[r.operador_id] ?? []) candidatas.add(ex);
-
-      let entrouEmAlguma = false;
-      for (const eqId of candidatas) {
-        const e = eqInfo.get(eqId);
-        const eqSetor = e?.setor_id ?? (eqId === info?.equipe_id ? info?.setor_id ?? null : null);
-        // Com filtro de setor, só as equipes daquele setor entram.
-        if (setorId && eqSetor !== setorId) continue;
-        const nome = e?.nome ?? (eqId === info?.equipe_id ? info?.equipe_nome ?? 'Sem equipe' : 'Equipe');
-        addTo(eqId, eqId, nome, r);
-        entrouEmAlguma = true;
-      }
-      // Operador sem nenhuma equipe visível: cai em "Sem equipe" (respeita setor).
-      if (!entrouEmAlguma && (!setorId || info?.setor_id === setorId)) {
-        addTo('__sem__', null, info?.equipe_nome ?? 'Sem equipe', r);
-      }
-    }
-    return Array.from(groups.values()).filter(g => g.items.length > 0);
-  }, [resumos, contaNoSetor, operadorEquipeMap, equipesExtras, equipes, setorId]);
-
-  // ── Métricas dos cards ────────────────────────────────────────────────────
-  // Tudo vem exclusivamente do relatório ANALÍTICO: sem filtro usa o snapshot
-  // salvo na importação; com filtro de setor/equipe, soma os resumos filtrados.
-  const metricas = useMemo(() => {
-    if (!setorId && !filtroEquipeId) {
-      // Usa snapshot — reflete totais do relatório importado, sem ser afetado por deleções
-      if (!snapshot) return null;
-      return {
-        totalRecebido:   snapshot.total_recebido,
-        totalHo:         snapshot.total_ho,
-        totalOperadores: snapshot.total_operadores,
-        totalPagamentos: snapshot.total_pagamentos,
-        periodoInicio:   snapshot.periodo_inicio,
-        periodoFim:      snapshot.periodo_fim,
-      };
-    }
-    // Filtro de SETOR (sem equipe): o total do setor vem do RELATÓRIO (soma
-    // carimbada por setor_id) — clones não afetam. `setorSomaPorUsuarios` diz
-    // quando NÃO é assim (setor alternativo, PaguePlay); é a mesma função que o
-    // dashboard e o Painel Líder consultam, e antes esta tela era a única que
-    // usava o carimbo também na PaguePlay.
-    const somaPorUsuarios = setorId
-      ? setorSomaPorUsuarios({ isPaguePlay: isPP, alternativo: setoresAlternativos.has(setorId) })
-      : false;
-    if (setorId && !filtroEquipeId && !somaPorUsuarios) {
-      const tot = totalPorSetor[setorId];
-      return {
-        totalRecebido:   tot?.total ?? 0,
-        totalHo:         tot?.ho ?? 0,
-        totalOperadores: resumosFiltrados.length,
-        totalPagamentos: tot?.qtd ?? 0,
-        periodoInicio:   snapshot?.periodo_inicio ?? null,
-        periodoFim:      snapshot?.periodo_fim ?? null,
-      };
-    }
-    // Setor alternativo ou filtro de equipe: soma dos resumos (membros + clones).
-    // Com filtro de SETOR alternativo, os órfãos daquele setor entram no total.
-    const orfaosDoSetor = setorId && !filtroEquipeId ? orfaosPorSetor[setorId] : undefined;
-    return {
-      totalRecebido:   resumosFiltrados.reduce((s, r) => s + r.total_recebido, 0)
-                       + (orfaosDoSetor?.total ?? 0),
-      totalHo:         resumosFiltrados.reduce((s, r) => s + r.total_ho, 0),
-      totalOperadores: resumosFiltrados.length,
-      totalPagamentos: resumosFiltrados.reduce((s, r) => s + r.total_pagamentos, 0)
-                       + (orfaosDoSetor?.qtd ?? 0),
-      periodoInicio:   snapshot?.periodo_inicio ?? null,
-      periodoFim:      snapshot?.periodo_fim ?? null,
-    };
-  }, [setorId, filtroEquipeId, snapshot, resumosFiltrados, orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP]);
+  const metricas = useMemo(() => calcularMetricas({
+    setorId, equipeId: filtroEquipeId, snapshot, resumosFiltrados,
+    orfaosPorSetor, totalPorSetor, setoresAlternativos, isPaguePlay: isPP,
+  }), [setorId, filtroEquipeId, snapshot, resumosFiltrados,
+       orfaosPorSetor, totalPorSetor, setoresAlternativos, isPP]);
 
   // ── Helpers destaques ──────────────────────────────────────────────────────
   const [mesAnoStr, mesNumStr] = mes.split('-');
@@ -1090,40 +985,4 @@ export function AnaliticoLider({
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
     </div>
   );
-}
-
-// ── Copiar lista (formato do protótipo HTML) ──────────────────────────────────
-
-/** Formata 'yyyy-MM-dd' → 'dd/mm/yyyy'. */
-function fmtDataAnalitico(iso: string | null): string {
-  if (!iso) return '—';
-  const [y, m, d] = iso.split('-');
-  return `${d}/${m}/${y}`;
-}
-
-/**
- * Monta o texto de "Copiar lista" dos acordos analíticos de um operador,
- * no mesmo formato do protótipo HTML:
- *   *Nome* — acordos pagos (período)
- *   CÓDIGO - Forma - Valor recebido - Total HO - Data
- *   Total: R$ x | HO: R$ y
- */
-function montarTextoListaAnalitico(nome: string, linhas: AnaliticoRecebimento[]): string {
-  const totRec = linhas.reduce((s, l) => s + l.valor_recebido, 0);
-  const totHo  = linhas.reduce((s, l) => s + l.total_ho, 0);
-
-  const datas = linhas.map(l => l.data_pagamento).filter(Boolean).sort();
-  const ini = datas[0] ?? null;
-  const fim = datas[datas.length - 1] ?? null;
-  const periodo = !ini ? '' : (ini === fim ? fmtDataAnalitico(ini) : `${fmtDataAnalitico(ini)} a ${fmtDataAnalitico(fim)}`);
-
-  const formaLabel = (f: AnaliticoRecebimento['forma_pagamento']) =>
-    f === 'cartao' ? 'Cartão' : 'Boleto/Pix';
-
-  const head = `*${nome}* — acordos pagos${periodo ? ` (${periodo})` : ''}`;
-  const lines = linhas.map(l =>
-    `${l.codigo} - ${formaLabel(l.forma_pagamento)} - ${formatBRL(l.valor_recebido)} - ${formatBRL(l.total_ho)} - ${fmtDataAnalitico(l.data_pagamento)}`,
-  );
-
-  return [head, '', ...lines, '', `Total: ${formatBRL(totRec)} | HO: ${formatBRL(totHo)}`].join('\n');
 }

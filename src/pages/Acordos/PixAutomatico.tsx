@@ -44,7 +44,13 @@ import type { MetasConfigMes } from '@/lib/supabase';
 import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
-import { diasUteisDoMes, diasUteisDecorridos, quartilAtual } from '@/lib/diasUteis';
+import { mesAtual } from '@/lib/mesReferencia';
+// As contas desta tela vivem em `pixAutomaticoView`: são puras e têm teste
+// próprio, o que os `useMemo` que elas substituíram nunca tiveram.
+import {
+  mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
+  filtrarItensPix, totaisPorStatus, calcularBonusMeta, type OperadorInfo,
+} from './pixAutomaticoView';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import {
@@ -64,8 +70,6 @@ const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
 function fmtPct(pct: number): string {
   return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`;
 }
-
-interface OperadorInfo { id: string; nome: string; equipe_id: string | null; setor_id: string | null; perfil: string; }
 
 /** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
 const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
@@ -212,57 +216,31 @@ export function PixAutomatico() {
   }, [empresa?.id, perfil?.id]);
 
   // ── Derivados ───────────────────────────────────────────────────────────
-  const operadorEquipe = useMemo(() => {
-    const m: Record<string, string | null> = {};
-    operadores.forEach(o => { m[o.id] = o.equipe_id; });
-    return m;
-  }, [operadores]);
-
-  const operadorSetor = useMemo(() => {
-    const m: Record<string, string | null> = {};
-    operadores.forEach(o => { m[o.id] = o.setor_id; });
-    return m;
-  }, [operadores]);
+  const operadorEquipe = useMemo(() => mapaOperadorEquipe(operadores), [operadores]);
+  const operadorSetor  = useMemo(() => mapaOperadorSetor(operadores),  [operadores]);
 
   // Filtro de operador só lista OPERADORES (sem líder/gerência/diretoria etc.)
-  const operadoresFiltro = useMemo(
-    () => operadores.filter(o => String(o.perfil ?? '').toLowerCase() === 'operador'),
-    [operadores],
-  );
+  const operadoresFiltro = useMemo(() => apenasOperadores(operadores), [operadores]);
 
   // Sugestões do vínculo (líder+ registra em nome de um operador)
-  const sugestoesVinculo = useMemo(() => {
-    const b = vinculoBusca.trim().toLowerCase();
-    if (!b) return [];
-    return operadoresFiltro
-      .filter(o => o.nome.toLowerCase().includes(b))
-      .slice(0, 8);
-  }, [operadoresFiltro, vinculoBusca]);
+  const sugestoesVinculo = useMemo(
+    () => sugerirOperadores(operadoresFiltro, vinculoBusca),
+    [operadoresFiltro, vinculoBusca],
+  );
 
-  const visiveis = useMemo(() => {
-    const b = busca.trim().toLowerCase();
-    return itens.filter(i => {
-      if (filtroStatus !== 'todos' && i.status !== filtroStatus) return false;
-      if (filtroOperador && i.operador_id !== filtroOperador) return false;
-      if (filtroEquipe && operadorEquipe[i.operador_id] !== filtroEquipe) return false;
-      if (filtroSetor && (i.setor_id ?? operadorSetor[i.operador_id] ?? null) !== filtroSetor) return false;
-      if (!b) return true;
-      return i.nr_cliente.toLowerCase().includes(b) || (i.operador_nome ?? '').toLowerCase().includes(b);
-    });
-  }, [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor, operadorEquipe, operadorSetor]);
+  const visiveis = useMemo(
+    () => filtrarItensPix(
+      itens,
+      { busca, status: filtroStatus, operadorId: filtroOperador,
+        equipeId: filtroEquipe, setorId: filtroSetor },
+      { porEquipe: operadorEquipe, porSetor: operadorSetor },
+    ),
+    [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
+     operadorEquipe, operadorSetor],
+  );
 
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)
-  const totais = useMemo(() => {
-    const soma = (status: PixAutoStatus) => {
-      const doStatus = visiveis.filter(i => i.status === status);
-      return {
-        qtd:      doStatus.length,
-        valor:    doStatus.reduce((acc, i) => acc + Number(i.valor), 0),
-        comissao: doStatus.reduce((acc, i) => acc + comissaoDe(i, pctPorSetor), 0),
-      };
-    };
-    return { pendente: soma('pendente'), aprovado: soma('aprovado'), desaprovado: soma('desaprovado') };
-  }, [visiveis, pctPorSetor]);
+  const totais = useMemo(() => totaisPorStatus(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
 
   const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
 
@@ -272,27 +250,11 @@ export function PixAutomatico() {
   //   • meta batida → valor garantido (verde)
   //   • 1º quartil  → projetando a meta, mensagem de incentivo (azul)
   //   • demais      → informativo (violeta)
-  const bonusMeta = useMemo(() => {
-    if (!perfil?.id || metaValor == null || metaValor <= 0 || !configMes || recebidoMes == null) return null;
-    const agora = new Date();
-    const ano = agora.getFullYear();
-    const mes = agora.getMonth() + 1;
-    const prefixoMes = `${ano}-${String(mes).padStart(2, '0')}`;
-    const acumulado = itens
-      .filter(i => i.operador_id === perfil.id && i.status === 'aprovado' && i.criado_em.startsWith(prefixoMes))
-      .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0);
-    if (acumulado <= 0) return null;
-
-    const metaBatida = recebidoMes >= metaValor;
-    const totalUteis = diasUteisDoMes(ano, mes, configMes.feriados);
-    const decorridos = totalUteis === 0 ? 0 : diasUteisDecorridos(
-      ano, mes, configMes.feriados, getTodayISO(), undefined, configMes.contar_dia_atual === true,
-    );
-    const esperado  = totalUteis === 0 ? 0 : (metaValor / totalUteis) * Math.max(decorridos, 1);
-    const projecao  = esperado > 0 ? Math.min(Math.round((recebidoMes / esperado) * 100), 999) : 0;
-    const quartil   = quartilAtual(projecao, configMes.quartis);
-    return { acumulado, metaBatida, quartil: quartil?.quartil ?? null, projecao };
-  }, [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes]);
+  const bonusMeta = useMemo(() => calcularBonusMeta({
+    operadorId: perfil?.id, itens, pctPorSetor, metaValor, recebidoMes, configMes,
+    // Mês e "hoje" de São Paulo, não do relógio de quem abre a tela.
+    mes: mesAtual(), hojeISO: getTodayISO(),
+  }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
