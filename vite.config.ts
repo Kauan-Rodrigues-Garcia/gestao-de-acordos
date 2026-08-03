@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react-swc';
 import tailwindcss from '@tailwindcss/vite';
 import { componentTagger } from 'lovable-tagger';
 import { visualizer } from 'rollup-plugin-visualizer';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 import path from 'path';
 
 import { cdnPrefixImages } from './vite-plugins/cdn-prefix-images';
@@ -20,6 +21,24 @@ const BUILD_VERSION = process.env.NODE_ENV === 'production' ? String(Date.now())
 // como reserva para pelo menos separar um deploy do outro.
 const COMMIT = (process.env.VERCEL_GIT_COMMIT_SHA ?? '').slice(0, 7);
 const APP_RELEASE = COMMIT || BUILD_VERSION;
+
+// ─── Source maps para o Sentry ───────────────────────────────────────────────
+//
+// Sem eles o relatório de erro chega minificado — "t.n is not a function" na
+// linha 1 de um bundle de 500 KB. Dá para saber que quebrou, não onde.
+//
+// O envio é OPT-IN: só acontece quando as três variáveis existem no ambiente de
+// build. Sem elas, nada muda — nem plugin, nem source map gerado. É de
+// propósito: o build local e o de quem clonar o repositório não podem depender
+// de um token que só a Vercel tem.
+//
+// `SENTRY_AUTH_TOKEN` é SEGREDO de verdade, ao contrário da DSN: ele dá acesso
+// de escrita ao projeto no Sentry. Nunca com prefixo VITE_ — o que tem VITE_ é
+// embutido no bundle e chega ao navegador.
+const SENTRY_TOKEN   = process.env.SENTRY_AUTH_TOKEN;
+const SENTRY_ORG     = process.env.SENTRY_ORG;
+const SENTRY_PROJECT = process.env.SENTRY_PROJECT;
+const ENVIAR_SOURCEMAPS = Boolean(SENTRY_TOKEN && SENTRY_ORG && SENTRY_PROJECT);
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -50,6 +69,29 @@ export default defineConfig(({ mode }) => {
       } satisfies Plugin,
       // Ativo apenas em `npm run analyze` (mode=analyze): gera stats.html com mapa do bundle.
       mode === 'analyze' && visualizer({ open: true, gzipSize: true, brotliSize: true, filename: 'stats.html' }),
+      // Sobe os source maps para o Sentry e APAGA os .map do dist em seguida —
+      // ver o bloco de comentário lá em cima. Precisa ser o último plugin: ele
+      // trabalha sobre os arquivos já emitidos.
+      ENVIAR_SOURCEMAPS && sentryVitePlugin({
+        authToken: SENTRY_TOKEN,
+        org:       SENTRY_ORG,
+        project:   SENTRY_PROJECT,
+        // Tem que bater com o `release` do `Sentry.init` (ver
+        // `src/lib/observabilidade.ts`), senão o Sentry recebe os mapas mas não
+        // os associa a erro nenhum e a pilha continua minificada.
+        release: { name: APP_RELEASE },
+        sourcemaps: {
+          // Publicar o .map deixaria o código-fonte inteiro baixável do site.
+          // Ele sobe para o Sentry e some do dist no mesmo passo.
+          //
+          // Verificado com um token inválido de propósito (2026-08-03): o
+          // upload falha, o plugin registra o erro, o BUILD TERMINA COM
+          // SUCESSO e o dist fica sem nenhum .map. Ou seja, token errado ou
+          // vencido custa a pilha legível daquele deploy — não derruba o
+          // deploy nem vaza o código-fonte.
+          filesToDeleteAfterUpload: ['./dist/**/*.map'],
+        },
+      }),
     ].filter(Boolean),
     resolve: {
       alias: {
@@ -78,6 +120,10 @@ export default defineConfig(({ mode }) => {
       __APP_RELEASE__: JSON.stringify(APP_RELEASE),
     },
     build: {
+      // Só gera .map quando eles vão de fato subir para o Sentry — e mesmo
+      // então o plugin os apaga do dist depois do upload. Sem o token, o build
+      // continua exatamente como era.
+      sourcemap: ENVIAR_SOURCEMAPS,
       // Sobe o aviso de chunk-size só para bibliotecas realmente pesadas
       // (recharts, xlsx) que ficam em chunks vendor separados.
       chunkSizeWarningLimit: 600,
