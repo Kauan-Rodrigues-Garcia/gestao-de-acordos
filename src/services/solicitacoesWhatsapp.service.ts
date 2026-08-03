@@ -117,6 +117,13 @@ export interface MensagemSolicitacao {
   lida_em:        string | null;
   criado_em:      string;
   autor?:         PessoaResumo | null;
+  // ── CPF no chat (migration 20260803d) ────────────────────────────────────
+  /** Marcado por trigger na escrita: o conteúdo continha CPF. */
+  tem_cpf?:       boolean | null;
+  /** Quando o texto será sobrescrito no banco (12 h após o envio). */
+  expurgar_em?:   string | null;
+  /** Preenchido quando já foi sobrescrito — o original não existe mais. */
+  expurgado_em?:  string | null;
 }
 
 export interface ClienteEncontrado {

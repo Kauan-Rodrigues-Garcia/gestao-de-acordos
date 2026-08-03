@@ -8,9 +8,9 @@
  * Traz confirmação de leitura (✓✓), animação de "digitando" e o cabeçalho com
  * primeiro nome + foto de quem está do outro lado.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Send, X, Check, CheckCheck, MessageSquare, Loader2, Lock, Eye } from 'lucide-react';
+import { Send, X, Check, CheckCheck, MessageSquare, Loader2, Lock, Eye, ShieldAlert } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -21,6 +21,9 @@ import type { MensagemSolicitacao, PessoaResumo } from '@/services/solicitacoesW
 import { primeiroNome, iniciais } from './formatacao';
 import { estaNoFim, viewportDaArea, rolarAoFim, deveRolar } from './scroll-conversa';
 import { foiLidaPorOutro, type Leitura } from './leitura';
+import {
+  estadoCpfDaMensagem, avisoAoDigitar, type EstadoCpfMensagem,
+} from '@/lib/cpfChat';
 
 function horaCurta(iso: string): string {
   try {
@@ -144,6 +147,19 @@ export function ChatSolicitacao({
     rolarAoFim(viewport, primeiraCarga ? 'auto' : 'smooth');
   }, [mensagens, loading, usuarioId]);
 
+  // Estado de CPF de cada mensagem, calculado uma vez por lista. `tem_cpf` vem
+  // do banco (trigger da migration 20260803d); a detecção local cobre o
+  // intervalo entre enviar e o servidor responder.
+  const cpf = useMemo(() => {
+    const agora = new Date();
+    const mapa: Record<string, EstadoCpfMensagem> = {};
+    for (const m of mensagens) mapa[m.id] = estadoCpfDaMensagem(m, agora);
+    return mapa;
+  }, [mensagens]);
+
+  // Aviso enquanto digita — a chance mais barata de o CPF nem chegar ao banco.
+  const avisoDigitando = useMemo(() => avisoAoDigitar(texto), [texto]);
+
   async function enviar() {
     const conteudo = texto.trim();
     if (!conteudo || enviando) return;
@@ -233,6 +249,7 @@ export function ChatSolicitacao({
 
           {mensagens.map((m, i) => {
             const minha    = m.autor_id === usuarioId;
+            const estadoCpf = cpf[m.id];
             const anterior = mensagens[i - 1];
             const novoDia  = !anterior || diaLegivel(anterior.criado_em) !== diaLegivel(m.criado_em);
 
@@ -266,13 +283,26 @@ export function ChatSolicitacao({
                     minha
                       ? 'bg-primary text-primary-foreground rounded-br-sm'
                       : 'bg-muted text-foreground rounded-bl-sm',
+                    // Mensagem com CPF sai da cor normal: quem passa o olho na
+                    // conversa vê logo qual tem prazo para sumir.
+                    estadoCpf.estado !== 'limpa'
+                      && 'bg-amber-500/10 text-foreground ring-1 ring-amber-500/40',
                   )}>
                     {!minha && (
                       <p className="text-[10px] font-semibold opacity-70 mb-0.5">
                         {primeiroNome(m.autor?.nome)}
                       </p>
                     )}
-                    <p className="whitespace-pre-wrap break-words">{m.conteudo}</p>
+                    <p className={cn(
+                      'whitespace-pre-wrap break-words',
+                      estadoCpf.estado === 'expurgada' && 'italic opacity-70',
+                    )}>{m.conteudo}</p>
+                    {estadoCpf.estado !== 'limpa' && (
+                      <p className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-tight text-amber-700 dark:text-amber-400">
+                        <ShieldAlert className="w-3 h-3 shrink-0 mt-px" />
+                        <span>{estadoCpf.aviso}</span>
+                      </p>
+                    )}
                     <div className={cn(
                       'flex items-center gap-1 mt-1 text-[10px]',
                       minha ? 'justify-end opacity-80' : 'opacity-60',
@@ -312,7 +342,16 @@ export function ChatSolicitacao({
           </p>
         </div>
       ) : (
-        <div className="flex items-end gap-2 p-2.5 border-t border-border bg-muted/20 shrink-0">
+        <div className="border-t border-border bg-muted/20 shrink-0">
+          {/* Aviso antes de enviar. Não bloqueia: bloquear empurraria o CPF
+              para fora do sistema, onde não há prazo nenhum. */}
+          {avisoDigitando && (
+            <p className="flex items-start gap-1.5 px-3 pt-2 text-[11px] leading-tight text-amber-700 dark:text-amber-400">
+              <ShieldAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
+              <span>{avisoDigitando}</span>
+            </p>
+          )}
+        <div className="flex items-end gap-2 p-2.5">
           <Textarea
             value={texto}
             onChange={e => { setTexto(e.target.value); onDigitando(); }}
@@ -335,6 +374,7 @@ export function ChatSolicitacao({
               ? <Loader2 className="w-4 h-4 animate-spin" />
               : <Send className="w-4 h-4" />}
           </Button>
+        </div>
         </div>
       )}
     </div>
