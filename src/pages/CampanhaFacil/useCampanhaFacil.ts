@@ -27,7 +27,14 @@ const PAGE_SIZE = 25;
 
 export interface ImportProgress { value: number; label: string; detail: string }
 export type StatusFilter = 'all' | 'Revisar';
-export type WorkspaceState = 'ready' | 'review' | 'blocked';
+
+/**
+ * Como está a campanha carregada. **Nenhum destes estados impede exportar** —
+ * eles só graduam o aviso. `critical` são as pendências que estragam o texto da
+ * mensagem (valor que vira R$ 0); `review` são as que não estragam, como
+ * telefone ausente.
+ */
+export type WorkspaceState = 'ready' | 'review' | 'critical';
 
 function normalizeDiscountValue(value: number | string): number {
   const n = Number(value);
@@ -241,12 +248,15 @@ export function useCampanhaFacil() {
   const stats = useMemo(() => {
     const ready = campaign.filter((i) => i.status === 'Pronto').length;
     const review = campaign.length - ready;
-    const blocking = campaign.filter((i) => i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0).length;
-    return { total: campaign.length, ready, review, blocking, senderCount: sendersList.length };
+    // `critical` conta o que o core marcou como pendência grave. É contagem para
+    // avisar, não trava: o nome antigo (`blocking`) descrevia um bloqueio que
+    // não existe mais.
+    const critical = campaign.filter((i) => i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0).length;
+    return { total: campaign.length, ready, review, critical, senderCount: sendersList.length };
   }, [campaign, sendersList]);
 
   const workspaceState: WorkspaceState =
-    stats.blocking > 0 ? 'blocked'
+    stats.critical > 0 ? 'critical'
     : (stats.review > 0 || stats.senderCount === 0) ? 'review'
     : 'ready';
 
@@ -488,26 +498,42 @@ export function useCampanhaFacil() {
   }, []);
 
   // ── Exportar ───────────────────────────────────────────────────────────────
+  /**
+   * Pendência de dado NÃO impede exportar.
+   *
+   * Até 04/08/2026 qualquer registro com pendência grave travava o botão da
+   * campanha inteira. Na operação isso virou parede por causa de cliente sem
+   * telefone cadastrado — uma linha que não dá para enviar, mas que não estraga
+   * as outras dez mil. O líder ficava sem a planilha por um dado que ele não
+   * tem como consertar dali.
+   *
+   * Quem tem pendência sai marcado: a planilha ganha as colunas STATUS e
+   * PENDÊNCIAS (ver `xlsx-export.js`), então a linha problemática chega
+   * identificada em vez de bloquear o arquivo. O único impedimento que sobra é
+   * não haver quem encaminhe — esse é campo do próprio formulário, e sem ele a
+   * coluna "ENCAMINHADA POR" sairia vazia na campanha toda.
+   */
   const exportCampaign = useCallback((rawFileName: string): boolean => {
     if (!campaign.length) return false;
     if (sendersList.length === 0) { toast.error('Informe quem encaminhará a campanha antes de exportar.'); return false; }
-    if (campaign.some((i) => i.hasBlockingIssues || (i.blockingIssues?.length ?? 0) > 0)) {
-      toast.error(relatorioSemValores ? 'Corrija as pendências do relatório 245 antes de exportar.' : 'Corrija os registros com valores inválidos antes de exportar.');
-      return false;
-    }
     const nome = normalizeExportFileName(rawFileName);
+    const pendentes = campaign.filter((i) => i.status !== 'Pronto').length;
     try {
       const workbook = CampaignXlsx.createWorkbook(campaign);
       if (!CampaignXlsx.isValidWorkbook(workbook)) throw new Error('O arquivo Excel não foi gerado corretamente.');
       downloadBlob(new Blob([workbook as BlobPart], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), nome);
-      toast.success(`Campanha salva como ${nome}.`);
+      toast.success(
+        pendentes > 0
+          ? `Campanha salva como ${nome}. ${pendentes.toLocaleString('pt-BR')} ${pendentes === 1 ? 'registro saiu marcado' : 'registros saíram marcados'} como “Revisar”, com o motivo na coluna PENDÊNCIAS.`
+          : `Campanha salva como ${nome}.`,
+      );
       return true;
     } catch (error) {
       console.error(error);
       toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a campanha.');
       return false;
     }
-  }, [campaign, sendersList, relatorioSemValores]);
+  }, [campaign, sendersList]);
 
   const defaultExportFileName = useCallback(() => {
     const date = new Date().toISOString().slice(0, 10);

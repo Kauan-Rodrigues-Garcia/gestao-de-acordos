@@ -38,7 +38,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { CampaignCore, type CampaignItem } from './lib/campaign-core';
-import { useCampanhaFacil } from './useCampanhaFacil';
+import { useCampanhaFacil, type WorkspaceState } from './useCampanhaFacil';
 
 const VARIABLE_LABELS: [string, string][] = [
   ['primeiro_nome', 'Primeiro nome'], ['nome', 'Nome completo'], ['cpf', 'CPF'],
@@ -418,8 +418,8 @@ export default function CampanhaFacil() {
                 <div>
                   <div className="flex items-center gap-2">
                     <h2 className="text-lg font-bold">
-                      {cf.workspaceState === 'blocked' ? 'Corrija os dados da campanha'
-                        : cf.workspaceState === 'review' ? 'Revisão necessária'
+                      {cf.workspaceState === 'critical' ? 'Pendências graves na campanha'
+                        : cf.workspaceState === 'review' ? 'Revisão recomendada'
                         : 'Pronta para exportar'}
                     </h2>
                     <StateBadge state={cf.workspaceState} />
@@ -428,19 +428,24 @@ export default function CampanhaFacil() {
                     {cf.stats.total.toLocaleString('pt-BR')} mensagens com o modelo “{cf.selectedTemplate.name}”.
                   </p>
                 </div>
-                <Button className="gap-2" onClick={openExport} disabled={cf.stats.blocking > 0}>
+                {/* Sem `disabled` por pendência: a exportação segue liberada e as
+                    linhas problemáticas saem marcadas na planilha. */}
+                <Button className="gap-2" onClick={openExport}>
                   <Download className="h-4 w-4" /> Exportar Excel
                 </Button>
               </div>
 
               {/* Banner de validação */}
-              {(cf.stats.blocking > 0 || cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
+              {(cf.stats.critical > 0 || cf.sendersList.length === 0 || (cf.parsed.missingHeaders?.length ?? 0) > 0) && (
                 <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
                   <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-500" />
                   <div>
-                    {cf.stats.blocking > 0 ? (
-                      <><strong>{cf.stats.blocking.toLocaleString('pt-BR')} registros impedem a exportação.</strong>{' '}
-                        <span className="text-muted-foreground">Corrija as pendências antes de salvar a campanha.</span></>
+                    {cf.stats.critical > 0 ? (
+                      <><strong>{cf.stats.critical.toLocaleString('pt-BR')} registros com pendência grave.</strong>{' '}
+                        <span className="text-muted-foreground">
+                          A exportação continua liberada — essas linhas saem marcadas como “Revisar”, com o motivo na
+                          coluna PENDÊNCIAS.
+                        </span></>
                     ) : cf.sendersList.length === 0 ? (
                       <><strong>Informe quem encaminhará a campanha.</strong>{' '}
                         <span className="text-muted-foreground">O mailing não fornece esses nomes.</span></>
@@ -755,8 +760,8 @@ function StepTitle({ n, title, subtitle }: { n: number; title: string; subtitle:
   );
 }
 
-function StateBadge({ state }: { state: 'ready' | 'review' | 'blocked' }) {
-  if (state === 'blocked') return <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Exportação bloqueada</Badge>;
+function StateBadge({ state }: { state: WorkspaceState }) {
+  if (state === 'critical') return <Badge className="bg-destructive/15 text-destructive hover:bg-destructive/15">Pendência grave</Badge>;
   if (state === 'review') return <Badge className="bg-amber-500/15 text-amber-600 hover:bg-amber-500/15 dark:text-amber-400">Atenção</Badge>;
   return <Badge className="bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/15 dark:text-emerald-400">Validada</Badge>;
 }
