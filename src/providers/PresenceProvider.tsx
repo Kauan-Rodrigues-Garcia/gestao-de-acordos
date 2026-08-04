@@ -37,6 +37,20 @@
  * heartbeat de transporte, que não é evento de presence. Quem cobre queda de
  * rede e máquina suspensa é a reconexão (CLOSED/CHANNEL_ERROR + visibilitychange),
  * logo abaixo. O track só é repetido quando FALHA — ver `doTrack`.
+ *
+ * ── Por que a reconexão é ESPALHADA no tempo ─────────────────────────────────
+ * O mesmo erro voltou ao log em 04/08/2026, em ondas: vários estouros por minuto
+ * na volta do intervalo, quando a operação inteira reabre o notebook junto.
+ *
+ * O canal de presence é UM só por empresa, então todo mundo divide o mesmo
+ * orçamento de eventos por segundo. Quando ele satura, os clientes caem
+ * JUNTOS — e o backoff, sendo idêntico e determinístico para todos (3 s, 6 s,
+ * 12 s…), fazia todos voltarem juntos e saturarem de novo. Uma manada
+ * sincronizada, batendo na mesma porta em uníssono.
+ *
+ * Daí o jitter em `esperaComJitter`: mesma ordem de grandeza de espera, mas
+ * cada aba sorteia a sua e a onda vira chuvisco. Pelo mesmo motivo o retorno à
+ * aba não reconecta mais no mesmo milissegundo para todos.
  */
 import {
   createContext, useContext, useEffect, useRef,
@@ -80,6 +94,31 @@ const RETRY_TRACK_MS = 5_000;
 
 /** Teto de tentativas do track. Depois disso, a reconexão do canal reassume. */
 const MAX_TENTATIVAS_TRACK = 4;
+
+const BACKOFF_BASE_MS = 3_000;
+const BACKOFF_MAX_MS  = 30_000;
+
+/**
+ * Espalhamento máximo ao voltar para a aba ou quando a rede volta.
+ *
+ * Curto de propósito: é a hora em que a pessoa está olhando a tela e espera ver
+ * quem está online. Meio segundo médio não se percebe, e já basta para as
+ * dezenas de abas que voltam do intervalo no mesmo minuto não pedirem `track`
+ * no mesmo instante.
+ */
+const ESPALHAMENTO_RETOMADA_MS = 1_500;
+
+/**
+ * Backoff exponencial com "equal jitter": metade fixa, metade sorteada.
+ *
+ * A metade fixa garante que a espera cresce de verdade a cada tentativa (com
+ * jitter total, um sorteio baixo devolveria o cliente ao canal saturado na
+ * hora); a metade sorteada é o que dessincroniza as abas.
+ */
+function esperaComJitter(tentativa: number): number {
+  const teto = Math.min(BACKOFF_BASE_MS * 2 ** tentativa, BACKOFF_MAX_MS);
+  return teto / 2 + Math.random() * (teto / 2);
+}
 
 /** Dois conjuntos com os mesmos ids? Evita re-render do app inteiro à toa. */
 function mesmosIds(a: Set<string>, b: Set<string>): boolean {
@@ -132,11 +171,12 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
       if (!mountedRef.current) return;
       if (channelRef.current?.state === 'joined') return;
       reconnectAttemptsRef.current = 0;   // usuário está de volta: sem backoff
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-        reconnectTimerRef.current = null;
-      }
-      setReconnectKey(k => k + 1);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      // Sem espera fixa e sem espera longa: só o bastante para que o turno
+      // inteiro voltando do intervalo não peça `track` no mesmo instante.
+      reconnectTimerRef.current = setTimeout(() => {
+        if (mountedRef.current) setReconnectKey(k => k + 1);
+      }, Math.random() * ESPALHAMENTO_RETOMADA_MS);
     };
     const aoTrocarVisibilidade = () => {
       if (document.visibilityState === 'visible') reviver();
@@ -232,7 +272,7 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
           // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta
           // deve continuar tentando. O limite antigo de 5 tentativas fazia a
           // presença morrer de vez depois de suspender a máquina.
-          const delay = Math.min(3000 * Math.pow(2, reconnectAttemptsRef.current), 30_000);
+          const delay = esperaComJitter(reconnectAttemptsRef.current);
           reconnectAttemptsRef.current += 1;
           if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
           reconnectTimerRef.current = setTimeout(() => {
@@ -252,9 +292,13 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         clearTimeout(reconnectTimerRef.current);
         reconnectTimerRef.current = null;
       }
-      channel.untrack().catch(() => {}).finally(() => {
-        supabase.removeChannel(channel);
-      });
+      // Sem `untrack()` antes de sair.
+      //
+      // Este cleanup roda em toda RECONEXÃO, não só no logout, e `untrack` é um
+      // evento de presence a mais no canal — enviado justamente quando ele está
+      // saturado, que é o que derruba a conexão. Sair do canal já basta: o
+      // servidor descarta a presença da key e difunde o `leave` para os demais.
+      supabase.removeChannel(channel);
       channelRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

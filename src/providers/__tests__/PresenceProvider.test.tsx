@@ -458,9 +458,13 @@ describe('PresenceProvider + useOnlineUsers', () => {
     vi.useRealTimers();
   });
 
-  // ─── Cleanup: untrack + removeChannel ────────────────────────────────
+  // ─── Cleanup: sai do canal sem gastar um evento de presence ──────────
 
-  it('cleanup ao desmontar: chama untrack e removeChannel', async () => {
+  it('cleanup ao desmontar: remove o canal e NÃO chama untrack', async () => {
+    // `untrack` é um evento de presence a mais no canal, e este cleanup roda em
+    // toda reconexão — ou seja, era enviado exatamente quando o canal estava
+    // saturado (PresenceRateLimitReached, 04/08/2026). Sair do canal já faz o
+    // servidor descartar a presença e difundir o `leave`.
     mockPerfilRef.current  = { id: USER_ID };
     mockEmpresaRef.current = { id: EMPRESA_ID };
 
@@ -473,13 +477,12 @@ describe('PresenceProvider + useOnlineUsers', () => {
 
     unmount();
 
-    // Pequeno delay para a cadeia untrack().finally(() => removeChannel)
     await act(async () => {
       await new Promise(r => setTimeout(r, 0));
     });
 
-    expect(mockUntrackSpy).toHaveBeenCalledTimes(1);
     expect(mockRemoveChannelSpy).toHaveBeenCalledTimes(1);
+    expect(mockUntrackSpy).not.toHaveBeenCalled();
   });
 
   // ─── Cleanup: retentativa cancelada ──────────────────────────────────
