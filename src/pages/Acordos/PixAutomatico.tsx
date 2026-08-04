@@ -130,6 +130,17 @@ export function PixAutomatico() {
   // filtro de setor; líder/elite sempre o próprio setor.
   const setorConfig = ehMultiSetor ? (filtroSetor || meuSetor) : meuSetor;
 
+  // A LISTA seguia a mesma lógica do seletor pela metade: o filtro de setor só
+  // aparece para cargo multi-setor, mas quem não o tem recebia `fetchAcordosPix`
+  // sem recorte nenhum e via os registros Pix da empresa inteira. Aqui o setor
+  // fica travado no dele — sem filtro na tela para afrouxar.
+  //
+  // Só para LÍDER: a busca do operador já vem filtrada pelo id dele, e travar
+  // por setor esconderia os registros antigos, gravados antes de a coluna
+  // `setor_id` existir — o mapa que resolveria o setor pelo operador nem chega a
+  // ser carregado fora da visão de líder.
+  const setorTravadoPix = (ehLider && !ehMultiSetor) ? meuSetor : null;
+
   const pctPorSetor = useMemo(() => {
     const m: Record<string, number> = {};
     Object.values(configs).forEach(c => { m[c.setor_id] = Number(c.pct); });
@@ -232,11 +243,11 @@ export function PixAutomatico() {
     () => filtrarItensPix(
       itens,
       { busca, status: filtroStatus, operadorId: filtroOperador,
-        equipeId: filtroEquipe, setorId: filtroSetor },
+        equipeId: filtroEquipe, setorId: setorTravadoPix ?? filtroSetor },
       { porEquipe: operadorEquipe, porSetor: operadorSetor },
     ),
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-     operadorEquipe, operadorSetor],
+     setorTravadoPix, operadorEquipe, operadorSetor],
   );
 
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)

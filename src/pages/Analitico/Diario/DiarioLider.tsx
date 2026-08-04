@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { formatBRL } from '@/lib/money';
-import { getTodayISO, isPerfilAdmin } from '@/lib/index';
+import { getTodayISO } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,8 +33,12 @@ import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { normDiario } from '@/services/diario/diarioComum';
 import { copiarTexto } from '@/lib/clipboard';
-import { supabase } from '@/lib/supabase';
-import { listarClonesEquipes } from '@/services/equipes/equipesClones.service';
+import { buscarEquipesComOperadores } from '@/services/analitico/analitico.service';
+import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
+import {
+  escopoDoDiario, linhasVisiveis, contarSetores,
+  type EscopoDiario, type VinculosDiario,
+} from '@/services/diario/escopoDiario';
 import {
   removerLinhaDiario, removerOrfaosDoDia, limparDadosDoDia, limparTodoDiario,
 } from '@/services/diario/diario.service';
@@ -66,52 +70,69 @@ export function DiarioLider({
   const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do Cod.Cliente
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  // BookPlay: cargo escopado (líder/elite/gerência sem 'ver_todos_setores') vê
-  // só o PRÓPRIO setor na aba "Por equipe". Admin/diretoria e quem tem
-  // ver_todos_setores veem todas as equipes. (O diário em si é empresa-wide.)
-  const veTudoSetores = isPerfilAdmin(perfil?.perfil ?? '')
-    || perfil?.perfil === 'diretoria'
-    || temPermissao('ver_todos_setores');
-  const setorEscopo = (mostrarNR && !veTudoSetores) ? (perfil?.setor_id ?? null) : null;
+  const veTudoSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
   const importHook = useDiarioImport();
-  const { dados, loading, refetch } = useDiario({ dia });
+  const { dados: dadosDaEmpresa, loading: carregandoDia, refetch } = useDiario({ dia });
 
   const [modalImportar, setModalImportar]  = useState(false);
   const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'equipes' | 'orfaos'>('operadores');
 
-  // Mapa operador→equipe/setor + nomes/setor de equipe + clones (aba "Por equipe")
-  const [perfEquipe, setPerfEquipe]   = useState<Record<string, string | null>>({});
-  const [equipeNomes, setEquipeNomes] = useState<Record<string, string>>({});
-  const [equipeSetor, setEquipeSetor] = useState<Record<string, string | null>>({});
-  const [clonesEq, setClonesEq]       = useState<{ equipe_id: string; operador_id: string }[]>([]);
+  // ── Quem está em qual equipe e setor ──────────────────────────────────────
+  //
+  // Vem de `buscarEquipesComOperadores`, a mesma fonte da aba Analítico — antes
+  // esta tela montava os mapas por conta própria, com dois efeitos: os clones
+  // entravam mesmo com `conta_recebimento` DESLIGADO (a consulta daqui não
+  // olhava a coluna), e o setor de cada operador simplesmente não era carregado,
+  // então não havia como escopar a lista por setor.
+  //
+  // Pelo mês do dia exibido: em mês fechado vale o retrato de quem estava onde
+  // NAQUELE mês (migration 20260803c), não o organograma de hoje.
+  const [vinculos, setVinculos] = useState<VinculosDiario | null>(null);
+  const mesDoDia = dia ? dia.slice(0, 7) : null;
 
   useEffect(() => {
     let cancel = false;
-    async function load() {
-      const [{ data: perfis }, { data: equipesData }, clones] = await Promise.all([
-        supabase.from('perfis').select('id, equipe_id').eq('empresa_id', empresaId),
-        supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId),
-        listarClonesEquipes(empresaId),
-      ]);
-      if (cancel) return;
-      const pm: Record<string, string | null> = {};
-      for (const p of (perfis ?? []) as { id: string; equipe_id: string | null }[]) {
-        pm[p.id] = p.equipe_id ?? null;
-      }
-      setPerfEquipe(pm);
-      const em: Record<string, string> = {};
-      const es: Record<string, string | null> = {};
-      for (const e of (equipesData ?? []) as { id: string; nome: string; setor_id: string | null }[]) {
-        em[e.id] = e.nome;
-        es[e.id] = e.setor_id ?? null;
-      }
-      setEquipeNomes(em);
-      setEquipeSetor(es);
-      setClonesEq(clones ?? []);
-    }
-    void load();
+    setVinculos(null);
+    void buscarEquipesComOperadores(empresaId, mesDoDia).then(composicao => {
+      if (!cancel) setVinculos(composicao);
+    });
     return () => { cancel = true; };
-  }, [empresaId]);
+  }, [empresaId, mesDoDia]);
+
+  const equipeNomes = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const e of vinculos?.equipes ?? []) m[e.id] = e.nome;
+    return m;
+  }, [vinculos]);
+
+  const equipeSetor = useMemo(() => {
+    const m: Record<string, string | null> = {};
+    for (const e of vinculos?.equipes ?? []) m[e.id] = e.setor_id;
+    return m;
+  }, [vinculos]);
+
+  // ── Isolamento por setor ──────────────────────────────────────────────────
+  //
+  // Até 04/08/2026 só a sub-aba "Por equipe" filtrava por setor: as listas por
+  // operador, os cards do dia e os órfãos vinham da empresa inteira, e o líder
+  // do Play 4 lia o recebimento do Receptivo. Agora a peneira é única e fica na
+  // ENTRADA — tudo nesta tela deriva de `dados`.
+  const escopo: EscopoDiario | null = vinculos && escopoDoDiario({
+    veTodosOsSetores: veTudoSetores,
+    setorDoUsuario:   perfil?.setor_id ?? null,
+    totalDeSetores:   contarSetores(vinculos),
+  });
+  const setorEscopo = escopo?.tipo === 'setor' ? escopo.setorId : null;
+  const semSetorDefinido = escopo?.tipo === 'sem-setor';
+
+  const dados = useMemo(
+    () => (escopo && vinculos ? linhasVisiveis(dadosDaEmpresa, escopo, vinculos) : []),
+    [dadosDaEmpresa, escopo, vinculos],
+  );
+
+  // Enquanto o escopo não estiver resolvido a tela segue "carregando": mostrar
+  // a empresa toda por um instante é o mesmo vazamento, só que curto.
+  const loading = carregandoDia || !vinculos;
   const [busca, setBusca]                  = useState('');
   const [expandidos, setExpandidos]        = useState<Set<string>>(new Set());
   const [removendoId, setRemovendoId]      = useState<string | null>(null);
@@ -131,6 +152,12 @@ export function DiarioLider({
   useEffect(() => {
     setMensalOkHoje(mensalJaImportadoHoje(empresaId));
   }, [empresaId, hojeISO]);
+
+  // A aba "Sem operador" deixa de existir para quem é escopado; se o escopo
+  // chegar depois (a composição carrega em seguida), sai dela.
+  useEffect(() => {
+    if (setorEscopo && abaAtiva === 'orfaos') setAbaAtiva('operadores');
+  }, [setorEscopo, abaAtiva]);
 
   // ── Agregações ────────────────────────────────────────────────────────────
   const {
@@ -189,12 +216,10 @@ export function DiarioLider({
   // Cada operador soma na própria equipe; clones (BookPlay) somam também nas
   // equipes clonadas — por isso a soma das equipes pode passar o total do dia.
   const resumoEquipes = useMemo(() => {
-    const clonesPorOp = new Map<string, string[]>();
-    for (const c of clonesEq) {
-      const arr = clonesPorOp.get(c.operador_id) ?? [];
-      arr.push(c.equipe_id);
-      clonesPorOp.set(c.operador_id, arr);
-    }
+    const perfEquipe = vinculos?.operadorEquipeMap ?? {};
+    // Só os clones com `conta_recebimento` ligado — quem monta a composição já
+    // descartou os desligados. A consulta antiga desta tela trazia todos.
+    const clonesPorOp = vinculos?.equipesExtrasPorOperador ?? {};
     const map = new Map<string, { equipeId: string; total: number; ops: Set<string>; pgtos: number }>();
     const add = (equipeId: string, r: DiarioRecebimento) => {
       const cur = map.get(equipeId) ?? { equipeId, total: 0, ops: new Set<string>(), pgtos: 0 };
@@ -213,9 +238,9 @@ export function DiarioLider({
         !setorEscopo || equipeSetor[eqId] === setorEscopo;
       for (const r of vinculadas) {
         if (!r.operador_id) continue;
-        const own = perfEquipe[r.operador_id];
+        const own = perfEquipe[r.operador_id]?.equipe_id ?? null;
         if (own && mostrarEquipe(own)) add(own, r);
-        for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
+        for (const eq of clonesPorOp[r.operador_id] ?? []) {
           if (eq !== own && mostrarEquipe(eq)) add(eq, r);
         }
       }
@@ -223,9 +248,9 @@ export function DiarioLider({
       // PaguePlay: própria equipe + clones + bucket "Sem equipe" (comportamento antigo).
       for (const r of vinculadas) {
         if (!r.operador_id) continue;
-        const own = perfEquipe[r.operador_id] ?? SEM_EQUIPE;
+        const own = perfEquipe[r.operador_id]?.equipe_id ?? SEM_EQUIPE;
         add(own, r);
-        for (const eq of clonesPorOp.get(r.operador_id) ?? []) {
+        for (const eq of clonesPorOp[r.operador_id] ?? []) {
           if (eq !== own) add(eq, r);
         }
       }
@@ -233,7 +258,7 @@ export function DiarioLider({
     return [...map.values()]
       .map(g => ({ equipeId: g.equipeId, total: g.total, nOps: g.ops.size, pgtos: g.pgtos }))
       .sort((a, b) => b.total - a.total);
-  }, [vinculadas, perfEquipe, equipeSetor, clonesEq, mostrarNR, setorEscopo]);
+  }, [vinculadas, vinculos, equipeSetor, mostrarNR, setorEscopo]);
   const maxTotalEquipe = resumoEquipes[0]?.total || 1;
 
   // ── Ações ─────────────────────────────────────────────────────────────────
@@ -318,6 +343,27 @@ export function DiarioLider({
   }, [importHook.estado, importHook.preview, onDadosImportados, refetch, handlePosImportComMarca]);
 
   // ── Render ────────────────────────────────────────────────────────────────
+
+  // Perfil sem setor numa empresa que tem vários: não há como dizer o que é
+  // dele. Antes disso cair aqui, o caminho de menor resistência era mostrar a
+  // empresa inteira — que é o vazamento.
+  if (semSetorDefinido) {
+    return (
+      <div className="flex items-start gap-2.5 rounded-xl border border-amber-300/70 dark:border-amber-700/50 bg-amber-50/70 dark:bg-amber-950/20 px-4 py-3">
+        <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-500 shrink-0 mt-0.5" />
+        <div className="text-xs">
+          <p className="font-semibold text-amber-700 dark:text-amber-400">
+            Seu usuário não tem setor definido
+          </p>
+          <p className="text-muted-foreground mt-0.5">
+            O recebimento diário é exibido por setor. Peça a um administrador
+            para definir o seu em Admin → Usuários.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
 
@@ -338,6 +384,15 @@ export function DiarioLider({
             </p>
           </div>
         </div>
+      )}
+
+      {/* Deixa explícito de quem são os números — sem isto o líder lê "Total do
+          dia" como o total da empresa e cobra a diferença de quem importou. */}
+      {setorEscopo && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Users className="w-3.5 h-3.5 shrink-0" />
+          Os valores desta aba são apenas do <strong className="text-foreground">seu setor</strong>.
+        </p>
       )}
 
       {/* Cards de resumo do dia */}
@@ -435,7 +490,10 @@ export function DiarioLider({
           {([
             { key: 'operadores', label: 'Por operador',  Icon: Users },
             { key: 'equipes',    label: 'Por equipe',    Icon: Layers },
-            { key: 'orfaos',     label: 'Sem operador',  Icon: AlertCircle },
+            // "Sem operador" some para quem é escopado: pagamento sem vínculo
+            // não tem setor, então não é dele nem de ninguém — resolver órfão é
+            // de quem enxerga a empresa toda.
+            ...(setorEscopo ? [] : [{ key: 'orfaos' as const, label: 'Sem operador', Icon: AlertCircle }]),
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
@@ -454,7 +512,10 @@ export function DiarioLider({
             </button>
           ))}
         </div>
-        {temPermissaoImportar && (
+        {/* Limpar e importar mexem no dia INTEIRO da empresa — não existe
+            versão "só do meu setor". Quem enxerga um setor só não pode apagar
+            o recebimento dos outros, ainda que tenha a permissão de importar. */}
+        {temPermissaoImportar && !setorEscopo && (
           <div className="flex items-center gap-2">
             {dados.length > 0 && (
               <Button
