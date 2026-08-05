@@ -24,7 +24,7 @@ export const _STATUS_LABELS_BK: Record<string, string> = {
   nao_pago: 'Não Pago',
 };
 
-export const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente'];
+export const TIPOS_PARCELADOS_BOOKPLAY  = ['boleto', 'pix_automatico', 'cartao_recorrente', 'pix', 'cartao'];
 export const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
 
 export function isTipoParcelado(tipo: string, isPP: boolean): boolean {

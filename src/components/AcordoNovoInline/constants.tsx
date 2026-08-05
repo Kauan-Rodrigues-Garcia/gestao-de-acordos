@@ -13,12 +13,16 @@ export const TIPOS_PAGUEPLAY = [
   { value: 'cartao',     label: 'Cartão de Crédito',   parcelado: false },
 ];
 
+// BookPlay: TODAS as formas de pagamento parcelam. A trava em 'pix' e 'cartao'
+// foi retirada em 05/08/2026 — na prática o cliente paga em parcelas
+// independentemente da forma, e a forma pode até variar entre as parcelas do
+// mesmo acordo (ver `tipo` por parcela em AcordoDetalheInline).
 export const TIPOS_BOOKPLAY = [
-  { value: 'boleto',            label: 'Boleto',            parcelado: true  },
-  { value: 'pix_automatico',    label: 'PIX Automático',    parcelado: true  },
-  { value: 'cartao_recorrente', label: 'Cartão Recorrente', parcelado: true  },
-  { value: 'cartao',            label: 'Cartão de Crédito', parcelado: false },
-  { value: 'pix',               label: 'PIX',               parcelado: false },
+  { value: 'boleto',            label: 'Boleto',            parcelado: true },
+  { value: 'pix_automatico',    label: 'PIX Automático',    parcelado: true },
+  { value: 'cartao_recorrente', label: 'Cartão Recorrente', parcelado: true },
+  { value: 'cartao',            label: 'Cartão de Crédito', parcelado: true },
+  { value: 'pix',               label: 'PIX',               parcelado: true },
 ];
 
 export const STATUS_OPTIONS = [

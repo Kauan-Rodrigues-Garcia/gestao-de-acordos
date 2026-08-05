@@ -21,6 +21,48 @@ export function ultimoDiaProxMes(dateStr: string): string {
   return `${nextY}-${String(nextM).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 }
 
+/** `dateStr` + 30 dias corridos (YYYY-MM-DD). */
+export function trintaDiasDepois(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + 30);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+
+/** Mesmo dia do mês seguinte, saturando em meses curtos (31 → 28/29/30). */
+export function mesmoDiaProxMes(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const alvoMes   = m === 12 ? 1 : m + 1;
+  const alvoAno   = m === 12 ? y + 1 : y;
+  const ultimoDia = new Date(alvoAno, alvoMes, 0).getDate();
+  const dia       = Math.min(d, ultimoDia);
+  return `${alvoAno}-${String(alvoMes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+/**
+ * Vencimento sugerido para a PRÓXIMA parcela.
+ *
+ * As duas empresas negociam diferente, e a BookPlay vinha usando a regra da
+ * PaguePlay por herança — era o principal erro relatado:
+ *
+ *   • PaguePlay — sempre o último dia do mês seguinte (o boleto fecha no fim
+ *     do mês). Não muda.
+ *
+ *   • BookPlay — 30 dias corridos na PRIMEIRA vez (parcela 1 → 2). Da 2ª em
+ *     diante, o mesmo DIA do mês seguinte: se o operador puxou a parcela 2
+ *     para o dia 20, a 3 tem de cair no dia 20 também, e não voltar para o dia
+ *     original do acordo nem escorregar um dia por mês (30 dias a partir do
+ *     dia 20 de agosto daria 19 de setembro).
+ *
+ * É o que faz "todas as parcelas ficarem no dia que a pessoa escolheu".
+ */
+export function vencimentoSugerido(
+  dateStr: string, isPaguePlay: boolean, proximaNumero = 2,
+): string {
+  if (isPaguePlay) return ultimoDiaProxMes(dateStr);
+  return proximaNumero <= 2 ? trintaDiasDepois(dateStr) : mesmoDiaProxMes(dateStr);
+}
+
 export interface ReagendarParams {
   novoVencimento: string;
   novoValor: number;
@@ -34,6 +76,8 @@ export interface ModalReagendarProps {
   salvando: boolean;
   /** Valor pré-calculado da próxima parcela (corrige regra dos 40%). */
   valorProxima?: number;
+  /** Decide a data sugerida: PaguePlay = fim do mês seguinte; BookPlay = +30 dias. */
+  isPaguePlay?: boolean;
   onConfirm: (params: ReagendarParams) => Promise<void>;
   onClose: () => void;
 }
@@ -45,10 +89,11 @@ export function ModalReagendar({
   totalParcelas,
   salvando,
   valorProxima,
+  isPaguePlay = true,
   onConfirm,
   onClose,
 }: ModalReagendarProps) {
-  const defaultVencimento = ultimoDiaProxMes(parcelaAtual.vencimento);
+  const defaultVencimento = vencimentoSugerido(parcelaAtual.vencimento, isPaguePlay, proximaNumero);
   const defaultValor = (valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ',');
 
   const [novoVencimento, setNovoVencimento] = useState(defaultVencimento);
@@ -56,9 +101,9 @@ export function ModalReagendar({
 
   useEffect(() => {
     if (!aberto) return;
-    setNovoVencimento(ultimoDiaProxMes(parcelaAtual.vencimento));
+    setNovoVencimento(vencimentoSugerido(parcelaAtual.vencimento, isPaguePlay, proximaNumero));
     setNovoValorStr((valorProxima ?? parcelaAtual.valor).toFixed(2).replace('.', ','));
-  }, [aberto, parcelaAtual.id, parcelaAtual.vencimento, parcelaAtual.valor, valorProxima]);
+  }, [aberto, parcelaAtual.id, parcelaAtual.vencimento, parcelaAtual.valor, valorProxima, isPaguePlay, proximaNumero]);
 
   async function handleConfirm() {
     const novoValor = parseCurrencyInput(novoValorStr);

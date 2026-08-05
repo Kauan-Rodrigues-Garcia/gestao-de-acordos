@@ -266,7 +266,7 @@ export function getTipoOptions(slug: string): readonly string[] {
   return isPaguePlay(slug) ? TIPO_OPTIONS_PAGUEPLAY : (Object.keys(TIPO_LABELS) as string[]);
 }
 
-export const PARCELAS_MAX_DEFAULT = 60;
+export const PARCELAS_MAX_DEFAULT = 99;   // 2 digitos: o campo da BookPlay e digitavel e ignora o 3o
 
 export const INSTITUICOES_OPTIONS = [
   'MUNDIAL EDITORA',

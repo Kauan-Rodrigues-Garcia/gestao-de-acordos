@@ -235,17 +235,21 @@ export function FormBP({
             </Select>
           </div>
 
-          {(['boleto', 'cartao_recorrente', 'pix_automatico'] as const).includes(tipoAtual as 'boleto' | 'cartao_recorrente' | 'pix_automatico') && (
-            <div className="space-y-1.5">
-              <Label className="text-xs font-medium">Parcelas</Label>
-              <Input
-                type="number" min="1" max={maxParcelas}
-                {...register('parcelas')}
-                placeholder="1"
-                className="h-9 text-sm font-mono"
-              />
-            </div>
-          )}
+          {/* Sem filtro por forma de pagamento: na BookPlay tudo parcela
+              (05/08/2026). O campo é digitável e aceita até 2 dígitos. */}
+          <div className="space-y-1.5">
+            <Label className="text-xs font-medium">Parcelas</Label>
+            <Input
+              type="number" min="1" max={maxParcelas} inputMode="numeric"
+              {...register('parcelas')}
+              onInput={(e) => {
+                const alvo = e.currentTarget;
+                alvo.value = alvo.value.replace(/\D/g, '').slice(0, 2);
+              }}
+              placeholder="1"
+              className="h-9 text-sm font-mono"
+            />
+          </div>
 
           {isEdit && (
             <div className="space-y-1.5">

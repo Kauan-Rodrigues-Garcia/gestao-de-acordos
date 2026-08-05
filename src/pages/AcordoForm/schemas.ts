@@ -6,7 +6,11 @@ import { z } from 'zod';
  * formulário e o `onSubmit` decidam pela MESMA lista — antes o `onSubmit`
  * tinha a sua cópia local e o formulário não tinha nenhuma.
  */
-export const TIPOS_PARCELADOS_BP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+export const TIPOS_PARCELADOS_BP = [
+  'boleto', 'cartao_recorrente', 'pix_automatico',
+  // Liberados em 05/08/2026: na BookPlay qualquer forma parcela.
+  'pix', 'cartao',
+];
 
 export const schemaBase = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),

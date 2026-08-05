@@ -101,7 +101,7 @@ describe('lib/index constantes', () => {
 
   it('constantes PaguePlay estão consistentes', () => {
     expect(PARCELAS_MAX_PAGUEPLAY).toBe(12);
-    expect(PARCELAS_MAX_DEFAULT).toBe(60);
+    expect(PARCELAS_MAX_DEFAULT).toBe(99);
     expect(TIPO_OPTIONS_PAGUEPLAY).toEqual(['boleto', 'cartao']);
     expect(ESTADOS_BRASIL).toHaveLength(27);
     expect(INSTITUICOES_OPTIONS.length).toBeGreaterThan(0);
@@ -389,7 +389,7 @@ describe('getters por slug (PaguePlay vs outros)', () => {
 
   it('getMaxParcelas retorna por slug', () => {
     expect(getMaxParcelas('pagueplay')).toBe(12);
-    expect(getMaxParcelas('bookplay')).toBe(60);
+    expect(getMaxParcelas('bookplay')).toBe(99);   // 2 digitos (05/08/2026)
   });
 });
 

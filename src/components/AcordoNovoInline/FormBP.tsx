@@ -8,7 +8,7 @@ import {
 import { FileText, Hash, Link2, Save, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL, parseBRL } from '@/lib/money';
-import { INSTITUICOES_OPTIONS, isPerfilAdmin } from '@/lib/index';
+import { INSTITUICOES_OPTIONS, isPerfilAdmin, PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
@@ -163,9 +163,13 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 {temParcelas && (
                   <div className="space-y-1">
                     <Label className="text-xs">Parcelas</Label>
+                    {/* Digitável e livre até 2 dígitos: o 3º é ignorado em vez
+                        de recusado, porque acordo com 100+ parcelas não existe
+                        e travar a digitação irrita mais do que ajuda. */}
                     <Input
-                      type="number" min={1} max={60}
-                      value={parcelasStr} onChange={(e) => setParcelasStr(e.target.value)}
+                      type="number" min={1} max={PARCELAS_MAX_DEFAULT} inputMode="numeric"
+                      value={parcelasStr}
+                      onChange={(e) => setParcelasStr(e.target.value.replace(/\D/g, '').slice(0, 2))}
                       className="h-8 text-xs font-mono"
                     />
                   </div>

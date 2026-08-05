@@ -28,7 +28,9 @@ import {
   extractLinkAcordo, getEstadoFromAcordo, isAtrasado, getTodayISO,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
-import { calcularParcelas, foiUsadoQuarentaPct, valorDemaisParcelas } from '@/lib/money';
+import {
+  calcularParcelas, foiUsadoQuarentaPct, valorDemaisParcelas, calcularParcelasComEntrada,
+} from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 import { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
@@ -513,10 +515,21 @@ export function AcordoDetalheInline({
   }
 
   // ── Valores calculados para parcelas virtuais ─────────────────────────────
-  const valoresParcelas: number[] | null =
-    isPaguePlay && acordo.valor_total != null && acordo.parcelas
-      ? calcularParcelas(acordo.valor_total, acordo.parcelas, acordo.usou_quarenta_pct ?? foiUsadoQuarentaPct(acordo))
-      : null;
+  // Parcela "virtual" é a linha que a tabela desenha para uma parcela que
+  // ainda não existe como registro. Sem uma lista de valores, ela repete o
+  // valor da parcela ATUAL — e num acordo com entrada isso mostrava as 9
+  // parcelas com o valor da entrada, inflando o acordo inteiro na tela.
+  const valoresParcelas: number[] | null = (() => {
+    // BookPlay com entrada: [entrada, demais, demais, ...].
+    const demais = valorDemaisParcelas(acordo);
+    if (demais !== null && acordo.valor_entrada != null && acordo.parcelas) {
+      return calcularParcelasComEntrada(acordo.valor_entrada, demais, acordo.parcelas);
+    }
+    if (isPaguePlay && acordo.valor_total != null && acordo.parcelas) {
+      return calcularParcelas(acordo.valor_total, acordo.parcelas, acordo.usou_quarenta_pct ?? foiUsadoQuarentaPct(acordo));
+    }
+    return null;
+  })();
 
   type LinhaTabela = { index: number; real: Acordo | null; dataCalc: string; };
   // Âncora: primeira parcela REAL do grupo (acordos vindos do analítico podem
@@ -841,6 +854,7 @@ export function AcordoDetalheInline({
           proximaNumero={(reagendarParcela.numero_parcela ?? 1) + 1}
           totalParcelas={totalParcelas}
           salvando={salvandoReagendar}
+          isPaguePlay={isPaguePlay}
           valorProxima={(() => {
             // Acordo com entrada (BookPlay): da 2ª em diante o valor é o das
             // DEMAIS. Sem isto o modal repetiria o valor da entrada, que é o

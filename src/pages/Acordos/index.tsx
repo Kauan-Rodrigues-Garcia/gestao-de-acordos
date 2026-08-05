@@ -14,6 +14,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
+import { valorDemaisParcelas } from '@/lib/money';
 import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
 import {
@@ -763,6 +764,10 @@ export default function Acordos() {
           proximaNumero={(reagendarAcordo.numero_parcela ?? 1) + 1}
           totalParcelas={reagendarAcordo.parcelas ?? 1}
           salvando={salvandoReagendar}
+          isPaguePlay={isPP}
+          // Acordo com entrada: da 2ª em diante vale o valor das DEMAIS, não o
+          // da entrada, que é o da parcela atual quando se reagenda a 1ª.
+          valorProxima={valorDemaisParcelas(reagendarAcordo) ?? undefined}
           onConfirm={handleReagendarAcordos}
           onClose={() => setReagendarAcordo(null)}
         />
