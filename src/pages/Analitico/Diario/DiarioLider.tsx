@@ -13,7 +13,7 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Upload, Users, AlertCircle, ChevronDown, ChevronRight, Trash2, Loader2,
-  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X, Copy, Layers,
+  TrendingUp, Calendar, BarChart3, Search, CalendarRange, X, Copy, Layers, Filter,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { useTenant } from '@/lib/tenant-config';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import type { DiarioRecebimento } from '@/lib/supabase';
+import { supabase, type DiarioRecebimento } from '@/lib/supabase';
 import { DiaDetalhado } from './DiaDetalhado';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
@@ -37,7 +37,7 @@ import { copiarTexto } from '@/lib/clipboard';
 import { buscarEquipesComOperadores } from '@/services/analitico/analitico.service';
 import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
 import {
-  escopoDoDiario, linhasVisiveis, contarSetores,
+  escopoDoDiario, linhasVisiveis, filtrarPorEquipe, contarSetores,
   type EscopoDiario, type VinculosDiario,
 } from '@/services/diario/escopoDiario';
 import {
@@ -118,18 +118,85 @@ export function DiarioLider({
   // operador, os cards do dia e os órfãos vinham da empresa inteira, e o líder
   // do Play 4 lia o recebimento do Receptivo. Agora a peneira é única e fica na
   // ENTRADA — tudo nesta tela deriva de `dados`.
-  const escopo: EscopoDiario | null = vinculos && escopoDoDiario({
-    veTodosOsSetores: veTudoSetores,
-    setorDoUsuario:   perfil?.setor_id ?? null,
-    totalDeSetores:   contarSetores(vinculos),
-  });
+  const escopoPermissao: EscopoDiario | null = useMemo(
+    () => (vinculos ? escopoDoDiario({
+      veTodosOsSetores: veTudoSetores,
+      setorDoUsuario:   perfil?.setor_id ?? null,
+      totalDeSetores:   contarSetores(vinculos),
+    }) : null),
+    [vinculos, veTudoSetores, perfil?.setor_id],
+  );
+
+  // ── Filtros de tela (setor e equipe) ──────────────────────────────────────
+  //
+  // Não confundir com o ESCOPO acima: escopo é permissão (o que a pessoa PODE
+  // ver, não é escolha dela); filtro é recorte dentro do que já pode ver.
+  //   • diretoria+ (vê todos os setores) escolhe SETOR e EQUIPE;
+  //   • líder, preso a um setor, escolhe só EQUIPE.
+  const [filtroSetor, setFiltroSetor]   = useState<string | null>(null);
+  const [filtroEquipe, setFiltroEquipe] = useState<string | null>(null);
+
+  // O filtro de setor entra TRANSFORMANDO o escopo, e não como uma segunda
+  // peneira paralela: assim é impossível um filtro de tela ampliar o que a
+  // permissão restringiu — a regra continua sendo a última palavra.
+  //
+  // Memoizado porque um objeto novo a cada render faria a peneira de `dados`
+  // recalcular sempre — e ela roda sobre todas as linhas do dia.
+  const escopo: EscopoDiario | null = useMemo(
+    () => (escopoPermissao?.tipo === 'tudo' && filtroSetor
+      ? { tipo: 'setor', setorId: filtroSetor }
+      : escopoPermissao),
+    [escopoPermissao, filtroSetor],
+  );
+
   const setorEscopo = escopo?.tipo === 'setor' ? escopo.setorId : null;
   const semSetorDefinido = escopo?.tipo === 'sem-setor';
+  // O seletor de setor só existe para quem enxerga mais de um.
+  const podeFiltrarSetor = escopoPermissao?.tipo === 'tudo';
 
   const dados = useMemo(
-    () => (escopo && vinculos ? linhasVisiveis(dadosDaEmpresa, escopo, vinculos) : []),
-    [dadosDaEmpresa, escopo, vinculos],
+    () => (escopo && vinculos
+      ? filtrarPorEquipe(linhasVisiveis(dadosDaEmpresa, escopo, vinculos), filtroEquipe, vinculos)
+      : []),
+    [dadosDaEmpresa, escopo, vinculos, filtroEquipe],
   );
+
+  // Trocar de setor derruba a equipe escolhida: ela é de outro setor e o
+  // filtro voltaria zerado sem explicação.
+  useEffect(() => { setFiltroEquipe(null); }, [filtroSetor]);
+
+  // Equipes oferecidas no seletor: só as do setor que está em vista.
+  const equipesDoEscopo = useMemo(() => {
+    const todas = vinculos?.equipes ?? [];
+    const visiveis = setorEscopo ? todas.filter(e => e.setor_id === setorEscopo) : todas;
+    return [...visiveis].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [vinculos, setorEscopo]);
+
+  // Nome dos setores. `EquipeAnalitico` só traz `setor_id`, então o nome vem de
+  // uma consulta própria — sem ela o seletor mostraria UUIDs. Falha aqui não
+  // quebra a tela: o filtro apenas não aparece.
+  const [setorNomes, setSetorNomes] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!podeFiltrarSetor || !empresaId) return;
+    let cancel = false;
+    void supabase.from('setores').select('id, nome').eq('empresa_id', empresaId)
+      .then(({ data }) => {
+        if (cancel || !data) return;
+        const m: Record<string, string> = {};
+        for (const s of data as { id: string; nome: string }[]) m[s.id] = s.nome;
+        setSetorNomes(m);
+      });
+    return () => { cancel = true; };
+  }, [podeFiltrarSetor, empresaId]);
+
+  // Setores oferecidos: os que aparecem na composição do mês.
+  const setoresDisponiveis = useMemo(() => {
+    const ids = new Set<string>();
+    for (const e of vinculos?.equipes ?? []) if (e.setor_id) ids.add(e.setor_id);
+    return [...ids]
+      .map(id => ({ id, nome: setorNomes[id] ?? 'Setor' }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+  }, [vinculos, setorNomes]);
 
   // Enquanto o escopo não estiver resolvido a tela segue "carregando": mostrar
   // a empresa toda por um instante é o mesmo vazamento, só que curto.
@@ -485,6 +552,46 @@ export function DiarioLider({
         </p>
       )}
 
+      {/* Filtros de tela. Setor só para quem enxerga mais de um; equipe para
+          todos, sempre restrita ao setor que está em vista. */}
+      {(podeFiltrarSetor || equipesDoEscopo.length > 1) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Filter className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          {podeFiltrarSetor && setoresDisponiveis.length > 1 && (
+            <select
+              value={filtroSetor ?? ''}
+              onChange={e => setFiltroSetor(e.target.value || null)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="">Todos os setores</option>
+              {setoresDisponiveis.map(s => (
+                <option key={s.id} value={s.id}>{s.nome}</option>
+              ))}
+            </select>
+          )}
+          {equipesDoEscopo.length > 1 && (
+            <select
+              value={filtroEquipe ?? ''}
+              onChange={e => setFiltroEquipe(e.target.value || null)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs"
+            >
+              <option value="">Todas as equipes</option>
+              {equipesDoEscopo.map(e => (
+                <option key={e.id} value={e.id}>{e.nome}</option>
+              ))}
+            </select>
+          )}
+          {(filtroSetor || filtroEquipe) && (
+            <Button
+              variant="ghost" size="sm" className="h-8 text-xs gap-1"
+              onClick={() => { setFiltroSetor(null); setFiltroEquipe(null); }}
+            >
+              <X className="w-3 h-3" /> Limpar
+            </Button>
+          )}
+        </div>
+      )}
+
       {/* Tabs + ações */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-1 border-b border-border">
@@ -776,6 +883,7 @@ export function DiarioLider({
           hojeISO={hojeISO}
           escopo={escopo}
           vinculos={vinculos}
+          equipeId={filtroEquipe}
         />
       )}
 

@@ -146,3 +146,50 @@ export function linhasVisiveis<T extends LinhaDiarioEscopavel>(
   const permitidos = operadoresQueContamNoSetor(escopo.setorId, vinculos);
   return linhas.filter(l => l.operador_id !== null && permitidos.has(l.operador_id));
 }
+
+// ── Filtros de tela (setor e equipe) ─────────────────────────────────────────
+//
+// Diferentes do ESCOPO acima. O escopo é uma regra de permissão: define o que a
+// pessoa PODE ver e não é escolha dela. Estes são recortes que ela ESCOLHE
+// dentro do que já pode ver — diretoria filtrando um setor, líder filtrando uma
+// equipe do próprio setor.
+//
+// Por isso o filtro de setor é aplicado transformando o escopo (um setor
+// escolhido vira `{ tipo: 'setor' }`) em vez de virar um segundo filtro
+// paralelo: assim é impossível um filtro de tela ampliar o que a regra de
+// permissão já restringiu.
+
+/**
+ * Operadores que contam numa equipe: os que a têm como equipe própria MAIS os
+ * clonados para ela. Mesma fonte de `operadoresQueContamNoSetor`, para a
+ * contagem por equipe não divergir da contagem por setor.
+ */
+export function operadoresDaEquipe(
+  equipeId: string,
+  vinculos: VinculosDiario,
+): Set<string> {
+  const out = new Set<string>();
+  for (const [operadorId, info] of Object.entries(vinculos.operadorEquipeMap)) {
+    if (info.equipe_id === equipeId) out.add(operadorId);
+  }
+  for (const [operadorId, extras] of Object.entries(vinculos.equipesExtrasPorOperador)) {
+    if ((extras as readonly string[]).includes(equipeId)) out.add(operadorId);
+  }
+  return out;
+}
+
+/**
+ * Recorte por equipe, aplicado DEPOIS de `linhasVisiveis`.
+ *
+ * `null`/vazio devolve tudo — "nenhuma equipe escolhida" é "todas", não
+ * "nenhuma". Linha sem operador cai fora: sem dono não há equipe.
+ */
+export function filtrarPorEquipe<T extends LinhaDiarioEscopavel>(
+  linhas: readonly T[],
+  equipeId: string | null,
+  vinculos: VinculosDiario,
+): T[] {
+  if (!equipeId) return [...linhas];
+  const permitidos = operadoresDaEquipe(equipeId, vinculos);
+  return linhas.filter(l => l.operador_id !== null && permitidos.has(l.operador_id));
+}

@@ -183,3 +183,41 @@ describe('montarDiaDetalhado — escopo por setor', () => {
     expect(r.dias).toHaveLength(5);
   });
 });
+
+describe('montarDiaDetalhado — filtro de equipe', () => {
+  const dados = [
+    linha('ana',   '2026-08-01', 100),   // eq-play4
+    linha('bruno', '2026-08-02', 200),   // eq-play4
+    linha('carla', '2026-08-03', 900),   // eq-recep
+  ];
+
+  function comEquipe(equipeId: string | null, escopo: EscopoDiario = TUDO) {
+    return montarDiaDetalhado({
+      linhasDia: dados, resumos, mes: MES, hojeISO: HOJE, escopo, vinculos, equipeId,
+    });
+  }
+
+  it('recorta pela equipe escolhida', () => {
+    const r = comEquipe('eq-play4');
+    expect(r.linhas.map(l => l.operadorId).sort()).toEqual(['ana', 'bruno']);
+    expect(r.totalGeral).toBe(300);
+  });
+
+  it('equipe nula é "todas", não "nenhuma"', () => {
+    expect(comEquipe(null).linhas).toHaveLength(3);
+  });
+
+  // O ponto crítico: o filtro é recorte de TELA, o escopo é PERMISSÃO. Um não
+  // pode desfazer o outro — senão o líder escolheria a equipe de outro setor
+  // no seletor e leria o recebimento dela.
+  it('filtro de equipe não amplia o escopo do setor', () => {
+    const r = comEquipe('eq-recep', { tipo: 'setor', setorId: 'PLAY4' });
+    expect(r.linhas).toEqual([]);
+    expect(r.totalGeral).toBe(0);
+  });
+
+  it('líder sem setor continua sem ver nada, mesmo escolhendo equipe', () => {
+    const r = comEquipe('eq-play4', { tipo: 'sem-setor' });
+    expect(r.linhas).toEqual([]);
+  });
+});

@@ -21,7 +21,9 @@
  *    com o total do mês em vez de parecer que sumiu dinheiro.
  */
 import type { LinhaRecebidaDia, ResumoOperadorAnalitico } from '@/services/analitico/analitico.service';
-import { linhasVisiveis, type EscopoDiario, type VinculosDiario } from './escopoDiario';
+import {
+  linhasVisiveis, filtrarPorEquipe, type EscopoDiario, type VinculosDiario,
+} from './escopoDiario';
 
 export interface LinhaDiaDetalhado {
   operadorId: string;
@@ -96,8 +98,10 @@ export function montarDiaDetalhado(params: {
   hojeISO:   string;      // 'yyyy-MM-dd'
   escopo:    EscopoDiario | null;
   vinculos:  VinculosDiario | null;
+  /** Recorte de tela: null = todas as equipes do escopo. */
+  equipeId?: string | null;
 }): DiaDetalhado {
-  const { linhasDia, resumos, mes, hojeISO, escopo, vinculos } = params;
+  const { linhasDia, resumos, mes, hojeISO, escopo, vinculos, equipeId = null } = params;
   const dias = diasDoMes(mes, hojeISO);
   const vazio: DiaDetalhado = {
     dias, linhas: [], totaisPorDia: dias.map(() => 0), totalGeral: 0, totalForaDaMatriz: 0,
@@ -116,7 +120,11 @@ export function montarDiaDetalhado(params: {
     else totalForaDaMatriz += Number(l.valor_recebido) || 0;
   }
 
-  const visiveis = linhasVisiveis(comOperador, escopo, vinculos);
+  // Permissão primeiro, recorte de tela depois — nesta ordem o filtro de
+  // equipe nunca consegue ampliar o que o escopo já restringiu.
+  const visiveis = filtrarPorEquipe(
+    linhasVisiveis(comOperador, escopo, vinculos), equipeId, vinculos,
+  );
 
   const nomes = mapaDeNomes(resumos);
   const porOperador = new Map<string, LinhaDiaDetalhado>();
