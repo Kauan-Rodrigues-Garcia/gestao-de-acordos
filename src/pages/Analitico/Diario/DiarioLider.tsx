@@ -29,6 +29,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import type { DiarioRecebimento } from '@/lib/supabase';
+import { DiaDetalhado } from './DiaDetalhado';
 import { useDiario } from '@/hooks/useDiario';
 import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { normDiario } from '@/services/diario/diarioComum';
@@ -75,7 +76,7 @@ export function DiarioLider({
   const { dados: dadosDaEmpresa, loading: carregandoDia, refetch } = useDiario({ dia });
 
   const [modalImportar, setModalImportar]  = useState(false);
-  const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'equipes' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva]            = useState<'operadores' | 'equipes' | 'orfaos' | 'detalhado'>('operadores');
 
   // ── Quem está em qual equipe e setor ──────────────────────────────────────
   //
@@ -490,6 +491,8 @@ export function DiarioLider({
           {([
             { key: 'operadores', label: 'Por operador',  Icon: Users },
             { key: 'equipes',    label: 'Por equipe',    Icon: Layers },
+            // Mês inteiro, operador × dia. Vale para as duas empresas.
+            { key: 'detalhado',  label: 'Dia detalhado', Icon: CalendarRange },
             // "Sem operador" some para quem é escopado: pagamento sem vínculo
             // não tem setor, então não é dele nem de ninguém — resolver órfão é
             // de quem enxerga a empresa toda.
@@ -761,6 +764,19 @@ export function DiarioLider({
             </div>
           )}
         </div>
+      )}
+
+      {/* ── Aba: Dia detalhado ────────────────────────────────────────────── */}
+      {/* Recebe o MESMO escopo das outras abas: a matriz é montada por
+          `montarDiaDetalhado`, que passa as linhas pela peneira de setor. */}
+      {abaAtiva === 'detalhado' && (
+        <DiaDetalhado
+          empresaId={empresaId}
+          mes={mesDoDia}
+          hojeISO={hojeISO}
+          escopo={escopo}
+          vinculos={vinculos}
+        />
       )}
 
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
