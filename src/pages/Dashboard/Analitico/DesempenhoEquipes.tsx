@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Building2, Users, Headset, Pencil, Check, X, Camera, Loader2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
 import { assinarTabela } from '@/lib/realtime';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
+import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
 import {
   buscarContribuicoesReceptivo, salvarContribuicaoReceptivo,
   type ContribuicaoReceptivo,
@@ -62,38 +64,51 @@ interface DesempenhoEquipesProps {
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
 interface LiderInfo { nome: string; foto_url: string | null }
 
+/**
+ * Avatar do próprio card (não de um líder): o do setor e o do Receptivo.
+ * Clicável para enviar/trocar a foto quando `onEditar` vem preenchido.
+ */
+interface AvatarProprio {
+  foto:      string | null;
+  /** Ausente = só exibe (quem não pode editar não vê o botão de câmera). */
+  onEditar?: () => void;
+  salvando?: boolean;
+  /** Ícone quando ainda não há foto: prédio no setor, headset no Receptivo. */
+  Icone:     LucideIcon;
+  /** Vai no alt/title — "Foto do setor", "Foto do Receptivo". */
+  rotulo:    string;
+}
+
 /** Avatares dos líderes da equipe, lado a lado (item 1: clone mantém foto/tag
  *  e uma equipe pode ter vários líderes). Cai no ícone quando não há líder. */
 function AvataresLideres({
-  lideres, ehSetor, fotoSetor, onEditarFotoSetor, salvandoFoto,
+  lideres, proprio,
 }: {
   lideres: LiderInfo[];
-  ehSetor?: boolean;
-  /** Foto do setor (só quando ehSetor). Clicável para trocar. */
-  fotoSetor?: string | null;
-  onEditarFotoSetor?: () => void;
-  salvandoFoto?: boolean;
+  /** Presente = o card tem avatar próprio e ignora a lista de líderes. */
+  proprio?: AvatarProprio;
 }) {
-  // Card do setor: avatar próprio, clicável para enviar/trocar foto do setor.
-  if (ehSetor) {
-    const conteudo = fotoSetor ? (
-      <img src={fotoSetor} alt="Foto do setor"
+  // Cards de setor e Receptivo: avatar próprio, clicável para trocar a foto.
+  if (proprio) {
+    const { foto, onEditar, salvando, Icone, rotulo } = proprio;
+    const conteudo = foto ? (
+      <img src={foto} alt={rotulo}
         className="w-full h-full rounded-full object-cover" />
     ) : (
-      <Building2 className="w-7 h-7" />
+      <Icone className="w-7 h-7" />
     );
     const classe = cn(
       'relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0 overflow-hidden',
-      fotoSetor ? 'bg-card' : 'bg-primary/15 text-primary',
+      foto ? 'bg-card' : 'bg-primary/15 text-primary',
     );
-    if (!onEditarFotoSetor) return <div className={classe}>{conteudo}</div>;
+    if (!onEditar) return <div className={classe} title={rotulo}>{conteudo}</div>;
     return (
-      <button type="button" onClick={onEditarFotoSetor} disabled={salvandoFoto}
-        title="Alterar foto do setor"
+      <button type="button" onClick={onEditar} disabled={salvando}
+        title={`Alterar ${rotulo.toLowerCase()}`}
         className={cn(classe, 'group cursor-pointer')}>
         {conteudo}
         <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white">
-          {salvandoFoto ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
+          {salvando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
         </span>
       </button>
     );
@@ -155,12 +170,13 @@ function Tile({
 
 function PainelPlacar({
   titulo, subtitulo, lideres, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
-  fotoSetor, onEditarFotoSetor, salvandoFoto,
+  avatarProprio,
 }: {
   titulo: string;
   subtitulo?: string;
   /** Líderes da equipe (fotos lado a lado). Vazio/omisso = ícone. */
   lideres?: LiderInfo[];
+  /** Só o destaque visual do card do setor — o avatar vem em `avatarProprio`. */
   ehSetor?: boolean;
   acumulado: number;
   /** PaguePlay: H.O. do acumulado (soma de total_ho do analítico). */
@@ -169,10 +185,8 @@ function PainelPlacar({
   meta: number | null;
   totalUteis: number;
   decorridos: number;
-  /** Foto do setor + callback de upload (só no card do setor). */
-  fotoSetor?: string | null;
-  onEditarFotoSetor?: () => void;
-  salvandoFoto?: boolean;
+  /** Avatar do próprio card (setor, Receptivo) em vez das fotos dos líderes. */
+  avatarProprio?: AvatarProprio;
 }) {
   const mediaDiaria = acumulado / Math.max(decorridos, 1);
   const metaDiaria  = meta && totalUteis > 0 ? meta / totalUteis : null;
@@ -194,8 +208,7 @@ function PainelPlacar({
     )}>
       {/* Cabeçalho: foto(s) do(s) líder(es) + nome + data | projeção */}
       <div className="flex items-center gap-3.5">
-        <AvataresLideres lideres={lideres ?? []} ehSetor={ehSetor}
-          fotoSetor={fotoSetor} onEditarFotoSetor={onEditarFotoSetor} salvandoFoto={salvandoFoto} />
+        <AvataresLideres lideres={lideres ?? []} proprio={avatarProprio} />
         <div className="flex-1 min-w-0">
           <p className="text-base sm:text-lg font-bold leading-tight truncate">{titulo}</p>
           <p className="text-xs text-muted-foreground truncate">
@@ -312,6 +325,7 @@ function paraInput(v: number): string {
 
 function CardContribuicaoReceptivo({
   dados, totalUteis, decorridos, podeEditar, salvando, somenteLocal, onSalvar,
+  foto, onEditarFoto, salvandoFoto,
 }: {
   dados: ContribuicaoReceptivo | undefined;
   totalUteis: number;
@@ -321,6 +335,10 @@ function CardContribuicaoReceptivo({
   /** true = migration pendente, o valor não é compartilhado ainda. */
   somenteLocal: boolean;
   onSalvar: (valores: ContribuicaoReceptivo) => void;
+  /** Foto própria do card (setores.foto_receptivo_url), igual à do setor. */
+  foto: string | null;
+  onEditarFoto?: () => void;
+  salvandoFoto?: boolean;
 }) {
   const [editando, setEditando]         = useState(false);
   const [acumuladoStr, setAcumuladoStr] = useState('');
@@ -349,6 +367,10 @@ function CardContribuicaoReceptivo({
         meta={dados && dados.meta > 0 ? dados.meta : null}
         totalUteis={totalUteis}
         decorridos={decorridos}
+        avatarProprio={{
+          foto, onEditar: onEditarFoto, salvando: salvandoFoto,
+          Icone: Headset, rotulo: 'Foto do Receptivo',
+        }}
       />
 
       {/* Botão fora do card: sentado no canto superior direito, para além da
@@ -432,10 +454,14 @@ export function DesempenhoEquipes({
   const [contarHoje, setContarHoje] = useState(false);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo[]>>({});  // equipe_id → líderes (inclui clones)
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
-  const [setorFotos, setSetorFotos] = useState<Record<string, string | null>>({});  // setor_id → foto_url
-  // Upload da foto do setor (bucket 'perfis', path setores/<id>).
+  // setor_id → foto. Duas fotos por setor: a do card do placar e a do card
+  // "Contribuição Receptivo".
+  const [setorFotos, setSetorFotos]         = useState<Record<string, string | null>>({});
+  const [receptivoFotos, setReceptivoFotos] = useState<Record<string, string | null>>({});
+  // Upload das fotos (bucket 'perfis') — um input só para os dois cards, o
+  // alvo diz qual setor e qual dos dois campos está sendo trocado.
   const inputFotoSetorRef = useRef<HTMLInputElement>(null);
-  const [uploadSetorId, setUploadSetorId] = useState<string | null>(null);
+  const [uploadAlvo, setUploadAlvo] = useState<{ setorId: string; campo: CampoFotoSetor } | null>(null);
   const [salvandoFotoSetor, setSalvandoFotoSetor] = useState(false);
   const [carregado, setCarregado] = useState(false);
 
@@ -532,33 +558,36 @@ export function DesempenhoEquipes({
 
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
-  // ── Upload da foto do setor ────────────────────────────────────────────────
-  const abrirUploadFotoSetor = useCallback((sid: string) => {
-    setUploadSetorId(sid);
+  // ── Upload das fotos do setor ──────────────────────────────────────────────
+  // A gravação vai por `fn_set_setor_foto` (migration 20260805a). O UPDATE
+  // direto que existia aqui voltava SEM ERRO e sem gravar nada para quem não é
+  // administrador — a RLS de `setores` filtra as linhas em vez de recusar o
+  // comando —, então a tela dizia "salvo!" e a foto sumia no recarregar.
+  const abrirUploadFotoSetor = useCallback((setorId: string, campo: CampoFotoSetor) => {
+    setUploadAlvo({ setorId, campo });
     inputFotoSetorRef.current?.click();
   }, []);
 
   async function onArquivoFotoSetor(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     e.target.value = '';
-    const sid = uploadSetorId;
-    if (!file || !sid) return;
+    const alvo = uploadAlvo;
+    if (!file || !alvo) return;
     setSalvandoFotoSetor(true);
     try {
-      const ext  = file.name.split('.').pop()?.toLowerCase() || 'jpg';
-      const path = `setores/${sid}.${ext}`;
-      const { error: upErr } = await supabase.storage.from('perfis').upload(path, file, { upsert: true });
-      if (upErr) { toast.error(`Erro no upload: ${upErr.message}`); return; }
-      const { data: { publicUrl } } = supabase.storage.from('perfis').getPublicUrl(path);
-      const urlFinal = `${publicUrl}?t=${Date.now()}`;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- foto_url é coluna nova (migration 20260725a), ainda fora do tipo gerado.
-      const { error: dbErr } = await supabase.from('setores').update({ foto_url: urlFinal } as any).eq('id', sid);
-      if (dbErr) { toast.error(`Erro ao salvar foto: ${dbErr.message}`); return; }
-      setSetorFotos(prev => ({ ...prev, [sid]: urlFinal }));
-      toast.success('Foto do setor atualizada!');
+      const r = await salvarFotoSetor(alvo.setorId, alvo.campo, file);
+      if (r.status === 'ok') {
+        const aplicar = alvo.campo === 'receptivo' ? setReceptivoFotos : setSetorFotos;
+        aplicar(prev => ({ ...prev, [alvo.setorId]: r.url }));
+        toast.success(alvo.campo === 'receptivo'
+          ? 'Foto do Receptivo atualizada!'
+          : 'Foto do setor atualizada!');
+      } else {
+        toast.error(r.mensagem);
+      }
     } finally {
       setSalvandoFotoSetor(false);
-      setUploadSetorId(null);
+      setUploadAlvo(null);
     }
   }
 
@@ -566,7 +595,7 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: clonesData }, { data: equipeLideresData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: receptivoFotosData }, { data: clonesData }, { data: equipeLideresData }] = await Promise.all([
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', anoNum)
             .in('tipo', ['setor', 'equipe']),
@@ -576,6 +605,10 @@ export function DesempenhoEquipes({
           supabase.from('perfis').select('id, nome, foto_url, equipe_id')
             .eq('empresa_id', empresaId).eq('perfil', 'lider'),
           supabase.from('setores').select('id, nome, foto_url').eq('empresa_id', empresaId),
+          // Foto do card Receptivo à parte: a coluna é nova (20260805a) e, se
+          // entrasse no select acima, a migration pendente zeraria também os
+          // NOMES dos setores — o PostgREST reprova a query inteira.
+          supabase.from('setores').select('id, foto_receptivo_url').eq('empresa_id', empresaId),
           // Clones: líder clonado numa equipe deve mostrar foto/tag lá também.
           // Tabela pode não existir (migration 20260712a pendente) → vazio.
           supabase.from('equipe_operadores_clones').select('equipe_id, operador_id')
@@ -621,6 +654,12 @@ export function DesempenhoEquipes({
         }
         setSetores(sMap);
         setSetorFotos(fMap);
+        // `data` nulo = migration 20260805a pendente; o card só fica sem foto.
+        const rMap: Record<string, string | null> = {};
+        for (const s of (receptivoFotosData as unknown as { id: string; foto_receptivo_url: string | null }[] | null) ?? []) {
+          rMap[s.id] = s.foto_receptivo_url ?? null;
+        }
+        setReceptivoFotos(rMap);
       } catch { /* sem metas/config — painéis mostram "—" */ }
       if (!cancelado) setCarregado(true);
     }
@@ -756,9 +795,13 @@ export function DesempenhoEquipes({
             titulo={setores[sid] ?? 'Setor'}
             subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : setorSomaMembros ? 'Setor · soma dos operadores' : 'Setor geral · total do relatório'}
             ehSetor
-            fotoSetor={setorFotos[sid] ?? null}
-            onEditarFotoSetor={sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid) : undefined}
-            salvandoFoto={salvandoFotoSetor && uploadSetorId === sid}
+            avatarProprio={{
+              foto: setorFotos[sid] ?? null,
+              onEditar: sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid, 'placar') : undefined,
+              salvando: salvandoFotoSetor && uploadAlvo?.setorId === sid && uploadAlvo.campo === 'placar',
+              Icone: Building2,
+              rotulo: 'Foto do setor',
+            }}
             mostrarHO={isPP}
             // Só o ACUMULADO do Receptivo soma aqui; a meta do setor segue
             // sendo a da aba Metas (decisão do usuário em 30/07/2026).
@@ -778,6 +821,9 @@ export function DesempenhoEquipes({
               salvando={salvandoContrib === sid}
               somenteLocal={!contribDbAtiva}
               onSalvar={valores => { void salvarContrib(sid, valores); }}
+              foto={receptivoFotos[sid] ?? null}
+              onEditarFoto={podeEditarContrib ? () => abrirUploadFotoSetor(sid, 'receptivo') : undefined}
+              salvandoFoto={salvandoFotoSetor && uploadAlvo?.setorId === sid && uploadAlvo.campo === 'receptivo'}
             />
           )}
           {/* Equipes do setor, maiores acumulados primeiro */}
