@@ -1,6 +1,13 @@
 import { parseCurrencyInput } from '@/lib/index';
 import { z } from 'zod';
 
+/**
+ * Formas de pagamento que geram parcelas na BookPlay. Vive aqui para que o
+ * formulário e o `onSubmit` decidam pela MESMA lista — antes o `onSubmit`
+ * tinha a sua cópia local e o formulário não tinha nenhuma.
+ */
+export const TIPOS_PARCELADOS_BP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+
 export const schemaBase = z.object({
   nome_cliente: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres').max(100, 'Nome muito longo'),
   nr_cliente:   z.string().trim().min(1, 'NR é obrigatório').max(100, 'NR muito longo'),
@@ -15,6 +22,15 @@ export const schemaBase = z.object({
   instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
   status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),
   observacoes: z.string().max(500, 'Campo muito longo').optional(),
+  // Entrada (BookPlay): quando ligada, `valor` passa a ser o valor da ENTRADA
+  // e este o de cada uma das demais parcelas. Opcional no schema porque só
+  // existe com a entrada ligada — a obrigatoriedade é checada em onSubmit,
+  // que é quem sabe se ela está ativa.
+  valor_demais: z.string().optional().refine(v => {
+    if (!v) return true;
+    const n = parseCurrencyInput(v);
+    return !isNaN(n) && n > 0;
+  }, 'Valor das demais parcelas deve ser maior que zero'),
 });
 
 export const schemaPP = z.object({

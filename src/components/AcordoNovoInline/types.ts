@@ -69,6 +69,12 @@ export interface SharedFormState {
   observacoes: string; setObservacoes: (v: string) => void;
   estadoSel: string; setEstadoSel: (v: string) => void;
   link: string; setLink: (v: string) => void;
+  // Entrada (BookPlay): 1º pagamento com valor próprio. Ligado, `valorStr`
+  // passa a ser o valor DA ENTRADA e `demaisStr` o das outras parcelas.
+  temEntradaForm: boolean; setTemEntradaForm: (fn: (v: boolean) => boolean) => void;
+  demaisStr: string; setDemaisStr: (v: string) => void;
+  /** Total do acordo com entrada — só para mostrar na tela. 0 = não aplicável. */
+  totalEntrada: number;
   // Derived
   temParcelas: boolean;
   parcelas: number;

@@ -17,7 +17,7 @@ import {
   buildObservacoesComEstado, isPerfilAdminOuLider, formatarTelefonePP,
   parseCurrencyInput, getTodayISO,
 } from '@/lib/index';
-import { calcularParcelas } from '@/lib/money';
+import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
@@ -84,6 +84,8 @@ export function AcordoNovoInline({
     // Fluxo "Tabular acordo" do analítico PP: parcela sendo paga, regra 40%
     // e flag de origem (habilita nascer no meio do plano + agendar a próxima).
     parcelaAtualStr?: string; quarentaPct?: string; analitico?: string;
+    // Entrada BookPlay: '1' quando ligada, e o valor das demais parcelas.
+    temEntrada?: string; demaisStr?: string;
   }
 
   function loadDraft(): Partial<DraftAcordoInline> {
@@ -114,6 +116,9 @@ export function AcordoNovoInline({
   const [isExtra,      setIsExtra]      = useState(false);
   const [tagIds,       setTagIds]       = useState<string[]>([]);
   const [quarentaPct,  setQuarentaPct]  = useState(draftInicial.quarentaPct === '1');
+  // Entrada (BookPlay): 1º pagamento com valor próprio, demais iguais entre si.
+  const [temEntradaForm, setTemEntradaForm] = useState(draftInicial.temEntrada === '1');
+  const [demaisStr,      setDemaisStr]      = useState(draftInicial.demaisStr ?? '');
   // Fluxo analítico PP: qual parcela está sendo paga (1 = fluxo normal)
   const [parcelaAtualStr] = useState(draftInicial.parcelaAtualStr ?? '1');
   const [veioDoAnalitico] = useState(draftInicial.analitico === '1');
@@ -149,6 +154,8 @@ export function AcordoNovoInline({
           parcelaAtualStr,
           quarentaPct: quarentaPct ? '1' : '',
           analitico:   veioDoAnalitico ? '1' : '',
+          temEntrada:  temEntradaForm ? '1' : '',
+          demaisStr,
         };
         const temConteudo = Object.values(draft).some(v => typeof v === 'string' && v.trim() !== '' && v !== '1' && v !== 'boleto' && v !== 'boleto_pix' && v !== 'verificar_pendente');
         if (temConteudo) sessionStorage.setItem(storageKey, JSON.stringify(draft));
@@ -158,7 +165,7 @@ export function AcordoNovoInline({
     return () => {
       if (persistRafRef.current !== null) { cancelAnimationFrame(persistRafRef.current); persistRafRef.current = null; }
     };
-  }, [storageKey, nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr, whatsapp, instituicao, status, observacoes, estadoSel, link, quarentaPct, parcelaAtualStr, veioDoAnalitico]);
+  }, [storageKey, nomeCliente, nrCliente, vencimento, valorStr, tipo, parcelasStr, whatsapp, instituicao, status, observacoes, estadoSel, link, quarentaPct, parcelaAtualStr, veioDoAnalitico, temEntradaForm, demaisStr]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
@@ -204,6 +211,21 @@ export function AcordoNovoInline({
   const temParcelas = !!tipoAtual?.parcelado;
   const parcelas    = Math.max(1, parseInt(parcelasStr) || 1);
 
+  // Entrada só existe na BookPlay e só faz sentido com mais de uma parcela —
+  // com uma parcela só não há "demais" para ter valor diferente.
+  const entradaDisponivel = !isPaguePlay && temParcelas && parcelas > 1;
+  const entradaAtiva      = entradaDisponivel && temEntradaForm;
+  const totalEntrada      = entradaAtiva
+    ? totalComEntrada(parseCurrencyInput(valorStr), parseCurrencyInput(demaisStr), parcelas)
+    : 0;
+
+  // Trocar para um tipo sem parcelas (ou voltar para 1 parcela) desliga a
+  // entrada: deixá-la ligada gravaria valor_entrada num acordo de parcela
+  // única, que o CHECK da migration 20260805b recusa.
+  useEffect(() => {
+    if (!entradaDisponivel && temEntradaForm) setTemEntradaForm(() => false);
+  }, [entradaDisponivel, temEntradaForm]);
+
   function handleChangeTipo(t: string) {
     setTipo(t);
     if (!tipos.find((x) => x.value === t)?.parcelado) { setParcelasStr('1'); setQuarentaPct(false); }
@@ -212,7 +234,11 @@ export function AcordoNovoInline({
   function validar(): string | null {
     if (!vencimento)                        return 'Data de vencimento obrigatória';
     const v = parseCurrencyInput(valorStr);
-    if (isNaN(v) || v <= 0)                 return 'Informe o valor do acordo';
+    if (isNaN(v) || v <= 0)                 return entradaAtiva ? 'Informe o valor da entrada' : 'Informe o valor do acordo';
+    if (entradaAtiva) {
+      const d = parseCurrencyInput(demaisStr);
+      if (isNaN(d) || d <= 0)               return 'Informe o valor das demais parcelas';
+    }
     if (isPaguePlay && !instituicao.trim()) return 'Código é obrigatório';
     if (!isPaguePlay && !nrCliente.trim())  return 'NR é obrigatório';
     // CPF em qualquer campo de texto: dado pessoal entrando pela porta de trás
@@ -243,8 +269,11 @@ export function AcordoNovoInline({
       const isColErr = String(error.code) === '42703' || String(error.code) === '400' ||
         error.message?.toLowerCase().includes('column') || error.message?.toLowerCase().includes('unknown');
       if (isColErr) {
-        // Tier 1: strip only usou_quarenta_pct, preserving valor_total
-        const { usou_quarenta_pct: _qp, ...payloadSemQP } = payload;
+        // Tier 1: strip only usou_quarenta_pct, preserving valor_total.
+        // `valor_entrada` sai junto: é da migration 20260805b, e sem ela o
+        // acordo ainda salva — perde só a distinção entre entrada e demais,
+        // em vez de o operador perder tudo o que digitou.
+        const { usou_quarenta_pct: _qp, valor_entrada: _ve, ...payloadSemQP } = payload;
         const { data: inseridoT1, error: e1 } = await supabase
           .from('acordos').insert(payloadSemQP as never).select('*, perfis(id, nome, email, perfil, setor_id)').single();
         if (!e1) return inseridoT1 as Acordo;
@@ -287,12 +316,20 @@ export function AcordoNovoInline({
         ? calcularParcelas(valorNum, parcelas, quarentaPctEfetivo)[parcelaInicial - 1]
         : valorNum;
 
+      // Entrada (BookPlay): `valorStr` é a ENTRADA e `demaisStr` o valor de
+      // cada uma das outras. Grava a entrada em `valor_entrada` e a soma em
+      // `valor_total`; o valor das demais é derivado de volta na hora de
+      // reagendar, por `valorDemaisParcelas`. Ver migration 20260805b.
+      const demaisNum = entradaAtiva ? parseCurrencyInput(demaisStr) : 0;
+
       const payload: Record<string, unknown> = {
         nome_cliente:    nomeCliente.trim() || '',
         nr_cliente:      nrCliente.trim()   || '',
         vencimento,
         valor:           valorParcelaInicial,
-        valor_total:      usaValorTotal ? valorNum : null,
+        valor_total:      entradaAtiva ? totalComEntrada(valorNum, demaisNum, parcelas)
+                        : usaValorTotal ? valorNum : null,
+        ...(entradaAtiva ? { valor_entrada: valorNum } : {}),
         usou_quarenta_pct: usaValorTotal ? quarentaPctEfetivo : false,
         tipo:             tipoParaSalvar,
         parcelas:        temParcelas ? parcelas : 1,
@@ -498,7 +535,9 @@ export function AcordoNovoInline({
         toast.success(
           agendarProxima
             ? `Parcela ${parcelaInicial}/${parcelas} registrada como paga. Próxima agendada para ${format(parseISO(ultimoDiaProxMes(vencimento)), 'dd/MM/yyyy', { locale: ptBR })}.`
-            : parcelas > 1 ? `Acordo criado! ${parcelas} parcelas negociadas.` : 'Acordo criado com sucesso!',
+            : entradaAtiva
+              ? `Acordo criado! Entrada de ${formatBRL(valorNum)} + ${parcelas - 1}× ${formatBRL(demaisNum)}.`
+              : parcelas > 1 ? `Acordo criado! ${parcelas} parcelas negociadas.` : 'Acordo criado com sucesso!',
         );
       }
     } finally {
@@ -734,6 +773,12 @@ export function AcordoNovoInline({
     observacoes, setObservacoes,
     estadoSel, setEstadoSel,
     link, setLink,
+    // Entrada só chega ligada ao formulário quando é aplicável (BookPlay,
+    // tipo parcelado, mais de uma parcela) — ver `entradaDisponivel`.
+    temEntradaForm: entradaAtiva,
+    setTemEntradaForm: (fn) => setTemEntradaForm(fn),
+    demaisStr, setDemaisStr,
+    totalEntrada,
     temParcelas, parcelas,
     parcelaInicial: Math.min(Math.max(1, parseInt(parcelaAtualStr) || 1), parcelas),
     veioDoAnalitico,

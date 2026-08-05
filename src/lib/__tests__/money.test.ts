@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { calcularParcelas, foiUsadoQuarentaPct, parseBRL, calcularTotalAnalitico } from '../money';
+import {
+  calcularParcelas, foiUsadoQuarentaPct, parseBRL, calcularTotalAnalitico,
+  temEntrada, totalComEntrada, calcularParcelasComEntrada, valorDemaisParcelas,
+} from '../money';
 
 describe('calcularParcelas', () => {
   it('divide igualmente quando divisão é exata', () => {
@@ -140,5 +143,91 @@ describe('calcularTotalAnalitico', () => {
     const total = 2988;
     const parcelas = calcularParcelas(total, 12, false);
     expect(calcularTotalAnalitico(parcelas[3], 12, 4, false)).toBe(total);
+  });
+});
+
+// ── Entrada + demais parcelas (BookPlay) ────────────────────────────────────
+// A entrada é a parcela 1 de N: "4 parcelas com entrada" = 4 pagamentos, o
+// primeiro com valor próprio. Ver a decisão em 05/08/2026.
+
+describe('temEntrada', () => {
+  it('reconhece o acordo com entrada', () => {
+    expect(temEntrada({ valor_entrada: 500, parcelas: 4 })).toBe(true);
+  });
+
+  it('acordo comum não tem entrada', () => {
+    expect(temEntrada({ valor_entrada: null, parcelas: 4 })).toBe(false);
+    expect(temEntrada({ parcelas: 4 })).toBe(false);
+  });
+
+  it('parcela única não é entrada — não há "demais" para diferir', () => {
+    expect(temEntrada({ valor_entrada: 500, parcelas: 1 })).toBe(false);
+  });
+
+  it('entrada zerada não conta', () => {
+    expect(temEntrada({ valor_entrada: 0, parcelas: 4 })).toBe(false);
+  });
+});
+
+describe('totalComEntrada', () => {
+  it('soma entrada + demais × (N−1)', () => {
+    expect(totalComEntrada(500, 200, 4)).toBe(1100);
+  });
+
+  it('parcela única: o total é a própria entrada', () => {
+    expect(totalComEntrada(500, 200, 1)).toBe(500);
+  });
+
+  it('centavos não acumulam erro de float', () => {
+    // 0.1 + 0.2 × 3 dá 0.7000000000000001 somando em float.
+    expect(totalComEntrada(0.1, 0.2, 4)).toBe(0.7);
+    expect(totalComEntrada(333.33, 111.11, 3)).toBe(555.55);
+  });
+});
+
+describe('calcularParcelasComEntrada', () => {
+  it('primeira é a entrada, as outras são iguais', () => {
+    expect(calcularParcelasComEntrada(500, 200, 4)).toEqual([500, 200, 200, 200]);
+  });
+
+  it('a soma bate com totalComEntrada', () => {
+    const p = calcularParcelasComEntrada(1234.56, 78.9, 5);
+    const soma = Math.round(p.reduce((a, b) => a + b, 0) * 100);
+    expect(soma).toBe(Math.round(totalComEntrada(1234.56, 78.9, 5) * 100));
+  });
+
+  it('N = 1 devolve só a entrada', () => {
+    expect(calcularParcelasComEntrada(500, 200, 1)).toEqual([500]);
+  });
+
+  it('N = 0 devolve vazio', () => {
+    expect(calcularParcelasComEntrada(500, 200, 0)).toEqual([]);
+  });
+});
+
+describe('valorDemaisParcelas', () => {
+  it('volta o valor das demais a partir do que foi gravado', () => {
+    const total = totalComEntrada(500, 200, 4);
+    expect(valorDemaisParcelas({ valor_total: total, valor_entrada: 500, parcelas: 4 })).toBe(200);
+  });
+
+  it('ida e volta preserva o valor em casos com centavo quebrado', () => {
+    for (const [entrada, demais, n] of [[500, 183.33, 4], [1000, 77.77, 7], [0.01, 0.02, 3]] as const) {
+      const total = totalComEntrada(entrada, demais, n);
+      expect(valorDemaisParcelas({ valor_total: total, valor_entrada: entrada, parcelas: n })).toBe(demais);
+    }
+  });
+
+  it('acordo sem entrada devolve null — quem chama cai no valor da parcela atual', () => {
+    expect(valorDemaisParcelas({ valor_total: 1100, valor_entrada: null, parcelas: 4 })).toBeNull();
+  });
+
+  it('sem valor_total não dá para derivar', () => {
+    expect(valorDemaisParcelas({ valor_total: null, valor_entrada: 500, parcelas: 4 })).toBeNull();
+  });
+
+  it('entrada cobrindo o total inteiro devolve null em vez de zero ou negativo', () => {
+    expect(valorDemaisParcelas({ valor_total: 500, valor_entrada: 500, parcelas: 4 })).toBeNull();
+    expect(valorDemaisParcelas({ valor_total: 400, valor_entrada: 500, parcelas: 4 })).toBeNull();
   });
 });

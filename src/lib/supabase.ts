@@ -149,6 +149,12 @@ export interface Acordo {
   valor_total?: number | null;
   /** true quando a 1ª parcela usou a regra dos 40% (PaguePLAY parcelado). */
   usou_quarenta_pct?: boolean;
+  /**
+   * BookPlay: valor da ENTRADA quando o 1º pagamento foi negociado como tal.
+   * NULL no acordo comum. A entrada é a parcela 1 de N; o valor das demais sai
+   * de `valorDemaisParcelas` (src/lib/money.ts). Migration 20260805b.
+   */
+  valor_entrada?: number | null;
   criado_em: string;
   atualizado_em: string;
   /** Timestamp de quando o acordo foi marcado como pago (preenchido automaticamente pelo trigger) */

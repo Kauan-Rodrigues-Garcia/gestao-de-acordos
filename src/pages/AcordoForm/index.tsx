@@ -28,7 +28,8 @@ import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import { toast } from 'sonner';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
-import { schemaBase, schemaPP, type FormData } from './schemas';
+import { schemaBase, schemaPP, TIPOS_PARCELADOS_BP, type FormData } from './schemas';
+import { totalComEntrada } from '@/lib/money';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
 
@@ -47,6 +48,9 @@ export default function AcordoForm() {
 
   const isPP = tenant.isPaguePlay;
   const maxParcelas = tenant.maxParcelas;
+  // Entrada (BookPlay): 1º pagamento com valor próprio. Fora do react-hook-form
+  // porque é um modo do formulário, não um campo enviado ao banco.
+  const [temEntrada, setTemEntrada] = useState(false);
 
   // NR duplicate / leader auth state
   const [conflito, setConflito]               = useState<ConflitNR | null>(null);
@@ -209,6 +213,17 @@ export default function AcordoForm() {
 
       const nrTrimmed = (data.nr_cliente ?? '').trim();
 
+      // ── Entrada (BookPlay) ────────────────────────────────────────────────
+      // Ligada, `valorNum` é a ENTRADA e `demaisNum` o valor de cada uma das
+      // outras. A entrada é a parcela 1 de N. Ver migration 20260805b.
+      const numParcelasBP = Math.max(1, parseInt(data.parcelas || '1', 10) || 1);
+      const entradaAtiva  = !isPP && temEntrada
+        && TIPOS_PARCELADOS_BP.includes(data.tipo) && numParcelasBP > 1;
+      const demaisNum     = entradaAtiva ? parseCurrencyInput(data.valor_demais ?? '') : 0;
+      if (entradaAtiva && (isNaN(demaisNum) || demaisNum <= 0)) {
+        toast.error('Informe o valor das demais parcelas'); setLoading(false); return;
+      }
+
       const payload: Record<string, unknown> = {
         nome_cliente:  (data.nome_cliente ?? '').trim(),
         nr_cliente:    nrTrimmed,
@@ -228,6 +243,10 @@ export default function AcordoForm() {
           : (data.observacoes?.trim() || null),
         operador_id:   uid,
         empresa_id:    empresa.id,
+        ...(entradaAtiva ? {
+          valor_entrada: valorNum,
+          valor_total:   totalComEntrada(valorNum, demaisNum, numParcelasBP),
+        } : {}),
       };
 
       if (data.instituicao?.trim()) payload.instituicao = data.instituicao.trim();
@@ -430,9 +449,8 @@ export default function AcordoForm() {
       }
 
       // ── Auto-criar parcelas ao salvar novo acordo ─────────────────────
-      const TIPOS_PARCELADOS_BOOKPLAY = ['boleto', 'cartao_recorrente', 'pix_automatico'];
       const TIPOS_PARCELADOS_PAGUEPLAY = ['boleto', 'pix'];
-      const tiposParcelados = isPP ? TIPOS_PARCELADOS_PAGUEPLAY : TIPOS_PARCELADOS_BOOKPLAY;
+      const tiposParcelados = isPP ? TIPOS_PARCELADOS_PAGUEPLAY : TIPOS_PARCELADOS_BP;
       const parcelasNum = parseInt(payload.parcelas as string, 10) || 1;
       const deveCriarParcelas =
         !isEdit &&
@@ -472,9 +490,16 @@ export default function AcordoForm() {
             nr_cliente:      payload.nr_cliente,
             data_cadastro:   getTodayISO(),
             vencimento:      vencimentoN,
-            valor:           payload.valor,
+            // Com entrada, a 1ª parcela (já gravada acima) vale a entrada e
+            // TODAS estas valem o das demais. Sem entrada, segue repetindo o
+            // valor único, como sempre foi.
+            valor:           entradaAtiva ? demaisNum : payload.valor,
             tipo:            payload.tipo,
             parcelas:        parcelasNum,
+            ...(entradaAtiva ? {
+              valor_entrada: valorNum,
+              valor_total:   payload.valor_total,
+            } : {}),
             whatsapp:        payload.whatsapp ?? null,
             status:          'verificar_pendente',
             observacoes:     payload.observacoes ?? null,
@@ -875,6 +900,8 @@ export default function AcordoForm() {
               showObs={showObs}
               setShowObs={setShowObs}
               maxParcelas={maxParcelas}
+              temEntrada={temEntrada}
+              setTemEntrada={setTemEntrada}
             />
           )}
 

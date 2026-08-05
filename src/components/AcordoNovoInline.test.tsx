@@ -953,3 +953,99 @@ describe('AcordoNovoInline — fluxo analítico PP (parcela 4/12)', () => {
     expect(inserts[0].payload).toMatchObject({ numero_parcela: 1 });
   });
 });
+
+// ── Entrada (BookPlay) ───────────────────────────────────────────────────────
+// Pedido de 05/08/2026: o 1º pagamento pode ser uma entrada com valor próprio,
+// e as demais parcelas ficam todas com OUTRO valor. A entrada é a parcela 1
+// de N — "4 parcelas com entrada" = 4 pagamentos.
+//
+// Estes testes olham o PAYLOAD gravado, não só a matemática (que tem os seus
+// em lib/__tests__/money.test.ts): o que quebraria em produção é o formulário
+// mandar o número certo para a coluna errada.
+
+/** Liga a entrada com N parcelas e os dois valores. Assume o form já aberto. */
+function ligarEntrada(parcelas: string, entrada: string, demais: string) {
+  fireEvent.change(screen.getByRole('spinbutton'), { target: { value: parcelas } });
+  fireEvent.click(screen.getByRole('button', { name: /1º pagamento é entrada\?/i }));
+  const valores = screen.getAllByPlaceholderText('0,00');
+  fireEvent.change(valores[0], { target: { value: entrada } });   // entrada
+  fireEvent.change(valores[1], { target: { value: demais } });    // demais
+}
+
+describe('AcordoNovoInline — entrada (BookPlay)', () => {
+  it('grava a entrada na parcela 1 e o total somado em valor_total', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = {
+      data: { id: 'novo-ent', nome_cliente: 'Cliente Teste', nr_cliente: '901' } as Acordo,
+      error: null,
+    };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('901');
+    ligarEntrada('4', '500', '200');
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
+    expect(insertCall?.payload).toMatchObject({
+      valor:          500,    // a parcela 1 vale a entrada
+      valor_entrada:  500,
+      valor_total:    1100,   // 500 + 200 × 3
+      parcelas:       4,
+      numero_parcela: 1,
+    });
+  });
+
+  it('sem a entrada ligada não grava valor_entrada — acordo comum segue igual', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+    routes.insertAcordo = {
+      data: { id: 'novo-sem', nome_cliente: 'Cliente Teste', nr_cliente: '902' } as Acordo,
+      error: null,
+    };
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('902');
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '4' } });
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+
+    const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
+    expect(insertCall?.payload).not.toHaveProperty('valor_entrada');
+    // BookPlay sem entrada continua sem valor_total: `valor` é o de CADA parcela.
+    expect(insertCall?.payload).toMatchObject({ valor: 100, valor_total: null, parcelas: 4 });
+  });
+
+  it('não deixa salvar sem o valor das demais parcelas', async () => {
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);
+
+    renderInline({ onSaved });
+    preencherMinimoBookplay('903');
+    // Liga a entrada e preenche só a entrada, deixando "demais" vazio.
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: /1º pagamento é entrada\?/i }));
+    fireEvent.change(screen.getAllByPlaceholderText('0,00')[0], { target: { value: '500' } });
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Informe o valor das demais parcelas'));
+    expect(onSaved).not.toHaveBeenCalled();
+    expect(supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert')).toBeUndefined();
+  });
+
+  it('voltar para 1 parcela desliga a entrada — o CHECK do banco recusaria', async () => {
+    renderInline();
+    preencherMinimoBookplay('904');
+    ligarEntrada('4', '500', '200');
+    expect(screen.getByRole('button', { name: /Com entrada/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('spinbutton'), { target: { value: '1' } });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Com entrada/i })).not.toBeInTheDocument();
+    });
+  });
+});

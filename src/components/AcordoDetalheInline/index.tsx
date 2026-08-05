@@ -28,7 +28,7 @@ import {
   extractLinkAcordo, getEstadoFromAcordo, isAtrasado, getTodayISO,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
-import { calcularParcelas, foiUsadoQuarentaPct } from '@/lib/money';
+import { calcularParcelas, foiUsadoQuarentaPct, valorDemaisParcelas } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 import { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
@@ -230,6 +230,12 @@ export function AcordoDetalheInline({
         vinculo_operador_nome: parcelaAtual.vinculo_operador_nome,
         valor_total:           parcelaAtual.valor_total ?? null,
         usou_quarenta_pct:     usou40Base,
+        // A entrada viaja com o grupo: sem ela a parcela 3 não teria como
+        // derivar o valor das demais e voltaria a repetir o valor anterior.
+        // Omitido (não nulo) quando a coluna não existe — migration pendente.
+        ...(parcelaAtual.valor_entrada != null
+          ? { valor_entrada: parcelaAtual.valor_entrada }
+          : {}),
         status:                'verificar_pendente' as const,
         valor:                 valorProximaParcela,
       };
@@ -303,6 +309,9 @@ export function AcordoDetalheInline({
                 vinculo_operador_nome: parInst.vinculo_operador_nome,
                 valor_total:           parInst.valor_total ?? null,
                 usou_quarenta_pct:     usou40p,
+                ...(parInst.valor_entrada != null
+                  ? { valor_entrada: parInst.valor_entrada }
+                  : {}),
                 status:                'verificar_pendente',
                 valor:                 valorI,
                 numero_parcela:        numero,
@@ -833,6 +842,11 @@ export function AcordoDetalheInline({
           totalParcelas={totalParcelas}
           salvando={salvandoReagendar}
           valorProxima={(() => {
+            // Acordo com entrada (BookPlay): da 2ª em diante o valor é o das
+            // DEMAIS. Sem isto o modal repetiria o valor da entrada, que é o
+            // da parcela atual quando se reagenda a partir da 1ª.
+            const demais = valorDemaisParcelas(reagendarParcela);
+            if (demais !== null) return demais;
             if (!reagendarParcela.valor_total || !reagendarParcela.parcelas) return undefined;
             const usou40 = reagendarParcela.usou_quarenta_pct ?? foiUsadoQuarentaPct(reagendarParcela);
             return calcularParcelas(reagendarParcela.valor_total, reagendarParcela.parcelas, usou40)[reagendarParcela.numero_parcela ?? 1];

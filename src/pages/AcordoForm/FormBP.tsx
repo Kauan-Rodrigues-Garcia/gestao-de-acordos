@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import {
-  Hash, DollarSign, FileText, User, Smartphone, Info, Building2, ChevronDown,
+  Hash, DollarSign, FileText, User, Smartphone, Info, Building2, ChevronDown, Wallet,
 } from 'lucide-react';
 import { INSTITUICOES_OPTIONS } from '@/lib/index';
+import { formatBRL, parseBRL, totalComEntrada } from '@/lib/money';
 import { cn } from '@/lib/utils';
+import { TIPOS_PARCELADOS_BP } from './schemas';
 import type { FormData } from './schemas';
 
 interface FormBPProps {
@@ -21,13 +23,23 @@ interface FormBPProps {
   showObs: boolean;
   setShowObs: (v: boolean) => void;
   maxParcelas: number;
+  /** Entrada (BookPlay): 1º pagamento com valor próprio. */
+  temEntrada: boolean;
+  setTemEntrada: (v: boolean) => void;
 }
 
 export function FormBP({
   register, errors, watch, setValue,
   isEdit, showObs, setShowObs, maxParcelas,
+  temEntrada, setTemEntrada,
 }: FormBPProps) {
   const tipoAtual = watch('tipo');
+
+  const numParcelas    = Math.max(1, parseInt(watch('parcelas') || '1', 10) || 1);
+  const podeTerEntrada = TIPOS_PARCELADOS_BP.includes(tipoAtual) && numParcelas > 1;
+  const totalDoAcordo  = totalComEntrada(
+    parseBRL(watch('valor') ?? ''), parseBRL(watch('valor_demais') ?? ''), numParcelas,
+  );
 
   return (
     <>
@@ -72,7 +84,9 @@ export function FormBP({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs font-semibold text-primary">Valor *</Label>
+            <Label className="text-xs font-semibold text-primary">
+              {temEntrada ? 'Valor da entrada *' : 'Valor *'}
+            </Label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
               <Input
@@ -86,6 +100,57 @@ export function FormBP({
             </div>
             {errors.valor && <p className="text-xs text-destructive">{errors.valor.message}</p>}
           </div>
+
+          {/* Entrada: só com mais de uma parcela — com parcela única não há
+              "demais" para ter valor diferente. Mesma regra do formulário
+              inline (components/AcordoNovoInline/FormBP.tsx). */}
+          {podeTerEntrada && (
+            <div className="space-y-1.5 sm:col-span-2">
+              <button
+                type="button" onClick={() => setTemEntrada(!temEntrada)}
+                title={temEntrada
+                  ? 'Clique para voltar a parcelas de valor igual'
+                  : 'Clique se o primeiro pagamento for uma entrada'}
+                className={cn(
+                  'h-9 flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
+                  temEntrada
+                    ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/25 dark:text-emerald-400'
+                    : 'bg-background text-foreground border-input hover:bg-accent/50',
+                )}
+              >
+                <Wallet className="w-3.5 h-3.5 shrink-0" />
+                {temEntrada ? 'Com entrada' : '1º pagamento é entrada?'}
+              </button>
+
+              {temEntrada && (
+                <>
+                  <Label className="text-xs font-semibold text-primary">Demais parcelas *</Label>
+                  <div className="relative">
+                    <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-primary/60" />
+                    <Input
+                      {...register('valor_demais')}
+                      placeholder="0.00"
+                      className={cn(
+                        'h-10 text-sm pl-8 font-mono border-primary/40 focus:border-primary',
+                        errors.valor_demais && 'border-destructive'
+                      )}
+                    />
+                  </div>
+                  {errors.valor_demais && <p className="text-xs text-destructive">{errors.valor_demais.message}</p>}
+                  {/* Resumo para conferir o total antes de salvar: os dois
+                      valores são digitados, um dígito a mais passaria batido. */}
+                  <div className="flex items-start gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-2.5 py-1.5">
+                    <Wallet className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>
+                      Parcela <strong>1/{numParcelas}</strong> é a entrada de <strong>{formatBRL(parseBRL(watch('valor') ?? ''))}</strong>
+                      {' '}e as outras <strong>{numParcelas - 1}</strong> ficam em <strong>{formatBRL(parseBRL(watch('valor_demais') ?? ''))}</strong> cada.
+                      {' '}Total do acordo: <strong>{formatBRL(totalDoAcordo)}</strong>.
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
         </CardContent>
       </Card>

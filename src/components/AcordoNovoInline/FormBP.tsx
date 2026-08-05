@@ -5,8 +5,9 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Link2, Save, User, X, Info } from 'lucide-react';
+import { FileText, Hash, Link2, Save, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatBRL, parseBRL } from '@/lib/money';
 import { INSTITUICOES_OPTIONS, isPerfilAdmin } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
@@ -26,7 +27,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
     instituicao, setInstituicao,
     tipo, handleChangeTipo,
     parcelasStr, setParcelasStr,
-    temParcelas,
+    temParcelas, parcelas,
+    temEntradaForm, setTemEntradaForm, demaisStr, setDemaisStr, totalEntrada,
     usuarioTemLogicaDiretoExtra,
     isExtra, setIsExtra,
     status, setStatus,
@@ -38,6 +40,10 @@ export function FormBP({ state }: { state: SharedFormState }) {
 
   const { perfil } = useAuth();
   const admin = isPerfilAdmin(perfil?.perfil ?? '');
+  // O botão precisa aparecer ANTES de a entrada ser ligada, então não pode
+  // depender de `temEntradaForm` (que o pai já entrega desligado quando a
+  // entrada não se aplica).
+  const podeTerEntrada = temParcelas && parcelas > 1;
 
   return (
     <>
@@ -81,14 +87,59 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 </div>
                 <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
                 <div className="space-y-1">
-                  <Label className="text-xs">Valor *</Label>
+                  <Label className="text-xs">{temEntradaForm ? 'Valor da entrada *' : 'Valor *'}</Label>
                   <Input value={valorStr} onChange={(e) => setValorStr(e.target.value)} placeholder="0,00" className="h-8 text-xs font-mono" />
                 </div>
+                {/* Só aparece com a entrada ligada — ver `entradaDisponivel`. */}
+                {temEntradaForm && (
+                  <div className="space-y-1">
+                    <Label className="text-xs">Demais parcelas *</Label>
+                    <Input
+                      value={demaisStr} onChange={(e) => setDemaisStr(e.target.value)}
+                      placeholder="0,00" className="h-8 text-xs font-mono"
+                    />
+                  </div>
+                )}
               </div>
-              {temParcelas && (
+
+              {/* Entrada: aparece só quando há mais de uma parcela — com
+                  parcela única não existe "demais" para ter valor diferente. */}
+              {podeTerEntrada && (
+                <button
+                  type="button" onClick={() => setTemEntradaForm(v => !v)} disabled={salvando}
+                  title={temEntradaForm
+                    ? 'Clique para voltar a parcelas de valor igual'
+                    : 'Clique se o primeiro pagamento for uma entrada'}
+                  className={cn(
+                    'mt-2 h-8 flex items-center gap-2 px-3 rounded-md border text-xs font-medium transition-all cursor-pointer',
+                    temEntradaForm
+                      ? 'bg-emerald-500/15 text-emerald-700 border-emerald-500/30 hover:bg-emerald-500/25 dark:text-emerald-400'
+                      : 'bg-background text-foreground border-input hover:bg-accent/50',
+                  )}
+                >
+                  <Wallet className="w-3 h-3 shrink-0" />
+                  {temEntradaForm ? 'Com entrada' : '1º pagamento é entrada?'}
+                </button>
+              )}
+
+              {temParcelas && !temEntradaForm && (
                 <div className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 rounded-md px-2.5 py-1.5">
                   <Info className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>Preencha o <strong>Valor</strong> com o valor de <strong>cada parcela</strong>, não o valor total do acordo.</span>
+                </div>
+              )}
+
+              {/* Resumo do que será gravado. Existe para o operador conferir o
+                  total ANTES de salvar — os dois valores são digitados, então
+                  um dígito a mais passaria despercebido sem esta linha. */}
+              {temEntradaForm && (
+                <div className="mt-2 flex items-start gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 rounded-md px-2.5 py-1.5">
+                  <Wallet className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    Parcela <strong>1/{parcelas}</strong> é a entrada de <strong>{formatBRL(parseBRL(valorStr))}</strong>
+                    {' '}e as outras <strong>{parcelas - 1}</strong> ficam em <strong>{formatBRL(parseBRL(demaisStr))}</strong> cada.
+                    {' '}Total do acordo: <strong>{formatBRL(totalEntrada)}</strong>.
+                  </span>
                 </div>
               )}
             </div>

@@ -103,6 +103,78 @@ export function calcularParcelas(
   return result.map(c => c / 100);
 }
 
+// ── Entrada + demais parcelas (BookPlay) ────────────────────────────────────
+//
+// Acordo negociado como "entrada de X e mais N−1 de Y". A entrada É a parcela
+// 1 de N: com 4 parcelas o cliente paga 4 vezes (1 entrada + 3 iguais), e o
+// contador segue 1/4 … 4/4 como em qualquer outro acordo.
+//
+// Difere do rateio normal e da regra dos 40% (PaguePlay), que PARTEM do total
+// e dividem. Aqui os dois valores são digitados pelo operador e o total é
+// consequência — não há resto de divisão para alguém absorver.
+//
+// No banco: `valor_entrada` guarda a entrada e `valor_total` a soma. O valor
+// das demais é derivado de volta por `valorDemaisParcelas`, então os dois
+// números nunca podem divergir entre si.
+
+/** true quando o acordo foi negociado com entrada (qualquer parcela do grupo). */
+export function temEntrada(acordo: {
+  valor_entrada?: number | null;
+  parcelas?:      number | null;
+}): boolean {
+  return acordo.valor_entrada != null
+    && acordo.valor_entrada > 0
+    && (acordo.parcelas ?? 1) > 1;
+}
+
+/** Total do acordo: entrada + demais × (N−1). Em centavos, para não somar float. */
+export function totalComEntrada(
+  valorEntrada: number,
+  valorDemais:  number,
+  numParcelas:  number,
+): number {
+  if (numParcelas <= 1) return Math.round(valorEntrada * 100) / 100;
+  const cents = Math.round(valorEntrada * 100)
+    + Math.round(valorDemais * 100) * (numParcelas - 1);
+  return cents / 100;
+}
+
+/**
+ * As N parcelas: a primeira é a entrada, as demais são iguais.
+ * Sem resto para distribuir — os dois valores vieram digitados.
+ */
+export function calcularParcelasComEntrada(
+  valorEntrada: number,
+  valorDemais:  number,
+  numParcelas:  number,
+): number[] {
+  if (numParcelas <= 0) return [];
+  const entrada = Math.round(valorEntrada * 100) / 100;
+  if (numParcelas === 1) return [entrada];
+  const demais = Math.round(valorDemais * 100) / 100;
+  return [entrada, ...Array<number>(numParcelas - 1).fill(demais)];
+}
+
+/**
+ * Volta o valor de CADA parcela que não é a entrada, a partir do que está
+ * gravado. É o número que o reagendamento sugere da 2ª em diante — sem ele a
+ * parcela 2 repetiria o valor da entrada.
+ *
+ * `null` quando o acordo não tem entrada ou não dá para derivar.
+ */
+export function valorDemaisParcelas(acordo: {
+  valor_total?:   number | null;
+  valor_entrada?: number | null;
+  parcelas?:      number | null;
+}): number | null {
+  if (!temEntrada(acordo)) return null;
+  const n = acordo.parcelas ?? 1;
+  if (acordo.valor_total == null) return null;
+  const restoCents = Math.round(acordo.valor_total * 100) - Math.round(acordo.valor_entrada! * 100);
+  if (restoCents <= 0) return null;
+  return Math.round(restoCents / (n - 1)) / 100;
+}
+
 /**
  * Deriva o VALOR TOTAL do acordo a partir do valor de UMA parcela vinda do
  * relatório analítico (PaguePlay), onde boleto/Pix informam só a parcela.
