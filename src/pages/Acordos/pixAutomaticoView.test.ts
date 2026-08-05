@@ -17,7 +17,7 @@ import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import {
   mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
   filtrarItensPix, totaisPorStatus, calcularBonusMeta,
-  calcularDobraComissao, rankingPixSetor, calcularMetaPix,
+  calcularDobraComissao, rankingPixSetor, calcularMetaPix, calcularMetaPixPorEquipe,
   MAX_SUGESTOES_VINCULO, type OperadorInfo,
 } from './pixAutomaticoView';
 
@@ -469,5 +469,93 @@ describe('calcularMetaPix', () => {
     const r = calcularMetaPix({ ...BASE_META_PIX, configMes: null })!;
     expect(r.faltaValor).toBeCloseTo(60000, 2);
     expect(r.projecao).toBe(0);
+  });
+});
+
+// ── Meta de Pix por equipe ──────────────────────────────────────────────────
+
+describe('calcularMetaPixPorEquipe', () => {
+  const equipePorOperador = { bryan1: 'eq-bryan', bryan2: 'eq-bryan', luci1: 'eq-luci' };
+  const metas = [
+    { equipeId: 'eq-bryan', equipeNome: 'Bryan',   metaValor: 100000, metaAcordos: 10 },
+    { equipeId: 'eq-luci',  equipeNome: 'Luciana', metaValor:  50000, metaAcordos:  5 },
+  ];
+  const base = { equipePorOperador, configMes: null, mes: '2026-07', hojeISO: '2026-07-15' };
+
+  it('separa o realizado de cada equipe pelos operadores dela', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...base,
+      metas,
+      itens: [
+        item({ operador_id: 'bryan1', valor: 30000 }),
+        item({ operador_id: 'bryan2', valor: 20000 }),
+        item({ operador_id: 'luci1',  valor: 15000 }),
+      ],
+    });
+    const bryan = r.equipes.find(e => e.equipeId === 'eq-bryan')!;
+    const luci  = r.equipes.find(e => e.equipeId === 'eq-luci')!;
+    expect(bryan.resumo!.realizado).toBe(50000);
+    expect(bryan.resumo!.acordos).toBe(2);
+    expect(luci.resumo!.realizado).toBe(15000);
+  });
+
+  it('a meta do setor é a soma das metas das equipes', () => {
+    const r = calcularMetaPixPorEquipe({ ...base, metas, itens: [] });
+    expect(r.setor!.metaValor).toBe(150000);    // 100.000 + 50.000
+    expect(r.setor!.metaAcordos).toBe(15);      // 10 + 5
+  });
+
+  it('o realizado do setor inclui quem está fora de equipe', () => {
+    // Sem isto, as equipes não fechariam com o setor e ninguém saberia por quê.
+    const r = calcularMetaPixPorEquipe({
+      ...base,
+      metas,
+      itens: [
+        item({ operador_id: 'bryan1', valor: 30000 }),
+        item({ operador_id: 'avulso', valor:  7000 }),   // sem equipe no mapa
+      ],
+    });
+    expect(r.setor!.realizado).toBe(37000);
+    expect(r.equipes.find(e => e.equipeId === 'eq-bryan')!.resumo!.realizado).toBe(30000);
+  });
+
+  it('desaprovado não conta, no setor nem na equipe', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...base,
+      metas,
+      itens: [
+        item({ operador_id: 'bryan1', valor: 30000, status: 'aprovado' }),
+        item({ operador_id: 'bryan1', valor: 99000, status: 'desaprovado' }),
+      ],
+    });
+    expect(r.setor!.realizado).toBe(30000);
+    expect(r.equipes.find(e => e.equipeId === 'eq-bryan')!.resumo!.realizado).toBe(30000);
+  });
+
+  it('equipe sem meta fica de fora da lista', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...base,
+      metas: [{ equipeId: 'eq-bryan', equipeNome: 'Bryan', metaValor: 0, metaAcordos: 0 }],
+      itens: [item({ operador_id: 'bryan1', valor: 30000 })],
+    });
+    expect(r.equipes).toHaveLength(0);
+    expect(r.setor).toBeNull();   // sem meta nenhuma, não há o que acompanhar
+  });
+
+  it('ordena as equipes da maior meta para a menor', () => {
+    const r = calcularMetaPixPorEquipe({ ...base, metas, itens: [] });
+    expect(r.equipes.map(e => e.equipeNome)).toEqual(['Bryan', 'Luciana']);
+  });
+
+  it('conta só os acordos do mês de referência', () => {
+    const r = calcularMetaPixPorEquipe({
+      ...base,
+      metas,
+      itens: [
+        item({ operador_id: 'bryan1', valor: 30000, criado_em: '2026-07-10T10:00:00Z' }),
+        item({ operador_id: 'bryan1', valor: 80000, criado_em: '2026-06-28T10:00:00Z' }),
+      ],
+    });
+    expect(r.equipes.find(e => e.equipeId === 'eq-bryan')!.resumo!.realizado).toBe(30000);
   });
 });

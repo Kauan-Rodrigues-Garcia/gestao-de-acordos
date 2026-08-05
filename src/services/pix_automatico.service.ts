@@ -102,36 +102,32 @@ function valorBR(v: number): string {
 }
 
 /**
- * Texto de uma linha para encaminhar (copiar em lote):
- * `NR: <nr> COMISSÃO <comissao>`
+ * Uma linha do "Copiar": só o CÓDIGO do acordo.
  *
- * Só NR e comissão. A linha trazia também operador, valor do acordo e data —
- * quem recebe este texto vai pagar a comissão, e para isso operador e data já
- * vêm no contexto do encaminhamento; o valor do acordo não entra na conta de
- * ninguém do outro lado e ainda se confundia com a comissão na leitura rápida.
+ * A linha já trouxe operador, valor, data e comissão. Quem recebe este texto
+ * confere código a código e paga o total — a comissão repetida em cada linha só
+ * dava ruído e concorria com o total na leitura rápida.
  */
-export function formatarLinhaPix(
-  a: Pick<PixAutoAcordo, 'nr_cliente'>,
-  comissao: number,
-): string {
-  return `NR: ${a.nr_cliente} COMISSÃO ${valorBR(comissao)}`;
+export function formatarLinhaPix(a: Pick<PixAutoAcordo, 'nr_cliente'>): string {
+  return a.nr_cliente;
 }
 
 /**
- * O texto completo do "Copiar": uma linha por acordo e, quando há mais de um,
- * o TOTAL da comissão no fim.
+ * O texto completo do "Copiar": um código por linha e, no fim, o total da
+ * comissão somado.
  *
- * Somar à mão a comissão de doze NRs colados no WhatsApp é onde o erro entra —
- * e o erro aqui é dinheiro pago a menos ou a mais. A soma sai daqui pronta.
- * Com um acordo só o total é a própria linha, então não se repete.
+ * Somar à mão a comissão de doze acordos colados no WhatsApp é onde o erro
+ * entra — e o erro aqui é dinheiro pago a menos ou a mais. A soma sai pronta.
+ * O total aparece mesmo com um acordo só: é ele que diz quanto pagar, e sem a
+ * comissão por linha não haveria valor nenhum no texto.
  */
 export function formatarCopiaPix(
   itens: { acordo: Pick<PixAutoAcordo, 'nr_cliente'>; comissao: number }[],
 ): string {
-  const linhas = itens.map(i => formatarLinhaPix(i.acordo, i.comissao));
-  if (itens.length <= 1) return linhas.join('\n');
+  if (itens.length === 0) return '';
+  const linhas = itens.map(i => formatarLinhaPix(i.acordo));
   const total = itens.reduce((s, i) => s + i.comissao, 0);
-  return [...linhas, `TOTAL COMISSÃO ${valorBR(total)}`].join('\n');
+  return [...linhas, `R$ ${valorBR(total)}`].join('\n');
 }
 
 // ── Acordos ────────────────────────────────────────────────────────────────
@@ -433,6 +429,8 @@ export interface PixAutoMeta {
   id: string;
   empresa_id: string;
   setor_id: string;
+  /** Equipe dona da meta. null = linha antiga, de quando a meta era do setor. */
+  equipe_id: string | null;
   mes: number;
   ano: number;
   /** Meta do VALOR dos acordos Pix do setor no mês (não da comissão). */
@@ -446,36 +444,46 @@ export interface PixAutoMeta {
 }
 
 /**
- * Meta de Pix do setor no mês. `null` = sem meta definida — diferente de meta
- * zero, e é por isso que o painel some em vez de anunciar "faltam R$ 0,00".
+ * Metas de Pix das EQUIPES de um setor no mês.
  *
- * Tolera a migration 20260804a ausente (tabela inexistente → null), no mesmo
- * padrão de `fetchNrsBloqueados`: recurso some, resto da tela segue.
+ * A meta do setor não é digitada: é a soma das metas das equipes (Bryan,
+ * Luciana, Matheus…). Por isso a leitura devolve a lista, e quem consolida é
+ * quem exibe — guardar o total do setor também deixaria dois números para a
+ * mesma verdade, e um deles ficaria velho.
+ *
+ * Tolera a migration ausente (tabela inexistente → lista vazia), no mesmo
+ * padrão de `fetchNrsBloqueados`: o recurso some, o resto da tela segue.
  */
-export async function fetchMetaPix(
+export async function fetchMetasPixEquipes(
   empresaId: string,
   setorId: string,
   mes: number,
   ano: number,
-): Promise<PixAutoMeta | null> {
+): Promise<PixAutoMeta[]> {
   const { data, error } = await supabase
     .from('pix_automatico_metas')
     .select('*')
     .eq('empresa_id', empresaId)
     .eq('setor_id', setorId)
     .eq('mes', mes)
-    .eq('ano', ano)
-    .maybeSingle();
+    .eq('ano', ano);
   if (error) {
-    console.warn('[pix_automatico.service] fetchMetaPix:', error.message);
-    return null;
+    console.warn('[pix_automatico.service] fetchMetasPixEquipes:', error.message);
+    return [];
   }
-  return (data as unknown as PixAutoMeta) ?? null;
+  return (data as unknown as PixAutoMeta[]) ?? [];
 }
 
-export async function upsertMetaPix(p: {
+/**
+ * Grava a meta de UMA equipe. `metaValor` e `metaAcordos` zerados apagam a
+ * linha: meta zero e "sem meta" são coisas diferentes na tela (uma mostra
+ * "faltam R$ 0,00", a outra não mostra nada), e é o apagar que devolve a
+ * equipe ao estado de "ainda não definida".
+ */
+export async function upsertMetaPixEquipe(p: {
   empresaId: string;
   setorId: string;
+  equipeId: string;
   mes: number;
   ano: number;
   metaValor: number;
@@ -483,18 +491,31 @@ export async function upsertMetaPix(p: {
   atualizadoPor: string;
   atualizadoPorNome: string;
 }): Promise<{ ok: boolean; error?: string }> {
+  if (p.metaValor <= 0 && p.metaAcordos <= 0) {
+    const { error } = await supabase
+      .from('pix_automatico_metas')
+      .delete()
+      .eq('empresa_id', p.empresaId)
+      .eq('equipe_id', p.equipeId)
+      .eq('mes', p.mes)
+      .eq('ano', p.ano);
+    if (error) return { ok: false, error: error.message };
+    return { ok: true };
+  }
+
   const { error } = await supabase
     .from('pix_automatico_metas')
     .upsert({
       empresa_id:          p.empresaId,
       setor_id:            p.setorId,
+      equipe_id:           p.equipeId,
       mes:                 p.mes,
       ano:                 p.ano,
       meta_valor:          p.metaValor,
       meta_acordos:        p.metaAcordos,
       atualizado_por:      p.atualizadoPor,
       atualizado_por_nome: p.atualizadoPorNome,
-    }, { onConflict: 'empresa_id,setor_id,mes,ano' });
+    }, { onConflict: 'empresa_id,equipe_id,mes,ano' });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

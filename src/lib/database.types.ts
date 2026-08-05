@@ -1962,6 +1962,7 @@ export type Database = {
           mes: number
           meta_acordos: number
           meta_valor: number
+          equipe_id: string | null
           setor_id: string
         }
         Insert: {
@@ -1975,6 +1976,7 @@ export type Database = {
           mes: number
           meta_acordos?: number
           meta_valor?: number
+          equipe_id?: string | null
           setor_id: string
         }
         Update: {
@@ -1988,6 +1990,7 @@ export type Database = {
           mes?: number
           meta_acordos?: number
           meta_valor?: number
+          equipe_id?: string | null
           setor_id?: string
         }
         Relationships: []

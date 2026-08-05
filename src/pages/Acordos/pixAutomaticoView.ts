@@ -416,3 +416,77 @@ export function calcularBonusMeta(e: EntradaBonusMeta): BonusMeta | null {
     projecao,
   };
 }
+
+// ── Meta de Pix por EQUIPE ──────────────────────────────────────────────────
+
+export interface MetaEquipeEntrada {
+  equipeId: string;
+  equipeNome: string;
+  metaValor: number;
+  metaAcordos: number;
+}
+
+export interface LinhaMetaEquipe {
+  equipeId: string;
+  equipeNome: string;
+  /** null = equipe sem meta definida no mês. */
+  resumo: ResumoMetaPix | null;
+}
+
+export interface ConsolidadoMetaPix {
+  /** Uma linha por equipe COM meta, da maior meta para a menor. */
+  equipes: LinhaMetaEquipe[];
+  /** Soma das equipes — é esta a meta do setor, que não é digitada. */
+  setor: ResumoMetaPix | null;
+}
+
+/**
+ * Acompanhamento da meta de Pix equipe a equipe, e o total do setor.
+ *
+ * A meta do setor é a SOMA das metas das equipes (Bryan + Luciana + Matheus),
+ * nunca um valor digitado à parte: com dois lugares para a mesma verdade, um
+ * deles fica velho na primeira alteração.
+ *
+ * O realizado de cada equipe sai dos acordos dos operadores DELA — por isso o
+ * mapa `equipePorOperador`. Acordo de operador sem equipe conhecida entra no
+ * total do setor mas em nenhuma equipe: some-lo em alguma seria creditar a um
+ * time o que não é dele, e escondê-lo faria as equipes não fecharem com o setor.
+ */
+export function calcularMetaPixPorEquipe(p: {
+  itens: PixAutoAcordo[];
+  metas: MetaEquipeEntrada[];
+  /** operador_id → equipe_id */
+  equipePorOperador: Record<string, string>;
+  configMes: MetasConfigMes | null;
+  mes: MesRef;
+  hojeISO: string;
+}): ConsolidadoMetaPix {
+  const base = { configMes: p.configMes, mes: p.mes, hojeISO: p.hojeISO };
+
+  const equipes: LinhaMetaEquipe[] = p.metas
+    .map(m => ({
+      equipeId: m.equipeId,
+      equipeNome: m.equipeNome,
+      resumo: calcularMetaPix({
+        ...base,
+        itens: p.itens.filter(i => p.equipePorOperador[i.operador_id] === m.equipeId),
+        metaValor: m.metaValor,
+        metaAcordos: m.metaAcordos,
+      }),
+    }))
+    .filter(l => l.resumo !== null)
+    .sort((a, b) => (b.resumo!.metaValor - a.resumo!.metaValor));
+
+  // Setor: metas somadas, realizado do setor inteiro (inclui quem está fora de
+  // equipe). Passa pela MESMA função, então projeção e % seguem uma regra só.
+  const metaValorSetor   = p.metas.reduce((s, m) => s + (Number(m.metaValor)   || 0), 0);
+  const metaAcordosSetor = p.metas.reduce((s, m) => s + (Number(m.metaAcordos) || 0), 0);
+  const setor = calcularMetaPix({
+    ...base,
+    itens: p.itens,
+    metaValor: metaValorSetor,
+    metaAcordos: metaAcordosSetor,
+  });
+
+  return { equipes, setor };
+}
