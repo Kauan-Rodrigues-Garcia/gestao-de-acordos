@@ -7,6 +7,7 @@ import {
   isCartao,
   mapearFormaPgto,
   resolveCols,
+  ehEquipeRetencao,
 } from './analiticoParser';
 
 // ── norm ────────────────────────────────────────────────────────────────────
@@ -164,5 +165,30 @@ describe('resolveCols', () => {
     const cols = resolveCols(headers);
     expect(cols).not.toBeNull();
     expect(cols!.tp).toBe(3); // TpDoc, não Tipo Venda (índice 2)
+  });
+});
+
+// ── ehEquipeRetencao ─────────────────────────────────────────────────────────
+
+describe('ehEquipeRetencao', () => {
+  it('reconhece a equipe de Retenção com e sem acento', () => {
+    expect(ehEquipeRetencao('Retenção')).toBe(true);
+    expect(ehEquipeRetencao('RETENCAO')).toBe(true);
+    expect(ehEquipeRetencao('retencao')).toBe(true);
+  });
+
+  it('reconhece as variações com subgrupo', () => {
+    // A coluna Equipe/SubGrupo do relatório 58 traz as duas grafias.
+    expect(ehEquipeRetencao('Retenção e Retenção')).toBe(true);
+    expect(ehEquipeRetencao('Retenção / Retenção')).toBe(true);
+    expect(ehEquipeRetencao('  Retenção  ')).toBe(true);
+  });
+
+  it('não confunde com as equipes do Receptivo', () => {
+    expect(ehEquipeRetencao('Receptivo')).toBe(false);
+    expect(ehEquipeRetencao('Play 1')).toBe(false);
+    expect(ehEquipeRetencao('')).toBe(false);
+    expect(ehEquipeRetencao(null)).toBe(false);
+    expect(ehEquipeRetencao(undefined)).toBe(false);
   });
 });

@@ -245,6 +245,28 @@ export default function Acordos() {
     });
   }, [acordos]);
 
+  // Lista do filtro de operador. O efeito acima só conhece quem aparece na
+  // PÁGINA carregada — como dropdown de filtro isso é inútil: o operador que
+  // você procura está justamente na página que você ainda não abriu. Aqui vem a
+  // lista do escopo inteiro, pelo mesmo recorte de setor do filtro de equipes.
+  const podeFiltrarPorUsuario = temPermissao('filtrar_por_usuario');
+  useEffect(() => {
+    if (!podeFiltrarPorUsuario || !empresa?.id) return;
+    if (!verTodosSetores && !perfil?.setor_id) return;
+    let q = supabase
+      .from('perfis')
+      .select('id, nome')
+      .eq('empresa_id', empresa.id)
+      .eq('ativo', true);
+    if (!verTodosSetores && perfil?.setor_id) q = q.eq('setor_id', perfil.setor_id);
+    q.order('nome').then(({ data }) => {
+      if (!data) return;
+      const map: Record<string, string> = {};
+      (data as { id: string; nome: string }[]).forEach(p => { map[p.id] = p.nome; });
+      setOperadoresMap(prev => ({ ...prev, ...map }));
+    });
+  }, [podeFiltrarPorUsuario, empresa?.id, verTodosSetores, perfil?.setor_id]);
+
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje       = getTodayISO();
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);

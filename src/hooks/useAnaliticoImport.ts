@@ -52,6 +52,8 @@ export interface PreviewImport {
   linhasDiario?:    LinhaDiario[];
   /** BookPlay: dia de referência (moda) para o recebimento diário */
   dia?:             string;
+  /** Linhas da equipe de Retenção descartadas do relatório do Receptivo. */
+  retencaoRemovidas: number;
 }
 
 /** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
@@ -165,6 +167,8 @@ export function useAnaliticoImport() {
         todosPerfis,
         loteId:           crypto.randomUUID(),
         mes:              mesBP,
+        // O relatório BookPlay não tem coluna de equipe — nada a descartar.
+        retencaoRemovidas: 0,
       });
       setEstado('preview');
       return;
@@ -173,13 +177,17 @@ export function useAnaliticoImport() {
     // ── PaguePlay: fluxo original (relatório analítico dedicado) ──
     // xlsx entra aqui, sob demanda (ver comentário do import no topo).
     const { parseRelatorioExcel } = await import('@/services/analitico/analiticoParser');
-    const { linhas, erros } = await parseRelatorioExcel(file);
+    const { linhas, erros, retencaoRemovidas } = await parseRelatorioExcel(file);
 
     if (!linhas.length) {
       setErroGeral(
-        erros.length
-          ? erros.join('\n')
-          : 'Nenhuma linha válida encontrada no arquivo.',
+        // Arquivo só de Retenção: "nenhuma linha válida" mandaria procurar
+        // defeito num arquivo que está certo — o filtro é que levou tudo.
+        retencaoRemovidas > 0 && !erros.length
+          ? `Nenhuma linha a importar: as ${retencaoRemovidas} linhas do arquivo são da equipe de Retenção, que não conta para o Receptivo.`
+          : erros.length
+            ? erros.join('\n')
+            : 'Nenhuma linha válida encontrada no arquivo.',
       );
       setEstado('error');
       return;
@@ -210,6 +218,7 @@ export function useAnaliticoImport() {
       todosPerfis,
       loteId:           crypto.randomUUID(),
       mes,
+      retencaoRemovidas,
     });
     setEstado('preview');
   }, [empresa?.id, tenant.isPaguePlay]);

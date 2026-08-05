@@ -17,10 +17,21 @@ import { supabase } from '@/lib/supabase';
 import type { Database } from '@/lib/database.types';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
+type PixAutoAcordoUpdate = Database['public']['Tables']['pix_automatico_acordos']['Update'];
 
 export type PixAutoStatus = 'pendente' | 'aprovado' | 'desaprovado';
 
 export const PIX_AUTO_PCT_PADRAO = 0.25;
+
+/**
+ * Acordos Pix no mês que dobram a comissão do operador.
+ *
+ * Regra de negócio da operação: batendo esta quantidade, a comissão do mês vale
+ * o dobro. Contam os acordos FEITOS (pendente + aprovado) — desaprovado não
+ * existiu. É o mesmo conjunto que o contador mostra ao operador, senão ele veria
+ * um número subir e a meta não sair do lugar.
+ */
+export const PIX_META_ACORDOS_DOBRA = 18;
 
 export interface PixAutoAcordo {
   id: string;
@@ -35,6 +46,11 @@ export interface PixAutoAcordo {
   avaliado_por: string | null;
   avaliado_por_nome: string | null;
   avaliado_em: string | null;
+  /** Comissão desta linha já paga ao operador (líder+ marca). */
+  pago: boolean;
+  pago_em: string | null;
+  pago_por: string | null;
+  pago_por_nome: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -80,13 +96,6 @@ export function comissaoDe(a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comi
   return Math.round(Number(a.valor) * pct) / 100; // valor × pct ÷ 100, 2 casas
 }
 
-/** Data ISO → "dd/mm" para o texto de encaminhamento. */
-function ddmm(criadoEm: string): string {
-  const d = new Date(criadoEm);
-  if (isNaN(d.getTime())) return '';
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
-}
-
 /** Valor numérico BR sem "R$" (ex.: 1234.5 → "1.234,50"). */
 function valorBR(v: number): string {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -94,20 +103,51 @@ function valorBR(v: number): string {
 
 /**
  * Texto de uma linha para encaminhar (copiar em lote):
- * `NR: <nr> <operador> VALOR <valor> COMISSÃO <comissao> <dd/mm>`
- * (operador e data entram só com o valor, sem rótulo.)
+ * `NR: <nr> COMISSÃO <comissao>`
+ *
+ * Só NR e comissão. A linha trazia também operador, valor do acordo e data —
+ * quem recebe este texto vai pagar a comissão, e para isso operador e data já
+ * vêm no contexto do encaminhamento; o valor do acordo não entra na conta de
+ * ninguém do outro lado e ainda se confundia com a comissão na leitura rápida.
  */
 export function formatarLinhaPix(
-  a: Pick<PixAutoAcordo, 'nr_cliente' | 'operador_nome' | 'valor' | 'criado_em'>,
+  a: Pick<PixAutoAcordo, 'nr_cliente'>,
   comissao: number,
 ): string {
-  const operador = (a.operador_nome ?? '—').trim().replace(/\s+/g, ' ');
-  return `NR: ${a.nr_cliente} ${operador} VALOR ${valorBR(a.valor)} COMISSÃO ${valorBR(comissao)} ${ddmm(a.criado_em)}`;
+  return `NR: ${a.nr_cliente} COMISSÃO ${valorBR(comissao)}`;
+}
+
+/**
+ * O texto completo do "Copiar": uma linha por acordo e, quando há mais de um,
+ * o TOTAL da comissão no fim.
+ *
+ * Somar à mão a comissão de doze NRs colados no WhatsApp é onde o erro entra —
+ * e o erro aqui é dinheiro pago a menos ou a mais. A soma sai daqui pronta.
+ * Com um acordo só o total é a própria linha, então não se repete.
+ */
+export function formatarCopiaPix(
+  itens: { acordo: Pick<PixAutoAcordo, 'nr_cliente'>; comissao: number }[],
+): string {
+  const linhas = itens.map(i => formatarLinhaPix(i.acordo, i.comissao));
+  if (itens.length <= 1) return linhas.join('\n');
+  const total = itens.reduce((s, i) => s + i.comissao, 0);
+  return [...linhas, `TOTAL COMISSÃO ${valorBR(total)}`].join('\n');
 }
 
 // ── Acordos ────────────────────────────────────────────────────────────────
 
-export async function fetchAcordosPix(empresaId: string, opts?: { operadorId?: string }): Promise<PixAutoAcordo[]> {
+/**
+ * Acordos Pix da empresa.
+ *
+ * `setorId` existe porque a RLS de líder é da EMPRESA, não do setor: sem ele, o
+ * líder do Receptivo puxava os acordos (e os operadores, e as equipes) de todos
+ * os setores. O recorte é pelo setor CARIMBADO na linha — o mesmo critério do
+ * filtro da tela —, então quem mudou de setor não leva o histórico junto.
+ */
+export async function fetchAcordosPix(
+  empresaId: string,
+  opts?: { operadorId?: string; setorId?: string | null },
+): Promise<PixAutoAcordo[]> {
   let q = supabase
     .from('pix_automatico_acordos')
     .select('*')
@@ -115,12 +155,79 @@ export async function fetchAcordosPix(empresaId: string, opts?: { operadorId?: s
     .order('criado_em', { ascending: false })
     .limit(1000);
   if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
   const { data, error } = await q;
   if (error) {
     console.warn('[pix_automatico.service] fetchAcordosPix:', error.message);
     return [];
   }
   return (data as unknown as PixAutoAcordo[]) ?? [];
+}
+
+/**
+ * Edita um registro do operador — só NR e valor, e só enquanto PENDENTE.
+ *
+ * O `.eq('status', 'pendente')` repete no cliente o que a policy e o gatilho da
+ * migration 20260804a já garantem. Não é desconfiança da RLS: é o que faz a
+ * tela dizer "este acordo já foi avaliado" em vez de gravar zero linhas em
+ * silêncio quando o líder aprovou enquanto o formulário estava aberto.
+ */
+export async function editarAcordoPix(p: {
+  id: string;
+  nrCliente: string;
+  valor: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const nr = p.nrCliente.trim();
+  if (!nr) return { ok: false, error: 'Informe o NR do acordo.' };
+  if (!Number.isFinite(p.valor) || p.valor <= 0) return { ok: false, error: 'Valor inválido.' };
+
+  const { data, error } = await supabase
+    .from('pix_automatico_acordos')
+    .update({ nr_cliente: nr, valor: p.valor })
+    .eq('id', p.id)
+    .eq('status', 'pendente')
+    .select('id');
+  if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) {
+    return { ok: false, error: 'Este acordo não está mais pendente e não pode ser editado.' };
+  }
+  return { ok: true };
+}
+
+// ── Pagamento da comissão ──────────────────────────────────────────────────
+
+/**
+ * Marca (ou desmarca) o pagamento da comissão. Só líder+ — a policy de UPDATE
+ * ampla é dele, e o gatilho devolve estas colunas se um operador tentar.
+ *
+ * Só linha APROVADA pode virar paga: pagar comissão de acordo pendente ou
+ * desaprovado é dinheiro saindo por engano, e o `.eq('status','aprovado')`
+ * fecha isso mesmo que a tela ofereça o botão por descuido.
+ */
+export async function marcarComissaoPaga(p: {
+  ids: string[];
+  pago: boolean;
+  responsavelId: string;
+  responsavelNome: string;
+}): Promise<{ ok: boolean; count: number; error?: string }> {
+  if (p.ids.length === 0) return { ok: true, count: 0 };
+  const payload: PixAutoAcordoUpdate = p.pago
+    ? {
+        pago: true,
+        pago_em: new Date().toISOString(),
+        pago_por: p.responsavelId,
+        pago_por_nome: p.responsavelNome,
+      }
+    : { pago: false, pago_em: null, pago_por: null, pago_por_nome: null };
+
+  let q = supabase
+    .from('pix_automatico_acordos')
+    .update(payload)
+    .in('id', p.ids);
+  if (p.pago) q = q.eq('status', 'aprovado');
+  const { data, error } = await q.select('id');
+  if (error) return { ok: false, count: 0, error: error.message };
+  return { ok: true, count: (data ?? []).length };
 }
 
 export async function criarAcordoPix(p: {
@@ -316,6 +423,78 @@ export async function upsertConfigPix(p: {
       atualizado_por_nome: p.atualizadoPorNome,
       atualizado_em:       new Date().toISOString(),
     }, { onConflict: 'empresa_id,setor_id' });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
+// ── Meta de Pix automático por setor/mês ───────────────────────────────────
+
+export interface PixAutoMeta {
+  id: string;
+  empresa_id: string;
+  setor_id: string;
+  mes: number;
+  ano: number;
+  /** Meta do VALOR dos acordos Pix do setor no mês (não da comissão). */
+  meta_valor: number;
+  /** Meta de QUANTIDADE de acordos Pix no mês. 0 = sem meta de quantidade. */
+  meta_acordos: number;
+  atualizado_por: string | null;
+  atualizado_por_nome: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+/**
+ * Meta de Pix do setor no mês. `null` = sem meta definida — diferente de meta
+ * zero, e é por isso que o painel some em vez de anunciar "faltam R$ 0,00".
+ *
+ * Tolera a migration 20260804a ausente (tabela inexistente → null), no mesmo
+ * padrão de `fetchNrsBloqueados`: recurso some, resto da tela segue.
+ */
+export async function fetchMetaPix(
+  empresaId: string,
+  setorId: string,
+  mes: number,
+  ano: number,
+): Promise<PixAutoMeta | null> {
+  const { data, error } = await supabase
+    .from('pix_automatico_metas')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .eq('setor_id', setorId)
+    .eq('mes', mes)
+    .eq('ano', ano)
+    .maybeSingle();
+  if (error) {
+    console.warn('[pix_automatico.service] fetchMetaPix:', error.message);
+    return null;
+  }
+  return (data as unknown as PixAutoMeta) ?? null;
+}
+
+export async function upsertMetaPix(p: {
+  empresaId: string;
+  setorId: string;
+  mes: number;
+  ano: number;
+  metaValor: number;
+  metaAcordos: number;
+  atualizadoPor: string;
+  atualizadoPorNome: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase
+    .from('pix_automatico_metas')
+    .upsert({
+      empresa_id:          p.empresaId,
+      setor_id:            p.setorId,
+      mes:                 p.mes,
+      ano:                 p.ano,
+      meta_valor:          p.metaValor,
+      meta_acordos:        p.metaAcordos,
+      atualizado_por:      p.atualizadoPor,
+      atualizado_por_nome: p.atualizadoPorNome,
+    }, { onConflict: 'empresa_id,setor_id,mes,ano' });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

@@ -183,6 +183,20 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
               </div>
             </div>
 
+            {/* Retenção descartada: o relatório do Receptivo vem com as linhas
+                da equipe de Retenção, e esse recebimento não é do Receptivo.
+                Some do total sem aviso seria pior — aqui fica dito. */}
+            {preview.retencaoRemovidas > 0 && (
+              <div className="rounded-lg border border-sky-200 bg-sky-50 dark:bg-sky-950/20 p-3">
+                <p className="text-xs text-sky-700 dark:text-sky-300">
+                  <strong>{preview.retencaoRemovidas}</strong>{' '}
+                  linha{preview.retencaoRemovidas !== 1 ? 's' : ''} da equipe de{' '}
+                  <strong>Retenção</strong> {preview.retencaoRemovidas !== 1 ? 'foram removidas' : 'foi removida'}{' '}
+                  do arquivo — esse recebimento não conta para o Receptivo.
+                </p>
+              </div>
+            )}
+
             {/* Operadores detectados automaticamente */}
             {detectados.length > 0 && (
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/20">

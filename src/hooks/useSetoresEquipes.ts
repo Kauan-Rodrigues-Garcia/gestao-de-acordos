@@ -24,6 +24,7 @@ import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { isPerfilAdmin, isPerfilLider, isPerfilDiretoria } from '@/lib/index';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 
 export interface SetorResumo { id: string; nome: string }
 
@@ -75,7 +76,9 @@ export function useSetoresEquipes(): SetoresEquipes {
         const { data } = await supabase
           .from('setores').select('id, nome')
           .eq('empresa_id', empresaId).order('nome');
-        setSetores((data as SetorResumo[]) ?? []);
+        // Ordem escolhida na aba Setores; o `order('nome')` acima vira só o
+        // desempate de quem ainda não está na ordem salva.
+        setSetores(aplicarOrdemSetores((data as SetorResumo[]) ?? [], empresaId));
       } else {
         setSetores(VAZIO);
       }

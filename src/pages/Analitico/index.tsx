@@ -12,6 +12,7 @@ import {
   getEstadoFromAcordo, ROUTE_PATHS,
 } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { useAnalitico } from '@/hooks/useAnalitico';
@@ -94,7 +95,10 @@ export default function PaginaAnalitico() {
       .select('id, nome')
       .eq('empresa_id', empresa.id)
       .order('nome')
-      .then(({ data }) => setSetores((data as { id: string; nome: string }[]) ?? []));
+      // Ordem escolhida na aba Setores (o `order('nome')` vira o desempate).
+      .then(({ data }) => setSetores(
+        aplicarOrdemSetores((data as { id: string; nome: string }[]) ?? [], empresa.id),
+      ));
   }, [empresa?.id]);
 
   // ── Guards (após todos os hooks) ─────────────────────────────────────────

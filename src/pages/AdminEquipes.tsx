@@ -48,6 +48,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import {
   listarClonesEquipes, criarCloneEquipe, removerCloneEquipe, setCloneContaRecebimento,
   removerTodosClonesEmpresa, type CloneEquipe,
@@ -295,7 +296,10 @@ export default function AdminEquipes() {
       if (equipesRes.error) throw equipesRes.error;
       if (operadoresRes.error) throw operadoresRes.error;
 
-      const setoresList = setoresRes.data ?? [];
+      // A ordem dos setores é a que o admin arrastou na aba Setores, não a
+      // alfabética do banco. O `.order('nome')` acima é só o desempate de quem
+      // ainda não está na ordem salva — ver `aplicarOrdemSetores`.
+      const setoresList = aplicarOrdemSetores(setoresRes.data ?? [], empresaId);
       setSetores(setoresList);
       setEquipes(equipesRes.data ?? []);
       setOperadores(operadoresRes.data ?? []);
@@ -339,7 +343,7 @@ export default function AdminEquipes() {
       ]);
       if (cancel) return;
       setCloneCat({
-        setores:    (s.data as CloneCatalogo['setores'])    ?? [],
+        setores:    aplicarOrdemSetores((s.data as CloneCatalogo['setores']) ?? [], empresaId),
         equipes:    (e.data as CloneCatalogo['equipes'])    ?? [],
         operadores: (o.data as CloneCatalogo['operadores']) ?? [],
       });

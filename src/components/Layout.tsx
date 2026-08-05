@@ -364,8 +364,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
         )}
 
-        {/* Campanha Fácil — BookPlay only (todos os usuários logados da empresa) */}
-        {empresa?.slug === 'bookplay' && (
+        {/* Campanha Fácil — BookPlay only, e apenas para cargos acima de operador */}
+        {empresa?.slug === 'bookplay' && userRole !== 'operador' && (
           <NavLink
             to={ROUTE_PATHS.CAMPANHA_FACIL}
             onClick={() => setMobileOpen(false)}

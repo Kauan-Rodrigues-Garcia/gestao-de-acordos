@@ -213,7 +213,10 @@ export function AcordosFilters({
                 </SelectContent>
               </Select>
             )}
-            {isPP && temPermissao('filtrar_por_usuario') && (
+            {/* Filtro de operador — cargos superiores (permissão `filtrar_por_usuario`).
+                Antes vinha com `isPP &&` na frente e nunca aparecia: esta página
+                redireciona a PaguePlay na entrada, então `isPP` é sempre false aqui. */}
+            {temPermissao('filtrar_por_usuario') && (
               <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
                 <SelectContent>
