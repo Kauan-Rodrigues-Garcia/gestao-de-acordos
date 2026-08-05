@@ -155,6 +155,10 @@ export function PixAutomatico() {
    * líder do Receptivo via "Digital Amauri", "Isabela" e companhia no filtro de
    * equipes. Cargo multi-setor (gerência, diretoria, admin) continua vendo tudo
    * e escolhendo no filtro de setor; líder/elite ficam no próprio.
+   *
+   * O fix 54ba8ea do repositório resolveu o mesmo problema com o nome
+   * `setorEscopo`; as duas expressões eram idênticas e ficou esta, que já
+   * era aplicada também nas consultas de perfis/equipes/setores.
    */
   const setorEscopo = ehLider && !ehMultiSetor ? meuSetor : null;
 
@@ -280,11 +284,11 @@ export function PixAutomatico() {
     () => filtrarItensPix(
       itens,
       { busca, status: filtroStatus, operadorId: filtroOperador,
-        equipeId: filtroEquipe, setorId: filtroSetor },
+        equipeId: filtroEquipe, setorId: setorEscopo ?? filtroSetor },
       { porEquipe: operadorEquipe, porSetor: operadorSetor },
     ),
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-     operadorEquipe, operadorSetor],
+     setorEscopo, operadorEquipe, operadorSetor],
   );
 
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)
