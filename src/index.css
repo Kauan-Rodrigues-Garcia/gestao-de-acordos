@@ -664,3 +664,36 @@
            hover:text-foreground hover:bg-accent transition-colors duration-100;
   }
 }
+/* ── Dia detalhado: troca de página dos dias ───────────────────────────────────
+ *
+ * A tabela não rola: os dias mudam de página no clique da seta. Para a troca
+ * não ser um corte seco, cada coluna entra deslizando do lado para onde a
+ * pessoa navegou, com um atraso crescente da esquerda para a direita — o
+ * conjunto lê como uma varredura, não como 10 elementos piscando juntos.
+ *
+ * O atraso vem de `animationDelay` inline (índice da coluna), e a animação
+ * reinicia porque a célula é recriada a cada página (a `key` inclui o índice
+ * inicial). CSS puro, e não framer-motion, porque são 10 colunas × N
+ * operadores: delegar ao compositor do navegador é muito mais barato do que
+ * manter centenas de animações em JS.
+ *
+ * `cubic-bezier(.22,1,.36,1)` é uma saída rápida que desacelera no fim — dá a
+ * sensação de peso freando, em vez do linear de menu.
+ */
+@keyframes dia-entra-da-direita {
+  from { opacity: 0; transform: translate3d(16px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes dia-entra-da-esquerda {
+  from { opacity: 0; transform: translate3d(-16px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+.dia-slide-dir { animation: dia-entra-da-direita .42s cubic-bezier(.22, 1, .36, 1) both; }
+.dia-slide-esq { animation: dia-entra-da-esquerda .42s cubic-bezier(.22, 1, .36, 1) both; }
+
+/* Quem pediu menos movimento no sistema recebe a troca sem deslize. */
+@media (prefers-reduced-motion: reduce) {
+  .dia-slide-dir,
+  .dia-slide-esq { animation: none; }
+}

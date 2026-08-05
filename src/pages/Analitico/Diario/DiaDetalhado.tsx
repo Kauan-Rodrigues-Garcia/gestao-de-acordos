@@ -103,10 +103,25 @@ export function DiaDetalhado({
     setInicio(Math.max(0, totalDias - DIAS_POR_PAGINA));
   }, [totalDias, mesVisto, equipeId]);
 
+  // Lado para onde a pessoa navegou — define de que direção as colunas entram.
+  const [direcao, setDirecao] = useState<'esq' | 'dir'>('dir');
+
   const podeVoltar  = inicio > 0;
   const podeAvancar = inicio + DIAS_POR_PAGINA < totalDias;
-  const irPara = (n: number) =>
+  const irPara = (n: number) => {
+    setDirecao(n > 0 ? 'dir' : 'esq');
     setInicio(i => Math.min(Math.max(0, i + n), Math.max(0, totalDias - DIAS_POR_PAGINA)));
+  };
+
+  /** Deslize da coluna `i` na troca de página. */
+  const animacaoDaColuna = (i: number) => ({
+    className: direcao === 'dir' ? 'dia-slide-dir' : 'dia-slide-esq',
+    // A varredura acompanha o sentido da navegação: indo para a frente começa
+    // pela esquerda; voltando, pela direita.
+    style: {
+      animationDelay: `${(direcao === 'dir' ? i : DIAS_POR_PAGINA - 1 - i) * 22}ms`,
+    } as React.CSSProperties,
+  });
 
   const mesAtualLabel = mesVisto ? rotuloDoMes(mesVisto) : '';
   const mesDeHoje = hojeISO.slice(0, 7);
@@ -185,7 +200,14 @@ export function DiaDetalhado({
   const primeiro = inicio + 1;
   const ultimo   = Math.min(inicio + DIAS_POR_PAGINA, totalDias);
 
-  /** Seta flutuante sobre o degradê. */
+  /**
+   * Seta flutuante sobre o degradê.
+   *
+   * Fica INVISÍVEL até o mouse chegar perto (o `group` é o container da
+   * tabela): dado é o que importa na tela, e um botão fixo por cima da
+   * primeira e da última coluna atrapalharia a leitura o tempo todo.
+   * `opacity` só — nada de `display`, senão não haveria o que animar.
+   */
   function Seta({ lado, onClick, ativo }: {
     lado: 'esq' | 'dir'; onClick: () => void; ativo: boolean;
   }) {
@@ -195,18 +217,23 @@ export function DiaDetalhado({
       <div
         className={cn(
           'absolute top-0 bottom-0 z-30 flex items-center pointer-events-none',
-          // O degradê escurece a borda e vai sumindo para dentro da tabela —
-          // é o que sinaliza "tem mais coisa deste lado".
+          'opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-300',
+          // Degradê leve: escurece a borda o suficiente para dizer "tem mais
+          // deste lado" sem apagar os números que estão embaixo.
           esq
-            ? 'left-0 pl-1 pr-8 bg-gradient-to-r from-black/80 via-black/45 to-transparent'
-            : 'right-0 pr-1 pl-8 bg-gradient-to-l from-black/80 via-black/45 to-transparent',
+            ? 'left-0 pl-1 pr-10 bg-gradient-to-r from-black/30 via-black/12 to-transparent'
+            : 'right-0 pr-1 pl-10 bg-gradient-to-l from-black/30 via-black/12 to-transparent',
         )}
       >
         <button
           type="button"
           onClick={onClick}
           title={esq ? 'Dias anteriores' : 'Próximos dias'}
-          className="pointer-events-auto h-9 w-9 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center shadow-lg backdrop-blur-sm transition-colors"
+          className={cn(
+            'pointer-events-auto h-9 w-9 rounded-full flex items-center justify-center',
+            'bg-black/35 hover:bg-black/60 text-white shadow-md backdrop-blur-sm',
+            'transition-all duration-200 hover:scale-110 active:scale-95',
+          )}
         >
           {esq ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
         </button>
@@ -232,16 +259,18 @@ export function DiaDetalhado({
 
       {/* `relative` ancora as setas; `overflow-hidden` corta o degradê no
           arredondado. Sem barra de rolagem: a página de dias troca no clique. */}
-      <div className="relative rounded-lg border-2 border-border overflow-hidden">
+      <div className="group relative rounded-lg border-2 border-border overflow-hidden">
         <table className="w-full text-xs border-collapse">
           <thead>
             <tr className="bg-muted">
               <th className="px-3 py-2 text-left font-semibold border-r-2 border-border w-[190px]">
                 Operador
               </th>
-              {diasVisiveis.map(d => (
+              {diasVisiveis.map((d, i) => (
                 <th
-                  key={d}
+                  // A `key` inclui `inicio`: a célula é recriada a cada página,
+                  // e é isso que faz a animação CSS tocar de novo.
+                  key={`${inicio}-${d}`}
                   className={cn(
                     'px-1 py-2 text-right font-semibold tabular-nums border-r border-border/60',
                     ehFimDeSemana(d) && 'text-muted-foreground/60',
@@ -249,7 +278,7 @@ export function DiaDetalhado({
                   )}
                   title={d.split('-').reverse().join('/')}
                 >
-                  {rotuloDoDia(d)}
+                  <span className="block" {...animacaoDaColuna(i)}>{rotuloDoDia(d)}</span>
                 </th>
               ))}
               <th className="px-3 py-2 text-right font-semibold border-l-2 border-border w-[110px]">
@@ -277,14 +306,16 @@ export function DiaDetalhado({
                 </td>
                 {l.valores.slice(inicio, inicio + DIAS_POR_PAGINA).map((v, i) => (
                   <td
-                    key={diasVisiveis[i]}
+                    key={`${inicio}-${diasVisiveis[i]}`}
                     className={cn(
                       'px-1 py-2 text-right tabular-nums font-mono border-r border-border/40',
                       // Zero apagado: o olho procura onde ENTROU dinheiro.
                       v === 0 ? 'text-muted-foreground/30' : 'text-foreground',
                     )}
                   >
-                    {v === 0 ? '—' : formatBRL(v)}
+                    <span className="block" {...animacaoDaColuna(i)}>
+                      {v === 0 ? '—' : formatBRL(v)}
+                    </span>
                   </td>
                 ))}
                 <td className="px-3 py-2 text-right tabular-nums font-mono font-semibold border-l-2 border-border">
@@ -299,13 +330,15 @@ export function DiaDetalhado({
               <td className="px-3 py-2 border-r-2 border-border">Total do dia</td>
               {m.totaisPorDia.slice(inicio, inicio + DIAS_POR_PAGINA).map((t, i) => (
                 <td
-                  key={diasVisiveis[i]}
+                  key={`${inicio}-${diasVisiveis[i]}`}
                   className={cn(
                     'px-1 py-2 text-right tabular-nums font-mono border-r border-border/40',
                     t === 0 && 'text-muted-foreground/40',
                   )}
                 >
-                  {t === 0 ? '—' : formatBRL(t)}
+                  <span className="block" {...animacaoDaColuna(i)}>
+                    {t === 0 ? '—' : formatBRL(t)}
+                  </span>
                 </td>
               ))}
               <td className="px-3 py-2 text-right tabular-nums font-mono border-l-2 border-border">
