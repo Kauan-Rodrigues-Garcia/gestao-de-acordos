@@ -51,7 +51,7 @@ import { mesAtual } from '@/lib/mesReferencia';
 import {
   mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
   filtrarItensPix, totaisPorStatus, calcularBonusMeta,
-  calcularDobraComissao, rankingPixSetor, calcularMetaPix, type OperadorInfo,
+  calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe, type OperadorInfo,
 } from './pixAutomaticoView';
 import { PixDobraCard } from './PixDobraCard';
 import { PixRankingSetor } from './PixRankingSetor';
@@ -64,7 +64,7 @@ import {
   excluirAcordoPix, limparDesaprovados, fetchConfigsPix, upsertConfigPix,
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
-  marcarComissaoPaga, fetchMetaPix, upsertMetaPix,
+  marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
   type LinhaPixLote, type PixAutoMeta,
 } from '@/services/pix_automatico.service';
 
@@ -133,7 +133,7 @@ export function PixAutomatico() {
   const [recebidoMes, setRecebidoMes] = useState<number | null>(null);
 
   // Meta de Pix do setor (independente do recebimento)
-  const [metaPix, setMetaPix]           = useState<PixAutoMeta | null>(null);
+  const [metasPix, setMetasPix]         = useState<PixAutoMeta[]>([]);
   const [salvandoMetaPix, setSalvandoMetaPix] = useState(false);
 
   // Edição de um registro pendente (dono ou líder+)
@@ -256,13 +256,14 @@ export function PixAutomatico() {
     return () => { cancelado = true; };
   }, [empresa?.id, perfil?.id]);
 
-  // Meta de Pix do setor em foco (líder: o setor da configuração; operador: o
-  // dele). Sem setor não há meta — a meta é por setor.
+  // Metas de Pix das EQUIPES do setor em foco. A meta do setor é a soma
+  // delas — não existe uma linha "do setor" para carregar.
   const carregarMetaPix = useCallback(async () => {
-    if (!empresa?.id || !setorConfig) { setMetaPix(null); return; }
+    if (!empresa?.id || !setorConfig) { setMetasPix([]); return; }
     const hoje = new Date();
-    const meta = await fetchMetaPix(empresa.id, setorConfig, hoje.getMonth() + 1, hoje.getFullYear());
-    setMetaPix(meta);
+    const metas = await fetchMetasPixEquipes(
+      empresa.id, setorConfig, hoje.getMonth() + 1, hoje.getFullYear());
+    setMetasPix(metas);
   }, [empresa?.id, setorConfig]);
 
   useEffect(() => { void carregarMetaPix(); }, [carregarMetaPix]);
@@ -335,13 +336,24 @@ export function PixAutomatico() {
   // o operador só tem os próprios, então o painel fica restrito a líder+ —
   // "faltam X para o setor" calculado só com as linhas de uma pessoa seria
   // um número errado apresentado como certo.
-  const resumoMetaPix = useMemo(() => ehLider ? calcularMetaPix({
-    itens,
-    metaValor:   metaPix?.meta_valor ?? null,
-    metaAcordos: metaPix?.meta_acordos ?? null,
-    configMes,
-    mes: mesAtual(), hojeISO: getTodayISO(),
-  }) : null, [ehLider, itens, metaPix, configMes]);
+  const consolidadoMetaPix = useMemo(() => {
+    if (!ehLider) return null;
+    const nomeEquipe = new Map(equipes.map(e => [e.id, e.nome]));
+    return calcularMetaPixPorEquipe({
+      itens,
+      metas: metasPix
+        .filter(m => m.equipe_id)
+        .map(m => ({
+          equipeId:    m.equipe_id!,
+          equipeNome:  nomeEquipe.get(m.equipe_id!) ?? 'Equipe',
+          metaValor:   Number(m.meta_valor)   || 0,
+          metaAcordos: Number(m.meta_acordos) || 0,
+        })),
+      equipePorOperador: operadorEquipe,
+      configMes,
+      mes: mesAtual(), hojeISO: getTodayISO(),
+    });
+  }, [ehLider, itens, metasPix, equipes, operadorEquipe, configMes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
@@ -518,14 +530,15 @@ export function PixAutomatico() {
   // ── Meta de Pix do setor (líder+) ─────────────────────────────────────────
   // Parâmetros não se chamam `metaValor`: esse nome já é o estado da meta de
   // RECEBIMENTO do operador (card de bônus), e sombreá-lo aqui é convite a erro.
-  async function salvarMetaPix(valorAlvo: number, acordosAlvo: number) {
+  async function salvarMetaPix(equipeId: string, valorAlvo: number, acordosAlvo: number) {
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
     const hoje = new Date();
     setSalvandoMetaPix(true);
     try {
-      const { ok, error } = await upsertMetaPix({
+      const { ok, error } = await upsertMetaPixEquipe({
         empresaId: empresa.id,
         setorId: setorConfig,
+        equipeId,
         mes: hoje.getMonth() + 1,
         ano: hoje.getFullYear(),
         metaValor: valorAlvo,
@@ -940,11 +953,16 @@ export function PixAutomatico() {
           recebimento pelo analítico, e somar de novo contaria duas vezes. */}
       {!loading && ehLider && setorConfig && (
         <PixMetaPainel
-          resumo={resumoMetaPix}
+          consolidado={consolidadoMetaPix}
           nomeSetor={setores.find(s => s.id === setorConfig)?.nome}
+          equipes={equipes}
+          metasAtuais={Object.fromEntries(
+            metasPix.filter(m => m.equipe_id).map(m => [
+              m.equipe_id!,
+              { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
+            ]),
+          )}
           podeEditar
-          metaValorAtual={Number(metaPix?.meta_valor ?? 0)}
-          metaAcordosAtual={Number(metaPix?.meta_acordos ?? 0)}
           salvando={salvandoMetaPix}
           onSalvar={salvarMetaPix}
           parseValor={parseCurrencyInput}
