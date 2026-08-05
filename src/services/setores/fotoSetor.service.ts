@@ -73,16 +73,29 @@ export async function salvarFotoSetor(
   const url = `${publicUrl}?t=${Date.now()}`;
 
   // `fn_set_setor_foto` é da migration 20260805a e ainda não está no
-  // database.types.ts gerado — daí o cast do cliente, não dos argumentos.
-  const rpc = supabase.rpc as unknown as (
-    nome: string, args: Record<string, unknown>,
-  ) => Promise<{ data: boolean | null; error: { message: string; code?: string } | null }>;
+  // database.types.ts gerado — daí o cast.
+  //
+  // O cast é no CLIENTE e a chamada segue sendo `cliente.rpc(...)`:
+  // `SupabaseClient.rpc` faz `return this.rest.rpc(...)`, então guardar o
+  // método numa variável perde o `this` e estoura "Cannot read properties of
+  // undefined (reading 'rest')". Foi assim que a foto parou de salvar.
+  const cliente = supabase as unknown as {
+    rpc: (nome: string, args: Record<string, unknown>) => Promise<{
+      data: boolean | null; error: { message: string; code?: string } | null;
+    }>;
+  };
 
-  const { data, error } = await rpc('fn_set_setor_foto', {
-    p_setor_id: setorId,
-    p_foto_url: url,
-    p_campo:    campo,
-  });
+  let data: boolean | null = null;
+  let error: { message: string; code?: string } | null = null;
+  try {
+    ({ data, error } = await cliente.rpc('fn_set_setor_foto', {
+      p_setor_id: setorId,
+      p_foto_url: url,
+      p_campo:    campo,
+    }));
+  } catch (e) {
+    error = { message: e instanceof Error ? e.message : String(e) };
+  }
 
   if (error) {
     if (ehPermissaoNegada(error.message, error.code)) {

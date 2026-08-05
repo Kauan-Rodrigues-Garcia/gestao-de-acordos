@@ -478,6 +478,10 @@ export default function AdminUsuarios() {
       setConfirmExclusaoUser(false);
       setDialogOpen(false);
       fetchDados();
+    } catch (e) {
+      // Sem este catch, um throw sai como rejeição não tratada e a tela fica
+      // muda — o admin clica de novo e só rebaixa a planilha.
+      toast.error(`Erro ao excluir usuário: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setExcluindoUsuario(false);
     }

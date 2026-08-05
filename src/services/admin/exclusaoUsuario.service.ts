@@ -31,12 +31,32 @@ export type ResultadoExclusao =
   | { status: 'ok';    acordosApagados: number; relatorio: string | null }
   | { status: 'falha'; mensagem: string };
 
-/** Chamada de RPC sem os tipos gerados — as funções são da migration 20260805c. */
-function rpc<T>(nome: string, args: Record<string, unknown>) {
-  const chamar = supabase.rpc as unknown as (
-    n: string, a: Record<string, unknown>,
-  ) => Promise<{ data: T | null; error: { message: string; code?: string } | null }>;
-  return chamar(nome, args);
+interface RespostaRpc<T> {
+  data:  T | null;
+  error: { message: string; code?: string } | null;
+}
+
+/**
+ * Chamada de RPC sem os tipos gerados — as funções são da migration 20260805c.
+ *
+ * O cast é no CLIENTE, não no método, e a chamada continua sendo `x.rpc(...)`.
+ * `SupabaseClient.rpc` faz `return this.rest.rpc(...)`: guardar o método numa
+ * variável (`const f = supabase.rpc; f(...)`) perde o `this` e estoura
+ * "Cannot read properties of undefined (reading 'rest')".
+ *
+ * O try/catch existe pelo mesmo motivo: um throw aqui não pode virar rejeição
+ * silenciosa: foi exatamente o que aconteceu em 05/08/2026 — a planilha baixava,
+ * o usuário não era excluído e a tela não dizia nada.
+ */
+async function rpc<T>(nome: string, args: Record<string, unknown>): Promise<RespostaRpc<T>> {
+  const cliente = supabase as unknown as {
+    rpc: (n: string, a: Record<string, unknown>) => Promise<RespostaRpc<T>>;
+  };
+  try {
+    return await cliente.rpc(nome, args);
+  } catch (e) {
+    return { data: null, error: { message: e instanceof Error ? e.message : String(e) } };
+  }
 }
 
 /**

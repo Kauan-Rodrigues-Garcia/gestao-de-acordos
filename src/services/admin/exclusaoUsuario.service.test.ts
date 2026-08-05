@@ -10,9 +10,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const rpcMock  = vi.fn();
 const fromMock = vi.fn();
 
+/**
+ * O mock imita a FORMA do SupabaseClient real, que faz
+ * `rpc(fn, args) { return this.rest.rpc(...) }`.
+ *
+ * A versão anterior era `rpc: (...a) => rpcMock(...a)` — uma arrow property,
+ * que funciona mesmo desanexada do objeto. Isso escondeu um bug real: o
+ * serviço guardava o método numa variável (`const f = supabase.rpc`), perdia o
+ * `this` e estourava em produção enquanto o teste passava. Depender de `this`
+ * aqui faz o teste falhar junto com a produção.
+ */
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    rpc:  (...a: unknown[]) => rpcMock(...a),
+    rest: { rpc: (...a: unknown[]) => rpcMock(...a) },
+    rpc(this: { rest: { rpc: (...a: unknown[]) => unknown } }, nome: string, args: unknown) {
+      return this.rest.rpc(nome, args);
+    },
     from: (...a: unknown[]) => fromMock(...a),
   },
 }));
@@ -106,6 +119,19 @@ describe('excluirUsuarioComAcordos', () => {
 
     expect(r).toMatchObject({ status: 'ok', acordosApagados: 0, relatorio: null });
     expect(writeMock).not.toHaveBeenCalled();
+  });
+
+  // Regressão de 05/08/2026: a planilha baixava, o usuário não era excluído e a
+  // tela ficava muda. A RPC estourava um TypeError (`this` perdido) e ninguém
+  // capturava — virava rejeição não tratada no onClick.
+  it('exceção na RPC vira falha na tela, nunca silêncio', async () => {
+    comAcordos([]);
+    rpcMock.mockImplementation(() => { throw new TypeError("Cannot read properties of undefined (reading 'rest')"); });
+
+    const r = await excluirUsuarioComAcordos({ userId: 'u-1', nome: 'Fulano' });
+
+    expect(r.status).toBe('falha');
+    expect(r.status === 'falha' && r.mensagem).toBeTruthy();
   });
 
   it('erro da RPC volta traduzido, não como texto do Postgres', async () => {
