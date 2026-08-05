@@ -1,7 +1,11 @@
 import { useEffect, useState, useRef, useMemo, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper } from 'lucide-react';
+import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper, AlertTriangle } from 'lucide-react';
+import {
+  resumoExclusao, excluirUsuarioComAcordos, limparAcordosDaEmpresaAnterior,
+  type ResumoExclusao,
+} from '@/services/admin/exclusaoUsuario.service';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -277,6 +281,34 @@ export default function AdminUsuarios() {
         if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
           throw new Error('Sem permissão para editar este usuário');
         }
+
+        // Trocou de empresa: o usuário chega LIMPO na nova e os acordos da
+        // anterior são apagados, com relatório baixado antes (regra de
+        // 05/08/2026, mesma da exclusão). Sem isto ele levaria junto as
+        // tabulações da outra empresa, que dividem o mesmo banco.
+        const empresaAnterior = editando.empresa_id;
+        if (empresaAnterior && empresaAnterior !== empresaId) {
+          const r = await limparAcordosDaEmpresaAnterior({
+            userId:            editando.id,
+            nome:              form.nome || editando.nome || 'usuario',
+            empresaAnteriorId: empresaAnterior,
+          });
+          if (r.status === 'falha') {
+            // O perfil JÁ mudou de empresa; só a limpeza falhou. Dizer as duas
+            // coisas, senão o admin acha que a troca inteira foi por água abaixo.
+            toast.warning(`Usuário movido de empresa, mas os acordos da anterior não foram apagados. ${r.mensagem}`);
+          } else if (r.acordosApagados > 0) {
+            toast.success(
+              `Usuário movido de empresa. ${r.acordosApagados.toLocaleString('pt-BR')} `
+              + `tabulaç${r.acordosApagados === 1 ? 'ão' : 'ões'} da empresa anterior apagada${r.acordosApagados === 1 ? '' : 's'}`
+              + `${r.relatorio ? ` — relatório salvo em ${r.relatorio}` : ''}.`,
+            );
+            setDialogOpen(false);
+            fetchDados();
+            return;
+          }
+        }
+
         toast.success('Usuário atualizado!');
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
@@ -406,6 +438,17 @@ export default function AdminUsuarios() {
   const [excluindoUsuario, setExcluindoUsuario] = useState(false);
   const [confirmExclusaoUser, setConfirmExclusaoUser] = useState(false);
 
+  // Quanto o usuário segura, lido ao abrir a confirmação: a caixa mostra o
+  // número em vez de um "tem certeza?" que não diz o que vai embora.
+  const [resumoDaExclusao, setResumoDaExclusao] = useState<ResumoExclusao | null>(null);
+
+  async function abrirConfirmacaoExclusao() {
+    if (!editando) return;
+    setConfirmExclusaoUser(true);
+    setResumoDaExclusao(null);
+    setResumoDaExclusao(await resumoExclusao(editando.id));
+  }
+
   async function excluirUsuarioEditado() {
     if (!editando) return;
     if (editando.id === perfilAtual?.id) {
@@ -414,24 +457,24 @@ export default function AdminUsuarios() {
     }
     setExcluindoUsuario(true);
     try {
-      // Estratégia principal: RPC fn_admin_delete_user, que apaga o registro em
-      // auth.users (a FK perfis.id -> auth.users ON DELETE CASCADE remove o
-      // perfil junto). Isso evita deixar o auth.user órfão, que fazia o signUp
-      // acusar "usuário já existe" ao recriar (ex.: troca de empresa).
-      const { error: rpcErro } = await supabase.rpc('fn_admin_delete_user', {
-        p_user_id: editando.id,
+      // As tabulações do usuário vão junto — regra de 05/08/2026 — e o
+      // relatório é baixado ANTES de qualquer DELETE. O fallback antigo
+      // (`perfis.delete()`) saiu: ele batia na MESMA FK que a RPC, então só
+      // produzia um segundo 409 no console e uma mensagem crua na tela.
+      const r = await excluirUsuarioComAcordos({
+        userId: editando.id,
+        nome:   editando.nome ?? 'usuario',
       });
-      if (rpcErro) {
-        // Fallback: deleta apenas o perfil (auth.user pode ficar órfão)
-        const { error } = await supabase.from('perfis').delete().eq('id', editando.id);
-        if (error) {
-          toast.error(`Erro ao excluir usuário: ${error.message}`);
-          return;
-        }
-        toast.success(`Perfil de ${editando.nome} removido. (auth.user pode permanecer órfão — aplique a migração fn_admin_delete_user no Supabase)`);
-      } else {
-        toast.success(`Usuário ${editando.nome} excluído com sucesso!`);
-      }
+
+      if (r.status === 'falha') { toast.error(r.mensagem); return; }
+
+      toast.success(
+        r.acordosApagados > 0
+          ? `Usuário ${editando.nome} excluído. ${r.acordosApagados.toLocaleString('pt-BR')} `
+            + `tabulaç${r.acordosApagados === 1 ? 'ão' : 'ões'} apagada${r.acordosApagados === 1 ? '' : 's'}`
+            + `${r.relatorio ? ` — relatório salvo em ${r.relatorio}` : ''}. Os NRs voltaram a ficar livres.`
+          : `Usuário ${editando.nome} excluído com sucesso!`,
+      );
       setConfirmExclusaoUser(false);
       setDialogOpen(false);
       fetchDados();
@@ -1020,7 +1063,7 @@ export default function AdminUsuarios() {
                 variant="outline"
                 size="sm"
                 className="gap-2 border-destructive/40 text-destructive hover:bg-destructive/10"
-                onClick={() => setConfirmExclusaoUser(true)}
+                onClick={() => { void abrirConfirmacaoExclusao(); }}
                 disabled={excluindoUsuario}
               >
                 <Trash2 className="w-4 h-4" />
@@ -1048,6 +1091,27 @@ export default function AdminUsuarios() {
               o acesso do usuário ao sistema.
             </DialogDescription>
           </DialogHeader>
+
+          {/* O que exatamente vai embora. Sem isto, "não pode ser desfeita"
+              não diz QUANTO se perde — e a exclusão apaga tabulação. */}
+          {resumoDaExclusao && resumoDaExclusao.acordos > 0 && (
+            <div className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2.5 space-y-1.5">
+              <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                {resumoDaExclusao.acordos.toLocaleString('pt-BR')}{' '}
+                {resumoDaExclusao.acordos === 1 ? 'tabulação será apagada' : 'tabulações serão apagadas'}
+              </p>
+              <p className="text-[11px] text-amber-700/90 dark:text-amber-400/90 leading-relaxed">
+                Uma planilha com todas elas é baixada antes da exclusão, para conferência.
+                Os NRs voltam a ficar livres para outros operadores tabularem.
+              </p>
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                O recebimento do analítico e do diário <strong>não</strong> é apagado — ele
+                continua contando nos totais de setor e equipe, sem o nome do operador.
+              </p>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setConfirmExclusaoUser(false)} disabled={excluindoUsuario}>
               Cancelar
