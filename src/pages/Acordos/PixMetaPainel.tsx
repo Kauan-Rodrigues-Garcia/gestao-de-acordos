@@ -41,11 +41,11 @@ export interface PixMetaPainelProps {
   nomeSetor?: string;
   /** Equipes do setor — inclusive as que ainda não têm meta. */
   equipes: EquipeOpcao[];
-  /** Metas salvas: equipe_id → { valor, acordos }, para preencher a edição. */
-  metasAtuais: Record<string, { valor: number; acordos: number }>;
+  /** Metas salvas: equipe_id → valor, para preencher a edição. */
+  metasAtuais: Record<string, number>;
   podeEditar: boolean;
   salvando: boolean;
-  onSalvar: (equipeId: string, metaValor: number, metaAcordos: number) => void;
+  onSalvar: (equipeId: string, metaValor: number) => void;
   /** Converte "1.234,56" digitado em número — o mesmo parser do resto da tela. */
   parseValor: (v: string) => number;
 }
@@ -76,8 +76,7 @@ export function PixMetaPainel({
   podeEditar, salvando, onSalvar, parseValor,
 }: PixMetaPainelProps) {
   const [editandoEquipe, setEditandoEquipe] = useState<string | null>(null);
-  const [valorInput, setValorInput]     = useState('');
-  const [acordosInput, setAcordosInput] = useState('');
+  const [valorInput, setValorInput]         = useState('');
 
   /**
    * Abrir a edição parte do que está SALVO — não do que ficou digitado numa
@@ -86,20 +85,17 @@ export function PixMetaPainel({
    * que o líder está digitando no meio da frase.
    */
   function abrir(equipeId: string) {
-    const atual = metasAtuais[equipeId];
+    const atual = metasAtuais[equipeId] ?? 0;
     setEditandoEquipe(equipeId);
-    setValorInput(atual?.valor
-      ? atual.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    setValorInput(atual > 0
+      ? atual.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
       : '');
-    setAcordosInput(atual?.acordos ? String(atual.acordos) : '');
   }
 
   function salvar(equipeId: string) {
-    const valor   = valorInput.trim()   ? parseValor(valorInput) : 0;
-    const acordos = acordosInput.trim() ? parseInt(acordosInput.replace(/\D/g, ''), 10) : 0;
-    if (isNaN(valor) || valor < 0)     return;
-    if (isNaN(acordos) || acordos < 0) return;
-    onSalvar(equipeId, valor, Number.isFinite(acordos) ? acordos : 0);
+    const valor = valorInput.trim() ? parseValor(valorInput) : 0;
+    if (isNaN(valor) || valor < 0) return;
+    onSalvar(equipeId, valor);
     setEditandoEquipe(null);
   }
 
@@ -160,12 +156,6 @@ export function PixMetaPainel({
                         placeholder="Meta R$"
                         className="h-8 w-32 text-xs"
                       />
-                      <Input
-                        value={acordosInput}
-                        onChange={e => setAcordosInput(e.target.value.replace(/\D/g, ''))}
-                        placeholder="Qtd."
-                        className="h-8 w-20 text-xs"
-                      />
                       <Button size="sm" className="h-8 gap-1 text-xs" disabled={salvando}
                         onClick={() => salvar(eq.id)}>
                         {salvando ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
@@ -187,11 +177,9 @@ export function PixMetaPainel({
                               <span className="ml-1">· faltam {formatCurrency(r.faltaValor)}</span>
                             )}
                           </span>
-                          {r.metaAcordos > 0 && (
-                            <span className="text-[10.5px] text-muted-foreground tabular-nums shrink-0">
-                              {r.acordos}/{r.metaAcordos} acordos
-                            </span>
-                          )}
+                          <span className="text-[10.5px] text-muted-foreground tabular-nums shrink-0">
+                            {r.acordos} acordo(s)
+                          </span>
                           <Progresso r={r} />
                         </>
                       ) : (
@@ -224,11 +212,9 @@ export function PixMetaPainel({
                   <span className="ml-1">· faltam {formatCurrency(consolidado.setor.faltaValor)}</span>
                 )}
               </span>
-              {consolidado.setor.metaAcordos > 0 && (
-                <span className="text-[10.5px] text-muted-foreground tabular-nums shrink-0">
-                  {consolidado.setor.acordos}/{consolidado.setor.metaAcordos} acordos
-                </span>
-              )}
+              <span className="text-[10.5px] text-muted-foreground tabular-nums shrink-0">
+                {consolidado.setor.acordos} acordo(s)
+              </span>
               <Progresso r={consolidado.setor} />
             </div>
           )}

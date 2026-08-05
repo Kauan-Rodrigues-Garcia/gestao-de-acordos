@@ -475,10 +475,12 @@ export async function fetchMetasPixEquipes(
 }
 
 /**
- * Grava a meta de UMA equipe. `metaValor` e `metaAcordos` zerados apagam a
- * linha: meta zero e "sem meta" são coisas diferentes na tela (uma mostra
- * "faltam R$ 0,00", a outra não mostra nada), e é o apagar que devolve a
- * equipe ao estado de "ainda não definida".
+ * Grava a meta de UMA equipe — só o VALOR. Meta de quantidade de acordos foi
+ * retirada: para acompanhar equipe e setor, o que a operação usa é o valor.
+ *
+ * `metaValor` zerado apaga a linha: meta zero e "sem meta" são coisas
+ * diferentes na tela (uma mostra "faltam R$ 0,00", a outra não mostra nada), e
+ * é o apagar que devolve a equipe ao estado de "ainda não definida".
  */
 export async function upsertMetaPixEquipe(p: {
   empresaId: string;
@@ -487,11 +489,10 @@ export async function upsertMetaPixEquipe(p: {
   mes: number;
   ano: number;
   metaValor: number;
-  metaAcordos: number;
   atualizadoPor: string;
   atualizadoPorNome: string;
 }): Promise<{ ok: boolean; error?: string }> {
-  if (p.metaValor <= 0 && p.metaAcordos <= 0) {
+  if (p.metaValor <= 0) {
     const { error } = await supabase
       .from('pix_automatico_metas')
       .delete()
@@ -512,7 +513,6 @@ export async function upsertMetaPixEquipe(p: {
       mes:                 p.mes,
       ano:                 p.ano,
       meta_valor:          p.metaValor,
-      meta_acordos:        p.metaAcordos,
       atualizado_por:      p.atualizadoPor,
       atualizado_por_nome: p.atualizadoPorNome,
     }, { onConflict: 'empresa_id,equipe_id,mes,ano' });

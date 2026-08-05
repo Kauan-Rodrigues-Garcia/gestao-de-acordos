@@ -477,8 +477,8 @@ describe('calcularMetaPix', () => {
 describe('calcularMetaPixPorEquipe', () => {
   const equipePorOperador = { bryan1: 'eq-bryan', bryan2: 'eq-bryan', luci1: 'eq-luci' };
   const metas = [
-    { equipeId: 'eq-bryan', equipeNome: 'Bryan',   metaValor: 100000, metaAcordos: 10 },
-    { equipeId: 'eq-luci',  equipeNome: 'Luciana', metaValor:  50000, metaAcordos:  5 },
+    { equipeId: 'eq-bryan', equipeNome: 'Bryan',   metaValor: 100000 },
+    { equipeId: 'eq-luci',  equipeNome: 'Luciana', metaValor:  50000 },
   ];
   const base = { equipePorOperador, configMes: null, mes: '2026-07', hojeISO: '2026-07-15' };
 
@@ -502,7 +502,6 @@ describe('calcularMetaPixPorEquipe', () => {
   it('a meta do setor é a soma das metas das equipes', () => {
     const r = calcularMetaPixPorEquipe({ ...base, metas, itens: [] });
     expect(r.setor!.metaValor).toBe(150000);    // 100.000 + 50.000
-    expect(r.setor!.metaAcordos).toBe(15);      // 10 + 5
   });
 
   it('o realizado do setor inclui quem está fora de equipe', () => {
@@ -535,7 +534,7 @@ describe('calcularMetaPixPorEquipe', () => {
   it('equipe sem meta fica de fora da lista', () => {
     const r = calcularMetaPixPorEquipe({
       ...base,
-      metas: [{ equipeId: 'eq-bryan', equipeNome: 'Bryan', metaValor: 0, metaAcordos: 0 }],
+      metas: [{ equipeId: 'eq-bryan', equipeNome: 'Bryan', metaValor: 0 }],
       itens: [item({ operador_id: 'bryan1', valor: 30000 })],
     });
     expect(r.equipes).toHaveLength(0);

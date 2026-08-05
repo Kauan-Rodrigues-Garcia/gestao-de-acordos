@@ -346,8 +346,7 @@ export function PixAutomatico() {
         .map(m => ({
           equipeId:    m.equipe_id!,
           equipeNome:  nomeEquipe.get(m.equipe_id!) ?? 'Equipe',
-          metaValor:   Number(m.meta_valor)   || 0,
-          metaAcordos: Number(m.meta_acordos) || 0,
+          metaValor:   Number(m.meta_valor) || 0,
         })),
       equipePorOperador: operadorEquipe,
       configMes,
@@ -530,7 +529,7 @@ export function PixAutomatico() {
   // ── Meta de Pix do setor (líder+) ─────────────────────────────────────────
   // Parâmetros não se chamam `metaValor`: esse nome já é o estado da meta de
   // RECEBIMENTO do operador (card de bônus), e sombreá-lo aqui é convite a erro.
-  async function salvarMetaPix(equipeId: string, valorAlvo: number, acordosAlvo: number) {
+  async function salvarMetaPix(equipeId: string, valorAlvo: number) {
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
     const hoje = new Date();
     setSalvandoMetaPix(true);
@@ -542,7 +541,6 @@ export function PixAutomatico() {
         mes: hoje.getMonth() + 1,
         ano: hoje.getFullYear(),
         metaValor: valorAlvo,
-        metaAcordos: acordosAlvo,
         atualizadoPor: perfil.id,
         atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
       });
@@ -957,10 +955,7 @@ export function PixAutomatico() {
           nomeSetor={setores.find(s => s.id === setorConfig)?.nome}
           equipes={equipes}
           metasAtuais={Object.fromEntries(
-            metasPix.filter(m => m.equipe_id).map(m => [
-              m.equipe_id!,
-              { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
-            ]),
+            metasPix.filter(m => m.equipe_id).map(m => [m.equipe_id!, Number(m.meta_valor) || 0]),
           )}
           podeEditar
           salvando={salvandoMetaPix}

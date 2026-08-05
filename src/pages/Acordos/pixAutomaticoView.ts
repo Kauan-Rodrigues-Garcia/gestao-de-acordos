@@ -423,7 +423,6 @@ export interface MetaEquipeEntrada {
   equipeId: string;
   equipeNome: string;
   metaValor: number;
-  metaAcordos: number;
 }
 
 export interface LinhaMetaEquipe {
@@ -471,7 +470,7 @@ export function calcularMetaPixPorEquipe(p: {
         ...base,
         itens: p.itens.filter(i => p.equipePorOperador[i.operador_id] === m.equipeId),
         metaValor: m.metaValor,
-        metaAcordos: m.metaAcordos,
+        metaAcordos: 0,
       }),
     }))
     .filter(l => l.resumo !== null)
@@ -479,13 +478,12 @@ export function calcularMetaPixPorEquipe(p: {
 
   // Setor: metas somadas, realizado do setor inteiro (inclui quem está fora de
   // equipe). Passa pela MESMA função, então projeção e % seguem uma regra só.
-  const metaValorSetor   = p.metas.reduce((s, m) => s + (Number(m.metaValor)   || 0), 0);
-  const metaAcordosSetor = p.metas.reduce((s, m) => s + (Number(m.metaAcordos) || 0), 0);
+  const metaValorSetor = p.metas.reduce((s, m) => s + (Number(m.metaValor) || 0), 0);
   const setor = calcularMetaPix({
     ...base,
     itens: p.itens,
     metaValor: metaValorSetor,
-    metaAcordos: metaAcordosSetor,
+    metaAcordos: 0,
   });
 
   return { equipes, setor };
