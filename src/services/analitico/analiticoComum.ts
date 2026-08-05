@@ -110,6 +110,23 @@ export function mapearFormaPgto(tpdoc: string): FormaPagementoAnalitico {
   return isCartao(tpdoc) ? 'cartao' : 'boleto_pix';
 }
 
+/**
+ * Linha da equipe de RETENÇÃO no relatório do Receptivo.
+ *
+ * O relatório 58 traz, junto com o Receptivo, as linhas da equipe de Retenção.
+ * Esse recebimento é da Retenção, não do Receptivo — importá-lo infla o
+ * acumulado do setor e, por tabela, a projeção e o quartil de todo mundo nele.
+ * Por isso a linha é descartada na importação, não depois: o que não entra não
+ * precisa ser desfeito.
+ *
+ * O casamento é por CONTER "retencao" no normalizado (sem acento, sem espaço),
+ * e não por igualdade: a coluna Equipe/SubGrupo aparece tanto como "Retenção"
+ * quanto como "Retenção e Retenção" e variações com subgrupo colado.
+ */
+export function ehEquipeRetencao(equipe: unknown): boolean {
+  return norm(equipe).includes('retencao');
+}
+
 // ── Resolução de colunas ─────────────────────────────────────────────────────
 
 export type ColKeys = 'op' | 'eq' | 'cli' | 'tp' | 'dt' | 'rec' | 'ho';

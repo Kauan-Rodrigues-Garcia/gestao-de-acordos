@@ -21,6 +21,7 @@
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import {
   consolidar,
+  ehEquipeRetencao,
   extrairCodigo,
   extrairNome,
   mapearFormaPgto,
@@ -38,6 +39,8 @@ export * from './analiticoComum';
 export interface ResultadoParseRelatorio {
   linhas: LinhaRelatorio[];
   erros: string[];
+  /** Linhas da equipe de Retenção descartadas — ver `ehEquipeRetencao`. */
+  retencaoRemovidas: number;
 }
 
 /**
@@ -48,10 +51,10 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
   const buffer = await arquivo.arrayBuffer();
   const wb = xlsxRead(buffer, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return { linhas: [], erros: ['Planilha vazia ou inválida.'] };
+  if (!ws) return { linhas: [], erros: ['Planilha vazia ou inválida.'], retencaoRemovidas: 0 };
 
   const rows: unknown[][] = xlsxUtils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][];
-  if (rows.length < 2) return { linhas: [], erros: ['Planilha sem dados.'] };
+  if (rows.length < 2) return { linhas: [], erros: ['Planilha sem dados.'], retencaoRemovidas: 0 };
 
   const headerRow = rows[0] as unknown[];
   const cols = resolveCols(headerRow);
@@ -63,11 +66,13 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
         `Colunas obrigatórias não encontradas. Cabeçalhos lidos: ${encontrados}. ` +
         'Verifique se o arquivo é o relatório correto do ERP.',
       ],
+      retencaoRemovidas: 0,
     };
   }
 
   const erros: string[] = [];
   const linhasBrutas: LinhaRelatorio[] = [];
+  let retencaoRemovidas = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] as unknown[];
@@ -80,6 +85,9 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
     const rec = parsearValor(row[cols.rec]);
     const ho  = cols.ho != null ? parsearValor(row[cols.ho]) : 0;
     const eq  = cols.eq != null ? String(row[cols.eq] ?? '').trim() : '';
+
+    // Retenção não é Receptivo: a linha sai antes de virar recebimento.
+    if (ehEquipeRetencao(eq)) { retencaoRemovidas++; continue; }
 
     if (!op || !cli || !tp || !dt) {
       erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", cliente="${cli}", tipo="${tp}", data="${row[cols.dt]}") — ignorada.`);
@@ -106,5 +114,5 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
   }
 
   const linhas = consolidar(linhasBrutas);
-  return { linhas, erros };
+  return { linhas, erros, retencaoRemovidas };
 }

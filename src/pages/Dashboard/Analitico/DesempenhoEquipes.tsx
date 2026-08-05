@@ -33,6 +33,7 @@ import {
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -688,6 +689,26 @@ export function DesempenhoEquipes({
   }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
       orfaosPorSetor, equipes, metas, setorEfetivo]);
 
+  /**
+   * Setores na ordem que o admin arrastou na aba Setores.
+   *
+   * `dados.grupos` é um Map preenchido percorrendo `equipes`, então a ordem dos
+   * setores na tela era a ordem de chegada das equipes — arbitrária, e diferente
+   * da que a tela de Setores mostra. Equipe sem setor fica sempre por último.
+   */
+  const gruposOrdenados = useMemo(() => {
+    const entradas = [...dados.grupos.entries()];
+    const porId = new Map(entradas);
+    const comSetor = entradas.filter(([sid]) => sid !== 'sem_setor');
+    const ordenados = aplicarOrdemSetores(
+      comSetor.map(([sid]) => ({ id: sid, nome: setores[sid] ?? '' })),
+      empresaId,
+    );
+    const lista: [string, EquipeAnalitico[]][] = ordenados.map(s => [s.id, porId.get(s.id) ?? []]);
+    if (porId.has('sem_setor')) lista.push(['sem_setor', porId.get('sem_setor')!]);
+    return lista;
+  }, [dados.grupos, setores, empresaId]);
+
   if (loading || !carregado) {
     return (
       <div className="space-y-3 animate-pulse">
@@ -714,7 +735,7 @@ export function DesempenhoEquipes({
         className="hidden"
         onChange={onArquivoFotoSetor}
       />
-      {[...dados.grupos.entries()].map(([sid, eqs]) => {
+      {gruposOrdenados.map(([sid, eqs]) => {
         // Setor NORMAL → total do relatório (carimbo setor_id), clones não contam.
         // Quando NÃO é assim, quem decide é `setorSomaPorUsuarios` — a mesma
         // função que o dashboard e a aba Analítico consultam.

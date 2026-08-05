@@ -1895,6 +1895,11 @@ export type Database = {
           nr_cliente: string
           operador_id: string
           operador_nome: string | null
+          // Migration 20260804a — pagamento da comissão (estado separado da aprovação).
+          pago: boolean
+          pago_em: string | null
+          pago_por: string | null
+          pago_por_nome: string | null
           pct_comissao: number | null
           setor_id: string | null
           status: string
@@ -1911,6 +1916,10 @@ export type Database = {
           nr_cliente: string
           operador_id: string
           operador_nome?: string | null
+          pago?: boolean
+          pago_em?: string | null
+          pago_por?: string | null
+          pago_por_nome?: string | null
           pct_comissao?: number | null
           setor_id?: string | null
           status?: string
@@ -1927,10 +1936,59 @@ export type Database = {
           nr_cliente?: string
           operador_id?: string
           operador_nome?: string | null
+          pago?: boolean
+          pago_em?: string | null
+          pago_por?: string | null
+          pago_por_nome?: string | null
           pct_comissao?: number | null
           setor_id?: string | null
           status?: string
           valor?: number
+        }
+        Relationships: []
+      }
+      // Migration 20260804a — meta de Pix automático por setor/mês. Separada de
+      // `metas` de propósito: aquela é a meta de RECEBIMENTO e é somada em todo
+      // lugar; o valor do Pix já entra no recebimento pelo analítico.
+      pix_automatico_metas: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          mes: number
+          meta_acordos: number
+          meta_valor: number
+          setor_id: string
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          mes: number
+          meta_acordos?: number
+          meta_valor?: number
+          setor_id: string
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          mes?: number
+          meta_acordos?: number
+          meta_valor?: number
+          setor_id?: string
         }
         Relationships: []
       }

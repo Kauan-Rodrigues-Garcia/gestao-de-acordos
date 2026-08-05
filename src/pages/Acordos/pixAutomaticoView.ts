@@ -25,7 +25,8 @@ import {
 } from '@/lib/diasUteis';
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
 import {
-  comissaoDe, type PixAutoAcordo, type PixAutoStatus,
+  comissaoDe, PIX_META_ACORDOS_DOBRA,
+  type PixAutoAcordo, type PixAutoStatus,
 } from '@/services/pix_automatico.service';
 
 export interface OperadorInfo {
@@ -132,6 +133,221 @@ export function totaisPorStatus(
     };
   };
   return { pendente: soma('pendente'), aprovado: soma('aprovado'), desaprovado: soma('desaprovado') };
+}
+
+// ── Acordos "feitos" no mês ─────────────────────────────────────────────────
+
+/**
+ * Acordos que CONTAM como feitos: pendente e aprovado.
+ *
+ * Desaprovado não entrou — se contasse, registrar lixo aproximaria da meta.
+ * A mesma definição vale para o contador dos 18, para o ranking e para o
+ * realizado da meta do setor: três números que a operação vai comparar entre si
+ * e que, com regras diferentes, não fechariam.
+ */
+export function ehAcordoFeito(a: Pick<PixAutoAcordo, 'status'>): boolean {
+  return a.status !== 'desaprovado';
+}
+
+/** Acordos feitos por um operador dentro do mês 'yyyy-MM'. */
+export function acordosFeitosNoMes(
+  itens: PixAutoAcordo[],
+  operadorId: string | null | undefined,
+  mes: MesRef,
+): PixAutoAcordo[] {
+  if (!operadorId) return [];
+  return itens.filter(i => i.operador_id === operadorId
+                        && ehAcordoFeito(i)
+                        && i.criado_em.startsWith(mes));
+}
+
+// ── Meta dos 18 acordos (comissão dobrada) ──────────────────────────────────
+
+export interface DobraComissao {
+  /** Acordos Pix feitos no mês (pendente + aprovado). */
+  feitos: number;
+  /** Quantos ainda faltam para a comissão dobrar. Zero quando já bateu. */
+  faltam: number;
+  meta: number;
+  atingiu: boolean;
+  /** Comissão aprovada do operador no mês, sem dobra. */
+  comissao: number;
+  /** O que ele leva: `comissao` dobrada quando bateu, senão a própria. */
+  comissaoFinal: number;
+}
+
+/**
+ * O contador dos 18 acordos e a comissão dobrada.
+ *
+ * A dobra incide sobre a comissão APROVADA — é a que existe de fato. O contador,
+ * em compensação, conta os FEITOS: a meta é do trabalho do operador, e ele não
+ * controla quando o líder vai avaliar. Fossem os dois pela mesma régua, quem
+ * fechou 18 acordos veria "12/18" só porque a fila de aprovação atrasou.
+ */
+export function calcularDobraComissao(
+  itens: PixAutoAcordo[],
+  operadorId: string | null | undefined,
+  pctPorSetor: Record<string, number>,
+  mes: MesRef,
+): DobraComissao {
+  const doMes = acordosFeitosNoMes(itens, operadorId, mes);
+  const feitos = doMes.length;
+  const atingiu = feitos >= PIX_META_ACORDOS_DOBRA;
+  const comissao = doMes
+    .filter(i => i.status === 'aprovado')
+    .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0);
+  return {
+    feitos,
+    faltam: Math.max(PIX_META_ACORDOS_DOBRA - feitos, 0),
+    meta: PIX_META_ACORDOS_DOBRA,
+    atingiu,
+    comissao,
+    comissaoFinal: atingiu ? comissao * 2 : comissao,
+  };
+}
+
+// ── Ranking do setor ────────────────────────────────────────────────────────
+
+export interface LinhaRankingPix {
+  operadorId: string;
+  nome: string;
+  /** Acordos feitos no mês (pendente + aprovado). */
+  acordos: number;
+  /** Valor somado desses acordos. */
+  valor: number;
+  /** Comissão aprovada no mês. */
+  comissao: number;
+  /** Bateu os 18 e está com a comissão dobrada. */
+  dobrou: boolean;
+}
+
+/**
+ * Ranking de Pix automático do conjunto recebido, por acordos feitos no mês.
+ *
+ * Recebe os itens JÁ no escopo de quem está olhando (o líder carrega só o
+ * próprio setor) — assim o ranking do Receptivo é o do Receptivo, e não uma
+ * mistura de setores que ninguém compara.
+ *
+ * Empate em acordos desempata por comissão e depois por nome, para a ordem não
+ * dançar entre dois carregamentos com os mesmos números.
+ */
+export function rankingPixSetor(
+  itens: PixAutoAcordo[],
+  pctPorSetor: Record<string, number>,
+  mes: MesRef,
+  nomePorOperador: Record<string, string> = {},
+): LinhaRankingPix[] {
+  const porOperador = new Map<string, LinhaRankingPix>();
+
+  for (const i of itens) {
+    if (!ehAcordoFeito(i) || !i.criado_em.startsWith(mes)) continue;
+    const linha = porOperador.get(i.operador_id) ?? {
+      operadorId: i.operador_id,
+      nome: nomePorOperador[i.operador_id] ?? i.operador_nome ?? '—',
+      acordos: 0, valor: 0, comissao: 0, dobrou: false,
+    };
+    linha.acordos += 1;
+    linha.valor   += Number(i.valor);
+    if (i.status === 'aprovado') linha.comissao += comissaoDe(i, pctPorSetor);
+    porOperador.set(i.operador_id, linha);
+  }
+
+  return [...porOperador.values()]
+    .map(l => ({ ...l, dobrou: l.acordos >= PIX_META_ACORDOS_DOBRA }))
+    .sort((a, b) =>
+      b.acordos - a.acordos
+      || b.comissao - a.comissao
+      || a.nome.localeCompare(b.nome));
+}
+
+// ── Meta de Pix do setor ────────────────────────────────────────────────────
+
+export interface EntradaMetaPix {
+  itens: PixAutoAcordo[];
+  /** Meta de valor do setor no mês. 0/null = sem meta de valor. */
+  metaValor: number | null;
+  /** Meta de quantidade de acordos no mês. 0/null = sem meta de quantidade. */
+  metaAcordos: number | null;
+  configMes: MetasConfigMes | null;
+  mes: MesRef;
+  hojeISO: string;
+}
+
+export interface ResumoMetaPix {
+  /** Valor somado dos acordos feitos no mês. */
+  realizado: number;
+  /** Quantidade de acordos feitos no mês. */
+  acordos: number;
+  metaValor: number;
+  metaAcordos: number;
+  /** Quanto falta em valor. Zero quando bateu. */
+  faltaValor: number;
+  /** Quantos acordos faltam. Zero quando bateu. */
+  faltaAcordos: number;
+  /** % do realizado sobre a meta (teto 999). */
+  pctValor: number;
+  /**
+   * Projeção: realizado sobre o ESPERADO até hoje, em dias úteis. 100% = no
+   * ritmo de bater. Zero quando não há como calcular dias úteis do mês.
+   */
+  projecao: number;
+  metaBatida: boolean;
+}
+
+/**
+ * O painel de meta do Pix automático.
+ *
+ * Deliberadamente NÃO toca no recebimento: o valor do Pix já entra no
+ * recebimento pelo analítico, e somar aqui de novo contaria duas vezes o mesmo
+ * dinheiro. Esta meta responde outra pergunta — quanto de Pix o setor fez e
+ * quanto falta —, e o realizado sai dos próprios acordos Pix.
+ *
+ * A projeção usa a mesma mecânica de dias úteis do bônus por meta e do
+ * dashboard (`diasUteisDoMes` / `diasUteisDecorridos` com os feriados do mês),
+ * para os dois painéis não darem números diferentes sobre o mesmo mês.
+ *
+ * Devolve `null` quando não há meta nenhuma definida: sem meta, "faltam
+ * R$ 0,00" seria uma afirmação falsa sobre uma pergunta que ninguém fez.
+ */
+export function calcularMetaPix(e: EntradaMetaPix): ResumoMetaPix | null {
+  const metaValor   = Number(e.metaValor ?? 0)   || 0;
+  const metaAcordos = Number(e.metaAcordos ?? 0) || 0;
+  if (metaValor <= 0 && metaAcordos <= 0) return null;
+
+  const doMes = e.itens.filter(i => ehAcordoFeito(i) && i.criado_em.startsWith(e.mes));
+  const realizado = doMes.reduce((s, i) => s + Number(i.valor), 0);
+  const acordos   = doMes.length;
+
+  let projecao = 0;
+  if (metaValor > 0 && e.configMes) {
+    const { ano, mes } = partesDoMes(e.mes);
+    const totalUteis = diasUteisDoMes(ano, mes, e.configMes.feriados);
+    if (totalUteis > 0) {
+      const decorridos = diasUteisDecorridos(
+        ano, mes, e.configMes.feriados, e.hojeISO, undefined,
+        e.configMes.contar_dia_atual === true,
+      );
+      // `Math.max(decorridos, 1)`: no primeiro dia do mês, zero dia decorrido
+      // daria divisão por zero e projeção infinita. Um dia é o piso — mesma
+      // regra de `calcularBonusMeta`.
+      const esperado = (metaValor / totalUteis) * Math.max(decorridos, 1);
+      projecao = esperado > 0 ? Math.min(Math.round((realizado / esperado) * 100), 999) : 0;
+    }
+  }
+
+  return {
+    realizado,
+    acordos,
+    metaValor,
+    metaAcordos,
+    faltaValor:   metaValor   > 0 ? Math.max(metaValor - realizado, 0) : 0,
+    faltaAcordos: metaAcordos > 0 ? Math.max(metaAcordos - acordos, 0) : 0,
+    pctValor:     metaValor   > 0 ? Math.min(Math.round((realizado / metaValor) * 100), 999) : 0,
+    projecao,
+    metaBatida:
+      (metaValor   <= 0 || realizado >= metaValor)
+      && (metaAcordos <= 0 || acordos >= metaAcordos),
+  };
 }
 
 // ── Bônus por meta ──────────────────────────────────────────────────────────

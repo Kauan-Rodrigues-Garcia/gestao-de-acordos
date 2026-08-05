@@ -17,6 +17,8 @@ import {
   AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/hooks/useAuth';
+import { PERFIL_NIVEL } from '@/lib/index';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -89,6 +91,7 @@ function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
 
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
+  const { perfil } = useAuth();
   const cf = useCampanhaFacil();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +126,21 @@ export default function CampanhaFacil() {
         <Card><CardContent className="p-8 text-center text-muted-foreground">
           <Sparkles className="mx-auto mb-3 h-8 w-8 opacity-50" />
           O Campanha Fácil está disponível apenas para a BookPlay.
+        </CardContent></Card>
+      </div>
+    );
+  }
+
+  // ── Gate de cargo: operador não usa o Campanha Fácil ──
+  // Mesma defesa em profundidade do gate acima: o item já some do menu, mas a
+  // rota continua acessível por URL colada. Cargo desconhecido cai no piso de
+  // operador de propósito — o padrão aqui é negar, não liberar.
+  if (perfil && (PERFIL_NIVEL[perfil.perfil] ?? PERFIL_NIVEL.operador) <= PERFIL_NIVEL.operador) {
+    return (
+      <div className="p-6">
+        <Card><CardContent className="p-8 text-center text-muted-foreground">
+          <Lock className="mx-auto mb-3 h-8 w-8 opacity-50" />
+          O Campanha Fácil está disponível apenas para líderes e cargos superiores.
         </CardContent></Card>
       </div>
     );
