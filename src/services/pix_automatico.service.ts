@@ -164,7 +164,7 @@ export async function fetchAcordosPix(
  * Edita um registro do operador — só NR e valor, e só enquanto PENDENTE.
  *
  * O `.eq('status', 'pendente')` repete no cliente o que a policy e o gatilho da
- * migration 20260804a já garantem. Não é desconfiança da RLS: é o que faz a
+ * migration 20260804c já garantem. Não é desconfiança da RLS: é o que faz a
  * tela dizer "este acordo já foi avaliado" em vez de gravar zero linhas em
  * silêncio quando o líder aprovou enquanto o formulário estava aberto.
  */

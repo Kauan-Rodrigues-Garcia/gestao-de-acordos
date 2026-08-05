@@ -1895,7 +1895,7 @@ export type Database = {
           nr_cliente: string
           operador_id: string
           operador_nome: string | null
-          // Migration 20260804a — pagamento da comissão (estado separado da aprovação).
+          // Migration 20260804c — pagamento da comissão (estado separado da aprovação).
           pago: boolean
           pago_em: string | null
           pago_por: string | null
@@ -1947,7 +1947,7 @@ export type Database = {
         }
         Relationships: []
       }
-      // Migration 20260804a — meta de Pix automático por setor/mês. Separada de
+      // Migration 20260804c — meta de Pix automático por setor/mês. Separada de
       // `metas` de propósito: aquela é a meta de RECEBIMENTO e é somada em todo
       // lugar; o valor do Pix já entra no recebimento pelo analítico.
       pix_automatico_metas: {

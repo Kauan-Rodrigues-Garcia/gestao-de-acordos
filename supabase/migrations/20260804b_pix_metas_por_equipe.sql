@@ -5,7 +5,7 @@
 -- No Receptivo, Bryan, Luciana e Matheus têm cada um a sua, e o setor é o
 -- total — é assim que a operação acompanha, equipe a equipe.
 --
--- `20260804a` criou a tabela com uma linha por setor/mês. Aqui ela passa a
+-- `20260804c` criou a tabela com uma linha por setor/mês. Aqui ela passa a
 -- aceitar uma linha por EQUIPE/mês, e o setor deixa de ser um valor guardado
 -- para virar uma soma calculada na leitura.
 --
@@ -20,7 +20,7 @@ ALTER TABLE public.pix_automatico_metas
   ADD COLUMN IF NOT EXISTS equipe_id UUID REFERENCES public.equipes(id) ON DELETE CASCADE;
 
 COMMENT ON COLUMN public.pix_automatico_metas.equipe_id IS
-  'Equipe dona da meta. NULL = linha antiga, de quando a meta era do setor inteiro (20260804a); a UI nova grava sempre com equipe.';
+  'Equipe dona da meta. NULL = linha antiga, de quando a meta era do setor inteiro (20260804c); a UI nova grava sempre com equipe.';
 
 -- ─── 2. Unicidade ────────────────────────────────────────────────────────────
 -- A UNIQUE original era (empresa, setor, mês, ano): com ela, a segunda equipe
