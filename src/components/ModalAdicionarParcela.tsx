@@ -69,6 +69,16 @@ export function ModalAdicionarParcela({
   const nrLabel      = isPaguePlay ? 'Código' : 'NR';
   const nrValor      = (isPaguePlay ? acordo?.instituicao : acordo?.nr_cliente) ?? '—';
 
+  /**
+   * Formas da lista personalizada. A lista trabalha com o valor que vai para o
+   * banco, e a PaguePlay grava 'boleto' para a opção 'boleto_pix' — sem essa
+   * troca o select ficava vazio, porque 'boleto' não existia entre as opções.
+   */
+  const tiposDaParcela = tipos.map(t => ({
+    value: t.value === 'boleto_pix' ? 'boleto' : t.value,
+    label: t.label,
+  }));
+
   const [vencimento, setVencimento] = useState('');
   const [valorStr,   setValorStr]   = useState('');
   const [tipoSel,    setTipoSel]    = useState('boleto');
@@ -83,9 +93,19 @@ export function ModalAdicionarParcela({
 
   // Personalização por parcela. `Record` por índice, e não array, para uma
   // linha em branco continuar em branco quando a quantidade muda.
+  //
+  // O valor fica como TEXTO, exatamente o que a pessoa digitou. Guardar o número
+  // já convertido quebrava a digitação: "150," virava 150 e o campo reescrevia
+  // "150" na mesma tecla, apagando a vírgula — nunca dava para chegar aos
+  // centavos. A conversão acontece só na hora de montar o plano.
+  type AjusteDigitado = {
+    valorStr?:   string;
+    vencimento?: string | null;
+    tipo?:       string | null;
+  };
   const [personalizar, setPersonalizar] = useState(false);
-  const [ajustes, setAjustes] = useState<Record<number, AjustePersonalizado>>({});
-  const setAjuste = (i: number, patch: AjustePersonalizado) =>
+  const [ajustes, setAjustes] = useState<Record<number, AjusteDigitado>>({});
+  const setAjuste = (i: number, patch: AjusteDigitado) =>
     setAjustes(prev => ({ ...prev, [i]: { ...prev[i], ...patch } }));
 
   // (Re)inicializa os campos toda vez que o modal abre para um acordo.
@@ -117,7 +137,17 @@ export function ModalAdicionarParcela({
     statusBase:     statusSel,
     isPaguePlay,
     personalizadas: personalizar
-      ? Array.from({ length: quantidade }, (_, i) => ajustes[i] ?? {})
+      ? Array.from({ length: quantidade }, (_, i): AjustePersonalizado => {
+          const a = ajustes[i];
+          const digitado = (a?.valorStr ?? '').trim();
+          return {
+            // Campo em branco devolve null de propósito: `planejarParcelas`
+            // trata null como "usa o valor do lote".
+            valor:      digitado === '' ? null : parseCurrencyInput(digitado),
+            vencimento: a?.vencimento,
+            tipo:       a?.tipo,
+          };
+        })
       : undefined,
   }), [quantidade, vencimento, valorStr, tipoSel, statusSel, isPaguePlay, personalizar, ajustes]);
 
@@ -164,7 +194,12 @@ export function ModalAdicionarParcela({
         salvar fica inalcançável (10 parcelas personalizadas já bastam).
       */}
       <DialogContent
-        className="max-w-md max-h-[90dvh] flex flex-col overflow-hidden"
+        className={cn(
+          'max-w-md max-h-[90dvh] flex flex-col overflow-hidden',
+          // A lista personalizada tem quatro colunas; em max-w-md o campo de
+          // data nativo não cabe e fica cortado.
+          personalizar && quantidade > 1 && 'max-w-lg',
+        )}
         aria-describedby="modal-adicionar-parcela-desc"
       >
         <DialogHeader className="shrink-0">
@@ -288,8 +323,17 @@ export function ModalAdicionarParcela({
                 para não ficarem duas barras uma dentro da outra. */}
             {personalizar && quantidade > 1 && (
               <div className="rounded-lg border border-border bg-muted/20 p-2 space-y-1.5">
+                <div className="grid grid-cols-[22px_minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1.1fr)] gap-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <span />
+                  <span>Vencimento</span>
+                  <span>Valor (R$)</span>
+                  <span>Forma</span>
+                </div>
                 {plano.parcelas.map((p, i) => (
-                  <div key={i} className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1.5 items-center">
+                  <div
+                    key={i}
+                    className="grid grid-cols-[22px_minmax(0,1.25fr)_minmax(0,1fr)_minmax(0,1.1fr)] gap-1.5 items-center"
+                  >
                     <span className="text-[10px] font-mono font-bold text-primary text-center">
                       {i + 1}
                     </span>
@@ -302,12 +346,10 @@ export function ModalAdicionarParcela({
                     <Input
                       // Vazio mostra o valor do lote como placeholder: fica claro
                       // que não preencher mantém o padrão, em vez de zerar.
-                      value={ajustes[i]?.valor != null ? String(ajustes[i]!.valor) : ''}
-                      onChange={(e) => {
-                        const v = parseCurrencyInput(e.target.value);
-                        setAjuste(i, { valor: e.target.value.trim() === '' ? null : v });
-                      }}
+                      value={ajustes[i]?.valorStr ?? ''}
+                      onChange={(e) => setAjuste(i, { valorStr: e.target.value })}
                       placeholder={formatCurrency(p.valor)}
+                      inputMode="decimal"
                       className="h-7 text-[11px] font-mono px-1.5"
                     />
                     <Select
@@ -316,11 +358,9 @@ export function ModalAdicionarParcela({
                     >
                       <SelectTrigger className="h-7 text-[11px] px-1.5"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {tipos
-                          .filter(t => t.value !== 'boleto_pix')
-                          .map((t) => (
-                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                          ))}
+                        {tiposDaParcela.map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
