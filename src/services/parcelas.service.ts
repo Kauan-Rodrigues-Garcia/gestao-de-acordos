@@ -259,6 +259,68 @@ export async function adicionarParcelasAoGrupo(
   return { ok: true, novasParcelas: novas, novoTotal };
 }
 
+export interface ParcelaNumerada extends NovaParcelaInput {
+  /** Posição EXATA no acordo — não é continuação do maior número existente. */
+  numero: number;
+}
+
+export type CriarNumeradasResultado =
+  | { ok: true; criadas: Acordo[] }
+  | { ok: false; erro: string };
+
+/**
+ * Cria parcelas em posições determinadas do acordo.
+ *
+ * Diferente de `adicionarParcelasAoGrupo`, que empilha no fim: aqui o número de
+ * cada parcela vem de fora. É o caso da tela de editar parcelas, onde um acordo
+ * de 17 parcelas com 2 linhas no banco mostra as 15 que faltam — e materializar
+ * a 9ª tem de gravar 9, não "a próxima da fila".
+ *
+ * O total (`parcelas`) NÃO muda: essas parcelas já eram contadas pelo acordo,
+ * só não existiam como registro.
+ */
+export async function criarParcelasNumeradas(
+  acordoBase: Acordo,
+  entradas: readonly ParcelaNumerada[],
+  opts: { camposExtras?: Record<string, unknown> } = {},
+): Promise<CriarNumeradasResultado> {
+  if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
+  if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
+  if (!entradas.length)       return { ok: false, erro: 'Nenhuma parcela para criar' };
+  for (const p of entradas) {
+    if (!(p.numero > 0))  return { ok: false, erro: 'Parcela sem número válido' };
+    if (!p.vencimento)    return { ok: false, erro: `Parcela ${p.numero}: informe o vencimento` };
+    if (!(p.valor > 0))   return { ok: false, erro: `Parcela ${p.numero}: informe um valor válido` };
+  }
+
+  const grupo = await garantirGrupo(acordoBase);
+  if ('erro' in grupo) return { ok: false, erro: grupo.erro };
+
+  const total = Math.max(
+    acordoBase.parcelas ?? 1,
+    ...entradas.map(p => p.numero),
+  );
+
+  const payloads = entradas.map(p => ({
+    ...payloadNovaParcela(acordoBase, p, grupo.grupoId, p.numero, total),
+    // Entrada e afins vêm por fora: `payloadNovaParcela` zera `valor_total`
+    // porque parcela avulsa fica fora de rateio, e no acordo com entrada esse
+    // campo é do GRUPO inteiro.
+    ...(opts.camposExtras ?? {}),
+  }));
+
+  const { data, error } = await supabase
+    .from('acordos')
+    .insert(payloads as never)
+    .select('*, perfis(id, nome, email, perfil, setor_id)');
+  if (error) return { ok: false, erro: `Erro ao criar parcelas: ${error.message}` };
+
+  const criadas: Acordo[] = Array.isArray(data)
+    ? data as Acordo[]
+    : (data ? [data as Acordo] : []);
+  return { ok: true, criadas };
+}
+
 /**
  * Replica a parcela no grupo do operador vinculado (o outro lado do par
  * Direto↔Extra do mesmo NR), mantendo os dois painéis consistentes.
