@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
-  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
+  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus, Edit,
 } from 'lucide-react';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { Button } from '@/components/ui/button';
@@ -619,6 +619,16 @@ export function AcordoDetalheInline({
                     >
                       <ArrowLeftRight className="w-3 h-3" />
                       Acordo direto
+                    </Button>
+                  )}
+                  {podeAdicionarParcela && deveExibirParcelas && registrosReais.length > 0 && (
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={() => setModalEditParcOpen(true)}
+                    >
+                      <Edit className="w-3 h-3" />
+                      Editar parcelas
                     </Button>
                   )}
                   {podeAdicionarParcela && (

@@ -1,4 +1,4 @@
-import { parseCurrencyInput } from '@/lib/index';
+import { parseCurrencyInput, PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { z } from 'zod';
 
 /**
@@ -21,7 +21,11 @@ export const schemaBase = z.object({
     return !isNaN(n) && n > 0;
   }, 'Valor deve ser maior que zero'),
   tipo:        z.enum(['boleto', 'pix', 'cartao', 'cartao_recorrente', 'pix_automatico']),
-  parcelas:    z.string().optional().refine(v => !v || (parseInt(v) > 0 && parseInt(v) <= 60), 'Parcelas inválidas'),
+  // O teto acompanha o campo digitável da BookPlay (2 dígitos). Estava em 60,
+  // então 61..99 passavam no campo e eram recusados pelo schema.
+  parcelas:    z.string().optional().refine(
+    v => !v || (parseInt(v) > 0 && parseInt(v) <= PARCELAS_MAX_DEFAULT), 'Parcelas inválidas',
+  ),
   whatsapp:    z.string().optional().refine(v => !v || v.replace(/\D/g, '').length >= 10, 'WhatsApp deve ter DDD + número'),
   instituicao: z.string().max(100, 'Nome da instituição muito longo').optional(),
   status:      z.enum(['verificar_pendente', 'pago', 'nao_pago']),

@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle } from 'lucide-react';
+import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle, Pencil, Wallet } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,11 +26,28 @@ import {
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
-import { calcularParcelas } from '@/lib/money';
+import {
+  calcularParcelas, formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
+} from '@/lib/money';
+import { PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
 import { DatePickerField } from '@/components/DatePickerField';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { TagsSelector } from '@/components/TagsSelector';
+import {
+  planejarQuantidade, descreverRemocao, type PlanoQuantidade,
+} from '@/services/quantidadeParcelas';
+import { carregarLinhasDoGrupo, aplicarQuantidade } from '@/services/quantidadeParcelas.service';
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog';
+
+/**
+ * Formas que geram parcelamento na PaguePlay. Na BookPlay a trava não existe
+ * mais desde 05/08/2026 — qualquer forma parcela, Pix inclusive.
+ */
+const TIPOS_PARCELADOS_PP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
 
 interface AcordoEditInlineProps {
   acordo: Acordo;
@@ -79,7 +96,32 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   const parcelamentoAlterado = isPaguePlay &&
     (tipo !== acordo.tipo || parseInt(parcelas || '1', 10) !== (acordo.parcelas || 1));
 
-  async function handleSave() {
+  // ── Parcelas (BookPlay) ───────────────────────────────────────────────────
+  // Acordo já parcelado abre com a quantidade ESCRITA, não editável: mudar o
+  // número cria ou apaga linha de parcela, e isso não pode acontecer por um
+  // clique errado num campo que estava logo ali. O botão é o gesto que diz
+  // "sim, quero mexer nisso".
+  const jaParcelado = (acordo.parcelas ?? 1) > 1;
+  const [editandoParcelas, setEditandoParcelas] = useState(false);
+  // Remoção de parcela é destrutiva: fica pendente até o operador confirmar.
+  const [remocaoPendente, setRemocaoPendente] = useState<{
+    plano: Extract<PlanoQuantidade, { acao: 'remover' }>;
+  } | null>(null);
+
+  // ── Entrada (BookPlay) ────────────────────────────────────────────────────
+  // O acordo com entrada guarda `valor_entrada` e `valor_total`; o valor das
+  // demais é derivado. Aqui a edição só precisa RECONHECER isso: o campo Valor
+  // continua sendo o desta linha, e o total é recalculado quando a quantidade
+  // muda, para os três números não divergirem.
+  const entradaAtiva     = !isPaguePlay && temEntrada(acordo);
+  const demaisAtual      = entradaAtiva ? valorDemaisParcelas(acordo) : null;
+  const ehLinhaDaEntrada = (acordo.numero_parcela ?? 1) === 1;
+  const parcelasNumAtual = Math.max(1, parseInt(parcelas || '1', 10) || 1);
+  const entradaPrevista  = entradaAtiva && ehLinhaDaEntrada
+    ? parseCurrencyInput(valor)
+    : Number(acordo.valor_entrada ?? 0);
+
+  async function handleSave(confirmouRemocao = false) {
     if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
 
@@ -99,6 +141,46 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
       return;
     }
     const parcelasNum = parseInt(parcelas || '1', 10);
+
+    // ─── BookPlay: a quantidade de parcelas é do GRUPO, não desta linha ────
+    // Mudar o número aqui cria as parcelas que faltam ou apaga as que sobram;
+    // sem isso o contador N/N passaria a mentir sobre o que existe no banco.
+    // O plano é calculado ANTES de qualquer gravação, para um caso impossível
+    // (reduzir por cima de parcela paga) parar antes de salvar meia coisa.
+    const mudouQuantidade = !isPaguePlay && parcelasNum !== (acordo.parcelas ?? 1);
+    const camposDoGrupo = entradaAtiva && demaisAtual != null
+      ? {
+          valor_entrada: entradaPrevista,
+          valor_total:   totalComEntrada(entradaPrevista, demaisAtual, parcelasNum),
+        }
+      : undefined;
+
+    let planoQuantidade: PlanoQuantidade | null = null;
+    if (!isPaguePlay && mudouQuantidade) {
+      const grupo = await carregarLinhasDoGrupo(acordo);
+      // `'erro' in` e não `!grupo.ok`: com `strict: false` o TypeScript não
+      // estreita união por discriminante booleano (mesmo caso já documentado
+      // em parcelas.service).
+      if ('erro' in grupo) { toast.error(grupo.erro); return; }
+      planoQuantidade = planejarQuantidade({
+        linhas:             grupo.linhas,
+        quantidadeAtual:    acordo.parcelas ?? 1,
+        novaQuantidade:     parcelasNum,
+        // Com entrada, quem entra é sempre parcela 2+: vale o das demais.
+        valorNovasParcelas: demaisAtual ?? valorNum,
+        tipo,
+        isPaguePlay:        false,
+      });
+      if (planoQuantidade.acao === 'bloqueado') { toast.error(planoQuantidade.motivo); return; }
+      if (planoQuantidade.acao === 'remover' && !confirmouRemocao) {
+        setRemocaoPendente({ plano: planoQuantidade });
+        return;
+      }
+    } else if (!isPaguePlay && camposDoGrupo) {
+      // Valor da entrada editado sem mexer na quantidade: o total do acordo
+      // muda junto e precisa cair em todas as linhas do grupo.
+      planoQuantidade = { acao: 'contador', novoTotal: parcelasNum };
+    }
 
     // ─── Bloqueio de NR/Inscrição duplicado (edição) ──────────────────────
     // Mesma validação feita no AcordoNovoInline/AcordoForm: quando o usuário
@@ -150,7 +232,11 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
         vencimento,
         valor:        valorNum,
         tipo,
-        parcelas:     ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && !Number.isNaN(parcelasNum) ? parcelasNum : 1,
+        // BookPlay: qualquer forma parcela, então o número vale sempre. Na
+        // PaguePlay a trava por forma continua valendo.
+        parcelas:     isPaguePlay
+          ? (TIPOS_PARCELADOS_PP.includes(tipo) && !Number.isNaN(parcelasNum) ? parcelasNum : 1)
+          : (Number.isNaN(parcelasNum) ? 1 : parcelasNum),
         whatsapp:     isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
         status,
         observacoes:  isPaguePlay
@@ -190,6 +276,24 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
       if (error) {
         toast.error(`Erro ao salvar: ${error.message}`);
         return;
+      }
+
+      // Grupo depois da linha: se o UPDATE acima for recusado (RLS, validação
+      // do banco), nenhuma parcela foi criada nem apagada.
+      if (planoQuantidade) {
+        const r = await aplicarQuantidade(acordo, planoQuantidade, {
+          isPaguePlay: false,
+          camposDoGrupo,
+        });
+        if ('erro' in r) {
+          // A linha já foi salva — dizer só "erro" esconderia metade do que
+          // aconteceu, e o operador precisa saber o que conferir.
+          toast.error(`Acordo salvo, mas a quantidade de parcelas não mudou: ${r.erro}`, { duration: 8000 });
+          onSaved((updated ?? { ...acordo, ...payload }) as Acordo);
+          return;
+        }
+        if (r.criadas.length) toast.success(`${r.criadas.length} parcela(s) criada(s).`);
+        if (r.removidas.length) toast.success(`${r.removidas.length} parcela(s) apagada(s).`);
       }
 
       // Sincroniza nr_registros quando a chave NR/Inscrição mudou.
@@ -260,7 +364,9 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
 
                 {/* Valor */}
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium">Valor *</Label>
+                  <Label className="text-xs font-medium">
+                    {entradaAtiva && ehLinhaDaEntrada ? 'Valor da entrada *' : 'Valor *'}
+                  </Label>
                   <div className="relative">
                     <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                     <Input
@@ -354,22 +460,58 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                 {/* Parcelas */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">
-                    Parcelas{!['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && (
+                    Parcelas{isPaguePlay && !TIPOS_PARCELADOS_PP.includes(tipo) && (
                       <span className="text-muted-foreground/50 font-normal"> (não se aplica)</span>
                     )}
                   </Label>
-                  <Select
-                    value={parcelas}
-                    onValueChange={setParcelas}
-                    disabled={!['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo)}
-                  >
-                    <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
-                        <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+
+                  {isPaguePlay ? (
+                    <Select
+                      value={parcelas}
+                      onValueChange={setParcelas}
+                      disabled={!TIPOS_PARCELADOS_PP.includes(tipo)}
+                    >
+                      <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from({ length: 12 }, (_, i) => i + 1).map(n => (
+                          <SelectItem key={n} value={String(n)}>{n === 1 ? '1 (à vista)' : `${n}x`}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : jaParcelado && !editandoParcelas ? (
+                    // Acordo que já é parcelamento: o número aparece escrito e
+                    // só vira campo depois do botão. Ver `jaParcelado`.
+                    <div className="h-8 flex items-center gap-2 px-2 rounded-md border border-input bg-muted/30">
+                      <span className="text-xs font-mono font-semibold text-foreground">
+                        {parcelas}x
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setEditandoParcelas(true)}
+                        disabled={saving}
+                        title="Alterar a quantidade de parcelas deste acordo"
+                        className="ml-auto inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                      >
+                        <Pencil className="w-3 h-3" /> Editar
+                      </button>
+                    </div>
+                  ) : (
+                    <Input
+                      type="number" min={1} max={PARCELAS_MAX_DEFAULT} inputMode="numeric"
+                      value={parcelas}
+                      onChange={e => setParcelas(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                      placeholder="1"
+                      className="h-8 text-xs font-mono"
+                    />
+                  )}
+
+                  {!isPaguePlay && editandoParcelas && parcelasNumAtual !== (acordo.parcelas ?? 1) && (
+                    <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-tight">
+                      {parcelasNumAtual > (acordo.parcelas ?? 1)
+                        ? 'Ao salvar, as parcelas que faltam são criadas seguindo as datas do acordo.'
+                        : 'Ao salvar, as parcelas acima desse número são apagadas (com confirmação).'}
+                    </p>
+                  )}
                 </div>
 
                 {/* Status */}
@@ -412,6 +554,25 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                     O cálculo de parcelamento será feito a partir do{' '}
                     <strong>valor total</strong> que você colocou no campo Valor.
                     Verifique se o valor está correto antes de salvar.
+                  </p>
+                </div>
+              )}
+
+              {/* Acordo com entrada: a edição reconhece e mostra os três
+                  números juntos, porque mexer em um muda os outros. */}
+              {entradaAtiva && demaisAtual != null && (
+                <div className="mt-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 flex items-start gap-2">
+                  <Wallet className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+                  <p className="text-xs text-emerald-700 dark:text-emerald-400">
+                    Acordo <strong>com entrada</strong>: a parcela <strong>1/{parcelasNumAtual}</strong> é a
+                    entrada de <strong>{formatBRL(entradaPrevista)}</strong> e as outras{' '}
+                    <strong>{Math.max(0, parcelasNumAtual - 1)}</strong> ficam em{' '}
+                    <strong>{formatBRL(demaisAtual)}</strong> cada — total{' '}
+                    <strong>{formatBRL(totalComEntrada(entradaPrevista, demaisAtual, parcelasNumAtual))}</strong>.
+                    {ehLinhaDaEntrada
+                      ? ' O campo Valor acima é o da entrada.'
+                      : ` Esta linha é a parcela ${acordo.numero_parcela ?? 1}; o campo Valor edita só ela.`}
+                    {' '}Para mudar o valor das demais, use <strong>Editar parcelas</strong> no detalhe do acordo.
                   </p>
                 </div>
               )}
@@ -461,7 +622,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                   <Button
                     size="sm"
                     className="h-7 text-xs gap-1"
-                    onClick={handleSave}
+                    onClick={() => void handleSave()}
                     disabled={saving}
                   >
                     <Save className="w-3 h-3" />
@@ -471,6 +632,32 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
               </div>
             </div>
           </motion.div>
+
+          {/* Reduzir parcelas apaga linha do banco: confirmação explícita,
+              com os números que vão sumir escritos na frente. */}
+          <AlertDialog
+            open={!!remocaoPendente}
+            onOpenChange={(aberto) => { if (!aberto) setRemocaoPendente(null); }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reduzir para {remocaoPendente?.plano.novoTotal} parcelas?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  {remocaoPendente ? descreverRemocao(remocaoPendente.plano) : ''}
+                  {' '}Isso não pode ser desfeito — parcelas já pagas não são apagadas por aqui.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={saving}>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  disabled={saving}
+                  onClick={() => { setRemocaoPendente(null); void handleSave(true); }}
+                >
+                  Apagar e salvar
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </td>
       </tr>
     );
