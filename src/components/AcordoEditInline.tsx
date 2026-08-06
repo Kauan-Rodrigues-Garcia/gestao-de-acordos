@@ -4,7 +4,7 @@
  */
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle, Pencil, Wallet } from 'lucide-react';
+import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle, Pencil, Wallet, Layers } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,6 +38,7 @@ import {
   planejarQuantidade, descreverRemocao, type PlanoQuantidade,
 } from '@/services/quantidadeParcelas';
 import { carregarLinhasDoGrupo, aplicarQuantidade } from '@/services/quantidadeParcelas.service';
+import { ModalEditarAcordoParcelado } from '@/components/AcordoDetalheInline/ModalEditarAcordoParcelado';
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogAction, AlertDialogCancel,
@@ -55,11 +56,19 @@ interface AcordoEditInlineProps {
   colSpan?: number;
   /** Recebe o acordo atualizado para optimistic update no pai */
   onSaved: (atualizado: Acordo) => void;
+  /**
+   * Parcelas gravadas pelo modal de parcelas. Separado de `onSaved` porque
+   * aquele FECHA a edição — e salvar parcelas não pode descartar o que a
+   * pessoa já digitou nos outros campos da área aberta.
+   */
+  onParcelasAtualizadas?: (linhas: Acordo[]) => void;
   onCancel: () => void;
 }
 
 
-export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, onSaved, onCancel }: AcordoEditInlineProps) {
+export function AcordoEditInline({
+  acordo, isPaguePlay = false, colSpan = 10, onSaved, onParcelasAtualizadas, onCancel,
+}: AcordoEditInlineProps) {
   const { empresa } = useEmpresa();
   const { perfil }  = useAuth();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
@@ -103,6 +112,7 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
   // "sim, quero mexer nisso".
   const jaParcelado = (acordo.parcelas ?? 1) > 1;
   const [editandoParcelas, setEditandoParcelas] = useState(false);
+  const [modalParcelasOpen, setModalParcelasOpen] = useState(false);
   // Remoção de parcela é destrutiva: fica pendente até o operador confirmar.
   const [remocaoPendente, setRemocaoPendente] = useState<{
     plano: Extract<PlanoQuantidade, { acao: 'remover' }>;
@@ -505,6 +515,20 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
                     />
                   )}
 
+                  {/* Editar as parcelas em si (data, valor, forma de cada uma)
+                      fica ao lado da quantidade: é onde o operador já está
+                      olhando quando pensa em parcela. */}
+                  {!isPaguePlay && jaParcelado && (
+                    <button
+                      type="button"
+                      onClick={() => setModalParcelasOpen(true)}
+                      disabled={saving}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                    >
+                      <Layers className="w-3 h-3" /> Editar parcelas (data, valor, forma)
+                    </button>
+                  )}
+
                   {!isPaguePlay && editandoParcelas && parcelasNumAtual !== (acordo.parcelas ?? 1) && (
                     <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-tight">
                       {parcelasNumAtual > (acordo.parcelas ?? 1)
@@ -632,6 +656,26 @@ export function AcordoEditInline({ acordo, isPaguePlay = false, colSpan = 10, on
               </div>
             </div>
           </motion.div>
+
+          {/* Data, valor e forma de cada parcela. Grava direto e devolve as
+              linhas — a área de edição continua aberta com o resto do que já
+              estava digitado. */}
+          {!isPaguePlay && jaParcelado && (
+            <ModalEditarAcordoParcelado
+              acordo={acordo}
+              open={modalParcelasOpen}
+              onClose={() => setModalParcelasOpen(false)}
+              onSaved={(linhas) => {
+                const minha = linhas.find(l => l.id === acordo.id);
+                if (minha) {
+                  setVencimento(minha.vencimento);
+                  setValor(Number(minha.valor).toFixed(2).replace('.', ','));
+                  setTipo(minha.tipo);
+                }
+                onParcelasAtualizadas?.(linhas);
+              }}
+            />
+          )}
 
           {/* Reduzir parcelas apaga linha do banco: confirmação explícita,
               com os números que vão sumir escritos na frente. */}

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   X, Calendar, DollarSign, Smartphone, Building2,
   FileText, User, Layers, MapPin, Link2, CheckCircle2, Clock,
-  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus, Edit,
+  ArrowLeftRight, Link as LinkIcon, MessageCircle, Plus,
 } from 'lucide-react';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { Button } from '@/components/ui/button';
@@ -33,9 +33,9 @@ import {
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
-import { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
 
-// Re-export for external consumers
+// Re-export for external consumers. O detalhe não abre mais o modal de
+// parcelas — quem abre é a área de editar acordo (AcordoEditInline).
 export { ModalEditarAcordoParcelado } from './ModalEditarAcordoParcelado';
 
 export interface AcordoDetalheInlineProps {
@@ -87,7 +87,6 @@ export function AcordoDetalheInline({
   const [marcandoPago,          setMarcandoPago]           = useState<string | null>(null);
   const [confirmarPgtoParc,     setConfirmarPgtoParc]      = useState<Acordo | null>(null);
   const [salvandoConfirmarPgto, setSalvandoConfirmarPgto]  = useState(false);
-  const [modalEditParcOpen,     setModalEditParcOpen]      = useState(false);
   const [modalExtraDiretoOpen,  setModalExtraDiretoOpen]   = useState(false);
   const [executandoExtraDireto, setExecutandoExtraDireto]  = useState(false);
   const [reagendarParcela,      setReagendarParcela]       = useState<Acordo | null>(null);
@@ -621,16 +620,6 @@ export function AcordoDetalheInline({
                       Acordo direto
                     </Button>
                   )}
-                  {podeAdicionarParcela && deveExibirParcelas && registrosReais.length > 0 && (
-                    <Button
-                      variant="outline" size="sm"
-                      className="h-7 text-xs gap-1.5 border-primary/40 text-primary hover:bg-primary/10"
-                      onClick={() => setModalEditParcOpen(true)}
-                    >
-                      <Edit className="w-3 h-3" />
-                      Editar parcelas
-                    </Button>
-                  )}
                   {podeAdicionarParcela && (
                     <Button
                       variant="outline" size="sm"
@@ -837,20 +826,6 @@ export function AcordoDetalheInline({
           </motion.div>
         </td>
       </tr>
-
-      {deveExibirParcelas && !isPaguePlay && (
-        <ModalEditarAcordoParcelado
-          acordo={acordoLocal}
-          registrosReais={registrosReais}
-          open={modalEditParcOpen}
-          onClose={() => setModalEditParcOpen(false)}
-          onSaved={(principal, todasAtualizadas) => {
-            setAcordoLocal(principal);
-            setRegistrosReais(todasAtualizadas);
-            onSaved?.(principal);
-          }}
-        />
-      )}
 
       {confirmarPgtoParc && (
         <ModalConfirmarPagamento
