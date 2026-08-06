@@ -10,7 +10,7 @@
  * Mostra o acordo existente + parcelas do grupo e deixa o operador revisar
  * vencimento, valor, forma e status antes de confirmar.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layers, Plus } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -24,6 +24,9 @@ import {
 import { DatePickerField } from '@/components/DatePickerField';
 import { supabase, type Acordo } from '@/lib/supabase';
 import type { NovaParcelaInput } from '@/services/parcelas.service';
+import {
+  planejarParcelas, validarPlano, MAX_PARCELAS_LOTE, type AjustePersonalizado,
+} from '@/services/parcelasLote';
 import {
   formatCurrency, formatDate, parseCurrencyInput,
   STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, STATUS_COLORS,
@@ -43,7 +46,8 @@ export interface ModalAdicionarParcelaProps {
   /** Texto de contexto no topo (porta A explica o bloqueio do NR). */
   descricao?:  string;
   salvando:    boolean;
-  onConfirm:   (input: NovaParcelaInput) => void | Promise<void>;
+  /** Recebe SEMPRE uma lista — com quantidade 1 ela tem um item só. */
+  onConfirm:   (inputs: NovaParcelaInput[]) => void | Promise<void>;
   onClose:     () => void;
 }
 
@@ -72,6 +76,18 @@ export function ModalAdicionarParcela({
   const [parcelas,   setParcelas]   = useState<ParcelaResumo[]>([]);
   const [loadingParcelas, setLoadingParcelas] = useState(false);
 
+  // Quantas parcelas adicionar de uma vez. Padrão 1: quem só quer uma parcela
+  // não percebe que o campo existe.
+  const [qtdStr, setQtdStr] = useState('1');
+  const quantidade = Math.min(Math.max(1, parseInt(qtdStr) || 1), MAX_PARCELAS_LOTE);
+
+  // Personalização por parcela. `Record` por índice, e não array, para uma
+  // linha em branco continuar em branco quando a quantidade muda.
+  const [personalizar, setPersonalizar] = useState(false);
+  const [ajustes, setAjustes] = useState<Record<number, AjustePersonalizado>>({});
+  const setAjuste = (i: number, patch: AjustePersonalizado) =>
+    setAjustes(prev => ({ ...prev, [i]: { ...prev[i], ...patch } }));
+
   // (Re)inicializa os campos toda vez que o modal abre para um acordo.
   useEffect(() => {
     if (!aberto || !acordo) return;
@@ -83,8 +99,27 @@ export function ModalAdicionarParcela({
     );
     setTipoSel(tipoParaOpcao(inicial?.tipo ?? acordo.tipo, isPaguePlay));
     setStatusSel(inicial?.status ?? 'verificar_pendente');
+    setQtdStr('1');
+    setPersonalizar(false);
+    setAjustes({});
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, acordo?.id]);
+
+  /**
+   * O lote que será gravado. Recalculado a cada tecla para a lista de
+   * personalização e o total na tela mostrarem exatamente o que vai ser salvo.
+   */
+  const plano = useMemo(() => planejarParcelas({
+    quantidade,
+    vencimentoBase: vencimento,
+    valorBase:      parseCurrencyInput(valorStr),
+    tipoBase:       tipoSel === 'boleto_pix' ? 'boleto' : tipoSel,
+    statusBase:     statusSel,
+    isPaguePlay,
+    personalizadas: personalizar
+      ? Array.from({ length: quantidade }, (_, i) => ajustes[i] ?? {})
+      : undefined,
+  }), [quantidade, vencimento, valorStr, tipoSel, statusSel, isPaguePlay, personalizar, ajustes]);
 
   // Parcelas já registradas do grupo (para o operador ver o que existe).
   useEffect(() => {
@@ -105,15 +140,17 @@ export function ModalAdicionarParcela({
   }, [aberto, acordo?.id, acordo?.acordo_grupo_id]);
 
   function confirmar() {
-    const valor = parseCurrencyInput(valorStr);
-    if (isNaN(valor) || valor <= 0) { toast.error('Informe um valor válido para a nova parcela'); return; }
-    if (!vencimento)                { toast.error('Informe o vencimento da nova parcela'); return; }
-    void onConfirm({
-      vencimento,
-      valor,
-      tipo:   tipoSel === 'boleto_pix' ? 'boleto' : tipoSel,
-      status: statusSel,
-    });
+    // A conferência roda sobre o PLANO, não sobre os campos soltos: é o plano
+    // que vai para o banco, e é nele que uma linha personalizada em branco
+    // apareceria.
+    const erro = validarPlano(plano);
+    if (erro) { toast.error(erro); return; }
+    void onConfirm(plano.parcelas.map(p => ({
+      vencimento: p.vencimento,
+      valor:      p.valor,
+      tipo:       p.tipo,
+      status:     p.status,
+    })));
   }
 
   if (!acordo) return null;
@@ -209,7 +246,84 @@ export function ModalAdicionarParcela({
                 </SelectContent>
               </Select>
             </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Quantidade de parcelas</Label>
+              <Input
+                type="number" min={1} max={MAX_PARCELAS_LOTE} inputMode="numeric"
+                value={qtdStr}
+                onChange={(e) => setQtdStr(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                className="h-8 text-xs font-mono"
+              />
+            </div>
           </div>
+
+          {/* Parcelas personalizadas — só faz sentido com mais de uma. */}
+          {quantidade > 1 && (
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={personalizar}
+                onChange={(e) => setPersonalizar(e.target.checked)}
+                className="h-3.5 w-3.5 accent-primary cursor-pointer"
+              />
+              <span className="text-xs font-medium">Parcelas personalizadas</span>
+              <span className="text-[10px] text-muted-foreground">
+                valor, data e forma de cada uma
+              </span>
+            </label>
+          )}
+
+          {personalizar && quantidade > 1 && (
+            <div className="rounded-lg border border-border bg-muted/20 p-2 space-y-1.5 max-h-56 overflow-y-auto">
+              {plano.parcelas.map((p, i) => (
+                <div key={i} className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1.5 items-center">
+                  <span className="text-[10px] font-mono font-bold text-primary text-center">
+                    {i + 1}
+                  </span>
+                  <Input
+                    type="date"
+                    value={p.vencimento}
+                    onChange={(e) => setAjuste(i, { vencimento: e.target.value })}
+                    className="h-7 text-[11px] font-mono px-1.5"
+                  />
+                  <Input
+                    // Vazio mostra o valor do lote como placeholder: fica claro
+                    // que não preencher mantém o padrão, em vez de zerar.
+                    value={ajustes[i]?.valor != null ? String(ajustes[i]!.valor) : ''}
+                    onChange={(e) => {
+                      const v = parseCurrencyInput(e.target.value);
+                      setAjuste(i, { valor: e.target.value.trim() === '' ? null : v });
+                    }}
+                    placeholder={formatCurrency(p.valor)}
+                    className="h-7 text-[11px] font-mono px-1.5"
+                  />
+                  <Select
+                    value={p.tipo}
+                    onValueChange={(v) => setAjuste(i, { tipo: v })}
+                  >
+                    <SelectTrigger className="h-7 text-[11px] px-1.5"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {tipos
+                        .filter(t => t.value !== 'boleto_pix')
+                        .map((t) => (
+                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Resumo: o operador confere o total antes de confirmar. */}
+          {quantidade > 1 && (
+            <p className="text-[11px] text-muted-foreground">
+              Serão criadas <strong className="text-foreground">{quantidade}</strong> parcelas,
+              de {formatDate(plano.parcelas[0]?.vencimento ?? '')} a{' '}
+              {formatDate(plano.parcelas[plano.parcelas.length - 1]?.vencimento ?? '')} — total{' '}
+              <strong className="text-foreground">{formatCurrency(plano.total)}</strong>.
+            </p>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">

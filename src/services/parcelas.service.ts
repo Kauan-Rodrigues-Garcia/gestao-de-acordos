@@ -29,6 +29,10 @@ export type AdicionarParcelaResultado =
   | { ok: true; novaParcela: Acordo; novoTotal: number }
   | { ok: false; erro: string };
 
+export type AdicionarLoteResultado =
+  | { ok: true; novasParcelas: Acordo[]; novoTotal: number }
+  | { ok: false; erro: string };
+
 /** Monta o payload da nova parcela copiando a identidade do acordo base. */
 function payloadNovaParcela(
   base: Acordo,
@@ -161,6 +165,98 @@ export async function adicionarParcelaAoGrupo(
   }
 
   return { ok: true, novaParcela: inserida as Acordo, novoTotal };
+}
+
+/**
+ * Adiciona VÁRIAS parcelas ao grupo de uma vez.
+ *
+ * O botão "Adicionar parcela" passou a aceitar uma quantidade e, opcionalmente,
+ * um valor/data/forma por parcela (ver `parcelasLote.planejarParcelas`).
+ *
+ * Inserção em UM comando, não num laço de N inserts: com 10 parcelas, um laço
+ * que falhasse na 6ª deixaria o grupo com metade das linhas e um contador N/N
+ * mentindo. Aqui, ou entram todas ou não entra nenhuma.
+ *
+ * Cada linha recebe seu próprio `numero_parcela`, seguindo o maior já existente
+ * no grupo — as parcelas do lote não colidem entre si nem com as antigas.
+ */
+export async function adicionarParcelasAoGrupo(
+  acordoBase: Acordo,
+  inputs: readonly NovaParcelaInput[],
+  opts: { isPaguePlay: boolean },
+): Promise<AdicionarLoteResultado> {
+  if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
+  if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
+  if (!inputs.length)         return { ok: false, erro: 'Nenhuma parcela para adicionar' };
+  for (const [i, p] of inputs.entries()) {
+    if (!p.vencimento)  return { ok: false, erro: `Parcela ${i + 1}: informe o vencimento` };
+    if (!(p.valor > 0)) return { ok: false, erro: `Parcela ${i + 1}: informe um valor válido` };
+  }
+
+  const grupo = await garantirGrupo(acordoBase);
+  if ('erro' in grupo) return { ok: false, erro: grupo.erro };
+  const { grupoId } = grupo;
+
+  const { data: linhasGrupo, error: errSel } = await supabase
+    .from('acordos')
+    .select('id, numero_parcela, parcelas')
+    .eq('empresa_id', acordoBase.empresa_id)
+    .eq('acordo_grupo_id', grupoId);
+  if (errSel) return { ok: false, erro: `Erro ao consultar parcelas do acordo: ${errSel.message}` };
+
+  const { novoNumero, totalAtual } = medirGrupo(
+    (linhasGrupo ?? []) as Pick<Acordo, 'numero_parcela' | 'parcelas'>[],
+    acordoBase,
+  );
+  // O total já contempla o lote inteiro: as linhas nascem com o N final, sem
+  // precisar de um segundo UPDATE para corrigir o contador do que acabou de
+  // entrar.
+  const novoTotal = Math.max(novoNumero + inputs.length - 1, totalAtual);
+
+  const payloads = inputs.map((input, i) =>
+    payloadNovaParcela(acordoBase, input, grupoId, novoNumero + i, novoTotal),
+  );
+
+  const { data: inseridas, error: errIns } = await supabase
+    .from('acordos')
+    .insert(payloads as never)
+    .select('*, perfis(id, nome, email, perfil, setor_id)');
+  if (errIns) return { ok: false, erro: `Erro ao adicionar parcelas: ${errIns.message}` };
+
+  // Um insert de várias linhas devolve array, mas o de UMA pode voltar como
+  // objeto. Normalizar aqui evita que o caminho de uma parcela — o mais comum —
+  // quebre num `.map` de algo que não é lista.
+  const novas: Acordo[] = Array.isArray(inseridas)
+    ? inseridas as Acordo[]
+    : (inseridas ? [inseridas as Acordo] : []);
+
+  // Mantém o contador N/N das linhas do grupo.
+  //
+  // Atualiza o grupo INTEIRO, sem excluir as recém-inseridas: elas já nasceram
+  // com `novoTotal`, então regravar o mesmo valor não muda nada. Excluí-las
+  // exigiria filtrar por uma lista de ids — mais código para o mesmo efeito.
+  if (novoTotal !== totalAtual) {
+    const { error: errTotal } = await supabase
+      .from('acordos')
+      .update({ parcelas: novoTotal })
+      .eq('empresa_id', acordoBase.empresa_id)
+      .eq('acordo_grupo_id', grupoId);
+    if (errTotal) console.warn('[parcelas.service] falha ao atualizar total do grupo:', errTotal.message);
+  }
+
+  // Espelha no par Direto↔Extra, uma parcela de cada vez — a falha de um
+  // espelho não desfaz o lote (para operador comum a RLS pode recusar).
+  if (acordoBase.vinculo_operador_id) {
+    for (const input of inputs) {
+      try {
+        await espelharParcelaNoVinculo(acordoBase, input, opts.isPaguePlay);
+      } catch (e) {
+        console.warn('[parcelas.service] falha ao espelhar parcela no vínculo:', e);
+      }
+    }
+  }
+
+  return { ok: true, novasParcelas: novas, novoTotal };
 }
 
 /**

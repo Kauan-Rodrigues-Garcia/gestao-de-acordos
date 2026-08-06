@@ -35,7 +35,7 @@ import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
-import { adicionarParcelaAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import { TIPOS_PAGUEPLAY, TIPOS_BOOKPLAY } from './constants';
 import { FormPP } from './FormPP';
 import { FormBP } from './FormBP';
@@ -742,17 +742,26 @@ export function AcordoNovoInline({
   function cancelarAvisoDiretoExtra() { setAvisoDiretoExtra(null); }
 
   // ── Adicionar parcela ao acordo existente (NR do próprio operador) ────────
-  async function confirmarAdicionarParcela(input: NovaParcelaInput) {
+  async function confirmarAdicionarParcela(inputs: NovaParcelaInput[]) {
     if (!acordoParaParcela) return;
     setSalvandoParcela(true);
     try {
-      const r = await adicionarParcelaAoGrupo(acordoParaParcela, input, { isPaguePlay });
+      const r = await adicionarParcelasAoGrupo(acordoParaParcela, inputs, { isPaguePlay });
+      // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
+      // TypeScript não estreita união por discriminante booleano.
       if ('erro' in r) { toast.error(r.erro); return; }
+      const novas = r.novasParcelas;
       limparDraft();
       setAcordoParaParcela(null);
-      onSaved(r.novaParcela);
-      if (r.novaParcela.status === 'pago') celebrarPetAcordoPago();
-      toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`);
+      // A tela de acordos recebe a PRIMEIRA: é a que o operador acabou de
+      // tabular; as demais aparecem ao abrir o detalhe do grupo.
+      if (novas[0]) onSaved(novas[0]);
+      if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
+      toast.success(
+        novas.length === 1
+          ? `Parcela ${novas[0]?.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`
+          : `${novas.length} parcelas adicionadas ao acordo existente (total ${r.novoTotal}).`,
+      );
     } finally {
       setSalvandoParcela(false);
     }

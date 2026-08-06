@@ -542,8 +542,15 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
     expect(toastError).not.toHaveBeenCalled();
 
     // Parcela inserida no MESMO grupo, com número e total incrementados.
+    //
+    // O payload é uma LISTA desde que o modal passou a aceitar uma quantidade
+    // (05/08/2026): adicionar uma parcela é o caso de lista com um item só, e
+    // o insert é sempre em lote para N parcelas entrarem juntas ou nenhuma.
     const insertCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
-    expect(insertCall?.payload).toMatchObject({
+    const payloadLote = insertCall?.payload as unknown as Record<string, unknown>[];
+    expect(Array.isArray(payloadLote)).toBe(true);
+    expect(payloadLote).toHaveLength(1);
+    expect(payloadLote[0]).toMatchObject({
       nr_cliente:      '777',
       acordo_grupo_id: 'grp-1',
       numero_parcela:  2,

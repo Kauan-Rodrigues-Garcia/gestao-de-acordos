@@ -35,7 +35,11 @@ export function ModalEditarAcordoParcelado({
   const [observacoes, setObservacoes] = useState(acordo.observacoes || '');
   const [instituicao, setInstituicao] = useState(acordo.instituicao || '');
 
-  type ParcRow = { id: string; numero: number; vencimento: string; valor: string; };
+  // `tipo` por parcela: um acordo de boleto pode ter uma parcela paga no Pix.
+  // A aba "Geral" continua aplicando a forma a TODAS; esta é a exceção.
+  type ParcRow = {
+    id: string; numero: number; vencimento: string; valor: string; tipo: Acordo['tipo'];
+  };
   const [parcRows, setParcRows] = useState<ParcRow[]>([]);
 
   useEffect(() => {
@@ -53,11 +57,14 @@ export function ModalEditarAcordoParcelado({
         numero: r.numero_parcela ?? 1,
         vencimento: r.vencimento,
         valor: r.valor.toFixed(2).replace('.', ','),
+        tipo: r.tipo,
       })).sort((a, b) => a.numero - b.numero)
     );
   }, [open, acordo.id, registrosReais.length]);
 
-  function updateRow(id: string, field: 'vencimento' | 'valor', value: string) {
+  function updateRow(
+    id: string, field: 'vencimento' | 'valor' | 'tipo', value: string,
+  ) {
     setParcRows(prev => prev.map(r => r.id === id ? { ...r, [field]: value } : r));
   }
 
@@ -82,9 +89,12 @@ export function ModalEditarAcordoParcelado({
       for (const row of parcRows) {
         const valorNum = parseCurrencyInput(row.valor);
         if (isNaN(valorNum) || valorNum <= 0) { toast.error(`Valor inválido na parcela ${row.numero}`); return; }
+        // Roda DEPOIS do update geral de propósito: a forma escolhida na
+        // parcela precisa sobrescrever a que a aba "Geral" acabou de aplicar
+        // ao grupo inteiro. Invertendo a ordem, o geral apagaria a exceção.
         const { error: errP } = await supabase
           .from('acordos')
-          .update({ vencimento: row.vencimento, valor: valorNum })
+          .update({ vencimento: row.vencimento, valor: valorNum, tipo: row.tipo })
           .eq('id', row.id);
         if (errP) { toast.error(`Erro parcela ${row.numero}: ${errP.message}`); return; }
       }
@@ -103,6 +113,10 @@ export function ModalEditarAcordoParcelado({
           ...camposGerais,
           vencimento: row.vencimento,
           valor: isNaN(valorNum) ? real.valor : valorNum,
+          // Depois de `camposGerais`, pela mesma razão da ordem dos UPDATEs:
+          // a forma da parcela vence a do grupo, e a tela tem de mostrar o que
+          // foi realmente gravado.
+          tipo: row.tipo,
         } as Acordo;
       });
 
@@ -202,7 +216,11 @@ export function ModalEditarAcordoParcelado({
         {/* Aba Parcelas */}
         {aba === 'parcelas' && (
           <div className="py-2 space-y-2 max-h-72 overflow-y-auto pr-1">
-            <p className="text-[11px] text-muted-foreground">Edite data e valor individualmente para cada parcela já criada no banco.</p>
+            <p className="text-[11px] text-muted-foreground">
+              Edite data, valor e forma de pagamento de cada parcela já criada no banco.
+              A forma escolhida aqui vale só para aquela parcela — a da aba “Geral” vale
+              para todas.
+            </p>
             {parcRows.length === 0 && (
               <p className="text-xs text-muted-foreground italic">Nenhuma parcela encontrada.</p>
             )}
@@ -217,13 +235,27 @@ export function ModalEditarAcordoParcelado({
                     size="sm"
                   />
                 </div>
-                <div className="w-28 space-y-0.5">
+                <div className="w-24 space-y-0.5">
                   <Label className="text-[10px] text-muted-foreground">Valor (R$)</Label>
                   <Input
                     value={row.valor}
                     onChange={e => updateRow(row.id, 'valor', e.target.value)}
                     className="h-7 text-xs font-mono"
                   />
+                </div>
+                <div className="w-32 space-y-0.5">
+                  <Label className="text-[10px] text-muted-foreground">Forma</Label>
+                  <Select
+                    value={row.tipo}
+                    onValueChange={v => updateRow(row.id, 'tipo', v)}
+                  >
+                    <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(TIPO_LABELS_ALL).map(([valor, label]) => (
+                        <SelectItem key={valor} value={valor}>{label as string}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             ))}

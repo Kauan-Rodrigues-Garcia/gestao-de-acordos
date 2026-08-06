@@ -18,7 +18,7 @@ import { criarNotificacao } from '@/services/notificacoes.service';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
-import { adicionarParcelaAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
 import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
@@ -335,13 +335,19 @@ export function AcordoDetalheInline({
   }
 
   // ── Adicionar parcela manualmente (mesmo NR, formas podem variar) ─────────
-  async function confirmarAdicionarParcela(input: NovaParcelaInput) {
+  // Recebe SEMPRE uma lista: o modal passou a aceitar uma quantidade, e o caso
+  // de uma parcela é só a lista de um item.
+  async function confirmarAdicionarParcela(inputs: NovaParcelaInput[]) {
     setSalvandoAddParcela(true);
     try {
-      const r = await adicionarParcelaAoGrupo(acordoLocal, input, { isPaguePlay });
+      const r = await adicionarParcelasAoGrupo(acordoLocal, inputs, { isPaguePlay });
+      // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
+      // TypeScript não estreita união por discriminante booleano.
       if ('erro' in r) { toast.error(r.erro); return; }
 
-      const grupoId = r.novaParcela.acordo_grupo_id ?? acordoLocal.acordo_grupo_id ?? null;
+      const novas   = r.novasParcelas;
+      const novosIds = new Set(novas.map(p => p.id));
+      const grupoId = novas[0]?.acordo_grupo_id ?? acordoLocal.acordo_grupo_id ?? null;
       const baseAtualizado: Acordo = {
         ...acordoLocal,
         parcelas:        r.novoTotal,
@@ -351,18 +357,22 @@ export function AcordoDetalheInline({
       setAcordoLocal(baseAtualizado);
       setRegistrosReais(prev => {
         const antigas = prev
-          .filter(p => p.id !== r.novaParcela.id)
+          .filter(p => !novosIds.has(p.id))
           .map(p => ({ ...p, parcelas: r.novoTotal }));
         const comBase = antigas.some(p => p.id === baseAtualizado.id)
           ? antigas
           : [baseAtualizado, ...antigas];
-        return [...comBase, r.novaParcela]
+        return [...comBase, ...novas]
           .sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1));
       });
       setModalAddParcela(false);
       onSaved?.(baseAtualizado);
-      if (r.novaParcela.status === 'pago') celebrarPetAcordoPago();
-      toast.success(`Parcela ${r.novaParcela.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`);
+      if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
+      toast.success(
+        novas.length === 1
+          ? `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`
+          : `${novas.length} parcelas adicionadas ao acordo (total ${r.novoTotal}).`,
+      );
     } finally {
       setSalvandoAddParcela(false);
     }
