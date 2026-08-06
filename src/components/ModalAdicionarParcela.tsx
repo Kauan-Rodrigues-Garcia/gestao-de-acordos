@@ -157,8 +157,17 @@ export function ModalAdicionarParcela({
 
   return (
     <Dialog open={aberto} onOpenChange={(open) => { if (!open && !salvando) onClose(); }}>
-      <DialogContent className="max-w-md" aria-describedby="modal-adicionar-parcela-desc">
-        <DialogHeader>
+      {/*
+        Teto de altura + miolo rolável. Sem isso o diálogo cresce com a
+        quantidade de parcelas e, como ele é centralizado por translate,
+        estoura para cima E para baixo — o footer sai da tela e o botão de
+        salvar fica inalcançável (10 parcelas personalizadas já bastam).
+      */}
+      <DialogContent
+        className="max-w-md max-h-[90dvh] flex flex-col overflow-hidden"
+        aria-describedby="modal-adicionar-parcela-desc"
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 text-primary text-sm">
             <Layers className="w-4 h-4" />
             Adicionar parcela ao acordo
@@ -168,165 +177,170 @@ export function ModalAdicionarParcela({
           </DialogDescription>
         </DialogHeader>
 
-        {/* Acordo existente */}
-        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <span className="font-mono font-semibold text-foreground">{nrLabel} {nrValor}</span>
-            <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[acordo.status])}>
-              {statusLabels[acordo.status] ?? acordo.status}
-            </span>
-          </div>
-          {acordo.nome_cliente && (
-            <p className="text-muted-foreground truncate">{acordo.nome_cliente}</p>
-          )}
-          <p className="text-muted-foreground">
-            Forma atual: <strong className="text-foreground">{tipoLabels[acordo.tipo] ?? acordo.tipo}</strong>
-            {' · '}Operador: <strong className="text-foreground">{(acordo.perfis as { nome?: string } | undefined)?.nome ?? '—'}</strong>
-          </p>
-        </div>
-
-        {/* Parcelas já registradas */}
-        <div className="text-xs">
-          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] mb-1.5">
-            Parcelas registradas
-          </p>
-          {loadingParcelas ? (
-            <div className="h-6 rounded bg-muted animate-pulse" />
-          ) : (
-            <ul className="space-y-1 max-h-28 overflow-y-auto pr-1">
-              {parcelas.map((p) => (
-                <li key={p.id} className="flex items-center justify-between gap-2 font-mono">
-                  <span className="text-primary font-bold">#{p.numero_parcela ?? 1}</span>
-                  <span>{formatDate(p.vencimento)}</span>
-                  <span className="font-semibold">{formatCurrency(p.valor)}</span>
-                  <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border font-sans', STATUS_COLORS[p.status])}>
-                    {statusLabels[p.status] ?? p.status}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Nova parcela */}
-        <div className="space-y-3 border-t border-border pt-3">
-          <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
-            Nova parcela
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
-            <div className="space-y-1">
-              <Label className="text-xs">Valor *</Label>
-              <Input
-                value={valorStr}
-                onChange={(e) => setValorStr(e.target.value)}
-                placeholder="0,00"
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Forma de Pagamento</Label>
-              <Select value={tipoSel} onValueChange={setTipoSel}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {tipos.map((t) => (
-                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Status</Label>
-              <Select value={statusSel} onValueChange={setStatusSel}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Quantidade de parcelas</Label>
-              <Input
-                type="number" min={1} max={MAX_PARCELAS_LOTE} inputMode="numeric"
-                value={qtdStr}
-                onChange={(e) => setQtdStr(e.target.value.replace(/\D/g, '').slice(0, 2))}
-                className="h-8 text-xs font-mono"
-              />
-            </div>
-          </div>
-
-          {/* Parcelas personalizadas — só faz sentido com mais de uma. */}
-          {quantidade > 1 && (
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={personalizar}
-                onChange={(e) => setPersonalizar(e.target.checked)}
-                className="h-3.5 w-3.5 accent-primary cursor-pointer"
-              />
-              <span className="text-xs font-medium">Parcelas personalizadas</span>
-              <span className="text-[10px] text-muted-foreground">
-                valor, data e forma de cada uma
+        {/* `min-h-0` é o que deixa este bloco encolher dentro do flex e rolar. */}
+        <div className="flex-1 min-h-0 overflow-y-auto space-y-4 -mr-3 pr-3">
+          {/* Acordo existente */}
+          <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs space-y-1">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono font-semibold text-foreground">{nrLabel} {nrValor}</span>
+              <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border', STATUS_COLORS[acordo.status])}>
+                {statusLabels[acordo.status] ?? acordo.status}
               </span>
-            </label>
-          )}
-
-          {personalizar && quantidade > 1 && (
-            <div className="rounded-lg border border-border bg-muted/20 p-2 space-y-1.5 max-h-56 overflow-y-auto">
-              {plano.parcelas.map((p, i) => (
-                <div key={i} className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1.5 items-center">
-                  <span className="text-[10px] font-mono font-bold text-primary text-center">
-                    {i + 1}
-                  </span>
-                  <Input
-                    type="date"
-                    value={p.vencimento}
-                    onChange={(e) => setAjuste(i, { vencimento: e.target.value })}
-                    className="h-7 text-[11px] font-mono px-1.5"
-                  />
-                  <Input
-                    // Vazio mostra o valor do lote como placeholder: fica claro
-                    // que não preencher mantém o padrão, em vez de zerar.
-                    value={ajustes[i]?.valor != null ? String(ajustes[i]!.valor) : ''}
-                    onChange={(e) => {
-                      const v = parseCurrencyInput(e.target.value);
-                      setAjuste(i, { valor: e.target.value.trim() === '' ? null : v });
-                    }}
-                    placeholder={formatCurrency(p.valor)}
-                    className="h-7 text-[11px] font-mono px-1.5"
-                  />
-                  <Select
-                    value={p.tipo}
-                    onValueChange={(v) => setAjuste(i, { tipo: v })}
-                  >
-                    <SelectTrigger className="h-7 text-[11px] px-1.5"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {tipos
-                        .filter(t => t.value !== 'boleto_pix')
-                        .map((t) => (
-                          <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ))}
             </div>
-          )}
-
-          {/* Resumo: o operador confere o total antes de confirmar. */}
-          {quantidade > 1 && (
-            <p className="text-[11px] text-muted-foreground">
-              Serão criadas <strong className="text-foreground">{quantidade}</strong> parcelas,
-              de {formatDate(plano.parcelas[0]?.vencimento ?? '')} a{' '}
-              {formatDate(plano.parcelas[plano.parcelas.length - 1]?.vencimento ?? '')} — total{' '}
-              <strong className="text-foreground">{formatCurrency(plano.total)}</strong>.
+            {acordo.nome_cliente && (
+              <p className="text-muted-foreground truncate">{acordo.nome_cliente}</p>
+            )}
+            <p className="text-muted-foreground">
+              Forma atual: <strong className="text-foreground">{tipoLabels[acordo.tipo] ?? acordo.tipo}</strong>
+              {' · '}Operador: <strong className="text-foreground">{(acordo.perfis as { nome?: string } | undefined)?.nome ?? '—'}</strong>
             </p>
-          )}
+          </div>
+
+          {/* Parcelas já registradas */}
+          <div className="text-xs">
+            <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px] mb-1.5">
+              Parcelas registradas
+            </p>
+            {loadingParcelas ? (
+              <div className="h-6 rounded bg-muted animate-pulse" />
+            ) : (
+              <ul className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                {parcelas.map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-2 font-mono">
+                    <span className="text-primary font-bold">#{p.numero_parcela ?? 1}</span>
+                    <span>{formatDate(p.vencimento)}</span>
+                    <span className="font-semibold">{formatCurrency(p.valor)}</span>
+                    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium border font-sans', STATUS_COLORS[p.status])}>
+                      {statusLabels[p.status] ?? p.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          {/* Nova parcela */}
+          <div className="space-y-3 border-t border-border pt-3">
+            <p className="font-semibold text-muted-foreground uppercase tracking-wide text-[10px]">
+              Nova parcela
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <DatePickerField label="Vencimento" required value={vencimento} onChange={setVencimento} />
+              <div className="space-y-1">
+                <Label className="text-xs">Valor *</Label>
+                <Input
+                  value={valorStr}
+                  onChange={(e) => setValorStr(e.target.value)}
+                  placeholder="0,00"
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Forma de Pagamento</Label>
+                <Select value={tipoSel} onValueChange={setTipoSel}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {tipos.map((t) => (
+                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Status</Label>
+                <Select value={statusSel} onValueChange={setStatusSel}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATUS_OPTIONS.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Quantidade de parcelas</Label>
+                <Input
+                  type="number" min={1} max={MAX_PARCELAS_LOTE} inputMode="numeric"
+                  value={qtdStr}
+                  onChange={(e) => setQtdStr(e.target.value.replace(/\D/g, '').slice(0, 2))}
+                  className="h-8 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Parcelas personalizadas — só faz sentido com mais de uma. */}
+            {quantidade > 1 && (
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={personalizar}
+                  onChange={(e) => setPersonalizar(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-primary cursor-pointer"
+                />
+                <span className="text-xs font-medium">Parcelas personalizadas</span>
+                <span className="text-[10px] text-muted-foreground">
+                  valor, data e forma de cada uma
+                </span>
+              </label>
+            )}
+
+            {/* A lista não tem rolagem própria: quem rola é o miolo do diálogo,
+                para não ficarem duas barras uma dentro da outra. */}
+            {personalizar && quantidade > 1 && (
+              <div className="rounded-lg border border-border bg-muted/20 p-2 space-y-1.5">
+                {plano.parcelas.map((p, i) => (
+                  <div key={i} className="grid grid-cols-[28px_1fr_1fr_1fr] gap-1.5 items-center">
+                    <span className="text-[10px] font-mono font-bold text-primary text-center">
+                      {i + 1}
+                    </span>
+                    <Input
+                      type="date"
+                      value={p.vencimento}
+                      onChange={(e) => setAjuste(i, { vencimento: e.target.value })}
+                      className="h-7 text-[11px] font-mono px-1.5"
+                    />
+                    <Input
+                      // Vazio mostra o valor do lote como placeholder: fica claro
+                      // que não preencher mantém o padrão, em vez de zerar.
+                      value={ajustes[i]?.valor != null ? String(ajustes[i]!.valor) : ''}
+                      onChange={(e) => {
+                        const v = parseCurrencyInput(e.target.value);
+                        setAjuste(i, { valor: e.target.value.trim() === '' ? null : v });
+                      }}
+                      placeholder={formatCurrency(p.valor)}
+                      className="h-7 text-[11px] font-mono px-1.5"
+                    />
+                    <Select
+                      value={p.tipo}
+                      onValueChange={(v) => setAjuste(i, { tipo: v })}
+                    >
+                      <SelectTrigger className="h-7 text-[11px] px-1.5"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {tipos
+                          .filter(t => t.value !== 'boleto_pix')
+                          .map((t) => (
+                            <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                          ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Resumo: o operador confere o total antes de confirmar. */}
+            {quantidade > 1 && (
+              <p className="text-[11px] text-muted-foreground">
+                Serão criadas <strong className="text-foreground">{quantidade}</strong> parcelas,
+                de {formatDate(plano.parcelas[0]?.vencimento ?? '')} a{' '}
+                {formatDate(plano.parcelas[plano.parcelas.length - 1]?.vencimento ?? '')} — total{' '}
+                <strong className="text-foreground">{formatCurrency(plano.total)}</strong>.
+              </p>
+            )}
+          </div>
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <DialogFooter className="shrink-0 gap-2 sm:gap-0 border-t border-border pt-3">
           <Button variant="outline" size="sm" onClick={onClose} disabled={salvando}>
             Cancelar
           </Button>
