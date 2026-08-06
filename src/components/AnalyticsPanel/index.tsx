@@ -20,9 +20,12 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { veTodosOsSetores, ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
-import { buscarContribuicoesReceptivo } from '@/services/analitico/contribuicaoReceptivo.service';
+import {
+  buscarContribuicoesReceptivo, receptivoDoEscopo,
+} from '@/services/analitico/contribuicaoReceptivo.service';
 import {
   formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
+  isPerfilAdminOuLider, isPerfilDiretoria,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
@@ -169,20 +172,22 @@ export function AnalyticsPanel({
   }, [isPP, isBookplay, empresa?.id, mesAnalise]);
 
   /**
-   * Quanto do Receptivo entra no que está na tela.
+   * A tela mostra dados de mais gente do que o próprio usuário?
    *
-   * Ele pertence ao SETOR, então só soma quando o recorte é um setor (o dele)
-   * ou a empresa (todos). Num recorte de equipe ou de um operador seria
-   * creditar a alguém um valor que não é dele.
+   * `fn_analitico_dashboard_mes` devolve só as PRÓPRIAS linhas para um
+   * operador e a empresa para líder+. O escopo, porém, fica travado no setor
+   * do usuário mesmo quando ele é operador — então escopo 'setor' não
+   * significa "estou vendo o setor". Sem esta distinção, o valor do card do
+   * Receptivo era creditado no total pessoal de cada operador.
    */
-  const receptivoNoEscopo = useMemo(() => {
-    if (!escopo) return 0;
-    if (escopo.tipo === 'empresa') {
-      return Object.values(receptivoPorSetor).reduce((s, v) => s + v, 0);
-    }
-    if (escopo.tipo === 'setor') return receptivoPorSetor[escopo.setorId] ?? 0;
-    return 0;
-  }, [escopo, receptivoPorSetor]);
+  const veDadosDeOutros =
+    isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+
+  /** Quanto do Receptivo entra no que está na tela — ver `receptivoDoEscopo`. */
+  const receptivoNoEscopo = useMemo(
+    () => receptivoDoEscopo({ escopo, porSetor: receptivoPorSetor, veDadosDeOutros }),
+    [escopo, receptivoPorSetor, veDadosDeOutros],
+  );
 
   /**
    * O acumulado que a tela mostra: relatório + Receptivo.

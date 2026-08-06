@@ -14,10 +14,47 @@
  * card continua funcionando exatamente como antes em vez de ficar vazio.
  */
 import { supabase } from '@/lib/supabase';
+import type { EscopoAnalitico } from './escopoAnalitico';
 
 export interface ContribuicaoReceptivo {
   acumulado: number;
   meta:      number;
+}
+
+/**
+ * Quanto do Receptivo entra no acumulado que a tela está mostrando.
+ *
+ * ## O erro que esta função existe para não deixar acontecer
+ *
+ * O valor do card é do SETOR — digitado à mão, sem dono. O painel somava por
+ * cima sempre que o escopo era 'setor' ou 'empresa'. Só que o escopo do
+ * dashboard NÃO diz de quem são os dados: para um operador comum ele fica
+ * travado no setor DELE (`setorTravado`), enquanto a RPC devolve apenas as
+ * linhas dele (`fn_analitico_dashboard_mes`: operador → próprias linhas,
+ * líder+ → empresa).
+ *
+ * O resultado era o operador ver "R$ x recebido + R$ 3.936,55 do receptivo" no
+ * próprio total acumulado — dinheiro do setor inteiro creditado a uma pessoa.
+ *
+ * Daí `veDadosDeOutros`: o Receptivo só soma quando a tela está de fato
+ * mostrando um AGREGADO (líder+ olhando o setor ou a empresa). Não é uma
+ * questão de permissão — o operador pode saber quanto o setor fez —, é de a
+ * quem o número está sendo atribuído.
+ */
+export function receptivoDoEscopo(params: {
+  escopo:   EscopoAnalitico | null;
+  porSetor: Record<string, number>;
+  /** true = a tela mostra dados de mais gente que o próprio usuário (líder+). */
+  veDadosDeOutros: boolean;
+}): number {
+  const { escopo, porSetor, veDadosDeOutros } = params;
+  if (!escopo || !veDadosDeOutros) return 0;
+  // Recorte de equipe ou de um operador: o valor não é daquele conjunto.
+  if (escopo.tipo === 'empresa') {
+    return Object.values(porSetor).reduce((s, v) => s + (Number(v) || 0), 0);
+  }
+  if (escopo.tipo === 'setor') return Number(porSetor[escopo.setorId]) || 0;
+  return 0;
 }
 
 export interface ResultadoContribuicoes {

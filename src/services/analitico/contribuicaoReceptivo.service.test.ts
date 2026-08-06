@@ -64,6 +64,7 @@ vi.mock('@/lib/supabase', () => ({
 import {
   buscarContribuicoesReceptivo,
   salvarContribuicaoReceptivo,
+  receptivoDoEscopo,
 } from './contribuicaoReceptivo.service';
 
 const EMPRESA = 'emp-1';
@@ -242,5 +243,75 @@ describe('salvarContribuicaoReceptivo', () => {
 
     expect(ok).toBe(true);
     expect(calls[0].payload).toMatchObject({ acumulado: 0, meta: 0 });
+  });
+});
+
+// ── receptivoDoEscopo ────────────────────────────────────────────────────────
+//
+// Bug de 05/08/2026: o valor do card do Receptivo (do SETOR, digitado à mão)
+// aparecia somado no total acumulado de CADA OPERADOR, com a linha
+// "R$ x recebido + R$ 3.936,55 do receptivo" no dashboard pessoal.
+//
+// Causa: para um operador o escopo fica travado no setor DELE, mas a RPC
+// devolve só as linhas dele. Escopo 'setor' não significa "estou vendo o
+// setor" — daí `veDadosDeOutros`.
+
+describe('receptivoDoEscopo', () => {
+  const porSetor = { RECEPTIVO: 3936.55, PLAY4: 1000 };
+
+  it('operador comum NÃO recebe o valor do setor no total dele', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'setor', setorId: 'RECEPTIVO' },
+      porSetor,
+      veDadosDeOutros: false,
+    })).toBe(0);
+  });
+
+  it('líder olhando o próprio setor soma o valor do setor', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'setor', setorId: 'RECEPTIVO' },
+      porSetor,
+      veDadosDeOutros: true,
+    })).toBe(3936.55);
+  });
+
+  it('visão de empresa soma todos os setores', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'empresa' },
+      porSetor,
+      veDadosDeOutros: true,
+    })).toBeCloseTo(4936.55, 2);
+  });
+
+  it('empresa sem ser líder continua zero', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'empresa' }, porSetor, veDadosDeOutros: false,
+    })).toBe(0);
+  });
+
+  it('líder filtrando UM operador não credita o setor a ele', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'operador', operadorId: 'ana' },
+      porSetor,
+      veDadosDeOutros: true,
+    })).toBe(0);
+  });
+
+  it('recorte de equipe também não recebe — o valor é do setor inteiro', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'equipe', operadores: new Set(['ana']) },
+      porSetor,
+      veDadosDeOutros: true,
+    })).toBe(0);
+  });
+
+  it('setor sem valor digitado devolve zero, não NaN', () => {
+    expect(receptivoDoEscopo({
+      escopo: { tipo: 'setor', setorId: 'DIGITAL' }, porSetor, veDadosDeOutros: true,
+    })).toBe(0);
+  });
+
+  it('escopo ainda não resolvido devolve zero', () => {
+    expect(receptivoDoEscopo({ escopo: null, porSetor, veDadosDeOutros: true })).toBe(0);
   });
 });
