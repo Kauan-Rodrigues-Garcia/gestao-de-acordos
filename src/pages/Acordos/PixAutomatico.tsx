@@ -53,7 +53,7 @@ import {
   mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
   filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
-  textoPrazoExpurgo, PIX_DIAS_UTEIS_EXPURGO,
+  textoPrazoExpurgo,
   type OperadorInfo, type FiltroPagamento,
 } from './pixAutomaticoView';
 import { PixComissaoDobrada } from './PixComissaoDobrada';
@@ -68,7 +68,7 @@ import {
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
-  expurgarDesaprovadosVencidos,
+  expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   type LinhaPixLote, type PixAutoMeta,
 } from '@/services/pix_automatico.service';
 

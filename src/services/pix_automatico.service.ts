@@ -381,6 +381,15 @@ export async function excluirAcordoPix(id: string): Promise<{ ok: boolean; error
  * O operador é avisado por notificação assim que o líder desaprova, e tem esse
  * prazo para conferir o que aconteceu. Passado o prazo, a linha some sozinha e
  * o NR volta a ficar livre — outra pessoa pode fechar o mesmo acordo depois.
+ *
+ * Fonte única no TypeScript: `prazoExpurgoDesaprovado` (que desenha a data na
+ * tela) e o texto da tela importam DAQUI. Quem mostra e quem cumpre o prazo têm
+ * de dizer o mesmo número.
+ *
+ * ⚠️ A outra ponta é SQL e não tem como importar isto: o mesmo `2` está em
+ * `fn_pix_expurga_desaprovados` (migration `20260809a`), que é quem de fato
+ * apaga. Mudar o prazo exige uma migration nova junto — senão a tela promete um
+ * prazo e o banco cumpre outro.
  */
 export const PIX_DIAS_UTEIS_EXPURGO = 2;
 

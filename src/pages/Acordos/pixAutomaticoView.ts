@@ -25,7 +25,7 @@ import {
 } from '@/lib/diasUteis';
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
 import {
-  comissaoDe, PIX_META_ACORDOS_DOBRA,
+  comissaoDe, PIX_META_ACORDOS_DOBRA, PIX_DIAS_UTEIS_EXPURGO,
   type PixAutoAcordo, type PixAutoStatus,
 } from '@/services/pix_automatico.service';
 
@@ -340,9 +340,10 @@ export function calcularDobraComissao(
 }
 
 // ── Prazo dos desaprovados ──────────────────────────────────────────────────
-
-/** Dias ÚTEIS que um acordo desaprovado sobrevive antes de ser excluído. */
-export const PIX_DIAS_UTEIS_EXPURGO = 2;
+//
+// O prazo em si (`PIX_DIAS_UTEIS_EXPURGO`) mora no serviço, junto de
+// `expurgarDesaprovadosVencidos`, que é quem o cumpre — mesmo lugar de
+// `PIX_META_ACORDOS_DOBRA`. Aqui só se calcula a data a partir dele.
 
 /**
  * O instante em que um desaprovado será excluído: `PIX_DIAS_UTEIS_EXPURGO`
