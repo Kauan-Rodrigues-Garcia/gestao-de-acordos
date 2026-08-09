@@ -71,6 +71,21 @@ function payloadNovaParcela(
   };
 }
 
+/**
+ * Alguma parcela do grupo ainda está EM ABERTO (aguardando pagamento)?
+ *
+ * `verificar_pendente` é o único status em aberto: `pago` liquidou e
+ * `nao_pago` encerrou (e já liberou o NR).
+ *
+ * É o que decide se uma parcela nova deve virar registro agora — ver
+ * `adicionarParcelasAoGrupo`, modo `'proxima'`.
+ */
+export function temParcelaEmAberto(
+  linhas: readonly { status?: string | null }[],
+): boolean {
+  return linhas.some(l => l.status === 'verificar_pendente');
+}
+
 /** Maior numero_parcela e maior total declarado entre as linhas do grupo. */
 function medirGrupo(
   linhas: Pick<Acordo, 'numero_parcela' | 'parcelas'>[],
@@ -168,14 +183,30 @@ export async function adicionarParcelaAoGrupo(
 }
 
 /**
- * Adiciona VÁRIAS parcelas ao grupo de uma vez.
+ * Adiciona parcelas ao grupo.
  *
- * O botão "Adicionar parcela" passou a aceitar uma quantidade e, opcionalmente,
- * um valor/data/forma por parcela (ver `parcelasLote.planejarParcelas`).
+ * ## Declarar não é materializar
  *
- * Inserção em UM comando, não num laço de N inserts: com 10 parcelas, um laço
- * que falhasse na 6ª deixaria o grupo com metade das linhas e um contador N/N
- * mentindo. Aqui, ou entram todas ou não entra nenhuma.
+ * O acordo declara `parcelas` (o "de N") e nem sempre tem N linhas no banco —
+ * é o modelo que `linhasParcelas.ts` desenha, com as que faltam aparecendo como
+ * virtuais. A regra da operação é que exista **uma parcela em aberto por vez**:
+ * a próxima só vira registro quando a atual for quitada e reagendada.
+ *
+ * Daí os dois modos:
+ *
+ * | `modo` | Total declarado | Linhas criadas |
+ * |---|---|---|
+ * | `'todas'` (padrão) | +N | as N |
+ * | `'proxima'` | +N | **1** se o grupo não tem parcela em aberto; **0** se tem |
+ *
+ * `'todas'` é usado por `aplicarQuantidade`, onde o operador está justamente
+ * editando quais linhas existem. `'proxima'` é o botão "Adicionar parcela":
+ * antes ele gravava as 10 de uma vez, o que enchia o acordo de parcelas em
+ * aberto e contrariava o resto do sistema.
+ *
+ * Em `'todas'`, a inserção é UM comando e não um laço de N: com 10 parcelas,
+ * um laço que falhasse na 6ª deixaria o grupo com metade das linhas e um
+ * contador N/N mentindo. Ou entram todas, ou não entra nenhuma.
  *
  * Cada linha recebe seu próprio `numero_parcela`, seguindo o maior já existente
  * no grupo — as parcelas do lote não colidem entre si nem com as antigas.
@@ -183,7 +214,7 @@ export async function adicionarParcelaAoGrupo(
 export async function adicionarParcelasAoGrupo(
   acordoBase: Acordo,
   inputs: readonly NovaParcelaInput[],
-  opts: { isPaguePlay: boolean },
+  opts: { isPaguePlay: boolean; modo?: 'todas' | 'proxima' },
 ): Promise<AdicionarLoteResultado> {
   if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
   if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
@@ -199,36 +230,48 @@ export async function adicionarParcelasAoGrupo(
 
   const { data: linhasGrupo, error: errSel } = await supabase
     .from('acordos')
-    .select('id, numero_parcela, parcelas')
+    .select('id, numero_parcela, parcelas, status')
     .eq('empresa_id', acordoBase.empresa_id)
     .eq('acordo_grupo_id', grupoId);
   if (errSel) return { ok: false, erro: `Erro ao consultar parcelas do acordo: ${errSel.message}` };
 
-  const { novoNumero, totalAtual } = medirGrupo(
-    (linhasGrupo ?? []) as Pick<Acordo, 'numero_parcela' | 'parcelas'>[],
-    acordoBase,
-  );
-  // O total já contempla o lote inteiro: as linhas nascem com o N final, sem
-  // precisar de um segundo UPDATE para corrigir o contador do que acabou de
-  // entrar.
+  const linhas = (linhasGrupo ?? []) as Pick<Acordo, 'numero_parcela' | 'parcelas' | 'status'>[];
+
+  const { novoNumero, totalAtual } = medirGrupo(linhas, acordoBase);
+  // O total declara o lote INTEIRO, mesmo quando nenhuma linha é materializada:
+  // é ele que faz as parcelas que faltam aparecerem como virtuais no detalhe.
   const novoTotal = Math.max(novoNumero + inputs.length - 1, totalAtual);
 
-  const payloads = inputs.map((input, i) =>
-    payloadNovaParcela(acordoBase, input, grupoId, novoNumero + i, novoTotal),
-  );
+  // Quantas viram registro AGORA. No modo 'proxima', só a próxima — e só se
+  // não houver parcela em aberto: com uma pendente, adicionar outra criaria
+  // duas cobranças vivas ao mesmo tempo.
+  //
+  // O grupo pode ainda não ter linha nenhuma no banco (acordo de uma parcela
+  // só, sem `acordo_grupo_id` até agora), então o status da base entra na
+  // conta junto com o das linhas lidas.
+  const aInserir = opts.modo === 'proxima'
+    ? (temParcelaEmAberto([...linhas, acordoBase]) ? [] : inputs.slice(0, 1))
+    : inputs;
 
-  const { data: inseridas, error: errIns } = await supabase
-    .from('acordos')
-    .insert(payloads as never)
-    .select('*, perfis(id, nome, email, perfil, setor_id)');
-  if (errIns) return { ok: false, erro: `Erro ao adicionar parcelas: ${errIns.message}` };
+  let novas: Acordo[] = [];
+  if (aInserir.length > 0) {
+    const payloads = aInserir.map((input, i) =>
+      payloadNovaParcela(acordoBase, input, grupoId, novoNumero + i, novoTotal),
+    );
 
-  // Um insert de várias linhas devolve array, mas o de UMA pode voltar como
-  // objeto. Normalizar aqui evita que o caminho de uma parcela — o mais comum —
-  // quebre num `.map` de algo que não é lista.
-  const novas: Acordo[] = Array.isArray(inseridas)
-    ? inseridas as Acordo[]
-    : (inseridas ? [inseridas as Acordo] : []);
+    const { data: inseridas, error: errIns } = await supabase
+      .from('acordos')
+      .insert(payloads as never)
+      .select('*, perfis(id, nome, email, perfil, setor_id)');
+    if (errIns) return { ok: false, erro: `Erro ao adicionar parcelas: ${errIns.message}` };
+
+    // Um insert de várias linhas devolve array, mas o de UMA pode voltar como
+    // objeto. Normalizar aqui evita que o caminho de uma parcela — o mais comum —
+    // quebre num `.map` de algo que não é lista.
+    novas = Array.isArray(inseridas)
+      ? inseridas as Acordo[]
+      : (inseridas ? [inseridas as Acordo] : []);
+  }
 
   // Mantém o contador N/N das linhas do grupo.
   //
@@ -241,13 +284,24 @@ export async function adicionarParcelasAoGrupo(
       .update({ parcelas: novoTotal })
       .eq('empresa_id', acordoBase.empresa_id)
       .eq('acordo_grupo_id', grupoId);
-    if (errTotal) console.warn('[parcelas.service] falha ao atualizar total do grupo:', errTotal.message);
+    if (errTotal) {
+      // Quando nada foi materializado, este UPDATE é o ÚNICO efeito da ação:
+      // engoli-lo faria o botão "adicionar 10 parcelas" não fazer absolutamente
+      // nada, em silêncio. Com linhas inseridas, o aviso basta — elas já
+      // nasceram com o total certo.
+      if (novas.length === 0) {
+        return { ok: false, erro: `Erro ao atualizar o total de parcelas: ${errTotal.message}` };
+      }
+      console.warn('[parcelas.service] falha ao atualizar total do grupo:', errTotal.message);
+    }
   }
 
-  // Espelha no par Direto↔Extra, uma parcela de cada vez — a falha de um
-  // espelho não desfaz o lote (para operador comum a RLS pode recusar).
+  // Espelha no par Direto↔Extra as parcelas que de fato entraram — no modo
+  // 'proxima' espelhar as 10 criaria no par o que não existe deste lado. A
+  // falha de um espelho não desfaz o lote (para operador comum a RLS pode
+  // recusar).
   if (acordoBase.vinculo_operador_id) {
-    for (const input of inputs) {
+    for (const input of aInserir) {
       try {
         await espelharParcelaNoVinculo(acordoBase, input, opts.isPaguePlay);
       } catch (e) {

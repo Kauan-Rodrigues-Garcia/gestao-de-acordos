@@ -57,7 +57,9 @@ vi.mock('@/lib/supabase', () => {
   return { supabase: { from: vi.fn((t: string) => makeBuilder(t)) } };
 });
 
-import { adicionarParcelaAoGrupo } from './parcelas.service';
+import {
+  adicionarParcelaAoGrupo, adicionarParcelasAoGrupo, temParcelaEmAberto,
+} from './parcelas.service';
 
 function makeAcordo(overrides: Partial<Acordo> = {}): Acordo {
   return {
@@ -251,5 +253,86 @@ describe('adicionarParcelaAoGrupo — validações', () => {
     expect(r.ok).toBe(false);
     if (r.ok) return;
     expect(r.erro).toMatch(/RLS denied/);
+  });
+});
+
+// ── Modo 'proxima': declarar não é materializar ──────────────────────────────
+//
+// O botão "Adicionar parcela" gravava as N linhas de uma vez. Errado: o sistema
+// mantém UMA parcela em aberto por vez, e a próxima só vira registro quando a
+// atual é quitada e reagendada — é o modelo que `linhasParcelas` desenha, com
+// as que faltam aparecendo como virtuais.
+//
+// A regra: declara sempre as N no contador; materializa 1 só quando não há
+// parcela em aberto no grupo, e 0 quando há.
+
+describe('temParcelaEmAberto', () => {
+  it('só verificar_pendente conta como em aberto', () => {
+    expect(temParcelaEmAberto([{ status: 'verificar_pendente' }])).toBe(true);
+    expect(temParcelaEmAberto([{ status: 'pago' }])).toBe(false);
+    // nao_pago encerrou o acordo (e já liberou o NR): não é cobrança viva.
+    expect(temParcelaEmAberto([{ status: 'nao_pago' }])).toBe(false);
+    expect(temParcelaEmAberto([])).toBe(false);
+  });
+
+  it('basta uma em aberto no meio de várias pagas', () => {
+    expect(temParcelaEmAberto([
+      { status: 'pago' }, { status: 'pago' }, { status: 'verificar_pendente' },
+    ])).toBe(true);
+  });
+});
+
+describe("adicionarParcelasAoGrupo — modo 'proxima'", () => {
+  const dez = Array.from({ length: 10 }, (_, i) => ({
+    vencimento: `2026-0${i < 3 ? 8 : 9}-1${i % 10}`,
+    valor: 100, tipo: 'boleto', status: 'verificar_pendente',
+  }));
+
+  it('base PAGA: declara as 10 e materializa só 1', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'pago' }], error: null };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'pago' }), dez, {
+      isPaguePlay: false, modo: 'proxima',
+    });
+    if ('erro' in r) throw new Error(r.erro);
+
+    // O contador passa a declarar 11 (a existente + 10).
+    expect(r.novoTotal).toBe(11);
+
+    const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
+    expect(inserts).toHaveLength(1);
+    // Uma linha só, não dez.
+    expect(Array.isArray(inserts[0].payload) ? inserts[0].payload.length : 1).toBe(1);
+  });
+
+  it('base EM ABERTO: declara as 10 e não materializa nenhuma', async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente' }], error: null };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'verificar_pendente' }), dez, {
+      isPaguePlay: false, modo: 'proxima',
+    });
+    if ('erro' in r) throw new Error(r.erro);
+
+    expect(r.novoTotal).toBe(11);
+    expect(r.novasParcelas).toHaveLength(0);
+    expect(supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert')).toHaveLength(0);
+    // O contador do grupo ainda precisa ser gravado: é o único efeito da ação.
+    expect(supabaseCalls.some(c => c.table === 'acordos' && c.op === 'update')).toBe(true);
+  });
+
+  it('sem materializar, falha ao gravar o contador vira ERRO — senão o botão não faria nada', async () => {
+    routes.selectGrupo  = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente' }], error: null };
+    routes.updateAcordo = { data: null, error: { message: 'permission denied' } };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'verificar_pendente' }), dez, {
+      isPaguePlay: false, modo: 'proxima',
+    });
+    expect('erro' in r).toBe(true);
+  });
+
+  it("modo padrão ('todas') segue gravando o lote inteiro — é o alterar quantidade", async () => {
+    routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'pago' }], error: null };
+    const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'pago' }), dez, { isPaguePlay: false });
+    if ('erro' in r) throw new Error(r.erro);
+
+    const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
+    expect(Array.isArray(inserts[0].payload) ? inserts[0].payload.length : 1).toBe(10);
   });
 });

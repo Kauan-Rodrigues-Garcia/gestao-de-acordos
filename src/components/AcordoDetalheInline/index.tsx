@@ -19,6 +19,7 @@ import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagenda
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalAdicionarParcela } from '@/components/ModalAdicionarParcela';
 import { adicionarParcelasAoGrupo, type NovaParcelaInput } from '@/services/parcelas.service';
+import { autenticarLider } from '@/services/autorizacao_lider.service';
 import { temVisaoAmpla } from '@/lib/deduplicarVinculados';
 import { transferirNr, liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import {
@@ -339,7 +340,7 @@ export function AcordoDetalheInline({
   async function confirmarAdicionarParcela(inputs: NovaParcelaInput[]) {
     setSalvandoAddParcela(true);
     try {
-      const r = await adicionarParcelasAoGrupo(acordoLocal, inputs, { isPaguePlay });
+      const r = await adicionarParcelasAoGrupo(acordoLocal, inputs, { isPaguePlay, modo: 'proxima' });
       // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
       // TypeScript não estreita união por discriminante booleano.
       if ('erro' in r) { toast.error(r.erro); return; }
@@ -367,10 +368,17 @@ export function AcordoDetalheInline({
       setModalAddParcela(false);
       onSaved?.(baseAtualizado);
       if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
+      // O acordo passa a DECLARAR as parcelas pedidas, mas materializa no
+      // máximo a próxima. Sem dizer isso, o operador que pediu 10 e viu uma
+      // linha (ou nenhuma) acha que o botão falhou.
+      const pedidas = inputs.length;
       toast.success(
-        novas.length === 1
-          ? `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`
-          : `${novas.length} parcelas adicionadas ao acordo (total ${r.novoTotal}).`,
+        novas.length === 0
+          ? `Acordo passou a ${r.novoTotal} parcelas. A próxima será registrada quando a atual for quitada.`
+          : pedidas > 1
+            ? `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} registrada. As demais entram conforme forem reagendadas.`
+            : `Parcela ${novas[0].numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada!`,
+        { duration: 6000 },
       );
     } finally {
       setSalvandoAddParcela(false);
@@ -384,48 +392,16 @@ export function AcordoDetalheInline({
     try {
       let liderNomeAutorizador: string | null = null;
       if (liderCreds) {
-        const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
-        const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
-
-        const authRes = await fetch(
-          `${supabaseUrl}/auth/v1/token?grant_type=password`,
-          {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
-            body:    JSON.stringify({ email: liderCreds.email.trim(), password: liderCreds.senha }),
-          },
-        );
-        if (!authRes.ok) {
-          toast.error('Credenciais de líder inválidas.');
+        // Mesmo caminho de autenticação das outras telas. A cópia inline que
+        // morava aqui não resolvia usuário→e-mail, então o líder que digitasse
+        // o próprio USUÁRIO levava "credenciais inválidas" com a senha certa.
+        const auth = await autenticarLider({ email: liderCreds.email, senha: liderCreds.senha });
+        if ('erro' in auth) {
+          toast.error(auth.erro);
           setExecutandoExtraDireto(false);
           return;
         }
-        const authData = await authRes.json() as { user?: { id: string }; access_token?: string };
-        const liderUid   = authData.user?.id;
-        const liderToken = authData.access_token;
-        if (!liderUid || !liderToken) {
-          toast.error('Credenciais de líder inválidas.');
-          setExecutandoExtraDireto(false);
-          return;
-        }
-
-        const perfilRes = await fetch(
-          `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
-          { headers: { apikey: supabaseAnon, Authorization: `Bearer ${liderToken}` } },
-        );
-        if (!perfilRes.ok) {
-          toast.error('Erro ao verificar perfil do líder.');
-          setExecutandoExtraDireto(false);
-          return;
-        }
-        const perfilArr = await perfilRes.json() as Array<{ perfil: string; nome: string }>;
-        const liderPerfilData = Array.isArray(perfilArr) && perfilArr.length > 0 ? perfilArr[0] : null;
-        if (!liderPerfilData || !['lider', 'administrador', 'super_admin', 'elite', 'gerencia', 'diretoria'].includes(liderPerfilData.perfil)) {
-          toast.error('O usuário informado não tem permissão de líder ou administrador.');
-          setExecutandoExtraDireto(false);
-          return;
-        }
-        liderNomeAutorizador = liderPerfilData.nome;
+        liderNomeAutorizador = auth.autorizador.nome;
       }
 
       const campoChave: 'instituicao' | 'nr_cliente' = isPaguePlay ? 'instituicao' : 'nr_cliente';
