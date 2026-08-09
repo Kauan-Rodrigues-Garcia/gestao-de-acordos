@@ -1,7 +1,7 @@
 # Sistema de Gestão de Acordos Financeiros
 
 [![CI](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-617%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-1750%20passing-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 
@@ -22,7 +22,10 @@ Plataforma web para gerenciamento de acordos financeiros com controle de acesso 
 | **Animações** | Framer Motion |
 | **Gráficos** | Recharts |
 | **Planilhas** | @e965/xlsx (fork mantido do SheetJS) |
-| **Backend/BaaS** | Supabase (Auth, PostgreSQL, Edge Functions) |
+| **Backend/BaaS** | Supabase (Auth, PostgreSQL, RLS, Realtime) |
+| **Serverless** | Rotas em `api/` na Vercel — o que precisa de `service_role` |
+| **Observabilidade** | Sentry (`@sentry/react`) |
+| **Testes** | Vitest + Testing Library · Playwright (e2e) |
 
 ---
 
@@ -63,7 +66,12 @@ npm run dev
 | `npm run build:map` | Build de produção com sourcemaps |
 | `npm run preview` | Visualiza o build localmente |
 | `npm run lint` | Executa o ESLint |
-| `npm run test:edge-functions` | Testa as Edge Functions (Deno) |
+| `npm run typecheck` | Type-check dos dois projetos TS (app + node) |
+| `npm run test` | Roda a suíte Vitest uma vez |
+| `npm run test:watch` | Vitest em modo watch |
+| `npm run test:coverage` | Vitest com cobertura (thresholds em `vitest.config.ts`) |
+| `npm run test:e2e` | Testes end-to-end (Playwright) |
+| `npm run analyze` | Build + mapa do bundle (`stats.html`) |
 
 ---
 
@@ -76,7 +84,9 @@ VITE_SUPABASE_URL=https://<seu-projeto>.supabase.co
 VITE_SUPABASE_ANON_KEY=<sua-anon-key>
 ```
 
-> A chave `SUPABASE_SERVICE_ROLE_KEY` é configurada diretamente nos **Secrets** do Supabase (usada pelas Edge Functions — nunca deve ser exposta no frontend).
+> A chave `SUPABASE_SERVICE_ROLE_KEY` fica nas **Environment Variables da Vercel**, **sem** o prefixo `VITE_`, e é lida apenas pelas rotas em `api/`. Ela ignora todo o RLS: o que tem `VITE_` é embutido no bundle e vaza para o navegador.
+>
+> O [.env.example](./.env.example) documenta todas as variáveis, incluindo as opcionais (Sentry, IA de visão, CDN de imagens).
 
 ---
 
@@ -104,11 +114,10 @@ gestao-de-acordos/
 │   │   ├── money.ts                # Utilitários monetários (BRL)
 │   │   ├── motion.ts               # Presets de animação
 │   │   └── utils.ts                # Helpers gerais
-│   └── pages/                      # 13 páginas da aplicação
+│   └── pages/                      # Páginas da aplicação (uma pasta por módulo)
+├── api/                            # Rotas serverless (Vercel) — tudo que usa service_role
 ├── supabase/
-│   ├── migrations/                 # Scripts SQL (PostgreSQL)
-│   └── functions/
-│       └── ai-normalize-import/    # Edge Function de normalização IA (Deno)
+│   └── migrations/                 # Scripts SQL (PostgreSQL)
 └── [vite.config.ts, tsconfig.json, eslint.config.js, ...]
 ```
 

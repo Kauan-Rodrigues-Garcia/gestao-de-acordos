@@ -7,71 +7,106 @@
 
 ## Estrutura do Projeto
 
+A regra de camadas é constante: **página não conversa com o Supabase quando há
+regra envolvida**. A regra mora em `services/`, o estado e o realtime em
+`hooks/`, e a tela consome os dois.
+
+```
+pages/  →  hooks/  →  services/  →  lib/supabase.ts
+             ↑
+        providers/  (singletons: realtime, presença, notificações)
+```
+
 ```
 src/
 ├── components/           # Componentes reutilizáveis
 │   ├── ui/               # shadcn/ui (não editar manualmente)
 │   ├── Layout.tsx        # Layout principal com sidebar
-│   ├── ProtectedRoute.tsx # Proteção de rotas por perfil
-│   ├── SeedSetores.tsx   # Inicialização automática de setores
-│   ├── AcordoDetalheInline.tsx  # Detalhe de acordo inline
+│   ├── ProtectedRoute.tsx       # Proteção de rotas por cargo + permissão
+│   ├── AcordoDetalheInline/     # Detalhe de acordo inline (+ editar parcelado)
 │   ├── AcordoEditInline.tsx     # Edição otimista (optimistic update)
-│   ├── AcordoNovoInline.tsx     # Criação de acordo inline
-│   ├── AnalyticsPanel.tsx       # Painel analítico (Recharts)
+│   ├── AcordoNovoInline/        # Criação inline (FormPP / FormBP + autorização NR)
+│   ├── AnalyticsPanel/          # Painel analítico (Recharts)
+│   ├── ModalAdicionarParcela.tsx  # Parcela avulsa no mesmo NR
 │   ├── ChatNotificacoes.tsx     # Notificações em tempo real
 │   ├── ModalFilaWhatsApp.tsx    # Fila de mensagens WhatsApp
-│   ├── StatCard.tsx             # Card de estatísticas
+│   ├── comemoracao/             # Overlay de meta batida
+│   ├── pet/                     # Pet Aura (gamificação)
 │   ├── ErrorBoundary.tsx        # Error boundary global/por página
 │   └── ThemeToggle.tsx          # Alternância de tema
 │
-├── hooks/                # React hooks
+├── hooks/                # Estado + realtime (29 hooks)
 │   ├── useAuth.tsx       # Autenticação + perfil + empresa (multi-tenant)
-│   ├── useAcordos.ts     # Acordos + métricas do dashboard
+│   ├── useEmpresa.tsx    # Empresa atual + slug do tenant
+│   ├── useCargoPermissoes.ts    # Permissões configuráveis por cargo
+│   ├── useAcordos.ts     # Acordos + métricas (React Query + realtime)
 │   ├── useAnalytics.ts   # Analytics com realtime
-│   ├── useNotificacoes.ts # Notificações do usuário
-│   ├── useNrRegistros.ts  # Registros NR únicos
-│   ├── usePresence.ts     # Presença online de usuários
-│   ├── useEmpresa.tsx     # Dados da empresa atual
-│   └── use-mobile.tsx    # Responsividade
+│   ├── useAnalitico.ts / useAnaliticoImport.ts   # Aba Analítico
+│   ├── useDiario.ts / useDiarioImport.ts         # Recebimento diário
+│   ├── useSolicitacoesWhatsapp.ts / useComemoracoes.ts / useOuvidoriaAcesso.ts
+│   └── useVersionCheck.ts       # Detecta novo deploy (dist/version.json)
 │
-├── providers/            # Context Providers
-│   ├── RealtimeAcordosProvider.tsx  # Canal WebSocket centralizado (singleton)
-│   └── PresenceProvider.tsx         # Presença online (singleton por empresa)
+├── providers/            # Context Providers (singletons)
+│   ├── RealtimeAcordosProvider.tsx  # Canal WebSocket centralizado
+│   ├── PresenceProvider.tsx         # Presença online por empresa
+│   └── NotificacoesProvider.tsx     # Estado único do sino + painel
 │
-├── services/             # Camada de serviços (lógica de negócio)
-│   ├── acordos.service.ts    # Queries, cálculos e métricas de acordos
-│   ├── setores.service.ts    # Queries e seed de setores
-│   ├── lixeira.service.ts    # Soft delete + retenção 3 dias
-│   ├── notificacoes.service.ts # Notificações do sistema
-│   ├── nr_registros.service.ts # Controle de NR únicos
-│   └── empresas.service.ts   # Dados de empresas
+├── services/             # Camada de serviços — a regra de negócio mora aqui
+│   ├── acordos.service.ts       # Queries, filtros, métricas
+│   ├── nr_registros.service.ts  # Titularidade de NR/Código
+│   ├── direto_extra.service.ts  # Config e resolução Direto/Extra
+│   ├── tratarExclusaoVinculo.ts # Quebra do par ao excluir
+│   ├── parcelas.service.ts      # Parcela no mesmo NR + lote + numeradas
+│   ├── lixeira.service.ts       # Soft delete + retenção 3 dias
+│   ├── desligamento.service.ts / situacaoUsuario.service.ts
+│   ├── autorizacao_lider.service.ts  # JWT do líder (nunca id em parâmetro)
+│   ├── impersonacao.service.ts
+│   ├── pix_automatico.service.ts     # Comissão Pix [BP]
+│   ├── solicitacoesWhatsapp.service.ts / ouvidoria.service.ts
+│   ├── analitico/        # Parser, importação, escopos, composição do mês
+│   ├── diario/           # Parser, importação, guard do relatório mensal
+│   ├── metas/ · equipes/ · admin/ · pet/ · bookplay/ · pagueplay/
+│   └── acordo-visao/     # Leitura de acordo por imagem (IA + OCR)
 │
 ├── lib/                  # Utilitários e configurações
-│   ├── supabase.ts       # Cliente Supabase + tipos TypeScript
-│   ├── index.ts          # Constantes, labels, formatadores, rotas
+│   ├── supabase.ts       # Cliente Supabase + interfaces de domínio
+│   ├── database.types.ts # Tipos gerados do schema
+│   ├── index.ts          # Cargos, rotas, labels, percentuais PP, formatadores
+│   ├── tenant.ts         # Slug do tenant + branding
+│   ├── tenant-config.ts  # useTenant() — diferenças de comportamento PP × BP
 │   ├── money.ts          # 💰 Utilitários monetários centralizados
-│   ├── utils.ts          # cn() e outros helpers
-│   ├── motion.ts         # Presets de animação Framer Motion
-│   └── tenant.ts         # Lógica multi-tenant (slug)
+│   ├── diasUteis.ts      # Dias úteis, feriados, quartis
+│   ├── mesReferencia.ts  # Recorte de mês no fuso de São Paulo
+│   ├── cpf.ts            # Detecção de CPF (nenhum CPF de cliente é gravado)
+│   └── observabilidade.ts # Sentry
 │
-├── pages/                # Páginas da aplicação
-│   ├── Login.tsx
-│   ├── Dashboard.tsx
-│   ├── Acordos.tsx           # Lista + fila WhatsApp
-│   ├── AcordoForm.tsx        # Cadastro/edição
+├── pages/                # Uma pasta por módulo
+│   ├── Login.tsx · Registro.tsx
+│   ├── Dashboard/            # Lista + filtros + métricas + fila WhatsApp
+│   ├── Acordos/              # Lista, Pix Automático, ranking e metas de Pix
+│   ├── AcordoForm/           # Cadastro/edição (FormPP / FormBP)
 │   ├── AcordoDetalhe.tsx     # Detalhes + histórico
+│   ├── Analitico/            # Aba Analítico + aba Recebimento diário
 │   ├── ImportarExcel.tsx     # Importação via planilha (Bookplay + PaguePLAY)
 │   ├── Lixeira.tsx           # Acordos excluídos (soft delete, 3 dias)
 │   ├── PainelLider.tsx       # Gestão da equipe + analítico
-│   ├── PainelDiretoria/      # KPIs estratégicos para diretoria (subfolder)
-│   ├── AdminUsuarios.tsx     # CRUD usuários + status online
-│   ├── AdminSetores.tsx      # CRUD setores
-│   ├── AdminConfiguracoes.tsx
-│   └── AdminLogs.tsx         # Auditoria completa
+│   ├── PainelDiretoria/      # KPIs estratégicos para diretoria
+│   ├── Ouvidoria/            # Reclamações e sugestões [PP]
+│   ├── CampanhaFacil/        # Campanhas de cobrança [BP]
+│   ├── SolicitacoesWhatsapp/ # Chat interno de solicitação
+│   ├── Comemoracoes/         # Comemorações de meta (aba de Admin → Usuários)
+│   ├── MetasConfig.tsx       # Metas, feriados e quartis
+│   └── AdminUsuarios · AdminEquipes · AdminSetoresAba · AdminCargos ·
+│       AdminConfiguracoes · AdminLogs · AdminDiretoExtra · AdminDocumentacoes
 │
 ├── App.tsx               # Roteamento com lazy loading
 └── main.tsx              # Entry point
 ```
+
+> As telas de administração foram consolidadas em abas: `/admin/setores`,
+> `/admin/equipes`, `/admin/logs`, `/admin/cargos` e `/comemoracoes` continuam
+> existindo como **redirects** para a aba correspondente — link antigo, favorito
+> e notificação já enviada continuam caindo na tela certa.
 
 ---
 
@@ -93,41 +128,42 @@ src/
 | `public.logs_sistema` | Log geral do sistema |
 | `public.notificacoes` | Notificações internas |
 | `public.nr_registros` | Controle de NR únicos por empresa |
-| `public.analitico_recebimentos` | Recebimentos do ERP (PaguePlay) — vide seção Analítico |
+| `public.analitico_recebimentos` | Recebimentos do ERP — vide seção Analítico |
+| `public.diario_recebimentos` | Recebimento diário do ERP |
+| `public.cargos_permissoes` | Permissões configuráveis por cargo (JSON) |
+| `public.lixeira_acordos` | Soft delete com snapshot e rastro de autoria |
+| `public.direto_extra_config` | Ativação de Direto/Extra por setor/equipe/usuário |
+| `public.equipe_lideres` / `equipe_operadores_clones` | Liderança e clones de equipe |
+| `public.metas_config_mes` / `metas_validacoes` | Feriados, quartis e trava de meta |
+| `public.pix_automatico_*` | Acordos, config, metas e registro de NR do Pix `[BP]` |
+| `public.ouvidoria_*` · `solicitacoes_whatsapp` · `comemoracoes` · `pet_*` | Módulos auxiliares |
 
-### Migrations — Ordem de Execução
+### Migrations
 
-Execute as migrations na ordem numérica abaixo:
+Os arquivos vivem em `supabase/migrations/` e são aplicados **em ordem
+alfabética do nome** — que, com o padrão de nomes por data (`AAAAMMDD` + sufixo
+`a`/`b`/`c`), é também a ordem cronológica. São ~150 arquivos, então listar
+todos aqui garantiria só uma lista velha; o que vale saber é a convenção:
 
-```
-01_schema_completo.sql          # Schema base completo
-02_seed_setores.sql             # Setores iniciais
-03_add_instituicao.sql          # Coluna instituicao em acordos
-03b_add_instituicao_setor.sql   # Complemento: coluna setor_id (executa após 03)
-04_history_trigger.sql          # Trigger de histórico de alterações
-05_ai_config.sql                # Configuração do modelo de IA
-06_update_status_tipo.sql       # Atualização de enums
-07_fix_lider_setor_policy.sql   # Correção de política RLS para líder
-08_fix_rls_policies.sql         # Correções gerais de RLS
-09_multi_empresa.sql            # Suporte multi-tenant
-10_indices_performance.sql      # Índices de performance
-11_tenant_lockdown.sql          # Isolamento total por tenant
-12_fix_signup_resilience.sql    # Resiliência no cadastro
-13_fix_signup_database_error.sql# Correção de erros de signup
-14a_add_equipes.sql             # Tabela equipes (executa antes de 14b)
-14b_auth_username.sql           # Login por username (executa após 14a)
-15a_add_metas.sql               # Tabela metas (executa antes de 15b)
-15b_fix_username_lookup.sql     # Correção RPC username lookup (executa após 15a)
-16_fix_username_lookup_v2.sql   # Refinamento da busca por username
-17_fix_signup_login_tenant.sql  # Correções de signup multi-tenant
-18_fix_novos_cargos_completo.sql# Suporte a novos perfis (elite, gerencia, diretoria)
-19_pagination_indexes.sql       # Índices para paginação
-20260629_analitico_recebimentos.sql  # Tabela analítico + RLS + permissão importar_analitico
-```
+| Faixa | Convenção |
+|---|---|
+| `01_` … `20_` | Fundação (schema, RLS, multi-tenant, cargos). Numeração sequencial simples. |
+| `<nome>_AAAA_MM_DD.sql` | Sprints de abril/2026 (NR, Direto/Extra, view deduplicada). |
+| `AAAAMMDD<letra>_<assunto>.sql` | Padrão atual, desde maio/2026. A letra ordena migrations do mesmo dia. |
 
-> **Nota sobre sufixos (a/b):** arquivos com o mesmo número base e sufixo `a`/`b`
-> foram criados na mesma sprint e devem ser executados em sequência.
-> O sufixo `b` indica complemento direto do arquivo `a`.
+> **Sufixos (a/b/c):** mesmo dia, ordem obrigatória. O `b` é complemento direto
+> do `a` — `14a_add_equipes` cria a tabela que `14b_auth_username` usa.
+
+As migrations que estabeleceram as regras vigentes estão tabeladas em
+[docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md#migrations-de-referência),
+ao lado da regra que cada uma criou — é o lugar para procurar "de onde veio esse
+comportamento".
+
+> ⚠️ O **status de aplicação** de cada migration no Supabase é controlado fora
+> do repositório. A presença do arquivo aqui **não** garante que ela rodou em
+> produção. Vários serviços toleram a tabela/RPC ausente de propósito
+> (`equipesClones`, `equipesLideres`, `expurgarDesaprovadosVencidos`, pet): o
+> recurso some da tela e o resto segue funcionando.
 
 ### Setores Iniciais
 
@@ -138,18 +174,33 @@ Setores: Em dia, Play 1, Play 2, Play 3, Play 4, Play 5, Play 6.
 
 ## 🔐 Perfis de Acesso (RBAC)
 
-O sistema implementa controle de acesso baseado em perfis (RBAC) com **7 níveis**,
+O sistema implementa controle de acesso baseado em perfis (RBAC) com **8 cargos**,
 controlado via PostgreSQL RLS e pelo componente `ProtectedRoute`.
+
+Os níveis abaixo são os de `PERFIL_NIVEL`, em `src/lib/index.ts` — **a fonte da
+verdade**. Esta tabela é cópia por conveniência; mudou o cargo, mude os dois.
 
 | Perfil | Nível | Acesso |
 |--------|-------|--------|
 | `operador` | 1 | Vê e gerencia apenas seus próprios acordos |
+| `ouvidoria` | 2 | Herda os gates de líder; foco na aba Ouvidoria `[PP]` |
 | `lider` | 2 | Vê acordos e operadores do seu setor; gerencia equipe |
-| `gerencia` | 3 | Visão multi-setor da empresa; relatórios gerenciais |
-| `elite` | 4 | Recursos avançados habilitados via toggle Elite; combinável com outros perfis |
-| `administrador` | 5 | Acesso total — todos os setores, acordos, configurações e logs |
-| `diretoria` | 6 | Painel estratégico (`PainelDiretoria`) com KPIs, projeções e comparativos |
+| `elite` | 3 | Como líder, com visões adicionais (toggle individual × geral) |
+| `gerencia` | 4 | Visão multi-setor da empresa; relatórios gerenciais |
+| `diretoria` | 5 | Painel estratégico (`PainelDiretoria`) com KPIs, projeções e comparativos |
+| `administrador` | 6 | Acesso total — todos os setores, acordos, configurações e logs |
 | `super_admin` | 7 | Cross-tenant — enxerga e gerencia todas as empresas do sistema |
+
+Agrupamentos usados no código:
+
+```ts
+PERFIS_LIDER     = ['lider', 'elite', 'gerencia', 'ouvidoria']
+PERFIS_ADMIN     = ['administrador', 'super_admin']
+PERFIS_DIRETORIA = ['diretoria']
+```
+
+`ouvidoria` está dentro de `PERFIS_LIDER` de propósito, e o banco espelha isso
+em `fn_user_has_any_role` (migration `20260717b`) — os dois lados mudam juntos.
 
 ### Detalhamento por Perfil
 
@@ -163,6 +214,10 @@ controlado via PostgreSQL RLS e pelo componente `ProtectedRoute`.
 - Visualiza e gerencia os operadores da equipe
 - Acessa o `PainelLider` com métricas da equipe
 - Pode criar equipes e definir metas do setor
+
+#### `ouvidoria`
+- Herda os gates de líder (está em `PERFIS_LIDER`, no código e no banco)
+- Acesso à aba Ouvidoria controlado por `ouvidoria_acessos` (nível `ver`/`editar`)
 
 #### `gerencia`
 - Visão de múltiplos setores da empresa
@@ -194,30 +249,61 @@ controlado via PostgreSQL RLS e pelo componente `ProtectedRoute`.
 
 ### Proteção de Rotas
 
+O guard tem **duas camadas**: o cargo (`allowedProfiles`) e a permissão
+configurável em Admin → Configurações → Permissões (`requiredPermissao`).
+
 ```tsx
-// Exemplo de uso do ProtectedRoute
-<ProtectedRoute allowedPerfis={['administrador', 'super_admin']}>
+// Só por cargo — super_admin sempre passa
+<ProtectedRoute allowedProfiles={['administrador', 'super_admin']}>
   <AdminUsuarios />
+</ProtectedRoute>
+
+// Cargo + permissão configurável
+<ProtectedRoute allowedProfiles={['lider', 'administrador', 'elite', 'gerencia']}
+                requiredPermissao="ver_painel_lider">
+  <PainelLider />
 </ProtectedRoute>
 ```
 
+Com `requiredPermissao`, a ordem de decisão é: admin/super_admin passa →
+permissão `true` passa → permissão `false` **bloqueia, mesmo que o cargo
+permitisse** → permissão ausente no banco cai no `allowedProfiles`
+(compatibilidade). A resolução vive em `useCargoPermissoes.temPermissao`.
+
+> As permissões do frontend controlam **navegação e interface**. Elas não são
+> barreira de segurança: quem manda no dado é a RLS.
+
 ### RLS no PostgreSQL
 
-Todas as tabelas possuem RLS habilitado. As políticas garantem isolamento por `empresa_id`:
+Todas as tabelas têm RLS habilitado, com isolamento por `empresa_id`. Para
+acordos, `SELECT`/`INSERT`/`UPDATE`/`DELETE` passam por **uma função só**,
+`fn_pode_gerir_acordo(setor_id, operador_id)` (migration `20260723f`) —
+centralizar impede que as políticas divirjam entre si.
 
-```sql
--- Exemplo: operador vê apenas seus próprios acordos
-CREATE POLICY "acordos_operador_select" ON public.acordos
-  FOR SELECT USING (
-    operador_id = auth.uid()
-    OR EXISTS (
-      SELECT 1 FROM public.perfis p
-      WHERE p.id = auth.uid()
-        AND p.perfil IN ('lider', 'gerencia', 'administrador', 'super_admin', 'elite', 'diretoria')
-        AND p.empresa_id = acordos.empresa_id
-    )
-  );
 ```
+pode gerir o acordo SE:
+  é o dono (operador_id = auth.uid())
+  OU é super_admin  OU é administrador
+  OU (empresa é PaguePlay  E  cargo = lider)        → PP: líder vê tudo (legado)
+  OU (empresa NÃO é PaguePlay  E  (                  → BookPlay e demais
+        cargo = diretoria
+        OU (cargo ∈ {lider, elite, gerencia} E setor do acordo = setor do usuário)
+     ))
+```
+
+A função é **fail-closed**: chaveia pelo positivo de *Pague Play*, então empresa
+não identificada cai no ramo restritivo. A versão anterior chaveava pelo positivo
+de Book Play, e uma falha de detecção virava **mais** acesso.
+
+> **Dependência crítica.** A listagem lê da view `acordos_deduplicados`. A RLS
+> acima só tem efeito porque a view é `security_invoker` (migration `20260723d`).
+> Sem essa flag a view roda como dona e **ignora todas as políticas**.
+
+Duas consequências moldam o código inteiro: o operador só lê os **próprios
+acordos** e a **própria linha** de `perfis`. Daí a regra: toda operação sobre o
+acordo ou o perfil de outra pessoa passa por **RPC `SECURITY DEFINER`**, com a
+autorização verificada no servidor — `select`/`update` direto na tabela falha
+silenciosamente sob a RLS.
 
 ---
 
@@ -225,17 +311,36 @@ CREATE POLICY "acordos_operador_select" ON public.acordos
 
 O sistema suporta múltiplas empresas isoladas por `empresa_id` e `empresa_slug`.
 
+Pague Play e Book Play são **deploys separados do mesmo código**, apontando para
+o **mesmo banco**. O que as separa é o slug do tenant, fixado no build.
+
 - Cada empresa tem um `slug` único (ex: `bookplay`, `pagueplay`)
-- O frontend é configurado por empresa via variável de ambiente `VITE_TENANT_SLUG`
-- No login, o sistema valida que o usuário pertence à empresa do site acessado
+- O frontend é configurado por empresa via `VITE_TENANT_SLUG`
+- No login, `useAuth` valida que o usuário pertence à empresa do site acessado
 - O `super_admin` ignora essa validação e pode acessar qualquer empresa
+
+A resolução do slug tem três níveis, em ordem de prioridade — a variável de
+build, o hostname e, por último, o slug da empresa do perfil logado:
 
 ```typescript
 // src/lib/tenant.ts
-export function getConfiguredTenantSlug(): string | null {
-  return import.meta.env.VITE_TENANT_SLUG ?? null;
+export function getConfiguredTenantSlug(): string {
+  const envSlug = normalizeSlug(import.meta.env.VITE_TENANT_SLUG);
+  return envSlug || detectSlugFromHostname();   // '' quando não há nenhum
 }
 ```
+
+> **Exceção — impersonação.** Com um `super_admin` impersonando alguém, a ordem
+> inverte: a empresa **real do usuário impersonado** manda no branding e nas
+> capacidades (`getTenantRuntimeConfig`). Sem isso, o admin logado no site da
+> Pague Play veria um usuário Book Play com regras de Pague Play.
+
+As **diferenças de comportamento** entre as duas operações (chave do cliente,
+formas de pagamento, máximo de parcelas, campo Estado, distribuição de receita)
+ficam centralizadas em `src/lib/tenant-config.ts`, no hook `useTenant()` — que
+substituiu mais de 130 chamadas espalhadas a `isPaguePlay(slug)`. A tabela
+comparativa completa está em
+[docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md).
 
 ---
 
@@ -248,15 +353,30 @@ usa o padrão Broadcaster:
 
 ```
 RealtimeAcordosProvider (singleton por empresa)
-├── 1 canal WebSocket: rt-acordos-central-{empresa_id}
+├── 1 canal WebSocket: rt-acordos-{empresa_id}-{reconnectTick}
 ├── Registry de subscribers: Map<instanceId, callback>
 ├── INSERT: busca registro completo com joins antes de notificar
 ├── UPDATE: merge cirúrgico preservando joins locais
 └── DELETE: distribui apenas o id removido
 ```
 
+O `reconnectTick` no nome não é enfeite: ao recriar, um nome novo força o
+Supabase a abrir um canal fresh em vez de reutilizar um já `CLOSED`.
+
+**Reconexão.** `CLOSED`/`CHANNEL_ERROR`/`TIMED_OUT` esperam 3 s antes de contar
+como falha — troca rápida de aba reconecta sozinha nesse intervalo. Persistindo,
+o canal é destruído e recriado com backoff exponencial (2 s → 30 s). Voltar para
+a aba com o canal morto reconecta **na hora**, sem backoff. E ao reconectar
+depois de uma falha, o cache de `acordos` é invalidado — é o que recupera os
+eventos perdidos durante o downtime.
+
 Todos os hooks que precisam de realtime (useAcordos, useAnalytics) se subscrevem
 ao provider em vez de criar canais próprios.
+
+> O motivo de existir: antes, cada instância de `useAcordos` criava seu próprio
+> canal com o mesmo nome. O Dashboard chegava a 4 canais simultâneos, e o
+> `removeChannel` de qualquer instância que desmontasse matava o canal das
+> outras — era o que fazia a Pague Play perder o Realtime.
 
 ### PresenceProvider
 
@@ -269,6 +389,13 @@ PresenceProvider (singleton por empresa)
 ├── track() imediato após SUBSCRIBED
 └── untrack() + removeChannel no logout/cleanup
 ```
+
+### NotificacoesProvider
+
+Fica **acima do Router** de propósito: o sino no header (`Layout`) e o painel
+(`ChatNotificacoes`) são componentes diferentes que precisam do **mesmo** estado
+de notificações. Montado abaixo do Router, cada um teria a sua cópia — e o
+contador do sino discordaria da lista aberta ao lado.
 
 ---
 
@@ -289,6 +416,16 @@ formatBRL(total); // "R$ 1.234,56"
 parseBRL("1.234,56"); // 1234.56
 ```
 
+**Parcelas são calculadas em centavos inteiros**, nunca em float — dividir
+`valor / n` em ponto flutuante acumula resto que não fecha com a soma. Três
+regimes coexistem, e `money.ts` tem um para cada:
+
+| Regime | Função | Onde |
+|---|---|---|
+| Rateio simples | `calcularParcelas(total, n, false)` | Ambos |
+| Regra dos **40 %** (1ª parcela = 40 % do total) | `calcularParcelas(total, n, true)` | `[PP]`, n ≥ 3 |
+| **Entrada + demais** (os dois valores digitados; o total é consequência) | `calcularParcelasComEntrada`, `valorDemaisParcelas` | `[BP]` (migration `20260805b`) |
+
 ---
 
 ## Rotas serverless (Vercel) — `api/`
@@ -298,8 +435,11 @@ ignora RLS, então nunca pode ser exposta ao navegador: fica só nas Environment
 Variables da Vercel, **sem** o prefixo `VITE_` (o que tem `VITE_` é embutido no
 bundle e vaza).
 
-Estas rotas sobem no mesmo deploy do site. No local elas só respondem com
-`vercel dev` — com `npm run dev` puro o fetch dá 404.
+Estas rotas sobem no mesmo deploy do site. **No local, `npm run dev` basta**: o
+plugin `vite-plugins/dev-api.ts` (`apply: 'serve'`, fora do build) serve `/api`
+dentro do próprio servidor de dev e carrega as variáveis não-`VITE` do
+`.env.local` no `process.env` do Node — elas ficam no processo, nunca chegam ao
+navegador. Não é preciso `vercel dev`.
 
 ### `api/alterar-senha.ts`
 
@@ -364,16 +504,35 @@ CDN_IMG_DEBUG=1
 
 # Feature flags
 VITE_ENABLE_ROUTE_MESSAGING=true  # Habilita mensagens na troca de rota
+
+# Observabilidade (opcional) — a DSN NÃO é segredo: só permite ENVIAR eventos
+VITE_SENTRY_DSN=https://<chave>@<org>.ingest.sentry.io/<id>
 ```
 
-> **Segurança:** A chave `SUPABASE_SERVICE_ROLE_KEY` é configurada nos **Secrets** do Supabase e nunca deve aparecer no frontend.
+**Só no servidor — nunca com prefixo `VITE_`.** O que tem `VITE_` é embutido no
+bundle e chega ao navegador. Estas ficam nas Environment Variables da Vercel (e
+no `.env.local` para o `npm run dev`, via plugin `dev-api`):
+
+| Variável | Usada por |
+|---|---|
+| `SUPABASE_SERVICE_ROLE_KEY` | `api/alterar-senha.ts`, `api/impersonar-usuario.ts` — **ignora todo o RLS** |
+| `VISION_PROVIDER` / `VISION_API_KEY` / `VISION_MODEL` | `api/ler-acordo-imagem.ts` (sem elas, cai no OCR local) |
+| `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Upload de source maps no build — segredo de verdade (acesso de escrita ao Sentry) |
+
+O [.env.example](./.env.example) documenta cada uma com o porquê.
 
 ---
 
-## Aba Analítico (PaguePlay exclusivo)
+## Aba Analítico
 
-Feature adicionada em 2026-06-29, branch `claude/acordos-analytics-import-r57x43`.
-**Todo o código é gatado por `isPaguePlay` — Bookplay não é afetado.**
+Feature adicionada em 2026-06-29, originalmente exclusiva da PaguePlay.
+
+> ⚠️ **Não é mais exclusiva.** A aba foi estendida à BookPlay: o guard em
+> `src/pages/Analitico/index.tsx` aceita os dois slugs, e a página vive em
+> `src/pages/Analitico/` (a rota `/analitico`). Os componentes de visão
+> continuam onde nasceram, em `src/pages/Dashboard/Analitico/`, e são importados
+> de lá. As diferenças entre as operações estão nas regras de escopo
+> (`services/analitico/escopoAnalitico.ts`), não em um gate por slug.
 
 ### Visão Geral
 
@@ -456,43 +615,48 @@ Adicionada em `cargos_permissoes` via migration `20260629_analitico_recebimentos
 | `lider`, `gerencia`, `administrador` | Por operador + Ranking + bucket de órfãos + importar |
 | `elite` | Toggle entre visão individual (próprios) e geral (como líder) |
 
-### Arquivos Novos
+### Arquivos
 
 ```
-supabase/migrations/20260629_analitico_recebimentos.sql
+supabase/migrations/20260629*_analitico_*.sql   (+ 20260802a, 20260803c, 20260809b)
+src/pages/Analitico/index.tsx   # RAIZ DA PÁGINA (/analitico): abas + guard + gate por cargo
 src/services/analitico/
   ├── analiticoParser.ts        # parse Excel, consolidação cartão, toDate, resolveCols
   ├── analitico.service.ts      # CRUD, importarLote, tabularDivergente, notificar
-  └── analiticoParser.test.ts   # testes do parser e resolveCols
+  ├── escopoAnalitico.ts        # "esta linha conta no que estou olhando?" — regra ÚNICA
+  ├── escopoFontes.ts · composicaoMes.ts · analiticoComum.ts
+  └── contribuicaoReceptivo.service.ts
 src/hooks/
   ├── useAnalitico.ts           # fetch + realtime + marcarVisto
-  └── useAnaliticoImport.ts     # máquina de estados upload→preview→confirmar
-src/pages/Dashboard/Analitico/
-  ├── index.tsx                 # raiz da aba (roteia por cargo)
+  ├── useAnaliticoImport.ts     # máquina de estados upload→preview→confirmar
+  ├── useAnaliticoDashboard.ts  # agregado do mês (fn_analitico_dashboard_mes_json)
+  └── useEscopoAnalitico.ts
+src/pages/Dashboard/Analitico/  # componentes de visão (importados pela página acima)
   ├── AnaliticoOperador.tsx     # visão operador
   ├── AnaliticoLider.tsx        # visão líder/admin (por operador + ranking + órfãos)
+  ├── DesempenhoEquipes.tsx · RankingView.tsx · QuartisOperadores.tsx
   ├── ImportarModal.tsx         # modal upload → preview delta → confirmar
   ├── TabulacaoCell.tsx         # botão de tabulação (máquina de estados)
-  └── types.ts                  # tipos locais
+  └── agregacaoLider.ts · types.ts
 ```
 
-### Arquivos Modificados
-
-```
-src/lib/supabase.ts             # + interfaces AnaliticoRecebimento, StatusTabulacaoAnalitico
-src/pages/Dashboard/PPTableFilters.tsx  # + aba "Analítico" no union type e array
-src/pages/Dashboard/index.tsx          # + AbaAnalitico, condicional de render
-ARQUITETURA.md                         # esta seção
-```
+> **`escopoAnalitico.ts` merece atenção.** A pergunta "esta linha entra na minha
+> conta?" já foi respondida em três lugares (aba Analítico, Painel Líder e
+> dashboard) de três jeitos — e três contas para o mesmo dinheiro deram três
+> números. A regra hoje é uma, pura e testada. Quem precisar dela **importa
+> daqui** em vez de reescrever.
 
 ---
 
-## Aba Recebimento Diário (PaguePlay exclusivo)
+## Aba Recebimento Diário
 
 Feature adicionada em 2026-07-01, aba interna da página Analítico (`/analitico`).
 Diferente do Analítico, é **apenas informativa**: não há vínculo com acordos
 tabulados nem máquina de estados de tabulação. O líder importa o relatório de
 recebimento diário do ERP e cada operador recebe a lista dos próprios pagamentos.
+
+> Nasceu na PaguePlay, mas **não é mais exclusiva**: a BookPlay também usa a aba,
+> com RLS por setor (migration `20260804a`).
 
 ### Tabela `diario_recebimentos`
 
@@ -501,7 +665,7 @@ id                UUID  PK
 empresa_id        UUID  FK empresas (gate de isolamento)
 operador_id       UUID  FK perfis — null quando operador não encontrado (órfão)
 operador_usuario  TEXT  username bruto do relatório (coluna "Operador")
-cpf               TEXT  somente dígitos
+cliente_codigo    TEXT  coluna "Cód.Cliente", só dígitos — SUBSTITUIU o CPF (20260728b)
 nome_cliente      TEXT  coluna "Profissional"
 acordo_codigo     TEXT  coluna "Cód.Acordo" (consolida parcelas de cartão na exibição)
 forma_pagamento   TEXT  texto bruto (Pix, Boleto, Cartão Padrão…)
@@ -511,7 +675,7 @@ dia_referencia    DATE  dia do relatório (moda das datas de pagamento)
 prox_contato      DATE  ≤ dia_referencia → acordo "ignorado" (fora dos totais e listas)
 tabulacao         TEXT  coluna "Tabulação" do ERP (informativa)
 id_baixa          TEXT  identificador do pagamento no ERP
-chave_unica       TEXT  id_baixa ou composta cpf|acordo|forma|valor|data
+chave_unica       TEXT  id_baixa ou composta codigo|acordo|forma|valor|data
 import_index      INT   nº da importação do dia que adicionou a linha
 visto             BOOL  false = "novo" para o operador
 importado_por_id / importado_em / lote_id
@@ -560,16 +724,19 @@ Adicionada em `cargos_permissoes` via migration `20260701b_diario_recebimentos.s
 ```
 supabase/migrations/20260701b_diario_recebimentos.sql   # tabela + RLS + realtime + RPC fn_diario_resumo_mes + permissão
 src/services/diario/
-  ├── diarioParser.ts           # parse Excel, resolveCols, formaKind, fmtCPF, diaReferencia
+  ├── diarioParser.ts           # parse Excel, resolveCols, formaKind, diaReferencia
   ├── diario.service.ts         # importarLote, buscas, marcarVisto, notificar, limparDia
-  └── diarioParser.test.ts      # testes do parser (headers reais do ERP)
+  ├── diarioMensalGuard.ts      # exige o relatório MENSAL como 1º import do dia
+  ├── escopoDiario.ts · diaDetalhado.ts · diarioComum.ts
+  └── *.test.ts                 # testes do parser (headers reais do ERP) e do guard
 src/hooks/
   ├── useDiario.ts              # fetch + realtime + novosIds/marcarVisto
   └── useDiarioImport.ts        # máquina de estados upload→preview→confirmar
 src/pages/Analitico/Diario/
   ├── index.tsx                 # raiz da aba (seletor de dia + roteia por cargo)
   ├── DiarioLider.tsx           # cards do dia/mês, lista por operador, órfãos, ignorados
-  ├── DiarioOperador.tsx        # lista própria (CPF/nome, forma, valor, data, total)
+  ├── DiarioOperador.tsx        # lista própria (código/nome, forma, valor, data, total)
+  ├── DiaDetalhado.tsx          # abertura de um dia específico
   ├── ImportarDiarioModal.tsx   # modal upload → preview (vínculo manual) → confirmar
   ├── FormaChip.tsx             # badge Pix/Boleto/Cartão
   └── helpers.ts                # consolidação, ignorados, agregação por operador
@@ -577,3 +744,19 @@ src/pages/Analitico/index.tsx   # + abas internas Analítico × Recebimento diá
 src/hooks/useNotificacoes.ts    # notificação nativa também para o diário
 src/lib/supabase.ts             # + interface DiarioRecebimento
 ```
+
+---
+
+## Qualidade e Ferramentas
+
+| Frente | Como está |
+|---|---|
+| **Testes** | Vitest + Testing Library (happy-dom). ~1750 testes em ~102 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
+| **Cobertura** | `vitest.config.ts` tem thresholds como **catraca**: cada valor fica logo abaixo do que a suíte entrega hoje. Ao subir a cobertura, suba os números **no mesmo commit**. |
+| **E2E** | Playwright em `tests/e2e/`. |
+| **CI** | `.github/workflows/ci.yml`: lint → typecheck → testes com cobertura → build. |
+| **Type-check** | `npm run typecheck` roda os **dois** projetos (`tsconfig.app` + `tsconfig.node`). `npx tsc --noEmit` na raiz não checa nada — o `tsconfig.json` tem `"files": []` e sem `-b` o tsc não segue as referências. |
+| **Lint** | ESLint 9 flat config + `import-x` + react-hooks. Husky/lint-staged no pre-commit. |
+| **Bundle** | 8 vendor chunks manuais em `vite.config.ts` (react, radix, supabase, charts, xlsx, forms, sentry). `npm run analyze` gera `stats.html`. |
+| **Observabilidade** | Sentry opcional (`VITE_SENTRY_DSN`). O usuário é identificado por **id, usuário e cargo** — nome e e-mail não saem daqui. Source maps sobem no build e são **apagados do `dist`** no mesmo passo. |
+| **Versão do build** | `dist/version.json` + `__APP_VERSION__`; `useVersionCheck` faz polling e avisa quando há deploy novo. |

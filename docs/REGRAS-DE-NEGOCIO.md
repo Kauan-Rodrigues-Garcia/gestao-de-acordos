@@ -84,7 +84,7 @@ de 130 chamadas espalhadas a `isPaguePlay(slug)`.
 |---|---|---|
 | **Chave do cliente** | `instituicao`, exibido como **"Código"** | `nr_cliente`, exibido como **"NR"** |
 | **Formas de pagamento** | Boleto/PIX e Cartão de Crédito (2 opções) | Boleto, Cartão Recorrente, Pix Automático, Cartão, Pix |
-| **Máx. de parcelas** | 12 | 60 |
+| **Máx. de parcelas** | 12 (`PARCELAS_MAX_PAGUEPLAY`) | 99 (`PARCELAS_MAX_DEFAULT`) — o campo é digitável e aceita 2 dígitos |
 | **Campo Estado (UF)** | Sim | Não |
 | **Distribuição de receita (H.O./Coren/Cofen)** | Sim | Não |
 | **Label do status pendente** | "Pendente" | "Verificar" |
@@ -146,9 +146,9 @@ PERFIS_DIRETORIA = ['diretoria']
 isso em `fn_user_has_any_role` (migration `20260717b`). Os dois lados precisam
 ser alterados juntos.
 
-> ⚠️ A tabela de RBAC no `README.md` está **desatualizada**: lista 7 perfis (sem
-> `ouvidoria`) e com números de nível diferentes dos de `PERFIL_NIVEL`. A fonte
-> correta é `src/lib/index.ts`.
+> A fonte da verdade dos níveis é `PERFIL_NIVEL`, em `src/lib/index.ts`. As
+> tabelas do `README.md` e do `ARQUITETURA.md` são cópias por conveniência —
+> ao mudar um cargo, mude os três no mesmo commit.
 
 ### 2.2 Visibilidade de usuários por perfil
 
@@ -601,6 +601,18 @@ Operadores são resolvidos por *match* automático do nome de usuário
 (case-insensitive), com vínculo manual para o que não casar. Linhas de operador
 não encontrado podem ser removidas individualmente ou em lote.
 
+**Um login, um operador (migration `20260809b`).** O resumo
+(`fn_analitico_resumo_por_operador`) agrupa pelo **perfil**, não pela grafia do
+`operador_usuario` — duas grafias do mesmo login no arquivo (caixa diferente, um
+espaço a mais) partiam o mesmo operador em duas linhas, cada uma com um pedaço
+do dinheiro. O login volta como `MIN(...)`, só para exibição.
+
+**`super_admin` não é operador.** Ele é conta de administração: ficou fora do
+resumo, do ranking e das somas de equipe/setor que saem dali. A mesma migration
+devolveu ao perfil dono do login as linhas que estavam presas a um `super_admin`
+— sem isso o mesmo recebimento aparecia repartido entre dois "Kauan", em equipes
+diferentes, e nenhuma das duas linhas era o total da pessoa.
+
 ### 10.2 Status de tabulação
 
 Cruzamento entre o relatório e a tabela `acordos` — pelo campo `instituicao`
@@ -778,6 +790,74 @@ Registro de acordos fechados no Pix automático para acompanhamento de comissão
 Comissão = `valor × pct ÷ 100`. Percentual por setor em
 `pix_automatico_config`, padrão **0,25** (isto é, 0,25 %).
 
+**Acordo "feito"** = `pendente` + `aprovado` (`ehAcordoFeito`). Desaprovado
+ficou de fora de propósito: se contasse, registrar lixo aproximaria da meta. A
+mesma definição vale para o contador da dobra, para o ranking e para o
+realizado da meta do setor — três números que a operação compara entre si.
+
+#### Aprovado ≠ pago
+
+São dois estados distintos e a tela mostra os dois: `status = 'aprovado'` é a
+comissão reconhecida; `pago` é a que já saiu. **A pagar** = aprovado e ainda
+não pago — `pendente` não entra, porque fila de avaliação não é dívida
+(`totalPagoPix`).
+
+#### Comissão dobrada — DOIS requisitos
+
+Batidos os dois, o operador recebe **de novo** o que já fez de comissão (fez
+R$ 100,00, leva R$ 200,00). Em `calcularDobraComissao`:
+
+| # | Requisito | Base de contagem |
+|---|---|---|
+| 1 | **18 acordos** Pix no mês (`PIX_META_ACORDOS_DOBRA`) | acordos **feitos** (pendente + aprovado) |
+| 2 | **meta de recebimento** do mês batida | recebido no mês, pelo analítico |
+
+Dois detalhes que não podem ser "simplificados":
+
+- as réguas são **diferentes de propósito**. A dobra incide sobre a comissão
+  **aprovada** (é a que existe de fato), mas o contador de acordos usa os
+  **feitos** — a quantidade é trabalho do operador, e ele não controla quando o
+  líder avalia. Com uma régua só, quem fechou 18 veria "12/18" porque a fila de
+  aprovação atrasou;
+- **sem meta definida no mês, não dobra.** O requisito 2 fica em aberto
+  (`metaDefinida: false`). Prometer dobra sem ter contra o que comparar era o
+  defeito da versão anterior, que tratava os 18 acordos como a regra inteira.
+
+O selo no ranking do setor diz **REQUISITO**, não "dobrou": aquela tela conhece
+os 18 acordos, mas não a meta de recebimento de cada um (`requisitoAcordosOk`).
+
+#### Desaprovado tem prazo — e devolve o NR
+
+Migration `20260809a`:
+
+1. desaprovar **notifica o operador** (trigger `fn_pix_notifica_desaprovacao`),
+   dizendo o prazo. Só na transição de status — sem o `IS DISTINCT FROM`,
+   qualquer update posterior renotificaria o mesmo fato;
+2. o desaprovado vive **2 dias úteis** a partir de `avaliado_em` e depois é
+   excluído por `fn_pix_expurga_desaprovados`. **Não há job agendado**: a função
+   é chamada ao abrir a aba (`expurgarDesaprovadosVencidos`). Linha sem
+   `avaliado_em` nunca é tocada — sem data não há de quando contar;
+3. excluir um desaprovado (pelo operador, pelo líder ou pelo expurgo) **libera o
+   NR**. Antes, `fn_pix_nr_apos_delete` só apagava o registro `pendente`; o
+   `recusado` ficava e travava o NR para sempre. A recusa é do acordo *daquela
+   pessoa*, não do NR. `validado` continua para sempre — esse virou dinheiro.
+
+> O prazo conta **só sábado e domingo** como não-úteis; feriado não entra, no
+> banco nem no front. É deliberado: a tabela de feriados é por tenant e por mês
+> (`metas_config_mes`) e não estaria disponível para a função do banco. Errar um
+> feriado adia a exclusão em um dia; **discordar do banco** mostraria ao operador
+> um prazo diferente do que vai acontecer.
+
+#### Metas de Pix por equipe
+
+A meta do **setor é a soma** das metas das equipes, nunca um valor digitado à
+parte (`calcularMetaPixPorEquipe`) — com dois lugares para a mesma verdade, um
+fica velho na primeira alteração. Acordo de operador sem equipe conhecida entra
+no total do setor e em nenhuma equipe.
+
+O painel de meta do Pix **não toca no recebimento**: o valor do Pix já entra no
+recebimento pelo analítico, e somar aqui contaria o mesmo dinheiro duas vezes.
+
 ### 13.3 Campanha Fácil `[BP]`
 
 Transforma exportações do sistema (mailing CSV/TXT, relatórios 245 ou 247 em
@@ -838,6 +918,7 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | Analítico | `src/services/analitico/` |
 | Recebimento diário | `src/services/diario/` |
 | Dias úteis, quartis, metas | `src/lib/diasUteis.ts`, `src/services/metas/` |
+| Pix Automático: dobra, prazo, ranking, metas | `src/pages/Acordos/pixAutomaticoView.ts`, `src/services/pix_automatico.service.ts` |
 | Equipes: líderes e clones | `src/services/equipes/` |
 | RLS de acordos | `supabase/migrations/20260723f_acordos_rls_fail_closed.sql` |
 | RPCs de transferência | `supabase/migrations/20260728a_transferencia_acordo_rpc.sql` |
@@ -861,10 +942,13 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | `20260728b` | Fim do CPF · `cliente_codigo` (**destrutiva**) |
 | `20260729a` | Performance: RLS InitPlan em analítico/diário + índice `(empresa_id, data_pagamento)` |
 | `20260729b` | Performance: agregado do dashboard em um único JSONB (`fn_analitico_dashboard_mes_json`) |
+| `20260805b` | Acordo com entrada `[BP]` (`valor_entrada`) |
+| `20260809a` | Pix: prazo do desaprovado, NR liberado na exclusão, UNIQUE da meta por equipe |
+| `20260809b` | Analítico: `super_admin` fora do resumo; agrupamento pelo perfil, não pela grafia do login |
 
 > O **status de aplicação** de cada migration no Supabase é controlado fora do
 > repositório. A presença do arquivo aqui não garante que ela rodou em produção.
 
 ---
 
-*Última revisão: 2026-07-29.*
+*Última revisão: 2026-08-09.*
