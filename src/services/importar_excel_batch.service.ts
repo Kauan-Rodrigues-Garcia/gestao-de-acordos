@@ -188,13 +188,30 @@ export async function processarImportacaoEmLote(
   }
 
   // Insert em lote dos 'novo'/'disponivel'.
+  //
+  // Se o lote inteiro falhar, reinsere LINHA A LINHA. Desde a trava do NR no
+  // banco (migration 20260809d), uma única linha cujo NR foi tabulado por
+  // outro operador entre a classificação e a gravação derruba o INSERT
+  // inteiro — e sem este retry as outras 49 linhas boas iriam junto. Assim só
+  // a linha conflitante é reportada, com o número da linha da planilha.
   for (let i = 0; i < paraInserirSimples.length; i += BATCH) {
-    const lote = paraInserirSimples.slice(i, i + BATCH).map(p => p.registro) as AcordoInsert[];
+    const fatia = paraInserirSimples.slice(i, i + BATCH);
+    const lote  = fatia.map(p => p.registro) as AcordoInsert[];
     const { error, data } = await supabase.from('acordos').insert(lote).select('id');
-    if (error) {
-      resultado.erros.push(`Lote ${Math.floor(i / BATCH) + 1}: ${error.message}`);
-    } else {
+    if (!error) {
       resultado.inseridos += data?.length ?? lote.length;
+      continue;
+    }
+
+    for (const p of fatia) {
+      const { error: errLinha } = await supabase
+        .from('acordos')
+        .insert(p.registro as AcordoInsert);
+      if (errLinha) {
+        resultado.erros.push(`Linha ${p.linhaOriginal}: ${errLinha.message}`);
+      } else {
+        resultado.inseridos += 1;
+      }
     }
   }
 

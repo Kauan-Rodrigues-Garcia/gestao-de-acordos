@@ -102,6 +102,7 @@ vi.mock('@/lib/supabase', () => ({
 // Importa o SUT depois do vi.mock.
 import {
   verificarNrRegistro,
+  mensagemErroNr,
   registrarNr,
   transferirNr,
   liberarNr,
@@ -127,6 +128,23 @@ describe('verificarNrRegistro', () => {
     const result2 = await verificarNrRegistro('   ', 'emp1', 'nr_cliente');
     expect(result2).toBeNull();
     expect(calls).toHaveLength(0);
+  });
+
+  // ── Falha FECHADO ─────────────────────────────────────────────────────────
+  // O erro da query era DESCARTADO e a função devolvia null, que quem chama lê
+  // como "NR livre". Uma instabilidade de rede virava tabulação duplicada sem
+  // autorização — um portão que abre ao falhar. Agora lança, e quem chama
+  // bloqueia o salvamento.
+  it('LANÇA quando a consulta falha — nunca devolve "livre" por erro', async () => {
+    nextResult = { data: null, error: { message: 'network error' } };
+    await expect(verificarNrRegistro('777', 'emp1', 'nr_cliente'))
+      .rejects.toThrow(/NR_VERIFICACAO_FALHOU/);
+  });
+
+  it('o erro lançado carrega a causa original, para o log dizer o que houve', async () => {
+    nextResult = { data: null, error: { message: 'timeout de conexão' } };
+    await expect(verificarNrRegistro('777', 'emp1', 'nr_cliente'))
+      .rejects.toThrow(/timeout de conexão/);
   });
 
   it('retorna null quando não há conflito (data vazio)', async () => {
@@ -393,5 +411,30 @@ describe('verificarNrsEmLote', () => {
     });
     expect(m.get('888')?.operadorNome).toBe('Operador desconhecido');
     expect(m.get('999')).toBeUndefined();
+  });
+});
+
+// ── mensagemErroNr ──────────────────────────────────────────────────────────
+// Traduz os dois erros do fluxo de NR. Existe para as três telas (cadastro
+// inline, formulário, edição) não escreverem três versões da mesma frase — foi
+// assim que as regras divergiram da primeira vez.
+
+describe('mensagemErroNr', () => {
+  it('recusa do banco: reaproveita a frase da migration, sem o marcador', () => {
+    const erro = new Error('NR_JA_REGISTRADO: o NR "777" já está tabulado por Maria. Recarregue a lista.');
+    const msg = mensagemErroNr(erro);
+    expect(msg).toContain('já está tabulado por Maria');
+    expect(msg).not.toContain('NR_JA_REGISTRADO');
+  });
+
+  it('verificação falhou: diz explicitamente que NÃO salvou', () => {
+    const msg = mensagemErroNr(new Error('NR_VERIFICACAO_FALHOU: network error'), 'Código');
+    expect(msg).toMatch(/NÃO foi salvo/);
+    expect(msg).toContain('Código');
+  });
+
+  it('erro alheio devolve null — quem chama mostra a mensagem dele', () => {
+    expect(mensagemErroNr(new Error('qualquer outra coisa'))).toBeNull();
+    expect(mensagemErroNr(null)).toBeNull();
   });
 });

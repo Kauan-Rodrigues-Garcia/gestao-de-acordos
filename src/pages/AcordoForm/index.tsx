@@ -18,7 +18,7 @@ import { criarNotificacao }  from '@/services/notificacoes.service';
 import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
-import { verificarNrRegistro }      from '@/services/nr_registros.service';
+import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   operadorEstaDesligado, transferirAcordoDeDesligado,
   transferirAcordoNoServidor, mensagemErroTransferencia,
@@ -533,7 +533,10 @@ export default function AcordoForm() {
       navigate(isPP ? ROUTE_PATHS.DASHBOARD : ROUTE_PATHS.ACORDOS);
     } catch (e) {
       console.error('[AcordoForm] unexpected:', e);
-      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+      // Verificação de NR que falhou (nada foi salvo) ou NR tomado por outro
+      // operador no meio do caminho — os dois precisam de frase própria.
+      const doNr = mensagemErroNr(e, isPP ? 'Código' : 'NR');
+      toast.error(doNr ?? (e instanceof Error ? e.message : 'Erro inesperado'), doNr ? { duration: 7000 } : undefined);
     } finally {
       setLoading(false);
     }

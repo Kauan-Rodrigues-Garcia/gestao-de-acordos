@@ -18,7 +18,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
-import { verificarNrRegistro, registrarNr } from '@/services/nr_registros.service';
+import { verificarNrRegistro, registrarNr, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -228,8 +228,17 @@ export function AcordoEditInline({
           }
         } catch (e) {
           console.warn('[AcordoEditInline] falha ao verificar nr_registros', e);
-          // Em caso de falha na verificação, NÃO bloqueia — mas avisa.
-          toast.warning('Não foi possível validar duplicidade de NR/Código. Salvando mesmo assim.');
+          // BLOQUEIA. Antes, falha na verificação salvava assim mesmo — o que
+          // transformava uma instabilidade de rede numa tabulação duplicada
+          // sem autorização. Um portão que abre ao falhar não é um portão.
+          const label = isPaguePlay ? 'Código' : 'NR';
+          toast.error(
+            mensagemErroNr(e, label)
+              ?? `Não foi possível verificar se este ${label} já está tabulado. `
+               + 'O acordo NÃO foi salvo — verifique a conexão e tente de novo.',
+            { duration: 7000 },
+          );
+          return;
         }
       }
     }

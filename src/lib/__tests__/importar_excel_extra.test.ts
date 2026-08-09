@@ -111,4 +111,36 @@ describe('forcarClassificacaoExtra', () => {
     const [c] = forcarClassificacaoExtra([original], new Set([10]), OP);
     expect(c).toEqual(original);
   });
+
+  // ── A aba EXTRA não é passe livre ─────────────────────────────────────────
+  // O portão da aba é "quem IMPORTA tem a lógica ativa" — o dono do NR não era
+  // consultado. Com os dois lados tendo a lógica (CASO C) a regra exige líder,
+  // e a versão anterior carimbava precisaAutorizacao:false em tudo, passando
+  // por cima do classificador.
+  it('CASO C (dono também tem a lógica): mantém a exigência de autorização', () => {
+    const dono = { acordoId: 'a1', operadorId: 'outro', operadorNome: 'Outro' };
+    const [c] = forcarClassificacaoExtra(
+      [base(10, { categoria: 'duplicado', donoAtual: dono, donoTemLogica: true, precisaAutorizacao: true })],
+      new Set([10]), OP,
+    );
+    expect(c.categoria).toBe('extra');
+    expect(c.precisaAutorizacao).toBe(true);
+  });
+
+  it('CASO A (dono NÃO tem a lógica): dispensa o líder, como manda a regra', () => {
+    const dono = { acordoId: 'a1', operadorId: 'outro', operadorNome: 'Outro' };
+    const [c] = forcarClassificacaoExtra(
+      [base(10, { categoria: 'duplicado', donoAtual: dono, donoTemLogica: false })],
+      new Set([10]), OP,
+    );
+    expect(c.precisaAutorizacao).toBe(false);
+  });
+
+  it('extra órfão nunca exige autorização — não há de quem tomar nada', () => {
+    const [c] = forcarClassificacaoExtra(
+      [base(10, { donoTemLogica: true })], new Set([10]), OP,
+    );
+    expect(c.donoAtual).toBeUndefined();
+    expect(c.precisaAutorizacao).toBe(false);
+  });
 });

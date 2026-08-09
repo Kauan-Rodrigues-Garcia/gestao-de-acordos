@@ -45,6 +45,36 @@ export interface NrConflito {
  * Verifica se um NR está registrado e vinculado a algum operador.
  * Retorna null se livre, ou NrConflito se ocupado.
  */
+/** A verificação de NR não pôde ser feita (rede/banco) — ver `verificarNrRegistro`. */
+export const ERRO_NR_VERIFICACAO = 'NR_VERIFICACAO_FALHOU';
+/** O banco recusou a gravação porque o NR é de outro operador (migration 20260809d). */
+export const ERRO_NR_JA_REGISTRADO = 'NR_JA_REGISTRADO';
+
+/**
+ * Traduz os erros do fluxo de NR para uma frase que o operador entende.
+ * Devolve `null` quando o erro não é de NR — aí quem chama mostra o dele.
+ *
+ * Existe porque os dois erros aparecem nos mesmos três lugares (cadastro
+ * inline, formulário e edição), e cada um escrevendo a própria versão foi como
+ * as regras divergiram da primeira vez.
+ */
+export function mensagemErroNr(e: unknown, label = 'NR'): string | null {
+  const txt = e instanceof Error ? e.message : String(e ?? '');
+
+  if (txt.includes(ERRO_NR_JA_REGISTRADO)) {
+    // A mensagem do banco já vem pronta e nomeia o dono; só tiramos o marcador.
+    const limpa = txt.split(`${ERRO_NR_JA_REGISTRADO}:`)[1]?.trim();
+    return limpa || `Este ${label} acabou de ser tabulado por outro operador. Recarregue a lista.`;
+  }
+
+  if (txt.includes(ERRO_NR_VERIFICACAO)) {
+    return `Não foi possível verificar se este ${label} já está tabulado. `
+         + 'O acordo NÃO foi salvo — verifique a conexão e tente de novo.';
+  }
+
+  return null;
+}
+
 export async function verificarNrRegistro(
   nrValue:   string,
   empresaId: string,
@@ -66,7 +96,19 @@ export async function verificarNrRegistro(
     query = query.neq('acordo_id', acordoIdExcluir);
   }
 
-  const { data } = await query;
+  const { data, error } = await query;
+
+  // Falha FECHADO. Antes o `error` era descartado e a função devolvia `null`,
+  // que quem chama lê como "NR livre" — um portão que, ao falhar, abre. Uma
+  // instabilidade de rede bastava para dois operadores tabularem o mesmo NR
+  // sem passar por autorização nenhuma.
+  //
+  // Lançar (em vez de devolver um estado novo) mantém a assinatura que os
+  // chamadores e os testes já usam, e obriga cada um a tratar explicitamente.
+  if (error) {
+    throw new Error(`NR_VERIFICACAO_FALHOU: ${error.message}`);
+  }
+
   if (!data || data.length === 0) return null;
 
   const item = data[0] as NrRegistro;

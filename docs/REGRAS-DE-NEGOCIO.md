@@ -449,6 +449,32 @@ Unicidade: `(empresa_id, nr_value, campo)`. Operações em
 
 O registro é **liberado** quando o acordo é excluído ou marcado como `nao_pago`.
 
+#### A trava vive no banco, não no navegador (migration `20260809d`)
+
+Até 2026-08-09 a regra inteira era do cliente, e o banco **ajudava a furá-la**:
+o trigger resolvia conflito com `ON CONFLICT DO UPDATE`, ou seja, o segundo
+DIRETO a chegar simplesmente roubava o registro do primeiro, em silêncio.
+Bastava a janela entre a consulta e o INSERT — dois operadores tabulando o mesmo
+NR nos mesmos segundos consultam antes de qualquer um gravar, e os dois veem
+"livre". Foi assim que dois operadores **sem** a lógica Direto/Extra tabularam
+o mesmo acordo.
+
+Hoje o trigger **recusa** (`RAISE EXCEPTION NR_JA_REGISTRADO`) quando o NR já
+pertence a outro operador. Três detalhes que fazem isso conviver com o que já
+existia:
+
+- **mesmo operador continua re-apontando** o próprio NR — é o que mantém o
+  parcelamento no mesmo grupo funcionando (seção 9.3);
+- **registro órfão não trava ninguém**: só há conflito se o acordo daquele
+  registro ainda existir;
+- os fluxos que **legitimamente** trocam o dono (autorização de líder, CASO B,
+  dono desligado) liberam o NR **antes** de inserir — por `DELETE` do acordo ou
+  por `fn_converter_para_extra` — então passam sem alteração.
+
+A checagem do cliente continua existindo: é ela que dá a mensagem boa e abre o
+fluxo de autorização. Ela deixou de ser a única — e **passou a falhar fechado**:
+erro na consulta agora bloqueia o salvamento em vez de tratar como "NR livre".
+
 ### 7.2 Status e tipos
 
 | Status | Rótulo `[BP]` | Rótulo `[PP]` |
@@ -909,6 +935,7 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | Gate de rotas | `src/components/ProtectedRoute.tsx`, `src/App.tsx` |
 | Fluxo de conflito de tabulação | `src/pages/AcordoForm/index.tsx`, `src/components/AcordoNovoInline/index.tsx` |
 | Titularidade de NR/Código | `src/services/nr_registros.service.ts` |
+| Trava do NR no banco (recusa + par do vínculo) | `supabase/migrations/20260809d_nr_trava_no_banco.sql` |
 | Direto/Extra (config e resolução) | `src/services/direto_extra.service.ts` |
 | Quebra do par ao excluir | `src/services/tratarExclusaoVinculo.ts` |
 | Desligamento e transferência | `src/services/desligamento.service.ts`, `src/services/situacaoUsuario.service.ts` |
@@ -945,10 +972,12 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | `20260805b` | Acordo com entrada `[BP]` (`valor_entrada`) |
 | `20260809a` | Pix: prazo do desaprovado, NR liberado na exclusão, UNIQUE da meta por equipe |
 | `20260809b` | Analítico: `super_admin` fora do resumo; agrupamento pelo perfil, não pela grafia do login |
+| `20260809c` | Despedida do pet (`perfis.pet_despedida`) |
+| `20260809d` | **Trava do NR no banco**: trigger recusa em vez de reatribuir · `fn_sync_par_vinculo` acha o par pelo vínculo |
 
 > O **status de aplicação** de cada migration no Supabase é controlado fora do
 > repositório. A presença do arquivo aqui não garante que ela rodou em produção.
 
 ---
 
-*Última revisão: 2026-08-09.*
+*Última revisão: 2026-08-09 (trava do NR no banco).*

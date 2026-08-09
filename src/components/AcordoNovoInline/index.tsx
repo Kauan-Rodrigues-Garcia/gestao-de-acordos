@@ -25,7 +25,7 @@ import { criarNotificacao }    from '@/services/notificacoes.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { resolverEmailDeLogin } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
-import { verificarNrRegistro }      from '@/services/nr_registros.service';
+import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
   operadorEstaDesligado, transferirAcordoDeDesligado,
   transferirAcordoNoServidor, mensagemErroTransferencia,
@@ -540,6 +540,14 @@ export function AcordoNovoInline({
               : parcelas > 1 ? `Acordo criado! ${parcelas} parcelas negociadas.` : 'Acordo criado com sucesso!',
         );
       }
+    } catch (e) {
+      // Os dois erros do fluxo de NR chegam aqui e precisam de frase própria:
+      // a verificação que não pôde ser feita (falha FECHADO, nada foi salvo) e
+      // a recusa do banco quando outro operador registrou o NR no meio do
+      // caminho (migration 20260809d). Sem isto o operador via um erro cru de
+      // Postgres e não sabia que podia simplesmente recarregar.
+      const doNr = mensagemErroNr(e, isPaguePlay ? 'Código' : 'NR');
+      toast.error(doNr ?? (e instanceof Error ? e.message : 'Erro inesperado ao salvar o acordo.'), { duration: 7000 });
     } finally {
       setSalvando(false);
     }

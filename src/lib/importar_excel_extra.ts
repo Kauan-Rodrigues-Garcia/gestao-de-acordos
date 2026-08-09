@@ -73,6 +73,18 @@ export function marcarAba(
  *  - Caso contrário (sem dono, ou dono é o próprio operador) → extra órfão,
  *    sem vínculo.
  * As demais linhas (aba DIRETO) permanecem com a classificação original.
+ *
+ * ## O que esta função NÃO pode fazer
+ *
+ * Ela não decide autorização — só a forma do vínculo. A versão anterior
+ * carimbava `precisaAutorizacao: false` em TODAS as linhas da aba, passando
+ * por cima do classificador. O portão da aba é "quem importa tem a lógica
+ * ativa", e o dono do NR não era consultado: com os dois lados tendo a lógica
+ * (CASO C), o classificador exigia líder e a aba EXTRA liberava assim mesmo.
+ *
+ * Agora a exigência do classificador é preservada. Só cai para `false` o que
+ * de fato é Caso A (eu tenho a lógica, o dono não) ou extra órfão — os dois
+ * casos em que a regra de negócio dispensa o líder.
  */
 export function forcarClassificacaoExtra(
   classif: ClassificacaoNR[],
@@ -84,12 +96,15 @@ export function forcarClassificacaoExtra(
     const donoOutro = c.donoAtual && c.donoAtual.operadorId !== operadorAtualId
       ? c.donoAtual
       : undefined;
+    // Sem dono de outro operador não há de quem tomar nada: extra órfão passa.
+    // Com dono, o líder só é dispensado quando o dono NÃO tem a lógica ativa.
+    const precisaAutorizacao = donoOutro ? c.donoTemLogica === true : false;
     return {
       ...c,
-      categoria:          'extra',
-      donoAtual:          donoOutro,
-      operadorTemLogica:  true,
-      precisaAutorizacao: false,
+      categoria:         'extra',
+      donoAtual:         donoOutro,
+      operadorTemLogica: true,
+      precisaAutorizacao,
     };
   });
 }
