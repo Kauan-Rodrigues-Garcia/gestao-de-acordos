@@ -43,7 +43,7 @@ UPDATE public.perfis p SET pet_despedida = 'pendente'
 | Valor | Quem é | O que vê |
 |---|---|---|
 | `'pendente'` | já tinha logado quando a migration rodou | pet normal **+ card de despedida** |
-| `'concluida'` | clicou "Até logo" | nada — o pet some de vez |
+| `'concluida'` | já dispensou o card de despedida | nada — o pet some de vez |
 | `null` | criado e nunca acessou, ou criado depois | nada — o pet nunca existiu |
 
 Quem nunca entrou fica `null` porque o `UPDATE` não o alcança; quem for criado
@@ -124,11 +124,33 @@ cartão de 380px arredondado, `PetAura` no cabeçalho com humor `feliz`.
 Não menciona a votação nem promete data: o novo jogo ainda está sendo desenhado,
 e prometer prazo num card de despedida é dívida que alguém vai cobrar.
 
-**Um botão só: "Até logo".** Sem "talvez depois". A ausência da segunda opção é
-o que garante que a despedida aconteça — é porta de mão única.
+**Um botão só: "Até logo".** Sem "talvez depois".
 
-Quem fechar a aba sem clicar continua `'pendente'` e vê o card na próxima
-sessão. É deliberado: o objetivo é que ninguém perca a despedida.
+### Fechar de qualquer jeito é se despedir
+
+**Todo caminho de fechar o card dispara a despedida** — não existe saída que
+adie. São quatro gatilhos para uma ação só:
+
+| Gatilho | Resultado |
+|---|---|
+| botão "Até logo" | despedida |
+| clique no backdrop (fora do card) | despedida |
+| botão X | despedida |
+| tecla `Esc` | despedida |
+
+Todos chamam o mesmo `despedir()`. Não há handler de "fechar sem fazer nada".
+
+Isso é mais simples do que ter dois caminhos, e resolve o furo da versão
+anterior: com um "fechar" neutro, quem clicasse fora todo dia nunca se
+despediria e veria o mesmo card para sempre. O pet vai embora de qualquer forma
+— então todo jeito de dispensar o card deve entregar o adeus, não adiá-lo.
+
+O `Esc` entra na lista por coerência: é um jeito de fechar como qualquer outro,
+e deixá-lo de fora criaria justamente a porta dos fundos que se quer eliminar.
+
+O único caso que **não** completa é fechar a aba ou navegar para fora — aí nada
+é gravado, o usuário continua `'pendente'` e o card volta na próxima sessão.
+Não dá para interceptar isso de forma confiável, e o comportamento é o desejado.
 
 ### A ordem de operações (a parte que erra fácil)
 
@@ -138,17 +160,17 @@ O caminho óbvio — gravar no banco e chamar `refreshPerfil()` na hora, como fa
 
 A ordem correta, com o widget dono da própria saída:
 
-1. clique → grava `pet_despedida = 'concluida'` (**sem** `refreshPerfil`) →
-   card fecha → dispara `despedirPet()`;
+1. qualquer um dos quatro gatilhos → grava `pet_despedida = 'concluida'`
+   (**sem** `refreshPerfil`) → card fecha → dispara `despedirPet()`;
 2. o widget liga `saindo = true`, que **sobrepõe o gate** — nenhuma
    re-renderização o desmonta no meio da animação;
 3. terminada a animação, o widget chama `refreshPerfil()` e aí sim desmonta.
 
-### Por que gravar no clique, e não no fim da animação
+### Por que gravar ao fechar, e não no fim da animação
 
 Se a gravação dependesse da animação completar, um defeito que a impedisse de
 terminar deixaria o usuário preso vendo o mesmo card em toda sessão, para
-sempre. Gravando no clique, o pior caso é alguém fechar a aba no meio e perder a
+sempre. Gravando ao fechar, o pior caso é alguém fechar a aba no meio e perder a
 animação — tendo já dado o adeus.
 
 Falha de rede na gravação mantém `'pendente'`: o card volta na próxima sessão,
@@ -182,7 +204,7 @@ quartinho se estiver aberto → aceno ~1,2 s → caminhada para fora ~1,6 s → 
 
 - **pet minimizado** — a preferência `usePetMinimizado` deixa só um ícone
   parado no canto. A despedida ignora o minimizado temporariamente; sem isso a
-  pessoa clica "Até logo" e não acontece nada visível.
+  pessoa dispensa o card e não acontece nada visível.
 - **pet dormindo** — o ciclo teaser de 5 min dormindo / 5 min acordado vale para
   todos os cargos que não são admin. O pet acorda para se despedir.
 
