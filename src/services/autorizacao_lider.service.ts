@@ -9,12 +9,19 @@
  *   1. fetch para /auth/v1/token?grant_type=password (não polui a sessão do
  *      operador logado).
  *   2. fetch para /rest/v1/perfis?id=eq.{uid} para verificar o perfil.
- *   3. Verifica se o perfil está na lista de perfis autorizadores (lider,
- *      elite, gerencia, administrador, super_admin) — uniformizando com
- *      `isPerfilAdminOuLider` da lib (que já inclui elite/gerencia).
+ *   3. Verifica o cargo contra `PERFIS_AUTORIZADORES` (lib/index), que espelha
+ *      a checagem do servidor em `fn_transferir_acordo_nr`.
+ *
+ * ## Este é o único caminho de autorização
+ *
+ * `AcordoNovoInline` e `AcordoForm` tinham cópias inline deste mesmo fluxo, e
+ * as cópias divergiram: o AcordoForm aceitava só `lider/administrador/
+ * super_admin` (barrando elite, gerência e diretoria) e nem resolvia
+ * usuário→e-mail, então o mesmo líder conseguia autorizar numa tela e era
+ * recusado na outra. Quem precisar autenticar um líder chama daqui.
  */
 
-import { isPerfilAdminOuLider } from '@/lib/index';
+import { podeAutorizarTabulacao, PERFIL_LABELS } from '@/lib/index';
 
 /**
  * Resolve um identificador de login (USUÁRIO ou e-mail) para o e-mail de
@@ -148,11 +155,17 @@ export async function autenticarLider(params: {
     return { ok: false, erro: 'Perfil do líder não encontrado' };
   }
 
-  // 3. Verificar se o perfil é autorizador (inclui elite e gerencia).
-  if (!isPerfilAdminOuLider(liderPerfil.perfil)) {
+  // 3. Verificar se o cargo pode autorizar.
+  //
+  // `PERFIS_AUTORIZADORES` espelha a checagem do servidor cargo a cargo. Antes
+  // isto usava `isPerfilAdminOuLider`, que inclui `ouvidoria` (o servidor
+  // recusa) e deixa `diretoria` de fora (o servidor aceita) — ou seja, aprovava
+  // quem seria barrado depois e barrava quem tinha direito.
+  if (!podeAutorizarTabulacao(liderPerfil.perfil)) {
     return {
       ok: false,
-      erro: 'O usuário informado não tem permissão de líder/elite/gerência/administrador',
+      erro: `O cargo "${PERFIL_LABELS[liderPerfil.perfil] ?? liderPerfil.perfil}" não tem permissão para autorizar tabulações. `
+          + 'É necessário líder, elite, gerência, diretoria ou administrador.',
     };
   }
 

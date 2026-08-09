@@ -114,6 +114,37 @@ export function isPerfilAdminOuLider(perfil: string): boolean {
   return isPerfilAdmin(perfil) || isPerfilLider(perfil);
 }
 
+/**
+ * Quem pode AUTORIZAR uma tabulação (transferir NR, trocar vínculo EXTRA,
+ * liberar duplicados na importação) digitando usuário e senha.
+ *
+ * ⚠️ Esta lista espelha, cargo a cargo, a checagem do servidor em
+ * `fn_transferir_acordo_nr` (migration `20260728a`). Os dois lados precisam
+ * mudar juntos: divergir aqui foi exatamente o defeito de 2026-08-09, quando
+ * existiam QUATRO listas diferentes para a mesma pergunta —
+ *
+ *   • `AcordoForm`            → só lider/administrador/super_admin
+ *   • `AcordoNovoInline`      → `isPerfilAdminOuLider` (com ouvidoria, sem diretoria)
+ *   • `autorizacao_lider`     → idem
+ *   • RPC no servidor         → com diretoria, sem ouvidoria
+ *
+ * O resultado é que gerência e elite eram recusadas numa tela e aceitas em
+ * outra, e a diretoria não conseguia autorizar em lugar nenhum.
+ *
+ * NÃO use `isPerfilAdminOuLider` para isto: ele inclui `ouvidoria` — que é
+ * outra trilha, e o servidor recusa — e deixa `diretoria` de fora.
+ */
+export const PERFIS_AUTORIZADORES = [
+  'lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin',
+] as const;
+
+/** Este cargo pode autorizar uma tabulação? Ver `PERFIS_AUTORIZADORES`. */
+export function podeAutorizarTabulacao(perfil: string | null | undefined): boolean {
+  return PERFIS_AUTORIZADORES.includes(
+    String(perfil ?? '').toLowerCase().trim() as typeof PERFIS_AUTORIZADORES[number],
+  );
+}
+
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 
 /**

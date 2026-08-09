@@ -19,6 +19,7 @@ import { enviarParaLixeira }  from '@/services/lixeira.service';
 // nr_registros é gerenciado pelo trigger trg_sync_nr_registros (v2) no banco
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
+import { autenticarLider } from '@/services/autorizacao_lider.service';
 import {
   operadorEstaDesligado, transferirAcordoDeDesligado,
   transferirAcordoNoServidor, mensagemErroTransferencia,
@@ -549,35 +550,20 @@ export default function AcordoForm() {
     setAutorizando(true);
     const uid = perfilLocal?.id ?? user?.id ?? '';
     try {
-      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL as string;
-      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      // Um caminho só de autenticação (autorizacao_lider.service). A cópia
+      // inline que morava aqui era a mais restritiva das quatro: aceitava
+      // apenas lider/administrador/super_admin — barrando elite, gerência e
+      // diretoria — e passava o texto digitado direto ao GoTrue, então o líder
+      // que digitasse o próprio USUÁRIO (como faz no login) levava
+      // "credenciais inválidas" mesmo com a senha certa.
+      const auth = await autenticarLider({ email: liderEmail, senha: liderSenha });
+      // `'erro' in auth` e não `!auth.ok`: com `strict: false` o TS não estreita
+      // união por discriminante booleano. É o mesmo idioma de parcelas.service.
+      if ('erro' in auth) { toast.error(auth.erro); return; }
 
-      const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': supabaseAnon },
-        body: JSON.stringify({ email: liderEmail, password: liderSenha }),
-      });
-      if (!authRes.ok) {
-        const s = authRes.status;
-        toast.error(s === 400 || s === 401 || s === 422 ? 'Credenciais do líder inválidas' : `Erro ao autenticar líder (${s})`);
-        return;
-      }
-      const authData   = await authRes.json();
-      const liderUid   = authData.user?.id as string | undefined;
-      const liderToken = authData.access_token as string | undefined;
-      if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
-
-      const perfilRes = await fetch(
-        `${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`,
-        { headers: { 'apikey': supabaseAnon, 'Authorization': `Bearer ${liderToken}` } }
-      );
-      if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
-      const perfilArr   = await perfilRes.json();
-      const liderPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
-      if (!liderPerfil || !['lider', 'administrador', 'super_admin'].includes(liderPerfil.perfil)) {
-        toast.error('O usuário informado não tem permissão de líder ou administrador');
-        return;
-      }
+      const liderUid    = auth.autorizador.uid;
+      const liderToken  = auth.autorizador.token;
+      const liderPerfil = { perfil: auth.autorizador.perfil, nome: auth.autorizador.nome };
 
       const labelNR    = isPP ? 'Código' : 'NR';
       const nrLogLabel = ((isPP ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';

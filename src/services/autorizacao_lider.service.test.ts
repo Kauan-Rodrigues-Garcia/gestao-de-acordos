@@ -133,3 +133,64 @@ describe('autenticarLider', () => {
     expect(res.ok).toBe(false);
   });
 });
+
+// ── A lista de autorizadores tem que bater com a do servidor ─────────────────
+//
+// Existiam QUATRO listas para a mesma pergunta e elas divergiam: gerência e
+// elite eram recusadas no AcordoForm e aceitas no AcordoNovoInline, a diretoria
+// não conseguia autorizar em lugar nenhum (o servidor aceita) e a ouvidoria
+// passava no cliente para ser recusada pelo servidor depois. Daí "alguns
+// líderes conseguem, outros não".
+//
+// `PERFIS_AUTORIZADORES` (lib/index) espelha `fn_transferir_acordo_nr`
+// (migration 20260728a) cargo a cargo. Estes testes são a trava.
+
+function mockAuthComPerfil(perfil: string) {
+  global.fetch = vi.fn()
+    .mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => ({ user: { id: 'abc' }, access_token: 'tk' }),
+    })
+    .mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => [{ perfil, nome: `Fulano ${perfil}` }],
+    }) as unknown as typeof fetch;
+}
+
+describe('autenticarLider — cargos aceitos espelham o servidor', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  // O servidor aceita estes seis em fn_transferir_acordo_nr.
+  for (const cargo of ['lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin']) {
+    it(`aceita "${cargo}"`, async () => {
+      mockAuthComPerfil(cargo);
+      const res = await autenticarLider({ email: 'x@test.com', senha: 'senha' });
+      expect(res.ok).toBe(true);
+    });
+  }
+
+  it('aceita diretoria — o servidor aceita, e o cliente recusava', async () => {
+    mockAuthComPerfil('diretoria');
+    const res = await autenticarLider({ email: 'dir@test.com', senha: 'senha' });
+    expect(res.ok).toBe(true);
+  });
+
+  it('recusa ouvidoria — o cliente aceitava e o servidor recusava depois', async () => {
+    mockAuthComPerfil('ouvidoria');
+    const res = await autenticarLider({ email: 'ouv@test.com', senha: 'senha' });
+    expect(res.ok).toBe(false);
+  });
+
+  it('recusa operador', async () => {
+    mockAuthComPerfil('operador');
+    const res = await autenticarLider({ email: 'op@test.com', senha: 'senha' });
+    expect(res.ok).toBe(false);
+  });
+
+  it('a recusa nomeia o cargo, para o líder saber por que foi barrado', async () => {
+    mockAuthComPerfil('operador');
+    const res = await autenticarLider({ email: 'op@test.com', senha: 'senha' });
+    if ('erro' in res) expect(res.erro).toMatch(/Operador/i);
+    else throw new Error('deveria ter recusado');
+  });
+});

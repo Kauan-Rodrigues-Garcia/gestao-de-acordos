@@ -23,7 +23,7 @@ import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
-import { resolverEmailDeLogin } from '@/services/autorizacao_lider.service';
+import { autenticarLider } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
@@ -559,41 +559,17 @@ export function AcordoNovoInline({
 
     setAutorizando(true);
     try {
-      const supabaseUrl  = import.meta.env.VITE_SUPABASE_URL  as string;
-      const supabaseAnon = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      // Um caminho só de autenticação (autorizacao_lider.service). A cópia
+      // inline que morava aqui divergiu da do AcordoForm e da do serviço: o
+      // mesmo líder era aceito numa tela e recusado na outra.
+      const auth = await autenticarLider({ email: liderEmail, senha: liderSenha });
+      // `'erro' in auth` e não `!auth.ok`: com `strict: false` o TS não estreita
+      // união por discriminante booleano. É o mesmo idioma de parcelas.service.
+      if ('erro' in auth) { toast.error(auth.erro); return; }
 
-      // Aceita usuário OU e-mail: o líder digita o próprio usuário (como no
-      // login) e o grant_type=password do GoTrue só aceita e-mail.
-      const liderLogin = await resolverEmailDeLogin(liderEmail);
-
-      const authRes = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', apikey: supabaseAnon },
-        body: JSON.stringify({ email: liderLogin, password: liderSenha }),
-      });
-
-      if (!authRes.ok) {
-        const s = authRes.status;
-        toast.error(s === 400 || s === 401 || s === 422 ? 'Credenciais do líder inválidas' : `Erro ao autenticar líder (${s})`);
-        return;
-      }
-
-      const authData   = await authRes.json() as { user?: { id: string }; access_token?: string };
-      const liderUid   = authData.user?.id;
-      const liderToken = authData.access_token;
-      if (!liderUid || !liderToken) { toast.error('Credenciais do líder inválidas'); return; }
-
-      const perfilRes = await fetch(`${supabaseUrl}/rest/v1/perfis?id=eq.${liderUid}&select=perfil,nome`, {
-        headers: { apikey: supabaseAnon, Authorization: `Bearer ${liderToken}` },
-      });
-      if (!perfilRes.ok) { toast.error('Erro ao verificar perfil do líder'); return; }
-
-      const perfilArr   = await perfilRes.json() as Array<{ perfil: string; nome: string }>;
-      const liderPerfil = Array.isArray(perfilArr) && perfilArr.length > 0 ? perfilArr[0] : null;
-      if (!liderPerfil || !isPerfilAdminOuLider(liderPerfil.perfil)) {
-        toast.error('O usuário informado não tem permissão de líder/elite/gerência/administrador');
-        return;
-      }
+      const liderUid    = auth.autorizador.uid;
+      const liderToken  = auth.autorizador.token;
+      const liderPerfil = { perfil: auth.autorizador.perfil, nome: auth.autorizador.nome };
 
       const labelNR    = isPaguePlay ? 'Código' : 'NR';
       const nrLogLabel = ((isPaguePlay ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
