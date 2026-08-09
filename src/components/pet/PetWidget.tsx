@@ -25,7 +25,8 @@ import {
   lerUltimaComida, salvarUltimaComida,
   type PetHumor, type PetRoupa, type PetCena, type PetMicro, type PetPescaFase,
 } from './petConfig';
-import { PET_EVENTO_COMEMORAR, celebrarPetAcordoPago } from './petEvents';
+import { PET_EVENTO_COMEMORAR, PET_EVENTO_DESPEDIDA, celebrarPetAcordoPago } from './petEvents';
+import { useAuth } from '@/hooks/useAuth';
 import { usePetClima, type PetClima } from './usePetClima';
 import { usePetEstado } from './usePetEstado';
 import { PetAura } from './PetAura';
@@ -51,6 +52,16 @@ const COMEMORACAO_MS = 4_500;
 const COCHILO_MS = 5 * 60_000;
 /** Duração dos balõezinhos de frase contextual. */
 const FRASE_MS = 3_200;
+// ── Despedida (migration 20260809c) ──────────────────────────────────────────
+// O pet acena e vai embora andando pela direita. Ritmo um pouco mais vivo que o
+// passeio normal (VELOCIDADE): é uma saída, não um passeio.
+/** Quanto tempo o pet acena antes de começar a andar. */
+const DESPEDIDA_ACENO_MS = 1_200;
+/** Posição final: à direita o bastante para o pet sair inteiro da tela. */
+const DESPEDIDA_SAIDA_X = 160;
+/** Velocidade da saída (px/s). Mais viva que o passeio: é uma saída, não um passeio. */
+const DESPEDIDA_VELOCIDADE = 110;
+
 /** Escada: altura da subida (px) e deriva pra acompanhar a inclinação. */
 const ESCADA_ALTURA = 230;
 const ESCADA_DERIVA_X = -16;
@@ -141,6 +152,12 @@ export function PetWidget() {
   const estado      = usePetEstado(interativo);
   const { atual: climaAtual, cidade: cidadeClima, setCidade: setCidadeClima } = usePetClima();
 
+  // Guardada em ref porque `refreshPerfil` muda de identidade a cada render —
+  // ver o efeito da despedida, lá embaixo.
+  const { refreshPerfil } = useAuth();
+  const refreshPerfilRef = useRef(refreshPerfil);
+  refreshPerfilRef.current = refreshPerfil;
+
   const [aberto, setAberto] = useState(false);
   const [minimizado, setMinimizado] = usePetMinimizado();
   const [humor,  setHumor]  = useState<PetHumor>('idle');   // modo interativo
@@ -179,6 +196,12 @@ export function PetWidget() {
   const [durY,       setDurY]       = useState(0);
   const [escadaFase, setEscadaFase] = useState<EscadaFase>('nenhuma');
 
+  // ── Despedida: acena e sai andando pela direita ────────────────────────
+  // 'foi' existe para o widget parar de se desenhar no instante em que a
+  // caminhada termina, sem esperar o perfil recarregar do banco.
+  const [saida, setSaida] = useState<'nao' | 'acenando' | 'andando' | 'foi'>('nao');
+  const despedindo = saida === 'acenando' || saida === 'andando';
+
   // Humor efetivo: interativo usa o humor manual; teaser segue o ciclo 5/5.
   // A comemoração passa por cima de tudo (até do sono — boa notícia acorda!).
   // Depois vêm o cochilo por inatividade e as reações ao mouse.
@@ -186,7 +209,11 @@ export function PetWidget() {
     ? humor
     : (acordadoTeaser ? 'idle' : 'dormindo');
   const humorEfetivo: PetHumor =
-    comemorando ? 'comemorando'
+    // A despedida passa por cima de tudo — inclusive do sono do teaser: o pet
+    // acorda para dar tchau, senão metade das pessoas veria um pet dormindo
+    // deslizar para fora da tela.
+    despedindo ? 'feliz'
+    : comemorando ? 'comemorando'
     : humorBase === 'idle' && cochilando ? 'dormindo'
     : humorBase === 'idle' && reacao === 'tonta' ? 'tonta'
     : humorBase === 'idle' && reacao === 'surpresa' ? 'surpresa'
@@ -197,7 +224,11 @@ export function PetWidget() {
     : humorBase === 'idle' && evento === 'marshmallow' ? 'assando'
     : humorBase;
   const cena: PetCena =
-    comemorando ? 'confete'
+    // Acena parado; ao começar a andar o aceno sai (quem vai embora não acena
+    // e caminha ao mesmo tempo).
+    saida === 'acenando' ? 'aceno'
+    : saida === 'andando' ? 'nenhuma'
+    : comemorando ? 'confete'
     : humorBase !== 'idle' ? 'nenhuma'
     : evento === 'borboleta' ? 'borboleta'
     : evento === 'moeda' ? 'moeda'
@@ -259,6 +290,10 @@ export function PetWidget() {
 
   // Passeio aleatório: anda até um ponto, para um tempinho, repete.
   useEffect(() => {
+    // Durante a despedida quem manda em x/movendo é o efeito da saída. Sem sair
+    // ANTES da linha abaixo, o `setMovendo(false)` dela desligaria os passinhos
+    // no meio da caminhada de saída (humorEfetivo vira 'feliz', que não é 'idle').
+    if (despedindo) return;
     if (aberto || humorEfetivo !== 'idle' || emEvento || minimizado) { setMovendo(false); return; }
     let vivo = true;
     const ids: number[] = [];
@@ -285,11 +320,13 @@ export function PetWidget() {
 
     agendar(passeio, 2000 + Math.random() * 3000);
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorEfetivo, emEvento, minimizado]);
+  }, [aberto, humorEfetivo, emEvento, minimizado, despedindo]);
 
   // Eventos aleatórios: sorteia videogame / borboleta / pescaria / dancinha…
   useEffect(() => {
-    if (aberto || humorBase !== 'idle' || comemorando || minimizado || cochilando) { setEvento('nenhum'); return; }
+    // Na despedida os eventos param: a escada mexe em `y` e sortearia uma
+    // subida no meio da saída, levando o pet para cima em vez de para fora.
+    if (despedindo || aberto || humorBase !== 'idle' || comemorando || minimizado || cochilando) { setEvento('nenhum'); return; }
     let vivo = true;
     const ids: number[] = [];
     const agendar = (fn: () => void, ms: number) => {
@@ -308,7 +345,7 @@ export function PetWidget() {
 
     sortearSessao();
     return () => { vivo = false; ids.forEach(clearTimeout); };
-  }, [aberto, humorBase, comemorando, minimizado, cochilando]);
+  }, [aberto, humorBase, comemorando, minimizado, cochilando, despedindo]);
 
   // Coreografia da pescaria: espera → fisgada! → peixe (70%) / escapou / bota
   useEffect(() => {
@@ -437,6 +474,62 @@ export function PetWidget() {
     return () => { vivo = false; ids.forEach(clearTimeout); setFrase(null); };
   }, [aberto, humorBase, emEvento, minimizado, cochilando, interativo, climaAtual.clima]);
 
+  // ── Despedida ──────────────────────────────────────────────────────────
+  // Chega do card (PetDespedida) por CustomEvent: os dois vivem em subárvores
+  // diferentes — o card no Layout, o pet no App.
+  useEffect(() => {
+    const aoDespedir = () => setSaida(s => (s === 'nao' ? 'acenando' : s));
+    window.addEventListener(PET_EVENTO_DESPEDIDA, aoDespedir);
+    return () => window.removeEventListener(PET_EVENTO_DESPEDIDA, aoDespedir);
+  }, []);
+
+  // Coreografia da saída: acena parado → caminha para fora → some.
+  //
+  // Declarado DEPOIS do passeio de propósito: os dois escrevem em x/movendo, e
+  // quem roda por último vence. O passeio também tem um `if (despedindo) return`,
+  // então isto é cinto e suspensório — mas a ordem é a garantia de verdade.
+  useEffect(() => {
+    if (saida === 'nao' || saida === 'foi') return;
+
+    if (saida === 'acenando') {
+      // Limpa o que estivesse acontecendo para o adeus começar do zero.
+      setAberto(false);
+      setEvento('nenhum');
+      setFrase(null);
+      setMovendo(false);
+      setDurMove(0);
+      const t = window.setTimeout(() => setSaida('andando'), DESPEDIDA_ACENO_MS);
+      return () => clearTimeout(t);
+    }
+
+    // Sai pela direita: x positivo, e dir 1 já é "olhando para a direita".
+    //
+    // A duração sai da DISTÂNCIA, como no passeio: o pet pode estar em qualquer
+    // ponto do rodapé quando se despede (o passeio vai até -ALCANCE). Com tempo
+    // fixo, quem estivesse na ponta esquerda sairia voando e quem estivesse no
+    // canto sairia arrastado — o mesmo adeus em duas velocidades.
+    const distancia = DESPEDIDA_SAIDA_X - xRef.current;
+    const dur = distancia / DESPEDIDA_VELOCIDADE;
+
+    setDir(1);
+    setDurMove(dur);
+    setMovendo(true);
+    setX(DESPEDIDA_SAIDA_X);
+    xRef.current = DESPEDIDA_SAIDA_X;
+
+    const t = window.setTimeout(() => {
+      setSaida('foi');
+      // Só agora: recarregar o perfil antes disto fecharia o gate e desmontaria
+      // o widget no meio do aceno. É o que torna a saída visível.
+      void refreshPerfilRef.current?.();
+    }, dur * 1000 + 120);
+    return () => clearTimeout(t);
+    // `refreshPerfil` entra por ref, não pelas dependências: ela é recriada a
+    // cada render do AuthProvider, e listá-la aqui reiniciaria este efeito sem
+    // parar — o clearTimeout do cleanup cancelaria o timer antes de ele
+    // disparar, e o pet ficaria congelado fora da tela para sempre.
+  }, [saida]);
+
   // Coreografia da escada: vai pro canto → sobe devagarinho → oizinho → desce
   useEffect(() => {
     if (evento !== 'escada') {
@@ -536,7 +629,12 @@ export function PetWidget() {
     });
   }
 
-  if (!habilitado) return null;
+  // A despedida SOBREPÕE o gate: quando o card grava 'concluida', o perfil
+  // recarrega e `habilitado` vira false — se isso desmontasse o widget na hora,
+  // o pet sumiria antes de acenar. Ele fica até terminar de sair por conta
+  // própria ('foi').
+  if (saida === 'foi') return null;
+  if (!habilitado && !despedindo) return null;
 
   const PetSvg = pet.tipo === 'aura' ? PetAura : PetRolo;
 
@@ -583,8 +681,10 @@ export function PetWidget() {
         </button>
       )}
 
-      {/* pet desativado: iconezinho fixo e parado — clique reabre o quartinho */}
-      {minimizado && (
+      {/* pet desativado: iconezinho fixo e parado — clique reabre o quartinho.
+          Na despedida some, para dar lugar ao pet inteiro: quem tinha
+          minimizado clicaria "Até logo" e não veria adeus nenhum. */}
+      {minimizado && !despedindo && (
         <button
           type="button"
           onClick={alternarPainel}
@@ -596,7 +696,7 @@ export function PetWidget() {
         </button>
       )}
 
-      {!minimizado && (<>
+      {(!minimizado || despedindo) && (<>
       {/* escadinha de madeira encostada no cantinho */}
       {evento === 'escada' && (
         <svg
@@ -657,9 +757,12 @@ export function PetWidget() {
             type="button"
             onClick={alternarPainel}
             onMouseEnter={aoPassarMousePorCima}
+            // Indo embora não atende mais: um clique aqui abriria o quartinho
+            // por cima da própria despedida.
+            disabled={despedindo}
             title={`Seu ${pet.nome} — clique para abrir`}
             aria-label={`Abrir o quartinho do seu ${pet.nome}`}
-            className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0"
+            className="relative w-24 h-24 text-black/70 dark:text-white/60 hover:scale-105 transition-transform cursor-pointer bg-transparent border-0 p-0 disabled:cursor-default disabled:hover:scale-100"
           >
             {/* flip na direção da caminhada; passinhos no corpo (sombra fica no chão) */}
             <div className="w-full h-full" style={{ transform: `scaleX(${dir})`, transition: 'transform .2s' }}>

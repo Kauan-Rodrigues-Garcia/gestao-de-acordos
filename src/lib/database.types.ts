@@ -1716,6 +1716,7 @@ export type Database = {
           lider_id: string | null
           nome: string
           perfil: string
+          pet_despedida: string | null
           senha_alterada: boolean | null
           setor_id: string | null
           situacao: string
@@ -1737,6 +1738,7 @@ export type Database = {
           lider_id?: string | null
           nome: string
           perfil: string
+          pet_despedida?: string | null
           senha_alterada?: boolean | null
           setor_id?: string | null
           situacao?: string
@@ -1758,6 +1760,7 @@ export type Database = {
           lider_id?: string | null
           nome?: string
           perfil?: string
+          pet_despedida?: string | null
           senha_alterada?: boolean | null
           setor_id?: string | null
           situacao?: string

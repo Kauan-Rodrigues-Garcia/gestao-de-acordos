@@ -87,6 +87,14 @@ export interface Perfil {
   viu_notificacao_chatplay?: boolean | null;
   /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
   senha_alterada?: boolean | null;
+  /**
+   * Despedida do pet (migration 20260809c): `'pendente'` = deve ver o card,
+   * `'concluida'` = já se despediu, `null` = nunca conviveu com o pet.
+   *
+   * `undefined` (campo ausente) é a migration ainda não aplicada, e significa
+   * algo diferente de `null` — ver `fasePet` em `components/pet/petConfig.ts`.
+   */
+  pet_despedida?: string | null;
   /** Situação operacional (item 5): 'ativo' | 'ferias' | 'desligado'.
    *  Férias/desligado somem de ranking e quartil; recebimento ainda conta.
    *  Desligado não loga. Ver migration 20260723c. */

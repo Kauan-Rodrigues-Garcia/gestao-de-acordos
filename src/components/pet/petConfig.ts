@@ -99,9 +99,56 @@ export function usePetDoTenant(): { nome: string; tipo: 'aura' | 'rolo' } {
   return { nome: 'mascote', tipo: 'aura' };
 }
 
-/** Pet visível para todos os cargos (usado também p/ subir o sino). */
+// ── Despedida do pet ─────────────────────────────────────────────────────────
+//
+// O pet sai de cena por um tempo (migration 20260809c). Quem já usava o sistema
+// recebe um card de despedida e a animação de saída; quem foi cadastrado e
+// nunca entrou nunca fica sabendo que existiu um pet.
+//
+// Ver docs/superpowers/specs/2026-08-09-despedida-do-pet-design.md
+
+export type FasePet =
+  /** Pet como sempre foi. Também é o estado enquanto a migration não roda. */
+  | 'normal'
+  /** Já usava o sistema e ainda não se despediu: pet + card de despedida. */
+  | 'despedindo'
+  /** Sem pet: nunca conviveu com ele, ou já se despediu. */
+  | 'ausente';
+
+/**
+ * Em que pé está o pet para este usuário.
+ *
+ * A distinção entre campo AUSENTE e campo VAZIO é o que faz isto funcionar:
+ *
+ *   • `undefined` → a coluna não existe (migration ainda não aplicada). O pet
+ *     fica exatamente como está hoje, para ninguém sumir sem se despedir;
+ *   • `null` → a coluna existe e está vazia: a pessoa nunca acessou o sistema
+ *     antes da migration, então nunca conviveu com o pet.
+ *
+ * Confundir os dois teria efeitos opostos: tratar `undefined` como `null`
+ * apagaria o pet de todo mundo antes da hora, sem despedida nenhuma.
+ *
+ * É a mesma distinção que `temCarimboDeSetor` faz em
+ * `services/analitico/escopoAnalitico.ts`.
+ */
+export function fasePet(
+  perfil: { pet_despedida?: string | null } | null | undefined,
+): FasePet {
+  if (perfil?.pet_despedida === undefined) return 'normal';
+  if (perfil?.pet_despedida === 'pendente') return 'despedindo';
+  return 'ausente';
+}
+
+/** Fase do pet para o usuário logado. */
+export function useFasePet(): FasePet {
+  const { perfil } = useAuth();
+  return fasePet(perfil);
+}
+
+/** Pet visível para todos os cargos (usado também p/ subir o sino).
+ *  Some quando a pessoa já se despediu — ou quando nunca conviveu com ele. */
 export function usePetHabilitado(): boolean {
-  return true;
+  return useFasePet() !== 'ausente';
 }
 
 /** Interações completas (alimentar, roupas, passeio): só admin/super_admin

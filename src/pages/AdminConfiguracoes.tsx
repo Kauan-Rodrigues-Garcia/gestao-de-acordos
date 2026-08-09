@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { copiarTexto } from '@/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText, PawPrint } from 'lucide-react';
+import { Settings, MessageSquare, Plus, Save, Trash2, Edit, Check, Database, CheckCircle2, AlertTriangle, Copy, Building2, ShieldCheck, ClipboardList, ArrowLeftRight, Tag, FileText } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,6 @@ import AdminCargos from '@/pages/AdminCargos';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
-import AdminPetAba from '@/components/admin/AdminPetAba';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
@@ -206,14 +205,10 @@ export default function AdminConfiguracoes() {
             >
               <FileText className="w-4 h-4" /> Documentações
             </TabsTrigger>
-            {podeVerBancoDados && (
-            <TabsTrigger
-              value="pet"
-              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
-            >
-              <PawPrint className="w-4 h-4" /> Pet
-            </TabsTrigger>
-            )}
+            {/* Aba Pet fora do ar: o mascote saiu de cena (migration 20260809c)
+                e isto administrava uma economia congelada. O componente segue
+                no repositório — ver a lista de remoção futura na spec
+                docs/superpowers/specs/2026-08-09-despedida-do-pet-design.md */}
           </TabsList>
         </div>
 
@@ -372,13 +367,6 @@ export default function AdminConfiguracoes() {
         <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
           <AdminDocumentacoes />
         </TabsContent>
-
-        {/* ─── Aba: Pet (joguinho) ─────────────────────────────────────── */}
-        {podeVerBancoDados && (
-        <TabsContent value="pet" className="flex-1 overflow-y-auto p-6 mt-0">
-          <AdminPetAba />
-        </TabsContent>
-        )}
 
       </Tabs>
 

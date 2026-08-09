@@ -48,7 +48,7 @@ import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
-import { PetNomeVotacaoLembrete } from './pet/PetNomeVotacaoLembrete';
+import { PetDespedida } from './pet/PetDespedida';
 import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
 import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
@@ -244,7 +244,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setTourPronto(true);
     }
   }, [perfil?.id]);
-  const votacaoNomePronta = !termoLoading && !precisaAceitar && tourPronto;
+  const avisoPetPronto = !termoLoading && !precisaAceitar && tourPronto;
 
   // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
   //  todas as páginas, inclusive a de login.)
@@ -726,8 +726,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
 
-      {/* Lembrete de votação do nome do mascote — só abre pós termos + tour */}
-      <PetNomeVotacaoLembrete pronto={votacaoNomePronta} />
+      {/* Despedida do mascote — só abre pós termos + tour, e só para quem já
+          convivia com ele (perfis.pet_despedida = 'pendente'). */}
+      <PetDespedida pronto={avisoPetPronto} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (
