@@ -166,6 +166,20 @@ A ordem correta, com o widget dono da própria saída:
    re-renderização o desmonta no meio da animação;
 3. terminada a animação, o widget chama `refreshPerfil()` e aí sim desmonta.
 
+### A gravação precisa ser aguardada
+
+A persistência mora em `src/services/pet/petDespedida.service.ts`, e não no
+componente, por causa de uma armadilha que já mordeu uma vez: o builder do
+supabase-js é **preguiçoso** — `supabase.from(...).update(...).eq(...)` só
+dispara a requisição quando alguém chama `.then()` (por `await` ou `.then`
+explícito). Um `void` sobre o builder avalia e descarta a expressão sem nunca
+invocar `.then()`: nada é enviado, nenhum erro aparece, e o card volta a cada
+recarga da página.
+
+O serviço aguarda de verdade e registra o erro em vez de engoli-lo. O teste
+`petDespedida.service.test.ts` usa um mock thenable que marca se o `.then()`
+foi chamado — ele falha se alguém voltar a tirar o `await`.
+
 ### Por que gravar ao fechar, e não no fim da animação
 
 Se a gravação dependesse da animação completar, um defeito que a impedisse de

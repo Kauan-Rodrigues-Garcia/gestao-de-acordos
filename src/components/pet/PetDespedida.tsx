@@ -30,8 +30,8 @@ import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
+import { concluirDespedidaPet } from '@/services/pet/petDespedida.service';
 import { PetAura } from './PetAura';
 import { useFasePet } from './petConfig';
 import { despedirPet } from './petEvents';
@@ -60,13 +60,14 @@ export function PetDespedida({ pronto }: PetDespedidaProps) {
     setAberto(false);
     despedirPet();
 
-    // Sem await e sem refreshPerfil — ver o cabeçalho.
-    if (perfil?.id) {
-      void supabase
-        .from('perfis')
-        .update({ pet_despedida: 'concluida' })
-        .eq('id', perfil.id);
-    }
+    // `void` sobre uma CHAMADA de função async: ela executa e roda sozinha. Não
+    // confundir com `void supabase.from(...)`, que era o defeito daqui — o
+    // builder do supabase-js é preguiçoso e só dispara no `.then()`. Ver o
+    // cabeçalho de petDespedida.service.
+    //
+    // Continua sem `refreshPerfil`: recarregar o perfil agora fecharia o gate e
+    // desmontaria o pet antes do aceno. Quem chama é o widget, ao terminar.
+    if (perfil?.id) void concluirDespedidaPet(perfil.id);
   }
 
   // Esc fecha — e fechar é se despedir, como qualquer outro caminho.
