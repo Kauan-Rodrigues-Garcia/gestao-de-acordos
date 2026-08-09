@@ -18,8 +18,8 @@ import { motion } from 'framer-motion';
 import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
-  Copy, Upload, Download, Building2, Lock, Target, TrendingUp,
-  Pencil, Banknote,
+  Copy, Upload, Download, Building2, Lock,
+  Pencil, Banknote, AlertTriangle,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DatePickerField } from '@/components/DatePickerField';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -50,10 +51,12 @@ import { mesAtual } from '@/lib/mesReferencia';
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
   mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
-  filtrarItensPix, totaisPorStatus, calcularBonusMeta,
-  calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe, type OperadorInfo,
+  filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
+  calcularDobraComissao, rankingPixSetor, calcularMetaPixPorEquipe,
+  textoPrazoExpurgo, PIX_DIAS_UTEIS_EXPURGO,
+  type OperadorInfo, type FiltroPagamento,
 } from './pixAutomaticoView';
-import { PixDobraCard } from './PixDobraCard';
+import { PixComissaoDobrada } from './PixComissaoDobrada';
 import { PixRankingSetor } from './PixRankingSetor';
 import { PixMetaPainel } from './PixMetaPainel';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -65,6 +68,7 @@ import {
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
+  expurgarDesaprovadosVencidos,
   type LinhaPixLote, type PixAutoMeta,
 } from '@/services/pix_automatico.service';
 
@@ -112,6 +116,12 @@ export function PixAutomatico() {
   const [filtroOperador, setFiltroOperador] = useState('');
   const [filtroEquipe, setFiltroEquipe]     = useState('');
   const [filtroSetor, setFiltroSetor]       = useState('');
+  // Pagamento e período — os dois valem para operador e líder: o operador
+  // precisa saber o que já caiu, o líder precisa achar o que registrou na
+  // semana passada sem rolar a lista inteira.
+  const [filtroPagamento, setFiltroPagamento] = useState<FiltroPagamento>('todos');
+  const [dataDe, setDataDe]   = useState('');
+  const [dataAte, setDataAte] = useState('');
 
   // Config % (líder)
   const [pctInput, setPctInput]     = useState('');
@@ -186,6 +196,23 @@ export function PixAutomatico() {
     if (!empresa?.id || !perfil?.id) return;
     setLoading(true);
     try {
+      // Expurgo dos desaprovados vencidos ANTES de listar: sem job agendado, é
+      // a abertura da tela que cobra o prazo. Só líder+ tem a policy — para o
+      // operador a chamada volta zero e a lista segue igual.
+      //
+      // O try/catch é a segunda trava: o expurgo é acessório, a listagem é a
+      // tela. Enquanto ele estourava (RPC ainda não aplicada no banco), a
+      // exceção abortava o `carregar` inteiro e a aba aparecia VAZIA — com 73
+      // pendentes e 148 aprovados intactos no banco. Nada aqui pode impedir a
+      // lista de carregar.
+      if (ehLider) {
+        try {
+          await expurgarDesaprovadosVencidos(empresa.id);
+        } catch (e) {
+          console.warn('[PixAutomatico] expurgo dos desaprovados:', e);
+        }
+      }
+
       const [lista, cfgs, bloqueados] = await Promise.all([
         fetchAcordosPix(empresa.id, ehLider
           ? { setorId: setorEscopo }
@@ -285,17 +312,26 @@ export function PixAutomatico() {
     () => filtrarItensPix(
       itens,
       { busca, status: filtroStatus, operadorId: filtroOperador,
-        equipeId: filtroEquipe, setorId: setorEscopo ?? filtroSetor },
+        equipeId: filtroEquipe, setorId: setorEscopo ?? filtroSetor,
+        pagamento: filtroPagamento, de: dataDe, ate: dataAte },
       { porEquipe: operadorEquipe, porSetor: operadorSetor },
     ),
     [itens, busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
-     setorEscopo, operadorEquipe, operadorSetor],
+     filtroPagamento, dataDe, dataAte, setorEscopo, operadorEquipe, operadorSetor],
   );
 
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)
   const totais = useMemo(() => totaisPorStatus(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
+  // Pago × a pagar: o operador via "Aprovado R$ 105,49" e recebia R$ 50,00 sem
+  // nada na tela explicando a diferença. Agora os dois números aparecem.
+  const pagamento = useMemo(() => totalPagoPix(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
 
   const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
+
+  /** Quanto falta para este desaprovado ser excluído. `null` = sem prazo. */
+  function prazoDesaprovado(item: PixAutoAcordo): string | null {
+    return textoPrazoExpurgo(item.avaliado_em);
+  }
 
   // ── Bônus por meta (card dinâmico) ──────────────────────────────────────
   // O que o operador já recebeu de comissão APROVADA no mês é pago DE NOVO se
@@ -309,12 +345,16 @@ export function PixAutomatico() {
     mes: mesAtual(), hojeISO: getTodayISO(),
   }), [perfil?.id, itens, pctPorSetor, metaValor, configMes, recebidoMes]);
 
-  // ── Meta dos 18 acordos (comissão dobrada) ──────────────────────────────
+  // ── Comissão dobrada: 18 acordos + meta do mês ──────────────────────────
   // Sempre sobre os acordos do próprio usuário, mesmo quando ele é líder e a
-  // lista mostra o setor inteiro: a dobra é individual.
+  // lista mostra o setor inteiro: a dobra é individual. São DOIS requisitos —
+  // a quantidade de acordos e a meta de recebimento —, e a meta vem do mesmo
+  // par (meta do mês, recebido no analítico) que alimentava o card de bônus.
   const dobra = useMemo(
-    () => calcularDobraComissao(itens, perfil?.id, pctPorSetor, mesAtual()),
-    [itens, perfil?.id, pctPorSetor],
+    () => calcularDobraComissao(itens, perfil?.id, pctPorSetor, mesAtual(), {
+      metaValor, recebidoMes,
+    }),
+    [itens, perfil?.id, pctPorSetor, metaValor, recebidoMes],
   );
 
   // ── Ranking do setor ────────────────────────────────────────────────────
@@ -788,12 +828,25 @@ export function PixAutomatico() {
       valor: totais.pendente.valor, comissao: totais.pendente.comissao,
       cls: 'from-sky-500/15 to-sky-600/5 border-sky-500/25', icon: <Clock className="w-4 h-4 text-sky-400" />,
       comissaoCls: 'text-sky-400',
+      rodape: null as string | null,
     },
     {
       label: 'Aprovado', qtd: totais.aprovado.qtd,
       valor: totais.aprovado.valor, comissao: totais.aprovado.comissao,
       cls: 'from-emerald-500/15 to-emerald-600/5 border-emerald-500/25', icon: <CheckCircle2 className="w-4 h-4 text-emerald-400" />,
       comissaoCls: 'text-emerald-400',
+      rodape: null as string | null,
+    },
+    // Pago é o que SAIU, não o que é devido. Aprovado R$ 105,49 com R$ 50,00
+    // pagos são dois fatos verdadeiros ao mesmo tempo — faltava o segundo.
+    {
+      label: 'Pago', qtd: pagamento.pago.qtd,
+      valor: pagamento.pago.valor, comissao: pagamento.pago.comissao,
+      cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-400" />,
+      comissaoCls: 'text-teal-400',
+      rodape: pagamento.aPagar.comissao > 0
+        ? `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`
+        : null,
     },
   ];
 
@@ -926,22 +979,29 @@ export function PixAutomatico() {
 
       {/* ── Totais pendente × aprovado ── */}
       {!loading && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {statsCards.map((s, i) => (
             <motion.div key={s.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: i * 0.06, duration: 0.3 }}>
-              <div className={cn('rounded-xl border bg-gradient-to-br p-4 flex items-center justify-between gap-3', s.cls)}>
-                <div className="flex items-center gap-3">
-                  {s.icon}
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">{s.label} · {s.qtd} acordo{s.qtd !== 1 ? 's' : ''}</p>
-                    <p className="text-lg font-bold font-mono text-foreground leading-tight">{formatCurrency(s.valor)}</p>
+              <div className={cn('rounded-xl border bg-gradient-to-br p-4 h-full', s.cls)}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    {s.icon}
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">{s.label} · {s.qtd} acordo{s.qtd !== 1 ? 's' : ''}</p>
+                      <p className="text-lg font-bold font-mono text-foreground leading-tight">{formatCurrency(s.valor)}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] text-muted-foreground">Comissão Pix</p>
+                    <p className={cn('text-lg font-bold font-mono leading-tight', s.comissaoCls)}>{formatCurrency(s.comissao)}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[11px] text-muted-foreground">Comissão Pix</p>
-                  <p className={cn('text-lg font-bold font-mono leading-tight', s.comissaoCls)}>{formatCurrency(s.comissao)}</p>
-                </div>
+                {s.rodape && (
+                  <p className="text-[10.5px] text-muted-foreground mt-2 pt-2 border-t border-border/40">
+                    {s.rodape}
+                  </p>
+                )}
               </div>
             </motion.div>
           ))}
@@ -969,10 +1029,14 @@ export function PixAutomatico() {
         />
       )}
 
-      {/* ── Contador dos 18 acordos (comissão dobrada) ──
+      {/* ── Comissão dobrada: os dois requisitos num card só ──
           É individual: aparece para quem tem acordos Pix próprios no mês, e
-          sempre para o operador — que precisa saber que a meta existe. */}
-      {!loading && (!ehLider || dobra.feitos > 0) && <PixDobraCard dobra={dobra} />}
+          sempre para o operador — que precisa saber que a regra existe.
+          Substituiu o contador dos 18 + o bloco de "bônus por meta", que eram
+          dois desenhos diferentes contando metades da mesma regra. */}
+      {!loading && (!ehLider || dobra.feitos > 0) && (
+        <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
+      )}
 
       {/* ── Ranking do setor ──
           Só para líder+: o operador enxerga apenas os próprios acordos (RLS),
@@ -985,51 +1049,25 @@ export function PixAutomatico() {
         />
       )}
 
-      {/* ── Bônus por meta (dinâmico: meta batida / 1º quartil / demais) ── */}
-      {!loading && bonusMeta && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-          <div className={cn(
-            'rounded-xl border bg-gradient-to-br p-4 flex items-start gap-3',
-            bonusMeta.metaBatida
-              ? 'from-emerald-500/20 to-emerald-600/5 border-emerald-500/40'
-              : bonusMeta.quartil === 1
-                ? 'from-sky-500/15 to-indigo-600/5 border-sky-500/30'
-                : 'from-violet-500/15 to-fuchsia-600/5 border-violet-500/25',
-          )}>
-            {bonusMeta.metaBatida
-              ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-              : bonusMeta.quartil === 1
-                ? <TrendingUp className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
-                : <Target className="w-5 h-5 text-violet-400 shrink-0 mt-0.5" />}
-            <div className="min-w-0">
-              <p className="text-[11px] text-muted-foreground">
-                Bônus por meta · comissão aprovada acumulada no mês
-              </p>
-              <p className={cn('text-xl font-bold font-mono leading-tight',
-                bonusMeta.metaBatida ? 'text-emerald-400' : bonusMeta.quartil === 1 ? 'text-sky-400' : 'text-violet-400')}>
-                {formatCurrency(bonusMeta.acumulado)}
-              </p>
-              {bonusMeta.metaBatida ? (
-                <p className="text-xs font-semibold text-emerald-400 mt-1">
-                  🏆 Meta batida — este valor está <strong>garantido</strong> e será recebido novamente!
-                </p>
-              ) : bonusMeta.quartil === 1 ? (
-                <p className="text-xs text-muted-foreground mt-1">
-                  <span className="font-semibold text-sky-400">Você está no 1º quartil, projetando a meta ({bonusMeta.projecao}%)!</span>{' '}
-                  Continue assim: batendo a meta do mês, você recebe este valor <strong className="text-foreground">de novo</strong>.
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">
-                  Bata a meta do mês e receba este valor <strong className="text-foreground">novamente</strong> como bônus.
-                </p>
-              )}
-            </div>
-          </div>
-        </motion.div>
+      {/* ── Aviso do prazo dos desaprovados ──
+          O operador é notificado na hora da desaprovação; aqui fica o lembrete
+          de que a linha some sozinha, para ele não achar que sumiu por engano. */}
+      {!loading && meusDesaprovados > 0 && (
+        <div className="rounded-lg border border-red-500/25 bg-red-500/[0.05] px-3 py-2 flex items-start gap-2.5">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+          <p className="text-[11px] text-muted-foreground">
+            Você tem <strong className="text-red-400">{meusDesaprovados}</strong> registro
+            {meusDesaprovados !== 1 ? 's' : ''} desaprovado{meusDesaprovados !== 1 ? 's' : ''}.
+            Registro desaprovado é excluído automaticamente{' '}
+            <strong className="text-foreground">{PIX_DIAS_UTEIS_EXPURGO} dias úteis</strong>{' '}
+            depois da avaliação — confira o motivo com o líder antes disso. Depois de
+            excluído, o NR volta a ficar livre para ser registrado de novo.
+          </p>
+        </div>
       )}
 
       {/* ── Filtros ── */}
-      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+      <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70 pointer-events-none" />
           <Input placeholder={ehLider ? 'Buscar por NR ou operador...' : 'Buscar por NR...'}
@@ -1051,6 +1089,52 @@ export function PixAutomatico() {
             <SelectItem value="desaprovado">Desaprovados</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* Pagamento: também para o operador — é a pergunta "o que já caiu?". */}
+        <Select value={filtroPagamento} onValueChange={v => setFiltroPagamento(v as FiltroPagamento)}>
+          <SelectTrigger className="h-9 w-36 text-xs rounded-lg">
+            <Banknote className="w-3 h-3 mr-1 shrink-0" /><SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Pago e a pagar</SelectItem>
+            <SelectItem value="pago">Já pagos</SelectItem>
+            <SelectItem value="a_pagar">A pagar</SelectItem>
+          </SelectContent>
+        </Select>
+
+        {/* Período de registro. Vazio = sem recorte, que é o padrão de sempre.
+            Usa o MESMO `DatePickerField` da lista de acordos (o calendário em
+            popover, com os meses em português) em vez do `input type="date"`
+            nativo: são duas datas na mesma tela e a operação já conhece aquele.
+            `minDate` na data final impede escolher um fim antes do começo —
+            período invertido só devolveria lista vazia sem dizer por quê. */}
+        <div className="flex items-center gap-1">
+          <DatePickerField
+            value={dataDe}
+            onChange={setDataDe}
+            triggerClassName="h-9 w-36 rounded-lg"
+            placeholder="Data inicial"
+          />
+          <span className="text-[11px] text-muted-foreground px-0.5">até</span>
+          <DatePickerField
+            value={dataAte}
+            onChange={setDataAte}
+            minDate={dataDe || undefined}
+            triggerClassName="h-9 w-36 rounded-lg"
+            placeholder="Data final"
+          />
+          {(dataDe || dataAte) && (
+            <button
+              type="button"
+              onClick={() => { setDataDe(''); setDataAte(''); }}
+              title="Limpar o período"
+              className="h-9 w-9 flex items-center justify-center rounded-lg border border-input text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         {ehLider && (
           <>
             {ehMultiSetor && (
@@ -1280,6 +1364,15 @@ export function PixAutomatico() {
                           <Badge variant="outline" className={cn('text-[10px] font-semibold', sInfo.cls)}>{sInfo.label}</Badge>
                           {item.status !== 'pendente' && item.avaliado_por_nome && (
                             <p className="text-[10px] text-muted-foreground mt-0.5">por {item.avaliado_por_nome}</p>
+                          )}
+                          {/* Prazo do desaprovado: ele some sozinho depois de
+                              PIX_DIAS_UTEIS_EXPURGO dias úteis, e quem registrou
+                              precisa ver quanto tempo ainda tem para conferir. */}
+                          {desaprovado && prazoDesaprovado(item) && (
+                            <p className="text-[10px] text-red-400/90 mt-0.5 inline-flex items-center gap-1">
+                              <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
+                              {prazoDesaprovado(item)}
+                            </p>
                           )}
                         </td>
                         {/* Pagamento da comissão — estado separado da aprovação.

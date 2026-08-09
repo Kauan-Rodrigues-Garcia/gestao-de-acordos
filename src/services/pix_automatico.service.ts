@@ -375,6 +375,57 @@ export async function excluirAcordoPix(id: string): Promise<{ ok: boolean; error
   return { ok: true };
 }
 
+/**
+ * Dias ÚTEIS que um acordo desaprovado sobrevive antes de ser excluído.
+ *
+ * O operador é avisado por notificação assim que o líder desaprova, e tem esse
+ * prazo para conferir o que aconteceu. Passado o prazo, a linha some sozinha e
+ * o NR volta a ficar livre — outra pessoa pode fechar o mesmo acordo depois.
+ */
+export const PIX_DIAS_UTEIS_EXPURGO = 2;
+
+/**
+ * Apaga os desaprovados cujo prazo já venceu e devolve quantos saíram.
+ *
+ * Chamada ao abrir a tela: não há job agendado neste projeto, e o expurgo
+ * precisa acontecer mesmo assim. É idempotente e barata (índice por status), e
+ * a policy do banco garante que só líder+ da empresa consegue executar.
+ *
+ * Migration ausente → devolve 0 sem barulho, no mesmo padrão de
+ * `fetchNrsBloqueados`: o recurso some, o resto da tela segue.
+ */
+export async function expurgarDesaprovadosVencidos(empresaId: string): Promise<number> {
+  // `fn_pix_expurga_desaprovados` é da migration 20260809a e ainda não está no
+  // database.types.ts gerado — daí o cast.
+  //
+  // O cast é no CLIENTE e a chamada segue sendo `cliente.rpc(...)`:
+  // `SupabaseClient.rpc` faz `return this.rest.rpc(...)`, então guardar o método
+  // numa variável perde o `this` e estoura "Cannot read properties of undefined
+  // (reading 'rest')" — o mesmo defeito que já tinha derrubado a exclusão de
+  // usuário e a foto do setor (a694d7d).
+  const cliente = supabase as unknown as {
+    rpc: (nome: string, args: Record<string, unknown>) => Promise<{
+      data: unknown; error: { message: string } | null;
+    }>;
+  };
+
+  let data: unknown = null;
+  let error: { message: string } | null = null;
+  try {
+    ({ data, error } = await cliente.rpc('fn_pix_expurga_desaprovados', {
+      p_empresa_id: empresaId,
+    }));
+  } catch (e) {
+    error = { message: e instanceof Error ? e.message : String(e) };
+  }
+
+  if (error) {
+    console.warn('[pix_automatico.service] expurgarDesaprovadosVencidos:', error.message);
+    return 0;
+  }
+  return Number(data) || 0;
+}
+
 /** Apaga todos os DESAPROVADOS do operador (botão "Limpar desaprovados"). */
 export async function limparDesaprovados(empresaId: string, operadorId: string): Promise<{ ok: boolean; count: number; error?: string }> {
   const { data, error } = await supabase

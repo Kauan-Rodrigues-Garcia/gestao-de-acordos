@@ -69,12 +69,38 @@ export function sugerirOperadores(ops: OperadorInfo[], busca: string): OperadorI
 
 // ── Filtro da lista ─────────────────────────────────────────────────────────
 
+/** Estado do pagamento da comissão, do ponto de vista de quem filtra. */
+export type FiltroPagamento = 'todos' | 'pago' | 'a_pagar';
+
 export interface FiltrosPix {
   busca?: string;
   status?: PixAutoStatus | 'todos';
   operadorId?: string | null;
   equipeId?: string | null;
   setorId?: string | null;
+  /** 'pago' = comissão já saiu; 'a_pagar' = aprovada e ainda não paga. */
+  pagamento?: FiltroPagamento;
+  /** Registrado A PARTIR de 'yyyy-MM-dd', inclusive. */
+  de?: string | null;
+  /** Registrado ATÉ 'yyyy-MM-dd', inclusive. */
+  ate?: string | null;
+}
+
+/**
+ * A data ('yyyy-MM-dd') de um instante do banco no fuso da operação.
+ *
+ * O filtro de data compara com o que a tabela MOSTRA, e a tabela mostra
+ * `toLocaleDateString('pt-BR')` — São Paulo. Recortar os dez primeiros
+ * caracteres do ISO compararia com a data em UTC: um acordo registrado às 22h
+ * de terça já é quarta em UTC e sumiria de um filtro "terça a terça".
+ */
+export function dataLocalDaLinha(criadoEm: string): string {
+  const d = new Date(criadoEm);
+  if (isNaN(d.getTime())) return String(criadoEm).slice(0, 10);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(d);
 }
 
 export interface MapasOperador {
@@ -95,12 +121,23 @@ export function filtrarItensPix(
   mapas: MapasOperador,
 ): PixAutoAcordo[] {
   const termo = (filtros.busca ?? '').trim().toLowerCase();
+  const de  = (filtros.de  ?? '').trim();
+  const ate = (filtros.ate ?? '').trim();
   return itens.filter(i => {
     if (filtros.status && filtros.status !== 'todos' && i.status !== filtros.status) return false;
     if (filtros.operadorId && i.operador_id !== filtros.operadorId) return false;
     if (filtros.equipeId && mapas.porEquipe[i.operador_id] !== filtros.equipeId) return false;
     if (filtros.setorId
         && (i.setor_id ?? mapas.porSetor[i.operador_id] ?? null) !== filtros.setorId) return false;
+    // "A pagar" é aprovado e ainda não pago: pendente não é dívida, é fila de
+    // avaliação, e desaprovado não gera comissão nenhuma.
+    if (filtros.pagamento === 'pago'    && !i.pago) return false;
+    if (filtros.pagamento === 'a_pagar' && !(i.status === 'aprovado' && !i.pago)) return false;
+    if (de || ate) {
+      const dia = dataLocalDaLinha(i.criado_em);
+      if (de  && dia < de)  return false;
+      if (ate && dia > ate) return false;
+    }
     if (!termo) return true;
     return i.nr_cliente.toLowerCase().includes(termo)
         || (i.operador_nome ?? '').toLowerCase().includes(termo);
@@ -135,6 +172,29 @@ export function totaisPorStatus(
   return { pendente: soma('pendente'), aprovado: soma('aprovado'), desaprovado: soma('desaprovado') };
 }
 
+/**
+ * Comissão que JÁ SAIU e comissão que ainda falta sair.
+ *
+ * Aprovado e pago são coisas diferentes, e era essa a dúvida do operador: o
+ * card "Aprovado" diz R$ 105,49 e ele recebeu R$ 50,00 — os dois números estão
+ * certos, faltava a tela mostrar o segundo. `aPagar` é o resto: aprovado que
+ * ainda não foi marcado como pago.
+ */
+export function totalPagoPix(
+  visiveis: PixAutoAcordo[],
+  pctPorSetor: Record<string, number>,
+): { pago: TotalPix; aPagar: TotalPix } {
+  const soma = (linhas: PixAutoAcordo[]): TotalPix => ({
+    qtd:      linhas.length,
+    valor:    linhas.reduce((acc, i) => acc + Number(i.valor), 0),
+    comissao: linhas.reduce((acc, i) => acc + comissaoDe(i, pctPorSetor), 0),
+  });
+  return {
+    pago:   soma(visiveis.filter(i => i.pago)),
+    aPagar: soma(visiveis.filter(i => i.status === 'aprovado' && !i.pago)),
+  };
+}
+
 // ── Acordos "feitos" no mês ─────────────────────────────────────────────────
 
 /**
@@ -164,46 +224,169 @@ export function acordosFeitosNoMes(
 // ── Meta dos 18 acordos (comissão dobrada) ──────────────────────────────────
 
 export interface DobraComissao {
+  // ── Requisito 1: quantidade de acordos ──
   /** Acordos Pix feitos no mês (pendente + aprovado). */
   feitos: number;
-  /** Quantos ainda faltam para a comissão dobrar. Zero quando já bateu. */
+  /** Quantos ainda faltam para cumprir o requisito. Zero quando já cumpriu. */
   faltam: number;
+  /** Quantos acordos o requisito exige (18). */
   meta: number;
+  /** Os 18 acordos estão cumpridos? */
+  acordosOk: boolean;
+  /** % do requisito de acordos, com teto em 100. */
+  pctAcordos: number;
+
+  // ── Requisito 2: bater a meta de recebimento do mês ──
+  /** Meta de recebimento do operador no mês. `null` = não definida. */
+  metaValor: number | null;
+  /** Quanto ele já recebeu no mês (analítico). `null` = ainda não carregou. */
+  recebidoMes: number | null;
+  /** Há meta definida para o mês? Sem ela, o requisito não tem como fechar. */
+  metaDefinida: boolean;
+  /** A meta de recebimento foi batida? */
+  metaOk: boolean;
+  /** Quanto falta em R$ para bater a meta. Zero quando bateu ou não há meta. */
+  faltaMeta: number;
+  /** % do recebido sobre a meta, com teto em 100. */
+  pctMeta: number;
+
+  // ── Resultado ──
+  /** Quantos dos dois requisitos já estão cumpridos (0, 1 ou 2). */
+  requisitosOk: number;
+  /** Os DOIS requisitos cumpridos — só aí a comissão dobra. */
   atingiu: boolean;
   /** Comissão aprovada do operador no mês, sem dobra. */
   comissao: number;
-  /** O que ele leva: `comissao` dobrada quando bateu, senão a própria. */
+  /** O extra que a dobra paga: o mesmo valor de novo. Zero enquanto não dobra. */
+  bonus: number;
+  /** O que ele leva: `comissao` dobrada quando dobrou, senão a própria. */
   comissaoFinal: number;
 }
 
+/** A meta de recebimento do mês, para o segundo requisito da dobra. */
+export interface MetaRecebimentoDobra {
+  /** Meta do operador no mês. `null`/0 = sem meta definida. */
+  metaValor: number | null;
+  /** Recebido no mês pelo analítico. `null` = ainda não carregou. */
+  recebidoMes: number | null;
+}
+
 /**
- * O contador dos 18 acordos e a comissão dobrada.
+ * Os dois requisitos da comissão dobrada.
  *
- * A dobra incide sobre a comissão APROVADA — é a que existe de fato. O contador,
- * em compensação, conta os FEITOS: a meta é do trabalho do operador, e ele não
- * controla quando o líder vai avaliar. Fossem os dois pela mesma régua, quem
- * fechou 18 acordos veria "12/18" só porque a fila de aprovação atrasou.
+ * A regra da operação tem DUAS condições, e as duas precisam fechar:
+ *
+ *   1. 18 acordos Pix feitos no mês;
+ *   2. a meta de recebimento do mês batida.
+ *
+ * Cumpridas as duas, o operador recebe de novo o que já fez de comissão — fez
+ * R$ 100,00, leva R$ 200,00. A versão anterior tratava os 18 acordos como se
+ * fossem a condição inteira, e o card dizia "meta batida — comissão dobrada"
+ * para quem tinha só metade do combinado.
+ *
+ * A dobra incide sobre a comissão APROVADA — é a que existe de fato. O contador
+ * de acordos, em compensação, conta os FEITOS (pendente + aprovado): a
+ * quantidade é do trabalho do operador, e ele não controla quando o líder vai
+ * avaliar. Fossem os dois pela mesma régua, quem fechou 18 acordos veria
+ * "12/18" só porque a fila de aprovação atrasou.
+ *
+ * Sem meta definida no mês, o requisito 2 fica em aberto (`metaDefinida: false`)
+ * e a comissão NÃO dobra: afirmar que dobrou sem ter contra o que comparar
+ * seria prometer dinheiro que ninguém conferiu.
  */
 export function calcularDobraComissao(
   itens: PixAutoAcordo[],
   operadorId: string | null | undefined,
   pctPorSetor: Record<string, number>,
   mes: MesRef,
+  metaRecebimento?: MetaRecebimentoDobra,
 ): DobraComissao {
   const doMes = acordosFeitosNoMes(itens, operadorId, mes);
   const feitos = doMes.length;
-  const atingiu = feitos >= PIX_META_ACORDOS_DOBRA;
+  const acordosOk = feitos >= PIX_META_ACORDOS_DOBRA;
   const comissao = doMes
     .filter(i => i.status === 'aprovado')
     .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0);
+
+  const metaValor    = metaRecebimento?.metaValor ?? null;
+  const recebidoMes  = metaRecebimento?.recebidoMes ?? null;
+  const metaDefinida = metaValor != null && metaValor > 0;
+  const metaOk       = metaDefinida && (recebidoMes ?? 0) >= metaValor!;
+
+  const atingiu = acordosOk && metaOk;
+
   return {
     feitos,
     faltam: Math.max(PIX_META_ACORDOS_DOBRA - feitos, 0),
     meta: PIX_META_ACORDOS_DOBRA,
+    acordosOk,
+    pctAcordos: Math.min(Math.round((feitos / PIX_META_ACORDOS_DOBRA) * 100), 100),
+
+    metaValor,
+    recebidoMes,
+    metaDefinida,
+    metaOk,
+    faltaMeta: metaDefinida ? Math.max(metaValor! - (recebidoMes ?? 0), 0) : 0,
+    pctMeta: metaDefinida
+      ? Math.min(Math.round(((recebidoMes ?? 0) / metaValor!) * 100), 100)
+      : 0,
+
+    requisitosOk: (acordosOk ? 1 : 0) + (metaOk ? 1 : 0),
     atingiu,
     comissao,
+    bonus: atingiu ? comissao : 0,
     comissaoFinal: atingiu ? comissao * 2 : comissao,
   };
+}
+
+// ── Prazo dos desaprovados ──────────────────────────────────────────────────
+
+/** Dias ÚTEIS que um acordo desaprovado sobrevive antes de ser excluído. */
+export const PIX_DIAS_UTEIS_EXPURGO = 2;
+
+/**
+ * O instante em que um desaprovado será excluído: `PIX_DIAS_UTEIS_EXPURGO`
+ * dias úteis depois da avaliação.
+ *
+ * Conta só sábado e domingo como não-úteis; feriado não entra. É de propósito:
+ * o mesmo prazo é aplicado pelo banco (`fn_pix_expurga_desaprovados`), e as
+ * duas pontas precisam dar a MESMA data — a tabela de feriados vive na
+ * configuração do mês do tenant e não estaria disponível para o job. Errar um
+ * feriado aqui adia a exclusão em um dia; discordar do banco mostraria ao
+ * operador um prazo que não é o que vai acontecer.
+ *
+ * `null` quando a linha não foi avaliada (não há de quando contar).
+ */
+export function prazoExpurgoDesaprovado(avaliadoEm: string | null | undefined): Date | null {
+  if (!avaliadoEm) return null;
+  const base = new Date(avaliadoEm);
+  if (isNaN(base.getTime())) return null;
+
+  const d = new Date(base.getTime());
+  let restantes = PIX_DIAS_UTEIS_EXPURGO;
+  while (restantes > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dia = d.getUTCDay();
+    if (dia !== 0 && dia !== 6) restantes -= 1;
+  }
+  return d;
+}
+
+/**
+ * Quanto falta para o desaprovado sumir, em texto curto para a tabela.
+ *
+ * `null` quando não há prazo a mostrar (linha sem avaliação).
+ */
+export function textoPrazoExpurgo(
+  avaliadoEm: string | null | undefined,
+  agora: Date = new Date(),
+): string | null {
+  const prazo = prazoExpurgoDesaprovado(avaliadoEm);
+  if (!prazo) return null;
+  const horas = Math.ceil((prazo.getTime() - agora.getTime()) / 3_600_000);
+  if (horas <= 0)  return 'exclusão a qualquer momento';
+  if (horas <= 24) return `exclusão em ${horas}h`;
+  return `exclusão em ${Math.ceil(horas / 24)} dias`;
 }
 
 // ── Ranking do setor ────────────────────────────────────────────────────────
@@ -217,8 +400,15 @@ export interface LinhaRankingPix {
   valor: number;
   /** Comissão aprovada no mês. */
   comissao: number;
-  /** Bateu os 18 e está com a comissão dobrada. */
-  dobrou: boolean;
+  /**
+   * Cumpriu o requisito dos 18 acordos.
+   *
+   * NÃO quer dizer que a comissão dobrou: a dobra exige também a meta de
+   * recebimento do mês (ver `calcularDobraComissao`), e a meta de cada
+   * operador não está nesta tela. Aqui é só o requisito que o ranking consegue
+   * afirmar sozinho.
+   */
+  requisitoAcordosOk: boolean;
 }
 
 /**
@@ -244,7 +434,7 @@ export function rankingPixSetor(
     const linha = porOperador.get(i.operador_id) ?? {
       operadorId: i.operador_id,
       nome: nomePorOperador[i.operador_id] ?? i.operador_nome ?? '—',
-      acordos: 0, valor: 0, comissao: 0, dobrou: false,
+      acordos: 0, valor: 0, comissao: 0, requisitoAcordosOk: false,
     };
     linha.acordos += 1;
     linha.valor   += Number(i.valor);
@@ -253,7 +443,7 @@ export function rankingPixSetor(
   }
 
   return [...porOperador.values()]
-    .map(l => ({ ...l, dobrou: l.acordos >= PIX_META_ACORDOS_DOBRA }))
+    .map(l => ({ ...l, requisitoAcordosOk: l.acordos >= PIX_META_ACORDOS_DOBRA }))
     .sort((a, b) =>
       b.acordos - a.acordos
       || b.comissao - a.comissao

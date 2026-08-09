@@ -16,8 +16,9 @@ import type { MetasConfigMes } from '@/lib/supabase';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import {
   mapaOperadorEquipe, mapaOperadorSetor, apenasOperadores, sugerirOperadores,
-  filtrarItensPix, totaisPorStatus, calcularBonusMeta,
+  filtrarItensPix, totaisPorStatus, totalPagoPix, calcularBonusMeta,
   calcularDobraComissao, rankingPixSetor, calcularMetaPix, calcularMetaPixPorEquipe,
+  prazoExpurgoDesaprovado, textoPrazoExpurgo, dataLocalDaLinha,
   MAX_SUGESTOES_VINCULO, type OperadorInfo,
 } from './pixAutomaticoView';
 
@@ -140,6 +141,76 @@ describe('filtrarItensPix', () => {
 });
 
 // ── Totais ──────────────────────────────────────────────────────────────────
+
+describe('filtrarItensPix — pagamento e período', () => {
+  const mapas = {
+    porEquipe: mapaOperadorEquipe(OPERADORES),
+    porSetor:  mapaOperadorSetor(OPERADORES),
+  };
+  const itens = [
+    item({ nr_cliente: 'PAGO',   status: 'aprovado',    pago: true }),
+    item({ nr_cliente: 'APAGAR', status: 'aprovado',    pago: false }),
+    item({ nr_cliente: 'PEND',   status: 'pendente',    pago: false }),
+    item({ nr_cliente: 'DESAP',  status: 'desaprovado', pago: false }),
+  ];
+
+  it('"pago" traz só o que já saiu', () => {
+    expect(filtrarItensPix(itens, { pagamento: 'pago' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['PAGO']);
+  });
+
+  it('"a pagar" é aprovado e ainda não pago — pendente não é dívida', () => {
+    expect(filtrarItensPix(itens, { pagamento: 'a_pagar' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['APAGAR']);
+  });
+
+  it('"todos" não recorta nada', () => {
+    expect(filtrarItensPix(itens, { pagamento: 'todos' }, mapas)).toHaveLength(4);
+  });
+
+  it('período recorta pelo dia de registro, inclusive nas pontas', () => {
+    const porData = [
+      item({ nr_cliente: 'A', criado_em: '2026-07-01T12:00:00Z' }),
+      item({ nr_cliente: 'B', criado_em: '2026-07-15T12:00:00Z' }),
+      item({ nr_cliente: 'C', criado_em: '2026-07-31T12:00:00Z' }),
+    ];
+    expect(filtrarItensPix(porData, { de: '2026-07-15' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['B', 'C']);
+    expect(filtrarItensPix(porData, { ate: '2026-07-15' }, mapas).map(i => i.nr_cliente))
+      .toEqual(['A', 'B']);
+    expect(filtrarItensPix(porData, { de: '2026-07-15', ate: '2026-07-15' }, mapas)
+      .map(i => i.nr_cliente)).toEqual(['B']);
+  });
+
+  it('o dia é o de São Paulo, não o do UTC', () => {
+    // 01/07 02h UTC ainda é 30/06 23h em São Paulo — e é 30/06 que a tabela mostra.
+    expect(dataLocalDaLinha('2026-07-01T02:00:00Z')).toBe('2026-06-30');
+    const virada = [item({ nr_cliente: 'VIRADA', criado_em: '2026-07-01T02:00:00Z' })];
+    expect(filtrarItensPix(virada, { de: '2026-07-01' }, mapas)).toHaveLength(0);
+    expect(filtrarItensPix(virada, { ate: '2026-06-30' }, mapas)).toHaveLength(1);
+  });
+});
+
+describe('totalPagoPix', () => {
+  it('separa o que já saiu do que ainda falta sair', () => {
+    const itens = [
+      item({ status: 'aprovado', pago: true,  valor: 10000, pct_comissao: 0.25 }),
+      item({ status: 'aprovado', pago: false, valor: 20000, pct_comissao: 0.25 }),
+      item({ status: 'pendente', pago: false, valor: 30000 }),
+    ];
+    const r = totalPagoPix(itens, { 'setor-A': 0.25 });
+    expect(r.pago.qtd).toBe(1);
+    expect(r.pago.comissao).toBeCloseTo(25, 2);
+    expect(r.aPagar.qtd).toBe(1);
+    expect(r.aPagar.comissao).toBeCloseTo(50, 2);
+  });
+
+  it('sem nada pago, os dois lados ficam zerados', () => {
+    const r = totalPagoPix([], { 'setor-A': 0.25 });
+    expect(r.pago).toEqual({ qtd: 0, valor: 0, comissao: 0 });
+    expect(r.aPagar).toEqual({ qtd: 0, valor: 0, comissao: 0 });
+  });
+});
 
 describe('totaisPorStatus', () => {
   const pctPorSetor = { 'setor-A': 0.25, 'setor-B': 0.5 };
@@ -285,28 +356,66 @@ function feitos(qtd: number, over: Partial<PixAutoAcordo> = {}): PixAutoAcordo[]
   }));
 }
 
-describe('calcularDobraComissao — os 18 acordos', () => {
-  it('conta quantos faltam enquanto a meta não sai', () => {
-    const r = calcularDobraComissao(feitos(5), 'maria', { 'setor-A': 0.25 }, '2026-07');
+describe('calcularDobraComissao — os dois requisitos', () => {
+  /** Meta do mês batida com folga: isola o requisito dos acordos. */
+  const META_BATIDA = { metaValor: 50_000, recebidoMes: 60_000 };
+  /** Meta definida e ainda não batida. */
+  const META_ABERTA = { metaValor: 50_000, recebidoMes: 20_000 };
+
+  it('conta quantos acordos faltam enquanto o requisito não fecha', () => {
+    const r = calcularDobraComissao(feitos(5), 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.feitos).toBe(5);
     expect(r.faltam).toBe(13);
     expect(r.meta).toBe(18);
+    expect(r.acordosOk).toBe(false);
+    expect(r.metaOk).toBe(true);
+    expect(r.requisitosOk).toBe(1);
     expect(r.atingiu).toBe(false);
   });
 
-  it('dobra a comissão ao atingir os 18', () => {
-    const r = calcularDobraComissao(feitos(18), 'maria', { 'setor-A': 0.25 }, '2026-07');
+  it('dobra a comissão só com os DOIS requisitos cumpridos', () => {
+    const r = calcularDobraComissao(feitos(18), 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.atingiu).toBe(true);
+    expect(r.requisitosOk).toBe(2);
     expect(r.faltam).toBe(0);
     // 18 × (10.000 × 0,25 ÷ 100) = 18 × 25 = 450
     expect(r.comissao).toBeCloseTo(450, 2);
+    expect(r.bonus).toBeCloseTo(450, 2);
     expect(r.comissaoFinal).toBeCloseTo(900, 2);
   });
 
+  it('18 acordos sem a meta batida NÃO dobra — era o que a tela prometia errado', () => {
+    const r = calcularDobraComissao(feitos(18), 'maria', { 'setor-A': 0.25 }, '2026-07', META_ABERTA);
+    expect(r.acordosOk).toBe(true);
+    expect(r.metaOk).toBe(false);
+    expect(r.atingiu).toBe(false);
+    expect(r.bonus).toBe(0);
+    expect(r.comissaoFinal).toBeCloseTo(450, 2);
+    expect(r.faltaMeta).toBeCloseTo(30_000, 2);
+    expect(r.pctMeta).toBe(40);
+  });
+
+  it('meta batida sem os 18 acordos também não dobra', () => {
+    const r = calcularDobraComissao(feitos(17), 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
+    expect(r.atingiu).toBe(false);
+    expect(r.faltam).toBe(1);
+  });
+
+  it('sem meta definida o requisito fica em aberto e a comissão não dobra', () => {
+    const r = calcularDobraComissao(feitos(20), 'maria', { 'setor-A': 0.25 }, '2026-07');
+    expect(r.acordosOk).toBe(true);
+    expect(r.metaDefinida).toBe(false);
+    expect(r.metaOk).toBe(false);
+    expect(r.atingiu).toBe(false);
+    expect(r.pctMeta).toBe(0);
+    expect(r.faltaMeta).toBe(0);
+  });
+
   it('passar de 18 não inverte o que falta', () => {
-    const r = calcularDobraComissao(feitos(25), 'maria', { 'setor-A': 0.25 }, '2026-07');
+    const r = calcularDobraComissao(feitos(25), 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.feitos).toBe(25);
     expect(r.faltam).toBe(0);
+    expect(r.pctAcordos).toBe(100);
     expect(r.atingiu).toBe(true);
   });
 
@@ -316,7 +425,7 @@ describe('calcularDobraComissao — os 18 acordos', () => {
       ...feitos(8, { status: 'pendente', pct_comissao: null }),
       ...feitos(5, { status: 'desaprovado', pct_comissao: null }),
     ];
-    const r = calcularDobraComissao(itens, 'maria', { 'setor-A': 0.25 }, '2026-07');
+    const r = calcularDobraComissao(itens, 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.feitos).toBe(18);
     expect(r.atingiu).toBe(true);
     // A dobra incide só sobre o APROVADO: 10 × 25 = 250 → 500.
@@ -330,15 +439,45 @@ describe('calcularDobraComissao — os 18 acordos', () => {
       ...feitos(18, { criado_em: '2026-06-10T10:00:00Z' }),
       ...feitos(3),
     ];
-    const r = calcularDobraComissao(itens, 'maria', { 'setor-A': 0.25 }, '2026-07');
+    const r = calcularDobraComissao(itens, 'maria', { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.feitos).toBe(3);
     expect(r.atingiu).toBe(false);
   });
 
   it('sem operador devolve zerado, não quebra', () => {
-    const r = calcularDobraComissao(feitos(18), null, { 'setor-A': 0.25 }, '2026-07');
+    const r = calcularDobraComissao(feitos(18), null, { 'setor-A': 0.25 }, '2026-07', META_BATIDA);
     expect(r.feitos).toBe(0);
     expect(r.comissaoFinal).toBe(0);
+    expect(r.atingiu).toBe(false);
+  });
+});
+
+// ── Prazo dos desaprovados ──────────────────────────────────────────────────
+
+describe('prazo do desaprovado', () => {
+  it('dois dias úteis pulam o fim de semana', () => {
+    // Sexta 10h → segunda (1º útil) → terça (2º útil)
+    const prazo = prazoExpurgoDesaprovado('2026-08-07T10:00:00Z');
+    expect(prazo?.toISOString().slice(0, 10)).toBe('2026-08-11');
+  });
+
+  it('no meio da semana são dois dias corridos mesmo', () => {
+    // Segunda → terça → quarta
+    const prazo = prazoExpurgoDesaprovado('2026-08-03T10:00:00Z');
+    expect(prazo?.toISOString().slice(0, 10)).toBe('2026-08-05');
+  });
+
+  it('linha sem avaliação não tem prazo', () => {
+    expect(prazoExpurgoDesaprovado(null)).toBeNull();
+    expect(textoPrazoExpurgo(undefined)).toBeNull();
+  });
+
+  it('o texto vira horas perto do fim e dias antes disso', () => {
+    const avaliado = '2026-08-03T10:00:00Z';           // prazo: 05/08 10h
+    expect(textoPrazoExpurgo(avaliado, new Date('2026-08-04T20:00:00Z'))).toBe('exclusão em 14h');
+    expect(textoPrazoExpurgo(avaliado, new Date('2026-08-03T11:00:00Z'))).toBe('exclusão em 2 dias');
+    expect(textoPrazoExpurgo(avaliado, new Date('2026-08-06T00:00:00Z')))
+      .toBe('exclusão a qualquer momento');
   });
 });
 
@@ -365,16 +504,18 @@ describe('rankingPixSetor', () => {
     expect(r[0].operadorId).toBe('joao');
   });
 
-  it('marca quem dobrou e soma valor e comissão', () => {
+  it('marca quem cumpriu os 18 e soma valor e comissão', () => {
     const itens = [
       ...feitos(18, { operador_id: 'maria', operador_nome: 'Maria Silva' }),
       ...feitos(2,  { operador_id: 'joao',  operador_nome: 'Joao Souza' }),
     ];
     const r = rankingPixSetor(itens, { 'setor-A': 0.25 }, '2026-07');
-    expect(r[0].dobrou).toBe(true);
+    // O selo é do REQUISITO de acordos, não da dobra: a dobra depende também da
+    // meta de recebimento de cada um, que o ranking do setor não conhece.
+    expect(r[0].requisitoAcordosOk).toBe(true);
     expect(r[0].valor).toBeCloseTo(180000, 2);
     expect(r[0].comissao).toBeCloseTo(450, 2);
-    expect(r[1].dobrou).toBe(false);
+    expect(r[1].requisitoAcordosOk).toBe(false);
   });
 
   it('prefere o nome atual do perfil ao carimbado na linha', () => {
