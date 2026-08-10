@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
-  Hash, MapPin, Link2, FileX, Plus, X,
+  MapPin, Link2, FileX, Plus, X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,7 +13,7 @@ import {
 import { cn } from '@/lib/utils';
 import { acordoTemCpf } from '@/lib/cpf';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
-import { copiarTexto } from '@/lib/clipboard';
+import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
@@ -188,8 +188,8 @@ export function AcordosTableBody({
                         <VinculoTag acordo={a} />
                       </div>
                     </td>
-                    <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                      {a.instituicao || '—'}
+                    <td className="px-3 py-2.5 max-w-[140px]">
+                      <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" />
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">
                       {formatCurrency(a.valor)}
@@ -234,19 +234,7 @@ export function AcordosTableBody({
                 ) : (
                   <>
                     <td className="px-3 py-2.5">
-                      <button
-                        type="button"
-                        title="Clique para copiar o NR"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          // Antes: writeText solto — sem toast e sem catch, o
-                          // clique podia não copiar nada sem avisar ninguém.
-                          void copiarTexto(a.nr_cliente, 'NR copiado', 'Não foi possível copiar o NR.');
-                        }}
-                        className="inline-flex items-center gap-1 font-mono font-bold text-primary text-[11px] bg-primary/8 border border-primary/20 px-1.5 py-0.5 rounded hover:bg-primary/15 hover:border-primary/40 transition-colors cursor-pointer"
-                      >
-                        <Hash className="w-2.5 h-2.5" />{a.nr_cliente}
-                      </button>
+                      <CodigoAcordoCopiavel codigo={a.nr_cliente} label="NR" />
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center gap-1.5">

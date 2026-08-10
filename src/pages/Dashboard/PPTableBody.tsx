@@ -11,6 +11,7 @@ import {
 } from '@/lib/index';
 import { acordoTemCpf } from '@/lib/cpf';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
+import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { VinculoTag } from '@/components/VinculoTag';
 import { OperadorCell } from '@/components/OperadorCell';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
@@ -153,7 +154,7 @@ export function PPTableBody({
               </td>
               <td className="px-3 py-2.5">
                 <div>
-                  <p className="font-medium text-foreground text-[12px] leading-none hover:text-primary transition-colors">{a.instituicao || '—'}</p>
+                  <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" />
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
                     {(a.tag_ids ?? []).map(tid => {
