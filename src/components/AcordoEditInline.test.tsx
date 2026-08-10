@@ -22,6 +22,41 @@ const registrarNrMock = vi.fn();
 vi.mock('@/services/nr_registros.service', () => ({
   verificarNrRegistro: (...a: unknown[]) => verificarNrRegistroMock(...a),
   registrarNr:         (...a: unknown[]) => registrarNrMock(...a),
+  // A tradução dos erros de NR é usada nos dois pontos de falha da gravação.
+  // Devolver `null` faz o componente cair na mensagem dele, que é o caminho
+  // que estes testes exercem.
+  mensagemErroNr:      () => null,
+}));
+
+// 1b) Dependências da escada de conflito. `conflitoNr.service` NÃO é mockado:
+// é justamente a decisão dele que queremos ver acontecendo de ponta a ponta.
+const estaDesligadoMock      = vi.fn();
+const diretoExtraAtivoMock   = vi.fn();
+const transferirServidorMock = vi.fn();
+const autenticarLiderMock    = vi.fn();
+/** A lógica Direto/Extra do usuário ATUAL, resolvida pelo useDiretoExtraConfig. */
+const euTenhoLogicaMock      = vi.fn();
+
+vi.mock('@/services/desligamento.service', () => ({
+  operadorEstaDesligado:       (...a: unknown[]) => estaDesligadoMock(...a),
+  transferirAcordoDeDesligado: vi.fn(async () => ({ ok: true })),
+  transferirAcordoNoServidor:  (...a: unknown[]) => transferirServidorMock(...a),
+  mensagemErroTransferencia:   (e: unknown) => String(e),
+}));
+
+vi.mock('@/services/direto_extra.service', () => ({
+  fetchIsDiretoExtraAtivo:  (...a: unknown[]) => diretoExtraAtivoMock(...a),
+  // Usados pelo useDiretoExtraConfig, que roda de verdade na árvore.
+  fetchDiretoExtraConfigs:  vi.fn(async () => []),
+  resolverDiretoExtraAtivo: (...a: unknown[]) => euTenhoLogicaMock(...a),
+}));
+
+vi.mock('@/services/notificacoes.service', () => ({
+  criarNotificacao: vi.fn(async () => ({ ok: true })),
+}));
+
+vi.mock('@/services/autorizacao_lider.service', () => ({
+  autenticarLider: (...a: unknown[]) => autenticarLiderMock(...a),
 }));
 
 // 2) Supabase — builder chainable terminando em .single() thenable.
@@ -31,6 +66,13 @@ let nextSingleResult: { data: unknown; error: { message: string } | null } = {
 };
 const updateCalls: Array<{ table: string; payload: unknown; id?: unknown }> = [];
 
+/**
+ * Respostas de `.maybeSingle()` na ordem em que a coleta de fatos as consome:
+ * 1º o acordo do dono, 2º o extra atual (ou o setor do dono). Fila, e não
+ * valor único, porque a ordem dessas leituras É a regra sendo testada.
+ */
+let maybeSingleQueue: Array<{ data: unknown; error: { message: string } | null }> = [];
+
 vi.mock('@/lib/supabase', () => {
   const makeBuilder = (table: string) => {
     const state: { payload?: unknown; id?: unknown } = {};
@@ -39,6 +81,8 @@ vi.mock('@/lib/supabase', () => {
         state.payload = payload;
         return builder;
       }),
+      insert: vi.fn(async () => ({ data: null, error: null })),
+      delete: vi.fn(() => builder),
       eq: vi.fn((col: string, val: unknown) => {
         if (col === 'id') state.id = val;
         return builder;
@@ -48,6 +92,7 @@ vi.mock('@/lib/supabase', () => {
         updateCalls.push({ table, payload: state.payload, id: state.id });
         return nextSingleResult;
       }),
+      maybeSingle: vi.fn(async () => maybeSingleQueue.shift() ?? { data: null, error: null }),
     };
     return builder;
   };
@@ -62,6 +107,7 @@ vi.mock('@/lib/supabase', () => {
   return {
     supabase: {
       from:          vi.fn((t: string) => makeBuilder(t)),
+      rpc:           vi.fn(async () => ({ data: null, error: null })),
       channel:       vi.fn(() => fakeChannel),
       removeChannel: vi.fn(),
     },
@@ -160,6 +206,14 @@ beforeEach(() => {
   updateCalls.length = 0;
   nextSingleResult = { data: null, error: null };
   empresaValue = { id: 'emp-1' };
+  maybeSingleQueue = [];
+  estaDesligadoMock.mockReset().mockResolvedValue(false);
+  diretoExtraAtivoMock.mockReset().mockResolvedValue(false);
+  euTenhoLogicaMock.mockReset().mockReturnValue(false);
+  transferirServidorMock.mockReset().mockResolvedValue({ ok: true });
+  autenticarLiderMock.mockReset().mockResolvedValue({
+    autorizador: { uid: 'lider-1', nome: 'Líder', token: 'tok', perfil: 'lider' },
+  });
 });
 
 function clickSalvar() {
@@ -205,6 +259,10 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     verificarNrRegistroMock.mockResolvedValue({
       registroId: 'r1', acordoId: 'outro', operadorId: 'op2', operadorNome: 'Ana',
     });
+    maybeSingleQueue = [
+      { data: { id: 'outro', vinculo_operador_id: null }, error: null }, // acordo do dono
+      { data: null, error: null },                                       // setor do dono
+    ];
 
     renderInline(
       <AcordoEditInline
@@ -225,11 +283,109 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     expect(verificarNrRegistroMock).toHaveBeenCalledWith(
       'INS-200', 'emp-1', 'instituicao', 'acordo-1',
     );
-    // Bloqueou → não salva.
+    // Ninguém tem a lógica Direto/Extra → CASO C: pede o líder, não salva.
+    await screen.findByText(/Autorização do Líder/i);
     expect(onSaved).not.toHaveBeenCalled();
-    expect(toastError).toHaveBeenCalled();
-    const [msg] = toastError.mock.calls[0];
-    expect(msg).toMatch(/Código/);
+  });
+
+  // Os casos abaixo usam PaguePlay porque é onde a chave é EDITÁVEL: o campo
+  // NR da BookPlay foi removido da tela por LGPD, então lá `nr_cliente` nunca
+  // muda por esta edição e a escada não tem como ser alcançada.
+
+  /** Prepara um acordo PaguePlay em conflito e devolve o input do Código. */
+  function renderConflitoPP(onSaved: () => void) {
+    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
+    verificarNrRegistroMock.mockResolvedValue({
+      registroId: 'r1', acordoId: 'acordo-da-maria', operadorId: 'op2', operadorNome: 'Maria Valeria',
+    });
+    nextSingleResult = { data: { ...acordo, instituicao: 'INS-200' }, error: null };
+
+    renderInline(
+      <AcordoEditInline acordo={acordo} isPaguePlay onSaved={onSaved} onCancel={vi.fn()} />,
+    );
+    return screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
+  }
+
+  it('(c) CASO B — dono tem a lógica Direto/Extra: abre o aviso, sem pedir líder', async () => {
+    // É o caso que a edição não tinha: antes parava num toast de "não é
+    // possível duplicar" mesmo com o caminho liberado pela lógica do dono.
+    const onSaved = vi.fn();
+    diretoExtraAtivoMock.mockResolvedValue(true); // o DONO tem a lógica
+    maybeSingleQueue = [
+      { data: { id: 'acordo-da-maria', vinculo_operador_id: null }, error: null },
+      { data: { setores: { nome: 'Cobrança' } }, error: null },
+    ];
+
+    const input = renderConflitoPP(onSaved);
+    fireEvent.change(input, { target: { value: 'INS-200' } });
+    clickSalvar();
+
+    await screen.findByText(/Vínculo detectado/i);
+    expect(screen.getByText(/Tabular como Direto/i)).toBeTruthy();
+    // A lógica do DONO é que foi consultada, não a minha.
+    expect(diretoExtraAtivoMock).toHaveBeenCalledWith({ userId: 'op2', empresaId: 'emp-1' });
+    expect(onSaved).not.toHaveBeenCalled();
+    // Nenhuma autorização de líder neste caminho.
+    expect(screen.queryByText(/Autorização do Líder/i)).toBeNull();
+  });
+
+  it('(d) CASO B confirmado: converte o acordo do dono e grava o meu como DIRETO', async () => {
+    const onSaved = vi.fn();
+    diretoExtraAtivoMock.mockResolvedValue(true);
+    maybeSingleQueue = [
+      { data: { id: 'acordo-da-maria', vinculo_operador_id: null }, error: null },
+      { data: { setores: { nome: 'Cobrança' } }, error: null },
+    ];
+
+    const input = renderConflitoPP(onSaved);
+    fireEvent.change(input, { target: { value: 'INS-200' } });
+    clickSalvar();
+
+    fireEvent.click(await screen.findByText(/Tabular como Direto/i));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    const payload = updateCalls.at(-1)?.payload as Record<string, unknown>;
+    expect(payload.tipo_vinculo).toBe('direto');
+    expect(payload.vinculo_operador_id).toBe('op2');
+  });
+
+  it('(e) CASO A — eu tenho a lógica e o dono não: gravo como EXTRA, sem modal', async () => {
+    const onSaved = vi.fn();
+    diretoExtraAtivoMock.mockResolvedValue(false); // o dono NÃO tem
+    euTenhoLogicaMock.mockReturnValue(true);       // EU tenho
+    maybeSingleQueue = [
+      { data: { id: 'acordo-da-maria', vinculo_operador_id: null }, error: null },
+      { data: null, error: null },
+    ];
+
+    const input = renderConflitoPP(onSaved);
+    fireEvent.change(input, { target: { value: 'INS-200' } });
+    clickSalvar();
+
+    // CASO A grava direto, sem modal: quem tem a lógica ativa não passa por
+    // autorização nenhuma — é o ponto todo da lógica.
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/Autorização do Líder/i)).toBeNull();
+    const payload = updateCalls.at(-1)?.payload as Record<string, unknown>;
+    expect(payload.tipo_vinculo).toBe('extra');
+    expect(payload.vinculo_operador_id).toBe('op2');
+  });
+
+  it('(f) já existe EXTRA no acordo do dono → autorização de líder, mesmo com a lógica ativa', async () => {
+    const onSaved = vi.fn();
+    euTenhoLogicaMock.mockReturnValue(true);
+    maybeSingleQueue = [
+      { data: { id: 'acordo-da-maria', vinculo_operador_id: 'op3', vinculo_operador_nome: 'Joana' }, error: null },
+      { data: { id: 'acordo-extra-9', operador_id: 'op3' }, error: null },
+    ];
+
+    const input = renderConflitoPP(onSaved);
+    fireEvent.change(input, { target: { value: 'INS-200' } });
+    clickSalvar();
+
+    // Tirar o lugar de um terceiro passa por líder — a lógica não dispensa.
+    await screen.findByText(/Autorização do Líder/i);
+    expect(onSaved).not.toHaveBeenCalled();
   });
 
   it('(b2) PaguePlay: editar sem estado (UF) é recusado antes de consultar o NR', async () => {

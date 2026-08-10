@@ -17,8 +17,19 @@ import { cn } from '@/lib/utils';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
+import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
 import type { Perfil } from '@/lib/supabase';
-import { verificarNrRegistro, registrarNr, mensagemErroNr } from '@/services/nr_registros.service';
+import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
+import {
+  coletarFatosConflitoNr, decidirConflitoNr, type DecisaoConflitoNr,
+} from '@/services/conflitoNr.service';
+import { criarNotificacao } from '@/services/notificacoes.service';
+import { autenticarLider } from '@/services/autorizacao_lider.service';
+import {
+  transferirAcordoDeDesligado, transferirAcordoNoServidor, mensagemErroTransferencia,
+} from '@/services/desligamento.service';
+import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
+import type { ConflitNR } from '@/components/AcordoNovoInline';
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
@@ -50,6 +61,22 @@ import {
  */
 const TIPOS_PARCELADOS_PP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
 
+/**
+ * Um conflito de NR que parou a gravação e espera o operador (ou o líder).
+ *
+ * Carrega o `plano` de parcelas junto: quem trocou o NR *e* mexeu na
+ * quantidade no mesmo save já confirmou a remoção antes do modal abrir.
+ * Recalcular depois perderia a mudança de parcelas ou pediria a mesma
+ * confirmação de novo.
+ */
+interface PendenciaConflitoNr {
+  decisao:    DecisaoConflitoNr;
+  campoChave: 'nr_cliente' | 'instituicao';
+  valorChave: string;
+  label:      string;
+  plano:      PlanoQuantidade | null;
+}
+
 interface AcordoEditInlineProps {
   acordo: Acordo;
   isPaguePlay?: boolean;
@@ -78,6 +105,17 @@ export function AcordoEditInline({
     (perfil as (Perfil & { equipe_id?: string | null }) | null)?.equipe_id ?? null,
   );
   const [saving, setSaving] = useState(false);
+
+  // ── Conflito de NR ────────────────────────────────────────────────────────
+  // Trocar a chave (NR na BookPlay, Código na PaguePlay) para uma que já é de
+  // outro operador cai na MESMA escada do cadastro novo — `conflitoNr.service`.
+  // Antes a edição parava num toast de "não é possível duplicar" mesmo quando
+  // a lógica Direto/Extra do dono liberava o caminho sem autorização nenhuma.
+  const [pendencia,        setPendencia]        = useState<PendenciaConflitoNr | null>(null);
+  const [liderEmail,       setLiderEmail]       = useState('');
+  const [liderSenha,       setLiderSenha]       = useState('');
+  const [autorizando,      setAutorizando]      = useState(false);
+  const [confirmandoAviso, setConfirmandoAviso] = useState(false);
 
   // Form state initialised from acordo
   const initialEstado = getEstadoFromAcordo(acordo);
@@ -192,46 +230,37 @@ export function AcordoEditInline({
       planoQuantidade = { acao: 'contador', novoTotal: parcelasNum };
     }
 
-    // ─── Bloqueio de NR/Inscrição duplicado (edição) ──────────────────────
-    // Mesma validação feita no AcordoNovoInline/AcordoForm: quando o usuário
-    // ALTERA a chave (NR no Bookplay, Inscrição no PaguePlay) para um valor
-    // que já está registrado em outro acordo ativo, bloquear o salvamento.
+    // ─── Conflito de NR/Código na edição ──────────────────────────────────
+    // Só entra aqui quem MUDOU a chave para um valor que não era seu. Editar
+    // valor, vencimento ou observação não passa por nada disto.
     //
     // Chaves:
-    //   • PaguePlay → `instituicao` (Inscrição do profissional)
+    //   • PaguePlay → `instituicao` (Inscrição do profissional, que É o código)
     //   • Bookplay  → `nr_cliente`   (NR do cliente)
     //
-    // O bloqueio ignora o próprio acordo (via `acordoIdExcluir`) e acordos
-    // com tipo_vinculo === 'extra' não deveriam existir como titulares no
-    // nr_registros (só Direto é titular lá), portanto a checagem é segura.
-    if (empresa?.id) {
+    // Na BookPlay `instituicao` é CATEGORIA (BOOKPLAY, MUNDIAL EDITORA…), não
+    // chave — foi registrá-la como chave que travou a categoria inteira em nome
+    // do primeiro operador que salvasse. Ver migration 20260810b.
+    if (empresa?.id && perfil?.id) {
       const campoChave: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-      const valorNovo = isPaguePlay ? instituicao.trim() : nrCliente.trim();
+      const valorNovo   = isPaguePlay ? instituicao.trim() : nrCliente.trim();
       const valorAntigo = isPaguePlay ? (acordo.instituicao ?? '').trim() : (acordo.nr_cliente ?? '').trim();
+      const label       = isPaguePlay ? 'Código' : 'NR';
 
       if (valorNovo && valorNovo !== valorAntigo) {
+        let conflito;
         try {
-          const conflito = await verificarNrRegistro(
+          conflito = await verificarNrRegistro(
             valorNovo,
             empresa.id,
             campoChave,
             acordo.id, // ignora o próprio acordo
           );
-          if (conflito) {
-            const label = isPaguePlay ? 'Código' : 'NR';
-            toast.error(
-              `${label} ${valorNovo} já está vinculado ao operador ${conflito.operadorNome}. ` +
-              `Não é possível duplicar a tabulação pela edição.`,
-              { duration: 6000 },
-            );
-            return;
-          }
         } catch (e) {
           console.warn('[AcordoEditInline] falha ao verificar nr_registros', e);
           // BLOQUEIA. Antes, falha na verificação salvava assim mesmo — o que
           // transformava uma instabilidade de rede numa tabulação duplicada
           // sem autorização. Um portão que abre ao falhar não é um portão.
-          const label = isPaguePlay ? 'Código' : 'NR';
           toast.error(
             mensagemErroNr(e, label)
               ?? `Não foi possível verificar se este ${label} já está tabulado. `
@@ -240,8 +269,100 @@ export function AcordoEditInline({
           );
           return;
         }
+
+        if (conflito) {
+          setSaving(true);
+          let decisao: DecisaoConflitoNr;
+          try {
+            decisao = decidirConflitoNr(await coletarFatosConflitoNr({
+              conflito,
+              empresaId:     empresa.id,
+              meuOperadorId: perfil.id,
+              euTemLogica:   usuarioTemLogicaDiretoExtra,
+              campoChave,
+              valorChave:    valorNovo,
+            }));
+          } catch (e) {
+            toast.error(
+              mensagemErroNr(e, label) ?? (e instanceof Error ? e.message : 'Erro ao verificar o vínculo.'),
+              { duration: 7000 },
+            );
+            return;
+          } finally {
+            setSaving(false);
+          }
+
+          const pend: PendenciaConflitoNr = {
+            decisao, campoChave, valorChave: valorNovo, label, plano: planoQuantidade,
+          };
+
+          switch (decisao.caso) {
+            // Outro acordo MEU já usa essa chave — nada a autorizar, é engano.
+            case 'proprio_acordo':
+              toast.error(`${label} ${valorNovo} já está em outro acordo seu.`, { duration: 6000 });
+              return;
+
+            // Dono saiu da empresa: assume e segue, sem líder no caminho.
+            case 'dono_desligado': {
+              setSaving(true);
+              const r = await transferirAcordoDeDesligado({
+                acordoAnteriorId: decisao.acordoId,
+                empresaId:        empresa.id,
+                operadorAntId:    decisao.operadorId,
+                operadorAntNome:  decisao.operadorNome,
+                novoOperadorId:   perfil.id,
+                novoOperadorNome: perfil.nome ?? 'Operador',
+                labelNr:          label,
+                valorNr:          valorNovo,
+              });
+              setSaving(false);
+              if (!r.ok) {
+                toast.error(`Erro ao liberar o acordo do operador desligado: ${r.erro}`);
+                return;
+              }
+              toast.success(`${label} "${valorNovo}" liberado: ${decisao.operadorNome} está desligado.`);
+              break; // segue para a gravação
+            }
+
+            // CASO A — eu tenho a lógica e o dono não: o acordo que estou
+            // editando passa a ser o EXTRA, e o dono segue DIRETO.
+            case 'eu_viro_extra':
+              await gravar(planoQuantidade, {
+                tipo_vinculo:          'extra',
+                vinculo_operador_id:   decisao.operadorId,
+                vinculo_operador_nome: decisao.operadorNome,
+              });
+              return;
+
+            // CASO B e C/D dependem do operador (ou do líder): guarda o estado
+            // e devolve o controle para o modal.
+            case 'aviso_direto_extra':
+            case 'troca_extra':
+            case 'autorizacao_lider':
+              setPendencia(pend);
+              return;
+          }
+        }
       }
     }
+
+    await gravar(planoQuantidade);
+  }
+
+  /**
+   * A gravação em si. Separada de `handleSave` porque os fluxos de conflito
+   * precisam RETOMAR daqui depois que o operador confirma ou o líder autoriza
+   * — sem refazer validação, plano de parcelas nem checagem de NR.
+   *
+   * `override` entra por cima do payload: é como os casos Direto/Extra gravam
+   * `tipo_vinculo` e o par do vínculo na mesma ida ao banco.
+   */
+  async function gravar(
+    planoQuantidade: PlanoQuantidade | null,
+    override: Record<string, unknown> = {},
+  ) {
+    const valorNum    = parseCurrencyInput(valor);
+    const parcelasNum = parseInt(parcelas || '1', 10);
 
     setSaving(true);
     try {
@@ -266,6 +387,10 @@ export function AcordoEditInline({
       };
 
       if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
+
+      // Depois do payload base: os casos Direto/Extra mandam em `tipo_vinculo`
+      // e no par do vínculo, e o toggle da tela não pode desfazer a decisão.
+      Object.assign(payload, override);
 
       // PP + parcelamento alterado: mesma fórmula do acordo novo. O valor
       // digitado é lido como TOTAL; a linha guarda a parcela corrente (valor)
@@ -293,13 +418,26 @@ export function AcordoEditInline({
         .select('*, perfis(id, nome, email, perfil, setor_id)')
         .single();
       if (error) {
-        toast.error(`Erro ao salvar: ${error.message}`);
+        // A recusa do trigger de NR (NR_JA_REGISTRADO) chega por aqui quando
+        // alguém tomou a chave entre a checagem e o UPDATE. Despejar o erro
+        // cru de Postgres na tela foi o que o operador viu no print.
+        toast.error(
+          mensagemErroNr(error, isPaguePlay ? 'Código' : 'NR')
+            ?? `Erro ao salvar: ${error.message}`,
+          { duration: 7000 },
+        );
         return;
       }
 
       // Grupo depois da linha: se o UPDATE acima for recusado (RLS, validação
       // do banco), nenhuma parcela foi criada nem apagada.
       if (planoQuantidade) {
+        const camposDoGrupo = entradaAtiva && demaisAtual != null
+          ? {
+              valor_entrada: entradaPrevista,
+              valor_total:   totalComEntrada(entradaPrevista, demaisAtual, parcelasNum),
+            }
+          : undefined;
         const r = await aplicarQuantidade(acordo, planoQuantidade, {
           isPaguePlay: false,
           camposDoGrupo,
@@ -315,37 +453,196 @@ export function AcordoEditInline({
         if (r.removidas.length) toast.success(`${r.removidas.length} parcela(s) apagada(s).`);
       }
 
-      // Sincroniza nr_registros quando a chave NR/Inscrição mudou.
-      // Só sincroniza se este acordo for DIRETO — Extras não possuem titularidade
-      // no nr_registros (o Direto do par é que é titular).
-      if (empresa?.id && (acordo.tipo_vinculo ?? 'direto') === 'direto') {
-        const campoChave: 'nr_cliente' | 'instituicao' = isPaguePlay ? 'instituicao' : 'nr_cliente';
-        const valorNovo = isPaguePlay ? instituicao.trim() : nrCliente.trim();
-        const valorAntigo = isPaguePlay ? (acordo.instituicao ?? '').trim() : (acordo.nr_cliente ?? '').trim();
-        if (valorNovo && valorNovo !== valorAntigo) {
-          try {
-            await registrarNr({
-              empresaId:    empresa.id,
-              nrValue:      valorNovo,
-              campo:        campoChave,
-              operadorId:   acordo.operador_id,
-              operadorNome: (updated as Acordo)?.perfis?.nome ?? '',
-              acordoId:     acordo.id,
-            });
-          } catch (e) {
-            console.warn('[AcordoEditInline] falha ao sincronizar nr_registros', e);
-          }
-        }
-      }
+      // `nr_registros` NÃO é sincronizado daqui. O trigger trg_sync_nr_registros
+      // já grava a titularidade dentro da mesma transação do UPDATE, com a
+      // checagem de dono junto. O upsert que existia aqui rodava DEPOIS e por
+      // fora dessa checagem — `onConflict → overwrite` — ou seja, reabria pelo
+      // cliente exatamente o roubo silencioso de NR que a 20260809d fechou no
+      // banco. Ver migration 20260810b.
 
       toast.success('Acordo atualizado!');
       onSaved((updated ?? { ...acordo, ...payload }) as Acordo);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro inesperado');
+      toast.error(
+        mensagemErroNr(e, isPaguePlay ? 'Código' : 'NR')
+          ?? (e instanceof Error ? e.message : 'Erro inesperado'),
+        { duration: 7000 },
+      );
     } finally {
       setSaving(false);
     }
   }
+
+  /**
+   * CASO B — o dono tem a lógica Direto/Extra e eu não. Ao confirmar, o acordo
+   * DELE cai para EXTRA e o que estou editando fica DIRETO.
+   */
+  async function confirmarAvisoDiretoExtra() {
+    if (!pendencia || pendencia.decisao.caso !== 'aviso_direto_extra') return;
+    if (!empresa?.id || !perfil?.id) return;
+    const { decisao, label, valorChave, plano } = pendencia;
+
+    setConfirmandoAviso(true);
+    try {
+      // A config pode ter sido desligada entre abrir o aviso e confirmar. Sem
+      // esta releitura o acordo do outro operador cairia para EXTRA por uma
+      // permissão que já não existe.
+      const aindaAtiva = await fetchIsDiretoExtraAtivo({
+        userId: decisao.operadorId, empresaId: empresa.id,
+      });
+      if (!aindaAtiva) {
+        toast.error('A lógica Direto/Extra do operador foi desativada. Atualize e tente novamente.');
+        return;
+      }
+
+      const { error: rpcErr } = await supabase.rpc('fn_converter_para_extra', {
+        p_acordo_id:           decisao.acordoId,
+        p_novo_direto_op_id:   perfil.id,
+        p_novo_direto_op_nome: perfil.nome ?? 'Operador',
+        p_valor:               parseCurrencyInput(valor),
+        p_vencimento:          vencimento,
+        p_nome_cliente:        nomeCliente.trim(),
+        p_tipo:                tipo,
+        p_whatsapp:            isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
+        p_parcelas:            parseInt(parcelas || '1', 10) || 1,
+      });
+      if (rpcErr) {
+        toast.error(`Erro ao converter o acordo de ${decisao.operadorNome}: ${rpcErr.message}`);
+        return;
+      }
+
+      setPendencia(null);
+      await gravar(plano, {
+        tipo_vinculo:          'direto',
+        vinculo_operador_id:   decisao.operadorId,
+        vinculo_operador_nome: decisao.operadorNome,
+      });
+
+      await criarNotificacao({
+        usuario_id: decisao.operadorId,
+        titulo:     'Seu acordo foi convertido em EXTRA',
+        mensagem:   `O ${label} "${valorChave}" foi tabulado como DIRETO pelo operador `
+                  + `${perfil.nome ?? 'outro operador'}. Seu acordo continua ativo como EXTRA.`,
+        empresa_id: empresa.id,
+      });
+      toast.success(`Acordo tabulado como DIRETO. ${decisao.operadorNome} foi notificado.`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado ao tabular');
+    } finally {
+      setConfirmandoAviso(false);
+    }
+  }
+
+  /**
+   * CASO C/D e troca de EXTRA — passa pela senha do líder. A transferência sai
+   * pela RPC com o TOKEN DO LÍDER: a RLS fail-closed barra o operador de ler
+   * ou apagar acordo alheio, e sem isso a tela dizia "acordo não encontrado"
+   * mesmo com a senha certa.
+   */
+  async function autorizarComLider() {
+    if (!pendencia || !empresa?.id || !perfil?.id) return;
+    if (!liderEmail.trim() || !liderSenha.trim()) {
+      toast.error('Informe o e-mail e a senha do líder');
+      return;
+    }
+    const { decisao, label, valorChave, plano } = pendencia;
+    if (decisao.caso !== 'autorizacao_lider' && decisao.caso !== 'troca_extra') return;
+
+    setAutorizando(true);
+    try {
+      const auth = await autenticarLider({ email: liderEmail, senha: liderSenha });
+      // `'erro' in auth` e não `!auth.ok`: com `strict: false` o TS não estreita
+      // união por discriminante booleano. Mesmo idioma de parcelas.service.
+      if ('erro' in auth) { toast.error(auth.erro); return; }
+
+      // Troca de EXTRA: quem sai é o EXTRA atual, e o DIRETO do dono continua
+      // intacto — por isso este caminho grava o acordo editado como EXTRA.
+      if (decisao.caso === 'troca_extra') {
+        if (decisao.extraAtualId) {
+          const { error: errDel } = await supabase
+            .from('acordos').delete().eq('id', decisao.extraAtualId);
+          if (errDel) { toast.error(`Erro ao remover o vínculo extra anterior: ${errDel.message}`); return; }
+        }
+
+        setPendencia(null);
+        await gravar(plano, {
+          tipo_vinculo:          'extra',
+          vinculo_operador_id:   decisao.operadorId,
+          vinculo_operador_nome: decisao.operadorNome,
+        });
+
+        await supabase.from('logs_sistema').insert({
+          usuario_id: perfil.id, acao: 'troca_extra', tabela: 'acordos',
+          registro_id: decisao.extraAtualId, empresa_id: empresa.id,
+          detalhes: {
+            nr: valorChave, origem: 'edicao',
+            aprovado_por: auth.autorizador.nome, aprovado_por_id: auth.autorizador.uid,
+            operador_extra_anterior: decisao.extraAtualOpId,
+            operador_extra_novo: perfil.id,
+          },
+        });
+
+        if (decisao.extraAtualOpId) {
+          await criarNotificacao({
+            usuario_id: decisao.extraAtualOpId,
+            titulo:     'Seu vínculo EXTRA foi transferido',
+            mensagem:   `O ${label} "${valorChave}" (EXTRA) foi transferido para `
+                      + `${perfil.nome ?? 'outro operador'}. Autorizado por ${auth.autorizador.nome}.`,
+            empresa_id: empresa.id,
+          });
+        }
+        toast.success('Troca de vínculo EXTRA autorizada!');
+        setLiderEmail(''); setLiderSenha('');
+        return;
+      }
+
+      // Transferência completa: o acordo do dono vai para a lixeira e a chave
+      // fica livre para o acordo que estou editando assumir.
+      const rt = await transferirAcordoNoServidor({
+        acordoId:       decisao.acordoId,
+        novoOperadorId: perfil.id,
+        token:          auth.autorizador.token,
+      });
+      if (!rt.ok) { toast.error(mensagemErroTransferencia(rt.erro)); return; }
+
+      setPendencia(null);
+      await gravar(plano);
+
+      await criarNotificacao({
+        usuario_id: decisao.operadorId,
+        titulo:     `Seu ${label} "${valorChave}" foi transferido`,
+        mensagem:   `O ${label} "${valorChave}" foi transferido para ${perfil.nome ?? 'outro operador'} `
+                  + `com autorização de ${auth.autorizador.nome}. Seu acordo foi movido para a lixeira.`,
+        empresa_id: empresa.id,
+      });
+      toast.success('Transferência autorizada!');
+      setLiderEmail(''); setLiderSenha('');
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado na autorização');
+    } finally {
+      setAutorizando(false);
+    }
+  }
+
+  function cancelarPendencia() {
+    setPendencia(null); setLiderEmail(''); setLiderSenha('');
+  }
+
+  // O modal de autorização fala a linguagem do cadastro novo (`ConflitNR`).
+  // Aqui o "payload" só existe para ele mostrar a chave em conflito.
+  const conflitoParaModal: ConflitNR | null =
+    pendencia && (pendencia.decisao.caso === 'autorizacao_lider' || pendencia.decisao.caso === 'troca_extra')
+      ? {
+          acordoId:     pendencia.decisao.acordoId,
+          operadorId:   pendencia.decisao.operadorId,
+          operadorNome: pendencia.decisao.operadorNome,
+          payload:      { [pendencia.campoChave]: pendencia.valorChave },
+          modo:         pendencia.decisao.caso === 'troca_extra' ? 'troca_extra' : 'transferencia_completa',
+          extraAtualId:     pendencia.decisao.caso === 'troca_extra' ? pendencia.decisao.extraAtualId : null,
+          extraAtualOpId:   pendencia.decisao.caso === 'troca_extra' ? pendencia.decisao.extraAtualOpId : null,
+          extraAtualOpNome: pendencia.decisao.caso === 'troca_extra' ? pendencia.decisao.extraAtualOpNome : null,
+        }
+      : null;
 
   return (
     <tr>
@@ -711,6 +1008,36 @@ export function AcordoEditInline({
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Conflito de NR na edição — os mesmos modais do cadastro novo, para
+              o operador não encontrar duas linguagens para a mesma regra. */}
+          <ModalAvisoDiretoExtra
+            aberto={pendencia?.decisao.caso === 'aviso_direto_extra'}
+            operadorNome={
+              pendencia?.decisao.caso === 'aviso_direto_extra' ? pendencia.decisao.operadorNome : ''
+            }
+            operadorSetor={
+              pendencia?.decisao.caso === 'aviso_direto_extra'
+                ? (pendencia.decisao.operadorSetor ?? undefined)
+                : undefined
+            }
+            nrLabel={pendencia?.valorChave ?? ''}
+            labelCampo={pendencia?.label ?? 'NR'}
+            confirmando={confirmandoAviso}
+            onConfirmar={() => { void confirmarAvisoDiretoExtra(); }}
+            onCancel={cancelarPendencia}
+          />
+
+          <ModalAutorizacaoNR
+            conflito={conflitoParaModal}
+            liderEmail={liderEmail}
+            liderSenha={liderSenha}
+            autorizando={autorizando}
+            onEmailChange={setLiderEmail}
+            onSenhaChange={setLiderSenha}
+            onAutorizar={() => { void autorizarComLider(); }}
+            onCancel={cancelarPendencia}
+          />
         </td>
       </tr>
     );

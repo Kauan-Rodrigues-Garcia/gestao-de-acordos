@@ -475,6 +475,45 @@ A checagem do cliente continua existindo: é ela que dá a mensagem boa e abre o
 fluxo de autorização. Ela deixou de ser a única — e **passou a falhar fechado**:
 erro na consulta agora bloqueia o salvamento em vez de tratar como "NR livre".
 
+#### Uma chave por acordo (migration `20260810b`)
+
+A `20260809d` registrava `nr_cliente` **e** `instituicao` como chaves, em toda
+empresa. Na BookPlay `instituicao` não é código: é um `<Select>` de lista fixa
+(BOOKPLAY, MUNDIAL EDITORA…), uma **categoria** repetida em todo acordo. Com a
+trava ativa, o primeiro operador que salvou virou dono da string `"BOOKPLAY"`
+para a empresa inteira, e todo mundo depois levou
+
+> `NR_JA_REGISTRADO: o Código "BOOKPLAY" já está tabulado por <fulano>.`
+
+ao cadastrar, ao editar e ao adicionar parcela — a parcela nova copia
+`instituicao` do acordo pai.
+
+A regra passou a ser **uma chave só por acordo** (`fn_nr_campo_chave`), a mesma
+que a `fn_sync_par_vinculo` já usava:
+
+| Tem `nr_cliente`? | Chave | Tenant |
+|---|---|---|
+| sim | `nr_cliente` | BookPlay |
+| não | `instituicao` | PaguePlay — lá a instituição **é** o código |
+
+A mesma migration fechou três buracos do branch UPDATE, que só reagia a status e
+a mudança de valor do NR:
+
+- **DIRETO → EXTRA** não liberava o registro (o NR ficava travado num acordo que
+  já não era DIRETO);
+- **EXTRA → DIRETO** não reivindicava o registro (o novo DIRETO ficava sem
+  titularidade e o NR seguia livre para um terceiro tomar);
+- **troca de operador** (transferência) não movia o registro.
+
+E **parcela do mesmo `acordo_grupo_id` não conflita**: o acordo pai já é dono do
+NR, a linha nova não muda titularidade nenhuma, logo não há o que autorizar.
+
+O cliente **não** escreve mais em `nr_registros` ao editar. O trigger grava a
+titularidade dentro da mesma transação do UPDATE, com a checagem de dono junto;
+o `registrarNr` que rodava depois passava por fora dessa checagem
+(`onConflict → overwrite`) e reabria pelo navegador exatamente o roubo
+silencioso que a `20260809d` tinha fechado no banco.
+
 ### 7.2 Status e tipos
 
 | Status | Rótulo `[BP]` | Rótulo `[PP]` |
@@ -490,8 +529,12 @@ Um acordo é **atrasado** quando o vencimento passou e o status ainda não é
 ### 7.3 O fluxo de conflito — ordem exata das decisões
 
 Ao salvar um acordo, se o NR/Código mudou, o sistema consulta `nr_registros`.
-Sem conflito, salva direto. **Com** conflito, a ordem é
-(`src/pages/AcordoForm/index.tsx`, espelhado em `AcordoNovoInline`):
+Sem conflito, salva direto. **Com** conflito, a decisão sai de
+`decidirConflitoNr` (`src/services/conflitoNr.service.ts`) — uma função pura,
+usada por **todas** as telas que gravam. A escada vivia copiada em
+`AcordoForm` e `AcordoNovoInline`, e faltava inteira na edição, que parava num
+toast de "não é possível duplicar" mesmo quando a lógica do dono liberava o
+caminho. A ordem:
 
 ```
 1. O NR já é MEU?
@@ -512,6 +555,16 @@ Sem conflito, salva direto. **Com** conflito, a ordem é
 
 O passo 2 vem **antes** das regras de Direto/Extra de propósito — é a diferença
 entre "mudar de dono" e "criar um vínculo com quem não trabalha mais aqui".
+O passo 3 vem antes do CASO A pelo mesmo motivo: tirar o lugar de um terceiro
+passa por líder, mesmo de quem tem a lógica ativa.
+
+#### Onde a escada roda
+
+| Tela | Alcança o conflito? |
+|---|---|
+| `AcordoForm`, `AcordoNovoInline` | sim — chave digitada no cadastro |
+| `AcordoEditInline` | sim `[PP]` (campo Código). `[BP]` não: o campo NR saiu da tela por LGPD, então `nr_cliente` não muda por lá |
+| Adicionar parcela (`parcelas.service`) | não, por desenho — parcela do mesmo grupo herda o NR e o dono do acordo pai |
 
 ### 7.4 Transferência no servidor
 
