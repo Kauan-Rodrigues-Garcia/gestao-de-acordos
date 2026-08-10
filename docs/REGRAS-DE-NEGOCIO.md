@@ -903,6 +903,37 @@ Economia baseada no recebimento diário.
 Todas as funções toleram a ausência das tabelas/RPCs, caindo no modo
 `localStorage`.
 
+### 13.4-b Comemoração de meta
+
+Líder+ monta e dispara (agora ou agendada); o card explode na tela de quem está
+no escopo. **Quem monta escolhe o alvo, e o alvo decide a plateia:**
+
+| Alvo | Plateia padrão | "Exibir apenas para a equipe" |
+|---|---|---|
+| Pessoas | o setor de cada homenageado | a equipe de cada homenageado |
+| Equipe | o setor da equipe | só aquela equipe |
+| Setor | **a empresa inteira** | não se aplica |
+
+Meta de setor é a única que interrompe quem nem sabe da meta — daí o aviso em
+destaque na montagem e o volume **travado em 25%**, sem edição.
+
+**Volume.** Nasce em 25%; acima de 60% a tela avisa que pode atrapalhar quem
+está em ligação. As três regras vivem em `pages/Comemoracoes/volume.ts`, e não
+no JSX, porque a tela, o botão "Testar" e o INSERT precisam concordar sobre o
+mesmo número.
+
+**Clone (migration `20260810a`).** Operador clonado trabalha em dois times. Até
+esta migration o banco unia os setores sozinho e a festa caía nos dois, sempre.
+Agora, ao clicar em "Comemorar agora"/"Agendar", quem montou responde em qual
+setor cada clone deve ser comemorado — "todos os setores" continua disponível, e
+é o comportamento antigo, agora deliberado. A resposta vai em
+`comemoracao_homenageados.setores_escolhidos`; quem preenche `setores_alvo` e
+`equipes_alvo` a partir dela continua sendo o trigger.
+
+> O recorte por equipe é filtro de **exibição** (`pages/Comemoracoes/escopo.ts`),
+> não de segurança — igual ao de setor. Quem está no setor mas em outra equipe
+> ainda LÊ a linha pela RLS e não vê o card.
+
 ### 13.5 Impersonação
 
 Exclusiva de `super_admin`. A sessão do admin é salva no `localStorage`, um
@@ -974,10 +1005,11 @@ seção 1.1: a impersonação atravessa tenant de propósito.
 | `20260809b` | Analítico: `super_admin` fora do resumo; agrupamento pelo perfil, não pela grafia do login |
 | `20260809c` | Despedida do pet (`perfis.pet_despedida`) |
 | `20260809d` | **Trava do NR no banco**: trigger recusa em vez de reatribuir · `fn_sync_par_vinculo` acha o par pelo vínculo |
+| `20260810a` | Comemoração: alvo por equipe (`somente_equipe` / `equipes_alvo`) · clone escolhe o setor (`setores_escolhidos`) |
 
 > O **status de aplicação** de cada migration no Supabase é controlado fora do
 > repositório. A presença do arquivo aqui não garante que ela rodou em produção.
 
 ---
 
-*Última revisão: 2026-08-09 (trava do NR no banco).*
+*Última revisão: 2026-08-10 (comemoração por equipe e escolha de setor do clone).*

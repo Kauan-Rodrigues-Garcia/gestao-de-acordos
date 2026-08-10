@@ -14,7 +14,7 @@ import { motion } from 'framer-motion';
 import {
   PartyPopper, Sparkles, Trophy, Users, Loader2, Trash2, Ban, Volume2,
   ShieldAlert, RefreshCw, Search, X, CalendarClock, Play, RotateCcw, Clock,
-  Image as ImageIcon,
+  Image as ImageIcon, AlertTriangle, Lock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -52,6 +52,15 @@ import {
 } from './layout';
 import { dispararTeste } from './testeLocal';
 import { SeletorMidia } from './SeletorMidia';
+import { ModalSetorClone } from './ModalSetorClone';
+import {
+  homenageadosAmbiguos, setoresEscolhidosPara, TODOS_OS_SETORES,
+  type CloneVinculo, type EscolhaDeSetor, type MapasVinculo,
+} from './clones';
+import {
+  VOLUME_PADRAO, VOLUME_SETOR, volumeEfetivo, volumeTravado, volumeAtrapalha,
+} from './volume';
+import { Checkbox } from '@/components/ui/checkbox';
 import { CardComemoracao } from '@/components/comemoracao/CardComemoracao';
 
 const DURACAO_PADRAO_S = 20;
@@ -90,7 +99,8 @@ export default function Comemoracoes() {
   const [duracao, setDuracao]     = useState(DURACAO_PADRAO_S);
   const [escolhidos, setEscolhidos] = useState<PessoaComemoracao[]>([]);
   const [buscaPessoa, setBuscaPessoa] = useState('');
-  const [pessoas, setPessoas]     = useState<PessoaComemoracao[]>([]);
+  /** `setor_id` vem junto: é o ponto de partida da pergunta do clone. */
+  const [pessoas, setPessoas]     = useState<(PessoaComemoracao & { setor_id: string | null })[]>([]);
   const [criando, setCriando]     = useState(false);
   const [salvandoId, setSalvandoId] = useState<string | null>(null);
 
@@ -102,14 +112,22 @@ export default function Comemoracoes() {
   const [layout, setLayout]       = useState<LayoutComemoracao>(() => layoutDoModelo('midia_topo'));
   const [selecionado, setSelecionado] = useState<ElementoId | null>(null);
   const [animTexto, setAnimTexto] = useState<AnimTextoId>('subir');
-  const [volume, setVolume]       = useState(100);
+  const [volume, setVolume]       = useState(VOLUME_PADRAO);
 
   // Alvo: pessoas (padrão), equipe ou setor inteiro
   const [alvoTipo, setAlvoTipo]   = useState<AlvoTipo>('operadores');
   const [equipeId, setEquipeId]   = useState<string>('');
   const [setorId, setSetorId]     = useState<string>('');
+  /** "Exibir apenas para a equipe" — estreita a plateia do setor (20260810a). */
+  const [somenteEquipe, setSomenteEquipe] = useState(false);
   const [equipes, setEquipes]     = useState<{ id: string; nome: string; setor_id: string | null }[]>([]);
   const [setores, setSetores]     = useState<{ id: string; nome: string }[]>([]);
+  const [clones, setClones]       = useState<CloneVinculo[]>([]);
+
+  // Pergunta do clone: quais homenageados estão em 2+ setores e o que a pessoa
+  // respondeu para cada um. Vazio = modal fechado.
+  const [ambiguos, setAmbiguos]   = useState<EscolhaDeSetor[]>([]);
+  const [respostas, setRespostas] = useState<Record<string, string>>({});
 
   // Biblioteca (null enquanto carrega ou se a migration 20260731f falta)
   const [midias, setMidias] = useState<MidiaComemoracao[] | null>(null);
@@ -129,10 +147,10 @@ export default function Comemoracoes() {
     void (async () => {
       const { data } = await supabase
         .from('perfis')
-        .select('id, nome, foto_url')
+        .select('id, nome, foto_url, setor_id')
         .eq('empresa_id', empresaId)
         .order('nome');
-      if (ativo) setPessoas((data ?? []) as PessoaComemoracao[]);
+      if (ativo) setPessoas((data ?? []) as (PessoaComemoracao & { setor_id: string | null })[]);
     })();
     return () => { ativo = false; };
   }, [empresaId, podeCriar]);
@@ -143,15 +161,21 @@ export default function Comemoracoes() {
     if (!empresaId || !podeCriar) return;
     let ativo = true;
     void (async () => {
-      const [eq, st] = await Promise.all([
+      const [eq, st, cl] = await Promise.all([
         supabase.from('equipes').select('id, nome, setor_id')
           .eq('empresa_id', empresaId).order('nome'),
         supabase.from('setores').select('id, nome')
           .eq('ativo', true).order('nome'),
+        // Todos os clones da empresa de uma vez. A tabela é pequena (é uma
+        // exceção por operador, não uma linha por pessoa) e a alternativa
+        // seria uma consulta a cada homenageado adicionado.
+        supabase.from('equipe_operadores_clones').select('operador_id, equipe_id')
+          .eq('empresa_id', empresaId),
       ]);
       if (!ativo) return;
       setEquipes((eq.data ?? []) as { id: string; nome: string; setor_id: string | null }[]);
       setSetores((st.data ?? []) as { id: string; nome: string }[]);
+      setClones((cl.data ?? []) as CloneVinculo[]);
     })();
     return () => { ativo = false; };
   }, [empresaId, podeCriar]);
@@ -168,6 +192,22 @@ export default function Comemoracoes() {
   const erroAgendamento = agendar
     ? validarAgendamento(new Date(quando).toISOString(), agoraCorrigido())
     : null;
+
+  /** O que `clones.ts` precisa para responder "em que setores esse aí está?". */
+  const mapasVinculo: MapasVinculo = useMemo(
+    () => ({ perfis: pessoas, clones, equipes }),
+    [pessoas, clones, equipes],
+  );
+
+  /**
+   * Meta de setor explode na empresa inteira e trava o volume no teto — é a
+   * única comemoração que toca em quem nem sabe que ela existe.
+   */
+  const volumeAplicado = volumeEfetivo(volume, alvoTipo);
+  const volumeFixo     = volumeTravado(alvoTipo);
+
+  /** Estreitar para a equipe só faz sentido quando a plateia é um setor. */
+  const podeEstreitar = alvoTipo !== 'setor';
 
   /** Modelo em vigor, ou null quando o layout foi mexido à mão. */
   const modeloAtual: ModeloId | null = modeloDoLayout(layout);
@@ -217,14 +257,35 @@ export default function Comemoracoes() {
       gifUrl: gifEscolhido?.url ?? null,
       somUrl: somEscolhido?.url ?? null,
       somInicioS: Number(somEscolhido?.inicio_s ?? 0),
-      layout, animTexto, volume,
+      layout, animTexto, volume: volumeAplicado,
       duracaoS: duracao,
     });
   }
 
-  async function comemorar() {
+  /**
+   * Clique em "Comemorar agora"/"Agendar".
+   *
+   * Passa pela pergunta do clone antes de criar, quando algum homenageado
+   * trabalha em mais de um setor. A pergunta é do alvo por OPERADORES: equipe
+   * pertence a um setor só, e meta de setor já vale para a empresa inteira.
+   */
+  function aoClicarComemorar() {
+    if (alvoTipo !== 'operadores') { void comemorar(); return; }
+
+    const pendentes = homenageadosAmbiguos(escolhidos.map((p) => p.id), mapasVinculo);
+    if (pendentes.length === 0) { void comemorar(); return; }
+
+    // Padrão "todos os setores": é como a comemoração se comportava antes da
+    // pergunta existir, então fechar o modal sem mexer não muda nada.
+    setRespostas(Object.fromEntries(pendentes.map((a) => [a.operadorId, TODOS_OS_SETORES])));
+    setAmbiguos(pendentes);
+  }
+
+  async function comemorar(escolhasDeSetor: Record<string, string> = {}) {
     if (!empresaId || !usuarioId) return;
     if (erroAgendamento) { toast.error(erroAgendamento); return; }
+
+    const operadorIds = escolhidos.map((p) => p.id);
 
     setCriando(true);
     try {
@@ -232,21 +293,31 @@ export default function Comemoracoes() {
         empresaId, criadoPor: usuarioId,
         titulo, mensagem: mensagem || null,
         efeito, som, duracaoS: duracao,
-        operadorIds: escolhidos.map((p) => p.id),
+        operadorIds,
         iniciaEm: agendar ? new Date(quando).toISOString() : undefined,
         gifMidiaId: gifEscolhido?.id ?? null,
         somMidiaId: somEscolhido?.id ?? null,
         layout,
         modelo: modeloDoLayout(layout) ?? undefined,
-        animTexto, volume,
+        animTexto, volume: volumeAplicado,
         alvoTipo,
         equipeId: alvoTipo === 'equipe' ? equipeId : null,
         setorId:  alvoTipo === 'setor'  ? setorId  : null,
+        somenteEquipe: podeEstreitar && somenteEquipe,
+        // Explícito para todo mundo, não só para quem foi perguntado: ver a
+        // nota em `setoresEscolhidosPara`.
+        setoresPorOperador: alvoTipo === 'operadores'
+          ? Object.fromEntries(operadorIds.map((id) => [
+              id, setoresEscolhidosPara(id, escolhasDeSetor[id], mapasVinculo),
+            ]))
+          : undefined,
       });
       if (!ok) { toast.error(e ?? 'Não foi possível comemorar.'); return; }
       toast.success(agendar ? 'Comemoração agendada!' : 'Comemoração no ar!');
       setEscolhidos([]);
       setMensagem('');
+      setAmbiguos([]);
+      setRespostas({});
       await recarregar();
     } finally {
       setCriando(false);
@@ -396,7 +467,9 @@ export default function Comemoracoes() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">
-                  Explode para o setor inteiro da equipe. Não precisa escolher ninguém.
+                  {somenteEquipe
+                    ? 'Explode só para quem é dessa equipe.'
+                    : 'Explode para o setor inteiro da equipe. Não precisa escolher ninguém.'}
                 </p>
               </>
             )}
@@ -413,10 +486,36 @@ export default function Comemoracoes() {
                     ))}
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">
-                  Meta de setor é notícia da empresa: explode para <strong>todo mundo</strong>.
-                </p>
+                {/* Em destaque, não como nota de rodapé: é a única opção que
+                    interrompe gente de setores que nem sabem da meta. */}
+                <div className="flex items-start gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <p className="text-[11px] leading-snug text-amber-700 dark:text-amber-300">
+                    <strong>Atenção:</strong> esta opção dispara a comemoração para{' '}
+                    <strong>TODOS os setores</strong> da empresa, não só para o
+                    escolhido. Por isso o volume fica travado em {VOLUME_SETOR}%.
+                  </p>
+                </div>
               </>
+            )}
+
+            {/* Estreitar para a equipe — vale para pessoas e para equipe. */}
+            {podeEstreitar && (
+              <label className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-muted/30 px-2.5 py-2">
+                <Checkbox
+                  checked={somenteEquipe}
+                  onCheckedChange={(v) => setSomenteEquipe(v === true)}
+                  className="mt-0.5"
+                />
+                <span className="space-y-0.5">
+                  <span className="block text-xs font-medium">Exibir apenas para a equipe</span>
+                  <span className="block text-[11px] leading-snug text-muted-foreground">
+                    {alvoTipo === 'equipe'
+                      ? 'Só quem está na equipe escolhida vê. Sem isto, o setor inteiro vê.'
+                      : 'Só quem está na equipe dos homenageados vê. Sem isto, o setor inteiro vê.'}
+                  </span>
+                </span>
+              </label>
             )}
           </div>
 
@@ -467,7 +566,10 @@ export default function Comemoracoes() {
               )}
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Quem vê é o setor de cada homenageado — e os setores onde ele tem clone.
+              {somenteEquipe
+                ? 'Quem vê é a equipe de cada homenageado.'
+                : 'Quem vê é o setor de cada homenageado. Quem trabalha em dois '
+                  + 'setores gera uma pergunta na hora de comemorar.'}
             </p>
           </div>
           )}
@@ -523,7 +625,7 @@ export default function Comemoracoes() {
               </Select>
               {/* Ouvir antes ignora o mudo: quem clicou pediu para ouvir. */}
               <Button variant="outline" size="icon" className="h-9 w-9 shrink-0" title="Ouvir"
-                onClick={() => tocarSomComemoracao(som, true, volume)}>
+                onClick={() => tocarSomComemoracao(som, true, volumeAplicado)}>
                 <Volume2 className="h-4 w-4" />
               </Button>
             </div>
@@ -533,13 +635,34 @@ export default function Comemoracoes() {
               </p>
             )}
 
-            <Label htmlFor="cm-vol" className="text-xs">Volume: {volume}%</Label>
+            <Label htmlFor="cm-vol" className="flex items-center gap-1.5 text-xs">
+              Volume: {volumeAplicado}%
+              {volumeFixo && (
+                <span className="inline-flex items-center gap-1 text-muted-foreground">
+                  <Lock className="h-3 w-3" /> travado
+                </span>
+              )}
+            </Label>
             <input id="cm-vol" type="range" min={0} max={100} step={5}
-              value={volume} onChange={(e) => setVolume(Number(e.target.value))}
-              className="h-6 w-full accent-primary" />
-            <p className="text-[11px] text-muted-foreground">
-              Percentual do volume normal. Vale para a música e para o som do catálogo.
-            </p>
+              value={volumeAplicado} disabled={volumeFixo}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              className={cn('h-6 w-full accent-primary', volumeFixo && 'cursor-not-allowed opacity-50')}
+            />
+            {volumeFixo ? (
+              <p className="text-[11px] text-muted-foreground">
+                Meta de setor toca em {VOLUME_SETOR}% para todo mundo da empresa —
+                este volume não é editável.
+              </p>
+            ) : volumeAtrapalha(volumeAplicado) ? (
+              <p className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-600 dark:text-amber-400">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                Volumes acima de 60% podem atrapalhar caso alguém esteja em ligação.
+              </p>
+            ) : (
+              <p className="text-[11px] text-muted-foreground">
+                Percentual do volume normal. Vale para a música e para o som do catálogo.
+              </p>
+            )}
           </div>
 
           {/* Duração e quando */}
@@ -588,7 +711,7 @@ export default function Comemoracoes() {
                 criando || !titulo.trim() || !!erroAgendamento || alvoIncompleto
                 || (alvoTipo === 'operadores' && escolhidos.length === 0)
               }
-              onClick={() => void comemorar()}>
+              onClick={aoClicarComemorar}>
               {criando ? <Loader2 className="h-4 w-4 animate-spin" />
                 : agendar ? <CalendarClock className="h-4 w-4" /> : <PartyPopper className="h-4 w-4" />}
               {agendar ? 'Agendar' : 'Comemorar agora'}
@@ -685,6 +808,19 @@ export default function Comemoracoes() {
           </p>
         </div>
       </div>
+
+      <ModalSetorClone
+        ambiguos={ambiguos}
+        respostas={respostas}
+        nomeDaPessoa={(id) => pessoas.find((p) => p.id === id)?.nome ?? 'Operador'}
+        nomeDoSetor={(id) => setores.find((s) => s.id === id)?.nome ?? 'Setor'}
+        agendando={agendar}
+        confirmando={criando}
+        onResponder={(operadorId, escolha) =>
+          setRespostas((r) => ({ ...r, [operadorId]: escolha }))}
+        onConfirmar={() => void comemorar(respostas)}
+        onCancelar={() => setAmbiguos([])}
+      />
 
       {/* ── Agendadas ── */}
       {agendadas.length > 0 && (

@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assinarTabela } from '@/lib/realtime';
 import {
   buscarComemoracoes, buscarParabens, parabenizar, finalizarComemoracao,
+  buscarMinhasEquipes,
   type Comemoracao, type ParabensComemoracao,
 } from '@/services/comemoracoes.service';
 import { sortearFrase } from '@/pages/Comemoracoes/frases';
@@ -22,6 +23,15 @@ import {
 } from '@/pages/Comemoracoes/janela';
 import { deveExplodir } from '@/pages/Comemoracoes/escopo';
 import { lerVistas, marcarVista } from '@/pages/Comemoracoes/vistas';
+
+/**
+ * Um só array vazio, no módulo.
+ *
+ * `?? []` criaria um array novo a cada render, e ele é dependência de um
+ * `useMemo` — o filtro recalcularia sempre, e o efeito que depende dele
+ * reiniciaria os timers da comemoração sem parar.
+ */
+const VAZIO: readonly string[] = [];
 
 // ── Lista ────────────────────────────────────────────────────────────────────
 
@@ -86,6 +96,35 @@ export function useComemoracoes(empresaId: string | null, habilitado = true) {
   return { comemoracoes, loading, dbAtiva, erro, recarregar, agoraCorrigido };
 }
 
+// ── Minhas equipes ───────────────────────────────────────────────────────────
+
+/**
+ * As equipes a que pertenço, incluindo aquelas em que sou clone.
+ *
+ * Uma consulta por sessão, e só para cruzar com `equipes_alvo`. Começa com a
+ * equipe do perfil já preenchida: enquanto os clones não chegam, o caso comum
+ * (quem não é clone de ninguém) já está certo e a comemoração não pisca.
+ */
+export function useMinhasEquipes(
+  usuarioId: string | null,
+  equipeDoPerfil: string | null,
+): string[] {
+  const [equipes, setEquipes] = useState<string[]>(
+    () => (equipeDoPerfil ? [equipeDoPerfil] : []),
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    void (async () => {
+      const lista = await buscarMinhasEquipes(usuarioId, equipeDoPerfil);
+      if (ativo) setEquipes(lista);
+    })();
+    return () => { ativo = false; };
+  }, [usuarioId, equipeDoPerfil]);
+
+  return equipes;
+}
+
 // ── Qual está no ar ──────────────────────────────────────────────────────────
 
 /**
@@ -98,9 +137,12 @@ export function useComemoracaoNoAr(params: {
   comemoracoes:   Comemoracao[];
   meuSetorId:     string | null;
   meuUsuarioId:   string | null;
+  /** Para as comemorações estreitadas por equipe (20260810a). */
+  minhasEquipes?: readonly string[];
   agoraCorrigido: () => number;
 }) {
   const { comemoracoes, meuSetorId, meuUsuarioId, agoraCorrigido } = params;
+  const minhasEquipes = params.minhasEquipes ?? VAZIO;
 
   const [atual, setAtual] = useState<Comemoracao | null>(null);
   /**
@@ -126,8 +168,10 @@ export function useComemoracaoNoAr(params: {
   // Só as que explodem para MIM. Líder+ enxerga todas na aba, mas o popup é do
   // setor — ver `escopo.ts`.
   const minhas = useMemo(
-    () => comemoracoes.filter((c) => !estaEncerrada(c) && deveExplodir(c, meuSetorId, meuUsuarioId)),
-    [comemoracoes, meuSetorId, meuUsuarioId],
+    () => comemoracoes.filter(
+      (c) => !estaEncerrada(c) && deveExplodir(c, meuSetorId, meuUsuarioId, minhasEquipes),
+    ),
+    [comemoracoes, meuSetorId, meuUsuarioId, minhasEquipes],
   );
 
   useEffect(() => {

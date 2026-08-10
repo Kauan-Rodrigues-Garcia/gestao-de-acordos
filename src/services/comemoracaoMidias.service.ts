@@ -85,6 +85,66 @@ export function mimesAceitos(tipo: TipoMidia): string {
 }
 
 /**
+ * As duas gavetas da TELA — não as do banco.
+ *
+ * O card tem um slot visual e um slot de som, e é assim que a biblioteca passou
+ * a se mostrar: imagens e GIFs juntos, áudios abaixo, um botão de importar para
+ * cada slot. `gif` e `imagem` continuam separados no banco porque a validade, a
+ * cota de fixados e o MIME aceito são por tipo.
+ */
+export type GrupoMidia = 'visual' | 'som';
+
+export const TIPOS_DO_GRUPO: Record<GrupoMidia, readonly TipoMidia[]> = {
+  visual: ['gif', 'imagem'],
+  som:    ['som'],
+};
+
+/** Rótulo do grupo, para botão e mensagem. */
+export const NOME_GRUPO: Record<GrupoMidia, string> = {
+  visual: 'imagem ou GIF',
+  som:    'áudio',
+};
+
+export function grupoDoTipo(tipo: TipoMidia): GrupoMidia {
+  return tipo === 'som' ? 'som' : 'visual';
+}
+
+/** `accept` do input: todos os MIMEs do grupo. */
+export function mimesDoGrupo(grupo: GrupoMidia): string {
+  return TIPOS_DO_GRUPO[grupo].flatMap((t) => MIME_POR_TIPO[t]).join(',');
+}
+
+export type ArquivoValidado =
+  | { tipo: TipoMidia; erro: null }
+  | { tipo: null;      erro: string };
+
+/**
+ * Valida contra um GRUPO e devolve em qual tipo o arquivo cai.
+ *
+ * Com um botão só para imagem e GIF, quem escolhe não decide mais o tipo — o
+ * MIME decide. Por isso a validação e a classificação saem da mesma função: se
+ * fossem duas, um dia uma aceitaria o que a outra classificou como null.
+ *
+ * A mensagem de erro é do grupo. A de `validarArquivo` mandava "use a aba
+ * imagem", e as abas deixaram de existir.
+ */
+export function validarArquivoDoGrupo(arquivo: File, grupo: GrupoMidia): ArquivoValidado {
+  const tipo = tipoDoArquivo(arquivo);
+  if (!tipo || !TIPOS_DO_GRUPO[grupo].includes(tipo)) {
+    return {
+      tipo: null,
+      erro: grupo === 'visual'
+        ? 'Envie um GIF, PNG, JPG ou WEBP.'
+        : 'Envie um MP3, WAV ou OGG.',
+    };
+  }
+  if (arquivo.size > LIMITE_BYTES) {
+    return { tipo: null, erro: `O arquivo tem ${emMB(arquivo.size)}. O limite é ${emMB(LIMITE_BYTES)}.` };
+  }
+  return { tipo, erro: null };
+}
+
+/**
  * Em qual gaveta o arquivo cai, pelo MIME.
  *
  * Pelo MIME e não pela extensão: `.gif` renomeado para `.png` continua sendo um

@@ -49,6 +49,10 @@ vi.mock('@/services/comemoracoes.service', () => ({
   parabenizar: (...a: unknown[]) => parabenizarMock(...(a as [])),
   // Migration 20260801a: o cliente que exibiu fecha a comemoração para todos.
   finalizarComemoracao: () => finalizarMock(),
+  // Migration 20260810a: as equipes de quem está vendo, para as comemorações
+  // estreitadas. Aqui ninguém é clone, então basta a do perfil.
+  buscarMinhasEquipes: (_id: string | null, doPerfil: string | null) =>
+    Promise.resolve(doPerfil ? [doPerfil] : []),
 }));
 
 vi.mock('@/lib/realtime', () => ({ assinarTabela: () => () => {} }));

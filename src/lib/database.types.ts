@@ -841,6 +841,7 @@ export type Database = {
       comemoracoes: {
         // Migration 20260801a acrescentou: modelo, anim_texto, volume,
         // finalizada_em, alvo_tipo, equipe_id, setor_id, empresa_inteira.
+        // Migration 20260810a acrescentou: somente_equipe, equipes_alvo.
         Row: {
           alvo_tipo: string
           anim_texto: string
@@ -852,6 +853,7 @@ export type Database = {
           empresa_id: string
           empresa_inteira: boolean
           equipe_id: string | null
+          equipes_alvo: string[]
           finalizada_em: string | null
           gif_midia_id: string | null
           id: string
@@ -863,6 +865,7 @@ export type Database = {
           setores_alvo: string[]
           som: string
           som_midia_id: string | null
+          somente_equipe: boolean
           titulo: string
           volume: number
         }
@@ -877,6 +880,7 @@ export type Database = {
           empresa_id: string
           empresa_inteira?: boolean
           equipe_id?: string | null
+          equipes_alvo?: string[]
           finalizada_em?: string | null
           gif_midia_id?: string | null
           id?: string
@@ -888,6 +892,7 @@ export type Database = {
           setores_alvo?: string[]
           som?: string
           som_midia_id?: string | null
+          somente_equipe?: boolean
           titulo: string
           volume?: number
         }
@@ -902,6 +907,7 @@ export type Database = {
           empresa_id?: string
           empresa_inteira?: boolean
           equipe_id?: string | null
+          equipes_alvo?: string[]
           finalizada_em?: string | null
           gif_midia_id?: string | null
           id?: string
@@ -913,15 +919,19 @@ export type Database = {
           setores_alvo?: string[]
           som?: string
           som_midia_id?: string | null
+          somente_equipe?: boolean
           titulo?: string
           volume?: number
         }
         Relationships: []
       }
+      // Migration 20260810a — `setores_escolhidos` é a resposta da pergunta do
+      // clone: em que setores ESTE homenageado deve ser comemorado. Vazio = o
+      // setor do perfil, e só ele.
       comemoracao_homenageados: {
-        Row: { comemoracao_id: string; operador_id: string }
-        Insert: { comemoracao_id: string; operador_id: string }
-        Update: { comemoracao_id?: string; operador_id?: string }
+        Row: { comemoracao_id: string; operador_id: string; setores_escolhidos: string[] }
+        Insert: { comemoracao_id: string; operador_id: string; setores_escolhidos?: string[] }
+        Update: { comemoracao_id?: string; operador_id?: string; setores_escolhidos?: string[] }
         Relationships: []
       }
       // Migration 20260731f — GIFs e sons enviados pelo líder. O catálogo

@@ -15,7 +15,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Volume2, VolumeX, PartyPopper, Check, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useComemoracoes, useComemoracaoNoAr, useParabens } from '@/hooks/useComemoracoes';
+import {
+  useComemoracoes, useComemoracaoNoAr, useParabens, useMinhasEquipes,
+} from '@/hooks/useComemoracoes';
 import { tocarSomComemoracao, tocarArquivoDeSom, estaMudo, definirMudo } from '@/lib/som-comemoracao';
 import { cn } from '@/lib/utils';
 import { efeitoValido, somValido } from '@/pages/Comemoracoes/catalogo';
@@ -33,10 +35,14 @@ export function ComemoracaoOverlay() {
   const setorId   = perfil?.setor_id ?? null;
 
   const { comemoracoes, agoraCorrigido } = useComemoracoes(empresaId, !!usuarioId);
+  // Inclui as equipes em que sou clone: quem trabalha em dois times comemora
+  // com os dois.
+  const minhasEquipes = useMinhasEquipes(usuarioId, perfil?.equipe_id ?? null);
   const { atual, fechar } = useComemoracaoNoAr({
     comemoracoes,
     meuSetorId:   setorId,
     meuUsuarioId: usuarioId,
+    minhasEquipes,
     agoraCorrigido,
   });
 

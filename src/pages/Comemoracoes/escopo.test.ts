@@ -35,7 +35,8 @@ describe('deveExplodir', () => {
   });
 
   it('vários setores alvo: basta estar em um', () => {
-    // É o caso do clone: o operador conta no setor dele e no da equipe clonada.
+    // É o caso do clone que respondeu "todos os setores" na pergunta da
+    // 20260810a — antes dela, a união era automática.
     expect(deveExplodir({ setores_alvo: [SETOR_A, SETOR_B] }, SETOR_B, EU)).toBe(true);
   });
 
@@ -73,5 +74,69 @@ describe('meta de setor: empresa inteira (20260801a)', () => {
     expect(deveExplodir(
       { empresa_inteira: false, setores_alvo: [SETOR_A] }, SETOR_B, EU,
     )).toBe(false);
+  });
+});
+
+describe('exibir apenas para a equipe (20260810a)', () => {
+  const EQ_1 = 'eq-1';
+  const EQ_2 = 'eq-2';
+  const OUTRO = 'u-outro';
+
+  it('sou da equipe alvo', () => {
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A], equipes_alvo: [EQ_1] },
+      SETOR_A, EU, [EQ_1],
+    )).toBe(true);
+  });
+
+  it('mesmo setor, outra equipe: não vê', () => {
+    // É o ponto do recurso — antes dele, o setor inteiro via.
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A], equipes_alvo: [EQ_1] },
+      SETOR_A, EU, [EQ_2],
+    )).toBe(false);
+  });
+
+  it('sem equipe nenhuma, não vê o que foi estreitado', () => {
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A], equipes_alvo: [EQ_1] },
+      SETOR_A, EU, [],
+    )).toBe(false);
+  });
+
+  it('clone: basta uma das minhas equipes bater', () => {
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A, SETOR_B], equipes_alvo: [EQ_2] },
+      SETOR_A, EU, [EQ_1, EQ_2],
+    )).toBe(true);
+  });
+
+  it('quem criou vê mesmo estreitado para outra equipe', () => {
+    expect(deveExplodir(
+      { criado_por: EU, setores_alvo: [SETOR_A], equipes_alvo: [EQ_1] },
+      SETOR_B, EU, [EQ_2],
+    )).toBe(true);
+  });
+
+  it('equipes_alvo vazio se comporta como antes: vale o setor', () => {
+    // Toda comemoração anterior à migration cai aqui.
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A], equipes_alvo: [] },
+      SETOR_A, EU, [],
+    )).toBe(true);
+  });
+
+  it('equipes_alvo nulo (banco sem a coluna) também vale o setor', () => {
+    expect(deveExplodir(
+      { criado_por: OUTRO, setores_alvo: [SETOR_A], equipes_alvo: null },
+      SETOR_A, EU,
+    )).toBe(true);
+  });
+
+  it('meta de setor ignora o recorte: é da empresa inteira', () => {
+    expect(deveExplodir(
+      { criado_por: OUTRO, empresa_inteira: true, equipes_alvo: [EQ_1] },
+      SETOR_B, EU, [EQ_2],
+    )).toBe(true);
   });
 });

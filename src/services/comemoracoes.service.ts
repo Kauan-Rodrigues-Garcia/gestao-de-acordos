@@ -64,6 +64,13 @@ export interface Comemoracao {
   inicia_em:     string;
   duracao_s:     number;
   setores_alvo:  string[];
+  /**
+   * Recorte por equipe (20260810a). Vazio = vale o setor, como sempre valeu.
+   * Quem preenche é o banco; ver `escopo.ts` para o efeito na exibição.
+   */
+  equipes_alvo:  string[];
+  /** "Exibir apenas para a equipe" ligado na montagem. */
+  somente_equipe: boolean;
   /** Alvo (20260801a): operadores | equipe | setor. */
   alvo_tipo:     AlvoTipo;
   equipe_id:     string | null;
@@ -109,6 +116,17 @@ export interface NovaComemoracao {
   alvoTipo?:   AlvoTipo;
   equipeId?:   string | null;
   setorId?:    string | null;
+  /**
+   * "Exibir apenas para a equipe" (20260810a). Ausente = false, ou seja, o
+   * setor inteiro vê — como era antes.
+   */
+  somenteEquipe?: boolean;
+  /**
+   * Em que setores cada homenageado deve ser comemorado — a resposta da
+   * pergunta do clone. Ausente para um operador = o banco cai no setor do
+   * perfil dele. Ver `pages/Comemoracoes/clones.ts`.
+   */
+  setoresPorOperador?: Record<string, string[]>;
 }
 
 interface Resultado<T = null> {
@@ -195,7 +213,7 @@ export async function buscarComemoracoes(
     Comemoracao,
     | 'homenageados' | 'autor' | 'layout' | 'gif_url' | 'som_url' | 'som_inicio_s'
     | 'modelo' | 'anim_texto' | 'volume' | 'alvo_tipo' | 'equipe_id' | 'setor_id'
-    | 'empresa_inteira' | 'finalizada_em'
+    | 'empresa_inteira' | 'finalizada_em' | 'equipes_alvo' | 'somente_equipe'
   > & {
     layout?: unknown;
     modelo?:          string | null;
@@ -206,6 +224,8 @@ export async function buscarComemoracoes(
     setor_id?:        string | null;
     empresa_inteira?: boolean | null;
     finalizada_em?:   string | null;
+    equipes_alvo?:    string[] | null;
+    somente_equipe?:  boolean | null;
     comemoracao_homenageados?: { operador_id: string }[] | null;
   };
 
@@ -231,6 +251,9 @@ export async function buscarComemoracoes(
       setor_id:   linha.setor_id  ?? null,
       empresa_inteira: linha.empresa_inteira ?? false,
       finalizada_em:   linha.finalizada_em   ?? null,
+      // Banco sem a 20260810a não estreita nada: vale o setor, como antes.
+      equipes_alvo:    linha.equipes_alvo   ?? [],
+      somente_equipe:  linha.somente_equipe ?? false,
       homenageados: (linha.comemoracao_homenageados ?? [])
         .map((h) => pessoas.get(h.operador_id))
         .filter((p): p is PessoaComemoracao => !!p),
@@ -247,6 +270,37 @@ export async function buscarComemoracoes(
     // desvio, e o relógio local serve — é o caso de quem nunca comemorou.
     agoraServidor: lista[0]?.criado_em ?? null,
   };
+}
+
+/**
+ * Minhas equipes — a do perfil mais aquelas em que sou clone.
+ *
+ * É o que `deveExplodir` cruza com `equipes_alvo` para decidir se a
+ * comemoração estreitada aparece na minha tela. Espelha
+ * `fn_equipes_do_operador` (20260810a) do lado do navegador.
+ *
+ * Falha em silêncio devolvendo só a equipe do perfil: o pior caso é um clone
+ * não ver a festa do time em que é clone, e isso é bem melhor que a tela
+ * inteira parar por causa de uma tabela auxiliar.
+ */
+export async function buscarMinhasEquipes(
+  usuarioId: string | null,
+  equipeDoPerfil: string | null,
+): Promise<string[]> {
+  const proprias = equipeDoPerfil ? [equipeDoPerfil] : [];
+  if (!usuarioId) return proprias;
+
+  const { data, error } = await supabase
+    .from('equipe_operadores_clones')
+    .select('equipe_id')
+    .eq('operador_id', usuarioId);
+
+  if (error) {
+    logger.warn('[comemoracoes] erro ao listar minhas equipes:', error.message);
+    return proprias;
+  }
+  const clonadas = ((data ?? []) as { equipe_id: string }[]).map((c) => c.equipe_id);
+  return [...new Set([...proprias, ...clonadas])];
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
@@ -307,6 +361,9 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       ...(p.volume !== undefined && p.volume !== 100  ? { volume: p.volume } : {}),
       ...(alvo === 'equipe' ? { alvo_tipo: 'equipe', equipe_id: p.equipeId } : {}),
       ...(alvo === 'setor'  ? { alvo_tipo: 'setor',  setor_id:  p.setorId  } : {}),
+      // Meta de setor é a empresa inteira por definição: estreitar para uma
+      // equipe não faz sentido, e a tela nem oferece.
+      ...(p.somenteEquipe && alvo !== 'setor' ? { somente_equipe: true } : {}),
     })
     .select('id')
     .single();
@@ -316,7 +373,11 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
       return { ok: false, erro: 'A migration 20260731e ainda não foi aplicada no banco.', dados: null };
     }
     if (colunaAusente(error)) {
-      return { ok: false, erro: 'A migration 20260801a ainda não foi aplicada no banco.', dados: null };
+      // Qual migration falta depende de QUAL coluna o banco não conhece —
+      // mandar sempre para a 20260801a fazia a pessoa aplicar a errada.
+      const qual = /somente_equipe|equipes_alvo/.test(error?.message ?? '')
+        ? '20260810a' : '20260801a';
+      return { ok: false, erro: `A migration ${qual} ainda não foi aplicada no banco.`, dados: null };
     }
     logger.warn('[comemoracoes] erro ao criar:', error?.message);
     return { ok: false, erro: error?.message ?? 'Não foi possível criar a comemoração.', dados: null };
@@ -329,9 +390,25 @@ export async function criarComemoracao(p: NovaComemoracao): Promise<Resultado<st
   // Os homenageados vão depois, e é o INSERT deles que dispara o trigger de
   // `setores_alvo`. Se esta parte falhar, a comemoração existiria sem plateia —
   // por isso a linha é apagada em vez de ficar órfã.
-  const { error: erroHomenageados } = await supabase
-    .from('comemoracao_homenageados')
-    .insert(p.operadorIds.map((operador_id) => ({ comemoracao_id: data.id, operador_id })));
+  const linhas = p.operadorIds.map((operador_id) => ({
+    comemoracao_id: data.id,
+    operador_id,
+    setores_escolhidos: p.setoresPorOperador?.[operador_id] ?? [],
+  }));
+
+  let { error: erroHomenageados } = await supabase
+    .from('comemoracao_homenageados').insert(linhas);
+
+  // Banco sem a 20260810a não tem `setores_escolhidos`. Repete sem a coluna em
+  // vez de apagar a comemoração: sem ela o trigger antigo resolve o clone
+  // sozinho, que é exatamente como aquele banco já se comportava.
+  if (erroHomenageados && colunaAusente(erroHomenageados)) {
+    ({ error: erroHomenageados } = await supabase
+      .from('comemoracao_homenageados')
+      .insert(linhas.map((l) => ({
+        comemoracao_id: l.comemoracao_id, operador_id: l.operador_id,
+      }))));
+  }
 
   if (erroHomenageados) {
     logger.warn('[comemoracoes] erro nos homenageados:', erroHomenageados.message);
