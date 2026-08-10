@@ -560,11 +560,25 @@ passa por líder, mesmo de quem tem a lógica ativa.
 
 #### Onde a escada roda
 
-| Tela | Alcança o conflito? |
-|---|---|
-| `AcordoForm`, `AcordoNovoInline` | sim — chave digitada no cadastro |
-| `AcordoEditInline` | sim `[PP]` (campo Código). `[BP]` não: o campo NR saiu da tela por LGPD, então `nr_cliente` não muda por lá |
-| Adicionar parcela (`parcelas.service`) | não, por desenho — parcela do mesmo grupo herda o NR e o dono do acordo pai |
+Existem **dois** componentes que gravam acordo, e é só isso:
+
+| Componente | Usado por | Alcança o conflito? |
+|---|---|---|
+| `AcordoNovoInline` | lista de Acordos, Dashboard, `/acordos/novo` | sim — chave digitada no cadastro |
+| `AcordoEditInline` | lista de Acordos, `/acordos/:id/editar` | sim `[PP]` (campo Código). `[BP]` não: o NR se define na criação e não muda depois |
+| Adicionar parcela (`parcelas.service`) | — | não, por desenho — parcela do mesmo grupo herda o NR e o dono do acordo pai |
+
+`src/pages/AcordoForm` **não tem formulário**: é a moldura de página (cabeçalho,
+voltar, carregar o acordo) em volta desses dois. Até 2026-08-10 ele carregava a
+própria implementação de tudo — dois formulários por tenant, schemas zod
+próprios e uma cópia da escada — e as cópias divergiram: a autenticação de líder
+de lá barrava elite, gerência e diretoria, e a checagem de NR rodava mesmo
+quando o Código não tinha mudado.
+
+Sobre o NR da BookPlay: ele foi removido da interface em `58616fa` (LGPD) junto
+com o CPF, porque a coluna `nr_cliente` guardava **os dois** — CPF na PaguePlay,
+NR na BookPlay. Em `8da2afe` o NR voltou só para a BookPlay, onde não é dado
+pessoal. Hoje ele é **obrigatório na criação** e **imutável na edição**.
 
 ### 7.4 Transferência no servidor
 
