@@ -405,6 +405,57 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
   });
 });
 
+describe('AcordoEditInline — campo Instituição/Código', () => {
+  // `instituicao` é a MESMA coluna nas duas empresas, servindo dois conceitos:
+  // código do acordo na PaguePlay (texto livre) e nome da instituição na
+  // BookPlay (uma de quatro). Enquanto a edição usava <Input> nos dois casos,
+  // dava para gravar qualquer coisa num campo que o cadastro restringe — e o
+  // valor digitado ainda virava chave de NR (ver 20260810b).
+
+  it('BookPlay: é lista fechada, com as mesmas opções do cadastro', async () => {
+    const acordo = makeAcordo({ instituicao: 'BOOKPLAY' });
+    renderInline(<AcordoEditInline acordo={acordo} onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    // Não existe campo digitável de instituição na BookPlay.
+    expect(screen.queryByPlaceholderText(/Instituição \(opcional\)/i)).toBeNull();
+    // O valor atual aparece no gatilho do Select.
+    expect(screen.getByText('BOOKPLAY')).toBeTruthy();
+  });
+
+  it('BookPlay: valor fora da lista não some da tela', async () => {
+    // Vem dos acordos gravados quando o campo era texto livre. Se o Select não
+    // oferecesse o valor atual, a tela mostraria o placeholder e o operador
+    // salvaria por cima sem perceber que havia conteúdo.
+    const acordo = makeAcordo({ instituicao: 'Bookplya' });
+    renderInline(<AcordoEditInline acordo={acordo} onSaved={vi.fn()} onCancel={vi.fn()} />);
+
+    expect(screen.getByText('Bookplya')).toBeTruthy();
+  });
+
+  it('PaguePlay: continua texto livre — ali é o código do acordo', async () => {
+    const acordo = makeAcordo({ instituicao: 'INS-100', nr_cliente: '', estado_uf: 'SP' });
+    renderInline(
+      <AcordoEditInline acordo={acordo} isPaguePlay onSaved={vi.fn()} onCancel={vi.fn()} />,
+    );
+
+    const input = screen.getByPlaceholderText(/Código \(opcional\)/i) as HTMLInputElement;
+    expect(input.value).toBe('INS-100');
+  });
+
+  it('BookPlay: salvar sem mexer preserva a instituição', async () => {
+    const acordo = makeAcordo({ instituicao: 'MUNDIAL EDITORA' });
+    const onSaved = vi.fn();
+    nextSingleResult = { data: acordo, error: null };
+
+    renderInline(<AcordoEditInline acordo={acordo} onSaved={onSaved} onCancel={vi.fn()} />);
+    clickSalvar();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    const payload = updateCalls.at(-1)?.payload as Record<string, unknown>;
+    expect(payload.instituicao).toBe('MUNDIAL EDITORA');
+  });
+});
+
 describe('AcordoEditInline — validações básicas', () => {
   it('bloqueia quando nome vazio', async () => {
     const acordo = makeAcordo({ nome_cliente: '   ' });

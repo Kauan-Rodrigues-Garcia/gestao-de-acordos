@@ -2,7 +2,7 @@
  * AcordoEditInline.tsx
  * Inline expandable row editor for agreements in the Acordos list.
  */
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Save, X, DollarSign, Smartphone, Link2, Building2, MessageCircle, FileText, AlertTriangle, Pencil, Wallet, Layers } from 'lucide-react';
 
@@ -34,6 +34,7 @@ import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
   getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
+  INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
@@ -60,6 +61,15 @@ import {
  * mais desde 05/08/2026 — qualquer forma parcela, Pix inclusive.
  */
 const TIPOS_PARCELADOS_PP = ['boleto', 'cartao_recorrente', 'pix_automatico'];
+
+/**
+ * Valor sentinela do "sem instituição" no Select.
+ *
+ * `instituicao` é opcional, mas o Select do Radix não aceita item com value
+ * vazio — string vazia é o que ele usa internamente para "nada selecionado".
+ * Daí o sentinela, traduzido de volta para '' na hora de gravar.
+ */
+const INSTITUICAO_NENHUMA = '__sem_instituicao__';
 
 /**
  * Um conflito de NR que parou a gravação e espera o operador (ou o líder).
@@ -136,6 +146,20 @@ export function AcordoEditInline({
   const [isExtra,     setIsExtra]     = useState(acordo.tipo_vinculo === 'extra');
   const [tagIds,      setTagIds]      = useState<string[]>(acordo.tag_ids ?? []);
   const { tags: empresaTags }         = useEmpresaTags();
+
+  // Instituições oferecidas na edição BookPlay: as quatro oficiais, mais o
+  // valor atual quando ele estiver fora da lista.
+  //
+  // Existem acordos gravados com valor fora do padrão, de quando este campo era
+  // texto livre. Sem incluí-lo, o Select abriria mostrando o placeholder — a
+  // tela diria "vazio" enquanto o banco tem conteúdo, e o operador salvaria por
+  // cima sem perceber. Aparecendo na lista, o valor fica visível e ele escolhe
+  // se troca por um dos oficiais.
+  const instituicoesDisponiveis = useMemo(() => {
+    const oficiais = [...INSTITUICOES_OPTIONS] as string[];
+    const atual    = instituicao.trim();
+    return atual && !oficiais.includes(atual) ? [...oficiais, atual] : oficiais;
+  }, [instituicao]);
 
   // PP: trocar forma de pagamento ou parcelas na edição refaz o parcelamento
   // com a mesma fórmula do acordo novo — o campo Valor passa a ser lido como
@@ -694,18 +718,42 @@ export function AcordoEditInline({
                   </div>
                 </div>
 
-                {/* Inscrição */}
+                {/* Código [PP] / Instituição [BP] — o MESMO campo `instituicao`
+                    servindo dois conceitos, e por isso dois controles.
+                    Na PaguePlay é o código do acordo: texto livre.
+                    Na BookPlay é a instituição, uma de quatro: lista fechada,
+                    igual à da criação. Enquanto isto aqui era um <Input> nas
+                    duas, a edição aceitava qualquer coisa num campo que o
+                    cadastro restringe — e o valor digitado ainda virava chave
+                    de NR, travando a categoria inteira (ver 20260810b). */}
                 <div className="space-y-1">
                   <Label className="text-xs font-medium">{isPaguePlay ? 'Código' : 'Instituição'}</Label>
-                  <div className="relative">
-                    <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                    <Input
-                      value={instituicao}
-                      onChange={e => setInstituicao(e.target.value)}
-                      placeholder={isPaguePlay ? 'Código (opcional)' : 'Instituição (opcional)'}
-                      className="h-8 text-xs pl-6"
-                    />
-                  </div>
+                  {isPaguePlay ? (
+                    <div className="relative">
+                      <Building2 className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <Input
+                        value={instituicao}
+                        onChange={e => setInstituicao(e.target.value)}
+                        placeholder="Código (opcional)"
+                        className="h-8 text-xs pl-6"
+                      />
+                    </div>
+                  ) : (
+                    <Select
+                      value={instituicao.trim() || INSTITUICAO_NENHUMA}
+                      onValueChange={v => setInstituicao(v === INSTITUICAO_NENHUMA ? '' : v)}
+                    >
+                      <SelectTrigger className="h-8 text-xs">
+                        <SelectValue placeholder="Selecione..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={INSTITUICAO_NENHUMA}>— Nenhuma —</SelectItem>
+                        {instituicoesDisponiveis.map(inst => (
+                          <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
 
                 {/* WhatsApp / Número */}
