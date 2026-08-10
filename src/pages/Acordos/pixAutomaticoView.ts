@@ -25,7 +25,7 @@ import {
 } from '@/lib/diasUteis';
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
 import {
-  comissaoDe, PIX_META_ACORDOS_DOBRA, PIX_DIAS_UTEIS_EXPURGO,
+  comissaoDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor, PIX_DIAS_UTEIS_EXPURGO,
   type PixAutoAcordo, type PixAutoStatus,
 } from '@/services/pix_automatico.service';
 
@@ -300,10 +300,25 @@ export function calcularDobraComissao(
   pctPorSetor: Record<string, number>,
   mes: MesRef,
   metaRecebimento?: MetaRecebimentoDobra,
+  /**
+   * Meta de acordos por setor (`metasDobraPorSetor`). Omitido = usa o padrão
+   * de 18 — é o que mantém os chamadores antigos e os ambientes sem a
+   * migration 20260810c funcionando.
+   */
+  metaPorSetor: Record<string, number> = {},
 ): DobraComissao {
   const doMes = acordosFeitosNoMes(itens, operadorId, mes);
   const feitos = doMes.length;
-  const acordosOk = feitos >= PIX_META_ACORDOS_DOBRA;
+
+  // A meta vem do setor em que o operador registrou no mês. Quando ele tem
+  // linhas em setores diferentes (mudou de setor no meio do mês), vale a MAIOR
+  // — exigir menos do que algum dos setores dele pede seria prometer a dobra
+  // cedo demais.
+  const meta = doMes.length
+    ? Math.max(...doMes.map(i => metaDobraDoSetor(i.setor_id, metaPorSetor)))
+    : metaDobraDoSetor(null, metaPorSetor);
+
+  const acordosOk = feitos >= meta;
   const comissao = doMes
     .filter(i => i.status === 'aprovado')
     .reduce((s, i) => s + comissaoDe(i, pctPorSetor), 0);
@@ -317,10 +332,10 @@ export function calcularDobraComissao(
 
   return {
     feitos,
-    faltam: Math.max(PIX_META_ACORDOS_DOBRA - feitos, 0),
-    meta: PIX_META_ACORDOS_DOBRA,
+    faltam: Math.max(meta - feitos, 0),
+    meta,
     acordosOk,
-    pctAcordos: Math.min(Math.round((feitos / PIX_META_ACORDOS_DOBRA) * 100), 100),
+    pctAcordos: Math.min(Math.round((feitos / meta) * 100), 100),
 
     metaValor,
     recebidoMes,
@@ -427,8 +442,14 @@ export function rankingPixSetor(
   pctPorSetor: Record<string, number>,
   mes: MesRef,
   nomePorOperador: Record<string, string> = {},
+  /** Meta por setor. Omitido = 18 para todos (ver `calcularDobraComissao`). */
+  metaPorSetor: Record<string, number> = {},
 ): LinhaRankingPix[] {
   const porOperador = new Map<string, LinhaRankingPix>();
+  // A meta é resolvida por linha porque o admin vê setores diferentes na mesma
+  // lista — um número só marcaria "cumpriu" para quem está em setor mais
+  // exigente. Mesma razão de `comissaoDe` receber o mapa em vez de um número.
+  const metaDoOperador = new Map<string, number>();
 
   for (const i of itens) {
     if (!ehAcordoFeito(i) || !i.criado_em.startsWith(mes)) continue;
@@ -441,10 +462,20 @@ export function rankingPixSetor(
     linha.valor   += Number(i.valor);
     if (i.status === 'aprovado') linha.comissao += comissaoDe(i, pctPorSetor);
     porOperador.set(i.operador_id, linha);
+
+    const metaLinha = metaDobraDoSetor(i.setor_id, metaPorSetor);
+    metaDoOperador.set(
+      i.operador_id,
+      Math.max(metaDoOperador.get(i.operador_id) ?? 0, metaLinha),
+    );
   }
 
   return [...porOperador.values()]
-    .map(l => ({ ...l, requisitoAcordosOk: l.acordos >= PIX_META_ACORDOS_DOBRA }))
+    .map(l => ({
+      ...l,
+      requisitoAcordosOk:
+        l.acordos >= (metaDoOperador.get(l.operadorId) ?? PIX_META_ACORDOS_DOBRA),
+    }))
     .sort((a, b) =>
       b.acordos - a.acordos
       || b.comissao - a.comissao

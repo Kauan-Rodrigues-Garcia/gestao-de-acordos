@@ -33,6 +33,37 @@ export const PIX_AUTO_PCT_PADRAO = 0.25;
  */
 export const PIX_META_ACORDOS_DOBRA = 18;
 
+/**
+ * A meta de acordos que vale para um setor.
+ *
+ * Espelha `comissaoDe`, que já resolve o `pct` por setor com um mapa e um
+ * padrão. O ranking mistura operadores de setores diferentes quando quem olha
+ * é admin, então a meta tem de ser resolvida POR LINHA — um número só para a
+ * tela inteira mostraria "cumpriu" para quem está em setor de meta maior.
+ *
+ * `PIX_META_ACORDOS_DOBRA` continua sendo o padrão: é o combinado da operação
+ * e o default da coluna.
+ */
+export function metaDobraDoSetor(
+  setorId: string | null | undefined,
+  metaPorSetor: Record<string, number>,
+): number {
+  if (setorId != null && metaPorSetor[setorId] != null && metaPorSetor[setorId] > 0) {
+    return metaPorSetor[setorId];
+  }
+  return PIX_META_ACORDOS_DOBRA;
+}
+
+/** Mapa setor → meta de acordos, do jeito que as telas consomem. */
+export function metasDobraPorSetor(configs: PixAutoConfig[]): Record<string, number> {
+  const mapa: Record<string, number> = {};
+  for (const c of configs) {
+    const m = Number(c.meta_acordos_dobra);
+    if (Number.isFinite(m) && m > 0) mapa[c.setor_id] = m;
+  }
+  return mapa;
+}
+
 export interface PixAutoAcordo {
   id: string;
   empresa_id: string;
@@ -60,6 +91,13 @@ export interface PixAutoConfig {
   empresa_id: string;
   setor_id: string;
   pct: number;
+  /**
+   * Quantos acordos o operador precisa fazer no mês para o requisito 1 da
+   * comissão dobrada. Era a constante `PIX_META_ACORDOS_DOBRA = 18`, fixa no
+   * código; virou config por setor na 20260810c. Opcional no tipo porque a
+   * coluna pode não existir em ambiente sem a migration.
+   */
+  meta_acordos_dobra?: number | null;
   /** Interruptor do setor: false = operador só visualiza, não registra. */
   permite_registro_operador: boolean;
   atualizado_por: string | null;
@@ -155,6 +193,112 @@ export async function fetchAcordosPix(
   const { data, error } = await q;
   if (error) {
     console.warn('[pix_automatico.service] fetchAcordosPix:', error.message);
+    return [];
+  }
+  return (data as unknown as PixAutoAcordo[]) ?? [];
+}
+
+/** Linhas por página na tabela do Pix. */
+export const PIX_LINHAS_POR_PAGINA = 100;
+
+export interface PaginaPix {
+  itens: PixAutoAcordo[];
+  /** Total de linhas no filtro atual — o que dá o número de páginas. */
+  total: number;
+  /** Página pedida (1-based), já normalizada. */
+  pagina: number;
+  totalPaginas: number;
+}
+
+/**
+ * Uma página da tabela, contada e recortada NO SERVIDOR.
+ *
+ * A tela usa duas consultas com escopos diferentes, e a diferença é
+ * intencional:
+ *
+ *   • esta aqui alimenta a TABELA — recorte por `.range()`, 100 linhas;
+ *   • `fetchAcordosPixDoMes` alimenta os AGREGADOS (dobra, ranking, meta), que
+ *     precisam do mês inteiro.
+ *
+ * Paginar a fonte dos agregados faria o operador que fez 40 acordos ver
+ * "3/18": o contador enxergaria só a página aberta. Foi por isso que as duas
+ * consultas ficaram separadas em vez de uma servir às duas coisas.
+ */
+export async function fetchPaginaAcordosPix(
+  empresaId: string,
+  opts?: {
+    operadorId?: string;
+    setorId?: string | null;
+    pagina?: number;
+    porPagina?: number;
+  },
+): Promise<PaginaPix> {
+  const porPagina = opts?.porPagina ?? PIX_LINHAS_POR_PAGINA;
+  const pedida    = Math.max(1, Math.floor(opts?.pagina ?? 1));
+  const de        = (pedida - 1) * porPagina;
+
+  let q = supabase
+    .from('pix_automatico_acordos')
+    // `count: 'exact'` na mesma ida: o rodapé precisa do total para saber
+    // quantas páginas existem, e uma segunda consulta só para contar dobraria
+    // a latência de cada troca de página.
+    .select('*', { count: 'exact' })
+    .eq('empresa_id', empresaId)
+    .order('criado_em', { ascending: false })
+    .range(de, de + porPagina - 1);
+
+  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
+
+  const { data, error, count } = await q;
+  if (error) {
+    console.warn('[pix_automatico.service] fetchPaginaAcordosPix:', error.message);
+    return { itens: [], total: 0, pagina: 1, totalPaginas: 1 };
+  }
+
+  const total = count ?? 0;
+  return {
+    itens: (data as unknown as PixAutoAcordo[]) ?? [],
+    total,
+    pagina: pedida,
+    totalPaginas: Math.max(1, Math.ceil(total / porPagina)),
+  };
+}
+
+/**
+ * Os acordos do MÊS, para os agregados.
+ *
+ * Sem `.limit()`: o recorte é o mês, que é pequeno por natureza, e um teto
+ * arbitrário aqui é o bug que existia antes — `fetchAcordosPix` cortava em
+ * 1000 linhas em silêncio, e a partir daí a dobra, o ranking e a meta
+ * passavam a mentir sem nada na tela indicando isso.
+ *
+ * `mes` no formato `YYYY-MM`, o mesmo que `calcularDobraComissao` compara.
+ */
+export async function fetchAcordosPixDoMes(
+  empresaId: string,
+  mes: string,
+  opts?: { operadorId?: string; setorId?: string | null },
+): Promise<PixAutoAcordo[]> {
+  const [ano, m] = mes.split('-').map(Number);
+  if (!ano || !m) return [];
+  const inicio = new Date(Date.UTC(ano, m - 1, 1)).toISOString();
+  const fim    = new Date(Date.UTC(ano, m, 1)).toISOString();
+
+  let q = supabase
+    .from('pix_automatico_acordos')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .gte('criado_em', inicio)
+    .lt('criado_em', fim)
+    .order('criado_em', { ascending: false });
+
+  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
+
+  const { data, error } = await q;
+  if (error) {
+    console.warn('[pix_automatico.service] fetchAcordosPixDoMes:', error.message);
     return [];
   }
   return (data as unknown as PixAutoAcordo[]) ?? [];
@@ -369,10 +513,143 @@ export async function reavaliarAcordoPix(id: string): Promise<{ ok: boolean; err
   return { ok: true };
 }
 
-export async function excluirAcordoPix(id: string): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Exclui um registro — passando pela lixeira.
+ *
+ * A ordem é snapshot ANTES do delete, e o delete só acontece se o snapshot
+ * entrou. Ao contrário, uma falha ao gravar na lixeira apagaria a linha do
+ * mesmo jeito e o operador acharia que tinha como voltar atrás.
+ *
+ * Foi exatamente o que faltou em 2026-08-10: o delete era direto, um registro
+ * se perdeu e o valor não pôde ser recuperado — ele só existia nesta tabela.
+ */
+export async function excluirAcordoPix(
+  id: string,
+  quem?: { id?: string | null; nome?: string | null },
+): Promise<{ ok: boolean; error?: string }> {
+  const { data: linha, error: errLer } = await supabase
+    .from('pix_automatico_acordos')
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+
+  if (errLer)  return { ok: false, error: errLer.message };
+  if (!linha)  return { ok: false, error: 'Registro não encontrado — recarregue a lista.' };
+
+  const a = linha as unknown as PixAutoAcordo;
+  const { error: errLix } = await supabase.from('lixeira_pix_automatico').insert({
+    empresa_id:        a.empresa_id,
+    acordo_id:         a.id,
+    nr_cliente:        a.nr_cliente,
+    valor:             a.valor,
+    status:            a.status,
+    operador_id:       a.operador_id,
+    operador_nome:     a.operador_nome,
+    setor_id:          a.setor_id ?? null,
+    dados_completos:   a,
+    excluido_por:      quem?.id ?? null,
+    excluido_por_nome: quem?.nome ?? null,
+  } as never);
+
+  if (errLix) {
+    return { ok: false, error: `Não foi possível guardar na lixeira: ${errLix.message}` };
+  }
+
   const { error } = await supabase.from('pix_automatico_acordos').delete().eq('id', id);
+  if (error) {
+    // A cópia ficou na lixeira sem o delete acontecer. Desfaz para a linha não
+    // aparecer nos dois lugares — a tela mostraria o registro vivo E na
+    // lixeira, e restaurar depois duplicaria o NR.
+    await supabase.from('lixeira_pix_automatico').delete().eq('acordo_id', id);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true };
+}
+
+// ── Lixeira ────────────────────────────────────────────────────────────────
+
+export interface PixLixeiraItem {
+  id: string;
+  empresa_id: string;
+  acordo_id: string;
+  nr_cliente: string;
+  valor: number;
+  status: string;
+  operador_id: string | null;
+  operador_nome: string | null;
+  setor_id: string | null;
+  dados_completos: PixAutoAcordo;
+  excluido_por: string | null;
+  excluido_por_nome: string | null;
+  excluido_em: string;
+  expira_em: string;
+}
+
+/**
+ * Itens da lixeira. `operadorId` restringe ao que era daquele operador — a RLS
+ * já faz isso para quem não é líder, e passar aqui evita depender só dela para
+ * a tela mostrar a coisa certa.
+ */
+export async function fetchLixeiraPix(
+  empresaId: string,
+  opts?: { operadorId?: string },
+): Promise<PixLixeiraItem[]> {
+  let q = supabase
+    .from('lixeira_pix_automatico')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('excluido_em', { ascending: false });
+  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+
+  const { data, error } = await q;
+  if (error) {
+    console.warn('[pix_automatico.service] fetchLixeiraPix:', error.message);
+    return [];
+  }
+  return (data as unknown as PixLixeiraItem[]) ?? [];
+}
+
+/**
+ * Restaura um item. Vai por RPC porque a volta precisa de três coisas que o
+ * cliente não consegue fazer junto: gravar o `status` original (a policy de
+ * INSERT exige `pendente`), realinhar o registro de NR, e sair da lixeira na
+ * mesma transação. Ver `fn_pix_restaurar_lixeira` na 20260810c.
+ */
+export async function restaurarItemLixeiraPix(
+  itemId: string,
+): Promise<{ ok: boolean; acordoId?: string; error?: string }> {
+  const { data, error } = await supabase.rpc('fn_pix_restaurar_lixeira', { p_item_id: itemId });
+  if (error) {
+    const msg = error.message.includes('SEM_PERMISSAO_RESTAURAR')
+      ? 'Só líder ou superior pode restaurar registros do Pix automático.'
+      : error.message.includes('LIXEIRA_ITEM_NAO_ENCONTRADO')
+        ? 'Este item já saiu da lixeira — recarregue a lista.'
+        : error.message;
+    return { ok: false, error: msg };
+  }
+  return { ok: true, acordoId: (data as string) ?? undefined };
+}
+
+/** Apaga de vez um item da lixeira. */
+export async function excluirItemLixeiraPix(itemId: string): Promise<{ ok: boolean; error?: string }> {
+  const { error } = await supabase.from('lixeira_pix_automatico').delete().eq('id', itemId);
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+/**
+ * Remove o que passou dos 3 dias de retenção.
+ *
+ * Chamada ao abrir a lixeira (purga preguiçosa): não existe job agendado, e sem
+ * isto o item expirado continuaria listado como se ainda desse para restaurar.
+ */
+export async function purgarLixeiraPixExpirada(empresaId: string): Promise<number> {
+  const { data, error } = await supabase.rpc('fn_pix_lixeira_purgar', { p_empresa_id: empresaId });
+  if (error) {
+    console.warn('[pix_automatico.service] purgarLixeiraPixExpirada:', error.message);
+    return 0;
+  }
+  return Number(data ?? 0);
 }
 
 /**
@@ -435,16 +712,61 @@ export async function expurgarDesaprovadosVencidos(empresaId: string): Promise<n
   return Number(data) || 0;
 }
 
-/** Apaga todos os DESAPROVADOS do operador (botão "Limpar desaprovados"). */
-export async function limparDesaprovados(empresaId: string, operadorId: string): Promise<{ ok: boolean; count: number; error?: string }> {
+/**
+ * Manda para a lixeira todos os DESAPROVADOS do operador
+ * (botão "Limpar desaprovados").
+ *
+ * Passa pela lixeira como o excluir de uma linha só. É o botão que apaga
+ * VÁRIAS de uma vez sem confirmação item a item — justamente o que mais
+ * precisa de volta atrás.
+ */
+export async function limparDesaprovados(
+  empresaId: string,
+  operadorId: string,
+  quem?: { id?: string | null; nome?: string | null },
+): Promise<{ ok: boolean; count: number; error?: string }> {
+  const { data: linhas, error: errLer } = await supabase
+    .from('pix_automatico_acordos')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .eq('operador_id', operadorId)
+    .eq('status', 'desaprovado');
+
+  if (errLer) return { ok: false, count: 0, error: errLer.message };
+
+  const itens = (linhas ?? []) as unknown as PixAutoAcordo[];
+  if (!itens.length) return { ok: true, count: 0 };
+
+  const { error: errLix } = await supabase.from('lixeira_pix_automatico').insert(
+    itens.map(a => ({
+      empresa_id:        a.empresa_id,
+      acordo_id:         a.id,
+      nr_cliente:        a.nr_cliente,
+      valor:             a.valor,
+      status:            a.status,
+      operador_id:       a.operador_id,
+      operador_nome:     a.operador_nome,
+      setor_id:          a.setor_id ?? null,
+      dados_completos:   a,
+      excluido_por:      quem?.id ?? null,
+      excluido_por_nome: quem?.nome ?? null,
+    })) as never,
+  );
+  if (errLix) {
+    return { ok: false, count: 0, error: `Não foi possível guardar na lixeira: ${errLix.message}` };
+  }
+
+  const ids = itens.map(a => a.id);
   const { data, error } = await supabase
     .from('pix_automatico_acordos')
     .delete()
-    .eq('empresa_id', empresaId)
-    .eq('operador_id', operadorId)
-    .eq('status', 'desaprovado')
+    .in('id', ids)
     .select('id');
-  if (error) return { ok: false, count: 0, error: error.message };
+
+  if (error) {
+    await supabase.from('lixeira_pix_automatico').delete().in('acordo_id', ids);
+    return { ok: false, count: 0, error: error.message };
+  }
   return { ok: true, count: (data ?? []).length };
 }
 
@@ -466,19 +788,26 @@ export async function upsertConfigPix(p: {
   empresaId: string;
   setorId: string;
   pct: number;
+  /** Meta de acordos da dobra. Omitido = não mexe no que já está gravado. */
+  metaAcordosDobra?: number;
   atualizadoPor: string;
   atualizadoPorNome: string;
 }): Promise<{ ok: boolean; error?: string }> {
+  const payload: Record<string, unknown> = {
+    empresa_id:          p.empresaId,
+    setor_id:            p.setorId,
+    pct:                 p.pct,
+    atualizado_por:      p.atualizadoPor,
+    atualizado_por_nome: p.atualizadoPorNome,
+    atualizado_em:       new Date().toISOString(),
+  };
+  // Só entra no upsert quando veio: `undefined` no payload viraria NULL na
+  // coluna, e a meta do setor sumiria ao alguém salvar só o percentual.
+  if (p.metaAcordosDobra != null) payload.meta_acordos_dobra = p.metaAcordosDobra;
+
   const { error } = await supabase
     .from('pix_automatico_config')
-    .upsert({
-      empresa_id:          p.empresaId,
-      setor_id:            p.setorId,
-      pct:                 p.pct,
-      atualizado_por:      p.atualizadoPor,
-      atualizado_por_nome: p.atualizadoPorNome,
-      atualizado_em:       new Date().toISOString(),
-    }, { onConflict: 'empresa_id,setor_id' });
+    .upsert(payload as never, { onConflict: 'empresa_id,setor_id' });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }

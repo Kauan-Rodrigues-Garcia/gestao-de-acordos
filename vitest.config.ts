@@ -33,6 +33,20 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     setupFiles: ['./src/test/setup.ts'],
+    // Credenciais de fachada para o teste.
+    //
+    // `src/lib/supabase.ts` chama `createClient` no topo do módulo, e o
+    // supabase-js valida a URL na hora. Sem estas duas, QUALQUER arquivo cuja
+    // árvore de imports encoste em `@/lib/supabase` morria na coleta com
+    // "supabaseUrl is required" — mesmo testando função pura, mesmo com o
+    // supabase mockado, porque o erro acontece antes do mock entrar.
+    //
+    // Eram 6 suítes inteiras sem rodar por isso. Os valores não conectam em
+    // lugar nenhum: só precisam ter forma de URL e de chave.
+    env: {
+      VITE_SUPABASE_URL:      'http://localhost:54321',
+      VITE_SUPABASE_ANON_KEY: 'chave-de-teste-sem-uso-real',
+    },
     // Por padrão ignora node_modules, dist etc. — mantemos o padrão.
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
     // Excluímos arquivos de tipo e mocks compartilhados.
