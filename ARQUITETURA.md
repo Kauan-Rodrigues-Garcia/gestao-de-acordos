@@ -4,6 +4,12 @@
 > decide** — permissões, RLS, tabulação de acordos, Direto/Extra, equipes,
 > metas, analítico e recebimento diário, nas duas operações (Pague Play e
 > Book Play) — consulte [docs/REGRAS-DE-NEGOCIO.md](./docs/REGRAS-DE-NEGOCIO.md).
+>
+> Para o que está **errado e precisa mudar**, com o custo que já cobrou, veja
+> [docs/DIVIDA-TECNICA.md](./docs/DIVIDA-TECNICA.md). Hoje há **1 item urgente**:
+> `nr_cliente` e `instituicao` significam coisas diferentes em cada empresa, e
+> essa conflação já causou dois bugs em produção. Código novo que toque essas
+> duas colunas deve ler aquele documento primeiro.
 
 ## Estrutura do Projeto
 

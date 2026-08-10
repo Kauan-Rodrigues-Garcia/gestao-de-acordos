@@ -496,6 +496,13 @@ que a `fn_sync_par_vinculo` já usava:
 | sim | `nr_cliente` | BookPlay |
 | não | `instituicao` | PaguePlay — lá a instituição **é** o código |
 
+> ⚠️ Isto é um **remendo por inferência**, não a regra certa. As duas colunas
+> significam coisas diferentes em cada empresa, e o banco não tem como saber
+> qual é qual — foi essa conflação que causou este bug e o do CPF antes dele.
+> A origem, o custo já pago e o caminho de saída estão em
+> [DIVIDA-TECNICA.md § 1](./DIVIDA-TECNICA.md#1-urgente-as-colunas-nr_cliente-e-instituicao-significam-coisas-diferentes-em-cada-empresa).
+> **Leia antes de escrever código novo que toque `instituicao` ou `nr_cliente`.**
+
 A mesma migration fechou três buracos do branch UPDATE, que só reagia a status e
 a mudança de valor do NR:
 
