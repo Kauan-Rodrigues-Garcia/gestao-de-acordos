@@ -566,7 +566,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-amber-500" />
               </Button>
             )}
-            {/* Badge de notificações — indica novas sem abrir o painel */}
+            {/* Sino — indica novas sem abrir o painel.
+                O sino BALANÇA e o número PULSA quando chega notificação: o
+                badge sozinho, num canto de 16 px, passava despercebido em quem
+                está olhando para o meio da tela. `animarBadge` vem do provider
+                e dura 900 ms. */}
             <Button
               variant="ghost"
               size="icon"
@@ -575,13 +579,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               aria-label={`Notificações${naoLidas > 0 ? ` — ${naoLidas} não lida${naoLidas > 1 ? 's' : ''}` : ''}`}
               onClick={() => document.querySelector<HTMLButtonElement>('[data-notif-trigger]')?.click()}
             >
-              <Bell className="w-4 h-4" />
+              <Bell className={`w-4 h-4 ${animarBadge ? 'animate-sino' : ''}`} />
               {naoLidas > 0 && (
-                <span
-                  className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center leading-none transition-transform ${animarBadge ? 'scale-125' : 'scale-100'}`}
-                >
-                  {naoLidas > 99 ? '99+' : naoLidas}
-                </span>
+                <>
+                  {/* Halo que se expande uma vez, atrás do número. */}
+                  {animarBadge && (
+                    <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-destructive/50 animate-ping" />
+                  )}
+                  <span
+                    className={`absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-destructive text-[9px] font-bold text-white flex items-center justify-center leading-none ring-2 ring-background transition-transform duration-200 ${animarBadge ? 'scale-125' : 'scale-100'}`}
+                  >
+                    {naoLidas > 99 ? '99+' : naoLidas}
+                  </span>
+                </>
               )}
             </Button>
             <HelpDrawer />

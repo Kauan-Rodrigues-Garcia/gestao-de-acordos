@@ -1,77 +1,100 @@
 /**
  * som-notificacao.test.ts
  *
- * O que importa aqui não é o timbre: é que o som NUNCA derrube a notificação.
- * Navegador sem WebAudio, contexto barrado por autoplay, oscilador que lança —
- * em todos os casos o card tem de continuar de pé.
+ * O que importa aqui não é o timbre: é que o som NUNCA derrube a notificação, e
+ * que ele não vire metralhadora nem toque depois de desligado.
+ *
+ * Desde 11/08/2026 o plano A é o arquivo `/sounds/notificacao.mp3` e o plano B
+ * é a síntese com WebAudio. Os dois caminhos são testados, e principalmente a
+ * TROCA entre eles: é ela que impede o aviso sonoro de sumir quando o arquivo
+ * não carrega.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { tocarSomNotificacao, __resetarContextoDeAudio } from './som-notificacao';
+import {
+  tocarSomNotificacao, somAtivo, definirSomAtivo, prepararSomNotificacao,
+  __resetarSomNotificacao, CHAVE_SOM, INTERVALO_MINIMO_MS,
+} from './som-notificacao';
 
-/** Os nós são inspecionados depois da chamada: o código os configura após criá-los. */
-interface NoAudio { type: string; frequency: { value: number } }
+// ── Áudio falso (plano A) ───────────────────────────────────────────────────
 
-interface Espioes {
-  criarOscilador: ReturnType<typeof vi.fn>;
-  resume:         ReturnType<typeof vi.fn>;
-  start:          ReturnType<typeof vi.fn>;
-  stop:           ReturnType<typeof vi.fn>;
-  construidos:    number;
-  /** O que de fato foi agendado — é o que fixa o som escolhido. */
-  osciladores:    NoAudio[];
-  picos:          number[];
-  filtro:         NoAudio | null;
+interface AudioFalso {
+  src: string;
+  volume: number;
+  currentTime: number;
+  preload: string;
+  play: ReturnType<typeof vi.fn>;
+  load: ReturnType<typeof vi.fn>;
+  addEventListener: (evento: string, ouvinte: () => void, opts?: unknown) => void;
+  /** Dispara o `error` do elemento, como um 404 faria. */
+  quebrar: () => void;
 }
 
-const original = (globalThis as Record<string, unknown>).AudioContext;
+let ultimoAudio: AudioFalso | null = null;
+let audiosConstruidos = 0;
 
-function instalarAudioFalso(estado: 'running' | 'suspended' = 'running'): Espioes {
-  const espioes: Espioes = {
-    criarOscilador: vi.fn(),
-    resume:         vi.fn(),
-    start:          vi.fn(),
-    stop:           vi.fn(),
-    construidos:    0,
-    osciladores:    [],
-    picos:          [],
-    filtro:         null,
-  };
-
-  const ganhoFalso = () => ({
-    gain: {
-      setValueAtTime: vi.fn(),
-      // A primeira rampa é a subida até o volume de pico; a segunda é a queda.
-      exponentialRampToValueAtTime: vi.fn((v: number) => {
-        if (v > 0.01) espioes.picos.push(v);
+function instalarAudio(resultadoDoPlay: 'ok' | 'rejeita' | 'lanca' = 'ok') {
+  audiosConstruidos = 0;
+  (globalThis as Record<string, unknown>).Audio = function (this: AudioFalso, src: string) {
+    audiosConstruidos += 1;
+    const ouvintes: Record<string, (() => void)[]> = {};
+    const el: AudioFalso = {
+      src,
+      volume: 1,
+      currentTime: 0,
+      preload: '',
+      load: vi.fn(),
+      play: vi.fn(() => {
+        if (resultadoDoPlay === 'lanca') throw new Error('sem permissão');
+        if (resultadoDoPlay === 'rejeita') return Promise.reject(new Error('autoplay'));
+        return Promise.resolve();
       }),
-    },
-    connect: vi.fn(),
-  });
+      addEventListener: (evento, ouvinte) => {
+        (ouvintes[evento] ??= []).push(ouvinte);
+      },
+      quebrar: () => { for (const o of ouvintes.error ?? []) o(); },
+    };
+    ultimoAudio = el;
+    return el;
+  } as unknown as typeof Audio;
+}
 
-  const filtroFalso = () => {
-    const f = { type: '', frequency: { value: 0 }, connect: vi.fn() };
-    espioes.filtro = f;
-    return f;
-  };
+// ── WebAudio falso (plano B) ────────────────────────────────────────────────
+
+interface EspioesSintese {
+  criarOscilador: ReturnType<typeof vi.fn>;
+  construidos: number;
+  picos: number[];
+}
+
+function instalarWebAudio(): EspioesSintese {
+  const espioes: EspioesSintese = { criarOscilador: vi.fn(), construidos: 0, picos: [] };
 
   class AudioContextFalso {
-    state = estado;
+    state = 'running';
     currentTime = 0;
     destination = {};
     constructor() { espioes.construidos += 1; }
-    resume() { espioes.resume(); return Promise.resolve(); }
-    createGain() { return ganhoFalso(); }
-    createBiquadFilter() { return filtroFalso(); }
+    resume() { return Promise.resolve(); }
+    createGain() {
+      return {
+        gain: {
+          setValueAtTime: vi.fn(),
+          exponentialRampToValueAtTime: vi.fn((v: number) => {
+            if (v > 0.01) espioes.picos.push(v);
+          }),
+        },
+        connect: vi.fn(),
+      };
+    }
+    createBiquadFilter() {
+      return { type: '', frequency: { value: 0 }, connect: vi.fn() };
+    }
     createOscillator() {
       espioes.criarOscilador();
-      const osc = {
+      return {
         type: '', frequency: { value: 0 },
-        connect: vi.fn(),
-        start: espioes.start,
-        stop:  espioes.stop,
+        connect: vi.fn(), start: vi.fn(), stop: vi.fn(),
       };
-      espioes.osciladores.push(osc);
-      return osc;
     }
   }
 
@@ -80,75 +103,188 @@ function instalarAudioFalso(estado: 'running' | 'suspended' = 'running'): Espioe
   return espioes;
 }
 
-beforeEach(() => { __resetarContextoDeAudio(); });
+const audioOriginal   = (globalThis as Record<string, unknown>).Audio;
+const contextoOriginal = (globalThis as Record<string, unknown>).AudioContext;
 
-afterEach(() => {
-  if (original === undefined) delete (globalThis as Record<string, unknown>).AudioContext;
-  else (globalThis as Record<string, unknown>).AudioContext = original;
-  __resetarContextoDeAudio();
+beforeEach(() => {
+  __resetarSomNotificacao();
+  ultimoAudio = null;
+  try { localStorage.removeItem(CHAVE_SOM); } catch { /* noop */ }
+  // O tempo anda entre os casos para o intervalo mínimo não vazar de um para o
+  // outro — quem testa o intervalo o faz de propósito, com `vi.setSystemTime`.
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-08-11T12:00:00Z'));
 });
 
-describe('tocarSomNotificacao', () => {
-  it('toca as duas notas', () => {
-    const espioes = instalarAudioFalso();
+afterEach(() => {
+  vi.useRealTimers();
+  if (audioOriginal === undefined) delete (globalThis as Record<string, unknown>).Audio;
+  else (globalThis as Record<string, unknown>).Audio = audioOriginal;
+  if (contextoOriginal === undefined) delete (globalThis as Record<string, unknown>).AudioContext;
+  else (globalThis as Record<string, unknown>).AudioContext = contextoOriginal;
+  __resetarSomNotificacao();
+  try { localStorage.removeItem(CHAVE_SOM); } catch { /* noop */ }
+});
+
+// ── Plano A ─────────────────────────────────────────────────────────────────
+
+describe('arquivo de som', () => {
+  it('toca o mp3 escolhido pelo usuário', () => {
+    instalarAudio();
+    tocarSomNotificacao();
+
+    expect(ultimoAudio?.src).toBe('/sounds/notificacao.mp3');
+    expect(ultimoAudio?.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('rebobina antes de tocar — senão o segundo aviso sai mudo', () => {
+    instalarAudio();
+    tocarSomNotificacao();
+    ultimoAudio!.currentTime = 3;
+
+    vi.setSystemTime(Date.now() + INTERVALO_MINIMO_MS + 10);
+    tocarSomNotificacao();
+    expect(ultimoAudio?.currentTime).toBe(0);
+  });
+
+  it('reaproveita um elemento só entre chamadas', () => {
+    instalarAudio();
+    tocarSomNotificacao();
+    vi.setSystemTime(Date.now() + INTERVALO_MINIMO_MS + 10);
+    tocarSomNotificacao();
+    expect(audiosConstruidos).toBe(1);
+  });
+
+  it('urgência muda o volume, e nenhum chega a 1', () => {
+    instalarAudio();
+
+    tocarSomNotificacao('info');
+    const info = ultimoAudio!.volume;
+
+    vi.setSystemTime(Date.now() + INTERVALO_MINIMO_MS + 10);
+    tocarSomNotificacao('critica');
+    const critica = ultimoAudio!.volume;
+
+    expect(critica).toBeGreaterThan(info);
+    expect(critica).toBeLessThan(1);
+  });
+
+  it('prepararSomNotificacao baixa o arquivo antes da primeira notificação', () => {
+    instalarAudio();
+    prepararSomNotificacao();
+    expect(ultimoAudio?.load).toHaveBeenCalled();
+    expect(ultimoAudio?.preload).toBe('auto');
+  });
+});
+
+// ── A troca para o plano B ──────────────────────────────────────────────────
+
+describe('queda para a síntese', () => {
+  it('sem suporte a Audio, sintetiza', () => {
+    delete (globalThis as Record<string, unknown>).Audio;
+    const espioes = instalarWebAudio();
+
     tocarSomNotificacao();
     expect(espioes.criarOscilador).toHaveBeenCalledTimes(2);
-    expect(espioes.start).toHaveBeenCalledTimes(2);
-    // Agendar o stop é o que impede o oscilador de ficar tocando para sempre.
-    expect(espioes.stop).toHaveBeenCalledTimes(2);
   });
 
-  it('toca a quarta justa escolhida, filtrada', () => {
-    // O timbre é escolha do usuário, não detalhe de implementação: trocar sem
-    // querer é o tipo de coisa que só se descobre pelo ouvido, em produção.
-    const espioes = instalarAudioFalso();
-    tocarSomNotificacao();
+  it('play que LANÇA cai na síntese na mesma hora', () => {
+    instalarAudio('lanca');
+    const espioes = instalarWebAudio();
 
-    expect(espioes.osciladores.map(o => o.type)).toEqual(['triangle', 'triangle']);
-    expect(espioes.osciladores.map(o => o.frequency.value)).toEqual([392.00, 523.25]);
-    expect(espioes.filtro?.type).toBe('lowpass');
-    expect(espioes.filtro?.frequency.value).toBe(2200);
-    expect(espioes.picos).toEqual([0.24, 0.24]);
+    tocarSomNotificacao();
+    expect(espioes.criarOscilador).toHaveBeenCalledTimes(2);
   });
 
-  it('reaproveita um contexto só entre chamadas', () => {
-    // Navegadores limitam AudioContext por página; um por notificação estouraria
-    // o limite num dia de trabalho.
-    const espioes = instalarAudioFalso();
+  it('play REJEITADO (autoplay barrado) cai na síntese', async () => {
+    instalarAudio('rejeita');
+    const espioes = instalarWebAudio();
+
     tocarSomNotificacao();
-    tocarSomNotificacao();
-    tocarSomNotificacao();
-    expect(espioes.construidos).toBe(1);
+    // A queda vem no `catch` da promessa, um tick depois.
+    await vi.waitFor(() => expect(espioes.criarOscilador).toHaveBeenCalledTimes(2));
   });
 
-  it('contexto suspenso pela política de autoplay: tenta destravar e não estoura', () => {
-    const espioes = instalarAudioFalso('suspended');
-    expect(() => tocarSomNotificacao()).not.toThrow();
-    expect(espioes.resume).toHaveBeenCalled();
+  it('arquivo que deu 404 não é tentado de novo', () => {
+    instalarAudio();
+    instalarWebAudio();
+
+    tocarSomNotificacao();
+    expect(ultimoAudio?.play).toHaveBeenCalledTimes(1);
+    // O elemento avisa do erro por evento, não por exceção do play.
+    ultimoAudio!.quebrar();
+    const quebrado = ultimoAudio!;
+
+    vi.setSystemTime(Date.now() + INTERVALO_MINIMO_MS + 10);
+    tocarSomNotificacao();
+    expect(quebrado.play).toHaveBeenCalledTimes(1);
   });
 
-  it('navegador sem WebAudio não estoura', () => {
+  it('nem arquivo nem WebAudio: não estoura', () => {
+    delete (globalThis as Record<string, unknown>).Audio;
     delete (globalThis as Record<string, unknown>).AudioContext;
     delete (globalThis as Record<string, unknown>).webkitAudioContext;
     expect(() => tocarSomNotificacao()).not.toThrow();
   });
+});
 
-  it('construtor que lança não derruba quem chamou', () => {
-    (globalThis as Record<string, unknown>).AudioContext = class {
-      constructor() { throw new Error('bloqueado'); }
-    } as unknown as typeof AudioContext;
-    expect(() => tocarSomNotificacao()).not.toThrow();
+// ── Intervalo mínimo ────────────────────────────────────────────────────────
+
+describe('intervalo mínimo', () => {
+  it('duas notificações no mesmo segundo tocam UMA vez', () => {
+    instalarAudio();
+    tocarSomNotificacao();
+    tocarSomNotificacao();
+    tocarSomNotificacao();
+    expect(ultimoAudio?.play).toHaveBeenCalledTimes(1);
   });
 
-  it('falha no meio da síntese não derruba quem chamou', () => {
-    (globalThis as Record<string, unknown>).AudioContext = class {
-      state = 'running';
-      currentTime = 0;
-      destination = {};
-      createGain() { return { gain: {}, connect: () => {} }; }
-      createBiquadFilter() { return { type: '', frequency: { value: 0 }, connect: () => {} }; }
-      createOscillator(): never { throw new Error('sem recurso'); }
-    } as unknown as typeof AudioContext;
-    expect(() => tocarSomNotificacao()).not.toThrow();
+  it('passado o intervalo, toca de novo', () => {
+    instalarAudio();
+    tocarSomNotificacao();
+    vi.setSystemTime(Date.now() + INTERVALO_MINIMO_MS + 1);
+    tocarSomNotificacao();
+    expect(ultimoAudio?.play).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ── Preferência ─────────────────────────────────────────────────────────────
+
+describe('ligar e desligar', () => {
+  it('vem ligado por padrão', () => {
+    expect(somAtivo()).toBe(true);
+  });
+
+  it('desligado não toca nada — nem arquivo, nem síntese', () => {
+    instalarAudio();
+    const espioes = instalarWebAudio();
+    definirSomAtivo(false);
+
+    tocarSomNotificacao();
+    expect(somAtivo()).toBe(false);
+    expect(ultimoAudio).toBeNull();
+    expect(espioes.criarOscilador).not.toHaveBeenCalled();
+  });
+
+  it('a escolha sobrevive: religar volta a tocar', () => {
+    instalarAudio();
+    definirSomAtivo(false);
+    tocarSomNotificacao();
+    expect(ultimoAudio).toBeNull();
+
+    definirSomAtivo(true);
+    tocarSomNotificacao();
+    expect(ultimoAudio?.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('storage que lança (modo privativo) não derruba nem muda o padrão', () => {
+    const original = Storage.prototype.getItem;
+    Storage.prototype.getItem = () => { throw new Error('bloqueado'); };
+    try {
+      expect(somAtivo()).toBe(true);
+      expect(() => definirSomAtivo(false)).not.toThrow();
+    } finally {
+      Storage.prototype.getItem = original;
+    }
   });
 });

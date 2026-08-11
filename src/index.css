@@ -697,3 +697,36 @@
   .dia-slide-dir,
   .dia-slide-esq { animation: none; }
 }
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * Sino do cabeçalho quando chega notificação
+ * ────────────────────────────────────────────────────────────────────────────
+ * O badge vermelho tem 16 px e mora no canto superior direito da tela. Quem
+ * está olhando para o meio da página não o vê mudar de 3 para 4 — e o aumento
+ * de escala sozinho, sem movimento, também não chama o olho periférico.
+ *
+ * O balanço resolve isso: movimento lateral é o que a visão periférica detecta
+ * melhor. Rápido e uma vez só, para avisar sem virar enfeite piscando.
+ *
+ * CSS puro em vez de framer-motion: são dois elementos de 16 px animando por
+ * 900 ms, e o compositor do navegador faz isso sem passar pelo JS.
+ */
+@keyframes sino-balanca {
+  0%, 100%      { transform: rotate(0); }
+  15%           { transform: rotate(-14deg); }
+  30%           { transform: rotate(11deg); }
+  45%           { transform: rotate(-8deg); }
+  60%           { transform: rotate(5deg); }
+  75%           { transform: rotate(-2deg); }
+}
+
+.animate-sino {
+  animation: sino-balanca .9s cubic-bezier(.36, .07, .19, .97) both;
+  transform-origin: top center;
+}
+
+/* Aqui o movimento é o aviso, então "menos movimento" não pode virar "aviso
+   nenhum": o sino para de balançar, mas o badge continua crescendo. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-sino { animation: none; }
+}
