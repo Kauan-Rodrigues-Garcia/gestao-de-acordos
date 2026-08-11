@@ -66,6 +66,7 @@ import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import {
   PixAutoAcordo, PixAutoStatus, PixAutoConfig, PIX_AUTO_PCT_PADRAO,
+  PIX_META_ACORDOS_DOBRA,
   fetchAcordosPix, criarAcordoPix, avaliarAcordoPix, reavaliarAcordoPix,
   excluirAcordoPix, limparDesaprovados, fetchConfigsPix, upsertConfigPix,
   PIX_LINHAS_POR_PAGINA, metasDobraPorSetor,

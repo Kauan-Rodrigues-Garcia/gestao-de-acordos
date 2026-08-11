@@ -1171,6 +1171,61 @@ export type Database = {
           },
         ]
       }
+      // ── Escrito à mão (migration 20260810c) ──────────────────────────────
+      // Este arquivo é GERADO, mas a lixeira do Pix precisa de insert e delete
+      // tipados, e `supabaseSemTipo` é read-only de propósito. Some na próxima
+      // regeneração pela CLI do Supabase — que é o certo a fazer quando der.
+      lixeira_pix_automatico: {
+        Row: {
+          acordo_id: string
+          dados_completos: Json
+          empresa_id: string
+          excluido_em: string
+          excluido_por: string | null
+          excluido_por_nome: string | null
+          expira_em: string
+          id: string
+          nr_cliente: string
+          operador_id: string | null
+          operador_nome: string | null
+          setor_id: string | null
+          status: string
+          valor: number
+        }
+        Insert: {
+          acordo_id: string
+          dados_completos: Json
+          empresa_id: string
+          excluido_em?: string
+          excluido_por?: string | null
+          excluido_por_nome?: string | null
+          expira_em?: string
+          id?: string
+          nr_cliente: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          setor_id?: string | null
+          status: string
+          valor: number
+        }
+        Update: {
+          acordo_id?: string
+          dados_completos?: Json
+          empresa_id?: string
+          excluido_em?: string
+          excluido_por?: string | null
+          excluido_por_nome?: string | null
+          expira_em?: string
+          id?: string
+          nr_cliente?: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          setor_id?: string | null
+          status?: string
+          valor?: number
+        }
+        Relationships: []
+      }
       lixeira_acordos: {
         Row: {
           acordo_id: string
@@ -2740,6 +2795,17 @@ export type Database = {
           p_whatsapp?: string
         }
         Returns: undefined
+      }
+      // ── Escrito à mão (migration 20260810c) ──────────────────────────────
+      fn_pix_restaurar_lixeira: {
+        Args: { p_item_id: string }
+        /** Id do registro recriado em pix_automatico_acordos. */
+        Returns: string
+      }
+      fn_pix_lixeira_purgar: {
+        Args: { p_empresa_id: string }
+        /** Quantos itens vencidos foram apagados. */
+        Returns: number
       }
     }
     Enums: {
