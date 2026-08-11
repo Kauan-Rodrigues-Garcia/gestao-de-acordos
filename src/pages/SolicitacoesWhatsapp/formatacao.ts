@@ -81,29 +81,38 @@ export function nivelEspera(ms: number): NivelEspera {
 // ── "Não concluído" ──────────────────────────────────────────────────────────
 
 /**
- * A partir daqui um pedido ainda PENDENTE ganha a tag "Não concluído".
+ * A partir daqui um pedido em aberto ganha a tag "Não concluído".
  *
  * Cinco dias é o combinado da operação (11/08/2026). Vermelho já existe a
  * partir de um dia (`ESPERA_CRITICA`), e uma cor mais forte não resolvia: com
  * dezenas de pedidos vermelhos ninguém distingue o de ontem do da semana
  * passada. A tag nomeia o caso em vez de só pintá-lo.
+ *
+ * ⚠️ O mesmo prazo está em SQL, em `fn_wpp_marcar_nao_concluidos` (migration
+ * 20260811b), que é quem AVISA dono e responsável. Aqui é quem mostra. Mudar um
+ * sem o outro faz a tela prometer um prazo e o aviso cumprir outro.
  */
 export const PRAZO_NAO_CONCLUIDO = 5 * 24 * 3_600_000;   // 5 dias
 
+/** Status alcançados pela tag — os dois em que o atendimento ainda não saiu. */
+const STATUS_NAO_CONCLUIDO = ['pendente', 'em_andamento'];
+
 /**
- * O pedido passou do prazo sem ninguém assumir?
+ * O pedido passou do prazo sem ser concluído?
  *
- * Só `pendente`, de propósito: é o status em que NINGUÉM pegou o chamado, e é
- * disso que a tag fala. `em_andamento` tem dono e `falta_info` está parado
- * esperando o solicitante — nos dois casos existe alguém a quem cobrar, e a
- * tag culparia a pessoa errada.
+ * Alcança `pendente` E `em_andamento`. Assumir o chamado e deixá-lo parado
+ * cinco dias é justamente o caso que o time queria enxergar — a primeira versão
+ * desta função olhava só `pendente` e deixava isso passar.
  *
- * Derivado do relógio, não gravado no banco: não existe job agendado neste
- * projeto, e uma coluna precisaria de alguém para virá-la no quinto dia. Assim
- * a tag aparece sozinha, na hora certa, sem migration.
+ * `falta_info` fica de fora: ele está parado esperando o SOLICITANTE responder,
+ * e cobrar o responsável por isso seria cobrar a pessoa errada.
+ *
+ * Derivado do relógio: a tag aparece na hora certa mesmo antes de alguém abrir
+ * a aba para disparar a verificação do banco. A coluna `nao_concluido_em` existe
+ * para outra coisa — lembrar que o aviso já saiu.
  */
 export function naoConcluido(s: Esperavel, agora: number): boolean {
-  if (s.status !== 'pendente') return false;
+  if (!STATUS_NAO_CONCLUIDO.includes(s.status)) return false;
   return esperaMs(s, agora) >= PRAZO_NAO_CONCLUIDO;
 }
 

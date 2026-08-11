@@ -84,6 +84,12 @@ export interface SolicitacaoWhatsapp {
   responsavel_id: string | null;
   iniciado_em:    string | null;
   finalizado_em:  string | null;
+  /**
+   * Quando o pedido passou dos 5 dias sem ser concluído e o aviso saiu.
+   * NULL = dentro do prazo. Quem preenche é `fn_wpp_marcar_nao_concluidos`
+   * (20260811b); serve para não notificar duas vezes.
+   */
+  nao_concluido_em?: string | null;
   criado_em:      string;
   atualizado_em:  string;
   /** Join: quem abriu. */
@@ -191,6 +197,48 @@ export function buscarDiretorio(empresaId: string): Promise<Map<string, PessoaRe
 
   diretorioEmVoo.set(empresaId, promessa);
   return promessa;
+}
+
+// ── "Não concluído" ──────────────────────────────────────────────────────────
+
+/**
+ * Marca os pedidos que passaram dos 5 dias e avisa dono e responsável.
+ *
+ * Chamada ao abrir a aba, ANTES da listagem — verificação preguiçosa, no mesmo
+ * desenho do expurgo do Pix e da purga da lixeira. Não existe job agendado
+ * neste projeto, e sem alguém para disparar o aviso ele nunca sairia.
+ *
+ * A RPC é idempotente: só alcança quem ainda está com `nao_concluido_em` nulo,
+ * então abrir a aba dez vezes no dia não gera dez notificações.
+ *
+ * Devolve quantos foram marcados agora. Migration ausente ou erro devolve 0 sem
+ * barulho: a listagem é o que importa, e já houve um caso nesta base
+ * (`expurgarDesaprovadosVencidos`) em que uma chamada acessória estourando
+ * deixou a aba inteira vazia.
+ */
+export async function marcarNaoConcluidos(empresaId: string): Promise<number> {
+  // O mesmo cuidado de `expurgarDesaprovadosVencidos`: a chamada segue sendo
+  // `cliente.rpc(...)` para não perder o `this` do SupabaseClient, e o cast
+  // existe porque a função é da 20260811b.
+  const cliente = supabase as unknown as {
+    rpc: (nome: string, args: Record<string, unknown>) => Promise<{
+      data: unknown; error: { message: string } | null;
+    }>;
+  };
+
+  try {
+    const { data, error } = await cliente.rpc('fn_wpp_marcar_nao_concluidos', {
+      p_empresa_id: empresaId,
+    });
+    if (error) {
+      console.warn('[solicitacoesWhatsapp] marcarNaoConcluidos:', error.message);
+      return 0;
+    }
+    return Number(data) || 0;
+  } catch (e) {
+    console.warn('[solicitacoesWhatsapp] marcarNaoConcluidos:', e);
+    return 0;
+  }
 }
 
 // ── Solicitações ─────────────────────────────────────────────────────────────

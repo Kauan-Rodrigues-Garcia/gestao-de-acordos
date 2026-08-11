@@ -104,13 +104,17 @@ describe('naoConcluido', () => {
     expect(naoConcluido(pedido(), t(30 * DIA))).toBe(true);
   });
 
-  // A tag fala de pedido que NINGUÉM pegou. Assumido tem dono a quem cobrar, e
-  // falta_info está parado esperando o solicitante — nos dois casos a tag
-  // culparia a pessoa errada.
-  it('em_andamento não recebe a tag por mais velho que seja', () => {
-    expect(naoConcluido(pedido({ status: 'em_andamento' }), t(30 * DIA))).toBe(false);
+  // Assumir e deixar parado cinco dias é o caso que o time queria enxergar. A
+  // primeira versão olhava só `pendente` e deixava isso passar.
+  it('em_andamento há mais de 5 dias TAMBÉM recebe a tag', () => {
+    expect(naoConcluido(pedido({ status: 'em_andamento' }), t(PRAZO_NAO_CONCLUIDO))).toBe(true);
   });
 
+  it('em_andamento dentro do prazo não recebe', () => {
+    expect(naoConcluido(pedido({ status: 'em_andamento' }), t(2 * DIA))).toBe(false);
+  });
+
+  // Parado esperando o SOLICITANTE responder: a tag cobraria a pessoa errada.
   it('falta_info não recebe a tag', () => {
     expect(naoConcluido(pedido({ status: 'falta_info' }), t(30 * DIA))).toBe(false);
   });

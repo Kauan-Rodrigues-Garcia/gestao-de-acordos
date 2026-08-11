@@ -247,9 +247,16 @@ export async function editarAcordoPix(p: {
  * Marca (ou desmarca) o pagamento da comissão. Só líder+ — a policy de UPDATE
  * ampla é dele, e o gatilho devolve estas colunas se um operador tentar.
  *
- * Só linha APROVADA pode virar paga: pagar comissão de acordo pendente ou
- * desaprovado é dinheiro saindo por engano, e o `.eq('status','aprovado')`
- * fecha isso mesmo que a tela ofereça o botão por descuido.
+ * Duas travas no caminho de PAGAR, as duas espelhando
+ * `fn_pix_valida_pagamento` (migration 20260811c):
+ *
+ *   `status = 'aprovado'` — pagar comissão de acordo pendente ou desaprovado é
+ *   dinheiro saindo por engano;
+ *
+ *   `pago = false` — quem já está pago não é pago de novo. `pago` é booleano,
+ *   então o clique repetido não somaria nada; o que ele faz é reescrever
+ *   `pago_em` e `pago_por`, apagando quem de fato pagou e quando. É esse rastro
+ *   que se protege. Desfazer o pagamento é o caminho para refazê-lo.
  */
 export async function marcarComissaoPaga(p: {
   ids: string[];
@@ -271,7 +278,7 @@ export async function marcarComissaoPaga(p: {
     .from('pix_automatico_acordos')
     .update(payload)
     .in('id', p.ids);
-  if (p.pago) q = q.eq('status', 'aprovado');
+  if (p.pago) q = q.eq('status', 'aprovado').eq('pago', false);
   const { data, error } = await q.select('id');
   if (error) return { ok: false, count: 0, error: error.message };
   return { ok: true, count: (data ?? []).length };
@@ -307,53 +314,34 @@ export interface LinhaPixLote {
 }
 
 /**
- * NRs que NÃO podem ser registrados de novo — o bloqueio de verdade.
+ * NRs que NÃO podem ser registrados de novo.
  *
- * O critério é o do banco (`fn_pix_nr_bloqueia_duplicado` v3, migration
- * 20260811a): **acordo vivo com status `aprovado` E `pago`**. Só o dinheiro que
- * já saiu tranca o NR.
+ * A regra, desde a migration 20260811c: **um NR, um registro — enquanto ele
+ * existir**. Qualquer linha viva com aquele NR ocupa o NR, em qualquer status.
+ * Excluir a linha (ela vai para a lixeira) libera.
  *
- * Até 20260811a o critério era o registro histórico
- * (`pix_automatico_nr_registro` em 'pendente'/'validado'). Isso trancava NR
- * cujo acordo já tinha sido excluído — foi o que travou o time em 2026-08-11,
- * quando apagaram um registro sem querer e não conseguiram refazê-lo.
+ * Vale também para `desaprovado`: ele existe registrado. A saída para o engano
+ * é a de sempre — o dono apaga o próprio desaprovado, e o expurgo automático de
+ * 2 dias úteis faz isso sozinho.
  *
- * Quem lê daqui tem de dizer o mesmo que o trigger, senão a tela promete o que
- * o banco recusa (ou pior: o contrário).
+ * O que ficou para trás e por quê:
+ *   • até 20260811a o portão era o REGISTRO HISTÓRICO
+ *     (`pix_automatico_nr_registro` em 'pendente'/'validado'). Ele sobrevive à
+ *     exclusão do acordo, então trancava NR de registro que não existia mais —
+ *     o bug que travou o time em 11/08/2026;
+ *   • a 20260811a trocou por "aprovado + pago", o que abria demais: dois
+ *     operadores podiam registrar o mesmo NR e ficar os dois pendentes.
+ *
+ * Esta lista tem de dizer o mesmo que `fn_pix_nr_bloqueia_duplicado`, senão a
+ * tela promete o que o banco recusa (ou pior: o contrário).
  */
 export async function fetchNrsBloqueados(empresaId: string): Promise<Set<string>> {
   const { data, error } = await supabase
     .from('pix_automatico_acordos')
     .select('nr_cliente')
-    .eq('empresa_id', empresaId)
-    .eq('status', 'aprovado')
-    .eq('pago', true);
+    .eq('empresa_id', empresaId);
   if (error) {
     console.warn('[pix_automatico.service] fetchNrsBloqueados:', error.message);
-    return new Set();
-  }
-  return new Set(((data ?? []) as { nr_cliente: string }[]).map(r => normalizarNr(r.nr_cliente)));
-}
-
-/**
- * NRs que já têm um acordo VIVO não descartado (pendente ou aprovado).
- *
- * Não é bloqueio — é dedupe de importação. Depois da 20260811a o banco só
- * recusa `aprovado + pago`, e sem esta lista subir a mesma planilha duas vezes
- * criaria a linha duplicada em silêncio, que é o engano mais fácil de cometer
- * na tela de importar.
- *
- * O registro manual, de uma linha só, segue a regra do banco e não passa por
- * aqui: lá o operador está digitando um NR de cada vez e sabe o que fez.
- */
-export async function fetchNrsEmUso(empresaId: string): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from('pix_automatico_acordos')
-    .select('nr_cliente')
-    .eq('empresa_id', empresaId)
-    .neq('status', 'desaprovado');
-  if (error) {
-    console.warn('[pix_automatico.service] fetchNrsEmUso:', error.message);
     return new Set();
   }
   return new Set(((data ?? []) as { nr_cliente: string }[]).map(r => normalizarNr(r.nr_cliente)));
@@ -377,15 +365,16 @@ export async function fetchNrRegistros(empresaId: string): Promise<PixNrRegistro
 /**
  * Cria vários acordos Pix de uma vez (importação de planilha).
  *
- * Dedupe por NR: pula o que já tem acordo vivo não descartado (`fetchNrsEmUso`)
- * e o que se repete dentro da própria planilha. É mais apertado que a regra do
- * banco de propósito — ver o comentário de `fetchNrsEmUso`.
+ * Dedupe por NR: pula o que já está registrado na empresa e o que se repete
+ * dentro da própria planilha. Mesma régua do banco — o insert em lote é uma
+ * transação só, e uma linha recusada pelo trigger derrubaria a importação
+ * inteira.
  */
 export async function criarAcordosPixLote(
   empresaId: string,
   linhas: LinhaPixLote[],
 ): Promise<{ ok: boolean; importados: number; ignorados: number; duplicados: number; error?: string }> {
-  const bloqueados = await fetchNrsEmUso(empresaId);
+  const bloqueados = await fetchNrsBloqueados(empresaId);
 
   let ignorados = 0;
   let duplicados = 0;
@@ -617,6 +606,66 @@ export async function purgarLixeiraPixExpirada(empresaId: string): Promise<numbe
     return 0;
   }
   return Number(data ?? 0);
+}
+
+// ── Log da aba ─────────────────────────────────────────────────────────────
+
+/**
+ * Uma ação registrada no histórico do Pix automático.
+ *
+ * Escrito só por triggers (`fn_pix_log*`, migration 20260811c) — não há caminho
+ * de escrita pelo cliente, de propósito: log que a tela grava tem furo no dia
+ * em que alguém esquece de chamar.
+ */
+export interface PixLogItem {
+  id: string;
+  empresa_id: string;
+  acordo_id: string;
+  nr_cliente: string;
+  acao:
+    | 'registrado' | 'restaurado' | 'editado'
+    | 'aprovado' | 'desaprovado' | 'voltou_pendente'
+    | 'pago' | 'pagamento_desfeito' | 'excluido';
+  /** Frase pronta, montada no banco. A tela só desenha. */
+  descricao: string;
+  valor: number | null;
+  /** Dono do registro — não é quem fez a ação. */
+  operador_id: string | null;
+  operador_nome: string | null;
+  autor_id: string | null;
+  autor_nome: string | null;
+  criado_em: string;
+}
+
+/** Quantas ações a tela mostra de uma vez. */
+export const PIX_LOG_LIMITE = 300;
+
+/**
+ * Histórico da aba. `acordoId` filtra um registro só (o histórico de uma
+ * linha); sem ele vem o da empresa inteira, do mais recente para o mais antigo.
+ *
+ * A RLS decide o recorte de quem lê: operador vê o que é dele, líder+ vê tudo.
+ * Migration ausente devolve lista vazia, no padrão do resto do arquivo.
+ */
+export async function fetchLogPix(
+  empresaId: string,
+  opts?: { acordoId?: string; operadorId?: string; limite?: number },
+): Promise<PixLogItem[]> {
+  let q = supabase
+    .from('pix_automatico_log')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('criado_em', { ascending: false })
+    .limit(opts?.limite ?? PIX_LOG_LIMITE);
+  if (opts?.acordoId)   q = q.eq('acordo_id', opts.acordoId);
+  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+
+  const { data, error } = await q;
+  if (error) {
+    console.warn('[pix_automatico.service] fetchLogPix:', error.message);
+    return [];
+  }
+  return (data as unknown as PixLogItem[]) ?? [];
 }
 
 /**

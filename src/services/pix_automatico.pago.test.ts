@@ -1,19 +1,22 @@
 /**
  * pix_automatico.pago.test.ts
  * ─────────────────────────────────────────────────────────────────────────────
- * A regra que mudou em 11/08/2026: quem tranca um NR no Pix automático é o
- * PAGAMENTO, não mais o registro histórico.
+ * As regras do Pix automático fechadas em 11/08/2026:
  *
- *   bloqueia  →  existe acordo VIVO com status 'aprovado' E pago = true
- *   libera    →  qualquer outra coisa, inclusive acordo aprovado ainda a pagar
+ *   NR       um registro vivo por NR, em QUALQUER status. Excluir libera.
+ *   pagar    só o que está aprovado, e uma vez só.
+ *   excluir  linha paga não sai — desfaz o pagamento primeiro.
  *
- * O outro lado da mesma regra: linha paga não pode ser excluída. Sem isso o
- * bloqueio seria um portão que qualquer um abre apagando a linha.
+ * O NR passou por três critérios em um dia. O primeiro era o registro
+ * histórico, que sobrevive à exclusão do acordo e por isso trancava NR de
+ * registro que já não existia (o bug que travou o time). O segundo,
+ * "aprovado + pago", abria demais: dois operadores registravam o mesmo NR e
+ * ficavam os dois pendentes. O terceiro é o que está aqui.
  *
  * Estes testes fixam o lado do CLIENTE. A palavra final é do banco
- * (`fn_pix_nr_bloqueia_duplicado` v3 e `trg_pix_a_impede_pago`, migration
- * 20260811a) — o que se protege aqui é a tela dizer a MESMA coisa que ele, e
- * não gravar na lixeira uma cópia que o delete seguinte vai recusar.
+ * (`fn_pix_nr_bloqueia_duplicado` v4, `fn_pix_valida_pagamento` e
+ * `trg_pix_a_impede_pago`) — o que se protege aqui é a tela dizer a MESMA coisa
+ * que ele, e não gravar na lixeira uma cópia que o delete seguinte vai recusar.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -68,7 +71,7 @@ vi.mock('@/lib/supabase', () => ({
 }));
 
 import {
-  fetchNrsBloqueados, fetchNrsEmUso, excluirAcordoPix, reavaliarAcordoPix,
+  fetchNrsBloqueados, excluirAcordoPix, reavaliarAcordoPix, marcarComissaoPaga,
 } from './pix_automatico.service';
 
 const LINHA_PAGA = {
@@ -88,14 +91,24 @@ beforeEach(() => {
 // ── Quem tranca o NR ────────────────────────────────────────────────────────
 
 describe('fetchNrsBloqueados', () => {
-  it('lê a tabela de ACORDOS filtrando aprovado + pago', async () => {
+  it('lê a tabela de ACORDOS, sem recorte por status', async () => {
     fila = [{ data: [{ nr_cliente: 'NR-100' }], error: null }];
     await fetchNrsBloqueados('emp-1');
 
     const c = calls[0];
     expect(c.table).toBe('pix_automatico_acordos');
-    expect(c.filters).toContainEqual(['eq', 'status', 'aprovado']);
-    expect(c.filters).toContainEqual(['eq', 'pago', true]);
+    expect(c.filters).toEqual([['eq', 'empresa_id', 'emp-1']]);
+  });
+
+  // Qualquer linha viva ocupa o NR — inclusive desaprovada. A saída para o
+  // engano é apagar o desaprovado, o que já era possível.
+  it('não filtra por status nem por pago', async () => {
+    fila = [{ data: [], error: null }];
+    await fetchNrsBloqueados('emp-1');
+
+    const colunasFiltradas = calls[0].filters.map(f => f[1]);
+    expect(colunasFiltradas).not.toContain('status');
+    expect(colunasFiltradas).not.toContain('pago');
   });
 
   it('NÃO consulta mais o registro histórico — foi ele que travou o time', async () => {
@@ -116,15 +129,37 @@ describe('fetchNrsBloqueados', () => {
   });
 });
 
-describe('fetchNrsEmUso', () => {
-  // Dedupe da IMPORTAÇÃO, mais apertado que o bloqueio do banco de propósito:
-  // subir a mesma planilha duas vezes duplicaria as linhas em silêncio.
-  it('pega tudo que não foi descartado', async () => {
-    fila = [{ data: [{ nr_cliente: 'NR-1' }, { nr_cliente: 'NR-2' }], error: null }];
-    const set = await fetchNrsEmUso('emp-1');
+// ── Pagar: só aprovado, e uma vez ───────────────────────────────────────────
 
-    expect(calls[0].filters).toContainEqual(['neq', 'status', 'desaprovado']);
-    expect(set).toEqual(new Set(['nr-1', 'nr-2']));
+describe('marcarComissaoPaga', () => {
+  it('pagar exige aprovado E ainda não pago', async () => {
+    fila = [{ data: [{ id: 'ac-2' }], error: null }];
+    await marcarComissaoPaga({
+      ids: ['ac-2'], pago: true, responsavelId: 'lid-1', responsavelNome: 'Bryan',
+    });
+
+    expect(calls[0].filters).toContainEqual(['eq', 'status', 'aprovado']);
+    expect(calls[0].filters).toContainEqual(['eq', 'pago', false]);
+  });
+
+  // Desfazer não tem trava de status: é a saída de qualquer engano, inclusive
+  // de uma linha que não deveria ter sido paga.
+  it('desfazer não filtra por status', async () => {
+    fila = [{ data: [{ id: 'ac-1' }], error: null }];
+    await marcarComissaoPaga({
+      ids: ['ac-1'], pago: false, responsavelId: 'lid-1', responsavelNome: 'Bryan',
+    });
+
+    const colunas = calls[0].filters.map(f => f[1]);
+    expect(colunas).not.toContain('status');
+  });
+
+  it('lista vazia não chega a consultar o banco', async () => {
+    const r = await marcarComissaoPaga({
+      ids: [], pago: true, responsavelId: 'lid-1', responsavelNome: 'Bryan',
+    });
+    expect(r).toEqual({ ok: true, count: 0 });
+    expect(calls).toHaveLength(0);
   });
 });
 

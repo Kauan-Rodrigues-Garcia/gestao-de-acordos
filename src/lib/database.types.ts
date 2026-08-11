@@ -1226,6 +1226,60 @@ export type Database = {
         }
         Relationships: []
       }
+      // ── Escrito à mão (migration 20260811c) ──────────────────────────────
+      // Log da aba do Pix. Só leitura pelo cliente — a escrita é dos triggers,
+      // que são SECURITY DEFINER. Some na próxima regeneração pela CLI.
+      pix_automatico_log: {
+        Row: {
+          acao: string
+          acordo_id: string
+          antes: Json | null
+          autor_id: string | null
+          autor_nome: string | null
+          criado_em: string
+          depois: Json | null
+          descricao: string
+          empresa_id: string
+          id: string
+          nr_cliente: string
+          operador_id: string | null
+          operador_nome: string | null
+          valor: number | null
+        }
+        Insert: {
+          acao: string
+          acordo_id: string
+          antes?: Json | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          depois?: Json | null
+          descricao: string
+          empresa_id: string
+          id?: string
+          nr_cliente: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          valor?: number | null
+        }
+        Update: {
+          acao?: string
+          acordo_id?: string
+          antes?: Json | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          depois?: Json | null
+          descricao?: string
+          empresa_id?: string
+          id?: string
+          nr_cliente?: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          valor?: number | null
+        }
+        Relationships: []
+      }
       lixeira_acordos: {
         Row: {
           acordo_id: string

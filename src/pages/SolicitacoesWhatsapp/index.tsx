@@ -42,6 +42,7 @@ import {
   criarSolicitacao, atualizarStatus, excluirSolicitacao,
   definirResponsavel, removerResponsavel, buscarEventos,
   MAX_PENDENTES, chatAindaAberto, podeFalarNaConversa, transferirAtendimento,
+  marcarNaoConcluidos,
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
@@ -188,6 +189,27 @@ export default function SolicitacoesWhatsapp() {
       : {},
     habilitado,
   );
+  /**
+   * Verificação preguiçosa do prazo de 5 dias.
+   *
+   * Não há job agendado neste projeto: se ninguém dispara, o aviso de "não
+   * concluído" nunca sai. Roda UMA vez por abertura da aba, antes de tudo o
+   * mais importar — a RPC é idempotente (só alcança quem ainda não foi
+   * marcado), então abrir a aba dez vezes no dia não vira dez notificações.
+   *
+   * Só recarrega a lista quando algo mudou de fato; o `marcarNaoConcluidos`
+   * engole os próprios erros justamente para não derrubar a listagem, que é o
+   * que a pessoa veio ver.
+   */
+  const verificouPrazoRef = useRef(false);
+  useEffect(() => {
+    if (verificouPrazoRef.current || !habilitado || !empresaId) return;
+    verificouPrazoRef.current = true;
+    void (async () => {
+      if (await marcarNaoConcluidos(empresaId) > 0) await recarregar();
+    })();
+  }, [habilitado, empresaId, recarregar]);
+
   // Editar (assumir, mudar status) — responsável e líder+.
   const podeEditarPedidos = temVisaoGeral;
   /**

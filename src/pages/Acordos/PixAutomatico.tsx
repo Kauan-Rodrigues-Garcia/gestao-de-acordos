@@ -11,7 +11,10 @@
  * Líder+: vê tudo, filtra por operador/equipe (e por setor para gerência+),
  * aprova/desaprova, registra vinculando a um operador, e configura o setor:
  * % de comissão (com confirmação) e interruptor do registro manual.
- * Cada NR é único por empresa (registro histórico em pix_automatico_nr_registro).
+ * Cada NR só pode ter UM registro vivo por empresa, em qualquer status; excluir
+ * a linha libera o NR (migration 20260811c). Todo movimento — registro, edição,
+ * avaliação, pagamento, exclusão e restauração — vai para `pix_automatico_log`,
+ * que o botão "Histórico" mostra.
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
@@ -19,7 +22,7 @@ import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock,
-  Pencil, Banknote, AlertTriangle,
+  Pencil, Banknote, AlertTriangle, History,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -72,6 +75,7 @@ import {
   PIX_LINHAS_POR_PAGINA, metasDobraPorSetor,
   fetchLixeiraPix, restaurarItemLixeiraPix, excluirItemLixeiraPix,
   purgarLixeiraPixExpirada, type PixLixeiraItem,
+  fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
@@ -91,6 +95,36 @@ function fmtPct(pct: number): string {
 
 /** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
 const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
+
+/** Rótulo curto de cada ação do log. */
+const PIX_LOG_LABEL: Record<PixLogItem['acao'], string> = {
+  registrado:         'Registro',
+  restaurado:         'Restauro',
+  editado:            'Edição',
+  aprovado:           'Aprovado',
+  desaprovado:        'Desaprovado',
+  voltou_pendente:    'Pendente',
+  pago:               'Pago',
+  pagamento_desfeito: 'Desfeito',
+  excluido:           'Excluído',
+};
+
+/**
+ * Cor por ação. Mesma paleta dos botões da tabela: aprovar é verde, desaprovar
+ * e excluir são vermelhos, pagar é o teal do botão "Pagar". Quem já usa a aba
+ * lê o histórico sem aprender uma legenda nova.
+ */
+const PIX_LOG_ESTILO: Record<PixLogItem['acao'], string> = {
+  registrado:         'border-border text-muted-foreground',
+  restaurado:         'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  editado:            'border-violet-500/30 bg-violet-500/10 text-violet-400',
+  aprovado:           'border-emerald-500/30 bg-emerald-500/10 text-emerald-400',
+  desaprovado:        'border-red-500/30 bg-red-500/10 text-red-400',
+  voltou_pendente:    'border-amber-500/30 bg-amber-500/10 text-amber-400',
+  pago:               'border-teal-500/30 bg-teal-500/10 text-teal-400',
+  pagamento_desfeito: 'border-border text-muted-foreground',
+  excluido:           'border-destructive/40 bg-destructive/10 text-destructive',
+};
 
 export function PixAutomatico() {
   const { perfil }  = useAuth();
@@ -141,6 +175,12 @@ export function PixAutomatico() {
   const [lixeiraAberta, setLixeiraAberta] = useState(false);
   const [lixeira, setLixeira] = useState<PixLixeiraItem[]>([]);
   const [lixeiraCarregando, setLixeiraCarregando] = useState(false);
+
+  // Histórico: tudo o que aconteceu com os registros desta aba.
+  const [historicoAberto, setHistoricoAberto] = useState(false);
+  const [historico, setHistorico] = useState<PixLogItem[]>([]);
+  const [historicoCarregando, setHistoricoCarregando] = useState(false);
+  const [historicoBusca, setHistoricoBusca] = useState('');
   const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [confirmandoPct, setConfirmandoPct] = useState<number | null>(null);
   const [salvandoToggle, setSalvandoToggle] = useState(false);
@@ -645,6 +685,23 @@ export function PixAutomatico() {
     }
   }
 
+  /**
+   * O histórico filtrado pela busca do painel.
+   *
+   * Varre a frase inteira, não só o NR: "aprovou", "pagou", o nome de quem fez
+   * e o do dono do registro estão todos ali. É o filtro que faz o painel
+   * responder a "o que o Bryan mexeu" sem uma tela de filtros por campo.
+   */
+  const historicoVisivel = useMemo(() => {
+    const termo = historicoBusca.trim().toLowerCase();
+    if (!termo) return historico;
+    return historico.filter(l =>
+      `${l.nr_cliente} ${l.descricao} ${l.autor_nome ?? ''} ${l.operador_nome ?? ''} ${PIX_LOG_LABEL[l.acao]}`
+        .toLowerCase()
+        .includes(termo),
+    );
+  }, [historico, historicoBusca]);
+
   /** Quem está executando — vai para a lixeira, para a auditoria ter nome. */
   const quemExclui = { id: perfil?.id ?? null, nome: perfil?.nome ?? perfil?.email ?? null };
 
@@ -702,6 +759,26 @@ export function PixAutomatico() {
       await carregar();
     } finally {
       setRestaurandoId(null);
+    }
+  }
+
+  // ── Histórico ───────────────────────────────────────────────────────────
+
+  /**
+   * Abre o histórico da aba.
+   *
+   * A RLS já decide o recorte (operador vê o que é dele, líder+ vê tudo da
+   * empresa), então não há filtro por operador aqui — passar um recorte a mais
+   * no cliente só criaria uma segunda regra para divergir daquela.
+   */
+  async function abrirHistorico() {
+    if (!empresa?.id) return;
+    setHistoricoAberto(true);
+    setHistoricoCarregando(true);
+    try {
+      setHistorico(await fetchLogPix(empresa.id));
+    } finally {
+      setHistoricoCarregando(false);
     }
   }
 
@@ -1043,6 +1120,11 @@ export function PixAutomatico() {
             className="gap-1.5 h-8 text-xs rounded-lg"
             title="Registros excluídos nos últimos 3 dias">
             <Trash2 className="w-3.5 h-3.5" /> Lixeira
+          </Button>
+          <Button variant="outline" size="sm" onClick={abrirHistorico}
+            className="gap-1.5 h-8 text-xs rounded-lg"
+            title="Tudo o que aconteceu nesta aba: registro, edição, avaliação, pagamento e exclusão">
+            <History className="w-3.5 h-3.5" /> Histórico
           </Button>
           {meusDesaprovados > 0 && (
             <Button variant="ghost" size="sm" onClick={limparMeusDesaprovados} disabled={limpando}
@@ -1801,6 +1883,78 @@ export function PixAutomatico() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Histórico ──────────────────────────────────────────────────────
+          Todo movimento de um registro do Pix: quem criou, quem editou, quem
+          aprovou, quem pagou, quem desfez, quem excluiu. Escrito por triggers
+          (20260811c) — não existe caminho de escrita pelo cliente, porque log
+          que a tela grava tem furo no dia em que alguém esquece de chamar. */}
+      <Dialog open={historicoAberto} onOpenChange={setHistoricoAberto}>
+        <DialogContent className="max-w-3xl" aria-describedby="dlg-historico-pix">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="w-4 h-4 text-muted-foreground" />
+              Histórico do Pix automático
+            </DialogTitle>
+            <DialogDescription id="dlg-historico-pix">
+              Tudo o que aconteceu com os registros: criação, edição, avaliação,
+              pagamento e exclusão.
+              {!ehLider && ' Você vê o histórico dos seus registros.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Input
+            value={historicoBusca}
+            onChange={e => setHistoricoBusca(e.target.value)}
+            placeholder="Filtrar por NR, pessoa ou ação…"
+            className="h-8 text-xs"
+          />
+
+          {historicoCarregando ? (
+            <div className="space-y-2 py-2">
+              {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
+            </div>
+          ) : historicoVisivel.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+              <History className="w-7 h-7 opacity-20" />
+              <p className="text-sm">
+                {historico.length === 0
+                  ? 'Nada registrado ainda.'
+                  : 'Nenhuma ação para esse filtro.'}
+              </p>
+            </div>
+          ) : (
+            <div className="max-h-[55vh] overflow-y-auto -mx-2 px-2 space-y-1.5">
+              {historicoVisivel.map(item => (
+                <div key={item.id}
+                  className="flex items-start gap-2.5 rounded-lg border border-border/60 px-2.5 py-2">
+                  <span className={cn(
+                    'shrink-0 mt-0.5 rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+                    PIX_LOG_ESTILO[item.acao],
+                  )}>
+                    {PIX_LOG_LABEL[item.acao]}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs leading-relaxed break-words">{item.descricao}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {item.autor_nome ?? 'Sistema'}
+                      {item.operador_nome && item.operador_nome !== item.autor_nome
+                        && ` · registro de ${item.operador_nome}`}
+                      {' · '}
+                      <span className="font-mono">
+                        {new Date(item.criado_em).toLocaleString('pt-BR', {
+                          day: '2-digit', month: '2-digit', year: '2-digit',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </DialogContent>
