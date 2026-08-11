@@ -866,14 +866,36 @@ export function PixAutomatico() {
     }
   }
 
-  // Exclui (lixeira) em lote os selecionados.
+  /**
+   * Exclui (lixeira) em lote os selecionados.
+   *
+   * As linhas já pagas ficam de fora — o banco as recusa uma a uma
+   * (`trg_pix_a_impede_pago`) e o laço seguiria em frente sem contar direito.
+   * O aviso diz quantas ficaram e por quê, senão o líder vê "3 excluídos" numa
+   * seleção de 5 e não sabe o que aconteceu com as outras duas.
+   */
   async function excluirSelecionados() {
-    const alvos = visiveis.filter(i => selecionados.has(i.id));
-    if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+    const marcados = visiveis.filter(i => selecionados.has(i.id));
+    if (marcados.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
+
+    const alvos = marcados.filter(i => !i.pago);
+    const pagos = marcados.length - alvos.length;
+    if (alvos.length === 0) {
+      toast.error(`${pagos} acordo(s) já pago(s) — desfaça o pagamento antes de excluir.`);
+      return;
+    }
+
     setLoteProcessando(true);
     try {
-      for (const item of alvos) await excluirAcordoPix(item.id, quemExclui);
-      toast.success(`${alvos.length} registro(s) excluído(s).`);
+      let excluidos = 0;
+      for (const item of alvos) {
+        const { ok } = await excluirAcordoPix(item.id, quemExclui);
+        if (ok) excluidos++;
+      }
+      toast.success(
+        `${excluidos} registro(s) na lixeira.`
+        + (pagos > 0 ? ` ${pagos} já pago(s) foram mantidos.` : ''),
+      );
       setSelecionados(new Set());
       await carregar();
     } finally {
@@ -1621,14 +1643,23 @@ export function PixAutomatico() {
                                 <Banknote className="w-3 h-3" /> {item.pago ? 'Desfazer' : 'Pagar'}
                               </button>
                             )}
-                            {ehLider && item.status !== 'pendente' && (
+                            {/* Pago não volta para pendente: ficaria uma linha
+                                pendente com pagamento feito, estado que a regra
+                                do NR não sabe ler. Desfaz-se o pagamento
+                                primeiro — o botão ao lado faz isso. */}
+                            {ehLider && item.status !== 'pendente' && !item.pago && (
                               <button title="Voltar para pendente" disabled={avaliandoId === item.id}
                                 onClick={() => voltarPendente(item)}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 disabled:opacity-50">
                                 <Undo2 className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {(ehLider || (desaprovado && item.operador_id === perfil?.id)) && (
+                            {/* Linha paga não se exclui: o pagamento é o que
+                                tranca o NR desde a 20260811a, e apagar a linha
+                                destrancaria. O banco recusa de qualquer jeito
+                                (trg_pix_a_impede_pago) — aqui é só não oferecer
+                                um botão que vai dar erro. */}
+                            {!item.pago && (ehLider || (desaprovado && item.operador_id === perfil?.id)) && (
                               <button title="Excluir registro" onClick={() => excluir(item)}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10">
                                 <Trash2 className="w-3.5 h-3.5" />
