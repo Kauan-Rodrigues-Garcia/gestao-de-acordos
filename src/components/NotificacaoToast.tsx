@@ -77,6 +77,7 @@ export function NotificacaoToast() {
   const [fila, setFila]       = useState<Notificacao[]>([]);
   const [ativos, setAtivos]   = useState<CardAtivo[]>([]);
   const [pausado, setPausado] = useState(false);
+  const pilhaRef = useRef<HTMLDivElement>(null);
 
   /**
    * Ids já vistos. Começa `null` para distinguir "ainda não sei o que existia"
@@ -156,6 +157,59 @@ export function NotificacaoToast() {
     }, PASSO_MS);
     return () => clearInterval(t);
   }, [ativos.length, pausado]);
+
+  /**
+   * A pausa é DERIVADA de onde o ponteiro está, não de `mouseenter`/`mouseleave`.
+   *
+   * Com os dois eventos havia um travamento real (relatado em 11/08/2026): ao
+   * clicar num card, ele some debaixo do cursor e o `mouseleave` NUNCA chega —
+   * o elemento já não existe para emitir o evento. A pausa ficava ligada para
+   * sempre, o relógio parava, e os cards seguintes se empilhavam sobre o sino
+   * sem nunca expirar. O canto da tela virava um bloco morto.
+   *
+   * A resposta é recalculada do zero em dois momentos: quando o ponteiro se
+   * move e quando a PILHA MUDA. O segundo é o que conserta o travamento — a
+   * conta refeita depois de o card sumir descobre que embaixo do cursor agora
+   * há outra coisa, mesmo que o mouse não tenha andado um pixel.
+   *
+   * `setPausado` com o mesmo valor não redesenha: o React descarta atualização
+   * idêntica.
+   */
+  const ponteiroRef = useRef<{ x: number; y: number } | null>(null);
+
+  const recalcularPausa = useCallback(() => {
+    const p  = ponteiroRef.current;
+    const el = pilhaRef.current;
+    if (!p || !el) { setPausado(false); return; }
+    const sob = document.elementFromPoint(p.x, p.y);
+    setPausado(!!sob && el.contains(sob));
+  }, []);
+
+  useEffect(() => {
+    const mover = (e: PointerEvent) => {
+      ponteiroRef.current = { x: e.clientX, y: e.clientY };
+      recalcularPausa();
+    };
+    // Ponteiro que sai da janela para de emitir `pointermove`; sem isto a pausa
+    // ficaria ligada com o cursor fora da tela.
+    const sair = () => { ponteiroRef.current = null; setPausado(false); };
+
+    document.addEventListener('pointermove', mover);
+    document.addEventListener('pointerleave', sair);
+    window.addEventListener('blur', sair);
+    return () => {
+      document.removeEventListener('pointermove', mover);
+      document.removeEventListener('pointerleave', sair);
+      window.removeEventListener('blur', sair);
+    };
+  }, [recalcularPausa]);
+
+  /**
+   * Quais cards estão na pilha. Depender de `ativos` inteiro refaria a conta 10
+   * vezes por segundo, porque o objeto muda a cada passo do relógio.
+   */
+  const idsAtivos = ativos.map(c => c.notificacao.id).join(',');
+  useEffect(() => { recalcularPausa(); }, [idsAtivos, recalcularPausa]);
 
   const fechar = useCallback((id: string) => {
     setAtivos(prev => prev.filter(c => c.notificacao.id !== id));
@@ -246,13 +300,9 @@ export function NotificacaoToast() {
 
   return (
     <div
+      ref={pilhaRef}
       className="fixed top-4 right-4 z-[100] w-[min(23rem,calc(100vw-2rem))] flex flex-col gap-2 pointer-events-none"
       aria-live="polite"
-      // A pausa vale para a PILHA, não para um card: o mouse está lendo a
-      // região inteira, e ver o vizinho sumir enquanto se lê é o mesmo defeito
-      // que a pausa veio corrigir.
-      onMouseEnter={() => setPausado(true)}
-      onMouseLeave={() => setPausado(false)}
     >
       <AnimatePresence initial={false}>{conteudo}</AnimatePresence>
 

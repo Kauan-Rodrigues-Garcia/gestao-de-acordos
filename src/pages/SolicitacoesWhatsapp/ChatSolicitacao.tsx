@@ -24,6 +24,8 @@ import { foiLidaPorOutro, type Leitura } from './leitura';
 import {
   estadoCpfDaMensagem, avisoAoDigitar, type EstadoCpfMensagem,
 } from '@/lib/cpfChat';
+import { SeletorEmoji } from './SeletorEmoji';
+import { inserirEmoji } from './emojis';
 
 function horaCurta(iso: string): string {
   try {
@@ -92,6 +94,7 @@ export function ChatSolicitacao({
   const online = useOnlineUsers().onlineIds;
   const [texto, setTexto] = useState('');
   const areaRef = useRef<HTMLDivElement>(null);
+  const campoRef = useRef<HTMLTextAreaElement>(null);
 
   /** O leitor está no fim? Ref, não state: muda a cada pixel de rolagem. */
   const grudadoRef = useRef(true);
@@ -168,6 +171,31 @@ export function ChatSolicitacao({
     setTexto('');
     const ok = await onEnviar(conteudo);
     if (!ok) setTexto(conteudo);
+  }
+
+  /**
+   * Emoji escolhido no menu entra na POSIÇÃO DO CURSOR, não no fim.
+   *
+   * O foco volta para o campo e o cursor é reposicionado logo depois do emoji —
+   * sem isso, continuar digitando escreveria no começo do texto (o campo perdeu
+   * o foco ao abrir o popover) e o menu ainda aberto ficaria sem destino.
+   *
+   * O `requestAnimationFrame` espera o React reescrever o `value`: mexer em
+   * `selectionStart` antes disso seria apagado pelo render seguinte.
+   */
+  function aoEscolherEmoji(emoji: string) {
+    const campo = campoRef.current;
+    const { texto: novo, cursor } = inserirEmoji(
+      texto, emoji, campo?.selectionStart ?? null, campo?.selectionEnd ?? null,
+    );
+    setTexto(novo);
+    onDigitando();
+    requestAnimationFrame(() => {
+      const el = campoRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(cursor, cursor);
+    });
   }
 
   return (
@@ -351,8 +379,10 @@ export function ChatSolicitacao({
               <span>{avisoDigitando}</span>
             </p>
           )}
-        <div className="flex items-end gap-2 p-2.5">
+        <div className="flex items-end gap-1.5 p-2.5">
+          <SeletorEmoji onEscolher={aoEscolherEmoji} disabled={enviando} />
           <Textarea
+            ref={campoRef}
             value={texto}
             onChange={e => { setTexto(e.target.value); onDigitando(); }}
             onKeyDown={e => {

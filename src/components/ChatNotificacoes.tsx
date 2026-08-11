@@ -69,6 +69,9 @@ function dataFormatada(iso: string): string {
 /** Quantas linhas por vez. Ver "TETO DE 30" no cabeçalho. */
 const PAGINA = 30;
 
+/** Espera antes de marcar tudo como lido com o painel aberto. Ver o efeito. */
+export const MS_ATE_MARCAR_LIDAS = 1_000;
+
 /** Filtro ativo: tudo, só as não lidas, ou uma categoria. */
 type Filtro = 'todas' | 'nao_lidas' | CategoriaNotificacao;
 
@@ -307,26 +310,35 @@ export function ChatNotificacoes() {
 
   // Esc fecha: primeiro o detalhe, depois o painel. Fechar tudo de uma vez faria
   // perder a lista por causa de um Esc destinado ao detalhe.
+  //
+  // `detalheRef` em vez de ler o estado dentro de um updater: chamar
+  // `setAberto` de dentro de `setDetalhe` agenda estado durante o cálculo de
+  // outro, o que o React executa duas vezes em modo estrito.
+  const detalheRef = useRef<Notificacao | null>(null);
+  useEffect(() => { detalheRef.current = detalhe; }, [detalhe]);
+
   useEffect(() => {
     if (!aberto) return;
     function onKey(e: KeyboardEvent) {
       if (e.key !== 'Escape') return;
-      setDetalhe(d => {
-        if (d) return null;
-        setAberto(false);
-        return null;
-      });
+      if (detalheRef.current) { setDetalhe(null); return; }
+      setAberto(false);
     }
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [aberto]);
 
-  // Janela aberta por 2 s → marca tudo como lida, para não acumular não lidas.
-  // Depende de naoLidas: notificação que chegar com a janela aberta também é
-  // marcada 2 s depois. Fechar antes cancela o timer.
+  /**
+   * Quanto tempo o painel fica aberto antes de marcar tudo como lido.
+   *
+   * Era 2 s e passou a 1 s a pedido (11/08/2026): abrir o sino JÁ é o gesto de
+   * "estou vendo", e dois segundos de espera faziam o contador continuar
+   * gritando depois de a pessoa ter lido. Não é zero porque a janela também
+   * abre por engano — um segundo é o bastante para fechar sem apagar o aviso.
+   */
   useEffect(() => {
     if (!aberto || naoLidas === 0) return;
-    const t = setTimeout(() => { void marcarTodasLidas(); }, 2000);
+    const t = setTimeout(() => { void marcarTodasLidas(); }, MS_ATE_MARCAR_LIDAS);
     return () => clearTimeout(t);
   }, [aberto, naoLidas, marcarTodasLidas]);
 

@@ -75,14 +75,40 @@ function chegam(rerender: (ui: React.ReactElement) => void, lista: Notificacao[]
   act(() => { rerender(React.createElement(NotificacaoToast)); });
 }
 
+/**
+ * O que está debaixo do cursor.
+ *
+ * O componente pergunta ao `document.elementFromPoint`, que o happy-dom não
+ * implementa (não há layout para consultar). O teste responde por ele — é a
+ * única forma de exercitar a pausa sem um navegador de verdade.
+ */
+let sobOPonteiro: Element | null = null;
+
+/**
+ * A pausa é derivada de ONDE o ponteiro está, não de mouseenter/leave — ver o
+ * comentário do efeito no componente. O teste move o ponteiro como o navegador
+ * faria, dizendo o que passou a estar embaixo dele.
+ */
+function moverPonteiroPara(alvo: Element | null) {
+  sobOPonteiro = alvo;
+  fireEvent.pointerMove(document, { clientX: 10, clientY: 10 });
+}
+
+const elementFromPointOriginal = document.elementFromPoint;
+
 beforeEach(() => {
   vi.useFakeTimers();
   navigateMock.mockClear();
   marcarLidaMock.mockClear();
   somMock.mockClear();
   estado = { notificacoes: [] };
+  sobOPonteiro = null;
+  document.elementFromPoint = (() => sobOPonteiro) as typeof document.elementFromPoint;
 });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => {
+  vi.useRealTimers();
+  document.elementFromPoint = elementFromPointOriginal;
+});
 
 describe('o que entra na pilha', () => {
   it('não mostra o que já existia ao montar — isso é histórico', () => {
@@ -174,16 +200,51 @@ describe('tempo na tela', () => {
     expect(screen.queryByText(CRITICO)).toBeNull();
   });
 
-  it('mouse em cima congela a contagem — é o que torna o card legível', () => {
+  it('ponteiro em cima congela a contagem — é o que torna o card legível', () => {
     const { rerender, container } = renderizar();
     chegam(rerender, [notif({ id: 'n1' })]);
 
     const pilha = container.firstElementChild as HTMLElement;
-    act(() => { fireEvent.mouseEnter(pilha); });
+    act(() => { moverPonteiroPara(screen.getByText(INFO)); });
     act(() => { vi.advanceTimersByTime(DURACAO_POR_URGENCIA.info * 3); });
     expect(screen.getByText(INFO)).toBeTruthy();
 
-    act(() => { fireEvent.mouseLeave(pilha); });
+    act(() => { moverPonteiroPara(document.body); });
+    act(() => { vi.advanceTimersByTime(DURACAO_POR_URGENCIA.info + 200); });
+    expect(screen.queryByText(INFO)).toBeNull();
+    expect(pilha).toBeTruthy();
+  });
+
+  /**
+   * O travamento relatado em 11/08/2026: clicar num card fazia ele sumir
+   * debaixo do cursor, o `mouseleave` nunca chegava, e a pausa ficava ligada
+   * para sempre — os cards seguintes empilhavam sobre o sino sem nunca expirar
+   * e o canto da tela virava um bloco morto.
+   */
+  it('card que some debaixo do cursor não deixa a pilha congelada', () => {
+    const { rerender } = renderizar();
+    chegam(rerender, [
+      notif({ id: 'n2', titulo: 'Fica' }),
+      notif({ id: 'n1', titulo: 'Vai sumir' }),
+    ]);
+
+    // Ponteiro sobre o card que vai desaparecer: a pausa liga.
+    act(() => { moverPonteiroPara(screen.getByText('Vai sumir')); });
+    // Clicar remove o card e navega. Nenhum `mouseleave` acontece.
+    act(() => { screen.getByLabelText('Abrir: Vai sumir').click(); });
+
+    // O vizinho tem de continuar contando e sair sozinho.
+    act(() => { vi.advanceTimersByTime(DURACAO_POR_URGENCIA.info + 400); });
+    expect(screen.queryByText('Fica')).toBeNull();
+  });
+
+  it('ponteiro que sai da janela também destrava', () => {
+    const { rerender } = renderizar();
+    chegam(rerender, [notif({ id: 'n1' })]);
+
+    act(() => { moverPonteiroPara(screen.getByText(INFO)); });
+    act(() => { fireEvent.pointerLeave(document); });
+
     act(() => { vi.advanceTimersByTime(DURACAO_POR_URGENCIA.info + 200); });
     expect(screen.queryByText(INFO)).toBeNull();
   });
