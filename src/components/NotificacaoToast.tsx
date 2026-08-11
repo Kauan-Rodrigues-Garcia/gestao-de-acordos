@@ -40,10 +40,11 @@ import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
 import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
 import {
-  tipoDaNotificacao, DURACAO_POR_URGENCIA, URGENCIA_BARRA,
+  tipoDaNotificacao, apresentacaoDaNotificacao,
+  DURACAO_POR_URGENCIA, URGENCIA_BARRA,
   type TipoNotificacao,
 } from '@/lib/notificacoes-tipo';
-import { IconeCategoria } from '@/components/notificacoes/IconeCategoria';
+import { CaraDaNotificacao } from '@/components/notificacoes/IconeCategoria';
 import { tocarSomNotificacao, prepararSomNotificacao } from '@/lib/som-notificacao';
 import { cn } from '@/lib/utils';
 
@@ -228,6 +229,7 @@ export function NotificacaoToast() {
   const conteudo = useMemo(() => ativos.map(card => {
     const { notificacao: n, tipo, restanteMs, duracaoMs } = card;
     const temDestino = rotaDaNotificacao(n, tenant.isPaguePlay) !== null;
+    const vis = apresentacaoDaNotificacao(n);
 
     return (
       <motion.div
@@ -248,7 +250,7 @@ export function NotificacaoToast() {
         // Nome explícito: sem ele o leitor de tela (e o teste) juntam o texto do
         // card com o `aria-label` do X de fechar, e os dois botões passam a ter
         // o mesmo nome.
-        aria-label={`Abrir: ${n.titulo}`}
+        aria-label={`Abrir: ${vis.titulo}`}
         onKeyDown={e => {
           if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrir(n); }
         }}
@@ -257,18 +259,39 @@ export function NotificacaoToast() {
         <span className={cn('absolute left-0 top-0 bottom-0 w-1', URGENCIA_BARRA[tipo.urgencia])} />
 
         <div className="flex items-start gap-3 p-3 pl-4">
-          <IconeCategoria categoria={tipo.categoria} />
+          <CaraDaNotificacao
+            categoria={tipo.categoria}
+            comFoto={vis.usarFotoDoAutor}
+            autorNome={n.autor_nome}
+            autorFoto={n.autor_foto}
+          />
 
           <div className="flex-1 min-w-0">
-            <p className="text-[13px] font-semibold leading-tight text-foreground line-clamp-1">
-              {n.titulo}
+            <p className="text-[12px] font-semibold leading-tight text-foreground line-clamp-1">
+              {vis.titulo}
             </p>
-            <p className="text-[12px] text-muted-foreground leading-snug mt-1 line-clamp-2">
-              {n.mensagem}
+            {/* O CORPO é o que a pessoa precisa ler. Numa conversa ele é a
+                frase que chegou, então ganha o tamanho e a cor do texto
+                principal — o contrário do que era até 11/08/2026, quando o
+                cabeçalho do atendimento estava em negrito e a mensagem em
+                cinza pequeno embaixo. */}
+            <p className={cn(
+              'leading-snug mt-1 line-clamp-2',
+              vis.usarFotoDoAutor
+                ? 'text-[13px] text-foreground'
+                : 'text-[12px] text-muted-foreground',
+            )}>
+              {vis.corpo}
             </p>
+            {vis.contexto && (
+              <p className="text-[11px] text-muted-foreground/70 mt-1 truncate">
+                {vis.contexto}
+              </p>
+            )}
             {temDestino && (
               <span className="mt-1.5 inline-flex items-center gap-1 text-[11px] font-medium text-primary">
-                Ver detalhes <ArrowRight className="w-3 h-3" />
+                {vis.usarFotoDoAutor ? 'Abrir conversa' : 'Ver detalhes'}
+                <ArrowRight className="w-3 h-3" />
               </span>
             )}
           </div>
@@ -278,7 +301,7 @@ export function NotificacaoToast() {
             // `stopPropagation`: fechar não pode navegar junto.
             onClick={e => { e.stopPropagation(); fechar(n.id); }}
             className="shrink-0 rounded-md p-1 -mt-0.5 -mr-0.5 text-muted-foreground/70 hover:text-foreground hover:bg-accent transition-colors"
-            aria-label={`Fechar aviso: ${n.titulo}`}
+            aria-label={`Fechar aviso: ${vis.titulo}`}
           >
             <X className="w-3.5 h-3.5" />
           </button>
@@ -301,7 +324,10 @@ export function NotificacaoToast() {
   return (
     <div
       ref={pilhaRef}
-      className="fixed top-4 right-4 z-[100] w-[min(23rem,calc(100vw-2rem))] flex flex-col gap-2 pointer-events-none"
+      // `top-[68px]`: o cabeçalho tem `h-14` (56 px) e os cards cobriam a foto e
+      // o nome do usuário. Aqui eles descem para logo ABAIXO da barra, com 12 px
+      // de folga — o mesmo alinhamento que o painel do sino já usava.
+      className="fixed top-[68px] right-4 z-[100] w-[min(23rem,calc(100vw-2rem))] flex flex-col gap-2 pointer-events-none"
       aria-live="polite"
     >
       <AnimatePresence initial={false}>{conteudo}</AnimatePresence>

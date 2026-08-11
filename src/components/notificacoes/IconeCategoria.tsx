@@ -55,3 +55,63 @@ export function IconeCategoria({
     </span>
   );
 }
+
+/** "Ana Paula Souza" → "AP". Iniciais para o avatar sem foto. */
+function iniciais(nome: string | null | undefined): string {
+  const partes = (nome ?? '').trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return '?';
+  return (partes[0][0] + (partes[1]?.[0] ?? '')).toUpperCase();
+}
+
+/**
+ * A cara da notificação: a FOTO de quem escreveu quando é conversa, o tile da
+ * categoria em todo o resto.
+ *
+ * Numa mensagem de chat, reconhecer quem falou é a primeira coisa que se faz —
+ * é assim que qualquer mensageiro apresenta o aviso. Já numa exclusão do Pix, a
+ * cara de quem apagou importa menos que o ícone dizendo de que assunto se
+ * trata, e por isso a troca não vale para todas as categorias (ver
+ * `apresentacaoDaNotificacao`).
+ *
+ * O redondo também comunica: pessoa é círculo, assunto é quadrado arredondado.
+ */
+export function CaraDaNotificacao({
+  categoria, comFoto, autorNome, autorFoto, tamanho = 'md', className,
+}: {
+  categoria: CategoriaNotificacao;
+  /** `usarFotoDoAutor` da apresentação. */
+  comFoto: boolean;
+  autorNome?: string | null;
+  autorFoto?: string | null;
+  tamanho?: 'sm' | 'md';
+  className?: string;
+}) {
+  if (!comFoto) {
+    return <IconeCategoria categoria={categoria} tamanho={tamanho} className={className} />;
+  }
+
+  const lado = tamanho === 'sm' ? 'w-7 h-7' : 'w-9 h-9';
+  return (
+    <span
+      className={cn(
+        'shrink-0 inline-flex items-center justify-center rounded-full overflow-hidden',
+        'ring-1 ring-border bg-muted',
+        lado, className,
+      )}
+      // O nome já está escrito ao lado, em destaque: repeti-lo aqui faria o
+      // leitor de tela anunciar a mesma pessoa duas vezes.
+      aria-hidden
+    >
+      {autorFoto ? (
+        <img src={autorFoto} alt="" className="w-full h-full object-cover" />
+      ) : (
+        <span className={cn(
+          'font-bold text-muted-foreground',
+          tamanho === 'sm' ? 'text-[9px]' : 'text-[11px]',
+        )}>
+          {iniciais(autorNome)}
+        </span>
+      )}
+    </span>
+  );
+}

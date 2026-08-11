@@ -11,7 +11,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  tipoDaNotificacao, categoriasPresentes, grupoDaData, tempoRelativo,
+  tipoDaNotificacao, apresentacaoDaNotificacao, categoriasPresentes,
+  grupoDaData, tempoRelativo,
   CATEGORIA_LABEL, CATEGORIA_ICONE, CATEGORIA_COR, DURACAO_POR_URGENCIA,
   type CategoriaNotificacao, type UrgenciaNotificacao,
 } from './notificacoes-tipo';
@@ -162,6 +163,93 @@ describe('categoriasPresentes', () => {
       { titulo: 'Nova mensagem — B', rota: null },
     ];
     expect(categoriasPresentes(lista)).toEqual(['chat']);
+  });
+});
+
+describe('apresentacaoDaNotificacao', () => {
+  const mensagemDoChat = {
+    titulo: 'Nova mensagem — MARIA VERUZA',
+    rota: '/solicitacoes-whatsapp',
+    mensagem: 'Bom dia, o cliente pediu retorno hoje',
+    autor_nome: 'João Pedro Silva',
+  };
+
+  // Até 11/08/2026 o card mostrava "Nova mensagem — MARIA VERUZA" em negrito e
+  // a frase em cinza pequeno embaixo — o contrário do que se quer ler.
+  it('no chat, quem falou vira o título e a MENSAGEM vira o corpo', () => {
+    expect(apresentacaoDaNotificacao(mensagemDoChat)).toEqual({
+      titulo:   'João Pedro Silva',
+      corpo:    'Bom dia, o cliente pediu retorno hoje',
+      contexto: 'MARIA VERUZA',
+      usarFotoDoAutor: true,
+    });
+  });
+
+  // Linhas gravadas antes da coluna `autor_nome` guardavam "João: bom dia".
+  it('desmancha o prefixo "Fulano: " das linhas antigas', () => {
+    const r = apresentacaoDaNotificacao({
+      ...mensagemDoChat,
+      mensagem: 'João: Bom dia, o cliente pediu retorno hoje',
+    });
+    expect(r.corpo).toBe('Bom dia, o cliente pediu retorno hoje');
+  });
+
+  it('não desmancha nada quando o texto só PARECE ter prefixo', () => {
+    const r = apresentacaoDaNotificacao({
+      ...mensagemDoChat,
+      mensagem: 'Atenção: o cliente pediu retorno',
+    });
+    expect(r.corpo).toBe('Atenção: o cliente pediu retorno');
+  });
+
+  // Sem autor não há foto para mostrar nem nome para pôr no título: cai no
+  // formato comum, que é o que as linhas anteriores à migration têm.
+  it('chat sem autor conhecido volta ao formato comum', () => {
+    const r = apresentacaoDaNotificacao({
+      titulo: 'Nova mensagem — MARIA VERUZA',
+      rota: '/solicitacoes-whatsapp',
+      mensagem: 'João: bom dia',
+      autor_nome: null,
+    });
+    expect(r.usarFotoDoAutor).toBe(false);
+    expect(r.titulo).toBe('Nova mensagem — MARIA VERUZA');
+    expect(r.corpo).toBe('João: bom dia');
+  });
+
+  it('título de chat sem travessão não perde o corpo', () => {
+    const r = apresentacaoDaNotificacao({
+      titulo: 'Nova mensagem',
+      rota: '/solicitacoes-whatsapp',
+      mensagem: 'oi',
+      autor_nome: 'Ana',
+    });
+    expect(r.titulo).toBe('Ana');
+    expect(r.corpo).toBe('oi');
+    expect(r.contexto).toBeNull();
+  });
+
+  // Numa exclusão, a cara de quem apagou importa menos que o ícone dizendo de
+  // que assunto se trata.
+  it('fora do chat, mantém título e corpo do produtor e não usa foto', () => {
+    const r = apresentacaoDaNotificacao({
+      titulo: 'Pix automático — registro excluído',
+      rota: '/acordos?tab=pix',
+      mensagem: 'Bryan excluiu o seu registro do NR 123.',
+      autor_nome: 'Bryan Souza',
+    });
+    expect(r).toEqual({
+      titulo:   'Pix automático — registro excluído',
+      corpo:    'Bryan excluiu o seu registro do NR 123.',
+      contexto: null,
+      usarFotoDoAutor: false,
+    });
+  });
+
+  it('mensagem vazia não estoura', () => {
+    expect(() => apresentacaoDaNotificacao({
+      titulo: 'Nova mensagem — X', rota: null,
+      mensagem: null as unknown as string, autor_nome: 'Ana',
+    })).not.toThrow();
   });
 });
 

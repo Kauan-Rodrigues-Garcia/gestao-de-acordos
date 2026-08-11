@@ -274,6 +274,81 @@ export function categoriasPresentes(
     .filter(c => achadas.has(c));
 }
 
+// ── Como a notificação é escrita na tela ─────────────────────────────────────
+
+export interface ApresentacaoNotificacao {
+  /** Linha de cima, em destaque. */
+  titulo: string;
+  /** O texto principal — o que a pessoa precisa ler. */
+  corpo: string;
+  /** Linha pequena embaixo, ou `null` quando não há o que contextualizar. */
+  contexto: string | null;
+  /**
+   * Mostrar a foto do autor no lugar do ícone da categoria.
+   *
+   * Só vale quando existe autor E o assunto é conversa: numa notificação de
+   * exclusão a cara de quem apagou importa menos que o ícone que diz "isto é
+   * do Pix automático".
+   */
+  usarFotoDoAutor: boolean;
+}
+
+/** Só o que a apresentação lê. */
+type AlvoApresentacao = Alvo & Pick<Notificacao, 'mensagem'> & {
+  autor_nome?: string | null;
+};
+
+/**
+ * Tira o "Fulano: " que as mensagens de chat carregavam no texto.
+ *
+ * Até a migration 20260811d o autor era gravado colado no conteúdo
+ * ("João: bom dia") porque não havia coluna para ele. As linhas daquela época
+ * continuam assim; a tela desmancha o prefixo quando reconhece o nome, para o
+ * card não repetir "João" duas vezes.
+ *
+ * Compara pelo PRIMEIRO nome porque era assim que o trigger antigo gravava.
+ */
+function semPrefixoDoAutor(mensagem: string, autor: string | null | undefined): string {
+  const nome = (autor ?? '').trim().split(/\s+/)[0];
+  if (!nome) return mensagem;
+  const prefixo = `${nome}: `;
+  return mensagem.startsWith(prefixo) ? mensagem.slice(prefixo.length) : mensagem;
+}
+
+/**
+ * O que vai em cada linha do card.
+ *
+ * A regra especial é o CHAT: ali o que importa é a frase que a pessoa escreveu,
+ * não o cabeçalho do atendimento. Até 11/08/2026 o card mostrava
+ * "Nova mensagem — MARIA SILVA" em negrito e a mensagem em cinza pequeno
+ * embaixo — exatamente ao contrário do que se quer ler. Agora sai como em
+ * qualquer mensageiro: quem falou em cima, a frase em destaque, e o atendimento
+ * como contexto discreto.
+ *
+ * O resto das categorias segue com título e corpo do jeito que o produtor
+ * escreveu — ali o título É a informação.
+ */
+export function apresentacaoDaNotificacao(n: AlvoApresentacao): ApresentacaoNotificacao {
+  const { categoria } = tipoDaNotificacao(n);
+  const titulo   = n.titulo ?? '';
+  const mensagem = n.mensagem ?? '';
+
+  if (categoria === 'chat' && n.autor_nome) {
+    // "Nova mensagem — MARIA SILVA" → "MARIA SILVA". O travessão é o separador
+    // que o trigger usa; sem ele, o título inteiro vira o contexto, que ainda
+    // faz sentido.
+    const cliente = titulo.split(' — ').slice(1).join(' — ').trim();
+    return {
+      titulo:   n.autor_nome,
+      corpo:    semPrefixoDoAutor(mensagem, n.autor_nome),
+      contexto: cliente || null,
+      usarFotoDoAutor: true,
+    };
+  }
+
+  return { titulo, corpo: mensagem, contexto: null, usarFotoDoAutor: false };
+}
+
 // ── Agrupamento por data ─────────────────────────────────────────────────────
 
 export type GrupoData = 'hoje' | 'ontem' | 'semana' | 'anteriores';

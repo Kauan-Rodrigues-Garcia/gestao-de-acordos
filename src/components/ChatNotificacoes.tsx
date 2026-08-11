@@ -47,11 +47,12 @@ import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useTenant } from '@/lib/tenant-config';
 import { rotaDaNotificacao } from '@/lib/notificacoes-rota';
 import {
-  tipoDaNotificacao, categoriasPresentes, grupoDaData, tempoRelativo,
+  tipoDaNotificacao, apresentacaoDaNotificacao, categoriasPresentes,
+  grupoDaData, tempoRelativo,
   CATEGORIA_LABEL, GRUPO_LABEL, URGENCIA_BARRA,
   type CategoriaNotificacao, type GrupoData,
 } from '@/lib/notificacoes-tipo';
-import { IconeCategoria } from '@/components/notificacoes/IconeCategoria';
+import { CaraDaNotificacao } from '@/components/notificacoes/IconeCategoria';
 import { somAtivo, definirSomAtivo, tocarSomNotificacao } from '@/lib/som-notificacao';
 import { cn } from '@/lib/utils';
 
@@ -91,6 +92,7 @@ export function ModalDetalhe({
   notificacao: n, onClose, onMarcarLida, onExcluir, onNavigate,
 }: ModalDetalheProps) {
   const tipo = tipoDaNotificacao(n);
+  const vis  = apresentacaoDaNotificacao(n);
 
   return (
     <motion.div
@@ -118,16 +120,26 @@ export function ModalDetalhe({
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="px-4 py-4 space-y-4">
           <div className="flex items-start gap-3">
-            <IconeCategoria categoria={tipo.categoria} />
-            <h3 className="text-sm font-semibold text-foreground leading-snug pt-1.5">
-              {n.titulo}
-            </h3>
+            <CaraDaNotificacao
+              categoria={tipo.categoria}
+              comFoto={vis.usarFotoDoAutor}
+              autorNome={n.autor_nome}
+              autorFoto={n.autor_foto}
+            />
+            <div className="min-w-0 pt-0.5">
+              <h3 className="text-sm font-semibold text-foreground leading-snug">
+                {vis.titulo}
+              </h3>
+              {vis.contexto && (
+                <p className="text-[11px] text-muted-foreground mt-0.5">{vis.contexto}</p>
+              )}
+            </div>
           </div>
 
           {/* Mensagem completa — sem line-clamp. É o que o painel não mostra. */}
           <div className="bg-muted/40 rounded-xl px-3.5 py-3 border border-border/50">
             <p className="text-[12.5px] text-foreground/90 leading-relaxed whitespace-pre-wrap">
-              {n.mensagem}
+              {vis.corpo}
             </p>
           </div>
 
@@ -183,6 +195,7 @@ function LinhaNotificacao({
   onExcluir: (id: string) => void;
 }) {
   const tipo = tipoDaNotificacao(n);
+  const vis  = apresentacaoDaNotificacao(n);
 
   return (
     <motion.div
@@ -204,7 +217,14 @@ function LinhaNotificacao({
         <span className={cn('absolute left-0 top-0 bottom-0 w-[3px]', URGENCIA_BARRA[tipo.urgencia])} />
       )}
 
-      <IconeCategoria categoria={tipo.categoria} tamanho="sm" className="mt-0.5" />
+      <CaraDaNotificacao
+        categoria={tipo.categoria}
+        comFoto={vis.usarFotoDoAutor}
+        autorNome={n.autor_nome}
+        autorFoto={n.autor_foto}
+        tamanho="sm"
+        className="mt-0.5"
+      />
 
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
@@ -212,23 +232,31 @@ function LinhaNotificacao({
             'text-xs leading-snug line-clamp-1',
             n.lida ? 'font-medium text-muted-foreground' : 'font-semibold text-foreground',
           )}>
-            {n.titulo}
+            {vis.titulo}
           </p>
           <span className="text-[10px] text-muted-foreground/70 shrink-0 tabular-nums mt-0.5">
             {tempoRelativo(n.criado_em)}
           </span>
         </div>
 
-        <p className="text-[11px] text-muted-foreground/85 mt-1 leading-snug line-clamp-2">
-          {n.mensagem}
+        {/* Numa conversa, o corpo é a frase que chegou — é ela que se lê, então
+            ganha o tamanho e a cor do texto principal. Ver
+            `apresentacaoDaNotificacao`. */}
+        <p className={cn(
+          'mt-1 leading-snug line-clamp-2',
+          vis.usarFotoDoAutor
+            ? 'text-[12px] text-foreground/90'
+            : 'text-[11px] text-muted-foreground/85',
+        )}>
+          {vis.corpo}
         </p>
 
         <div className="flex items-center gap-2 mt-1.5">
-          <span className="text-[10px] text-muted-foreground/60">
-            {CATEGORIA_LABEL[tipo.categoria]}
+          <span className="text-[10px] text-muted-foreground/60 truncate">
+            {vis.contexto ?? CATEGORIA_LABEL[tipo.categoria]}
           </span>
           {!n.lida && (
-            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary">
+            <span className="inline-flex items-center gap-1 text-[10px] font-medium text-primary shrink-0">
               <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Nova
             </span>
           )}

@@ -229,6 +229,18 @@ export interface Notificacao {
    * Migration 20260731a. Nulo nas linhas antigas — ver `rotaDaNotificacao`.
    */
   rota?: string | null;
+  /**
+   * Quem causou o aviso: escreveu a mensagem, excluiu o registro. Nulo quando
+   * não há pessoa por trás (importação, expurgo por prazo) e nas linhas
+   * anteriores à migration 20260811d.
+   *
+   * Nome e foto vêm DESNORMALIZADOS de propósito: o payload do realtime é a
+   * linha crua, sem junção, e a foto precisa estar pronta no instante em que o
+   * card aparece. Ver o cabeçalho da migration.
+   */
+  autor_id?:   string | null;
+  autor_nome?: string | null;
+  autor_foto?: string | null;
   criado_em: string;
 }
 
