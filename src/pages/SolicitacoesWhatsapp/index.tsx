@@ -17,7 +17,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   MessageSquarePlus, Inbox, CheckCircle2, Filter, RefreshCw, ShieldAlert, Loader2,
-  Search, X,
+  Search, X, ChevronDown,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -46,7 +46,7 @@ import {
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
 import { podeAcessarAbaWpp, temVisaoGeralPorCargo, podeDefinirResponsavel } from './permissoes';
-import { combinaBusca } from './formatacao';
+import { combinaBusca, naoConcluido } from './formatacao';
 import { ordenarEmAberto } from './ordenacao';
 import { Input } from '@/components/ui/input';
 import { FormNovaSolicitacao, type DadosNovaSolicitacao } from './FormNovaSolicitacao';
@@ -121,6 +121,20 @@ export default function SolicitacoesWhatsapp() {
   const [chatAbertoId, setChatAbertoId] = useState<string | null>(null);
   const [eventos, setEventos] = useState<Record<string, EventoSolicitacao[]>>({});
   const [busca, setBusca] = useState('');
+
+  /**
+   * Os finalizados nascem RECOLHIDOS para quem enxerga os pedidos dos outros —
+   * para essa pessoa a lista de concluídos é a maior da tela e empurra para
+   * fora do campo de visão justamente o que ainda precisa de alguém. Quem só vê
+   * os próprios pedidos abre a aba com tudo à mostra, como sempre foi.
+   *
+   * O líder é conhecido pelo cargo, então já entra certo. O responsável só é
+   * descoberto depois que a lista de responsáveis carrega — daí o efeito, que
+   * roda UMA vez (mesmo desenho de `ajustouSetorRef`) para não desfazer o
+   * clique de quem já tiver aberto a seção.
+   */
+  const [finalizadosAbertos, setFinalizadosAbertos] = useState(!ehLiderOuAcima);
+  const recolheuFinalizadosRef = useRef(false);
 
   // Um relógio para a lista toda. Sem ele o "tempo de espera" dos cards só
   // mudaria quando algo mais provocasse um render.
@@ -224,6 +238,16 @@ export default function SolicitacoesWhatsapp() {
     [solicitacoes, usuarioId],
   );
 
+  /**
+   * Quantos passaram dos 5 dias sem ninguém assumir. O número no cabeçalho
+   * existe porque a tag mora no card: com a lista longa, ela só é vista por
+   * quem rola até lá.
+   */
+  const totalNaoConcluidos = useMemo(
+    () => emAberto.filter(s => naoConcluido(s, agora)).length,
+    [emAberto, agora],
+  );
+
   // O responsável atende a fila da empresa inteira, então não pode nascer preso
   // ao próprio setor como um líder nasce. Roda uma vez, quando descobrimos que
   // ele é responsável — depois o filtro é dele para mexer.
@@ -235,6 +259,16 @@ export default function SolicitacoesWhatsapp() {
       setSetorSel(null);
     }
   }, [souResponsavel, ehLiderOuAcima]);
+
+  // Ver o comentário de `finalizadosAbertos`: o responsável ganha visão geral
+  // depois do carregamento, e é aqui que a seção de concluídos se recolhe.
+  useEffect(() => {
+    if (recolheuFinalizadosRef.current) return;
+    if (souResponsavel) {
+      recolheuFinalizadosRef.current = true;
+      setFinalizadosAbertos(false);
+    }
+  }, [souResponsavel]);
 
   /**
    * Escolher uma equipe separa a lista por operador. Sem equipe, a lista corre
@@ -420,7 +454,7 @@ export default function SolicitacoesWhatsapp() {
 
   const precisaEscolherSetor = veMaisDeUmSetor && !setorSel;
 
-  function renderCard(s: SolicitacaoWhatsapp) {
+  function renderCard(s: SolicitacaoWhatsapp, compacto = false) {
     return (
       <CardSolicitacao
         key={s.id}
@@ -430,6 +464,7 @@ export default function SolicitacoesWhatsapp() {
         naoLidas={naoLidas[s.id] ?? 0}
         totalMensagens={totaisMensagens[s.id] ?? 0}
         agora={agora}
+        compacto={compacto}
         podeEditar={podeEditarPedidos}
         podeExcluir={podeExcluirSolicitacao(s)}
         podeTransferir={podeTransferirParaMim(s)}
@@ -463,14 +498,18 @@ export default function SolicitacoesWhatsapp() {
     );
   }
 
-  function renderLista(lista: SolicitacaoWhatsapp[], vazio: string) {
+  function renderLista(lista: SolicitacaoWhatsapp[], vazio: string, compacto = false) {
     if (lista.length === 0) {
       return <p className="text-xs text-muted-foreground py-6 text-center">{vazio}</p>;
     }
 
     // Sem equipe escolhida, lista corrida.
     if (!agruparPorOperador) {
-      return <div className="space-y-2">{lista.map(renderCard)}</div>;
+      return (
+        <div className={compacto ? 'space-y-1' : 'space-y-2'}>
+          {lista.map(s => renderCard(s, compacto))}
+        </div>
+      );
     }
 
     // Com equipe escolhida: um bloco por operador da equipe. É a visão que o
@@ -496,8 +535,8 @@ export default function SolicitacoesWhatsapp() {
               </Badge>
               <div className="flex-1 h-px bg-border" />
             </div>
-            <div className="space-y-2 sm:pl-8">
-              {grupo.itens.map(renderCard)}
+            <div className={cn('sm:pl-8', compacto ? 'space-y-1' : 'space-y-2')}>
+              {grupo.itens.map(s => renderCard(s, compacto))}
             </div>
           </div>
         ))}
@@ -641,6 +680,15 @@ export default function SolicitacoesWhatsapp() {
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
                 {emAberto.length}
               </Badge>
+              {totalNaoConcluidos > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-[10px] px-1.5 py-0 h-4 border-destructive/50 bg-destructive/15 text-destructive"
+                  title="Pendentes há mais de 5 dias sem ninguém assumir"
+                >
+                  {totalNaoConcluidos} não concluído{totalNaoConcluidos > 1 ? 's' : ''}
+                </Badge>
+              )}
             </div>
             {renderLista(emAberto, busca
               ? 'Nenhum pedido em aberto para essa busca.'
@@ -649,18 +697,28 @@ export default function SolicitacoesWhatsapp() {
                 : 'Você não tem solicitações em aberto.')}
           </section>
 
-          {/* Finalizados */}
+          {/* Finalizados — recolhido, e em linha enxuta quando aberto.
+              É histórico: quem abre a aba está atrás do que falta fazer, e a
+              lista de concluídos empurrava isso para fora da tela. */}
           <section className="space-y-2">
-            <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setFinalizadosAbertos(v => !v)}
+              className="flex items-center gap-2 w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-accent/40 transition-colors"
+            >
               <CheckCircle2 className="w-4 h-4 text-emerald-500" />
               <h2 className="text-sm font-semibold">Finalizados</h2>
               <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
                 {finalizados.length}
               </Badge>
-            </div>
-            {renderLista(finalizados, busca
+              <ChevronDown className={cn(
+                'w-4 h-4 text-muted-foreground transition-transform',
+                finalizadosAbertos && 'rotate-180',
+              )} />
+            </button>
+            {finalizadosAbertos && renderLista(finalizados, busca
               ? 'Nenhum finalizado para essa busca.'
-              : 'Nada finalizado ainda.')}
+              : 'Nada finalizado ainda.', true)}
           </section>
         </div>
       )}

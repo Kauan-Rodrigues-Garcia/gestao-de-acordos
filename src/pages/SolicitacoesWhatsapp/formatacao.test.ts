@@ -6,8 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  esperaMs, formatarEspera, nivelEspera, combinaBusca,
-  ESPERA_ATENCAO, ESPERA_CRITICA,
+  esperaMs, formatarEspera, nivelEspera, combinaBusca, naoConcluido,
+  ESPERA_ATENCAO, ESPERA_CRITICA, PRAZO_NAO_CONCLUIDO,
 } from './formatacao';
 
 const MIN = 60_000;
@@ -88,6 +88,40 @@ describe('nivelEspera', () => {
   });
   it('1 dia em ponto já é crítico', () => {
     expect(nivelEspera(ESPERA_CRITICA)).toBe('critico');
+  });
+});
+
+describe('naoConcluido', () => {
+  it('pendente há menos de 5 dias ainda não recebe a tag', () => {
+    expect(naoConcluido(pedido(), t(PRAZO_NAO_CONCLUIDO - 1))).toBe(false);
+  });
+
+  it('5 dias em ponto já é não concluído', () => {
+    expect(naoConcluido(pedido(), t(PRAZO_NAO_CONCLUIDO))).toBe(true);
+  });
+
+  it('pendente muito antigo segue não concluído', () => {
+    expect(naoConcluido(pedido(), t(30 * DIA))).toBe(true);
+  });
+
+  // A tag fala de pedido que NINGUÉM pegou. Assumido tem dono a quem cobrar, e
+  // falta_info está parado esperando o solicitante — nos dois casos a tag
+  // culparia a pessoa errada.
+  it('em_andamento não recebe a tag por mais velho que seja', () => {
+    expect(naoConcluido(pedido({ status: 'em_andamento' }), t(30 * DIA))).toBe(false);
+  });
+
+  it('falta_info não recebe a tag', () => {
+    expect(naoConcluido(pedido({ status: 'falta_info' }), t(30 * DIA))).toBe(false);
+  });
+
+  it('feito nunca recebe a tag', () => {
+    const s = pedido({ status: 'feito', finalizado_em: new Date(t(20 * DIA)).toISOString() });
+    expect(naoConcluido(s, t(40 * DIA))).toBe(false);
+  });
+
+  it('data inválida não vira tag (espera cai para zero)', () => {
+    expect(naoConcluido(pedido({ criado_em: 'não é data' }), t(30 * DIA))).toBe(false);
   });
 });
 

@@ -78,6 +78,35 @@ export function nivelEspera(ms: number): NivelEspera {
   return 'normal';
 }
 
+// ── "Não concluído" ──────────────────────────────────────────────────────────
+
+/**
+ * A partir daqui um pedido ainda PENDENTE ganha a tag "Não concluído".
+ *
+ * Cinco dias é o combinado da operação (11/08/2026). Vermelho já existe a
+ * partir de um dia (`ESPERA_CRITICA`), e uma cor mais forte não resolvia: com
+ * dezenas de pedidos vermelhos ninguém distingue o de ontem do da semana
+ * passada. A tag nomeia o caso em vez de só pintá-lo.
+ */
+export const PRAZO_NAO_CONCLUIDO = 5 * 24 * 3_600_000;   // 5 dias
+
+/**
+ * O pedido passou do prazo sem ninguém assumir?
+ *
+ * Só `pendente`, de propósito: é o status em que NINGUÉM pegou o chamado, e é
+ * disso que a tag fala. `em_andamento` tem dono e `falta_info` está parado
+ * esperando o solicitante — nos dois casos existe alguém a quem cobrar, e a
+ * tag culparia a pessoa errada.
+ *
+ * Derivado do relógio, não gravado no banco: não existe job agendado neste
+ * projeto, e uma coluna precisaria de alguém para virá-la no quinto dia. Assim
+ * a tag aparece sozinha, na hora certa, sem migration.
+ */
+export function naoConcluido(s: Esperavel, agora: number): boolean {
+  if (s.status !== 'pendente') return false;
+  return esperaMs(s, agora) >= PRAZO_NAO_CONCLUIDO;
+}
+
 // ── Busca ────────────────────────────────────────────────────────────────────
 
 /** Marcas de acento que o NFD separa da letra base (U+0300–U+036F). */

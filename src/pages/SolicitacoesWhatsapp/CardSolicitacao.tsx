@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   ChevronDown, MessageSquare, Clock, User, MapPin, Hash, Phone,
   Trash2, Loader2, PlayCircle, CheckCircle2, HelpCircle, RotateCcw, ArrowLeftRight,
-  Copy, Check,
+  Copy, Check, AlertTriangle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { copiarTextoSilencioso } from '@/lib/clipboard';
@@ -23,7 +23,8 @@ import {
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
 } from '@/services/solicitacoesWhatsapp.service';
 import {
-  primeiroNome, esperaMs, formatarEspera, nivelEspera, type NivelEspera,
+  primeiroNome, esperaMs, formatarEspera, nivelEspera, naoConcluido,
+  type NivelEspera,
 } from './formatacao';
 
 const STATUS_ESTILO: Record<StatusSolicitacao, string> = {
@@ -79,8 +80,15 @@ function BotaoCopiarWhatsapp({ numero }: { numero: string }) {
   );
 }
 
-/** Tempo de espera do pedido. Já vem calculado do pai, que tem o relógio. */
-function SeloEspera({ ms, encerrado }: { ms: number; encerrado: boolean }) {
+/**
+ * Tempo de espera do pedido. Já vem calculado do pai, que tem o relógio.
+ *
+ * Só aparece em pedido EM ABERTO. Em `feito` o número não mede mais nada que
+ * peça ação — o cronômetro ao lado de um chamado encerrado só disputava a
+ * atenção com os que ainda esperam (pedido do usuário, 11/08/2026). Quanto
+ * levou entre abrir e concluir continua no bloco "Histórico", ao expandir.
+ */
+function SeloEspera({ ms }: { ms: number }) {
   const nivel = nivelEspera(ms);
   return (
     <span
@@ -88,12 +96,27 @@ function SeloEspera({ ms, encerrado }: { ms: number; encerrado: boolean }) {
         'inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
         ESPERA_ESTILO[nivel],
       )}
-      title={encerrado
-        ? `Levou ${formatarEspera(ms)} entre a abertura e a conclusão`
-        : `Esperando há ${formatarEspera(ms)}`}
+      title={`Esperando há ${formatarEspera(ms)}`}
     >
       <Clock className="w-2.5 h-2.5" />
       {formatarEspera(ms)}
+    </span>
+  );
+}
+
+/**
+ * "Não concluído" — pendente há mais de 5 dias e ninguém assumiu.
+ *
+ * Sai do relógio, não do banco: ver `naoConcluido` em `formatacao.ts`.
+ */
+function SeloNaoConcluido() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded border border-destructive/50 bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-destructive"
+      title="Pendente há mais de 5 dias sem ninguém assumir"
+    >
+      <AlertTriangle className="w-2.5 h-2.5" />
+      Não concluído
     </span>
   );
 }
@@ -123,12 +146,19 @@ function Pessoa({ nome, foto, tamanho = 'w-5 h-5' }: { nome: string | null | und
 }
 
 export function CardSolicitacao({
-  solicitacao: s, expandido, eventos, naoLidas, totalMensagens, agora,
+  solicitacao: s, expandido, eventos, naoLidas, totalMensagens, agora, compacto = false,
   podeEditar, podeExcluir, podeTransferir, avisaResponsavel, ehDono, salvando,
   onAlternar, onMudarStatus, onExcluir, onTransferir, onAbrirChat, chatAberto, children,
 }: {
   solicitacao: SolicitacaoWhatsapp;
   expandido:   boolean;
+  /**
+   * Linha enxuta em vez do card cheio. É como os FINALIZADOS aparecem: eles são
+   * histórico, não fila, e ocupavam a mesma altura do que ainda precisa de
+   * alguém. Fechado mostra só o essencial; ABERTO é idêntico ao card normal —
+   * a conversa e o histórico continuam a um clique.
+   */
+  compacto?:   boolean;
   /**
    * "Agora" em ms, vindo do pai. Um relógio só para a lista inteira em vez de um
    * timer por card — com dezenas de pedidos abertos a diferença aparece.
@@ -166,7 +196,11 @@ export function CardSolicitacao({
   children?:   React.ReactNode;
 }) {
   const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
-  const espera = esperaMs(s, agora);
+  const espera    = esperaMs(s, agora);
+  const encerrado = s.status === 'feito';
+  const atrasado  = naoConcluido(s, agora);
+  /** Fechado e compacto = uma linha. Aberto volta a ser o card inteiro. */
+  const enxuto = compacto && !expandido;
 
   return (
     <div className={cn(
@@ -177,52 +211,77 @@ export function CardSolicitacao({
       <button
         type="button"
         onClick={onAlternar}
-        className="w-full text-left px-3.5 py-3 flex items-center gap-3 hover:bg-accent/40 transition-colors"
+        className={cn(
+          'w-full text-left flex items-center gap-3 hover:bg-accent/40 transition-colors',
+          enxuto ? 'px-3 py-1.5' : 'px-3.5 py-3',
+        )}
       >
-        <div className="flex-1 min-w-0 space-y-1">
+        <div className={cn('flex-1 min-w-0', !enxuto && 'space-y-1')}>
           <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-primary bg-primary/10 border border-primary/20 px-1.5 py-0.5 rounded">
               <Hash className="w-2.5 h-2.5" />{s.codigo_cliente}
             </span>
-            <p className="font-medium text-sm truncate">{s.nome_cliente || 'Sem nome'}</p>
-            {s.estado_uf && (
+            <p className={cn('truncate', enxuto ? 'text-[13px]' : 'font-medium text-sm')}>
+              {s.nome_cliente || 'Sem nome'}
+            </p>
+            {s.estado_uf && !enxuto && (
               <span className="text-[11px] text-muted-foreground inline-flex items-center gap-0.5">
                 <MapPin className="w-3 h-3" />{s.estado_uf}
               </span>
             )}
+            {/* Na linha enxuta o que sobra é quem atendeu e quando acabou — é o
+                que se procura num histórico. */}
+            {enxuto && s.responsavel && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <Pessoa nome={s.responsavel.nome} foto={s.responsavel.foto_url} tamanho="w-4 h-4" />
+              </span>
+            )}
           </div>
-          <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
-            <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
-              {CATEGORIA_LABEL[s.categoria]}
-            </Badge>
-            <span className="inline-flex items-center gap-1">
-              <Clock className="w-3 h-3" />{dataHora(s.criado_em)}
-            </span>
-            {!ehDono && s.solicitante && (
+          {!enxuto && (
+            <div className="flex items-center gap-2 flex-wrap text-[11px] text-muted-foreground">
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal">
+                {CATEGORIA_LABEL[s.categoria]}
+              </Badge>
               <span className="inline-flex items-center gap-1">
-                <User className="w-3 h-3" />
-                <Pessoa nome={s.solicitante.nome} foto={s.solicitante.foto_url} tamanho="w-4 h-4" />
+                <Clock className="w-3 h-3" />{dataHora(s.criado_em)}
               </span>
-            )}
-            {/* Quem está atendendo — o solicitante precisa saber com quem está. */}
-            {s.responsavel && (
-              <span className="inline-flex items-center gap-1 text-foreground/80">
-                com <Pessoa nome={s.responsavel.nome} foto={s.responsavel.foto_url} tamanho="w-4 h-4" />
-              </span>
-            )}
-          </div>
+              {!ehDono && s.solicitante && (
+                <span className="inline-flex items-center gap-1">
+                  <User className="w-3 h-3" />
+                  <Pessoa nome={s.solicitante.nome} foto={s.solicitante.foto_url} tamanho="w-4 h-4" />
+                </span>
+              )}
+              {/* Quem está atendendo — o solicitante precisa saber com quem está. */}
+              {s.responsavel && (
+                <span className="inline-flex items-center gap-1 text-foreground/80">
+                  com <Pessoa nome={s.responsavel.nome} foto={s.responsavel.foto_url} tamanho="w-4 h-4" />
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <SeloEspera ms={espera} encerrado={s.status === 'feito'} />
+          {atrasado && <SeloNaoConcluido />}
+          {/* Cronômetro só no que ainda espera alguém. */}
+          {!encerrado && <SeloEspera ms={espera} />}
+          {enxuto && (
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {dataHora(s.finalizado_em ?? s.criado_em)}
+            </span>
+          )}
           {naoLidas > 0 && (
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-[10px] font-bold text-white">
               {naoLidas > 9 ? '9+' : naoLidas}
             </span>
           )}
-          <Badge variant="outline" className={cn('text-[10px] px-2 py-0.5', STATUS_ESTILO[s.status])}>
-            {STATUS_LABEL[s.status]}
-          </Badge>
+          {/* O selo de status some na linha enxuta: ela só é usada dentro da
+              seção "Finalizados", onde todo mundo diria "Feito". */}
+          {!enxuto && (
+            <Badge variant="outline" className={cn('text-[10px] px-2 py-0.5', STATUS_ESTILO[s.status])}>
+              {STATUS_LABEL[s.status]}
+            </Badge>
+          )}
           <ChevronDown className={cn(
             'w-4 h-4 text-muted-foreground transition-transform',
             expandido && 'rotate-180',
@@ -288,7 +347,11 @@ export function CardSolicitacao({
                 {(s.iniciado_em || s.finalizado_em) && (
                   <p className="text-[11px] text-muted-foreground pt-0.5">
                     {s.iniciado_em   && <>Iniciado {dataHora(s.iniciado_em)}. </>}
-                    {s.finalizado_em && <>Finalizado {dataHora(s.finalizado_em)}.</>}
+                    {s.finalizado_em && <>Finalizado {dataHora(s.finalizado_em)}. </>}
+                    {/* O cronômetro saiu do cabeçalho quando o pedido acaba;
+                        quanto levou continua sendo informação útil, e este é o
+                        lugar dela. */}
+                    {encerrado && <>Levou {formatarEspera(espera)}.</>}
                   </p>
                 )}
               </div>
