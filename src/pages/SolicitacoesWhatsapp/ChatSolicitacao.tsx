@@ -380,7 +380,6 @@ export function ChatSolicitacao({
             </p>
           )}
         <div className="flex items-end gap-1.5 p-2.5">
-          <SeletorEmoji onEscolher={aoEscolherEmoji} disabled={enviando} />
           <Textarea
             ref={campoRef}
             value={texto}
@@ -393,6 +392,10 @@ export function ChatSolicitacao({
             rows={1}
             className="min-h-[38px] max-h-28 resize-none text-[13px] bg-card"
           />
+          {/* Emoji junto do enviar, à direita: as duas ações que agem sobre a
+              mensagem ficam no mesmo canto, e o campo de texto encosta na borda
+              esquerda como em qualquer mensageiro. */}
+          <SeletorEmoji onEscolher={aoEscolherEmoji} disabled={enviando} />
           <Button
             size="icon"
             className="h-9 w-9 shrink-0"
