@@ -186,8 +186,7 @@ export async function fetchAcordosPix(
     .from('pix_automatico_acordos')
     .select('*')
     .eq('empresa_id', empresaId)
-    .order('criado_em', { ascending: false })
-    .limit(1000);
+    .order('criado_em', { ascending: false });
   if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
   if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
   const { data, error } = await q;
@@ -198,111 +197,19 @@ export async function fetchAcordosPix(
   return (data as unknown as PixAutoAcordo[]) ?? [];
 }
 
-/** Linhas por página na tabela do Pix. */
+/**
+ * Linhas desenhadas por vez na tabela do Pix.
+ *
+ * A paginação é de EXIBIÇÃO: a consulta traz o conjunto filtrado inteiro e a
+ * tabela desenha uma fatia. Não é economia de rede — é economia de DOM, e é o
+ * que mantém corretos os números que somam o filtro todo.
+ *
+ * Paginar no servidor quebraria dois deles: os totais por status e o pago ×
+ * a pagar são "sobre o conjunto visível", ou seja, sobre o RECORTE DO FILTRO.
+ * Calculados sobre uma página, o líder que filtra por equipe veria o total das
+ * 100 linhas abertas achando que é o da equipe.
+ */
 export const PIX_LINHAS_POR_PAGINA = 100;
-
-export interface PaginaPix {
-  itens: PixAutoAcordo[];
-  /** Total de linhas no filtro atual — o que dá o número de páginas. */
-  total: number;
-  /** Página pedida (1-based), já normalizada. */
-  pagina: number;
-  totalPaginas: number;
-}
-
-/**
- * Uma página da tabela, contada e recortada NO SERVIDOR.
- *
- * A tela usa duas consultas com escopos diferentes, e a diferença é
- * intencional:
- *
- *   • esta aqui alimenta a TABELA — recorte por `.range()`, 100 linhas;
- *   • `fetchAcordosPixDoMes` alimenta os AGREGADOS (dobra, ranking, meta), que
- *     precisam do mês inteiro.
- *
- * Paginar a fonte dos agregados faria o operador que fez 40 acordos ver
- * "3/18": o contador enxergaria só a página aberta. Foi por isso que as duas
- * consultas ficaram separadas em vez de uma servir às duas coisas.
- */
-export async function fetchPaginaAcordosPix(
-  empresaId: string,
-  opts?: {
-    operadorId?: string;
-    setorId?: string | null;
-    pagina?: number;
-    porPagina?: number;
-  },
-): Promise<PaginaPix> {
-  const porPagina = opts?.porPagina ?? PIX_LINHAS_POR_PAGINA;
-  const pedida    = Math.max(1, Math.floor(opts?.pagina ?? 1));
-  const de        = (pedida - 1) * porPagina;
-
-  let q = supabase
-    .from('pix_automatico_acordos')
-    // `count: 'exact'` na mesma ida: o rodapé precisa do total para saber
-    // quantas páginas existem, e uma segunda consulta só para contar dobraria
-    // a latência de cada troca de página.
-    .select('*', { count: 'exact' })
-    .eq('empresa_id', empresaId)
-    .order('criado_em', { ascending: false })
-    .range(de, de + porPagina - 1);
-
-  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
-  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
-
-  const { data, error, count } = await q;
-  if (error) {
-    console.warn('[pix_automatico.service] fetchPaginaAcordosPix:', error.message);
-    return { itens: [], total: 0, pagina: 1, totalPaginas: 1 };
-  }
-
-  const total = count ?? 0;
-  return {
-    itens: (data as unknown as PixAutoAcordo[]) ?? [],
-    total,
-    pagina: pedida,
-    totalPaginas: Math.max(1, Math.ceil(total / porPagina)),
-  };
-}
-
-/**
- * Os acordos do MÊS, para os agregados.
- *
- * Sem `.limit()`: o recorte é o mês, que é pequeno por natureza, e um teto
- * arbitrário aqui é o bug que existia antes — `fetchAcordosPix` cortava em
- * 1000 linhas em silêncio, e a partir daí a dobra, o ranking e a meta
- * passavam a mentir sem nada na tela indicando isso.
- *
- * `mes` no formato `YYYY-MM`, o mesmo que `calcularDobraComissao` compara.
- */
-export async function fetchAcordosPixDoMes(
-  empresaId: string,
-  mes: string,
-  opts?: { operadorId?: string; setorId?: string | null },
-): Promise<PixAutoAcordo[]> {
-  const [ano, m] = mes.split('-').map(Number);
-  if (!ano || !m) return [];
-  const inicio = new Date(Date.UTC(ano, m - 1, 1)).toISOString();
-  const fim    = new Date(Date.UTC(ano, m, 1)).toISOString();
-
-  let q = supabase
-    .from('pix_automatico_acordos')
-    .select('*')
-    .eq('empresa_id', empresaId)
-    .gte('criado_em', inicio)
-    .lt('criado_em', fim)
-    .order('criado_em', { ascending: false });
-
-  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
-  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
-
-  const { data, error } = await q;
-  if (error) {
-    console.warn('[pix_automatico.service] fetchAcordosPixDoMes:', error.message);
-    return [];
-  }
-  return (data as unknown as PixAutoAcordo[]) ?? [];
-}
 
 /**
  * Edita um registro do operador — só NR e valor, e só enquanto PENDENTE.

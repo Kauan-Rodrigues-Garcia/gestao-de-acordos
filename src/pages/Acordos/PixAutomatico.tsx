@@ -36,6 +36,9 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog';
+import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
@@ -65,6 +68,9 @@ import {
   PixAutoAcordo, PixAutoStatus, PixAutoConfig, PIX_AUTO_PCT_PADRAO,
   fetchAcordosPix, criarAcordoPix, avaliarAcordoPix, reavaliarAcordoPix,
   excluirAcordoPix, limparDesaprovados, fetchConfigsPix, upsertConfigPix,
+  PIX_LINHAS_POR_PAGINA, metasDobraPorSetor,
+  fetchLixeiraPix, restaurarItemLixeiraPix, excluirItemLixeiraPix,
+  purgarLixeiraPixExpirada, type PixLixeiraItem,
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
   comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
@@ -126,6 +132,15 @@ export function PixAutomatico() {
   // Config % (líder)
   const [pctInput, setPctInput]     = useState('');
   const [salvandoPct, setSalvandoPct] = useState(false);
+  // Meta de acordos da comissão dobrada — era 18 fixo no código
+  const [metaDobraInput, setMetaDobraInput] = useState('');
+  const [salvandoMetaDobra, setSalvandoMetaDobra] = useState(false);
+
+  // Lixeira: 3 dias de retenção, restaurar é líder+
+  const [lixeiraAberta, setLixeiraAberta] = useState(false);
+  const [lixeira, setLixeira] = useState<PixLixeiraItem[]>([]);
+  const [lixeiraCarregando, setLixeiraCarregando] = useState(false);
+  const [restaurandoId, setRestaurandoId] = useState<string | null>(null);
   const [confirmandoPct, setConfirmandoPct] = useState<number | null>(null);
   const [salvandoToggle, setSalvandoToggle] = useState(false);
   const [avaliandoId, setAvaliandoId] = useState<string | null>(null);
@@ -187,6 +202,11 @@ export function PixAutomatico() {
   const registroLigadoSetorConfig = setorConfig != null
     ? (configs[setorConfig]?.permite_registro_operador ?? true)
     : true;
+  // Meta de acordos da dobra do setor em edição. Sem config gravada, o padrão
+  // da operação (18) — o mesmo default da coluna.
+  const metaDobraSetorConfig = setorConfig != null
+    ? (Number(configs[setorConfig]?.meta_acordos_dobra) || PIX_META_ACORDOS_DOBRA)
+    : PIX_META_ACORDOS_DOBRA;
   // Operador só registra com o interruptor do PRÓPRIO setor ligado
   const podeRegistrar = ehLider
     || meuSetor == null
@@ -254,6 +274,7 @@ export function PixAutomatico() {
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { setPctInput(String(pctSetorConfig).replace('.', ',')); }, [pctSetorConfig]);
+  useEffect(() => { setMetaDobraInput(String(metaDobraSetorConfig)); }, [metaDobraSetorConfig]);
 
   // Meta do mês + config de quartis + recebido no analítico (card de bônus)
   useEffect(() => {
@@ -320,6 +341,28 @@ export function PixAutomatico() {
      filtroPagamento, dataDe, dataAte, setorEscopo, operadorEquipe, operadorSetor],
   );
 
+  // ── Paginação da tabela ─────────────────────────────────────────────────
+  // De EXIBIÇÃO, não de consulta: `visiveis` continua sendo o filtro inteiro,
+  // e é ele que alimenta os totais. A fatia existe para a tabela não desenhar
+  // milhares de <tr> de uma vez.
+  const [pagina, setPagina] = useState(1);
+  const totalPaginas = Math.max(1, Math.ceil(visiveis.length / PIX_LINHAS_POR_PAGINA));
+  // Mexer no filtro encurta a lista; sem isto quem estava na página 7 ficaria
+  // olhando uma tabela vazia sem entender por quê.
+  const paginaAtual = Math.min(pagina, totalPaginas);
+  useEffect(() => { setPagina(1); }, [
+    busca, filtroStatus, filtroOperador, filtroEquipe, filtroSetor,
+    filtroPagamento, dataDe, dataAte,
+  ]);
+
+  const daPagina = useMemo(
+    () => visiveis.slice(
+      (paginaAtual - 1) * PIX_LINHAS_POR_PAGINA,
+      paginaAtual * PIX_LINHAS_POR_PAGINA,
+    ),
+    [visiveis, paginaAtual],
+  );
+
   // Totais SEMPRE sobre o conjunto visível (líder filtrando vê o recorte)
   const totais = useMemo(() => totaisPorStatus(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
   // Pago × a pagar: o operador via "Aprovado R$ 105,49" e recebia R$ 50,00 sem
@@ -350,11 +393,18 @@ export function PixAutomatico() {
   // lista mostra o setor inteiro: a dobra é individual. São DOIS requisitos —
   // a quantidade de acordos e a meta de recebimento —, e a meta vem do mesmo
   // par (meta do mês, recebido no analítico) que alimentava o card de bônus.
+  // A meta de acordos deixou de ser 18 fixo: cada setor tem a sua
+  // (`pix_automatico_config.meta_acordos_dobra`, migration 20260810c).
+  const metaPorSetor = useMemo(
+    () => metasDobraPorSetor(Object.values(configs)),
+    [configs],
+  );
+
   const dobra = useMemo(
     () => calcularDobraComissao(itens, perfil?.id, pctPorSetor, mesAtual(), {
       metaValor, recebidoMes,
-    }),
-    [itens, perfil?.id, pctPorSetor, metaValor, recebidoMes],
+    }, metaPorSetor),
+    [itens, perfil?.id, pctPorSetor, metaValor, recebidoMes, metaPorSetor],
   );
 
   // ── Ranking do setor ────────────────────────────────────────────────────
@@ -367,8 +417,8 @@ export function PixAutomatico() {
   }, [operadores]);
 
   const ranking = useMemo(
-    () => rankingPixSetor(itens, pctPorSetor, mesAtual(), nomePorOperador),
-    [itens, pctPorSetor, nomePorOperador],
+    () => rankingPixSetor(itens, pctPorSetor, mesAtual(), nomePorOperador, metaPorSetor),
+    [itens, pctPorSetor, nomePorOperador, metaPorSetor],
   );
 
   // ── Meta de Pix do setor ────────────────────────────────────────────────
@@ -594,10 +644,13 @@ export function PixAutomatico() {
     }
   }
 
+  /** Quem está executando — vai para a lixeira, para a auditoria ter nome. */
+  const quemExclui = { id: perfil?.id ?? null, nome: perfil?.nome ?? perfil?.email ?? null };
+
   async function excluir(item: PixAutoAcordo) {
-    const { ok, error } = await excluirAcordoPix(item.id);
+    const { ok, error } = await excluirAcordoPix(item.id, quemExclui);
     if (!ok) { toast.error('Erro ao excluir: ' + error); return; }
-    toast.success('Registro excluído.');
+    toast.success('Registro movido para a lixeira. Fica 3 dias lá.');
     await carregar();
   }
 
@@ -605,13 +658,57 @@ export function PixAutomatico() {
     if (!empresa?.id || !perfil?.id) return;
     setLimpando(true);
     try {
-      const { ok, count, error } = await limparDesaprovados(empresa.id, perfil.id);
+      const { ok, count, error } = await limparDesaprovados(empresa.id, perfil.id, quemExclui);
       if (!ok) { toast.error('Erro ao limpar: ' + error); return; }
-      toast.success(`${count} registro${count !== 1 ? 's' : ''} desaprovado${count !== 1 ? 's' : ''} removido${count !== 1 ? 's' : ''}.`);
+      toast.success(`${count} registro${count !== 1 ? 's' : ''} desaprovado${count !== 1 ? 's' : ''} na lixeira.`);
       await carregar();
     } finally {
       setLimpando(false);
     }
+  }
+
+  // ── Lixeira ─────────────────────────────────────────────────────────────
+
+  /**
+   * Abre a lixeira. Purga o vencido ANTES de listar: não há job agendado, e sem
+   * isso um item de 4 dias apareceria como se ainda desse para restaurar.
+   * Mesmo desenho do expurgo dos desaprovados no `carregar`.
+   */
+  async function abrirLixeira() {
+    if (!empresa?.id || !perfil?.id) return;
+    setLixeiraAberta(true);
+    setLixeiraCarregando(true);
+    try {
+      try {
+        await purgarLixeiraPixExpirada(empresa.id);
+      } catch (e) {
+        // Acessório: a listagem é o que importa. Ver o comentário em `carregar`.
+        console.warn('[PixAutomatico] purga da lixeira:', e);
+      }
+      setLixeira(await fetchLixeiraPix(empresa.id, ehLider ? undefined : { operadorId: perfil.id }));
+    } finally {
+      setLixeiraCarregando(false);
+    }
+  }
+
+  async function restaurarDaLixeira(item: PixLixeiraItem) {
+    setRestaurandoId(item.id);
+    try {
+      const { ok, error } = await restaurarItemLixeiraPix(item.id);
+      if (!ok) { toast.error(error ?? 'Não foi possível restaurar.'); return; }
+      toast.success(`NR ${item.nr_cliente} restaurado.`);
+      setLixeira(prev => prev.filter(l => l.id !== item.id));
+      await carregar();
+    } finally {
+      setRestaurandoId(null);
+    }
+  }
+
+  async function apagarDaLixeira(item: PixLixeiraItem) {
+    const { ok, error } = await excluirItemLixeiraPix(item.id);
+    if (!ok) { toast.error('Erro ao apagar: ' + error); return; }
+    setLixeira(prev => prev.filter(l => l.id !== item.id));
+    toast.success('Removido em definitivo.');
   }
 
   /** Passo 1: valida o % digitado e abre a confirmação. */
@@ -642,6 +739,44 @@ export function PixAutomatico() {
       await carregar();
     } finally {
       setSalvandoPct(false);
+    }
+  }
+
+  /**
+   * Grava a meta de acordos da dobra do setor em edição.
+   *
+   * Separada do percentual de propósito: são dois números com consequências
+   * diferentes, e o do percentual tem diálogo de confirmação porque reescreve
+   * o que os operadores vão receber. A meta só muda um requisito daqui pra
+   * frente — não mexe em comissão já aprovada.
+   */
+  async function salvarMetaDobra() {
+    if (!empresa?.id || !perfil?.id || !setorConfig) return;
+    const meta = parseInt(metaDobraInput.replace(/\D/g, ''), 10);
+    if (!Number.isFinite(meta) || meta <= 0) {
+      toast.error('A meta precisa ser um número maior que zero.');
+      return;
+    }
+    if (meta === metaDobraSetorConfig) { toast.info('A meta não mudou.'); return; }
+
+    setSalvandoMetaDobra(true);
+    try {
+      const { ok, error } = await upsertConfigPix({
+        empresaId: empresa.id,
+        setorId: setorConfig,
+        // O percentual vigente viaja junto: `upsertConfigPix` é upsert, e sem
+        // ele a linha nasceria com o default de 0,25 quando o setor ainda não
+        // tem config gravada.
+        pct: pctSetorConfig,
+        metaAcordosDobra: meta,
+        atualizadoPor: perfil.id,
+        atualizadoPorNome: perfil.nome ?? perfil.email ?? '—',
+      });
+      if (!ok) { toast.error('Erro ao salvar a meta: ' + error); return; }
+      toast.success(`Meta da comissão dobrada: ${meta} acordos no mês.`);
+      await carregar();
+    } finally {
+      setSalvandoMetaDobra(false);
     }
   }
 
@@ -736,7 +871,7 @@ export function PixAutomatico() {
     if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
     setLoteProcessando(true);
     try {
-      for (const item of alvos) await excluirAcordoPix(item.id);
+      for (const item of alvos) await excluirAcordoPix(item.id, quemExclui);
       toast.success(`${alvos.length} registro(s) excluído(s).`);
       setSelecionados(new Set());
       await carregar();
@@ -880,6 +1015,11 @@ export function PixAutomatico() {
           <Button variant="outline" size="sm" onClick={exportar} disabled={loading || visiveis.length === 0}
             className="gap-1.5 h-8 text-xs rounded-lg" title="Exportar registros visíveis">
             <Download className="w-3.5 h-3.5" /> Exportar
+          </Button>
+          <Button variant="outline" size="sm" onClick={abrirLixeira}
+            className="gap-1.5 h-8 text-xs rounded-lg"
+            title="Registros excluídos nos últimos 3 dias">
+            <Trash2 className="w-3.5 h-3.5" /> Lixeira
           </Button>
           {meusDesaprovados > 0 && (
             <Button variant="ghost" size="sm" onClick={limparMeusDesaprovados} disabled={limpando}
@@ -1191,6 +1331,32 @@ export function PixAutomatico() {
               Confirmar
             </Button>
           </div>
+
+          {/* Meta da comissão dobrada. Era 18 fixo no código; agora é por
+              setor. Sem diálogo de confirmação, ao contrário do percentual:
+              mudar a meta não reescreve comissão já aprovada, só muda um
+              requisito daqui pra frente. */}
+          <div className="flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            <span className="text-[11px] text-muted-foreground shrink-0">
+              Acordos p/ dobrar:
+            </span>
+            <Input
+              value={metaDobraInput}
+              onChange={e => setMetaDobraInput(e.target.value.replace(/\D/g, ''))}
+              inputMode="numeric"
+              className="h-7 w-14 text-xs text-center font-mono"
+              title="Quantos acordos Pix o operador precisa fechar no mês"
+            />
+            <Button size="sm" variant="ghost"
+              className="h-7 gap-1 px-2 text-xs text-amber-400 hover:text-amber-300"
+              onClick={salvarMetaDobra} disabled={salvandoMetaDobra}
+              title="Salvar a meta de acordos do setor">
+              {salvandoMetaDobra ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              Salvar
+            </Button>
+          </div>
+
           <div className="flex items-center gap-2">
             <Switch checked={registroLigadoSetorConfig} disabled={salvandoToggle}
               onCheckedChange={alternarRegistroSetor}
@@ -1298,7 +1464,7 @@ export function PixAutomatico() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visiveis.map((item, i) => {
+                  {daPagina.map((item, i) => {
                     const comissao = comissaoDe(item, pctPorSetor);
                     const pctLinha = item.status === 'aprovado' && item.pct_comissao != null
                       ? Number(item.pct_comissao)
@@ -1475,10 +1641,138 @@ export function PixAutomatico() {
                   })}
                 </tbody>
               </table>
+
+              {/* Rodapé de páginas. Só aparece quando há mais de uma — numa
+                  lista curta seria ruído fixo dizendo "1 de 1". */}
+              {totalPaginas > 1 && (
+                <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-border">
+                  <p className="text-[11px] text-muted-foreground">
+                    {(paginaAtual - 1) * PIX_LINHAS_POR_PAGINA + 1}
+                    {'–'}
+                    {Math.min(paginaAtual * PIX_LINHAS_POR_PAGINA, visiveis.length)}
+                    {' de '}
+                    <span className="font-semibold text-foreground">{visiveis.length}</span>
+                    {' registros'}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-7 px-2 text-xs rounded-lg"
+                      disabled={paginaAtual <= 1}
+                      onClick={() => setPagina(p => Math.max(1, p - 1))}
+                    >
+                      Anterior
+                    </Button>
+                    <span className="text-[11px] text-muted-foreground tabular-nums px-1">
+                      {paginaAtual} / {totalPaginas}
+                    </span>
+                    <Button
+                      variant="outline" size="sm"
+                      className="h-7 px-2 text-xs rounded-lg"
+                      disabled={paginaAtual >= totalPaginas}
+                      onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                    >
+                      Próxima
+                    </Button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* ── Lixeira ────────────────────────────────────────────────────────
+          Existe porque o excluir apagava de vez: sem log, sem auditoria, sem
+          volta. Um registro se perdeu assim em 10/08/2026 e o valor não pôde
+          ser recuperado — ele só existia na tabela do Pix. */}
+      <Dialog open={lixeiraAberta} onOpenChange={setLixeiraAberta}>
+        <DialogContent className="max-w-3xl" aria-describedby="dlg-lixeira-pix">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-4 h-4 text-muted-foreground" />
+              Lixeira do Pix automático
+            </DialogTitle>
+            <DialogDescription id="dlg-lixeira-pix">
+              Registros excluídos ficam aqui por 3 dias e depois somem de vez.
+              {!ehLider && ' Restaurar é com o líder.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {lixeiraCarregando ? (
+            <div className="space-y-2 py-2">
+              {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-11 w-full rounded-lg" />)}
+            </div>
+          ) : lixeira.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-2 text-muted-foreground">
+              <Trash2 className="w-7 h-7 opacity-20" />
+              <p className="text-sm">A lixeira está vazia.</p>
+            </div>
+          ) : (
+            <div className="max-h-[55vh] overflow-y-auto -mx-2 px-2">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-background">
+                  <tr className="border-b border-border">
+                    <th className="text-left px-2 py-2 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">NR</th>
+                    <th className="text-left px-2 py-2 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Operador</th>
+                    <th className="text-right px-2 py-2 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Valor</th>
+                    <th className="text-left px-2 py-2 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Excluído por</th>
+                    <th className="text-left px-2 py-2 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Quando</th>
+                    <th className="px-2 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {lixeira.map(item => (
+                    <tr key={item.id} className="border-b border-border/50 hover:bg-accent/30">
+                      <td className="px-2 py-2 font-mono">{item.nr_cliente}</td>
+                      <td className="px-2 py-2">{item.operador_nome ?? '—'}</td>
+                      <td className="px-2 py-2 text-right font-mono">
+                        {formatCurrency(Number(item.valor))}
+                      </td>
+                      <td className="px-2 py-2 text-muted-foreground">
+                        {item.excluido_por_nome ?? '—'}
+                      </td>
+                      <td className="px-2 py-2 font-mono text-muted-foreground">
+                        {new Date(item.excluido_em).toLocaleString('pt-BR', {
+                          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="px-2 py-2">
+                        <div className="flex items-center justify-end gap-1">
+                          {/* Restaurar é líder+ — a RPC confere no servidor, o
+                              botão só evita o clique que ia falhar. */}
+                          {ehLider && (
+                            <button
+                              title="Restaurar este registro"
+                              disabled={restaurandoId === item.id}
+                              onClick={() => restaurarDaLixeira(item)}
+                              className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
+                            >
+                              {restaurandoId === item.id
+                                ? <RefreshCw className="w-3 h-3 animate-spin" />
+                                : <Undo2 className="w-3 h-3" />}
+                              Restaurar
+                            </button>
+                          )}
+                          {ehLider && (
+                            <button
+                              title="Apagar em definitivo"
+                              onClick={() => apagarDaLixeira(item)}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
