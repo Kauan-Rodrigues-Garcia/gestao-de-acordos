@@ -17,6 +17,10 @@ import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { registrarLog } from '@/services/logs.service';
 import { mesReferencia } from './analiticoComum';
+import {
+  montarOrigens, totalLiquido, totalExcluido,
+  type ExclusoesPorSetor, type OrigemDoAcumulado,
+} from './composicaoAcumulado';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -992,12 +996,32 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
 
   const setorDoPerfil = new Map<string, string | null>();
   if (linhas?.length) {
-    const { data: perfis } = await supabase
+    // Setor da EQUIPE, caindo no setor do cadastro quando a pessoa não tem
+    // equipe — a mesma definição de `operadorEquipeMap`. Enquanto aqui era só
+    // `perfis.setor_id`, a lista de origens do acumulado (que sai daqui) e o
+    // escopo de setor (que sai do `operadorEquipeMap`) discordavam sobre a
+    // mesma pessoa, e o total não fechava com a soma das origens exibidas.
+    type PerfilSetor = {
+      id: string;
+      setor_id: string | null;
+      equipes: { setor_id: string | null } | null;
+    };
+    let perfis = (await supabase
       .from('perfis')
-      .select('id, setor_id')
-      .eq('empresa_id', empresaId);
-    for (const p of ((perfis ?? []) as { id: string; setor_id: string | null }[])) {
-      setorDoPerfil.set(p.id, p.setor_id);
+      .select('id, setor_id, equipes(setor_id)')
+      .eq('empresa_id', empresaId)).data as PerfilSetor[] | null;
+
+    // Sem o vínculo com `equipes` (base antiga), cai no setor do cadastro.
+    if (!perfis) {
+      const cru = (await supabase
+        .from('perfis')
+        .select('id, setor_id')
+        .eq('empresa_id', empresaId)).data as { id: string; setor_id: string | null }[] | null;
+      perfis = cru?.map((p): PerfilSetor => ({ ...p, equipes: null })) ?? null;
+    }
+
+    for (const p of (perfis ?? [])) {
+      setorDoPerfil.set(p.id, p.equipes?.setor_id ?? p.setor_id ?? null);
     }
   }
 
@@ -1059,21 +1083,56 @@ export async function buscarTotalOrfaosPorSetor(
 // mostrar — sem depender de cadastro de operador nem de clones. Órfão/linha
 // antiga sem setor_id cai no setor de quem importou (mesma regra dos órfãos).
 
+export interface TotalDoSetor {
+  /** Já LÍQUIDO das origens desmarcadas — é o número do card. */
+  total: number;
+  ho: number;
+  qtd: number;
+  /** De onde veio cada pedaço, para a tela listar e permitir desmarcar. */
+  origens: OrigemDoAcumulado[];
+  /** Quanto saiu do total por exclusão. 0 quando nada foi desmarcado. */
+  excluido: number;
+}
+
 export async function buscarTotalPorSetor(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
-): Promise<Record<string, { total: number; ho: number; qtd: number }>> {
+  /** Origens fora do acumulado, por setor — `buscarExclusoesSetor`. */
+  exclusoes: ExclusoesPorSetor = {},
+): Promise<Record<string, TotalDoSetor>> {
   const { linhas, setorDoPerfil } = await lerMesAnaliticoDedup(empresaId, mes);
   if (!linhas?.length) return {};
 
-  const porSetor: Record<string, { total: number; ho: number; qtd: number }> = {};
+  // Agrupa primeiro por setor DONO (o carimbo), depois quebra por origem. A
+  // exclusão é aplicada aqui, e não em quem chama, porque `total` é lido por
+  // três telas: aplicar fora seria pedir que as três lembrassem — e foi
+  // exatamente assim que os totais divergiram antes.
+  const linhasPorSetor = new Map<string, LinhaMesAnalitico[]>();
   for (const l of linhas) {
     const sid = setorDaLinha(l, setorDoPerfil);
     if (!sid) continue;
-    const acc = porSetor[sid] ?? (porSetor[sid] = { total: 0, ho: 0, qtd: 0 });
-    acc.total += Number(l.valor_recebido) || 0;
-    acc.ho    += Number(l.total_ho) || 0;
-    acc.qtd   += 1;
+    const lista = linhasPorSetor.get(sid);
+    if (lista) lista.push(l); else linhasPorSetor.set(sid, [l]);
+  }
+
+  const setorDoOperador = (id: string) => setorDoPerfil.get(id) ?? null;
+  const porSetor: Record<string, TotalDoSetor> = {};
+  for (const [sid, doSetor] of linhasPorSetor) {
+    const origens = montarOrigens({
+      setorId: sid,
+      linhas: doSetor,
+      setorDoOperador,
+      excluidas: exclusoes[sid],
+    });
+    porSetor[sid] = {
+      total:    totalLiquido(origens),
+      // H.O. e quantidade acompanham o total: um acumulado sem a origem e uma
+      // contagem com ela seriam dois recortes no mesmo card.
+      ho:       origens.reduce((s, o) => (o.excluida ? s : s + o.ho), 0),
+      qtd:      origens.reduce((s, o) => (o.excluida ? s : s + o.qtd), 0),
+      origens,
+      excluido: totalExcluido(origens),
+    };
   }
   return porSetor;
 }

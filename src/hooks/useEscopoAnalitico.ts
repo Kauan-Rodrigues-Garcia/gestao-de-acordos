@@ -19,6 +19,8 @@ import {
   escopoDeSetor, setorSomaPorUsuarios, temCarimboDeSetor, ESCOPO_EMPRESA,
   type EscopoAnalitico, type LinhaEscopavel,
 } from '@/services/analitico/escopoAnalitico';
+import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
+import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 
 export interface ParametrosEscopo {
   /** false = o tenant não usa analítico; o escopo sai pronto como empresa. */
@@ -48,6 +50,10 @@ export interface ResultadoEscopo {
   fontes: FontesDeEscopo | null;
   /** O carimbo de setor chegou nas linhas? (migration 20260802a aplicada) */
   carimboDisponivel: boolean;
+  /** setor → origens fora do acumulado, para quem monta escopos de vários setores. */
+  exclusoes: Record<string, ReadonlySet<OrigemKey>>;
+  /** Setor de uma pessoa — equipe primeiro, cadastro na falta dela. */
+  setorDoOperador: (id: string) => string | null;
   /**
    * true = ainda resolvendo.
    *
@@ -72,6 +78,30 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
   /** O carimbo de setor chegou? (migration 20260802a aplicada) */
   const carimboDisponivel = useMemo(() => temCarimboDeSetor(linhas), [linhas]);
 
+  /**
+   * Origens que cada setor tirou do acumulado no mês (migration 20260812e).
+   *
+   * Carregado AQUI, e não em cada tela, pelo mesmo motivo que o resto deste
+   * hook existe: o dashboard e o Painel Diretoria têm que mostrar o mesmo
+   * número que o card da aba Analítico. Tabela ausente devolve `{}` e nada
+   * muda — a leitura é tolerante à migration pendente.
+   */
+  const [exclusoes, setExclusoes] = useState<Record<string, Set<OrigemKey>>>({});
+  useEffect(() => {
+    if (!ativo || !empresaId || !mes) { setExclusoes({}); return; }
+    let cancelado = false;
+    void buscarExclusoesSetor(empresaId, mes).then(({ porSetor }) => {
+      if (!cancelado) setExclusoes(porSetor);
+    });
+    return () => { cancelado = true; };
+  }, [ativo, empresaId, mes]);
+
+  /** Setor de uma pessoa — equipe primeiro, cadastro na falta dela. */
+  const setorDoOperador = useMemo(
+    () => (id: string) => fontes?.operadorEquipeMap[id]?.setor_id ?? null,
+    [fontes],
+  );
+
   const escopo = useMemo<EscopoAnalitico | null>(() => {
     if (!ativo) return ESCOPO_EMPRESA;
     // Operador: a RPC já devolve só as linhas dele, mas o filtro explícito
@@ -90,8 +120,11 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
       }),
       operadores: operadoresDoSetor(setorId!, fontes),
       temCarimbo: carimboDisponivel,
+      origensExcluidas: exclusoes[setorId!],
+      setorDoOperador,
     });
-  }, [ativo, operadorId, equipeId, setorId, fontes, isPaguePlay, carimboDisponivel]);
+  }, [ativo, operadorId, equipeId, setorId, fontes, isPaguePlay, carimboDisponivel,
+      exclusoes, setorDoOperador]);
 
-  return { escopo, fontes, carimboDisponivel, pendente: escopo === null };
+  return { escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador, pendente: escopo === null };
 }

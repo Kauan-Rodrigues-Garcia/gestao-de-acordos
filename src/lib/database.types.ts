@@ -164,6 +164,62 @@ export type Database = {
           },
         ]
       }
+      // Migration 20260812e — origens que ficam FORA do acumulado do setor.
+      // Escrito à mão enquanto os tipos não são regerados pela CLI: o service
+      // precisa de INSERT e DELETE, e `tabelaSemTipo` só serve leitura de
+      // propósito (gravar sem tipo é o caminho para gravar errado calado).
+      analitico_exclusoes_setor: {
+        Row: {
+          criado_em: string
+          empresa_id: string
+          excluido_por: string | null
+          id: string
+          mes: string
+          setor_id: string
+          setor_origem_id: string | null
+        }
+        Insert: {
+          criado_em?: string
+          empresa_id: string
+          excluido_por?: string | null
+          id?: string
+          mes: string
+          setor_id: string
+          setor_origem_id?: string | null
+        }
+        Update: {
+          criado_em?: string
+          empresa_id?: string
+          excluido_por?: string | null
+          id?: string
+          mes?: string
+          setor_id?: string
+          setor_origem_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitico_exclusoes_setor_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_setor_origem_id_fkey"
+            columns: ["setor_origem_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analitico_recebimentos: {
         Row: {
           acordo_id: string | null

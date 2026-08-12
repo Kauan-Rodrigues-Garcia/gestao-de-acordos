@@ -36,6 +36,8 @@
  * (soma dos operadores + órfãos), que é o comportamento que ela já tinha.
  */
 
+import { origemDaLinha, origemConta, type OrigemKey } from './composicaoAcumulado';
+
 /** O mínimo que uma linha precisa expor para ser filtrada. */
 export interface LinhaEscopavel {
   operador_id: string | null;
@@ -60,6 +62,17 @@ export type EscopoAnalitico =
       porRelatorio: boolean;
       /** Membros + clones que contam. Usado quando `porRelatorio` é false. */
       operadores: ReadonlySet<string>;
+      /**
+       * Origens que o setor tirou do acumulado no mês (migration 20260812e).
+       *
+       * O ERP às vezes manda, no relatório de um setor, linhas de gente de
+       * outro. A tela lista as origens e permite desmarcar; aqui a escolha é
+       * aplicada para que o dashboard e o Painel Diretoria mostrem o MESMO
+       * número que o card da aba Analítico. Vazio = tudo conta.
+       */
+      origensExcluidas: ReadonlySet<OrigemKey>;
+      /** Setor de uma pessoa, para casar a linha com a origem excluída. */
+      setorDoOperador: (id: string) => string | null | undefined;
     };
 
 export const ESCOPO_EMPRESA: EscopoAnalitico = { tipo: 'empresa' };
@@ -101,6 +114,10 @@ export function escopoDeSetor(params: {
   alternativo: boolean;
   operadores: ReadonlySet<string>;
   temCarimbo: boolean;
+  /** Origens fora do acumulado. Omitir = tudo conta (o padrão). */
+  origensExcluidas?: ReadonlySet<OrigemKey>;
+  /** Setor de uma pessoa. Omitir só faz sentido quando não há exclusão. */
+  setorDoOperador?: (id: string) => string | null | undefined;
 }): EscopoAnalitico {
   const { setorId, alternativo, operadores, temCarimbo } = params;
   return {
@@ -108,8 +125,13 @@ export function escopoDeSetor(params: {
     setorId,
     porRelatorio: !alternativo && temCarimbo,
     operadores,
+    origensExcluidas: params.origensExcluidas ?? SEM_EXCLUSAO,
+    setorDoOperador:  params.setorDoOperador ?? (() => null),
   };
 }
+
+/** Conjunto vazio compartilhado: identidade estável para os `useMemo` da tela. */
+const SEM_EXCLUSAO: ReadonlySet<OrigemKey> = new Set<OrigemKey>();
 
 /** A linha entra na conta deste escopo? */
 export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): boolean {
@@ -125,15 +147,23 @@ export function linhaNoEscopo(linha: LinhaEscopavel, escopo: EscopoAnalitico): b
       // somá-la aqui seria atribuir a alguém o recebimento de ninguém.
       return linha.operador_id !== null && escopo.operadores.has(linha.operador_id);
 
-    case 'setor':
-      if (escopo.porRelatorio) {
+    case 'setor': {
+      const daquiPeloCarimbo = (linha.setor_id ?? null) === escopo.setorId;
+      const dentro = escopo.porRelatorio
         // O carimbo manda, inclusive para a órfã (é dela que ele veio).
-        return (linha.setor_id ?? null) === escopo.setorId;
-      }
-      // Alternativo: soma dos usuários + as órfãs carimbadas neste setor.
-      return linha.operador_id !== null
-        ? escopo.operadores.has(linha.operador_id)
-        : (linha.setor_id ?? null) === escopo.setorId;
+        ? daquiPeloCarimbo
+        // Alternativo: soma dos usuários + as órfãs carimbadas neste setor.
+        : (linha.operador_id !== null
+            ? escopo.operadores.has(linha.operador_id)
+            : daquiPeloCarimbo);
+      if (!dentro) return false;
+      // A linha é do setor; falta saber se a ORIGEM dela continua marcada.
+      if (escopo.origensExcluidas.size === 0) return true;
+      return origemConta(
+        origemDaLinha(linha.operador_id, escopo.setorDoOperador),
+        escopo.origensExcluidas,
+      );
+    }
   }
 }
 

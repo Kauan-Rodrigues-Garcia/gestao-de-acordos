@@ -94,7 +94,10 @@ export default function PainelDiretoria() {
   const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
   const analiticoPrev = useAnaliticoDashboard(temAnalitico, deslocarMes(mesAnalise, -1));
 
-  const { escopo, fontes, carimboDisponivel, pendente: escopoPendente } = useEscopoAnalitico({
+  const {
+    escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador,
+    pendente: escopoPendente,
+  } = useEscopoAnalitico({
     ativo:       temAnalitico,
     empresaId:   empresa?.id,
     isPaguePlay: isPP,
@@ -160,11 +163,16 @@ export default function PainelDiretoria() {
         }),
         operadores:  operadoresDoSetor(s.id, fontes),
         temCarimbo:  carimboDisponivel,
+        // As origens que o setor tirou do acumulado na aba Analítico. Sem isto
+        // a diretoria leria um número e o líder outro, para o mesmo setor.
+        origensExcluidas: exclusoes[s.id],
+        setorDoOperador,
       });
       out[s.id] = agregarAnalitico(analiticoDash.linhas, escopoSetor).bruto;
     }
     return out;
-  }, [usarAnalitico, fontes, setoresDetalhes, analiticoDash.linhas, isPP, carimboDisponivel]);
+  }, [usarAnalitico, fontes, setoresDetalhes, analiticoDash.linhas, isPP, carimboDisponivel,
+      exclusoes, setorDoOperador]);
 
   const setoresAgendamento = useMemo(() => {
     return setoresDetalhes.map(s => {

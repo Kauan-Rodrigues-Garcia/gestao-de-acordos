@@ -40,6 +40,7 @@ import {
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
+import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
 } from '@/services/diario/diario.service';
@@ -260,12 +261,15 @@ export default function PainelLider() {
     }
     let cancel = false;
     setLoadingAnalitico(true);
-    void Promise.all([
+    // As exclusões entram no `buscarTotalPorSetor`, senão este painel mostraria
+    // o setor com as origens que a aba Analítico já tirou do acumulado.
+    void buscarExclusoesSetor(empresa.id, mesStr).then(({ porSetor: exclusoes }) =>
+    Promise.all([
       buscarResumoOperadoresAnalitico(empresa.id, mesStr),
       buscarTotalOrfaosPorSetor(empresa.id, mesStr),
-      buscarTotalPorSetor(empresa.id, mesStr),
+      buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
       supabase.from('setores').select('id, alternativo').eq('empresa_id', empresa.id),
-    ]).then(([{ data }, orfaos, totSetor, setoresRes]) => {
+    ])).then(([{ data }, orfaos, totSetor, setoresRes]) => {
       if (cancel) return;
       setAnaliticoResumos(data);
       setAnaliticoOrfaos(orfaos);

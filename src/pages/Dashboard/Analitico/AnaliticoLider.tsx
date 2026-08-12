@@ -47,9 +47,16 @@ import {
   type ResumoMensalAnalitico,
   type EquipeAnalitico,
   type OperadorEquipeInfo,
+  type TotalDoSetor,
 } from '@/services/analitico/analitico.service';
 // A mesma regra que decide como o card SOMA decide o que a limpeza APAGA.
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+import {
+  buscarExclusoesSetor, salvarExclusoesSetor,
+} from '@/services/analitico/exclusoesSetor.service';
+import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
+import { ComposicaoAcumulado } from './ComposicaoAcumulado';
+import { useAuth } from '@/hooks/useAuth';
 // As contas desta tela vivem em `agregacaoLider`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
@@ -98,6 +105,11 @@ export function AnaliticoLider({
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
+  const { perfil } = useAuth();
+  const perfilId = perfil?.id ?? null;
+  // Quem edita a composição do acumulado é o mesmo público que importa o
+  // relatório e responde pelo número do setor — igual à RLS da 20260812e.
+  const podeEditarComposicao = temPermissaoImportar || podeVerTodosSetores;
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
@@ -148,7 +160,11 @@ export function AnaliticoLider({
   // ── Total do RELATÓRIO por setor + setores alternativos ───────────────────
   // Setor normal → total do relatório (carimbo). Setor alternativo → soma de
   // membros/clones. Fonte única do "total do setor" para as duas telas.
-  const [totalPorSetor, setTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
+  const [totalPorSetor, setTotalPorSetor] = useState<Record<string, TotalDoSetor>>({});
+  // Migration 20260812e aplicada? Falso = o controle de composição não aparece
+  // e tudo conta, como sempre contou.
+  const [exclusoesAtivas, setExclusoesAtivas] = useState(false);
+  const [salvandoComposicao, setSalvandoComposicao] = useState(false);
   const [setoresAlternativos, setSetoresAlternativos] = useState<Set<string>>(new Set());
   const [nomeDoSetor, setNomeDoSetor] = useState<Map<string, string>>(new Map());
 
@@ -159,17 +175,39 @@ export function AnaliticoLider({
     setExpandidos(new Set());
     setLinhasMap(new Map());
     setFiltrosDatas(new Map());
+    // As exclusões vêm ANTES: `buscarTotalPorSetor` já devolve o total líquido
+    // delas, para que nenhuma tela precise lembrar de aplicá-las depois.
+    const { porSetor: exclusoesDoMes, dbAtiva } = await buscarExclusoesSetor(empresaId, mes);
     const [{ data, error }, orfaosSetor, totSetor] = await Promise.all([
       buscarResumoOperadoresAnalitico(empresaId, mes),
       buscarTotalOrfaosPorSetor(empresaId, mes),
-      buscarTotalPorSetor(empresaId, mes),
+      buscarTotalPorSetor(empresaId, mes, exclusoesDoMes),
     ]);
     if (error) toast.error(`Erro ao carregar resumo: ${error}`);
     setResumos(data);
     setOrfaosPorSetor(orfaosSetor);
     setTotalPorSetor(totSetor);
+    setExclusoesAtivas(dbAtiva);
     setLoadingResumos(false);
   }, [empresaId, mes]);
+
+  /**
+   * Grava a composição do setor em foco e recarrega os totais.
+   *
+   * Recarrega em vez de recalcular na memória porque o mesmo mês alimenta o
+   * card, o Desempenho Equipes e o gráfico — reconstruir só um deles é como as
+   * telas passam a discordar.
+   */
+  const salvarComposicao = useCallback(async (excluidas: Set<OrigemKey>) => {
+    if (!empresaId || !mes || !setorId) return;
+    setSalvandoComposicao(true);
+    const ok = await salvarExclusoesSetor({
+      empresaId, setorId, mes, excluidas, usuarioId: perfilId ?? null,
+    });
+    if (!ok) toast.error('Não foi possível salvar a composição do acumulado.');
+    else await carregarResumos();
+    setSalvandoComposicao(false);
+  }, [empresaId, mes, setorId, perfilId, carregarResumos]);
 
   const carregarSnapshot = useCallback(async () => {
     if (!empresaId || !mes) return;
@@ -552,6 +590,19 @@ export function AnaliticoLider({
           </div>
         )}
       </div>
+
+      {/* Composição do acumulado — de onde vieram os reais do card acima.
+          Só com um setor em foco: sem filtro, o número é o da empresa, e a
+          empresa soma tudo por definição — não há origem a tirar. */}
+      {setorId && exclusoesAtivas && !loadingResumos && (
+        <ComposicaoAcumulado
+          origens={totalPorSetor[setorId]?.origens ?? []}
+          nomeDoSetor={id => nomeDoSetor.get(id)}
+          podeEditar={podeEditarComposicao}
+          salvando={salvandoComposicao}
+          onSalvar={excluidas => { void salvarComposicao(excluidas); }}
+        />
+      )}
 
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
