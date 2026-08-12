@@ -5,12 +5,13 @@ import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { FileText, Hash, Link2, Save, User, X, Info, Wallet } from 'lucide-react';
+import { FileText, Hash, Link2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL, parseBRL } from '@/lib/money';
 import { INSTITUICOES_OPTIONS, isPerfilAdmin, PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { useAuth } from '@/hooks/useAuth';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
+import { TagsSelector } from '@/components/TagsSelector';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
 import { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
 import { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
@@ -32,6 +33,7 @@ export function FormBP({ state }: { state: SharedFormState }) {
     usuarioTemLogicaDiretoExtra,
     isExtra, setIsExtra,
     status, setStatus,
+    tagIds, setTagIds, empresaTags,
     observacoes, setObservacoes,
     conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
     autorizando, autorizarTransferencia, cancelarConflito,
@@ -233,6 +235,22 @@ export function FormBP({ state }: { state: SharedFormState }) {
                 </div>
               </div>
             </div>
+
+            {/* Tags. Aparece só quando a empresa tem alguma cadastrada em
+                Configurações — um seletor vazio seria um campo que não faz
+                nada. Estava só no formulário da PaguePlay, embora o estado, o
+                salvamento (`tag_ids`) e a tela de EDIÇÃO do acordo já
+                servissem os dois tenants: a BookPlay criava a tag e não tinha
+                onde marcá-la ao lançar o acordo. */}
+            {empresaTags.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">
+                  <Tag className="w-3 h-3" /> Tags
+                  <span className="font-normal normal-case text-muted-foreground/50 ml-1">(opcional)</span>
+                </p>
+                <TagsSelector tags={empresaTags} selectedIds={tagIds} onChange={setTagIds} disabled={salvando} />
+              </div>
+            )}
 
             <div>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1">

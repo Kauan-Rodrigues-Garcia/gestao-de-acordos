@@ -189,6 +189,15 @@ vi.mock('@/components/ui/select', () => {
   };
 });
 
+// Tags da empresa. O seletor só aparece quando há alguma cadastrada, então o
+// padrão é lista vazia — os demais testes deste arquivo seguem como estavam.
+// A leitura de `empresaTagsValue` acontece no RENDER, não na criação do mock,
+// então não há TDZ aqui.
+let empresaTagsValue: { id: string; nome: string; cor: string }[] = [];
+vi.mock('@/hooks/useEmpresaTags', () => ({
+  useEmpresaTags: () => ({ tags: empresaTagsValue, loading: false, refetch: vi.fn() }),
+}));
+
 // Agora sim, o SUT.
 import { AcordoNovoInline, ModalAvisoDiretoExtra } from './AcordoNovoInline';
 
@@ -1054,5 +1063,65 @@ describe('AcordoNovoInline — entrada (BookPlay)', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: /Com entrada/i })).not.toBeInTheDocument();
     });
+  });
+});
+
+// ── Tags nos dois tenants ───────────────────────────────────────────────────
+// A BookPlay cadastrou uma tag em Configurações e não tinha onde marcá-la ao
+// lançar o acordo: o seletor existia só no formulário da PaguePlay, embora o
+// estado, o `tag_ids` do insert e a tela de EDIÇÃO já servissem os dois.
+
+describe('AcordoNovoInline — tags', () => {
+  const TAG = { id: 'tag-ia-voz', nome: 'IA VOZ', cor: '#ec4899' };
+
+  beforeEach(() => { empresaTagsValue = []; });
+
+  /** O seletor nasce fechado: as tags só entram no DOM depois de abri-lo. */
+  function abrirSeletorDeTags() {
+    fireEvent.click(screen.getByRole('button', { name: /Selecionar tags/i }));
+  }
+
+  it('Bookplay: mostra o seletor de tags quando a empresa tem tag cadastrada', () => {
+    empresaTagsValue = [TAG];
+    renderInline();
+
+    expect(screen.getByRole('button', { name: /Selecionar tags/i })).toBeInTheDocument();
+    abrirSeletorDeTags();
+    expect(screen.getByRole('button', { name: /IA VOZ/i })).toBeInTheDocument();
+  });
+
+  it('PaguePlay: continua mostrando (nada foi movido de lugar)', () => {
+    empresaTagsValue = [TAG];
+    renderInline({ isPaguePlay: true });
+
+    abrirSeletorDeTags();
+    expect(screen.getByRole('button', { name: /IA VOZ/i })).toBeInTheDocument();
+  });
+
+  it('sem tag cadastrada, o campo não aparece em nenhum dos dois', () => {
+    // Um seletor vazio seria um campo que não faz nada — e a PaguePlay já se
+    // comportava assim, então a regra é a mesma para os dois tenants.
+    renderInline();
+    expect(screen.queryByRole('button', { name: /Selecionar tags/i })).not.toBeInTheDocument();
+  });
+
+  it('Bookplay: a tag marcada entra no insert como `tag_ids`', async () => {
+    empresaTagsValue = [TAG];
+    const onSaved = vi.fn();
+    verificarNrRegistroMock.mockResolvedValue(null);   // NR livre
+    routes.insertAcordo = {
+      data: { id: 'novo-tag', nome_cliente: 'Cliente Teste', nr_cliente: '905' } as Acordo,
+      error: null,
+    };
+    renderInline({ onSaved });
+
+    preencherMinimoBookplay('905');
+    abrirSeletorDeTags();
+    fireEvent.click(screen.getByRole('button', { name: /IA VOZ/i }));
+    clickSalvarAcordo();
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    const insert = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'insert');
+    expect((insert?.payload as { tag_ids?: string[] })?.tag_ids).toEqual([TAG.id]);
   });
 });
