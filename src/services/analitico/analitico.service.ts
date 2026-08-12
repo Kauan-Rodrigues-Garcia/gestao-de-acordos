@@ -70,6 +70,23 @@ interface RespostaPagina<T> {
  *
  * Detectar o fim por página incompleta é exato: com a paginação por range, se a
  * página k volta com menos de PAGE linhas, não existe página k+1 com dados.
+ *
+ * ## ⚠️ CONTRATO: `buscarPagina` TEM que ordenar por uma chave ÚNICA
+ *
+ * Cada página é uma consulta INDEPENDENTE. Sem `ORDER BY` — ou com um `ORDER BY`
+ * que empata, como `data_pagamento` num mês em que centenas de linhas caem no
+ * mesmo dia — o Postgres não promete a mesma ordem entre duas execuções. Duas
+ * páginas então se sobrepõem e um pedaço do meio some: o total sai ora maior,
+ * ora menor, e MUDA a cada carregamento da tela.
+ *
+ * Foi exatamente o que aconteceu na BookPlay em 12/08/2026: o card "Total
+ * recebido" do Play 5 mostrou R$ 220.034,54, R$ 170.691,84 e R$ 93.772,00 em
+ * carregamentos seguidos, para um relatório de R$ 143.114,70. Aqui em paralelo
+ * é pior que serial, porque as 4 páginas da onda saem ao mesmo tempo.
+ *
+ * `.order('id')` no fim da consulta resolve: `id` é a PK, é única, e a ordem
+ * total torna o range determinístico. Ordenar por qualquer outra coisa exige
+ * `id` como último critério de desempate.
  */
 async function paginarParalelo<T>(
   buscarPagina: (de: number, ate: number) => Promise<RespostaPagina<T>>,
@@ -620,6 +637,10 @@ export async function buscarAnalitico(
       .select('*, perfis(id, nome, usuario)')
       .eq('empresa_id', filtros.empresaId)
       .order('data_pagamento', { ascending: false })
+      // `data_pagamento` EMPATA — num mês, centenas de linhas caem no mesmo dia.
+      // Empate deixa a ordem livre entre as páginas paralelas, que então se
+      // sobrepõem e perdem linhas do meio. `id` desempata e fecha a ordem.
+      .order('id', { ascending: true })
       .range(from, to);
 
     if (filtros.mes) {
@@ -949,6 +970,12 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
         .eq('empresa_id', empresaId)
         .gte('data_pagamento', primeiro)
         .lte('data_pagamento', fim)
+        // Ordem TOTAL pela PK. Sem ela as páginas paralelas se sobrepõem e o
+        // card do setor muda de valor a cada carregamento — ver o contrato de
+        // `paginarParalelo`. Esta é a leitura que alimenta `buscarTotalPorSetor`,
+        // `buscarTotalOrfaosPorSetor` e o gráfico por dia: os três números da
+        // aba Analítico saíam desta consulta sem ordem nenhuma.
+        .order('id', { ascending: true })
         .range(de, ate);
       return {
         data:  (r.data as unknown as LinhaMesAnalitico[]) ?? [],

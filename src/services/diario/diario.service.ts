@@ -320,6 +320,9 @@ export async function buscarDiario(
       .eq('dia_referencia', filtros.dia)
       .order('data_pagamento', { ascending: true })
       .order('cliente_codigo', { ascending: true })
+      // Os dois empatam (na BookPlay `cliente_codigo` é sempre null), e empate
+      // deixa a ordem livre entre as páginas. `id` fecha a ordem.
+      .order('id', { ascending: true })
       .range(from, to);
 
     if (filtros.operadorId !== undefined) {
@@ -602,6 +605,11 @@ async function buscarResumoMensalDiarioLinhas(
       .eq('empresa_id', empresaId)
       .gte('dia_referencia', primeiro)
       .lte('dia_referencia', fim)
+      // Ordem total pela PK. Sem `ORDER BY`, cada página é uma consulta
+      // independente e o Postgres não promete a mesma ordem entre elas: as
+      // páginas se sobrepõem, linhas do meio somem e o acumulado do mês muda a
+      // cada carregamento. Foi o defeito medido na aba Analítico em 12/08/2026.
+      .order('id', { ascending: true })
       .range(offset, offset + PAGE - 1);
     if (error) return { resumos: [], orfaosPorSetor: {}, linhasDia: [], error: error.message };
     rows.push(...((data ?? []) as unknown as Row[]));
