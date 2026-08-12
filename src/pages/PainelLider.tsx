@@ -38,9 +38,14 @@ import { cn } from '@/lib/utils';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
+  mapaSetorDaEquipe, operadoresDoSetor,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
+import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
+import {
+  escopoDeSetor, setorSomaPorUsuarios,
+} from '@/services/analitico/escopoAnalitico';
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
 } from '@/services/diario/diario.service';
@@ -208,6 +213,9 @@ export default function PainelLider() {
   const [analiticoOrfaos,  setAnaliticoOrfaos]  = useState<Record<string, { total: number; qtd: number }>>({});
   const [analiticoTotalPorSetor, setAnaliticoTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
   const [analiticoSetoresAlt, setAnaliticoSetoresAlt] = useState<Set<string>>(new Set());
+  // Origens fora do acumulado (migration 20260812e). Guardadas em estado porque
+  // o GRÁFICO também precisa delas — ele mostra o mesmo dinheiro do card, por dia.
+  const [analiticoExclusoes, setAnaliticoExclusoes] = useState<Record<string, Set<OrigemKey>>>({});
   const [loadingAnalitico, setLoadingAnalitico] = useState(false);
   // BookPlay: recebido por operador (coluna "Recebido" da lista) vem do analítico.
   const analiticoPorOp = useMemo(() => {
@@ -263,13 +271,15 @@ export default function PainelLider() {
     setLoadingAnalitico(true);
     // As exclusões entram no `buscarTotalPorSetor`, senão este painel mostraria
     // o setor com as origens que a aba Analítico já tirou do acumulado.
-    void buscarExclusoesSetor(empresa.id, mesStr).then(({ porSetor: exclusoes }) =>
-    Promise.all([
-      buscarResumoOperadoresAnalitico(empresa.id, mesStr),
-      buscarTotalOrfaosPorSetor(empresa.id, mesStr),
-      buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
-      supabase.from('setores').select('id, alternativo').eq('empresa_id', empresa.id),
-    ])).then(([{ data }, orfaos, totSetor, setoresRes]) => {
+    void buscarExclusoesSetor(empresa.id, mesStr).then(({ porSetor: exclusoes }) => {
+      if (!cancel) setAnaliticoExclusoes(exclusoes);
+      return Promise.all([
+        buscarResumoOperadoresAnalitico(empresa.id, mesStr),
+        buscarTotalOrfaosPorSetor(empresa.id, mesStr),
+        buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
+        supabase.from('setores').select('id, alternativo').eq('empresa_id', empresa.id),
+      ]);
+    }).then(([{ data }, orfaos, totSetor, setoresRes]) => {
       if (cancel) return;
       setAnaliticoResumos(data);
       setAnaliticoOrfaos(orfaos);
@@ -285,6 +295,38 @@ export default function PainelLider() {
     });
     return () => { cancel = true; };
   }, [mostrarAbasAnaliticas, empresa?.id, mesStr, diarioReloadKey]);
+
+  /**
+   * A regra do gráfico é a MESMA do card Total recebido.
+   *
+   * O gráfico tinha regra própria — somava sempre por operador/clone, mesmo em
+   * setor normal, que soma pelo carimbo do relatório. Em agosto/2026 isso dava
+   * R$ 144.380,95 no card do Play 5 e R$ 142.447,74 no gráfico, sem nada na
+   * tela explicando a diferença. Agora os dois passam por `linhaNoEscopo`, e a
+   * origem desmarcada some dos dois juntos.
+   */
+  const escopoDoGrafico = useMemo(() => {
+    if (!setorAbas || !equipesInfo) return null;
+    const fontes = {
+      setoresAlternativos:      analiticoSetoresAlt,
+      operadorEquipeMap:        equipesInfo.operadorEquipeMap,
+      equipesExtrasPorOperador: equipesInfo.equipesExtrasPorOperador,
+      setorDaEquipe:            mapaSetorDaEquipe(equipesInfo.equipes),
+    };
+    return escopoDeSetor({
+      setorId:     setorAbas,
+      alternativo: setorSomaPorUsuarios({
+        isPaguePlay: isPP,
+        alternativo: analiticoSetoresAlt.has(setorAbas),
+      }),
+      operadores:  operadoresDoSetor(setorAbas, fontes),
+      // As linhas do analítico sempre trazem o carimbo desde a 20260802a; na
+      // PaguePlay ele nem é usado (cai no ramo alternativo acima).
+      temCarimbo:  true,
+      origensExcluidas: analiticoExclusoes[setorAbas],
+      setorDoOperador:  id => equipesInfo.operadorEquipeMap[id]?.setor_id ?? null,
+    });
+  }, [setorAbas, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -581,6 +623,7 @@ export default function PainelLider() {
               equipesExtrasPorOperador={equipesInfo?.equipesExtrasPorOperador ?? {}}
               linhasExternas={isPP ? (resumoDiario?.linhasDia ?? []) : undefined}
               fonteLabel={isPP ? 'relatório de recebimento diário' : 'relatório analítico'}
+              escopo={escopoDoGrafico}
             />
           )}
         </div>

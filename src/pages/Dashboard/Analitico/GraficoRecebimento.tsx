@@ -20,6 +20,7 @@ import {
   buscarRecebidoPorDia, mapaSetorDaEquipe, setoresDoOperador,
   type EquipeAnalitico, type OperadorEquipeInfo, type LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
+import { linhaNoEscopo, type EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
 
 interface GraficoRecebimentoProps {
   empresaId: string;
@@ -33,6 +34,12 @@ interface GraficoRecebimentoProps {
   linhasExternas?: LinhaRecebidaDia[];
   /** Nome da fonte no rodapé (padrão: "relatório analítico"). */
   fonteLabel?: string;
+  /**
+   * A regra de "esta linha conta neste setor?", a MESMA do card Total recebido.
+   * Sem ela o gráfico volta à regra própria que tinha — ver o comentário no
+   * filtro. Ignorado quando não há setor em foco: a empresa soma tudo.
+   */
+  escopo?: EscopoAnalitico | null;
 }
 
 const COR_LINHA = '#10b981';
@@ -62,7 +69,7 @@ function formatYAxis(v: number): string {
 export function GraficoRecebimento({
   empresaId, mes, setorId, equipes,
   operadorEquipeMap, equipesExtrasPorOperador = {},
-  linhasExternas, fonteLabel = 'relatório analítico',
+  linhasExternas, fonteLabel = 'relatório analítico', escopo,
 }: GraficoRecebimentoProps) {
   const [linhas, setLinhas]   = useState<LinhaRecebidaDia[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,12 +115,25 @@ export function GraficoRecebimento({
 
     for (const l of linhas) {
       if (setorId) {
-        const conta = l.operador_id
-          ? setoresDoOperador(
-              l.operador_id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
-            ).has(setorId)
-          // Órfão: setor da importação; sem setor_id, o setor de quem importou
-          : (l.setor_id ?? operadorEquipeMap[l.importado_por_id ?? '']?.setor_id) === setorId;
+        // `escopo` é a MESMA regra do card "Total recebido" — carimbo do
+        // relatório no setor normal, soma dos operadores no alternativo e na
+        // PaguePlay, e as origens que o setor tirou do acumulado.
+        //
+        // Antes daqui usar o escopo, este gráfico tinha regra PRÓPRIA: somava
+        // sempre por operador/clone, mesmo em setor normal. Em agosto/2026 o
+        // Play 5 fechava o card em R$ 144.380,95 e o gráfico em R$ 142.447,74
+        // — os R$ 1.933,21 dos operadores de outros setores que vieram no
+        // relatório. Duas telas, dois números, nenhum aviso.
+        const conta = escopo
+          ? linhaNoEscopo({ operador_id: l.operador_id, setor_id: l.setor_id }, escopo)
+          // Sem escopo (fonte externa antiga): regra anterior, para o gráfico
+          // não ficar vazio enquanto quem chama não passa o escopo.
+          : (l.operador_id
+              ? setoresDoOperador(
+                  l.operador_id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
+                ).has(setorId)
+              // Órfão: setor da importação; sem setor_id, o setor de quem importou
+              : (l.setor_id ?? operadorEquipeMap[l.importado_por_id ?? '']?.setor_id) === setorId);
         if (!conta) continue;
       }
       const dia = Number(l.data_pagamento.slice(8, 10));
@@ -140,7 +160,7 @@ export function GraficoRecebimento({
       diasComRecebimento: comValor.length,
       mesNum: mesN,
     };
-  }, [linhas, mes, setorId, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe]);
+  }, [linhas, mes, setorId, escopo, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe]);
 
   if (loading) {
     return (
