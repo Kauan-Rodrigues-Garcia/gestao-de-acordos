@@ -714,61 +714,155 @@ export async function limparDadosDoMes(
 }
 
 /**
- * Versão escopada por setor de `limparDadosDoMes`: remove só as linhas do mês
- * cujo operador pertence ao setor (ids em `perfilIdsDoSetor`) e os órfãos
- * (sem operador) importados por alguém do setor. Usada por líder/gerência —
+ * O setor de quem está limpando, no mesmo vocabulário de `linhaNoEscopo`.
+ *
+ * A regra desta struct é uma só: **apagar exatamente o que o card do setor
+ * soma**. Enquanto a limpeza e a soma respondiam "quais linhas são deste setor?"
+ * de jeitos diferentes, sobrava dinheiro na tela depois de limpar o mês — ver o
+ * comentário de `limparDadosDoMesSetor`.
+ */
+export interface EscopoLimpezaSetor {
+  /** Setor em foco. `null` só em base antiga, sem setor nenhum cadastrado. */
+  setorId: string | null;
+  /** Perfis do setor — membros + clones que contam (`perfilIdsDoSetor`). */
+  perfilIds: string[];
+  /**
+   * O total deste setor sai do CARIMBO do relatório (setor normal da BookPlay)
+   * ou da SOMA dos operadores (setor alternativo e PaguePlay)?
+   *
+   * É a negação de `setorSomaPorUsuarios` — a MESMA decisão que `escopoDeSetor`
+   * toma para exibir. Quem chama tem que passar a dela, não uma cópia.
+   */
+  porRelatorio: boolean;
+}
+
+/**
+ * Versão escopada por setor de `limparDadosDoMes`. Usada por líder/gerência —
  * os dados dos DEMAIS setores ficam intactos.
+ *
+ * ## O defeito que esta função tinha (BookPlay, agosto/2026)
+ *
+ * A limpeza apagava por OPERADOR (`operador_id in perfilIdsDoSetor`), enquanto o
+ * card do setor normal soma por CARIMBO (`setor_id`, ver `buscarTotalPorSetor`).
+ * São conjuntos diferentes sempre que o relatório de um setor traz gente de
+ * outro — o que é rotina: o arquivo do Play 5 trazia operadores do Play Mix
+ * Marília e do Play 4, e todos foram carimbados como Play 5 na importação.
+ *
+ * O resultado, medido no banco: depois de "Limpar mês" no Play 5 sobravam 9
+ * linhas carimbadas Play 5 (R$ 4.851,21) cujos operadores são de outros setores.
+ * A tela continuava mostrando esse valor com o mês supostamente zerado. Pior:
+ * reimportar o relatório somava o arquivo POR CIMA do resto — 7 dessas linhas
+ * (R$ 2.918,00) não estavam no arquivo novo, então o card fechava em
+ * R$ 146.032,70 para um relatório de R$ 143.114,70.
+ *
+ * Agora a limpeza espelha `linhaNoEscopo`, caso a caso:
+ *
+ *   • setor NORMAL (`porRelatorio`) → apaga pelo carimbo, seja de quem for o
+ *     operador. É literalmente o conjunto que o card soma. As linhas de um
+ *     operador do setor que foram carimbadas em OUTRO setor ficam de pé, porque
+ *     é no card do outro setor que elas aparecem.
+ *   • setor ALTERNATIVO / PaguePlay → apaga pelos operadores e pelas órfãs
+ *     carimbadas neste setor, que é como o card desses casos soma.
+ *
+ * Em ambos, a linha antiga sem carimbo (anterior à migration 20260712a) cai
+ * pelo operador ou por quem importou — mesma escada de `setorDaLinha`.
  */
 export async function limparDadosDoMesSetor(
   empresaId: string,
   mes: string,
-  perfilIdsDoSetor: string[],
+  escopo: EscopoLimpezaSetor,
 ): Promise<{ error: string | null }> {
-  if (!perfilIdsDoSetor.length) return { error: null };
+  const { setorId, perfilIds, porRelatorio } = escopo;
+  if (!setorId && !perfilIds.length) return { error: null };
   const { primeiro, fim } = limitesDoMes(mes);
 
-  const { error: errOps } = await supabase
+  /** Recorte comum a todas as passadas: esta empresa, este mês. */
+  const doMes = () => supabase
     .from('analitico_recebimentos')
     .delete()
     .eq('empresa_id', empresaId)
-    .in('operador_id', perfilIdsDoSetor)
-    .gte('data_pagamento', primeiro)
-    .lte('data_pagamento', fim);
-  if (errOps) return { error: errOps.message };
-
-  const { error: errOrfaos } = await supabase
-    .from('analitico_recebimentos')
-    .delete()
-    .eq('empresa_id', empresaId)
-    .is('operador_id', null)
-    .in('importado_por_id', perfilIdsDoSetor)
     .gte('data_pagamento', primeiro)
     .lte('data_pagamento', fim);
 
-  return { error: errOrfaos?.message ?? null };
+  if (porRelatorio) {
+    if (setorId) {
+      const { error } = await doMes().eq('setor_id', setorId);
+      if (error) return { error: error.message };
+    }
+    if (perfilIds.length) {
+      // Legado sem carimbo. O `is('setor_id', null)` é o que impede a limpeza de
+      // um setor de alcançar linha carimbada em outro.
+      const { error } = await doMes().in('operador_id', perfilIds).is('setor_id', null);
+      if (error) return { error: error.message };
+
+      const { error: errOrfaos } = await doMes()
+        .is('operador_id', null)
+        .in('importado_por_id', perfilIds)
+        .is('setor_id', null);
+      if (errOrfaos) return { error: errOrfaos.message };
+    }
+    return { error: null };
+  }
+
+  if (perfilIds.length) {
+    const { error } = await doMes().in('operador_id', perfilIds);
+    if (error) return { error: error.message };
+  }
+  if (setorId) {
+    const { error } = await doMes().is('operador_id', null).eq('setor_id', setorId);
+    if (error) return { error: error.message };
+  }
+  if (perfilIds.length) {
+    const { error } = await doMes()
+      .is('operador_id', null)
+      .in('importado_por_id', perfilIds)
+      .is('setor_id', null);
+    if (error) return { error: error.message };
+  }
+  return { error: null };
 }
 
-/** Remove todos os órfãos (sem operador) de um mês específico.
- *  Com `importadorIds`, remove só os importados por esses perfis (escopo de setor). */
+/**
+ * Remove os órfãos (sem operador) de um mês.
+ *
+ * Sem `escopo`, remove todos — é o botão de diretoria/admin. Com `escopo`,
+ * remove os que a tela do setor LISTA, e a lista usa `setor_id` com fallback
+ * para o setor de quem importou (`filtrarOrfaosDoSetor`). Filtrar só por
+ * `importado_por_id`, como antes, deixava para trás justamente o órfão que o
+ * líder estava vendo: carimbado no setor dele, importado por outra pessoa.
+ */
 export async function removerOrfaosDoMes(
   empresaId: string,
   mes: string,
-  importadorIds?: string[],
+  escopo?: { setorId: string | null; perfilIds: string[] },
 ): Promise<{ error: string | null }> {
-  if (importadorIds && !importadorIds.length) return { error: null };
+  if (escopo && !escopo.setorId && !escopo.perfilIds.length) return { error: null };
   const { primeiro, fim } = limitesDoMes(mes);
 
-  let q = supabase
+  const orfaosDoMes = () => supabase
     .from('analitico_recebimentos')
     .delete()
     .eq('empresa_id', empresaId)
     .is('operador_id', null)
     .gte('data_pagamento', primeiro)
     .lte('data_pagamento', fim);
-  if (importadorIds) q = q.in('importado_por_id', importadorIds);
 
-  const { error } = await q;
-  return { error: error?.message ?? null };
+  if (!escopo) {
+    const { error } = await orfaosDoMes();
+    return { error: error?.message ?? null };
+  }
+
+  if (escopo.setorId) {
+    const { error } = await orfaosDoMes().eq('setor_id', escopo.setorId);
+    if (error) return { error: error.message };
+  }
+  if (escopo.perfilIds.length) {
+    const { error } = await orfaosDoMes()
+      .in('importado_por_id', escopo.perfilIds)
+      .is('setor_id', null);
+    if (error) return { error: error.message };
+  }
+  return { error: null };
 }
 
 // ── Destaques do dia ──────────────────────────────────────────────────────────

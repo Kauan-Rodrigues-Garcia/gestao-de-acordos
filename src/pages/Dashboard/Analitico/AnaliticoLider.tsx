@@ -48,6 +48,8 @@ import {
   type EquipeAnalitico,
   type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
+// A mesma regra que decide como o card SOMA decide o que a limpeza APAGA.
+import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 // As contas desta tela vivem em `agregacaoLider`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
@@ -148,6 +150,7 @@ export function AnaliticoLider({
   // membros/clones. Fonte única do "total do setor" para as duas telas.
   const [totalPorSetor, setTotalPorSetor] = useState<Record<string, { total: number; ho: number; qtd: number }>>({});
   const [setoresAlternativos, setSetoresAlternativos] = useState<Set<string>>(new Set());
+  const [nomeDoSetor, setNomeDoSetor] = useState<Map<string, string>>(new Map());
 
   // ── Cargas ────────────────────────────────────────────────────────────────
   const carregarResumos = useCallback(async () => {
@@ -217,16 +220,20 @@ export function AnaliticoLider({
         // do ranking de um mês que ele trabalhou inteiro.
         setOperadoresOcultos(idsOcultosRankingQuartil(situacaoPorOperador as Record<string, SituacaoUsuario>));
       });
-    // Setores alternativos (coluna pode não existir → todos normais)
+    // Setores alternativos (coluna pode não existir → todos normais). O nome vem
+    // junto porque o aviso de "Limpar mês" precisa DIZER qual setor vai embora.
     void (async () => {
       const comFlag = await supabase.from('setores')
-        .select('id, alternativo').eq('empresa_id', empresaId);
+        .select('id, nome, alternativo').eq('empresa_id', empresaId);
       if (comFlag.error) return;
       const alt = new Set<string>();
-      for (const s of (comFlag.data as { id: string; alternativo: boolean | null }[]) ?? []) {
+      const nomes = new Map<string, string>();
+      for (const s of (comFlag.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? []) {
         if (s.alternativo) alt.add(s.id);
+        nomes.set(s.id, s.nome);
       }
       setSetoresAlternativos(alt);
+      setNomeDoSetor(nomes);
     })();
   }, [empresaId, mes]);
 
@@ -246,11 +253,44 @@ export function AnaliticoLider({
   // ── Escopo de setor (líder/gerência restritos) ────────────────────────────
   const restritoAoSetor = !podeVerTodosSetores && !!setorId;
 
+  /**
+   * "Limpar mês" apaga só o setor?
+   *
+   * Sim sempre que HÁ um setor em foco — não só quando o usuário está preso a
+   * ele. Antes a conta era `restritoAoSetor`, então um admin que filtrasse o
+   * Play 5 e clicasse em "Limpar mês" apagava agosto da EMPRESA INTEIRA: os
+   * números na tela eram de um setor e o botão agia sobre todos. O aviso dizia
+   * a verdade ("todos os registros de agosto"), mas ninguém lê um aviso
+   * esperando que ele contrarie o filtro que acabou de aplicar.
+   */
+  const limparSomenteOSetor = !!setorId;
+
+  /** Nome do setor em foco para o aviso e o toast — "o setor" se ainda não veio. */
+  const setorEmFocoLabel = (setorId && nomeDoSetor.get(setorId)) || 'seu setor';
+
   /** Todos os perfis (ativos) do setor em foco — para limpar/remover escopado. */
   const idsDoSetor = useMemo(
     () => perfilIdsDoSetor(operadorEquipeMap, setorId),
     [operadorEquipeMap, setorId],
   );
+
+  /**
+   * O escopo que "Limpar mês" e "Remover órfãos" apagam.
+   *
+   * `porRelatorio` é a MESMA decisão que o card usa para somar
+   * (`setorSomaPorUsuarios`, via `escopoDeSetor`): setor normal soma pelo
+   * carimbo do relatório, alternativo e PaguePlay somam pelos operadores.
+   * Passar aqui uma regra diferente da que soma é o defeito que fazia sobrar
+   * dinheiro na tela depois de limpar — ver `limparDadosDoMesSetor`.
+   */
+  const escopoLimpeza = useMemo(() => ({
+    setorId,
+    perfilIds: idsDoSetor,
+    porRelatorio: !setorSomaPorUsuarios({
+      isPaguePlay: isPP,
+      alternativo: !!setorId && setoresAlternativos.has(setorId),
+    }),
+  }), [setorId, idsDoSetor, isPP, setoresAlternativos]);
 
   const orfaosVisiveisSetor = useMemo(
     () => filtrarOrfaosDoSetor(orfaos, restritoAoSetor, operadorEquipeMap, setorId),
@@ -312,9 +352,11 @@ export function AnaliticoLider({
 
   async function removerTodosOrfaos() {
     setRemovendoTodos(true);
-    // Restrito ao setor: remove só os órfãos importados por gente do setor
+    // Restrito ao setor: remove os órfãos QUE A LISTA ACIMA MOSTRA — carimbados
+    // no setor, ou sem carimbo e importados por gente dele. Fora do escopo
+    // restrito a lista traz todos, e o botão remove todos: os dois casam.
     const { error } = await removerOrfaosDoMes(
-      empresaId, mes, restritoAoSetor ? idsDoSetor : undefined);
+      empresaId, mes, restritoAoSetor ? escopoLimpeza : undefined);
     if (error) toast.error(`Erro ao remover: ${error}`);
     else {
       toast.success('Todos os registros sem operador foram removidos.');
@@ -327,9 +369,10 @@ export function AnaliticoLider({
 
   async function limparMes() {
     setLimpando(true);
-    // Líder/gerência limpam SÓ o próprio setor; diretoria/admin, a empresa toda
-    const { error } = restritoAoSetor
-      ? await limparDadosDoMesSetor(empresaId, mes, idsDoSetor)
+    // Com um setor em foco, limpa só ele — seja porque o usuário está preso a
+    // esse setor, seja porque ele mesmo o filtrou. Sem setor nenhum, a empresa.
+    const { error } = limparSomenteOSetor
+      ? await limparDadosDoMesSetor(empresaId, mes, escopoLimpeza)
       : await limparDadosDoMes(empresaId, mes);
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
@@ -338,8 +381,8 @@ export function AnaliticoLider({
       await atualizarResumoMensal(empresaId, mes);
       const mesLabel = new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
       toast.success(
-        restritoAoSetor
-          ? `Dados do seu setor em ${mesLabel} excluídos. Reimporte o relatório quando necessário.`
+        limparSomenteOSetor
+          ? `Dados de ${setorEmFocoLabel} em ${mesLabel} excluídos. Reimporte o relatório quando necessário.`
           : `Dados de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`,
       );
       setConfirmandoLimpeza(false);
@@ -960,9 +1003,12 @@ export function AnaliticoLider({
                 <strong>
                   {new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
                 </strong>{' '}
-                {restritoAoSetor ? 'do seu setor ' : ''}serão excluídos permanentemente,
+                {limparSomenteOSetor ? <>do setor <strong>{setorEmFocoLabel}</strong> </> : ''}
+                serão excluídos permanentemente,
                 incluindo todas as tabulações registradas no período.
-                {restritoAoSetor && ' Os dados dos demais setores não serão afetados.'}
+                {limparSomenteOSetor
+                  ? ' Os dados dos demais setores não serão afetados.'
+                  : ' Isso alcança TODOS os setores da empresa — para limpar apenas um, filtre o setor antes.'}
               </p>
               <p className="text-xs text-muted-foreground">
                 Esta ação não pode ser desfeita. Após a exclusão, reimporte o relatório para restaurar os dados.
