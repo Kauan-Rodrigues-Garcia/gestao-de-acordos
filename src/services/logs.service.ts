@@ -568,10 +568,11 @@ export function baixarCsv(csv: string, nomeArquivo: string): void {
  * Apaga logs mais antigos que `dias`. Só super_admin, mínimo de 30 dias, e a
  * própria função registra o expurgo.
  *
- * A versão 1.0 tinha um "Limpar Logos" que chamava DELETE via PostgREST numa
- * tabela sem política de DELETE: respondia sucesso e não apagava nada. Agora o
- * caminho é a RPC, e o número devolvido é o número de linhas que saíram de
- * verdade.
+ * A versão 1.0 tinha um "Limpar Logs" que chamava DELETE direto pelo PostgREST
+ * e apagava a trilha inteira da empresa — sem piso de idade, sem registro de
+ * quem apagou, atrás de um `window.confirm`. Agora o caminho é a RPC: o piso de
+ * 30 dias é do banco, o expurgo se registra sozinho, e o número devolvido é o
+ * de linhas que saíram de verdade.
  */
 export async function expurgarLogs(
   dias: number,

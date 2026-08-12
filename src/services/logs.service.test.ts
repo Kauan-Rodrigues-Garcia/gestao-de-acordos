@@ -367,9 +367,9 @@ describe('expurgarLogs', () => {
   });
 
   it('propaga a mensagem de recusa em vez de fingir sucesso', async () => {
-    // Era exatamente aqui que a versão 1.0 mentia: DELETE via PostgREST numa
-    // tabela sem política de DELETE respondia sucesso com zero linhas, e a tela
-    // dizia "Logs apagados com sucesso".
+    // A recusa mais importante é a do piso de 30 dias, que mora no banco: a
+    // versão 1.0 apagava a trilha inteira sem piso nenhum, e a tela não tinha
+    // como saber se o pedido foi recusado.
     estado.rpcResultado = { data: null, error: { message: 'Retenção mínima de 30 dias' } };
     const r = await expurgarLogs(5);
     expect(r.removidos).toBe(0);

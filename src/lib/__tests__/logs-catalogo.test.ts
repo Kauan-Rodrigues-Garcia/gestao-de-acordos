@@ -35,7 +35,7 @@ describe('descreverAcao', () => {
   });
 
   it('humaniza ação FORA do catálogo pela convenção <alvo>_<verbo>', () => {
-    // Este é o caso que importa: a migration cria triggers para 20 tabelas e
+    // Este é o caso que importa: a migration cria triggers para 29 tabelas e
     // pode ganhar mais depois. Sem esta regra, cada tabela nova apareceria com o
     // nome cru até alguém lembrar de editar o catálogo.
     expect(descreverAcao('pix_lixeira_criado')).toBe('Pix na lixeira criado');

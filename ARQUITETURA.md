@@ -185,7 +185,7 @@ Setores: Em dia, Play 1, Play 2, Play 3, Play 4, Play 5, Play 6.
 à mão em sete pontos do frontend: quase nada ficava registrado (editar acordo,
 mudar cargo, alterar permissão, aprovar comissão, mexer em meta — nada disso
 gerava log), e o que ficava não dizia o que havia mudado. Agora uma trigger
-genérica (`fn_log_auditoria`) audita **20 tabelas**, com diferença campo a campo,
+genérica (`fn_log_auditoria`) audita **29 tabelas**, com diferença campo a campo,
 frase pronta em português, severidade e rótulo humano — independente de qual tela,
 RPC ou importação alterou a linha.
 
@@ -296,7 +296,35 @@ em `fn_user_has_any_role` (migration `20260717b`) — os dois lados mudam juntos
 - Perfil reservado para equipe técnica
 - Cross-tenant: acessa dados de todas as empresas
 - Ignora validação de slug de tenant no login
-- Não é criado via fluxo normal de cadastro
+- Não é criado via fluxo normal de cadastro — só outro `super_admin` cria
+
+> **Acesso total é por construção, não por lista.** Nunca houve allowlist de
+> usuários: o cargo, sozinho, sempre valeu cross-tenant. A migration
+> `20260812b_super_admin_acesso_total.sql` fechou as duas frestas que ainda
+> deixavam isso ao acaso:
+>
+> 1. **Uma política RLS de super_admin em cada tabela** (`<tabela>_super_admin_total`,
+>    `FOR ALL USING (fn_user_is_super_admin())` — 58 tabelas). O projeto tem 231
+>    políticas e a maioria filtra por empresa; duas escreviam
+>    `empresa_id = fn_user_empresa_id()` na mão em vez de chamar
+>    `fn_can_access_empresa()` (`acordos_delete_own` e `perfis_lider_update`,
+>    confirmadas no banco), o que deixava a tabela voltar **vazia** na outra
+>    empresa — sem erro e sem aviso. Políticas permissivas se somam por OR, então
+>    uma por tabela basta, e a próxima política nova não precisa lembrar do caso.
+> 2. **Linha de `cargos_permissoes` para `super_admin` em toda empresa**, com
+>    todas as chaves `true`, mais trigger em `empresas` para empresa nova já
+>    nascer com ela. Antes não existia linha nenhuma: funcionava só pelo atalho
+>    de `useCargoPermissoes` (`if (isAdmin) return true`), e o banco respondia que
+>    o cargo não podia nada.
+>
+> **Exceção deliberada:** `logs_sistema` **não** recebe a política `FOR ALL` — a
+> trilha de auditoria é append-only (`20260812a`). O super_admin já lê tudo pela
+> `logs_sis_admin` e apaga por idade pela `fn_logs_expurgar`; o que ele não faz é
+> reescrever a própria pegada.
+>
+> **Cuidado operacional:** o código nunca bloqueia super_admin — marcar a conta
+> como desligada ou inativa **não** revoga o acesso (ver `rejectDesligado` em
+> `useAuth`). Para tirar o acesso de um super_admin, **troque o cargo dele**.
 
 ### Proteção de Rotas
 

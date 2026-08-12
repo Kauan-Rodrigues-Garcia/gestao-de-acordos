@@ -27,15 +27,23 @@
 --      quanto.
 --
 --   4. O BOTÃO "LIMPAR LOGS" NUNCA APAGOU NADA. A tabela tem RLS ligada e
---      políticas só de SELECT e INSERT. Sem política de DELETE, o PostgREST
---      responde 204 com zero linhas afetadas — a tela dava "Logs apagados com
---      sucesso" e nada acontecia. Ver seção 8.
+--      políticas só de SELECT e INSERT nos ARQUIVOS do repositório. Ver seção 8.
+--
+--      CORREÇÃO (12/08/2026, depois de conferir o banco de produção): a
+--      afirmação acima estava errada. Existe no banco uma política
+--      `logs_sis_delete_admin` (DELETE, para administrador e super_admin) que
+--      NÃO está em migration nenhuma — foi criada direto no SQL Editor. Somada
+--      ao GRANT padrão da Supabase, ela fazia o botão APAGAR DE VERDADE.
+--      Nenhum log chegou a ser perdido (o mais antigo é de 01/04/2026, início
+--      do projeto), e o REVOKE da seção 8 deixou a política inerte. Ela é
+--      removida na migration 20260812d.
 --
 -- ── A decisão ───────────────────────────────────────────────────────────────
 -- Auditoria confiável não pode morar na tela. Ela vira TRIGGER: o banco grava
 -- porque a linha mudou, não porque alguém se lembrou de gravar. Uma única
--- função genérica (`fn_log_auditoria`) atende 20 tabelas, com diff campo a
--- campo, frase pronta em português e severidade.
+-- função genérica (`fn_log_auditoria`) atende as tabelas listadas na seção 5
+-- (29 delas existiam no banco e ganharam gatilho), com diff campo a campo,
+-- frase pronta em português e severidade.
 --
 -- O frontend continua registrando o que o banco não tem como ver — login,
 -- login recusado, logout, exportação de dados, resumo de importação, leitura
@@ -1037,9 +1045,11 @@ GRANT EXECUTE ON FUNCTION public.fn_logs_resumo(
 -- explícita: sem política de UPDATE, sem política de DELETE, e um REVOKE para
 -- que a ausência seja intenção declarada e não esquecimento.
 --
--- Isto também conserta, de verdade, o "Limpar Logs" que respondia sucesso e
--- não apagava nada: apagar deixa de ser DELETE do PostgREST e passa a ser uma
--- função com regra — só super_admin, por idade, e ela mesma se registra.
+-- É o REVOKE que sustenta a promessa. Política não concede privilégio: sem
+-- UPDATE/DELETE no papel `authenticated`, nenhuma política — nem a
+-- `logs_sis_delete_admin`, que existia no banco fora do repositório — consegue
+-- apagar linha. Apagar deixa de ser DELETE do PostgREST e passa a ser uma
+-- função com regra: só super_admin, por idade, e ela mesma se registra.
 REVOKE UPDATE, DELETE ON public.logs_sistema FROM authenticated;
 
 DROP POLICY IF EXISTS "logs_sis_admin" ON public.logs_sistema;

@@ -6,8 +6,8 @@
  * ## O que a versão 1.0 era
  * Uma tabela de sete colunas com as últimas 200 linhas, dois filtros (tabela e
  * empresa), a ação em maiúsculas sem tradução, `JSON.stringify(detalhes)`
- * truncado na última coluna, e um botão "Limpar Logs" que respondia sucesso sem
- * apagar nada (a tabela tem RLS e não tinha política de DELETE). Como quase nada
+ * truncado na última coluna, e um botão "Limpar Logs" que apagava a trilha
+ * inteira da empresa com um `window.confirm` de uma linha. Como quase nada
  * gravava log, a tela costumava estar vazia — e quando não estava, dizia
  * "UPDATE em acordos" sem dizer o que mudou.
  *
@@ -23,7 +23,7 @@
  *      requisição (IP, navegador, rota) e a linha de vida do registro.
  *
  * A cobertura do que é registrado não mora aqui: mora em triggers de banco
- * (migration 20260812a), que auditam 20 tabelas independentemente do caminho
+ * (migration 20260812a), que auditam 29 tabelas independentemente do caminho
  * que alterou a linha. Esta tela é o leitor daquela trilha.
  */
 import { useEffect, useMemo, useState } from 'react';
