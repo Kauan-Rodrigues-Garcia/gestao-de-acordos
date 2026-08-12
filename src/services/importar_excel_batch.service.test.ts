@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processarImportacaoEmLote } from './importar_excel_batch.service';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
+import { registrarLog } from './logs.service';
 
 // ── Mock do Supabase (estilo builder thenable) ──────────────────────────
 const calls: any[] = [];
@@ -47,6 +48,11 @@ vi.mock('@/services/notificacoes.service', () => ({
 }));
 vi.mock('@/services/lixeira.service', () => ({
   enviarParaLixeira: vi.fn().mockResolvedValue({ ok: true })
+}));
+// Trilha de auditoria (Logs 2.0, migration 20260812a). O serviço não escreve
+// mais na tabela `logs_sistema`: chama `registrarLog`, que fala com a RPC.
+vi.mock('@/services/logs.service', () => ({
+  registrarLog: vi.fn().mockResolvedValue('log-id')
 }));
 
 describe('processarImportacaoEmLote', () => {
@@ -214,7 +220,6 @@ describe('processarImportacaoEmLote', () => {
       { data: null, error: null }, // delete
       { data: null, error: null }, // insert novo
     ];
-    resultsByTable['logs_sistema'] = [{ data: null, error: null }];
 
     const params: any = {
       payloads: [{ linhaOriginal: 1, nr: 'NR1', registro: { nr_cliente: 'NR1' }, nomeCliente: 'C1' }],
@@ -238,8 +243,26 @@ describe('processarImportacaoEmLote', () => {
     const callDelete = calls.find(c => c.operation === 'delete' && c.table === 'acordos');
     expect(callDelete.filters).toContainEqual(['eq', 'id', 'old-a']);
 
-    const callLog = calls.find(c => c.operation === 'insert' && c.table === 'logs_sistema');
-    expect(callLog.payload.acao).toBe('transferencia_nr_import');
+    // Auditoria: a transferência de titularidade e o resumo da importação.
+    // As duas coisas são eventos distintos e as duas precisam existir — o
+    // primeiro explica de quem para quem o NR passou e quem autorizou; o segundo
+    // explica quantas linhas do arquivo entraram.
+    const logs = vi.mocked(registrarLog).mock.calls.map(c => c[0]);
+
+    const logTransferencia = logs.find(l => l.acao === 'acordo_transferido');
+    expect(logTransferencia).toBeDefined();
+    expect(logTransferencia!.categoria).toBe('importacao');
+    expect(logTransferencia!.registroId).toBe('old-a');
+    expect(logTransferencia!.detalhes).toMatchObject({
+      nr: 'NR1',
+      aprovado_por: 'Lider',
+      operador_anterior: 'op-old',
+      operador_novo: 'op-1',
+    });
+
+    const logResumo = logs.find(l => l.acao === 'importacao_concluida');
+    expect(logResumo).toBeDefined();
+    expect(logResumo!.detalhes).toMatchObject({ linhas_no_arquivo: 1, inseridos: 1 });
 
     expect(criarNotificacao).toHaveBeenCalled();
   });

@@ -11,6 +11,7 @@
  * assim a faixa "Você está como X" e o botão Sair continuam funcionando.
  */
 import { supabase } from '@/lib/supabase';
+import { registrarLog } from '@/services/logs.service';
 
 const K_ADMIN = 'impersonacao:admin';
 const K_ATIVA = 'impersonacao:ativa';
@@ -136,20 +137,39 @@ export async function sairImpersonacao(): Promise<void> {
     refresh_token: salva.refresh_token,
   });
 
-  // Auditoria de encerramento (já de volta como admin; best-effort)
+  // Auditoria de encerramento (já de volta como admin; best-effort).
+  //
+  // Este log NUNCA existiu: `logs_sistema.empresa_id` é NOT NULL desde
+  // 11_tenant_lockdown, o insert não preenchia a coluna (nem
+  // `ImpersonacaoAtiva` nem `SessaoAdminSalva` carregam a empresa) e o erro
+  // morria no `catch` abaixo. Ou seja: a trilha registrava o INÍCIO de cada
+  // impersonação e nunca o fim — pela leitura dela, todo administrador que já
+  // usou "entrar como" ainda estaria dentro da conta de alguém.
+  //
+  // `fn_log_registrar` resolve a empresa a partir do perfil de quem chama, e a
+  // sessão do admin já foi restaurada acima — por isso o registro agora completa.
   if (!error && ativa) {
-    try {
-      // NOTA: logs_sistema.empresa_id é NOT NULL no banco e não é preenchido aqui
-      // (ImpersonacaoAtiva/SessaoAdminSalva não carregam empresa_id) — o insert já
-      // falhava silenciosamente (catch abaixo), pré-existente a este fix de tipos.
-      await supabase.from('logs_sistema').insert({
-        usuario_id: salva.adminId,
-        acao: 'impersonar_fim',
-        tabela: 'auth.users',
-        registro_id: ativa.alvoId,
-        detalhes: { alvo_nome: ativa.alvoNome, inicio: ativa.inicio, fim: new Date().toISOString() },
-      } as never);
-    } catch {/* segue */}
+    const fim = new Date().toISOString();
+    await registrarLog({
+      acao: 'impersonar_fim',
+      categoria: 'seguranca',
+      severidade: 'critico',
+      descricao: `Saiu do modo "entrar como" de ${ativa.alvoNome}`,
+      tabela: 'auth.users',
+      registroId: ativa.alvoId,
+      alvoTipo: 'usuario',
+      alvoRotulo: ativa.alvoNome,
+      detalhes: {
+        alvo_nome: ativa.alvoNome,
+        inicio: ativa.inicio,
+        fim,
+        duracao_segundos: Math.max(
+          0,
+          Math.round((new Date(fim).getTime() - new Date(ativa.inicio).getTime()) / 1000),
+        ),
+      },
+      usuarioId: salva.adminId,
+    });
   }
 
   notificar();

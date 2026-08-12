@@ -71,13 +71,16 @@ export default defineConfig({
       ],
       thresholds: {
         // Catraca: cada valor fica logo abaixo do que a suíte entrega hoje
-        // (27,93 / 22,94 / 21,56 / 26,84 em 2026-08-03). A folga é pequena de
-        // propósito — o portão só serve enquanto doer descer. Ao subir a
-        // cobertura, suba estes números junto, no mesmo commit.
-        lines: 27.5,
-        functions: 22.5,
-        branches: 21,
-        statements: 26.5,
+        // (32,76 / 27,26 / 26,46 / 31,39 em 2026-08-12, com os testes de Logs
+        // 2.0). A folga é pequena de propósito — o portão só serve enquanto doer
+        // descer. Ao subir a cobertura, suba estes números junto, no mesmo
+        // commit.
+        //
+        // Histórico: 27,5 / 22,5 / 21 / 26,5 em 2026-08-03.
+        lines: 32.5,
+        functions: 27,
+        branches: 26,
+        statements: 31,
       },
     },
   },

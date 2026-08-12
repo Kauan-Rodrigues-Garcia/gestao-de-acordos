@@ -28,6 +28,7 @@ import type { ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId } from '@/services/nr_registros.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
+import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { MetaProgressoHeader } from '@/components/MetaProgressoHeader';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
@@ -572,11 +573,8 @@ export default function Dashboard() {
     if (error) { toast.error('Erro ao excluir acordo: ' + error.message); }
     else {
       liberarNrPorAcordoId(a.id);
-      supabase.from('logs_sistema').insert({
-        usuario_id: perfil?.id ?? null, acao: 'exclusao_acordo', tabela: 'acordos',
-        registro_id: a.id, empresa_id: empresa?.id ?? null,
-        detalhes: { nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: new Date().toISOString() },
-      }).then(({ error: logError }) => { if (logError) console.warn('[excluirAcordo] log error:', logError.message); });
+      // Auditada pela trigger `trg_log_acordos` (migration 20260812a), que grava
+      // a linha inteira e registra se o acordo foi para a lixeira.
       removeAcordo(a.id);
       toast.success(`Acordo #${a.nr_cliente} excluído!`);
     }
@@ -599,13 +597,24 @@ export default function Dashboard() {
       if (error) { toast.error(`Erro ao excluir acordos: ${error.message}`); return; }
       ids.forEach(id => liberarNrPorAcordoId(id));
       ids.forEach(id => removeAcordo(id));
-      const agora = new Date().toISOString();
-      acordosParaExcluir.forEach(acordo => {
-        supabase.from('logs_sistema').insert({
-          usuario_id: perfil?.id ?? null, acao: 'exclusao_acordo', tabela: 'acordos',
-          registro_id: acordo.id, empresa_id: empresa?.id ?? null,
-          detalhes: { nome_cliente: acordo.nome_cliente, nr_cliente: acordo.nr_cliente, excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: agora, modo: 'lote' },
-        }).then(({ error: logError }) => { if (logError) console.warn('[excluirSelecionados] log error:', logError.message); });
+      // Cada acordo tem seu log pela trigger. O que falta é o fato de terem
+      // saído juntos, num único clique — um log de lote em vez de N iguais.
+      void registrarLog({
+        acao: 'acordo_excluido_em_lote',
+        categoria: 'acordo',
+        severidade: 'aviso',
+        descricao: `Excluiu ${ids.length} acordo(s) em uma única ação`,
+        empresaId: empresa?.id ?? null,
+        tabela: 'acordos',
+        alvoTipo: 'acordo',
+        detalhes: {
+          quantidade: ids.length,
+          acordos: acordosParaExcluir
+            .slice(0, 50)
+            .map(a => `NR ${a.nr_cliente} — ${a.nome_cliente}`),
+          truncado: acordosParaExcluir.length > 50,
+          origem_tela: 'dashboard',
+        },
       });
       setSelecionados([]);
       toast.success(`${ids.length} acordo(s) excluído(s) com sucesso!`);

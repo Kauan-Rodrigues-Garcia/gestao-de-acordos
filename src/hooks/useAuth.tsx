@@ -41,6 +41,7 @@ import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
+import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
 
 interface AuthContextType {
   user: User | null;
@@ -309,6 +310,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (lookupError || !emailResult) {
+        // Identificador que não resolve: `fn_log_login_recusado` confirma no
+        // banco se existe alguém com esse usuário/e-mail e só grava nesse caso —
+        // então isto não enche a trilha com nomes inventados.
+        void registrarLoginRecusado(identifier.trim(), 'usuario_nao_encontrado');
         return { error: 'Usuário não encontrado neste site. Tente novamente com seu e-mail ou confirme se o cadastro está vinculado à empresa correta.' };
       }
       email = emailResult;
@@ -318,10 +323,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) {
-        if (error.message.toLowerCase().includes('email not confirmed')) {
+        // Toda recusa é registrada, com o motivo separado: senha errada e e-mail
+        // não confirmado são problemas diferentes, e distingui-los na trilha é o
+        // que permite reconhecer força bruta em vez de cadastro pela metade.
+        const motivo = error.message.toLowerCase().includes('email not confirmed')
+          ? 'email_nao_confirmado'
+          : error.message.toLowerCase().includes('invalid login credentials')
+            ? 'credenciais_invalidas'
+            : 'erro_autenticacao';
+        void registrarLoginRecusado(email, motivo);
+
+        if (motivo === 'email_nao_confirmado') {
           return { error: 'Email não confirmado. Entre em contato com o administrador.' };
         }
-        if (error.message.toLowerCase().includes('invalid login credentials')) {
+        if (motivo === 'credenciais_invalidas') {
           return { error: 'Credenciais inválidas. Verifique seu usuário e senha.' };
         }
         return { error: error.message };
@@ -329,9 +344,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (data.user) {
         const { tenantMismatch, missingProfile } = await fetchPerfil(data.user.id);
         if (tenantMismatch || missingProfile) {
+          // Senha correta, empresa errada. É o caso mais importante desta lista
+          // do ponto de vista de segurança: credencial válida tentando entrar
+          // pelo site de outra operação.
+          void registrarLog({
+            acao: 'acesso_negado',
+            categoria: 'seguranca',
+            severidade: 'critico',
+            descricao: tenantMismatch
+              ? 'Entrou com senha correta em um site de outra empresa — acesso negado'
+              : 'Entrou com senha correta sem perfil cadastrado — acesso negado',
+            tabela: 'auth.users',
+            registroId: data.user.id,
+            alvoTipo: 'usuario',
+            detalhes: { motivo: tenantMismatch ?? missingProfile },
+          });
           await forceSignOut();
           return { error: tenantMismatch ?? missingProfile };
         }
+
+        // `void` e não `await`: login é o caminho mais sensível a latência do
+        // sistema, e a requisição do log completa sozinha — ela não está
+        // amarrada ao ciclo de vida de nenhum componente. O carimbo de tempo é
+        // do banco (`criado_em DEFAULT now()`), então a ordem na trilha continua
+        // certa mesmo que a resposta chegue depois da navegação.
+        void registrarLog({
+          acao: 'login',
+          categoria: 'autenticacao',
+          descricao: 'Entrou no sistema',
+          tabela: 'auth.users',
+          registroId: data.user.id,
+          alvoTipo: 'usuario',
+          detalhes: { por: identifier.includes('@') ? 'email' : 'usuario' },
+        });
       }
       return { error: null };
     } finally {
@@ -341,6 +386,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     isManualSignOut.current = true;
+    // Antes de derrubar a sessão: depois do signOut, `auth.uid()` é nulo e a
+    // função de log não tem como saber quem saiu.
+    await registrarLog({
+      acao: 'logout',
+      categoria: 'autenticacao',
+      descricao: 'Saiu do sistema',
+      tabela: 'auth.users',
+      registroId: perfil?.id ?? null,
+      alvoTipo: 'usuario',
+    });
     await forceSignOut();
     setPerfil(null);
     setEmpresa(null);

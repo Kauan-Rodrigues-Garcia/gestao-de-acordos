@@ -129,21 +129,34 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     }
 
     // 5) Auditoria (best-effort — não bloqueia a impersonação se falhar)
+    //
+    // Escrita direta, e não pela RPC `fn_log_registrar`: a chamada usa
+    // service_role e não tem `auth.uid()`, então a RPC não teria como saber quem
+    // é o autor. O formato segue Logs 2.0 (migration 20260812a).
+    //
+    // Severidade crítica sem hesitação: a partir daqui, tudo que a trilha
+    // registrar em nome do alvo foi feito com a mão do administrador.
     await fetch(`${url}/rest/v1/logs_sistema`, {
       method: 'POST',
       headers: { ...admin, Prefer: 'return=minimal' },
       body: JSON.stringify({
         usuario_id: caller.id,
+        usuario_nome: callerPerfil.nome ?? null,
         acao: 'impersonar_inicio',
+        categoria: 'seguranca',
+        severidade: 'critico',
+        descricao: `Entrou como ${alvo.nome ?? alvo.email} — os eventos seguintes desta sessão são desta pessoa`,
         tabela: 'auth.users',
         registro_id: alvo.id,
+        alvo_tipo: 'usuario',
+        alvo_rotulo: alvo.nome ?? alvo.email,
         empresa_id: callerPerfil.empresa_id ?? null,
+        origem: 'api',
         detalhes: {
           admin_nome: callerPerfil.nome ?? null,
           alvo_id: alvo.id,
           alvo_nome: alvo.nome ?? null,
           alvo_email: alvo.email,
-          em: new Date().toISOString(),
         },
       }),
     }).catch(() => {/* auditoria falhou, segue */});

@@ -160,20 +160,34 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     }).catch(() => {/* senha já trocou; não falha a operação por causa da flag */});
 
     // 6) Auditoria (best-effort). A senha NUNCA entra no log.
+    //
+    // Escrita direta na tabela, e não pela RPC `fn_log_registrar`: aqui não
+    // existe `auth.uid()` — a chamada usa service_role —, e a RPC resolveria o
+    // autor como nulo. O payload segue o formato de Logs 2.0 (migration
+    // 20260812a) para que a linha caia nas mesmas categorias e filtros da tela.
     await fetch(`${url}/rest/v1/logs_sistema`, {
       method: 'POST',
       headers: { ...admin, Prefer: 'return=minimal' },
       body: JSON.stringify({
         usuario_id: caller.id,
+        usuario_nome: callerPerfil.nome ?? null,
         acao: 'senha_redefinida',
+        categoria: 'seguranca',
+        severidade: 'critico',
+        descricao: `Redefiniu a senha de ${alvo.nome ?? 'um usuário'}`,
         tabela: 'auth.users',
         registro_id: alvo.id,
+        alvo_tipo: 'usuario',
+        alvo_rotulo: alvo.nome ?? alvo.id,
         empresa_id: callerPerfil.empresa_id ?? null,
+        origem: 'api',
         detalhes: {
           admin_nome: callerPerfil.nome ?? null,
           alvo_id: alvo.id,
           alvo_nome: alvo.nome ?? null,
-          em: new Date().toISOString(),
+          // A senha é temporária de propósito: o alvo tem de trocá-la no próximo
+          // acesso, e registrar isso explica por que o botão de chave voltou.
+          exige_troca_no_proximo_acesso: true,
         },
       }),
     }).catch(() => {/* auditoria falhou, segue */});

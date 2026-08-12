@@ -131,7 +131,7 @@ src/
 | `public.historico_acordos` | Log de alterações nos acordos |
 | `public.logs_whatsapp` | Log de mensagens enviadas |
 | `public.modelos_mensagem` | Templates de mensagem |
-| `public.logs_sistema` | Log geral do sistema |
+| `public.logs_sistema` | Trilha de auditoria do sistema — **append-only**, escrita por gatilho. Vide [Logs 2.0](#logs-20--trilha-de-auditoria) |
 | `public.notificacoes` | Notificações internas |
 | `public.nr_registros` | Controle de NR únicos por empresa |
 | `public.analitico_recebimentos` | Recebimentos do ERP — vide seção Analítico |
@@ -175,6 +175,51 @@ comportamento".
 
 Execute o script `supabase/migrations/02_seed_setores.sql` no SQL Editor do Supabase.
 Setores: Em dia, Play 1, Play 2, Play 3, Play 4, Play 5, Play 6.
+
+### Logs 2.0 — trilha de auditoria
+
+> Migration `20260812a_logs_2_0.sql`. Tela: **Configurações → Logs**
+> (`src/pages/AdminLogs/`).
+
+**Quem grava é o banco, não a tela.** Até a versão 1.0, `logs_sistema` era escrita
+à mão em sete pontos do frontend: quase nada ficava registrado (editar acordo,
+mudar cargo, alterar permissão, aprovar comissão, mexer em meta — nada disso
+gerava log), e o que ficava não dizia o que havia mudado. Agora uma trigger
+genérica (`fn_log_auditoria`) audita **20 tabelas**, com diferença campo a campo,
+frase pronta em português, severidade e rótulo humano — independente de qual tela,
+RPC ou importação alterou a linha.
+
+| Camada | Responsabilidade |
+|--------|------------------|
+| `fn_log_auditoria()` | Trigger genérica. Configurada por `TG_ARGV`: categoria, slug da ação, substantivo da frase, colunas do rótulo, colunas ignoradas, coluna do tenant, severidade base |
+| `fn_log_registrar(...)` | Única porta de escrita. Resolve autor pela sessão (**não aceita autoria forjada**), força a empresa de quem não é super_admin, mascara dado sensível, captura IP e navegador dos headers do PostgREST. Nunca levanta exceção |
+| `fn_log_login_recusado(...)` | Chamável por **anônimo** — é o único evento que existe antes de haver sessão. Só grava se o identificador existir e agrupa rajadas de 30 s numa linha |
+| `fn_logs_resumo(...)` | Agregados da tela calculados sobre o filtro inteiro. `SECURITY INVOKER`: respeita o RLS de quem chama |
+| `fn_logs_expurgar(dias)` | Único caminho de exclusão. Só super_admin, retenção mínima de 30 dias, e registra o próprio expurgo |
+| `fn_log_diff` · `fn_log_mascarar` · `fn_log_rotulo_campo` · `fn_log_contexto` | Diff, máscara de dado pessoal, rótulo de campo e contexto da requisição |
+
+**A trilha é append-only.** Sem política de `UPDATE`, sem política de `DELETE`, e
+com `REVOKE` explícito — nenhum evento pode ser editado ou apagado
+individualmente, nem por administrador. O `INSERT` direto só aceita linhas com
+`usuario_id = auth.uid()`.
+
+**O que o frontend registra** (o que o banco não tem como ver): entrada, saída e
+tentativa recusada de login; acesso negado por empresa errada; exportação de
+dados; **resumo das três importações** (acordos por planilha, Analítico e
+Recebimento Diário — quantas linhas entraram, quantas o banco já tinha, quantas
+foram bloqueadas ou reconciliadas e por quê); lembrete de WhatsApp enviado;
+exclusão em lote; troca de vínculo Extra com o líder que autorizou; transferência
+pelo Analítico; início e fim de impersonação; redefinição de senha. Tudo via
+`registrarLog()` de `src/services/logs.service.ts` — nunca `insert` direto.
+
+**Fora da auditoria por trigger, de propósito:** `analitico_recebimentos` e
+`diario_recebimentos` (importação em massa — o evento útil é o resumo),
+`notificacoes` (derivada de outras triggers), `logs_sistema` (não se audita o
+próprio livro) e `pet_*` (aba fora do ar).
+
+**Retenção recomendada: 180 dias.** Uma linha de log por linha alterada é o preço
+de "tudo registrado"; os índices cobrem todos os filtros da tela e o expurgo por
+idade existe para quando a tabela crescer.
 
 ---
 

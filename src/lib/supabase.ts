@@ -204,6 +204,18 @@ export interface ModeloMensagem {
   criado_em: string;
 }
 
+/**
+ * Uma linha da trilha de auditoria.
+ *
+ * Os campos a partir de `categoria` vieram com a migration 20260812a (Logs
+ * 2.0). Todos opcionais no tipo porque o histórico anterior à migration existe
+ * e é lido pela mesma tela — `descricao` nula, por exemplo, significa "linha
+ * antiga", e a tela cai em `descreverAcao(acao)`.
+ *
+ * `usuario_nome`/`email`/`cargo` são desnormalizados de propósito: `usuario_id`
+ * é ON DELETE SET NULL, e desligar alguém apagava a autoria de todo o histórico
+ * dele.
+ */
 export interface LogSistema {
   id: string;
   usuario_id: string | null;
@@ -213,7 +225,25 @@ export interface LogSistema {
   empresa_id?: string;
   detalhes: Record<string, unknown> | null;
   criado_em: string;
+
+  categoria?: string;
+  severidade?: string;
+  descricao?: string | null;
+  usuario_nome?: string | null;
+  usuario_email?: string | null;
+  usuario_cargo?: string | null;
+  alvo_tipo?: string | null;
+  alvo_rotulo?: string | null;
+  antes?: Record<string, unknown> | null;
+  depois?: Record<string, unknown> | null;
+  campos?: string[] | null;
+  origem?: string;
+  rota?: string | null;
+  ip?: string | null;
+  user_agent?: string | null;
+
   perfis?: Perfil;
+  empresas?: { id: string; nome: string } | null;
 }
 
 export interface Notificacao {

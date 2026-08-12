@@ -4,8 +4,8 @@
  * Testes do componente ModalFilaWhatsApp:
  *   - render básico e progresso
  *   - botão "Enviar todos" condicional
- *   - abrir próximo + log supabase
- *   - ausência de log quando sem usuarioId
+ *   - abrir próximo + registro na trilha de auditoria
+ *   - ausência de registro quando sem usuarioId
  *   - copiar mensagem individual
  *   - copiar todas as mensagens
  *   - expandir/colapsar item
@@ -27,21 +27,22 @@ const mocks = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastWarning: vi.fn(),
   toastError: vi.fn(),
-  supabaseCalls: [] as Array<{ table: string; payload?: unknown }>,
+  /** Chamadas a `registrarLog` — o que o componente pede que seja auditado. */
+  logsRegistrados: [] as Array<Record<string, unknown>>,
 }));
 
 // Variável de controle para tenantSlug (alterável por teste)
 let tenantSlugMock = 'pagueplay';
 
-// ── 1) Supabase ────────────────────────────────────────────────────────────
-vi.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: (table: string) => ({
-      insert: (payload: unknown) => {
-        mocks.supabaseCalls.push({ table, payload });
-        return Promise.resolve({ error: null });
-      },
-    }),
+// ── 1) Trilha de auditoria ────────────────────────────────────────────────
+// Mock no SERVIÇO e não no supabase: desde Logs 2.0 (migration 20260812a) o
+// componente não escreve na tabela — ele chama `registrarLog`, que fala com a
+// RPC `fn_log_registrar`. O teste verifica a intenção do componente ("registrar
+// o envio deste item"), não o transporte, que tem os próprios testes.
+vi.mock('@/services/logs.service', () => ({
+  registrarLog: (params: Record<string, unknown>) => {
+    mocks.logsRegistrados.push(params);
+    return Promise.resolve('log-id');
   },
 }));
 
@@ -106,7 +107,7 @@ function criarFila(overrides: Partial<ItemFila>[] = []): ItemFila[] {
 // ── Setup / teardown ──────────────────────────────────────────────────────
 beforeEach(() => {
   // Resetar chamadas do supabase
-  mocks.supabaseCalls.length = 0;
+  mocks.logsRegistrados.length = 0;
   // Resetar spies de toast
   mocks.toastSuccess.mockReset();
   mocks.toastWarning.mockReset();
@@ -187,18 +188,21 @@ describe('ModalFilaWhatsApp', () => {
     const badges = screen.getAllByText('2');
     expect(badges.length).toBeGreaterThanOrEqual(1);
 
-    // Log no supabase
+    // Registro na trilha de auditoria
     await waitFor(() => {
-      expect(mocks.supabaseCalls).toHaveLength(1);
+      expect(mocks.logsRegistrados).toHaveLength(1);
     });
-    const call = mocks.supabaseCalls[0];
-    expect(call.table).toBe('logs_sistema');
-    expect((call.payload as any).acao).toBe('envio_lembrete_whatsapp');
-    expect((call.payload as any).detalhes.acordo_id).toBe('a1');
+    const log = mocks.logsRegistrados[0];
+    expect(log.acao).toBe('whatsapp_lembrete_enviado');
+    expect(log.categoria).toBe('whatsapp');
+    expect(log.registroId).toBe('a1');
+    // A frase pronta tem de nomear o cliente: é ela que a tela de Logs mostra.
+    expect(log.descricao).toContain('Ana');
+    expect((log.detalhes as any).modo).toBe('lote');
   });
 
   // 5. Sem usuarioId → não registra log
-  it('5. sem usuarioId, "Abrir próximo" não registra log no supabase', async () => {
+  it('5. sem usuarioId, "Abrir próximo" não registra log', async () => {
     const onClose = vi.fn();
     render(
       <ModalFilaWhatsApp fila={criarFila()} onClose={onClose} />,
@@ -211,7 +215,7 @@ describe('ModalFilaWhatsApp', () => {
       expect(screen.getByText('1 enviado(s)')).toBeInTheDocument();
     });
 
-    expect(mocks.supabaseCalls).toHaveLength(0);
+    expect(mocks.logsRegistrados).toHaveLength(0);
   });
 
   // 6. Copiar mensagem individual
@@ -311,9 +315,10 @@ describe('ModalFilaWhatsApp', () => {
     });
 
     await waitFor(() => {
-      expect(mocks.supabaseCalls).toHaveLength(1);
+      expect(mocks.logsRegistrados).toHaveLength(1);
     });
-    expect(mocks.supabaseCalls[0].table).toBe('logs_sistema');
+    expect(mocks.logsRegistrados[0].acao).toBe('whatsapp_lembrete_enviado');
+    expect(mocks.logsRegistrados[0].registroId).toBe('a2');
   });
 
   // 10. Todos enviados → botão muda para "Fechar"

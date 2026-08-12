@@ -29,6 +29,7 @@ import { type ItemFila } from '@/components/ModalFilaWhatsApp';
 import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
+import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
@@ -446,11 +447,9 @@ export default function Acordos() {
       toast.error('Erro ao excluir acordo: ' + error.message);
     } else {
       liberarNrPorAcordoId(a.id);
-      supabase.from('logs_sistema').insert({
-        usuario_id: perfil?.id ?? null, acao: 'exclusao_acordo', tabela: 'acordos', registro_id: a.id,
-        empresa_id: empresa?.id ?? null,
-        detalhes: { nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: new Date().toISOString() },
-      }).then(({ error: logError }) => { if (logError) console.warn('[excluirAcordo] log error:', logError.message); });
+      // A exclusão em si já é auditada pela trigger `trg_log_acordos` (migration
+      // 20260812a), que guarda a linha inteira e diz se foi para a lixeira.
+      // Registrar aqui de novo produziria duas entradas para o mesmo fato.
       toast.success(`Acordo #${a.nr_cliente} excluído!`);
       removeAcordo(a.id);
     }
@@ -461,6 +460,9 @@ export default function Acordos() {
     setConfirmandoExclusaoLote(false);
     let deletedCount = 0;
     let failedCount  = 0;
+    // Guarda o rótulo de cada acordo ANTES de excluir: depois do delete a linha
+    // não existe mais, e o resumo do lote precisa dizer quais NRs saíram.
+    const excluidos: string[] = [];
     for (const id of selecionados) {
       setExcluindoId(id);
       const acordo = acordos.find(a => a.id === id);
@@ -475,18 +477,35 @@ export default function Acordos() {
         deletedCount++;
         liberarNrPorAcordoId(id);
         removeAcordo(id);
-        if (acordo) {
-          supabase.from('logs_sistema').insert({
-            usuario_id: perfil?.id ?? null, acao: 'exclusao_acordo', tabela: 'acordos', registro_id: id,
-            empresa_id: empresa?.id ?? null,
-            detalhes: { nome_cliente: acordo.nome_cliente, nr_cliente: acordo.nr_cliente, excluido_por: perfil?.nome ?? perfil?.email ?? null, excluido_em: new Date().toISOString(), modo: 'lote' },
-          }).then(({ error: logError }) => { if (logError) console.warn('[excluirSelecionados] log error:', logError.message); });
-        }
+        // Cada exclusão gera seu próprio log pela trigger do banco. O que a
+        // trigger NÃO sabe é que foram parte de um lote — e é isso que se
+        // registra abaixo, uma vez.
+        if (acordo) excluidos.push(`NR ${acordo.nr_cliente} — ${acordo.nome_cliente}`);
       }
     }
     setExcluindoId(null);
     setSelecionados([]);
-    if (deletedCount > 0) toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
+
+    if (deletedCount > 0) {
+      void registrarLog({
+        acao: 'acordo_excluido_em_lote',
+        categoria: 'acordo',
+        severidade: 'aviso',
+        descricao: `Excluiu ${deletedCount} acordo(s) em uma única ação`,
+        empresaId: empresa?.id ?? null,
+        tabela: 'acordos',
+        alvoTipo: 'acordo',
+        detalhes: {
+          quantidade: deletedCount,
+          falhas: failedCount,
+          // Teto de 50: um lote de 500 NRs num único campo de log não é
+          // informação, é despejo. O detalhe de cada um está no log da trigger.
+          acordos: excluidos.slice(0, 50),
+          truncado: excluidos.length > 50,
+        },
+      });
+      toast.success(`${deletedCount} acordo(s) excluído(s) com sucesso!`);
+    }
     if (failedCount  > 0) toast.error(`${failedCount} acordo(s) não puderam ser excluídos`);
   }
 
@@ -495,11 +514,17 @@ export default function Acordos() {
     const mensagem = buildMensagem(a);
     window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`, '_blank');
     if (perfil?.id) {
-      supabase.from('logs_sistema').insert({
-        usuario_id: perfil.id, acao: 'envio_lembrete_whatsapp', tabela: 'acordos', registro_id: a.id,
-        empresa_id: empresa?.id ?? null,
-        detalhes: { acordo_id: a.id, nome_cliente: a.nome_cliente, nr_cliente: a.nr_cliente, modo: 'individual' },
-      }).then(({ error }) => { if (error) console.warn('[enviarUmWhatsapp] log error:', error.message); });
+      void registrarLog({
+        acao: 'whatsapp_lembrete_enviado',
+        categoria: 'whatsapp',
+        descricao: `Enviou lembrete de WhatsApp para ${a.nome_cliente} (NR ${a.nr_cliente})`,
+        empresaId: empresa?.id ?? null,
+        tabela: 'acordos',
+        registroId: a.id,
+        alvoTipo: 'acordo',
+        alvoRotulo: `NR ${a.nr_cliente} — ${a.nome_cliente}`,
+        detalhes: { modo: 'individual' },
+      });
     }
   }
 

@@ -1353,35 +1353,81 @@ export type Database = {
         Relationships: []
       }
       logs_sistema: {
+        // Colunas de auditoria (categoria..user_agent) — migration 20260812a.
         Row: {
           acao: string
+          alvo_rotulo: string | null
+          alvo_tipo: string | null
+          antes: Json | null
+          campos: string[] | null
+          categoria: string
           criado_em: string
+          depois: Json | null
+          descricao: string | null
           detalhes: Json | null
           empresa_id: string
           id: string
+          ip: string | null
+          origem: string
           registro_id: string | null
+          rota: string | null
+          severidade: string
           tabela: string | null
+          user_agent: string | null
+          usuario_cargo: string | null
+          usuario_email: string | null
           usuario_id: string | null
+          usuario_nome: string | null
         }
         Insert: {
           acao: string
+          alvo_rotulo?: string | null
+          alvo_tipo?: string | null
+          antes?: Json | null
+          campos?: string[] | null
+          categoria?: string
           criado_em?: string
+          depois?: Json | null
+          descricao?: string | null
           detalhes?: Json | null
           empresa_id: string
           id?: string
+          ip?: string | null
+          origem?: string
           registro_id?: string | null
+          rota?: string | null
+          severidade?: string
           tabela?: string | null
+          user_agent?: string | null
+          usuario_cargo?: string | null
+          usuario_email?: string | null
           usuario_id?: string | null
+          usuario_nome?: string | null
         }
         Update: {
           acao?: string
+          alvo_rotulo?: string | null
+          alvo_tipo?: string | null
+          antes?: Json | null
+          campos?: string[] | null
+          categoria?: string
           criado_em?: string
+          depois?: Json | null
+          descricao?: string | null
           detalhes?: Json | null
           empresa_id?: string
           id?: string
+          ip?: string | null
+          origem?: string
           registro_id?: string | null
+          rota?: string | null
+          severidade?: string
           tabela?: string | null
+          user_agent?: string | null
+          usuario_cargo?: string | null
+          usuario_email?: string | null
           usuario_id?: string | null
+          usuario_nome?: string | null
         }
         Relationships: [
           {
@@ -2659,6 +2705,51 @@ export type Database = {
         Returns: boolean
       }
       fn_get_perfil_usuario: { Args: { uid: string }; Returns: string }
+      // ── Logs 2.0 (migration 20260812a) ──────────────────────────────────
+      fn_log_registrar: {
+        Args: {
+          p_acao: string
+          p_categoria?: string
+          p_severidade?: string
+          p_descricao?: string | null
+          p_empresa_id?: string | null
+          p_tabela?: string | null
+          p_registro_id?: string | null
+          p_alvo_tipo?: string | null
+          p_alvo_rotulo?: string | null
+          p_antes?: Json | null
+          p_depois?: Json | null
+          p_campos?: string[] | null
+          p_detalhes?: Json | null
+          p_origem?: string
+          p_rota?: string | null
+          p_usuario_id?: string | null
+        }
+        Returns: string | null
+      }
+      fn_log_login_recusado: {
+        Args: { p_identificador: string; p_motivo?: string }
+        Returns: undefined
+      }
+      fn_logs_resumo: {
+        Args: {
+          p_empresa_id?: string | null
+          p_de?: string | null
+          p_ate?: string | null
+          p_categoria?: string | null
+          p_severidade?: string | null
+          p_acao?: string | null
+          p_usuario_id?: string | null
+          p_tabela?: string | null
+          p_origem?: string | null
+          p_busca?: string | null
+        }
+        Returns: Json
+      }
+      fn_logs_expurgar: {
+        Args: { p_dias?: number; p_empresa_id?: string | null }
+        Returns: number
+      }
       fn_get_setor_usuario: { Args: { uid: string }; Returns: string }
       fn_meta_esta_bloqueada: {
         Args: {

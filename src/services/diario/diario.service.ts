@@ -15,6 +15,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { DiarioRecebimento } from '@/lib/supabase';
+import { registrarLog } from '@/services/logs.service';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
 import { ROTA_DIARIO } from '@/lib/notificacoes-rota';
@@ -197,6 +198,41 @@ export async function importarLoteDiario(
       }
     }
   }
+
+  // ── Resumo da importação na trilha de auditoria ────────────────────────────
+  //
+  // `diario_recebimentos` não tem trigger de auditoria de propósito (milhares de
+  // linhas por arquivo; ver 20260812a). O evento útil é este: qual dia foi
+  // importado, quantas linhas entraram, quantas o banco já tinha e quantas foram
+  // corrigidas. É o que explica um recebimento do dia que mudou de valor sem
+  // ninguém ter mexido na tela.
+  void registrarLog({
+    acao: erros.length > 0 ? 'importacao_falhou' : 'importacao_concluida',
+    categoria: 'importacao',
+    severidade: erros.length > 0 ? 'aviso' : 'info',
+    descricao:
+      `Importou recebimento diário de ${diasNoLote.length === 1 ? diasNoLote[0] : `${diasNoLote.length} dias`}: `
+      + `${inseridos} linha(s) nova(s), ${duplicados} já existente(s), ${atualizados} corrigida(s)`
+      + (erros.length > 0 ? ` — ${erros.length} problema(s)` : ''),
+    empresaId,
+    tabela: 'diario_recebimentos',
+    registroId: loteId,
+    alvoTipo: 'importacao_diario',
+    alvoRotulo: diasNoLote.length === 1 ? `Dia ${diasNoLote[0]}` : `${diasNoLote.length} dias`,
+    origem: 'importacao',
+    detalhes: {
+      lote_id: loteId,
+      dias: diasNoLote,
+      linhas_no_arquivo: linhas.length,
+      inseridos,
+      duplicados,
+      atualizados,
+      operadores_afetados: porOperador.size,
+      operadores_sem_vinculo: [...new Set(rows.filter(r => !r.operador_id).map(r => r.operador_usuario))].slice(0, 20),
+      primeiros_erros: erros.slice(0, 20),
+    },
+    usuarioId: importadoPorId,
+  });
 
   return {
     inseridos,

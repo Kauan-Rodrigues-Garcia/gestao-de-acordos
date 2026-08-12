@@ -9,7 +9,7 @@ import { MessageSquare, Send, Copy, X, CheckCircle2, ChevronDown, ChevronUp } fr
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { supabase } from '@/lib/supabase';
+import { registrarLog } from '@/services/logs.service';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { copiarTexto } from '@/lib/clipboard';
@@ -55,22 +55,23 @@ export function ModalFilaWhatsApp({
   const enviados  = filaLocal.filter(i => i.enviado).length;
   const restantes = total - enviados;
 
-  async function registrarLog(item: ItemFila) {
+  /**
+   * O envio de lembrete não altera linha nenhuma — o WhatsApp abre numa aba —,
+   * então nenhuma trigger vê o que aconteceu. Este é um dos casos em que o
+   * registro tem de partir da tela.
+   */
+  async function registrarEnvio(item: ItemFila) {
     if (!usuarioId) return;
-    supabase.from('logs_sistema').insert({
-      usuario_id: usuarioId,
-      acao: 'envio_lembrete_whatsapp',
+    void registrarLog({
+      acao: 'whatsapp_lembrete_enviado',
+      categoria: 'whatsapp',
+      descricao: `Enviou lembrete de WhatsApp para ${item.nome_cliente} (NR ${item.nr_cliente})`,
+      empresaId: empresaId ?? null,
       tabela: 'acordos',
-      registro_id: item.id,
-      empresa_id: empresaId ?? null,
-      detalhes: {
-        acordo_id:    item.id,
-        nome_cliente: item.nome_cliente,
-        nr_cliente:   item.nr_cliente,
-        modo,
-      },
-    }).then(({ error }) => {
-      if (error) console.warn('[ModalFilaWhatsApp] log error:', error.message);
+      registroId: item.id,
+      alvoTipo: 'acordo',
+      alvoRotulo: `NR ${item.nr_cliente} — ${item.nome_cliente}`,
+      detalhes: { modo },
     });
   }
 
@@ -84,7 +85,7 @@ export function ModalFilaWhatsApp({
     const item = pendentes[0];
     window.open(item.link, '_blank');
     marcarEnviado(item.id);
-    registrarLog(item);
+    registrarEnvio(item);
   }
 
   async function enviarTodosAuto() {
@@ -99,7 +100,7 @@ export function ModalFilaWhatsApp({
         toast.warning('Popup bloqueado! Permita popups para este site.');
       }
       marcarEnviado(item.id);
-      registrarLog(item);
+      registrarEnvio(item);
       if (i < pendentes.length - 1) {
         await new Promise(r => setTimeout(r, WHATSAPP_SEND_DELAY_MS));
       }
@@ -115,7 +116,7 @@ export function ModalFilaWhatsApp({
   function marcarEnviadoManual(id: string) {
     const item = filaLocal.find(i => i.id === id);
     setFilaLocal(prev => prev.map(i => i.id === id ? { ...i, enviado: true } : i));
-    if (item) registrarLog(item);
+    if (item) registrarEnvio(item);
   }
 
   function copiarMensagem(msg: string) {

@@ -22,6 +22,7 @@ import { ufDoAcordo } from '@/lib/index';
 import { acordoTemCpf } from '@/lib/cpf';
 import { criarNotificacao } from './notificacoes.service';
 import { enviarParaLixeira } from './lixeira.service';
+import { registrarLog } from './logs.service';
 import type { ClassificacaoNR } from './classificar_nrs_import.service';
 
 /** `registro` é montado dinamicamente (planilha) — não dá pra tipar como literal. */
@@ -215,6 +216,42 @@ export async function processarImportacaoEmLote(
     }
   }
 
+  // ── Resumo da importação ───────────────────────────────────────────────────
+  //
+  // Cada acordo inserido gera seu próprio log pela trigger do banco. O que
+  // nenhuma trigger consegue enxergar é a IMPORTAÇÃO como evento: quantas linhas
+  // o arquivo tinha, quantas entraram, quantas foram barradas e por quê. É esse
+  // resumo que responde "por que só 380 dos 500 acordos apareceram" — a pergunta
+  // que hoje só se responde repetindo a importação.
+  await registrarLog({
+    acao: resultado.erros.length > 0 ? 'importacao_falhou' : 'importacao_concluida',
+    categoria: 'importacao',
+    severidade: resultado.erros.length > 0 ? 'aviso' : 'info',
+    descricao:
+      `Importou planilha de acordos: ${resultado.inseridos} de ${params.payloads.length} linha(s) `
+      + `gravada(s)`
+      + (resultado.bloqueados.length > 0 ? `, ${resultado.bloqueados.length} bloqueada(s)` : '')
+      + (resultado.erros.length > 0 ? `, ${resultado.erros.length} com erro` : ''),
+    empresaId: params.empresaId,
+    tabela: 'acordos',
+    alvoTipo: 'acordo',
+    origem: 'importacao',
+    detalhes: {
+      linhas_no_arquivo: params.payloads.length,
+      inseridos: resultado.inseridos,
+      bloqueados: resultado.bloqueados.length,
+      erros: resultado.erros.length,
+      // Só as 20 primeiras de cada: a lista completa pode ter centenas de itens,
+      // e quem investiga precisa do padrão, não do despejo.
+      motivos_bloqueio: resultado.bloqueados.slice(0, 20)
+        .map(b => `Linha ${b.linhaOriginal} (${b.nr}): ${b.motivo}`),
+      primeiros_erros: resultado.erros.slice(0, 20),
+      autorizacoes_de_lider: params.linhasAutorizadas.size,
+      autorizado_por: params.autorizador?.nome ?? null,
+      operador: params.operadorAtual.nome,
+    },
+  });
+
   return resultado;
 }
 
@@ -375,13 +412,24 @@ async function aplicarCasoC(
     return false;
   }
 
-  // 5. Log em logs_sistema.
-  await supabase.from('logs_sistema').insert({
-    usuario_id:  params.operadorAtual.id,
-    acao:        'transferencia_nr_import',
-    tabela:      'acordos',
-    registro_id: dono.acordoId,
-    empresa_id:  params.empresaId,
+  // 5. Registro na trilha de auditoria.
+  //
+  // As triggers do banco registram o delete e o insert; o que só este ponto sabe
+  // é que a troca de titularidade veio de uma PLANILHA e foi autorizada por um
+  // líder — os dois fatos que alguém vai procurar quando contestar a comissão.
+  await registrarLog({
+    acao:       'acordo_transferido',
+    categoria:  'importacao',
+    severidade: 'aviso',
+    descricao:
+      `Transferiu o NR ${p.nr} de ${dono.operadorNome ?? 'outro operador'} para `
+      + `${params.operadorAtual.nome} durante importação de planilha, autorizado por ${autorizador.nome}`,
+    empresaId:  params.empresaId,
+    tabela:     'acordos',
+    registroId: dono.acordoId,
+    alvoTipo:   'acordo',
+    alvoRotulo: `NR ${p.nr} — ${acordoAntData?.nome_cliente ?? p.nomeCliente}`,
+    origem:     'importacao',
     detalhes: {
       nr:                p.nr,
       nome_cliente:      acordoAntData?.nome_cliente ?? p.nomeCliente,
@@ -394,7 +442,7 @@ async function aplicarCasoC(
       operador_anterior_nome: dono.operadorNome,
       operador_novo:     params.operadorAtual.id,
       operador_novo_nome: params.operadorAtual.nome,
-      origem:            'import_excel',
+      linha_planilha:    p.linhaOriginal,
     },
   });
 

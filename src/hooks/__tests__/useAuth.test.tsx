@@ -419,8 +419,16 @@ describe('useAuth – signIn', () => {
     });
 
     expect(signInResult.error).toBeNull();
-    expect(mockRpc).toHaveBeenCalledTimes(2);
-    expect(mockRpc).toHaveBeenLastCalledWith('buscar_email_por_usuario', { p_usuario: 'operador' });
+
+    // Duas buscas de e-mail: a por empresa (que falhou) e a genérica.
+    const buscas = mockRpc.mock.calls.filter(([fn]) => String(fn).startsWith('buscar_email'));
+    expect(buscas).toHaveLength(2);
+    expect(buscas[1]).toEqual(['buscar_email_por_usuario', { p_usuario: 'operador' }]);
+
+    // Entrada bem-sucedida vira evento na trilha de auditoria (Logs 2.0).
+    const logs = mockRpc.mock.calls.filter(([fn]) => fn === 'fn_log_registrar');
+    expect(logs).toHaveLength(1);
+    expect(logs[0][1]).toMatchObject({ p_acao: 'login', p_categoria: 'autenticacao' });
   });
 
   it('username não encontrado em nenhum RPC retorna erro', async () => {

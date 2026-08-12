@@ -24,6 +24,7 @@ import {
   coletarFatosConflitoNr, decidirConflitoNr, type DecisaoConflitoNr,
 } from '@/services/conflitoNr.service';
 import { criarNotificacao } from '@/services/notificacoes.service';
+import { registrarLog } from '@/services/logs.service';
 import { autenticarLider } from '@/services/autorizacao_lider.service';
 import {
   transferirAcordoDeDesligado, transferirAcordoNoServidor, mensagemErroTransferencia,
@@ -595,12 +596,23 @@ export function AcordoEditInline({
           vinculo_operador_nome: decisao.operadorNome,
         });
 
-        await supabase.from('logs_sistema').insert({
-          usuario_id: perfil.id, acao: 'troca_extra', tabela: 'acordos',
-          registro_id: decisao.extraAtualId, empresa_id: empresa.id,
+        // A troca de Extra é uma DECISÃO com autorização de líder por trás; as
+        // triggers registram o delete e o insert que a executaram, mas não têm
+        // como saber que os dois foram a mesma decisão, nem quem a autorizou.
+        await registrarLog({
+          acao: 'acordo_extra_trocado',
+          categoria: 'acordo',
+          severidade: 'aviso',
+          descricao: `Assumiu o vínculo EXTRA do ${label} ${valorChave}, autorizado por ${auth.autorizador.nome}`,
+          empresaId: empresa.id,
+          tabela: 'acordos',
+          registroId: decisao.extraAtualId,
+          alvoTipo: 'acordo',
+          alvoRotulo: `${label} ${valorChave}`,
           detalhes: {
-            nr: valorChave, origem: 'edicao',
-            aprovado_por: auth.autorizador.nome, aprovado_por_id: auth.autorizador.uid,
+            origem: 'edicao',
+            aprovado_por: auth.autorizador.nome,
+            aprovado_por_id: auth.autorizador.uid,
             operador_extra_anterior: decisao.extraAtualOpId,
             operador_extra_novo: perfil.id,
           },

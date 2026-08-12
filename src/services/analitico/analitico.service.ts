@@ -15,6 +15,7 @@ import { supabase } from '@/lib/supabase';
 import type { Acordo, AnaliticoRecebimento, AnaliticoDashboardLinha, StatusTabulacaoAnalitico } from '@/lib/supabase';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { enviarParaLixeira } from '@/services/lixeira.service';
+import { registrarLog } from '@/services/logs.service';
 import { mesReferencia } from './analiticoComum';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
@@ -237,6 +238,51 @@ export async function importarLoteAnalitico(
   let atualizados = 0;
   const erros: string[] = [];
 
+  /**
+   * Resumo da importação na trilha de auditoria.
+   *
+   * `analitico_recebimentos` NÃO tem trigger de auditoria de propósito: são
+   * milhares de linhas por arquivo, e auditar uma a uma encheria a trilha sem
+   * responder nada. O evento que importa é este — quantas linhas entraram,
+   * quantas o banco já tinha, quantas foram reconciliadas e quais erros
+   * apareceram. É o que responde "por que o card do operador não bate com o
+   * relatório" sem precisar reimportar para descobrir.
+   *
+   * Declarado como closure porque a função tem dois pontos de saída (a
+   * reconciliação pode abortar), e os dois precisam registrar.
+   */
+  const registrarResumo = (reconciliou: boolean) => {
+    const mesesDoLote = [...new Set(rows.map(r => r.mes_referencia))].sort();
+    void registrarLog({
+      acao: erros.length > 0 ? 'importacao_falhou' : 'importacao_concluida',
+      categoria: 'importacao',
+      severidade: erros.length > 0 ? 'aviso' : 'info',
+      descricao:
+        `Importou relatório analítico: ${inseridos} linha(s) nova(s), `
+        + `${duplicados} já existente(s), ${atualizados} reconciliada(s)`
+        + (erros.length > 0 ? ` — ${erros.length} problema(s)` : ''),
+      empresaId,
+      tabela: 'analitico_recebimentos',
+      registroId: loteId,
+      alvoTipo: 'importacao_analitico',
+      alvoRotulo: mesesDoLote.length === 1 ? `Mês ${mesesDoLote[0]}` : `${mesesDoLote.length} meses`,
+      origem: 'importacao',
+      detalhes: {
+        lote_id: loteId,
+        linhas_no_arquivo: linhas.length,
+        inseridos,
+        duplicados,
+        atualizados,
+        reconciliacao_executada: reconciliou,
+        meses: mesesDoLote,
+        operadores_sem_vinculo: [...new Set(rows.filter(r => !r.operador_id).map(r => r.operador_usuario))].slice(0, 20),
+        setor_importacao_id: setorImportacaoId ?? null,
+        primeiros_erros: erros.slice(0, 20),
+      },
+      usuarioId: importadoPorId,
+    });
+  };
+
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
     const { data, error } = await supabase
@@ -355,6 +401,7 @@ export async function importarLoteAnalitico(
   // novas já entraram; o líder reimporta e a conferência roda de novo.
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
+    registrarResumo(false);
     return { inseridos, duplicados, atualizados, erros };
   }
 
@@ -406,6 +453,7 @@ export async function importarLoteAnalitico(
     else atualizados++;
   }
 
+  registrarResumo(true);
   return { inseridos, duplicados, atualizados, erros };
 }
 
@@ -1442,17 +1490,27 @@ export async function tabularDivergente(
     });
   }
 
-  // 7. Registrar em logs_sistema
-  await supabase.from('logs_sistema').insert({
-    usuario_id:  novoOperadorId,
-    acao:        'TRANSFERENCIA_ANALITICO',
+  // 7. Registrar na trilha de auditoria.
+  //
+  // A trigger do banco registra o acordo que saiu, mas não sabe que ele saiu
+  // POR CAUSA de uma tabulação divergente no analítico, nem de quem para quem a
+  // titularidade passou — que é a informação que resolve disputa de comissão.
+  await registrarLog({
+    acao:        'acordo_transferido',
+    categoria:   'acordo',
+    severidade:  'aviso',
+    descricao:
+      `Reivindicou o código ${codigo} pelo Analítico — o acordo saiu de `
+      + `${outroOperadorNome ?? 'outro operador'} para ${novoOperadorNome ?? 'este operador'}`,
+    empresaId:   empresaId,
     tabela:      'acordos',
-    registro_id: acordoExistenteId,
-    empresa_id:  empresaId,
+    registroId:  acordoExistenteId,
+    alvoTipo:    'acordo',
+    alvoRotulo:  `Código ${codigo}`,
     detalhes: {
       codigo,
-      de_operador_id:   outroOperadorId,
-      de_operador_nome: outroOperadorNome,
+      de_operador_id:     outroOperadorId,
+      de_operador_nome:   outroOperadorNome,
       para_operador_id:   novoOperadorId,
       para_operador_nome: novoOperadorNome,
     },

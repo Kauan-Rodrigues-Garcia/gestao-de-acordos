@@ -22,6 +22,7 @@ import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
+import { registrarLog }        from '@/services/logs.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
 import { autenticarLider } from '@/services/autorizacao_lider.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
@@ -605,13 +606,28 @@ export function AcordoNovoInline({
 
         await supabase.from('acordos').update({ ...buildSyncPayload(conflito.payload), vinculo_operador_id: perfil.id, vinculo_operador_nome: nomeNovoOp }).eq('id', conflito.acordoId);
 
-        await supabase.from('logs_sistema').insert({
-          usuario_id: perfil.id, acao: 'troca_extra', tabela: 'acordos', registro_id: extraAtualId,
-          empresa_id: empresa.id,
+        // Mesma razão do registro em AcordoEditInline: as triggers veem o delete
+        // e o insert, não a decisão nem o líder que a autorizou.
+        await registrarLog({
+          acao: 'acordo_extra_trocado',
+          categoria: 'acordo',
+          severidade: 'aviso',
+          descricao:
+            `Assumiu o vínculo EXTRA do ${labelNR} ${nrLogLabel} de `
+            + `${extraAtualOpNome ?? 'outro operador'}, autorizado por ${liderPerfil.nome}`,
+          empresaId: empresa.id,
+          tabela: 'acordos',
+          registroId: extraAtualId,
+          alvoTipo: 'acordo',
+          alvoRotulo: `${labelNR} ${nrLogLabel}`,
           detalhes: {
-            nr: nrLogLabel, aprovado_por: liderPerfil.nome, aprovado_por_id: liderUid,
-            operador_extra_anterior: extraAtualOpId, operador_extra_ant_nome: extraAtualOpNome,
-            operador_extra_novo: perfil.id, operador_extra_novo_nome: nomeNovoOp,
+            origem: 'criacao',
+            aprovado_por: liderPerfil.nome,
+            aprovado_por_id: liderUid,
+            operador_extra_anterior: extraAtualOpId,
+            operador_extra_ant_nome: extraAtualOpNome,
+            operador_extra_novo: perfil.id,
+            operador_extra_novo_nome: nomeNovoOp,
           },
         });
 
