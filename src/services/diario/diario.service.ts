@@ -406,6 +406,110 @@ export async function limparDadosDoDia(
 }
 
 /**
+ * Escopo de setor da limpeza do mês — o mesmo vocabulário de
+ * `EscopoLimpezaSetor` do analítico, de propósito: os dois lados apagam
+ * juntos e têm de recortar o mesmo pedaço.
+ */
+export interface EscopoLimpezaMesDiario {
+  setorId: string | null;
+  perfilIds: string[];
+  porRelatorio: boolean;
+}
+
+/**
+ * Remove o MÊS inteiro do recebimento diário.
+ *
+ * ## Por que existe
+ *
+ * Na BookPlay o diário e o analítico saem do MESMO arquivo: a confirmação da
+ * importação chama `importarLoteAnalitico` e, em seguida, `importarLoteDiario`
+ * (ver `useAnaliticoImport`). Só que "Limpar mês" mexia apenas no analítico. O
+ * diário ficava para trás, e o rombo foi medido em agosto/2026 — diário acima
+ * do analítico em TODOS os setores da empresa:
+ *
+ *   Receptivo         +3.503,08     Play 5            +637,49
+ *   Play Mix Marília  +4.418,00     Play 4            +268,21
+ *   Amauri Digital      +165,00     total          +8.991,78
+ *
+ * Play Mix Marília e Amauri Digital não tinham UMA linha de analítico: o mês
+ * foi limpo e o diário deles seguiu de pé, sozinho.
+ *
+ * Apagar o mês não perde dado: o relatório do ERP traz o mês inteiro (o arquivo
+ * do Receptivo de 12/08 tinha 3.090 linhas cobrindo 01→12/08) e
+ * `importarLoteDiario` grava cada linha no SEU dia. Reimportar reconstrói todos
+ * os dias, não só o último.
+ *
+ * ## O recorte de setor não é o mesmo carimbo do analítico
+ *
+ * `analitico_recebimentos.setor_id` é o carimbo do RELATÓRIO, posto na
+ * importação. `diario_recebimentos.setor_id` é outra coisa: o trigger
+ * `fn_diario_preencher_setor` o deriva do `perfis.setor_id` do OPERADOR (e, sem
+ * operador, de quem importou) no momento do insert.
+ *
+ * Mesmo assim o recorte aqui espelha `limparDadosDoMesSetor` passo a passo — e
+ * espelhar inclui o `setor_id IS NULL` da passada por operador. Sem ele, um
+ * setor apagaria a linha de alguém que hoje é dele mas que no dia da importação
+ * era de outro setor, e essa linha é justamente a que o OUTRO setor mostra.
+ */
+export async function limparMesDiario(
+  empresaId: string,
+  mes: string,
+  escopo?: EscopoLimpezaMesDiario | null,
+): Promise<{ error: string | null }> {
+  const primeiro = primeiroDiaDoMes(mes);
+  const fim      = ultimoDiaDoMes(mes);
+
+  const doMes = () => supabase
+    .from('diario_recebimentos')
+    .delete()
+    .eq('empresa_id', empresaId)
+    .gte('dia_referencia', primeiro)
+    .lte('dia_referencia', fim);
+
+  if (!escopo) {
+    const { error } = await doMes();
+    return { error: error?.message ?? null };
+  }
+
+  const { setorId, perfilIds, porRelatorio } = escopo;
+  if (!setorId && !perfilIds.length) return { error: null };
+
+  if (porRelatorio) {
+    if (setorId) {
+      const { error } = await doMes().eq('setor_id', setorId);
+      if (error) return { error: error.message };
+    }
+    if (perfilIds.length) {
+      const { error } = await doMes().in('operador_id', perfilIds).is('setor_id', null);
+      if (error) return { error: error.message };
+      const { error: errOrfaos } = await doMes()
+        .is('operador_id', null)
+        .in('importado_por_id', perfilIds)
+        .is('setor_id', null);
+      if (errOrfaos) return { error: errOrfaos.message };
+    }
+    return { error: null };
+  }
+
+  if (perfilIds.length) {
+    const { error } = await doMes().in('operador_id', perfilIds);
+    if (error) return { error: error.message };
+  }
+  if (setorId) {
+    const { error } = await doMes().is('operador_id', null).eq('setor_id', setorId);
+    if (error) return { error: error.message };
+  }
+  if (perfilIds.length) {
+    const { error } = await doMes()
+      .is('operador_id', null)
+      .in('importado_por_id', perfilIds)
+      .is('setor_id', null);
+    if (error) return { error: error.message };
+  }
+  return { error: null };
+}
+
+/**
  * Remove TODOS os registros de recebimento diário da empresa.
  * Usado na limpeza automática de fim de dia (reset diário): a partir das 23h,
  * o primeiro líder/admin que entra zera a tabela para o dia seguinte começar

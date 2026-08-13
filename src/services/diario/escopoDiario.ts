@@ -11,11 +11,21 @@
  *
  * ## Por que o diário precisa de uma regra própria
  *
- * `analitico_recebimentos` tem `setor_id` — o carimbo posto na importação, que
- * `escopoAnalitico.ts` usa. `diario_recebimentos` **não tem** essa coluna: a
- * única forma de saber a que setor uma linha pertence é pelo operador dela.
- * Daí este módulo: ele traduz "setor" em "conjunto de operadores" e filtra por
- * `operador_id`.
+ * `analitico_recebimentos.setor_id` é o carimbo posto na importação — o setor de
+ * que o RELATÓRIO é, e é o que `escopoAnalitico.ts` usa.
+ *
+ * `diario_recebimentos` também tem `setor_id`, mas ele **não é o mesmo carimbo**:
+ * o trigger `fn_diario_preencher_setor` o deriva do `perfis.setor_id` do
+ * OPERADOR no instante do insert (sem operador, de quem importou). São duas
+ * perguntas diferentes — "de que setor é este arquivo?" e "de que setor era esta
+ * pessoa naquele dia?" — e ler uma como se fosse a outra é o que faz duas telas
+ * mostrarem números diferentes para o mesmo dinheiro.
+ *
+ * Para EXIBIR, este módulo continua traduzindo "setor" em "conjunto de
+ * operadores" e filtrando por `operador_id`: é a regra que casa com o Analítico
+ * e com o Painel Líder, inclusive para clones. Quem precisa do carimbo do diário
+ * é a LIMPEZA (`limparMesDiario`), que tem de espelhar passada a passada o que o
+ * analítico apaga.
  *
  * A tradução usa `setoresDoOperador`, a mesma função do Analítico e do Painel
  * Líder — inclusive para clones. Um operador emprestado ao Digital conta nos

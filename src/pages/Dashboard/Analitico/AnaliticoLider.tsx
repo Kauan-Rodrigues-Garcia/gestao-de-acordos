@@ -38,8 +38,6 @@ import {
   buscarResumoMensal,
   removerLinhaAnalitico,
   removerOrfaosDoMes,
-  limparDadosDoMes,
-  limparDadosDoMesSetor,
   atualizarResumoMensal,
   mapaSetorDaEquipe,
   type ResumoOperadorAnalitico,
@@ -51,6 +49,8 @@ import {
 } from '@/services/analitico/analitico.service';
 // A mesma regra que decide como o card SOMA decide o que a limpeza APAGA.
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
+// Limpar o mês do analítico apaga o mês do diário junto (BookPlay).
+import { limparMesRecebimentos } from '@/services/analitico/limparMesRecebimentos';
 import {
   buscarExclusoesSetor, salvarExclusoesSetor,
 } from '@/services/analitico/exclusoesSetor.service';
@@ -409,19 +409,33 @@ export function AnaliticoLider({
     setLimpando(true);
     // Com um setor em foco, limpa só ele — seja porque o usuário está preso a
     // esse setor, seja porque ele mesmo o filtrou. Sem setor nenhum, a empresa.
-    const { error } = limparSomenteOSetor
-      ? await limparDadosDoMesSetor(empresaId, mes, escopoLimpeza)
-      : await limparDadosDoMes(empresaId, mes);
+    //
+    // Na BookPlay o RECEBIMENTO DIÁRIO sai do mesmo arquivo (ver
+    // `limparMesRecebimentos`), então o mês dele cai junto — e volta na próxima
+    // importação do relatório, que traz o mês inteiro.
+    const { error, erroDiario } = await limparMesRecebimentos({
+      empresaId, mes,
+      escopo: limparSomenteOSetor ? escopoLimpeza : null,
+      incluirDiario: !isPP,
+    });
     if (error) {
       toast.error(`Erro ao limpar: ${error}`);
     } else {
+      // O analítico já saiu; só o diário ficou. Dizer as duas coisas, senão o
+      // líder acha que nada foi apagado e clica de novo.
+      if (erroDiario) {
+        toast.warning(
+          `Analítico do mês excluído, mas o recebimento diário não foi. ${erroDiario}`,
+        );
+      }
       // Recalcula o snapshot mensal para o card refletir o que sobrou no banco
       await atualizarResumoMensal(empresaId, mes);
       const mesLabel = new Date(mes + '-15').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      const abas = isPP ? 'Dados' : 'Analítico e recebimento diário';
       toast.success(
         limparSomenteOSetor
-          ? `Dados de ${setorEmFocoLabel} em ${mesLabel} excluídos. Reimporte o relatório quando necessário.`
-          : `Dados de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`,
+          ? `${abas} de ${setorEmFocoLabel} em ${mesLabel} excluídos. Reimporte o relatório quando necessário.`
+          : `${abas} de ${mesLabel} excluídos. Reimporte o relatório quando necessário.`,
       );
       setConfirmandoLimpeza(false);
       void carregarResumos();
@@ -1061,6 +1075,14 @@ export function AnaliticoLider({
                   ? ' Os dados dos demais setores não serão afetados.'
                   : ' Isso alcança TODOS os setores da empresa — para limpar apenas um, filtre o setor antes.'}
               </p>
+              {!isPP && (
+                <p>
+                  O <strong>Recebimento diário</strong> do mês sai junto: as duas abas
+                  vêm do mesmo relatório, e deixar uma sem a outra é o que fazia o
+                  diário ficar acima do analítico. Reimportar o relatório do mês
+                  reconstrói os dois, dia por dia.
+                </p>
+              )}
               <p className="text-xs text-muted-foreground">
                 Esta ação não pode ser desfeita. Após a exclusão, reimporte o relatório para restaurar os dados.
               </p>
