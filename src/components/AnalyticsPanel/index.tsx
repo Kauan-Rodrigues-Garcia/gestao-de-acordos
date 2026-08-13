@@ -33,7 +33,8 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
 import { SeletorMes } from './SeletorMes';
-import { SkeletonCard, MetricCard, MiniSparkline, BannerNaoTabulado } from './SubComponents';
+import { SkeletonCard, MetricCard, MiniSparkline } from './SubComponents';
+import { PainelMetas } from '@/components/PainelMetas';
 import { PPMetrics } from './PPMetrics';
 import { ChartsSection } from './ChartsSection';
 import { CHART_RECEBIDO } from './constants';
@@ -324,6 +325,76 @@ export function AnalyticsPanel({
    */
   const carregando = loading || escopoPendente;
 
+  /**
+   * O que sobrou do painel antigo: continua útil, mas não é sobre meta.
+   * Entra recolhido para não competir com os números de projeção.
+   */
+  const cardsSecundarios = !isPP && !carregando ? (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <MetricCard
+        label="Agendado no mês"
+        icon={<Calendar className="w-4 h-4" />}
+        accentColor="#6366f1"
+        trend="neutral"
+        value={formatCurrency(valorAgendadoMes)}
+        sub={`${totalAcordosMes} acordos`}
+      />
+      <MetricCard
+        label="Não Pagos"
+        icon={<XCircle className="w-4 h-4" />}
+        accentColor="#ef4444"
+        trend={valorNaoPago > 0 ? 'down' : 'neutral'}
+        value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+        sub={`${totalNaoPagos} acordos`}
+      />
+      {/* "Hoje" só existe dentro do mês corrente. Num mês fechado este card
+          seria sempre R$ 0,00 — um zero que parece dado real e não é. */}
+      {noMesAtual && (
+        <MetricCard
+          label="Agendado hoje"
+          icon={<Clock className="w-4 h-4" />}
+          accentColor="#f59e0b"
+          value={formatCurrency(valorAgendadoHoje)}
+        />
+      )}
+      <MetricCard
+        label="Acordos no mês"
+        icon={<BarChart2 className="w-4 h-4" />}
+        accentColor="#3b82f6"
+        value={String(totalAcordosMes)}
+        sub={`${totalPendentes} pendentes`}
+      />
+      {mostraAgendadoRestante && (
+        <MetricCard
+          label="Agendado restante no mês"
+          icon={<Clock className="w-4 h-4" />}
+          accentColor="#a855f7"
+          trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
+          value={<span className="text-purple-500">{formatCurrency(valorAgendadoRestanteMes)}</span>}
+          sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
+        />
+      )}
+      <MetricCard
+        label="Taxa de conversão"
+        icon={<Percent className="w-4 h-4" />}
+        accentColor={taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444'}
+        value={(
+          <span style={{ color: taxaConversao >= 70 ? '#22c55e' : taxaConversao >= 40 ? '#f59e0b' : '#ef4444' }}>
+            {taxaConversao}%
+          </span>
+        )}
+        sub={`${totalPagosMes} de ${totalAcordosMes} pagos`}
+      />
+      <MetricCard
+        label="Ticket médio"
+        icon={<TrendingUp className="w-4 h-4" />}
+        accentColor="#6366f1"
+        value={<span className="text-indigo-500">{formatCurrency(ticketMedio)}</span>}
+        sub={ticketMedioSub}
+      />
+    </div>
+  ) : null;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
@@ -451,7 +522,20 @@ export function AnalyticsPanel({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
-              ) : isPP ? (
+              ) : !isPP ? (
+                /* BookPlay: o corpo é o painel de metas. Ele SUBSTITUI os
+                   cards soltos e os dois gráficos que viviam aqui — o donut da
+                   meta e o Recebido vs Agendado foram absorvidos por ele, e o
+                   que sobrou virou o bloco recolhível `secundarios`. */
+                <PainelMetas
+                  mes={mesAnalise}
+                  setorFiltro={setorEmFoco}
+                  equipeFiltroExterno={equipeFiltroExterno}
+                  operadorFiltroExterno={operadorFiltroExterno}
+                  temLogicaDiretoExtra={temLogicaDiretoExtra}
+                  secundarios={cardsSecundarios}
+                />
+              ) : (
                 <PPMetrics
                   temLogicaDiretoExtra={temLogicaDiretoExtra}
                   usarAnalitico={usarAnalitico}
@@ -482,111 +566,11 @@ export function AnalyticsPanel({
                   valorNaoPago={valorNaoPago}
                   totalNaoPagos={totalNaoPagos}
                 />
-              ) : (
-                /* Bookplay metrics */
-                <div className="space-y-3">
-                {/* Aviso: recebimento do analítico ainda não tabulado */}
-                {usarAnalitico && (
-                  <BannerNaoTabulado
-                    valor={anal.naoTabuladoBruto}
-                    qtd={anal.naoTabuladoQtd}
-                    totalAnalitico={anal.bruto}
-                  />
-                )}
-                {/* Formas de pagamento do analítico (Pix, Boleto, Pix Automático, Cartão…) */}
-                {usarAnalitico && Object.keys(anal.porForma).length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {Object.entries(anal.porForma)
-                      .sort((a, b) => b[1].bruto - a[1].bruto)
-                      .map(([forma, f], i) => {
-                        const cor = BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length];
-                        const Icone = /cart/i.test(forma) ? CreditCard : QrCode;
-                        return (
-                          <MetricCard
-                            key={forma}
-                            label={`${forma} (analítico)`}
-                            icon={<Icone className="w-4 h-4" />}
-                            accentColor={cor}
-                            gradientFrom={cor}
-                            value={<span style={{ color: cor }}>{formatCurrency(f.bruto)}</span>}
-                            sub={`${f.qtd} pagamento${f.qtd !== 1 ? 's' : ''}`}
-                          />
-                        );
-                      })}
-                  </div>
-                )}
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  <MetricCard
-                    label="Recebido no mês"
-                    icon={<DollarSign className="w-4 h-4" />}
-                    accentColor="#22c55e"
-                    gradientFrom="#22c55e"
-                    trend="up"
-                    value={
-                      <span className="text-emerald-500">
-                        {formatCurrency(usarAnalitico ? brutoComReceptivo : valorRecebidoMes)}
-                      </span>
-                    }
-                    sub={usarAnalitico
-                      ? `${anal.qtd} pgtos no analítico`
-                        + (receptivoNoEscopo > 0 ? ` · + ${formatCurrency(receptivoNoEscopo)} receptivo` : '')
-                      : `${totalPagosMes} acordos pagos`}
-                  />
-                  <MetricCard
-                    label="Agendado no mês"
-                    icon={<Calendar className="w-4 h-4" />}
-                    accentColor="#6366f1"
-                    gradientFrom="#6366f1"
-                    trend="neutral"
-                    value={formatCurrency(valorAgendadoMes)}
-                    sub={`${totalAcordosMes} acordos`}
-                  />
-                  <MetricCard
-                    label="Não Pagos"
-                    icon={<XCircle className="w-4 h-4" />}
-                    accentColor="#ef4444"
-                    gradientFrom="#ef4444"
-                    trend={valorNaoPago > 0 ? 'down' : 'neutral'}
-                    value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
-                    sub={`${totalNaoPagos} acordos`}
-                  />
-                  {/* "Hoje" só existe dentro do mês corrente. Num mês fechado
-                      este card seria sempre R$ 0,00 — um zero que parece dado
-                      real e não é. */}
-                  {noMesAtual && (
-                    <MetricCard
-                      label="Agendado hoje"
-                      icon={<Clock className="w-4 h-4" />}
-                      accentColor="#f59e0b"
-                      gradientFrom="#f59e0b"
-                      value={formatCurrency(valorAgendadoHoje)}
-                    />
-                  )}
-                  <MetricCard
-                    label="Acordos no mês"
-                    icon={<BarChart2 className="w-4 h-4" />}
-                    accentColor="#3b82f6"
-                    gradientFrom="#3b82f6"
-                    value={String(totalAcordosMes)}
-                    sub={`${totalPendentes} pendentes`}
-                  />
-                  {mostraAgendadoRestante && (
-                    <MetricCard
-                      label="Agendado restante no mês"
-                      icon={<Clock className="w-4 h-4" />}
-                      accentColor="#a855f7"
-                      gradientFrom="#a855f7"
-                      trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
-                      value={<span className="text-purple-500">{formatCurrency(valorAgendadoRestanteMes)}</span>}
-                      sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
-                    />
-                  )}
-                </div>
-                </div>
               )}
 
-              {/* Charts row */}
-              {!carregando && (
+              {/* Charts row — só na PaguePlay. Na BookPlay o donut da meta e o
+                  Recebido vs Agendado passaram a viver dentro do PainelMetas. */}
+              {!carregando && isPP && (
                 <ChartsSection
                   isPP={isPP}
                   porDiaChart={porDiaChart}
@@ -602,8 +586,13 @@ export function AnalyticsPanel({
                 />
               )}
 
-              {/* ROW 3 — Métricas adicionais */}
-              {!carregando && (
+              {/* ROW 3 — Métricas adicionais. Só na PaguePlay: na BookPlay
+                  Taxa de conversão e Ticket médio foram para o bloco recolhível
+                  do PainelMetas, e "Projeção do mês" saiu de cena — o painel
+                  novo projeta contra a meta e os dias úteis, não contra dias
+                  corridos, e dois números chamados "projeção" na mesma tela
+                  discordariam por construção. */}
+              {!carregando && isPP && (
                 <motion.div variants={itemVariants} className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <motion.div
                     variants={itemVariants}

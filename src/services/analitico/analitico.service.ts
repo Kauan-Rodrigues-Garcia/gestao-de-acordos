@@ -234,6 +234,10 @@ export async function importarLoteAnalitico(
     // antes da migration.
     ...(l.instituicao ? { instituicao: l.instituicao } : {}),
     ...(l.forma_detalhe ? { forma_detalhe: l.forma_detalhe } : {}),
+    // "Tipo comissão" (20260813a). Mesmo padrão: só referencia a coluna quando
+    // o relatório traz o valor, para o import não quebrar antes da migration
+    // nem em relatório que não tem essa coluna.
+    ...(l.tipo_comissao ? { tipo_comissao: l.tipo_comissao } : {}),
     forma_pagamento: l.forma_pagamento,
     valor_recebido:  l.valor_recebido,
     total_ho:        l.total_ho,

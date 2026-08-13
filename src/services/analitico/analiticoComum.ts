@@ -40,6 +40,15 @@ export interface LinhaRelatorio {
   instituicao?: string;
   /** Rótulo detalhado da forma (BookPlay): Boleto, Pix, Pix Automático, etc. */
   forma_detalhe?: string;
+  /**
+   * Coluna "Tipo comissão" do relatório, texto cru (Extra, Integral…).
+   *
+   * É o próprio ERP dizendo se o recebimento é de NR vinculado a outro
+   * operador (Extra) ou do operador da linha (Integral). Antes da 20260813a
+   * essa coluna era descartada na importação, e a separação Direto × Extra
+   * dependia da tabulação — que no Receptivo simplesmente não acontece.
+   */
+  tipo_comissao?: string;
   forma_pagamento: FormaPagementoAnalitico;
   tpdoc_original: string;
   valor_recebido: number;
@@ -127,9 +136,33 @@ export function ehEquipeRetencao(equipe: unknown): boolean {
   return norm(equipe).includes('retencao');
 }
 
+/**
+ * A linha é comissão EXTRA? (coluna "Tipo comissão" do relatório)
+ *
+ * O ERP manda `Extra` para recebimento de NR vinculado a outro operador e
+ * `Integral` para o do próprio. A leitura é por CONTER "extra" no normalizado,
+ * e não por igualdade: o mesmo campo já apareceu como "Extra", "EXTRA" e
+ * "Comissão Extra" conforme o relatório.
+ *
+ * `undefined` quando não há valor — e aí a resposta honesta é "não sei", não
+ * "é direto". Ver `classificarComissao`.
+ */
+export function ehComissaoExtra(tipoComissao: unknown): boolean | undefined {
+  const n = norm(tipoComissao);
+  if (!n) return undefined;
+  return n.includes('extra');
+}
+
+/** `'extra' | 'direto' | null` — `null` = o relatório não informou. */
+export function classificarComissao(tipoComissao: unknown): 'extra' | 'direto' | null {
+  const extra = ehComissaoExtra(tipoComissao);
+  if (extra === undefined) return null;
+  return extra ? 'extra' : 'direto';
+}
+
 // ── Resolução de colunas ─────────────────────────────────────────────────────
 
-export type ColKeys = 'op' | 'eq' | 'cli' | 'tp' | 'dt' | 'rec' | 'ho';
+export type ColKeys = 'op' | 'eq' | 'cli' | 'tp' | 'dt' | 'rec' | 'ho' | 'tc';
 
 const COL_ALIASES: Record<ColKeys, string[]> = {
   op:  ['cobradora', 'operador', 'cobrador'],
@@ -140,6 +173,13 @@ const COL_ALIASES: Record<ColKeys, string[]> = {
   dt:  ['dtpgto', 'datapgto', 'datapagamento', 'datadopagamento'],
   rec: ['recebido', 'valorrecebido'],
   ho:  ['totalho', 'ho'],
+  // "Tipo comissão" (Extra / Integral). Opcional: relatório antigo não tem, e
+  // a importação não pode falhar por causa dela — ver `required` abaixo.
+  //
+  // NÃO incluir 'comissao' solto: casaria com uma coluna "Comissão" de VALOR
+  // (a PaguePlay tem métricas de comissão em reais), e aí um número monetário
+  // seria gravado como se fosse o rótulo do vínculo.
+  tc:  ['tipocomissao', 'tipodecomissao'],
 };
 
 export function resolveCols(headers: unknown[]): Record<ColKeys, number> | null {

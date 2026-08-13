@@ -110,6 +110,10 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
       valor_recebido:   rec,
       total_ho:         ho,
       data_pagamento:   dt,
+      // "Tipo comissão" (Extra / Integral) — opcional, ver COL_ALIASES.
+      tipo_comissao:    cols.tc != null
+        ? (String(row[cols.tc] ?? '').trim() || undefined)
+        : undefined,
     });
   }
 
