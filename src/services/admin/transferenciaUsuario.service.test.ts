@@ -207,6 +207,39 @@ describe('executarTransferencia — relatório antes do DELETE', () => {
   });
 });
 
+// ── Setor de destino é obrigatório ───────────────────────────────────────────
+
+describe('executarTransferencia — sem setor de destino', () => {
+  it('recusa antes de tocar em qualquer coisa', async () => {
+    comAcordos(3);
+
+    const r = await executarTransferencia({
+      alvo: { ...ALVO_SETOR, destinoSetorId: null },
+      levarAcordos: false,
+      executadoPorId: 'admin-1',
+    });
+
+    expect(r.status).toBe('falha');
+    if (r.status === 'falha') expect(r.mensagem).toContain('setor de destino');
+    // Nem o relatório: a recusa vem antes de tudo. Sem setor a pessoa ficaria
+    // fora de todo painel escopado por setor.
+    expect(baixarRelatorioMock).not.toHaveBeenCalled();
+    expect(ops).toHaveLength(0);
+    expect(rpcCalls).toHaveLength(0);
+  });
+
+  it('vale também para troca de empresa', async () => {
+    const r = await executarTransferencia({
+      alvo: { ...ALVO_EMPRESA, destinoSetorId: null },
+      levarAcordos: false,
+      executadoPorId: 'admin-1',
+    });
+
+    expect(r.status).toBe('falha');
+    expect(ops).toHaveLength(0);
+  });
+});
+
 // ── O perfil ─────────────────────────────────────────────────────────────────
 
 describe('executarTransferencia — o perfil', () => {

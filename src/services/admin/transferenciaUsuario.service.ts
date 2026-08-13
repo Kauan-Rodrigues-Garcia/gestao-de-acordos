@@ -202,6 +202,18 @@ export async function executarTransferencia(params: {
   // Empresa nunca leva: mover acordo entre CNPJs não é uma opção deste produto.
   const levarAcordos = tipo === 'setor' && params.levarAcordos;
 
+  // Setor de destino é obrigatório. Sem ele a pessoa fica fora de TODO painel
+  // escopado por setor — some do analítico, do Painel Líder e das metas — e é um
+  // estado que ninguém escolhe de propósito. A tela também trava o botão; a
+  // trava vive aqui porque é aqui que a escrita acontece.
+  if (!alvo.destinoSetorId) {
+    return {
+      status: 'falha',
+      mensagem: 'Escolha o setor de destino. Transferir sem setor deixaria o usuário '
+        + 'fora de todos os painéis por setor.',
+    };
+  }
+
   // ── 1. Relatório, antes de qualquer DELETE ────────────────────────────────
   let relatorio: string | null = null;
   let acordosParaApagar = 0;

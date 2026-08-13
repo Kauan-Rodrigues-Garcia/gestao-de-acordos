@@ -57,6 +57,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { supabase, Setor, Perfil } from '@/lib/supabase';
+import { executarTransferencia } from '@/services/admin/transferenciaUsuario.service';
+import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
@@ -118,14 +120,41 @@ export default function AdminSetoresAba() {
   const [expandido, setExpandido] = useState<Set<string>>(new Set());
   const [verTodos, setVerTodos] = useState<Set<string>>(new Set());
 
-  // Transferência de setor — aceita 1 ou vários usuários de uma vez
+  // Transferência — aceita 1 ou vários usuários de uma vez. Esta é a ÚNICA
+  // porta: os campos Setor/Empresa do modal de editar usuário viraram somente
+  // leitura em 13/08/2026, porque mudá-los é transferir e transferir mexe em
+  // tabulação, NR, equipe, clone e fantasma.
   const [transferindo, setTransferindo] = useState<Perfil[] | null>(null);
   const [transferAlvo, setTransferAlvo] = useState<string>('');
   const [transfSalvando, setTransfSalvando] = useState(false);
+  /** Empresa de destino. Igual à atual = transferência de setor. */
+  const [transferEmpresa, setTransferEmpresa] = useState<string>('');
+  /** Setores da empresa de DESTINO — pode não ser a atual. */
+  const [setoresDestino, setSetoresDestino] = useState<Setor[]>([]);
+  const [carregandoDestino, setCarregandoDestino] = useState(false);
+  const [levarAcordos, setLevarAcordos] = useState(false);
+  const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
   // Seleção múltipla via checkbox nas listas de usuários
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
   const acessoOk = temAcessoSetores(perfilAtual?.perfil);
+
+  /** O destino é outra empresa? Muda o título, some a escolha e o aviso troca. */
+  const trocaDeEmpresa = !!transferEmpresa && transferEmpresa !== empresaAtual?.id;
+
+  /** Nomes para o histórico. Setor de outra empresa não está em `setores`. */
+  const nomeDoSetorPorId = useCallback((id: string | null): string => {
+    if (!id) return 'sem setor';
+    return setores.find(s => s.id === id)?.nome
+      ?? setoresDestino.find(s => s.id === id)?.nome
+      ?? 'outro setor';
+  }, [setores, setoresDestino]);
+
+  const nomeDaEmpresaPorId = useCallback((id: string | null): string => {
+    if (!id) return 'empresa';
+    if (id === empresaAtual?.id) return empresaAtual?.nome ?? 'esta empresa';
+    return empresas.find(e => e.id === id)?.nome ?? 'outra empresa';
+  }, [empresas, empresaAtual?.id, empresaAtual?.nome]);
 
   const fetchSetores = useCallback(async () => {
     if (!empresaAtual?.id) {
@@ -159,7 +188,9 @@ export default function AdminSetoresAba() {
     }
     const { data, error } = await supabase
       .from('perfis')
-      .select('id, nome, perfil, setor_id, foto_url, usuario')
+      // `equipe_id` entra por causa da transferência: é a equipe de ORIGEM, e
+      // sem ela o fantasma não teria para onde devolver o recebimento do mês.
+      .select('id, nome, perfil, setor_id, equipe_id, foto_url, usuario')
       .eq('empresa_id', empresaAtual.id)
       .order('nome');
     if (error) {
@@ -174,6 +205,45 @@ export default function AdminSetoresAba() {
     fetchSetores();
     fetchPerfis();
   }, [fetchSetores, fetchPerfis]);
+
+  // Empresas para o destino da transferência. Só super_admin: `setores_select`
+  // usa `fn_can_access_empresa`, que só abre a outra empresa para ele — um
+  // administrador comum veria a lista de setores vazia e o UPDATE seria barrado
+  // pela RLS de `perfis`. Oferecer o campo a quem não pode usar é pior que não
+  // oferecer.
+  const podeTrocarEmpresa = perfilAtual?.perfil === 'super_admin';
+
+  useEffect(() => {
+    if (!podeTrocarEmpresa) { setEmpresas([]); return; }
+    let cancel = false;
+    void supabase.from('empresas').select('id, nome').order('nome').then(({ data }) => {
+      if (!cancel) setEmpresas((data as { id: string; nome: string }[]) ?? []);
+    });
+    return () => { cancel = true; };
+  }, [podeTrocarEmpresa]);
+
+  /**
+   * Setores da empresa de DESTINO.
+   *
+   * Sem isto o seletor de setor listava sempre os da empresa atual: ao escolher
+   * a outra empresa, não aparecia setor nenhum para escolher e a transferência
+   * ficava impossível de concluir.
+   */
+  useEffect(() => {
+    if (!transferindo || !transferEmpresa) return;
+    if (transferEmpresa === empresaAtual?.id) { setSetoresDestino(setores); return; }
+
+    let cancel = false;
+    setCarregandoDestino(true);
+    void supabase.from('setores')
+      .select('*').eq('empresa_id', transferEmpresa).order('nome')
+      .then(({ data }) => {
+        if (cancel) return;
+        setSetoresDestino((data as Setor[]) ?? []);
+        setCarregandoDestino(false);
+      });
+    return () => { cancel = true; };
+  }, [transferindo, transferEmpresa, empresaAtual?.id, setores]);
 
   // Item 12: carrega os clones (operador→equipe) e resolve o setor destino de
   // cada equipe. Só cross-setor entra na lista (o filtro final é no memo).
@@ -234,16 +304,25 @@ export default function AdminSetoresAba() {
     });
   }
 
-  function abrirTransferir(usuario: Perfil) {
-    setTransferindo([usuario]);
+  /** Estado inicial do diálogo: empresa atual, sem setor, sem levar nada. */
+  function prepararTransferencia(lista: Perfil[]) {
+    setTransferindo(lista);
     setTransferAlvo('');
+    setTransferEmpresa(empresaAtual?.id ?? '');
+    setSetoresDestino(setores);
+    // Recomeça sempre em "chegar limpo": herdar a escolha da transferência
+    // anterior é como se apaga um histórico sem querer.
+    setLevarAcordos(false);
+  }
+
+  function abrirTransferir(usuario: Perfil) {
+    prepararTransferencia([usuario]);
   }
 
   function abrirTransferirSelecionados() {
     const lista = perfis.filter(p => selecionados.has(p.id));
     if (lista.length === 0) return;
-    setTransferindo(lista);
-    setTransferAlvo('');
+    prepararTransferencia(lista);
   }
 
   function toggleSelecionado(id: string) {
@@ -255,29 +334,76 @@ export default function AdminSetoresAba() {
     });
   }
 
+  /**
+   * Executa a transferência de todo mundo que está selecionado.
+   *
+   * ## Por que não é mais um `update` direto
+   *
+   * Até 13/08/2026 este botão fazia `update({ setor_id, equipe_id: null })` e
+   * mais nada. As tabulações ficavam carimbadas no setor ANTIGO
+   * (`acordos.setor_id` alimenta o Dashboard e o Painel Líder) e contavam lá
+   * para sempre; os clones em `equipe_operadores_clones` ficavam pendurados, e a
+   * pessoa seguia somando no setor emprestado; o recebimento dela sumia na hora
+   * da equipe de origem, no meio do mês; e nada disso deixava rastro para
+   * desfazer. Agora tudo passa por `executarTransferencia`.
+   *
+   * ## Um de cada vez, de propósito
+   *
+   * Cada pessoa gera o próprio relatório de tabulações ANTES de qualquer DELETE
+   * (regra de 20260805c). Em lote isso é um arquivo por pessoa — e é o certo:
+   * as tabulações são de cada uma, e um arquivo só não diria de quem é o quê.
+   * Sequencial também garante que a falha de uma não leve as outras junto.
+   */
   async function transferir() {
-    if (!transferindo?.length || !transferAlvo) return;
+    if (!transferindo?.length || !transferAlvo || !empresaAtual?.id) return;
     setTransfSalvando(true);
-    try {
-      // Ao trocar de setor, remove os usuários de qualquer equipe do setor antigo.
-      const ids = transferindo.map(t => t.id);
-      const { error } = await supabase
-        .from('perfis')
-        .update({ setor_id: transferAlvo, equipe_id: null })
-        .in('id', ids);
-      if (error) throw error;
-      toast.success(
-        transferindo.length === 1
-          ? `${transferindo[0].nome} transferido de setor!`
-          : `${transferindo.length} usuários transferidos de setor!`,
-      );
+
+    const destinoEmpresa = transferEmpresa || empresaAtual.id;
+    let ok = 0;
+    let apagados = 0;
+    let movidos = 0;
+    const falhas: string[] = [];
+
+    for (const p of transferindo) {
+      const r = await executarTransferencia({
+        alvo: {
+          perfilId:         p.id,
+          nome:             p.nome,
+          usuario:          p.usuario ?? null,
+          origemEmpresaId:  empresaAtual.id,
+          origemSetorId:    p.setor_id ?? null,
+          origemEquipeId:   p.equipe_id ?? null,
+          destinoEmpresaId: destinoEmpresa,
+          destinoSetorId:   transferAlvo,
+        },
+        levarAcordos,
+        executadoPorId: perfilAtual?.id ?? null,
+      });
+
+      if (r.status === 'falha') { falhas.push(`${p.nome}: ${r.mensagem}`); continue; }
+      ok++;
+      apagados += r.acordosApagados;
+      movidos  += r.acordosMovidos;
+      if (r.avisoRegistro) toast.warning(`${p.nome} — ${r.avisoRegistro}`, { duration: 12000 });
+    }
+
+    if (ok > 0) {
+      const partes = [ok === 1 ? '1 usuário transferido.' : `${ok} usuários transferidos.`];
+      if (apagados > 0) {
+        partes.push(`${apagados.toLocaleString('pt-BR')} tabulações apagadas (relatórios baixados).`);
+      }
+      if (movidos > 0) partes.push(`${movidos.toLocaleString('pt-BR')} tabulações foram junto.`);
+      partes.push('O recebimento continua na equipe de origem até a liderança tirar.');
+      toast.success(partes.join(' '), { duration: 9000 });
+    }
+    // Falha de uma pessoa não some no meio de um "sucesso" agregado.
+    for (const f of falhas) toast.error(f, { duration: 12000 });
+
+    setTransfSalvando(false);
+    if (ok > 0) {
       setTransferindo(null);
       setSelecionados(new Set());
       fetchPerfis();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro ao transferir usuário');
-    } finally {
-      setTransfSalvando(false);
     }
   }
 
@@ -672,22 +798,39 @@ export default function AdminSetoresAba() {
         </DialogContent>
       </Dialog>
 
-      {/* ── Dialog transferir usuário(s) de setor ── */}
-      <Dialog open={!!transferindo} onOpenChange={o => { if (!o) setTransferindo(null); }}>
-        <DialogContent className="max-w-md" aria-describedby="modal-transferir-desc">
+      {/* ── Transferências recentes, com o desfazer ──────────────────────────
+          Ao lado do botão que transfere: quem errou volta ao lugar de onde
+          transferiu, não a uma tela de auditoria noutro canto. */}
+      <div className="mt-6">
+        <HistoricoTransferencias
+          empresaId={empresaAtual?.id}
+          podeDesfazer={
+            perfilAtual?.perfil === 'administrador' || perfilAtual?.perfil === 'super_admin'
+          }
+          nomeDoSetor={nomeDoSetorPorId}
+          nomeDaEmpresa={nomeDaEmpresaPorId}
+          nomeDoPerfil={id => perfis.find(p => p.id === id)?.nome}
+          onDesfeita={() => { fetchPerfis(); fetchSetores(); }}
+        />
+      </div>
+
+      {/* ── Dialog transferir usuário(s): setor e/ou empresa ── */}
+      <Dialog open={!!transferindo} onOpenChange={o => { if (!o && !transfSalvando) setTransferindo(null); }}>
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto" aria-describedby="modal-transferir-desc">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowRightLeft className="w-4 h-4 text-primary" />
-              Transferir de setor
+              Transferir {trocaDeEmpresa ? 'de empresa' : 'de setor'}
             </DialogTitle>
             <DialogDescription id="modal-transferir-desc" className="text-xs">
               {transferindo && transferindo.length === 1 ? (
-                <>Selecione o novo setor para <strong>{transferindo[0].nome}</strong>.</>
+                <>Escolha o destino de <strong>{transferindo[0].nome}</strong>.</>
               ) : (
-                <>Selecione o novo setor para <strong>{transferindo?.length ?? 0} usuários</strong>.</>
+                <>Escolha o destino de <strong>{transferindo?.length ?? 0} usuários</strong>.</>
               )}
             </DialogDescription>
           </DialogHeader>
+
           {transferindo && transferindo.length > 1 && (
             <div className="flex flex-wrap gap-1 max-h-24 overflow-y-auto -mt-1">
               {transferindo.map(t => (
@@ -697,23 +840,118 @@ export default function AdminSetoresAba() {
               ))}
             </div>
           )}
-          <div className="space-y-2 py-2">
-            <Label className="text-xs">Novo setor</Label>
-            <Select value={transferAlvo} onValueChange={setTransferAlvo}>
-              <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione o setor..." /></SelectTrigger>
-              <SelectContent>
-                {setores
-                  // Esconde o setor de origem só quando TODOS os selecionados já estão nele
-                  .filter(s => !(transferindo && transferindo.every(t => t.setor_id === s.id)))
-                  .map(s => (
-                    <SelectItem key={s.id} value={s.id}>{s.nome}{!s.ativo && ' (inativo)'}</SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            <p className="text-[11px] text-muted-foreground">
-              Ao transferir, {transferindo && transferindo.length === 1 ? 'o usuário sai' : 'os usuários saem'} de qualquer equipe do setor atual.
+
+          <div className="space-y-3 py-2">
+            {/* Empresa: só super_admin. Ver `podeTrocarEmpresa`. */}
+            {podeTrocarEmpresa && empresas.length > 1 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">Empresa</Label>
+                <Select
+                  value={transferEmpresa}
+                  onValueChange={v => {
+                    setTransferEmpresa(v);
+                    // O setor escolhido pertence à empresa anterior — mantê-lo
+                    // gravaria um setor de outra empresa no perfil.
+                    setTransferAlvo('');
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione a empresa..." /></SelectTrigger>
+                  <SelectContent>
+                    {empresas.map(e => (
+                      <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label className="text-xs">
+                Novo setor <span className="text-destructive">*</span>
+              </Label>
+              <Select value={transferAlvo} onValueChange={setTransferAlvo} disabled={carregandoDestino}>
+                <SelectTrigger className="h-9 text-sm">
+                  <SelectValue placeholder={carregandoDestino ? 'Carregando setores…' : 'Selecione o setor...'} />
+                </SelectTrigger>
+                <SelectContent>
+                  {setoresDestino.length === 0 ? (
+                    <SelectItem value="__none__" disabled>
+                      Nenhum setor nesta empresa
+                    </SelectItem>
+                  ) : (
+                    setoresDestino
+                      // Esconde o setor de origem só quando TODOS os selecionados
+                      // já estão nele — e só faz sentido na mesma empresa.
+                      .filter(s => trocaDeEmpresa
+                        || !(transferindo && transferindo.every(t => t.setor_id === s.id)))
+                      .map(s => (
+                        <SelectItem key={s.id} value={s.id}>{s.nome}{!s.ativo && ' (inativo)'}</SelectItem>
+                      ))
+                  )}
+                </SelectContent>
+              </Select>
+              {/* Setor é obrigatório: sem ele a pessoa some de todo painel
+                  escopado por setor, e é um estado que ninguém escolhe de
+                  propósito. O botão fica travado até escolher. */}
+              {!transferAlvo && (
+                <p className="text-[11px] text-muted-foreground">
+                  Escolha um setor de destino para continuar.
+                </p>
+              )}
+            </div>
+
+            {/* A escolha do destino das tabulações. Só troca de setor a tem. */}
+            {!trocaDeEmpresa ? (
+              <div className="space-y-1.5">
+                <Label className="text-xs">As tabulações deles</Label>
+                <button
+                  type="button" role="radio" aria-checked={!levarAcordos}
+                  onClick={() => setLevarAcordos(false)}
+                  className={cn(
+                    'w-full text-left rounded-md border p-2.5 transition-colors',
+                    !levarAcordos ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40',
+                  )}
+                >
+                  <span className={cn('block text-sm font-medium', !levarAcordos && 'text-primary')}>
+                    Chegar limpo
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground leading-snug">
+                    Baixa o relatório das tabulações e apaga o histórico. Os NRs voltam
+                    a ficar livres para outros tabularem. Um arquivo por pessoa.
+                  </span>
+                </button>
+                <button
+                  type="button" role="radio" aria-checked={levarAcordos}
+                  onClick={() => setLevarAcordos(true)}
+                  className={cn(
+                    'w-full text-left rounded-md border p-2.5 transition-colors',
+                    levarAcordos ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40',
+                  )}
+                >
+                  <span className={cn('block text-sm font-medium', levarAcordos && 'text-primary')}>
+                    Levar as tabulações junto
+                  </span>
+                  <span className="block text-[11px] text-muted-foreground leading-snug">
+                    As tabulações mudam de setor com eles e os vínculos continuam de pé.
+                    Nada é apagado. Use só quando o setor mudou de nome na prática.
+                  </span>
+                </button>
+              </div>
+            ) : (
+              <p className="text-[11px] rounded-md border border-destructive/30 bg-destructive/5 p-2.5">
+                Troca de empresa é sempre limpa: o relatório das tabulações é baixado e
+                o histórico apagado. Tabulação não muda de empresa — são cadastros de
+                clientes de CNPJs diferentes.
+              </p>
+            )}
+
+            <p className="text-[11px] text-muted-foreground rounded-md border border-border bg-muted/30 p-2.5">
+              Eles saem de qualquer equipe e dos vínculos de clone. O recebimento
+              deste mês <strong>continua na equipe de origem</strong>, marcado como
+              transferido, até a liderança de lá tirar. Dá para desfazer depois.
             </p>
           </div>
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setTransferindo(null)} disabled={transfSalvando}>
               <X className="w-3.5 h-3.5 mr-1" /> Cancelar

@@ -6,11 +6,6 @@ import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
 } from '@/services/admin/exclusaoUsuario.service';
-import {
-  executarTransferencia, type AlvoTransferencia,
-} from '@/services/admin/transferenciaUsuario.service';
-import { DialogoTransferencia } from '@/components/admin/DialogoTransferencia';
-import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -126,10 +121,6 @@ export default function AdminUsuarios() {
   // o fluxo principal usa `editando` + `novaSenha`).
   const [senhaTarget,     setSenhaTarget]     = useState<Perfil | null>(null);
   const [novaSenha,       setNovaSenha]       = useState('');
-  // Transferência: mudar Setor/Empresa passa por confirmação própria, porque as
-  // consequências (apagar tabulação, liberar NR, tirar de equipe) não cabem no
-  // botão "Salvar" junto com trocar o nome.
-  const [alvoTransferencia, setAlvoTransferencia] = useState<AlvoTransferencia | null>(null);
   const [salvandoSenha,   setSalvandoSenha]   = useState(false);
   const [impersonando,    setImpersonando]    = useState<string | null>(null);
 
@@ -290,26 +281,6 @@ export default function AdminUsuarios() {
     if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
 
-    // Mudou de setor ou de empresa? Isso é transferência: passa pela confirmação
-    // que mostra o que será movido e deixa escolher o destino das tabulações.
-    if (editando) {
-      const trocouSetor   = (editando.setor_id ?? '') !== (form.setor_id ?? '');
-      const trocouEmpresa = !!editando.empresa_id && editando.empresa_id !== empresaId;
-      if (trocouSetor || trocouEmpresa) {
-        setAlvoTransferencia({
-          perfilId:         editando.id,
-          nome:             form.nome || editando.nome || 'usuario',
-          usuario:          (form.usuario.trim() || editando.usuario || '').toLowerCase() || null,
-          origemEmpresaId:  editando.empresa_id ?? empresaId,
-          origemSetorId:    editando.setor_id ?? null,
-          origemEquipeId:   editando.equipe_id ?? null,
-          destinoEmpresaId: empresaId,
-          destinoSetorId:   form.setor_id || null,
-        });
-        return;
-      }
-    }
-
     setSaving(true);
     try {
       if (editando) {
@@ -361,71 +332,6 @@ export default function AdminUsuarios() {
       const msg = e instanceof Error
         ? e.message
         : ((e as { message?: string })?.message ?? 'Erro ao salvar usuário');
-      toast.error(msg);
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  /** Nome do setor para o diálogo — "sem setor" quando não há. */
-  function nomeDoSetor(id: string | null): string {
-    if (!id) return 'sem setor';
-    return setores.find(s => s.id === id)?.nome ?? 'setor desconhecido';
-  }
-
-  function nomeDaEmpresa(id: string | null): string {
-    if (!id) return 'empresa';
-    return empresas.find(e => e.id === id)?.nome ?? empresaAtual?.nome ?? 'empresa';
-  }
-
-  /**
-   * A transferência confirmada no diálogo.
-   *
-   * Ordem: campos básicos primeiro, vínculo depois. Se o nome falhar (RLS), a
-   * transferência não acontece — o inverso deixaria a pessoa transferida com o
-   * cadastro pela metade, e transferir é a parte cara de desfazer.
-   */
-  async function confirmarTransferencia(levarAcordos: boolean) {
-    if (!alvoTransferencia || !editando) return;
-    setSaving(true);
-    try {
-      await salvarCamposBasicos(editando.id);
-
-      const r = await executarTransferencia({
-        alvo: alvoTransferencia,
-        levarAcordos,
-        executadoPorId: perfilAtual?.id ?? null,
-      });
-
-      if (r.status === 'falha') { toast.error(r.mensagem); return; }
-
-      const partes: string[] = ['Usuário transferido.'];
-      if (r.acordosApagados > 0) {
-        partes.push(
-          `${r.acordosApagados.toLocaleString('pt-BR')} tabulaç${r.acordosApagados === 1 ? 'ão' : 'ões'} `
-          + `apagada${r.acordosApagados === 1 ? '' : 's'}`
-          + `${r.relatorio ? ` — relatório salvo em ${r.relatorio}` : ''}.`,
-        );
-      }
-      if (r.acordosMovidos > 0) {
-        partes.push(`${r.acordosMovidos.toLocaleString('pt-BR')} tabulações foram junto.`);
-      }
-      if (r.clonesRemovidos > 0) {
-        partes.push(`Removido de ${r.clonesRemovidos} equipe(s) em que era clone.`);
-      }
-      toast.success(partes.join(' '), { duration: 8000 });
-
-      // Sem registro não há desfazer NEM fantasma. O admin precisa saber agora,
-      // não no dia em que tentar desfazer.
-      if (r.avisoRegistro) toast.warning(r.avisoRegistro, { duration: 12000 });
-
-      setAlvoTransferencia(null);
-      setDialogOpen(false);
-      fetchDados();
-    } catch (e) {
-      const msg = e instanceof Error
-        ? e.message
-        : ((e as { message?: string })?.message ?? 'Erro ao transferir usuário');
       toast.error(msg);
     } finally {
       setSaving(false);
@@ -1052,26 +958,43 @@ export default function AdminUsuarios() {
                 </div>
               )}
             </div>
+            {/* Setor e empresa: escolhidos ao CRIAR, somente leitura ao editar.
+                ─────────────────────────────────────────────────────────────
+                Mudá-los depois é uma TRANSFERÊNCIA: apaga tabulação ou muda o
+                setor dela, libera NR, tira de equipe e clones, deixa fantasma
+                na equipe de origem e precisa poder ser desfeita.
+
+                Enquanto isso morava aqui, havia três portas para a mesma coisa
+                — este campo, o mesmo campo de empresa e o botão "Transferir" da
+                aba Setores, que fazia um `update` cru sem nada disso. Agora a
+                porta é uma só, na aba Setores. */}
             <div className="space-y-1.5">
               <Label className="text-xs">Setor</Label>
-              <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
-                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
-                <SelectContent>
-                  {setoresDoForm.length === 0
-                    ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
-                    : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {editando && form.setor_id !== (editando.setor_id ?? '') && (
-                <p className="text-[11px] text-primary flex items-center gap-1">
-                  <ArrowRightLeft className="w-3 h-3" />
-                  Ao salvar, a transferência será confirmada numa tela à parte.
-                </p>
+              {editando ? (
+                <>
+                  <Input
+                    value={setores.find(s => s.id === editando.setor_id)?.nome ?? 'Sem setor'}
+                    readOnly className="h-9 text-sm bg-muted/40"
+                  />
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <ArrowRightLeft className="w-3 h-3 shrink-0" />
+                    Para mover de setor ou de empresa, use <strong>Transferir</strong> na aba Setores.
+                  </p>
+                </>
+              ) : (
+                <Select value={form.setor_id} onValueChange={v => setForm(f => ({ ...f, setor_id: v }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione um setor" /></SelectTrigger>
+                  <SelectContent>
+                    {setoresDoForm.length === 0
+                      ? <SelectItem value="__none__" disabled>Nenhum setor nesta empresa</SelectItem>
+                      : setoresDoForm.map(s => <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               )}
             </div>
              <div className="space-y-1.5">
                <Label className="text-xs">Empresa</Label>
-               {isSuperAdmin ? (
+               {isSuperAdmin && !editando ? (
                  <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v, setor_id: setores.find(s => s.empresa_id === v)?.id ?? '' }))}>
                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
                    <SelectContent>
@@ -1079,24 +1002,16 @@ export default function AdminUsuarios() {
                    </SelectContent>
                  </Select>
                ) : (
-                 <Input value={empresaAtual?.nome ?? 'Tenant atual'} readOnly className="h-9 text-sm bg-muted/40" />
+                 <Input
+                   value={
+                     (editando && empresas.find(e => e.id === editando.empresa_id)?.nome)
+                     ?? empresaAtual?.nome ?? 'Tenant atual'
+                   }
+                   readOnly className="h-9 text-sm bg-muted/40"
+                 />
                )}
              </div>
           </div>
-
-          {/* ── Seção: Transferências ──────────────────────────────────────
-              Fica aqui, e não numa tela de auditoria, porque é aqui que o admin
-              chega quando moveu alguém errado. Some sozinha para quem nunca foi
-              transferido, que é a maioria. */}
-          {editando && (
-            <HistoricoTransferencias
-              perfilId={editando.id}
-              podeDesfazer={isAdmin || isSuperAdmin}
-              nomeDoSetor={nomeDoSetor}
-              nomeDaEmpresa={nomeDaEmpresa}
-              onDesfeita={() => { setDialogOpen(false); fetchDados(); }}
-            />
-          )}
 
           {/* ── Seção: Redefinir senha (edição, só admin/super_admin) ───
               A senha atual não é exibida porque não existe para ser exibida: o
@@ -1232,19 +1147,6 @@ export default function AdminUsuarios() {
           }
           e.target.value = '';
         }}
-      />
-
-      {/* Transferência: confirmação própria de mudar Setor/Empresa */}
-      <DialogoTransferencia
-        aberto={!!alvoTransferencia}
-        alvo={alvoTransferencia}
-        origemSetorNome={nomeDoSetor(alvoTransferencia?.origemSetorId ?? null)}
-        destinoSetorNome={nomeDoSetor(alvoTransferencia?.destinoSetorId ?? null)}
-        origemEmpresaNome={nomeDaEmpresa(alvoTransferencia?.origemEmpresaId ?? null)}
-        destinoEmpresaNome={nomeDaEmpresa(alvoTransferencia?.destinoEmpresaId ?? null)}
-        salvando={saving}
-        onCancelar={() => setAlvoTransferencia(null)}
-        onConfirmar={levar => void confirmarTransferencia(levar)}
       />
 
       {/* Recorte da foto antes do upload */}

@@ -1,8 +1,11 @@
 /**
- * HistoricoTransferencias.tsx — as transferências de uma pessoa, e o desfazer.
+ * HistoricoTransferencias.tsx — as transferências recentes, e o desfazer.
  *
- * Fica dentro do modal de editar usuário porque é ali que o admin vai procurar:
- * ele abre a pessoa que foi movida errado, não uma tela de auditoria.
+ * Fica ao lado do botão que transfere, na aba Setores. A primeira versão morava
+ * no modal de editar usuário, junto dos campos Setor/Empresa — mas esses campos
+ * saíram de lá em 13/08/2026 justamente para a transferência ter UMA porta só.
+ * Deixar o desfazer na porta que fechou seria manter o espalhamento pela
+ * metade: quem transferiu errado volta ao lugar de onde transferiu.
  *
  * ## O que o desfazer alcança, e o que não
  *
@@ -23,23 +26,29 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import {
-  listarTransferenciasDoPerfil, desfazerTransferencia,
+  listarTransferencias, listarTransferenciasDoPerfil, desfazerTransferencia,
   type TransferenciaRegistrada,
 } from '@/services/admin/transferenciaUsuario.service';
 import { toast } from 'sonner';
 
 interface Props {
-  perfilId: string;
+  /** Transferências desta empresa. Ignorado quando `perfilId` vem preenchido. */
+  empresaId?: string;
+  /** Só as de uma pessoa. Usado quando a lista nasce de um card de usuário. */
+  perfilId?: string;
   /** Só administrador/super_admin desfaz — a RPC também cobra, isto tira o botão. */
   podeDesfazer: boolean;
   nomeDoSetor: (id: string | null) => string;
   nomeDaEmpresa: (id: string | null) => string;
-  /** Recarrega a lista de usuários da tela de trás depois de desfazer. */
+  /** Nome de quem foi transferido. Sem ele a linha não diz de quem é. */
+  nomeDoPerfil?: (id: string) => string | undefined;
+  /** Recarrega a tela de trás depois de desfazer. */
   onDesfeita: () => void;
 }
 
 export function HistoricoTransferencias({
-  perfilId, podeDesfazer, nomeDoSetor, nomeDaEmpresa, onDesfeita,
+  empresaId, perfilId, podeDesfazer, nomeDoSetor, nomeDaEmpresa,
+  nomeDoPerfil, onDesfeita,
 }: Props) {
   const [itens, setItens] = useState<TransferenciaRegistrada[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -48,9 +57,13 @@ export function HistoricoTransferencias({
 
   const carregar = useCallback(async () => {
     setCarregando(true);
-    setItens(await listarTransferenciasDoPerfil(perfilId));
+    setItens(
+      perfilId
+        ? await listarTransferenciasDoPerfil(perfilId)
+        : empresaId ? await listarTransferencias(empresaId) : [],
+    );
     setCarregando(false);
-  }, [perfilId]);
+  }, [perfilId, empresaId]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 
@@ -106,6 +119,9 @@ export function HistoricoTransferencias({
           >
             <div className="flex items-start justify-between gap-2">
               <div className="space-y-0.5">
+                {nomeDoPerfil && (
+                  <p className="font-semibold">{nomeDoPerfil(t.perfilId) ?? 'Usuário removido'}</p>
+                )}
                 <p className="flex items-center gap-1.5 flex-wrap font-medium">
                   <ArrowRightLeft className="w-3 h-3 text-muted-foreground shrink-0" />
                   {t.tipo === 'empresa' ? (
