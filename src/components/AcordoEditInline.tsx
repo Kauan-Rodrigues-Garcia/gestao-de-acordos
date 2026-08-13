@@ -18,6 +18,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo } from '@/services/direto_extra.service';
+import { converterParaExtra } from '@/services/diretoExtraRpc';
 import type { Perfil } from '@/lib/supabase';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
@@ -520,16 +521,18 @@ export function AcordoEditInline({
         return;
       }
 
-      const { error: rpcErr } = await supabase.rpc('fn_converter_para_extra', {
-        p_acordo_id:           decisao.acordoId,
-        p_novo_direto_op_id:   perfil.id,
-        p_novo_direto_op_nome: perfil.nome ?? 'Operador',
-        p_valor:               parseCurrencyInput(valor),
-        p_vencimento:          vencimento,
-        p_nome_cliente:        nomeCliente.trim(),
-        p_tipo:                tipo,
-        p_whatsapp:            isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
-        p_parcelas:            parseInt(parcelas || '1', 10) || 1,
+      const rpcErr = await converterParaExtra({
+        acordoId: decisao.acordoId,
+        novoDiretoOperadorId: perfil.id,
+        novoDiretoOperadorNome: perfil.nome ?? 'Operador',
+        valor: parseCurrencyInput(valor),
+        vencimento,
+        nomeCliente: nomeCliente.trim(),
+        tipo,
+        nrCliente: nrCliente.trim(),
+        instituicao: instituicao.trim(),
+        whatsapp: isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
+        parcelas: parseInt(parcelas || '1', 10) || 1,
       });
       if (rpcErr) {
         toast.error(`Erro ao converter o acordo de ${decisao.operadorNome}: ${rpcErr.message}`);

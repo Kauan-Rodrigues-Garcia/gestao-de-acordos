@@ -33,6 +33,7 @@ import {
 } from '@/services/desligamento.service';
 import { useDiretoExtraConfig }     from '@/hooks/useDiretoExtraConfig';
 import { fetchIsDiretoExtraAtivo }  from '@/services/direto_extra.service';
+import { converterParaExtra, vincularExtraAoDireto } from '@/services/diretoExtraRpc';
 import { useEmpresaTags }           from '@/hooks/useEmpresaTags';
 import { useProfissional }          from '@/hooks/useProfissional';
 import { ModalAdicionarParcela }    from '@/components/ModalAdicionarParcela';
@@ -486,15 +487,26 @@ export function AcordoNovoInline({
             const payloadExtra = { ...payload, tipo_vinculo: 'extra', vinculo_operador_id: conflitoFinal.operadorId, vinculo_operador_nome: conflitoFinal.operadorNome };
             const inseridoExtra = await executarSalvar(payloadExtra);
             if (inseridoExtra) {
-              const { error: rpcErr } = await supabase.rpc('fn_vincular_extra_ao_direto', {
-                p_direto_id: conflitoFinal.acordoId, p_extra_op_id: perfil.id, p_extra_op_nome: perfil.nome ?? 'Operador',
-                p_valor: payload.valor as number, p_vencimento: payload.vencimento as string,
-                p_nome_cliente: (payload.nome_cliente as string) ?? '', p_tipo: (payload.tipo as string) ?? 'boleto',
-                p_whatsapp: (payload.whatsapp as string | null) ?? null, p_parcelas: (payload.parcelas as number) ?? 1,
+              const rpcErr = await vincularExtraAoDireto({
+                diretoId: conflitoFinal.acordoId,
+                extraOperadorId: perfil.id,
+                extraOperadorNome: perfil.nome ?? 'Operador',
+                valor: payload.valor as number,
+                vencimento: payload.vencimento as string,
+                nomeCliente: (payload.nome_cliente as string) ?? '',
+                tipo: (payload.tipo as string) ?? 'boleto',
+                nrCliente: (payload.nr_cliente as string | null) ?? '',
+                instituicao: (payload.instituicao as string | null) ?? '',
+                whatsapp: (payload.whatsapp as string | null) ?? null,
+                parcelas: (payload.parcelas as number) ?? 1,
               });
               if (rpcErr) {
-                console.warn('[Caso A] RPC falhou, tentando update direto:', rpcErr.message);
-                await supabase.from('acordos').update({ ...buildSyncPayload(payload), vinculo_operador_id: perfil.id, vinculo_operador_nome: perfil.nome ?? 'Operador' }).eq('id', conflitoFinal.acordoId);
+                // Nunca contorne a autorização do RPC com escrita direta. Além
+                // de esconder falhas de RLS, isso podia deixar apenas metade do
+                // par Direto/Extra gravada.
+                await supabase.from('acordos').delete().eq('id', inseridoExtra.id);
+                toast.error(`Erro ao vincular o acordo: ${rpcErr.message}`);
+                return;
               }
               await criarNotificacao({
                 usuario_id: conflitoFinal.operadorId,
@@ -702,19 +714,22 @@ export function AcordoNovoInline({
         return;
       }
 
-      const { error: rpcErr } = await supabase.rpc('fn_converter_para_extra', {
-        p_acordo_id: acordoAnteriorId, p_novo_direto_op_id: perfil.id, p_novo_direto_op_nome: perfil.nome ?? 'Operador',
-        p_valor: payload.valor as number, p_vencimento: payload.vencimento as string,
-        p_nome_cliente: (payload.nome_cliente as string) ?? '', p_tipo: (payload.tipo as string) ?? 'boleto',
-        p_whatsapp: (payload.whatsapp as string | null) ?? null, p_parcelas: (payload.parcelas as number) ?? 1,
+      const rpcErr = await converterParaExtra({
+        acordoId: acordoAnteriorId,
+        novoDiretoOperadorId: perfil.id,
+        novoDiretoOperadorNome: perfil.nome ?? 'Operador',
+        valor: payload.valor as number,
+        vencimento: payload.vencimento as string,
+        nomeCliente: (payload.nome_cliente as string) ?? '',
+        tipo: (payload.tipo as string) ?? 'boleto',
+        nrCliente: (payload.nr_cliente as string | null) ?? '',
+        instituicao: (payload.instituicao as string | null) ?? '',
+        whatsapp: (payload.whatsapp as string | null) ?? null,
+        parcelas: (payload.parcelas as number) ?? 1,
       });
       if (rpcErr) {
-        console.warn('[Caso B] RPC falhou, usando fallback:', rpcErr.message);
-        await supabase.from('nr_registros').delete().eq('acordo_id', acordoAnteriorId);
-        const { error: errReb } = await supabase.from('acordos')
-          .update({ ...buildSyncPayload(payload), tipo_vinculo: 'extra', vinculo_operador_id: perfil.id, vinculo_operador_nome: perfil.nome ?? 'Operador' })
-          .eq('id', acordoAnteriorId);
-        if (errReb) { toast.error(`Erro ao converter acordo: ${errReb.message}`); return; }
+        toast.error(`Erro ao converter acordo: ${rpcErr.message}`);
+        return;
       }
 
       const payloadDireto = { ...payload, tipo_vinculo: 'direto', vinculo_operador_id: operadorAntId, vinculo_operador_nome: operadorAntNome };

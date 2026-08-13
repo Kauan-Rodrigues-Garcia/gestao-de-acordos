@@ -17,6 +17,7 @@ import { loadEnv } from 'vite';
 interface ResShim {
   status(code: number): ResShim;
   json(data: unknown): void;
+  setHeader(name: string, value: string): void;
 }
 
 export function devApi(): Plugin {
@@ -49,6 +50,7 @@ export function devApi(): Plugin {
 
         const resShim: ResShim = {
           status(code: number) { res.statusCode = code; return this; },
+          setHeader(name: string, value: string) { res.setHeader(name, value); },
           json(data: unknown) {
             if (!res.headersSent) res.setHeader('Content-Type', 'application/json');
             res.end(JSON.stringify(data));

@@ -1,7 +1,7 @@
 # Sistema de Gestão de Acordos Financeiros
 
 [![CI](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Kauan-Rodrigues-Garcia/gestao-de-acordos/actions/workflows/ci.yml)
-![Tests](https://img.shields.io/badge/tests-1750%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/tests-2302%20passing-brightgreen)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue)
 ![Node](https://img.shields.io/badge/node-%E2%89%A520-informational)
 
@@ -66,7 +66,7 @@ npm run dev
 | `npm run build:map` | Build de produção com sourcemaps |
 | `npm run preview` | Visualiza o build localmente |
 | `npm run lint` | Executa o ESLint |
-| `npm run typecheck` | Type-check dos dois projetos TS (app + node) |
+| `npm run typecheck` | Type-check dos três projetos TS (app + Vite/Node + APIs serverless) |
 | `npm run test` | Roda a suíte Vitest uma vez |
 | `npm run test:watch` | Vitest em modo watch |
 | `npm run test:coverage` | Vitest com cobertura (thresholds em `vitest.config.ts`) |
@@ -157,12 +157,14 @@ O sistema implementa **8 perfis** com níveis crescentes de acesso, protegidos p
 
 ## 🚀 Deploy em Produção
 
-O projeto usa **HashRouter** (React Router DOM), que armazena a rota no fragmento da URL (ex: `/#/login`). Isso significa que **o servidor nunca recebe a rota** — ele sempre serve `index.html` e o React cuida do roteamento no cliente. Compatível com qualquer hospedagem de arquivos estáticos sem configuração adicional.
+O deploy é feito na **Vercel**. O frontend Vite e as funções serverless em
+`api/` sobem juntos; `vercel.json` preserva `/api/*` e envia as demais URLs para
+`index.html`. O app mantém **HashRouter** para que links antigos no formato
+`/#/rota` continuem válidos e os dois tenants compartilhem a mesma estratégia.
 
-> ⚠️ **Por que não BrowserRouter?**  
-> O deploy está no **Render** como *Static Site*, que não suporta SPA fallback nativo.  
-> Com BrowserRouter, ao recarregar `/login` o Render retorna `404 Not Found` porque não existe o arquivo físico `/login/index.html`.  
-> O HashRouter resolve isso definitivamente, sem precisar configurar redirects no servidor.
+Configure na Vercel as variáveis públicas de build (`VITE_*`) e os segredos de
+servidor (`SUPABASE_SERVICE_ROLE_KEY`, `VISION_API_KEY`) separadamente. Consulte
+[.env.example](./.env.example) antes do deploy.
 
 ---
 
@@ -173,7 +175,7 @@ As seguintes melhorias foram implementadas com base na análise técnica do proj
 | Melhoria | Descrição |
 |---|---|
 | **Race condition** | `fetchPerfil` agora usa **7 tentativas** com **backoff exponencial** (500 ms → 8 s), tolerando banco sob alta carga |
-| **HashRouter mantido** | BrowserRouter testado e revertido — o Render (Static Site) não tem SPA fallback; HashRouter garante zero 404 ao recarregar |
+| **HashRouter mantido** | Preserva URLs legadas `/#/...` e mantém o roteamento idêntico nos dois projetos Vercel |
 | **`.env.example`** | Arquivo de exemplo criado com documentação completa de todas as variáveis |
 | **Error Boundaries** | `ErrorBoundary` adicionado: envolve toda a app (crash global) e cada página individualmente |
 | **Paginação backend** | `fetchAcordos` corrigido: paginação usa lote ampliado para compensar deduplicação client-side |

@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -65,15 +65,18 @@ export type Database = {
           numero_parcela: number | null
           observacoes: string | null
           operador_id: string
+          operador_vinculado_id: string | null
           pago_em: string | null
           parcelas: number | null
           setor_id: string | null
-          status: 'verificar_pendente' | 'pago' | 'nao_pago'
+          status: string
           tag_ids: string[] | null
-          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
-          tipo_vinculo: 'direto' | 'extra'
+          tipo: string
+          tipo_receptivo: string | null
+          tipo_vinculo: string
           usou_quarenta_pct: boolean
           valor: number
+          valor_entrada: number | null
           valor_total: number | null
           vencimento: string
           vinculo_operador_id: string | null
@@ -95,15 +98,18 @@ export type Database = {
           numero_parcela?: number | null
           observacoes?: string | null
           operador_id: string
+          operador_vinculado_id?: string | null
           pago_em?: string | null
           parcelas?: number | null
           setor_id?: string | null
-          status?: 'verificar_pendente' | 'pago' | 'nao_pago'
+          status: string
           tag_ids?: string[] | null
-          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
-          tipo_vinculo?: 'direto' | 'extra'
+          tipo: string
+          tipo_receptivo?: string | null
+          tipo_vinculo?: string
           usou_quarenta_pct?: boolean
           valor: number
+          valor_entrada?: number | null
           valor_total?: number | null
           vencimento: string
           vinculo_operador_id?: string | null
@@ -125,15 +131,18 @@ export type Database = {
           numero_parcela?: number | null
           observacoes?: string | null
           operador_id?: string
+          operador_vinculado_id?: string | null
           pago_em?: string | null
           parcelas?: number | null
           setor_id?: string | null
-          status?: 'verificar_pendente' | 'pago' | 'nao_pago'
+          status?: string
           tag_ids?: string[] | null
-          tipo?: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico'
-          tipo_vinculo?: 'direto' | 'extra'
+          tipo?: string
+          tipo_receptivo?: string | null
+          tipo_vinculo?: string
           usou_quarenta_pct?: boolean
           valor?: number
+          valor_entrada?: number | null
           valor_total?: number | null
           vencimento?: string
           vinculo_operador_id?: string | null
@@ -164,10 +173,74 @@ export type Database = {
           },
         ]
       }
-      // Migration 20260812e — origens que ficam FORA do acumulado do setor.
-      // Escrito à mão enquanto os tipos não são regerados pela CLI: o service
-      // precisa de INSERT e DELETE, e `tabelaSemTipo` só serve leitura de
-      // propósito (gravar sem tipo é o caminho para gravar errado calado).
+      api_rate_limits: {
+        Row: {
+          atualizado_em: string
+          janela_inicio: string
+          requisicoes: number
+          rota: string
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          janela_inicio?: string
+          requisicoes?: number
+          rota: string
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          janela_inicio?: string
+          requisicoes?: number
+          rota?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
+      ai_config: {
+        Row: {
+          empresa_id: string | null
+          enabled: boolean
+          id: string
+          max_cols: number
+          max_rows: number
+          model: string
+          prompt_system: string
+          temperature: number
+          updated_at: string
+        }
+        Insert: {
+          empresa_id?: string | null
+          enabled?: boolean
+          id?: string
+          max_cols?: number
+          max_rows?: number
+          model?: string
+          prompt_system?: string
+          temperature?: number
+          updated_at?: string
+        }
+        Update: {
+          empresa_id?: string | null
+          enabled?: boolean
+          id?: string
+          max_cols?: number
+          max_rows?: number
+          model?: string
+          prompt_system?: string
+          temperature?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analitico_exclusoes_setor: {
         Row: {
           criado_em: string
@@ -202,6 +275,13 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_excluido_por_fkey"
+            columns: ["excluido_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
           {
@@ -240,8 +320,6 @@ export type Database = {
           pagamentos_detalhados: Json | null
           setor_id: string | null
           status_tabulacao: string
-          // Coluna "Tipo comissão" do relatório (migration 20260813a).
-          // NULL nas linhas importadas antes dela.
           tipo_comissao: string | null
           total_ho: number
           valor_recebido: number
@@ -297,6 +375,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "analitico_recebimentos_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "acordos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_recebimentos_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "acordos_deduplicados"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "analitico_recebimentos_empresa_id_fkey"
             columns: ["empresa_id"]
             isOneToOne: false
@@ -308,6 +400,13 @@ export type Database = {
             columns: ["operador_id"]
             isOneToOne: false
             referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_recebimentos_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
             referencedColumns: ["id"]
           },
         ]
@@ -359,41 +458,51 @@ export type Database = {
           },
         ]
       }
-      campanha_facil_mensagens: {
+      atendimento_responsaveis: {
         Row: {
-          atualizado_em: string
-          categoria: string
-          corpo: string
           criado_em: string
-          criado_por: string | null
-          criado_por_nome: string | null
+          definido_por: string | null
           empresa_id: string
           id: string
-          titulo: string
+          usuario_id: string
         }
         Insert: {
-          atualizado_em?: string
-          categoria?: string
-          corpo: string
           criado_em?: string
-          criado_por?: string | null
-          criado_por_nome?: string | null
+          definido_por?: string | null
           empresa_id: string
           id?: string
-          titulo: string
+          usuario_id: string
         }
         Update: {
-          atualizado_em?: string
-          categoria?: string
-          corpo?: string
           criado_em?: string
-          criado_por?: string | null
-          criado_por_nome?: string | null
+          definido_por?: string | null
           empresa_id?: string
           id?: string
-          titulo?: string
+          usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "atendimento_responsaveis_definido_por_fkey"
+            columns: ["definido_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_responsaveis_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "atendimento_responsaveis_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campanha_facil_descontos: {
         Row: {
@@ -435,7 +544,59 @@ export type Database = {
           overdue?: number
           settlement?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campanha_facil_descontos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      campanha_facil_mensagens: {
+        Row: {
+          atualizado_em: string
+          categoria: string
+          corpo: string
+          criado_em: string
+          criado_por: string | null
+          criado_por_nome: string | null
+          empresa_id: string
+          id: string
+          titulo: string
+        }
+        Insert: {
+          atualizado_em?: string
+          categoria?: string
+          corpo: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id: string
+          id?: string
+          titulo: string
+        }
+        Update: {
+          atualizado_em?: string
+          categoria?: string
+          corpo?: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id?: string
+          id?: string
+          titulo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "campanha_facil_mensagens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       campanha_facil_mensagens_ocultas: {
         Row: {
@@ -456,7 +617,15 @@ export type Database = {
           ocultado_por?: string | null
           template_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "campanha_facil_mensagens_ocultas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       cargos_permissoes: {
         Row: {
@@ -492,6 +661,396 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comemoracao_homenageados: {
+        Row: {
+          comemoracao_id: string
+          operador_id: string
+          setores_escolhidos: string[]
+        }
+        Insert: {
+          comemoracao_id: string
+          operador_id: string
+          setores_escolhidos?: string[]
+        }
+        Update: {
+          comemoracao_id?: string
+          operador_id?: string
+          setores_escolhidos?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comemoracao_homenageados_comemoracao_id_fkey"
+            columns: ["comemoracao_id"]
+            isOneToOne: false
+            referencedRelation: "comemoracoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracao_homenageados_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comemoracao_midias: {
+        Row: {
+          caminho: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          expira_em: string | null
+          fixada: boolean
+          id: string
+          inicio_s: number
+          nome: string
+          tipo: string
+          trecho_s: number | null
+          url: string
+        }
+        Insert: {
+          caminho: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          expira_em?: string | null
+          fixada?: boolean
+          id?: string
+          inicio_s?: number
+          nome: string
+          tipo: string
+          trecho_s?: number | null
+          url: string
+        }
+        Update: {
+          caminho?: string
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          expira_em?: string | null
+          fixada?: boolean
+          id?: string
+          inicio_s?: number
+          nome?: string
+          tipo?: string
+          trecho_s?: number | null
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comemoracao_midias_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracao_midias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comemoracao_parabens: {
+        Row: {
+          comemoracao_id: string
+          criado_em: string
+          frase: string
+          usuario_id: string
+        }
+        Insert: {
+          comemoracao_id: string
+          criado_em?: string
+          frase: string
+          usuario_id: string
+        }
+        Update: {
+          comemoracao_id?: string
+          criado_em?: string
+          frase?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comemoracao_parabens_comemoracao_id_fkey"
+            columns: ["comemoracao_id"]
+            isOneToOne: false
+            referencedRelation: "comemoracoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracao_parabens_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comemoracoes: {
+        Row: {
+          alvo_tipo: string
+          anim_texto: string
+          cancelada_em: string | null
+          criado_em: string
+          criado_por: string | null
+          duracao_s: number
+          efeito: string
+          empresa_id: string
+          empresa_inteira: boolean
+          equipe_id: string | null
+          equipes_alvo: string[]
+          finalizada_em: string | null
+          gif_midia_id: string | null
+          id: string
+          inicia_em: string
+          layout: Json
+          mensagem: string | null
+          modelo: string
+          setor_id: string | null
+          setores_alvo: string[]
+          som: string
+          som_midia_id: string | null
+          somente_equipe: boolean
+          titulo: string
+          volume: number
+        }
+        Insert: {
+          alvo_tipo?: string
+          anim_texto?: string
+          cancelada_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_s?: number
+          efeito?: string
+          empresa_id: string
+          empresa_inteira?: boolean
+          equipe_id?: string | null
+          equipes_alvo?: string[]
+          finalizada_em?: string | null
+          gif_midia_id?: string | null
+          id?: string
+          inicia_em?: string
+          layout?: Json
+          mensagem?: string | null
+          modelo?: string
+          setor_id?: string | null
+          setores_alvo?: string[]
+          som?: string
+          som_midia_id?: string | null
+          somente_equipe?: boolean
+          titulo: string
+          volume?: number
+        }
+        Update: {
+          alvo_tipo?: string
+          anim_texto?: string
+          cancelada_em?: string | null
+          criado_em?: string
+          criado_por?: string | null
+          duracao_s?: number
+          efeito?: string
+          empresa_id?: string
+          empresa_inteira?: boolean
+          equipe_id?: string | null
+          equipes_alvo?: string[]
+          finalizada_em?: string | null
+          gif_midia_id?: string | null
+          id?: string
+          inicia_em?: string
+          layout?: Json
+          mensagem?: string | null
+          modelo?: string
+          setor_id?: string | null
+          setores_alvo?: string[]
+          som?: string
+          som_midia_id?: string | null
+          somente_equipe?: boolean
+          titulo?: string
+          volume?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comemoracoes_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracoes_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracoes_gif_midia_id_fkey"
+            columns: ["gif_midia_id"]
+            isOneToOne: false
+            referencedRelation: "comemoracao_midias"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracoes_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "comemoracoes_som_midia_id_fkey"
+            columns: ["som_midia_id"]
+            isOneToOne: false
+            referencedRelation: "comemoracao_midias"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      composicao_mes: {
+        Row: {
+          criado_em: string
+          empresa_id: string
+          equipe_id: string | null
+          equipe_nome: string | null
+          equipes_clone: string[]
+          mes: string
+          operador_id: string
+          setor_id: string | null
+          situacao: string
+        }
+        Insert: {
+          criado_em?: string
+          empresa_id: string
+          equipe_id?: string | null
+          equipe_nome?: string | null
+          equipes_clone?: string[]
+          mes: string
+          operador_id: string
+          setor_id?: string | null
+          situacao?: string
+        }
+        Update: {
+          criado_em?: string
+          empresa_id?: string
+          equipe_id?: string | null
+          equipe_nome?: string | null
+          equipes_clone?: string[]
+          mes?: string
+          operador_id?: string
+          setor_id?: string | null
+          situacao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "composicao_mes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      composicao_mes_equipe: {
+        Row: {
+          empresa_id: string
+          equipe_id: string
+          mes: string
+          nome: string
+          setor_id: string | null
+        }
+        Insert: {
+          empresa_id: string
+          equipe_id: string
+          mes: string
+          nome: string
+          setor_id?: string | null
+        }
+        Update: {
+          empresa_id?: string
+          equipe_id?: string
+          mes?: string
+          nome?: string
+          setor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "composicao_mes_equipe_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contribuicao_receptivo: {
+        Row: {
+          acumulado: number
+          atualizado_em: string
+          atualizado_por: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          mes: string
+          meta: number
+          setor_id: string
+        }
+        Insert: {
+          acumulado?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          mes: string
+          meta?: number
+          setor_id: string
+        }
+        Update: {
+          acumulado?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          mes?: string
+          meta?: number
+          setor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contribuicao_receptivo_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contribuicao_receptivo_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contribuicao_receptivo_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
             referencedColumns: ["id"]
           },
         ]
@@ -694,432 +1253,6 @@ export type Database = {
         }
         Relationships: []
       }
-      equipes: {
-        Row: {
-          created_at: string | null
-          empresa_id: string | null
-          id: string
-          nome: string
-          setor_id: string | null
-          treinamento: boolean | null
-          treinamento_inicio: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          empresa_id?: string | null
-          id?: string
-          nome: string
-          setor_id?: string | null
-          treinamento?: boolean | null
-          treinamento_inicio?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          empresa_id?: string | null
-          id?: string
-          nome?: string
-          setor_id?: string | null
-          treinamento?: boolean | null
-          treinamento_inicio?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "equipes_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "equipes_setor_id_fkey"
-            columns: ["setor_id"]
-            isOneToOne: false
-            referencedRelation: "setores"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      // ── Migration 20260730b — Solicitações de WhatsApp (PaguePlay) ──────────
-      // Setor que só atende por ligação pede ao digital que mande mensagem.
-      atendimento_responsaveis: {
-        Row: {
-          criado_em: string
-          definido_por: string | null
-          empresa_id: string
-          id: string
-          usuario_id: string
-        }
-        Insert: {
-          criado_em?: string
-          definido_por?: string | null
-          empresa_id: string
-          id?: string
-          usuario_id: string
-        }
-        Update: {
-          criado_em?: string
-          definido_por?: string | null
-          empresa_id?: string
-          id?: string
-          usuario_id?: string
-        }
-        Relationships: []
-      }
-      solicitacoes_whatsapp: {
-        Row: {
-          atualizado_em: string
-          categoria: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
-          codigo_cliente: string
-          criado_em: string
-          empresa_id: string
-          equipe_id: string | null
-          estado_uf: string | null
-          finalizado_em: string | null
-          id: string
-          iniciado_em: string | null
-          mensagem: string
-          nome_cliente: string | null
-          responsavel_id: string | null
-          setor_id: string | null
-          solicitante_id: string
-          status: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
-          whatsapp: string
-        }
-        Insert: {
-          atualizado_em?: string
-          categoria: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
-          codigo_cliente: string
-          criado_em?: string
-          empresa_id: string
-          equipe_id?: string | null
-          estado_uf?: string | null
-          finalizado_em?: string | null
-          id?: string
-          iniciado_em?: string | null
-          mensagem: string
-          nome_cliente?: string | null
-          responsavel_id?: string | null
-          setor_id?: string | null
-          solicitante_id: string
-          status?: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
-          whatsapp: string
-        }
-        Update: {
-          atualizado_em?: string
-          categoria?: 'proposta' | 'preventivo' | 'quebra_acordo' | 'outros'
-          codigo_cliente?: string
-          criado_em?: string
-          empresa_id?: string
-          equipe_id?: string | null
-          estado_uf?: string | null
-          finalizado_em?: string | null
-          id?: string
-          iniciado_em?: string | null
-          mensagem?: string
-          nome_cliente?: string | null
-          responsavel_id?: string | null
-          setor_id?: string | null
-          solicitante_id?: string
-          status?: 'pendente' | 'em_andamento' | 'feito' | 'falta_info'
-          whatsapp?: string
-        }
-        Relationships: []
-      }
-      // `tipo`/`responsavel_*` vieram da 20260730f (transferência de atendimento).
-      solicitacoes_whatsapp_eventos: {
-        Row: {
-          autor_id: string | null
-          criado_em: string
-          empresa_id: string
-          id: string
-          responsavel_anterior: string | null
-          responsavel_novo: string | null
-          solicitacao_id: string
-          status_anterior: string | null
-          status_novo: string
-          tipo: 'status' | 'responsavel'
-        }
-        Insert: {
-          autor_id?: string | null
-          criado_em?: string
-          empresa_id: string
-          id?: string
-          responsavel_anterior?: string | null
-          responsavel_novo?: string | null
-          solicitacao_id: string
-          status_anterior?: string | null
-          status_novo: string
-          tipo?: 'status' | 'responsavel'
-        }
-        Update: {
-          autor_id?: string | null
-          criado_em?: string
-          empresa_id?: string
-          id?: string
-          responsavel_anterior?: string | null
-          responsavel_novo?: string | null
-          solicitacao_id?: string
-          status_anterior?: string | null
-          status_novo?: string
-          tipo?: 'status' | 'responsavel'
-        }
-        Relationships: []
-      }
-      solicitacoes_whatsapp_mensagens: {
-        Row: {
-          autor_id: string
-          conteudo: string
-          criado_em: string
-          empresa_id: string
-          id: string
-          lida_em: string | null
-          solicitacao_id: string
-        }
-        Insert: {
-          autor_id: string
-          conteudo: string
-          criado_em?: string
-          empresa_id: string
-          id?: string
-          lida_em?: string | null
-          solicitacao_id: string
-        }
-        Update: {
-          autor_id?: string
-          conteudo?: string
-          criado_em?: string
-          empresa_id?: string
-          id?: string
-          lida_em?: string | null
-          solicitacao_id?: string
-        }
-        Relationships: []
-      }
-      // Migration 20260731e — comemoração de meta (popup estilo alerta de live).
-      // `setores_alvo` é preenchido por trigger a partir dos homenageados, e
-      // congela o público na criação. `efeito`/`som` são ids do catálogo em
-      // código (src/pages/Comemoracoes/catalogo.ts).
-      comemoracoes: {
-        // Migration 20260801a acrescentou: modelo, anim_texto, volume,
-        // finalizada_em, alvo_tipo, equipe_id, setor_id, empresa_inteira.
-        // Migration 20260810a acrescentou: somente_equipe, equipes_alvo.
-        Row: {
-          alvo_tipo: string
-          anim_texto: string
-          cancelada_em: string | null
-          criado_em: string
-          criado_por: string | null
-          duracao_s: number
-          efeito: string
-          empresa_id: string
-          empresa_inteira: boolean
-          equipe_id: string | null
-          equipes_alvo: string[]
-          finalizada_em: string | null
-          gif_midia_id: string | null
-          id: string
-          inicia_em: string
-          layout: Json
-          mensagem: string | null
-          modelo: string
-          setor_id: string | null
-          setores_alvo: string[]
-          som: string
-          som_midia_id: string | null
-          somente_equipe: boolean
-          titulo: string
-          volume: number
-        }
-        Insert: {
-          alvo_tipo?: string
-          anim_texto?: string
-          cancelada_em?: string | null
-          criado_em?: string
-          criado_por?: string | null
-          duracao_s?: number
-          efeito?: string
-          empresa_id: string
-          empresa_inteira?: boolean
-          equipe_id?: string | null
-          equipes_alvo?: string[]
-          finalizada_em?: string | null
-          gif_midia_id?: string | null
-          id?: string
-          inicia_em?: string
-          layout?: Json
-          mensagem?: string | null
-          modelo?: string
-          setor_id?: string | null
-          setores_alvo?: string[]
-          som?: string
-          som_midia_id?: string | null
-          somente_equipe?: boolean
-          titulo: string
-          volume?: number
-        }
-        Update: {
-          alvo_tipo?: string
-          anim_texto?: string
-          cancelada_em?: string | null
-          criado_em?: string
-          criado_por?: string | null
-          duracao_s?: number
-          efeito?: string
-          empresa_id?: string
-          empresa_inteira?: boolean
-          equipe_id?: string | null
-          equipes_alvo?: string[]
-          finalizada_em?: string | null
-          gif_midia_id?: string | null
-          id?: string
-          inicia_em?: string
-          layout?: Json
-          mensagem?: string | null
-          modelo?: string
-          setor_id?: string | null
-          setores_alvo?: string[]
-          som?: string
-          som_midia_id?: string | null
-          somente_equipe?: boolean
-          titulo?: string
-          volume?: number
-        }
-        Relationships: []
-      }
-      // Migration 20260810a — `setores_escolhidos` é a resposta da pergunta do
-      // clone: em que setores ESTE homenageado deve ser comemorado. Vazio = o
-      // setor do perfil, e só ele.
-      comemoracao_homenageados: {
-        Row: { comemoracao_id: string; operador_id: string; setores_escolhidos: string[] }
-        Insert: { comemoracao_id: string; operador_id: string; setores_escolhidos?: string[] }
-        Update: { comemoracao_id?: string; operador_id?: string; setores_escolhidos?: string[] }
-        Relationships: []
-      }
-      // Migration 20260731f — GIFs e sons enviados pelo líder. O catálogo
-      // padrão vive em código e NÃO passa por aqui.
-      comemoracao_midias: {
-        Row: {
-          caminho: string
-          criado_em: string
-          criado_por: string | null
-          empresa_id: string
-          id: string
-          // Migration 20260731g — trecho do som. `trecho_s` NULL = inteiro.
-          inicio_s: number
-          nome: string
-          // Migration 20260801a — 'imagem' entra ao lado de 'gif' e 'som'.
-          tipo: string
-          trecho_s: number | null
-          url: string
-          // Migration 20260801a — fixada não expira; as demais somem em 3 dias.
-          fixada: boolean
-          expira_em: string | null
-        }
-        Insert: {
-          caminho: string
-          criado_em?: string
-          criado_por?: string | null
-          empresa_id: string
-          id?: string
-          inicio_s?: number
-          nome: string
-          tipo: string
-          trecho_s?: number | null
-          url: string
-          fixada?: boolean
-          expira_em?: string | null
-        }
-        Update: {
-          caminho?: string
-          criado_em?: string
-          criado_por?: string | null
-          empresa_id?: string
-          id?: string
-          inicio_s?: number
-          nome?: string
-          tipo?: string
-          trecho_s?: number | null
-          url?: string
-          fixada?: boolean
-          expira_em?: string | null
-        }
-        Relationships: []
-      }
-      comemoracao_parabens: {
-        Row: { comemoracao_id: string; criado_em: string; frase: string; usuario_id: string }
-        Insert: { comemoracao_id: string; criado_em?: string; frase: string; usuario_id: string }
-        Update: { comemoracao_id?: string; criado_em?: string; frase?: string; usuario_id?: string }
-        Relationships: []
-      }
-      // Migration 20260731d — até onde CADA pessoa leu CADA conversa.
-      // PK composta (solicitacao_id, usuario_id). Substituiu, para efeito de
-      // "não lidas", o carimbo único `mensagens.lida_em`, que sumia para todos
-      // quando qualquer um abria a thread.
-      solicitacoes_whatsapp_leitura: {
-        Row: {
-          atualizado_em: string
-          empresa_id: string
-          lido_ate: string
-          solicitacao_id: string
-          usuario_id: string
-        }
-        Insert: {
-          atualizado_em?: string
-          empresa_id: string
-          lido_ate?: string
-          solicitacao_id: string
-          usuario_id: string
-        }
-        Update: {
-          atualizado_em?: string
-          empresa_id?: string
-          lido_ate?: string
-          solicitacao_id?: string
-          usuario_id?: string
-        }
-        Relationships: []
-      }
-      // Migration 20260730a — Contribuição Receptivo por setor/mês (BookPlay).
-      // Uma linha por (empresa_id, setor_id, mes); `mes` é 'yyyy-MM'. Substitui o
-      // localStorage por onde esse valor passava, para que seja compartilhado.
-      contribuicao_receptivo: {
-        Row: {
-          acumulado: number
-          atualizado_em: string
-          atualizado_por: string | null
-          criado_em: string
-          empresa_id: string
-          id: string
-          mes: string
-          meta: number
-          setor_id: string
-        }
-        Insert: {
-          acumulado?: number
-          atualizado_em?: string
-          atualizado_por?: string | null
-          criado_em?: string
-          empresa_id: string
-          id?: string
-          mes: string
-          meta?: number
-          setor_id: string
-        }
-        Update: {
-          acumulado?: number
-          atualizado_em?: string
-          atualizado_por?: string | null
-          criado_em?: string
-          empresa_id?: string
-          id?: string
-          mes?: string
-          meta?: number
-          setor_id?: string
-        }
-        Relationships: []
-      }
-      // Migration 20260725b — líder por equipe (BookPlay). A equipe declara quem
-      // a comanda; um líder pode liderar várias equipes, de qualquer setor.
       equipe_lideres: {
         Row: {
           criado_em: string
@@ -1145,7 +1278,36 @@ export type Database = {
           id?: string
           lider_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "equipe_lideres_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_lideres_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_lideres_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_lideres_lider_id_fkey"
+            columns: ["lider_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       equipe_operadores_clones: {
         Row: {
@@ -1175,7 +1337,81 @@ export type Database = {
           id?: string
           operador_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "equipe_operadores_clones_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_operadores_clones_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_operadores_clones_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipe_operadores_clones_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      equipes: {
+        Row: {
+          created_at: string | null
+          empresa_id: string | null
+          id: string
+          nome: string
+          setor_id: string | null
+          treinamento: boolean
+          treinamento_inicio: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          empresa_id?: string | null
+          id?: string
+          nome: string
+          setor_id?: string | null
+          treinamento?: boolean
+          treinamento_inicio?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          empresa_id?: string | null
+          id?: string
+          nome?: string
+          setor_id?: string | null
+          treinamento?: boolean
+          treinamento_inicio?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "equipes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "equipes_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       historico_acordos: {
         Row: {
@@ -1231,115 +1467,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      // ── Escrito à mão (migration 20260810c) ──────────────────────────────
-      // Este arquivo é GERADO, mas a lixeira do Pix precisa de insert e delete
-      // tipados, e `supabaseSemTipo` é read-only de propósito. Some na próxima
-      // regeneração pela CLI do Supabase — que é o certo a fazer quando der.
-      lixeira_pix_automatico: {
-        Row: {
-          acordo_id: string
-          dados_completos: Json
-          empresa_id: string
-          excluido_em: string
-          excluido_por: string | null
-          excluido_por_nome: string | null
-          expira_em: string
-          id: string
-          nr_cliente: string
-          operador_id: string | null
-          operador_nome: string | null
-          setor_id: string | null
-          status: string
-          valor: number
-        }
-        Insert: {
-          acordo_id: string
-          dados_completos: Json
-          empresa_id: string
-          excluido_em?: string
-          excluido_por?: string | null
-          excluido_por_nome?: string | null
-          expira_em?: string
-          id?: string
-          nr_cliente: string
-          operador_id?: string | null
-          operador_nome?: string | null
-          setor_id?: string | null
-          status: string
-          valor: number
-        }
-        Update: {
-          acordo_id?: string
-          dados_completos?: Json
-          empresa_id?: string
-          excluido_em?: string
-          excluido_por?: string | null
-          excluido_por_nome?: string | null
-          expira_em?: string
-          id?: string
-          nr_cliente?: string
-          operador_id?: string | null
-          operador_nome?: string | null
-          setor_id?: string | null
-          status?: string
-          valor?: number
-        }
-        Relationships: []
-      }
-      // ── Escrito à mão (migration 20260811c) ──────────────────────────────
-      // Log da aba do Pix. Só leitura pelo cliente — a escrita é dos triggers,
-      // que são SECURITY DEFINER. Some na próxima regeneração pela CLI.
-      pix_automatico_log: {
-        Row: {
-          acao: string
-          acordo_id: string
-          antes: Json | null
-          autor_id: string | null
-          autor_nome: string | null
-          criado_em: string
-          depois: Json | null
-          descricao: string
-          empresa_id: string
-          id: string
-          nr_cliente: string
-          operador_id: string | null
-          operador_nome: string | null
-          valor: number | null
-        }
-        Insert: {
-          acao: string
-          acordo_id: string
-          antes?: Json | null
-          autor_id?: string | null
-          autor_nome?: string | null
-          criado_em?: string
-          depois?: Json | null
-          descricao: string
-          empresa_id: string
-          id?: string
-          nr_cliente: string
-          operador_id?: string | null
-          operador_nome?: string | null
-          valor?: number | null
-        }
-        Update: {
-          acao?: string
-          acordo_id?: string
-          antes?: Json | null
-          autor_id?: string | null
-          autor_nome?: string | null
-          criado_em?: string
-          depois?: Json | null
-          descricao?: string
-          empresa_id?: string
-          id?: string
-          nr_cliente?: string
-          operador_id?: string | null
-          operador_nome?: string | null
-          valor?: number | null
-        }
-        Relationships: []
       }
       lixeira_acordos: {
         Row: {
@@ -1413,8 +1540,66 @@ export type Database = {
         }
         Relationships: []
       }
+      lixeira_pix_automatico: {
+        Row: {
+          acordo_id: string
+          dados_completos: Json
+          empresa_id: string
+          excluido_em: string
+          excluido_por: string | null
+          excluido_por_nome: string | null
+          expira_em: string
+          id: string
+          nr_cliente: string
+          operador_id: string | null
+          operador_nome: string | null
+          setor_id: string | null
+          status: string
+          valor: number
+        }
+        Insert: {
+          acordo_id: string
+          dados_completos: Json
+          empresa_id: string
+          excluido_em?: string
+          excluido_por?: string | null
+          excluido_por_nome?: string | null
+          expira_em?: string
+          id?: string
+          nr_cliente: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          setor_id?: string | null
+          status: string
+          valor: number
+        }
+        Update: {
+          acordo_id?: string
+          dados_completos?: Json
+          empresa_id?: string
+          excluido_em?: string
+          excluido_por?: string | null
+          excluido_por_nome?: string | null
+          expira_em?: string
+          id?: string
+          nr_cliente?: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          setor_id?: string | null
+          status?: string
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lixeira_pix_automatico_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logs_sistema: {
-        // Colunas de auditoria (categoria..user_agent) — migration 20260812a.
         Row: {
           acao: string
           alvo_rotulo: string | null
@@ -1426,7 +1611,7 @@ export type Database = {
           depois: Json | null
           descricao: string | null
           detalhes: Json | null
-          empresa_id: string
+          empresa_id: string | null
           id: string
           ip: string | null
           origem: string
@@ -1451,7 +1636,7 @@ export type Database = {
           depois?: Json | null
           descricao?: string | null
           detalhes?: Json | null
-          empresa_id: string
+          empresa_id?: string | null
           id?: string
           ip?: string | null
           origem?: string
@@ -1476,7 +1661,7 @@ export type Database = {
           depois?: Json | null
           descricao?: string | null
           detalhes?: Json | null
-          empresa_id?: string
+          empresa_id?: string | null
           id?: string
           ip?: string | null
           origem?: string
@@ -1567,6 +1752,7 @@ export type Database = {
           meta_acordos: number
           meta_proporcional: boolean
           meta_valor: number
+          metas_extras: Json
           referencia_id: string
           tipo: string
           updated_at: string | null
@@ -1581,6 +1767,7 @@ export type Database = {
           meta_acordos?: number
           meta_proporcional?: boolean
           meta_valor?: number
+          metas_extras?: Json
           referencia_id: string
           tipo: string
           updated_at?: string | null
@@ -1595,6 +1782,7 @@ export type Database = {
           meta_acordos?: number
           meta_proporcional?: boolean
           meta_valor?: number
+          metas_extras?: Json
           referencia_id?: string
           tipo?: string
           updated_at?: string | null
@@ -1653,7 +1841,22 @@ export type Database = {
           mes?: number
           quartis?: Json
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "metas_config_mes_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_config_mes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       metas_validacoes: {
         Row: {
@@ -1704,10 +1907,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "metas_validacoes_reaberto_por_fkey"
+            columns: ["reaberto_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "metas_validacoes_setor_id_fkey"
             columns: ["setor_id"]
             isOneToOne: false
             referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "metas_validacoes_validado_por_fkey"
+            columns: ["validado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
             referencedColumns: ["id"]
           },
         ]
@@ -1749,33 +1966,69 @@ export type Database = {
       }
       notificacoes: {
         Row: {
+          acordo_id: string | null
+          autor_foto: string | null
+          autor_id: string | null
+          autor_nome: string | null
           criado_em: string
           empresa_id: string | null
           id: string
           lida: boolean
           mensagem: string
+          rota: string | null
           titulo: string
           usuario_id: string | null
         }
         Insert: {
+          acordo_id?: string | null
+          autor_foto?: string | null
+          autor_id?: string | null
+          autor_nome?: string | null
           criado_em?: string
           empresa_id?: string | null
           id?: string
           lida?: boolean
           mensagem: string
+          rota?: string | null
           titulo: string
           usuario_id?: string | null
         }
         Update: {
+          acordo_id?: string | null
+          autor_foto?: string | null
+          autor_id?: string | null
+          autor_nome?: string | null
           criado_em?: string
           empresa_id?: string | null
           id?: string
           lida?: boolean
           mensagem?: string
+          rota?: string | null
           titulo?: string
           usuario_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "notificacoes_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "acordos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "acordos_deduplicados"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notificacoes_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "notificacoes_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -1856,7 +2109,22 @@ export type Database = {
           nivel?: string
           usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ouvidoria_acessos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ouvidoria_acessos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       ouvidoria_atendimentos: {
         Row: {
@@ -1925,7 +2193,22 @@ export type Database = {
           tipo?: string
           whatsapp?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "ouvidoria_atendimentos_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ouvidoria_atendimentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       perfis: {
         Row: {
@@ -1943,7 +2226,7 @@ export type Database = {
           nome: string
           perfil: string
           pet_despedida: string | null
-          senha_alterada: boolean | null
+          senha_alterada: boolean
           setor_id: string | null
           situacao: string
           tampermonkey_configured: boolean | null
@@ -1965,7 +2248,7 @@ export type Database = {
           nome: string
           perfil: string
           pet_despedida?: string | null
-          senha_alterada?: boolean | null
+          senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
           tampermonkey_configured?: boolean | null
@@ -1987,7 +2270,7 @@ export type Database = {
           nome?: string
           perfil?: string
           pet_despedida?: string | null
-          senha_alterada?: boolean | null
+          senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
           tampermonkey_configured?: boolean | null
@@ -2025,97 +2308,6 @@ export type Database = {
           },
         ]
       }
-      pet_itens: {
-        Row: {
-          ativo: boolean
-          criado_em: string
-          descricao: string | null
-          disponivel_ate: string | null
-          disponivel_de: string | null
-          emoji: string | null
-          exclusivo: boolean
-          id: string
-          nome: string
-          ordem: number
-          preco_moedas: number | null
-          raridade: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
-          tenant: string | null
-          tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
-        }
-        Insert: {
-          ativo?: boolean
-          criado_em?: string
-          descricao?: string | null
-          disponivel_ate?: string | null
-          disponivel_de?: string | null
-          emoji?: string | null
-          exclusivo?: boolean
-          id: string
-          nome: string
-          ordem?: number
-          preco_moedas?: number | null
-          raridade?: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
-          tenant?: string | null
-          tipo: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
-        }
-        Update: {
-          ativo?: boolean
-          criado_em?: string
-          descricao?: string | null
-          disponivel_ate?: string | null
-          disponivel_de?: string | null
-          emoji?: string | null
-          exclusivo?: boolean
-          id?: string
-          nome?: string
-          ordem?: number
-          preco_moedas?: number | null
-          raridade?: 'comum' | 'raro' | 'epico' | 'lendario' | 'exclusivo'
-          tenant?: string | null
-          tipo?: 'roupa' | 'comida' | 'movel' | 'trofeu' | 'colecionavel'
-        }
-        Relationships: []
-      }
-      pet_nome_votos: {
-        Row: {
-          empresa_id: string | null
-          nome_escolhido: 'Aura' | 'Lupi' | 'Albi'
-          usuario_id: string
-          votado_em: string
-        }
-        Insert: {
-          empresa_id?: string | null
-          nome_escolhido: 'Aura' | 'Lupi' | 'Albi'
-          usuario_id: string
-          votado_em?: string
-        }
-        Update: {
-          empresa_id?: string | null
-          nome_escolhido?: 'Aura' | 'Lupi' | 'Albi'
-          usuario_id?: string
-          votado_em?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "pet_nome_votos_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "pet_nome_votos_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: true
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      // Migration 20260813b — registro de transferência de pessoa entre setores
-      // e entre empresas. Escrito à mão pelo mesmo motivo de
-      // `analitico_exclusoes_setor`: o service precisa de INSERT e UPDATE, e
-      // `tabelaSemTipo` só serve leitura de propósito.
       perfis_transferencias: {
         Row: {
           acordos_apagados: number
@@ -2138,7 +2330,7 @@ export type Database = {
           perfil_id: string
           perfil_nome: string | null
           relatorio_arquivo: string | null
-          tipo: 'setor' | 'empresa'
+          tipo: string
         }
         Insert: {
           acordos_apagados?: number
@@ -2161,7 +2353,7 @@ export type Database = {
           perfil_id: string
           perfil_nome?: string | null
           relatorio_arquivo?: string | null
-          tipo: 'setor' | 'empresa'
+          tipo: string
         }
         Update: {
           acordos_apagados?: number
@@ -2184,9 +2376,37 @@ export type Database = {
           perfil_id?: string
           perfil_nome?: string | null
           relatorio_arquivo?: string | null
-          tipo?: 'setor' | 'empresa'
+          tipo?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "perfis_transferencias_criado_por_fkey"
+            columns: ["criado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_desfeita_por_fkey"
+            columns: ["desfeita_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_destino_empresa_id_fkey"
+            columns: ["destino_empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_destino_setor_id_fkey"
+            columns: ["destino_setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "perfis_transferencias_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -2195,8 +2415,283 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "perfis_transferencias_fantasma_removido_por_fkey"
+            columns: ["fantasma_removido_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_origem_equipe_id_fkey"
+            columns: ["origem_equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_origem_setor_id_fkey"
+            columns: ["origem_setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "perfis_transferencias_perfil_id_fkey"
             columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pet_economia_regras: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          base_recebimento: string
+          cargo: string
+          janela_dias: number
+          moedas_por_real: number
+          observacao: string | null
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          base_recebimento?: string
+          cargo: string
+          janela_dias?: number
+          moedas_por_real?: number
+          observacao?: string | null
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          base_recebimento?: string
+          cargo?: string
+          janela_dias?: number
+          moedas_por_real?: number
+          observacao?: string | null
+        }
+        Relationships: []
+      }
+      pet_estado: {
+        Row: {
+          atualizado_em: string
+          criado_em: string
+          dormindo: boolean
+          itens_desbloqueados: Json
+          moedas: number
+          moedas_ganhas_total: number
+          moedas_gastas_total: number
+          nivel: number
+          roupa_equipada: string
+          streak: number
+          ultimo_dia_ativo: string | null
+          usuario_id: string
+          xp: number
+        }
+        Insert: {
+          atualizado_em?: string
+          criado_em?: string
+          dormindo?: boolean
+          itens_desbloqueados?: Json
+          moedas?: number
+          moedas_ganhas_total?: number
+          moedas_gastas_total?: number
+          nivel?: number
+          roupa_equipada?: string
+          streak?: number
+          ultimo_dia_ativo?: string | null
+          usuario_id: string
+          xp?: number
+        }
+        Update: {
+          atualizado_em?: string
+          criado_em?: string
+          dormindo?: boolean
+          itens_desbloqueados?: Json
+          moedas?: number
+          moedas_ganhas_total?: number
+          moedas_gastas_total?: number
+          nivel?: number
+          roupa_equipada?: string
+          streak?: number
+          ultimo_dia_ativo?: string | null
+          usuario_id?: string
+          xp?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pet_estado_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pet_inventario: {
+        Row: {
+          adquirido_em: string
+          item_id: string
+          origem: string
+          usuario_id: string
+        }
+        Insert: {
+          adquirido_em?: string
+          item_id: string
+          origem?: string
+          usuario_id: string
+        }
+        Update: {
+          adquirido_em?: string
+          item_id?: string
+          origem?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pet_inventario_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "pet_itens"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pet_inventario_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pet_itens: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          descricao: string | null
+          disponivel_ate: string | null
+          disponivel_de: string | null
+          emoji: string | null
+          exclusivo: boolean
+          id: string
+          nome: string
+          ordem: number
+          preco_moedas: number | null
+          raridade: string
+          tenant: string | null
+          tipo: string
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string | null
+          disponivel_ate?: string | null
+          disponivel_de?: string | null
+          emoji?: string | null
+          exclusivo?: boolean
+          id: string
+          nome: string
+          ordem?: number
+          preco_moedas?: number | null
+          raridade?: string
+          tenant?: string | null
+          tipo: string
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          descricao?: string | null
+          disponivel_ate?: string | null
+          disponivel_de?: string | null
+          emoji?: string | null
+          exclusivo?: boolean
+          id?: string
+          nome?: string
+          ordem?: number
+          preco_moedas?: number | null
+          raridade?: string
+          tenant?: string | null
+          tipo?: string
+        }
+        Relationships: []
+      }
+      pet_nome_votos: {
+        Row: {
+          empresa_id: string | null
+          nome_escolhido: string
+          usuario_id: string
+          votado_em: string
+        }
+        Insert: {
+          empresa_id?: string | null
+          nome_escolhido: string
+          usuario_id: string
+          votado_em?: string
+        }
+        Update: {
+          empresa_id?: string | null
+          nome_escolhido?: string
+          usuario_id?: string
+          votado_em?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pet_nome_votos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pet_nome_votos_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pet_recompensas: {
+        Row: {
+          atualizado_em: string
+          dia_referencia: string
+          moedas_creditadas: number
+          setor_id: string | null
+          usuario_id: string
+          valor_resgatado: number
+          valor_validado_no_momento: number | null
+        }
+        Insert: {
+          atualizado_em?: string
+          dia_referencia: string
+          moedas_creditadas?: number
+          setor_id?: string | null
+          usuario_id: string
+          valor_resgatado?: number
+          valor_validado_no_momento?: number | null
+        }
+        Update: {
+          atualizado_em?: string
+          dia_referencia?: string
+          moedas_creditadas?: number
+          setor_id?: string | null
+          usuario_id?: string
+          valor_resgatado?: number
+          valor_validado_no_momento?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pet_recompensas_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pet_recompensas_usuario_id_fkey"
+            columns: ["usuario_id"]
             isOneToOne: false
             referencedRelation: "perfis"
             referencedColumns: ["id"]
@@ -2215,7 +2710,6 @@ export type Database = {
           nr_cliente: string
           operador_id: string
           operador_nome: string | null
-          // Migration 20260804c — pagamento da comissão (estado separado da aprovação).
           pago: boolean
           pago_em: string | null
           pago_por: string | null
@@ -2265,55 +2759,29 @@ export type Database = {
           status?: string
           valor?: number
         }
-        Relationships: []
-      }
-      // Migration 20260804c — meta de Pix automático por setor/mês. Separada de
-      // `metas` de propósito: aquela é a meta de RECEBIMENTO e é somada em todo
-      // lugar; o valor do Pix já entra no recebimento pelo analítico.
-      pix_automatico_metas: {
-        Row: {
-          ano: number
-          atualizado_em: string
-          atualizado_por: string | null
-          atualizado_por_nome: string | null
-          criado_em: string
-          empresa_id: string
-          id: string
-          mes: number
-          meta_acordos: number
-          meta_valor: number
-          equipe_id: string | null
-          setor_id: string
-        }
-        Insert: {
-          ano: number
-          atualizado_em?: string
-          atualizado_por?: string | null
-          atualizado_por_nome?: string | null
-          criado_em?: string
-          empresa_id: string
-          id?: string
-          mes: number
-          meta_acordos?: number
-          meta_valor?: number
-          equipe_id?: string | null
-          setor_id: string
-        }
-        Update: {
-          ano?: number
-          atualizado_em?: string
-          atualizado_por?: string | null
-          atualizado_por_nome?: string | null
-          criado_em?: string
-          empresa_id?: string
-          id?: string
-          mes?: number
-          meta_acordos?: number
-          meta_valor?: number
-          equipe_id?: string | null
-          setor_id?: string
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_acordos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_acordos_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_acordos_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pix_automatico_config: {
         Row: {
@@ -2322,6 +2790,7 @@ export type Database = {
           atualizado_por_nome: string | null
           empresa_id: string
           id: string
+          meta_acordos_dobra: number
           pct: number
           permite_registro_operador: boolean
           setor_id: string
@@ -2332,6 +2801,7 @@ export type Database = {
           atualizado_por_nome?: string | null
           empresa_id: string
           id?: string
+          meta_acordos_dobra?: number
           pct?: number
           permite_registro_operador?: boolean
           setor_id: string
@@ -2342,11 +2812,153 @@ export type Database = {
           atualizado_por_nome?: string | null
           empresa_id?: string
           id?: string
+          meta_acordos_dobra?: number
           pct?: number
           permite_registro_operador?: boolean
           setor_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_config_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pix_automatico_log: {
+        Row: {
+          acao: string
+          acordo_id: string
+          antes: Json | null
+          autor_id: string | null
+          autor_nome: string | null
+          criado_em: string
+          depois: Json | null
+          descricao: string
+          empresa_id: string
+          id: string
+          nr_cliente: string
+          operador_id: string | null
+          operador_nome: string | null
+          valor: number | null
+        }
+        Insert: {
+          acao: string
+          acordo_id: string
+          antes?: Json | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          depois?: Json | null
+          descricao: string
+          empresa_id: string
+          id?: string
+          nr_cliente: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          valor?: number | null
+        }
+        Update: {
+          acao?: string
+          acordo_id?: string
+          antes?: Json | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          depois?: Json | null
+          descricao?: string
+          empresa_id?: string
+          id?: string
+          nr_cliente?: string
+          operador_id?: string | null
+          operador_nome?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_log_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pix_automatico_metas: {
+        Row: {
+          ano: number
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          criado_em: string
+          empresa_id: string
+          equipe_id: string | null
+          id: string
+          mes: number
+          meta_acordos: number
+          meta_valor: number
+          setor_id: string
+        }
+        Insert: {
+          ano: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          criado_em?: string
+          empresa_id: string
+          equipe_id?: string | null
+          id?: string
+          mes: number
+          meta_acordos?: number
+          meta_valor?: number
+          setor_id: string
+        }
+        Update: {
+          ano?: number
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          criado_em?: string
+          empresa_id?: string
+          equipe_id?: string | null
+          id?: string
+          mes?: number
+          meta_acordos?: number
+          meta_valor?: number
+          setor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_metas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_metas_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_metas_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pix_automatico_nr_registro: {
         Row: {
@@ -2394,40 +3006,22 @@ export type Database = {
           operador_nome?: string | null
           status?: string
         }
-        Relationships: []
-      }
-      profissionais: {
-        Row: {
-          atualizado_em: string
-          criado_em: string
-          codigo: string
-          empresa_id: string
-          estado_uf: string | null
-          id: string
-          nome: string
-          telefone: string | null
-        }
-        Insert: {
-          atualizado_em?: string
-          criado_em?: string
-          codigo: string
-          empresa_id: string
-          estado_uf?: string | null
-          id?: string
-          nome: string
-          telefone?: string | null
-        }
-        Update: {
-          atualizado_em?: string
-          criado_em?: string
-          codigo?: string
-          empresa_id?: string
-          estado_uf?: string | null
-          id?: string
-          nome?: string
-          telefone?: string | null
-        }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_nr_registro_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "pix_automatico_acordos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_nr_registro_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -2458,6 +3052,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      profissionais: {
+        Row: {
+          atualizado_em: string
+          codigo: string
+          criado_em: string
+          empresa_id: string
+          estado_uf: string | null
+          id: string
+          nome: string
+          telefone: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          codigo: string
+          criado_em?: string
+          empresa_id: string
+          estado_uf?: string | null
+          id?: string
+          nome: string
+          telefone?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          codigo?: string
+          criado_em?: string
+          empresa_id?: string
+          estado_uf?: string | null
+          id?: string
+          nome?: string
+          telefone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profissionais_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       relatorio_validacoes_dia: {
         Row: {
@@ -2508,19 +3143,24 @@ export type Database = {
             referencedRelation: "setores"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "relatorio_validacoes_dia_validado_por_fkey"
+            columns: ["validado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
         ]
       }
       setores: {
         Row: {
-          // Migration 20260724a — setor sem relatório próprio: acumulado = soma
-          // dos usuários (membros + clones) em vez do total importado.
           alternativo: boolean
           ativo: boolean
           atualizado_em: string
           criado_em: string
           descricao: string | null
           empresa_id: string
-          // Migration 20260725a — foto exibida nos painéis.
+          foto_receptivo_url: string | null
           foto_url: string | null
           id: string
           nome: string
@@ -2532,6 +3172,7 @@ export type Database = {
           criado_em?: string
           descricao?: string | null
           empresa_id: string
+          foto_receptivo_url?: string | null
           foto_url?: string | null
           id?: string
           nome: string
@@ -2543,6 +3184,7 @@ export type Database = {
           criado_em?: string
           descricao?: string | null
           empresa_id?: string
+          foto_receptivo_url?: string | null
           foto_url?: string | null
           id?: string
           nome?: string
@@ -2553,6 +3195,296 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      solicitacoes_whatsapp: {
+        Row: {
+          atualizado_em: string
+          categoria: string
+          codigo_cliente: string
+          criado_em: string
+          empresa_id: string
+          equipe_id: string | null
+          estado_uf: string | null
+          finalizado_em: string | null
+          id: string
+          iniciado_em: string | null
+          mensagem: string
+          msg_expurgado_em: string | null
+          msg_expurgar_em: string | null
+          msg_tem_cpf: boolean
+          nao_concluido_em: string | null
+          nome_cliente: string | null
+          responsavel_id: string | null
+          setor_id: string | null
+          solicitante_id: string
+          status: string
+          whatsapp: string
+        }
+        Insert: {
+          atualizado_em?: string
+          categoria: string
+          codigo_cliente: string
+          criado_em?: string
+          empresa_id: string
+          equipe_id?: string | null
+          estado_uf?: string | null
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string | null
+          mensagem: string
+          msg_expurgado_em?: string | null
+          msg_expurgar_em?: string | null
+          msg_tem_cpf?: boolean
+          nao_concluido_em?: string | null
+          nome_cliente?: string | null
+          responsavel_id?: string | null
+          setor_id?: string | null
+          solicitante_id: string
+          status?: string
+          whatsapp: string
+        }
+        Update: {
+          atualizado_em?: string
+          categoria?: string
+          codigo_cliente?: string
+          criado_em?: string
+          empresa_id?: string
+          equipe_id?: string | null
+          estado_uf?: string | null
+          finalizado_em?: string | null
+          id?: string
+          iniciado_em?: string | null
+          mensagem?: string
+          msg_expurgado_em?: string | null
+          msg_expurgar_em?: string | null
+          msg_tem_cpf?: boolean
+          nao_concluido_em?: string | null
+          nome_cliente?: string | null
+          responsavel_id?: string | null
+          setor_id?: string | null
+          solicitante_id?: string
+          status?: string
+          whatsapp?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitacoes_whatsapp_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_equipe_id_fkey"
+            columns: ["equipe_id"]
+            isOneToOne: false
+            referencedRelation: "equipes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_solicitante_id_fkey"
+            columns: ["solicitante_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      solicitacoes_whatsapp_eventos: {
+        Row: {
+          autor_id: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          responsavel_anterior: string | null
+          responsavel_novo: string | null
+          solicitacao_id: string
+          status_anterior: string | null
+          status_novo: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          responsavel_anterior?: string | null
+          responsavel_novo?: string | null
+          solicitacao_id: string
+          status_anterior?: string | null
+          status_novo: string
+          tipo?: string
+        }
+        Update: {
+          autor_id?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          responsavel_anterior?: string | null
+          responsavel_novo?: string | null
+          solicitacao_id?: string
+          status_anterior?: string | null
+          status_novo?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitacoes_whatsapp_eventos_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_eventos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_eventos_responsavel_anterior_fkey"
+            columns: ["responsavel_anterior"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_eventos_responsavel_novo_fkey"
+            columns: ["responsavel_novo"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_eventos_solicitacao_id_fkey"
+            columns: ["solicitacao_id"]
+            isOneToOne: false
+            referencedRelation: "solicitacoes_whatsapp"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      solicitacoes_whatsapp_leitura: {
+        Row: {
+          atualizado_em: string
+          empresa_id: string
+          lido_ate: string
+          solicitacao_id: string
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          empresa_id: string
+          lido_ate?: string
+          solicitacao_id: string
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          empresa_id?: string
+          lido_ate?: string
+          solicitacao_id?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitacoes_whatsapp_leitura_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_leitura_solicitacao_id_fkey"
+            columns: ["solicitacao_id"]
+            isOneToOne: false
+            referencedRelation: "solicitacoes_whatsapp"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_leitura_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      solicitacoes_whatsapp_mensagens: {
+        Row: {
+          autor_id: string
+          conteudo: string
+          criado_em: string
+          empresa_id: string
+          expurgado_em: string | null
+          expurgar_em: string | null
+          id: string
+          lida_em: string | null
+          solicitacao_id: string
+          tem_cpf: boolean
+        }
+        Insert: {
+          autor_id: string
+          conteudo: string
+          criado_em?: string
+          empresa_id: string
+          expurgado_em?: string | null
+          expurgar_em?: string | null
+          id?: string
+          lida_em?: string | null
+          solicitacao_id: string
+          tem_cpf?: boolean
+        }
+        Update: {
+          autor_id?: string
+          conteudo?: string
+          criado_em?: string
+          empresa_id?: string
+          expurgado_em?: string | null
+          expurgar_em?: string | null
+          id?: string
+          lida_em?: string | null
+          solicitacao_id?: string
+          tem_cpf?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "solicitacoes_whatsapp_mensagens_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_mensagens_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "solicitacoes_whatsapp_mensagens_solicitacao_id_fkey"
+            columns: ["solicitacao_id"]
+            isOneToOne: false
+            referencedRelation: "solicitacoes_whatsapp"
             referencedColumns: ["id"]
           },
         ]
@@ -2635,7 +3567,6 @@ export type Database = {
           atualizado_em: string | null
           criado_em: string | null
           data_cadastro: string | null
-          data_pagamento: string | null
           empresa_id: string | null
           estado_uf: string | null
           id: string | null
@@ -2645,16 +3576,15 @@ export type Database = {
           numero_parcela: number | null
           observacoes: string | null
           operador_id: string | null
-          pago_em: string | null
+          operador_vinculado_id: string | null
           parcelas: number | null
           setor_id: string | null
-          status: 'verificar_pendente' | 'pago' | 'nao_pago' | null
+          status: string | null
           tag_ids: string[] | null
-          tipo: 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico' | null
-          tipo_vinculo: 'direto' | 'extra' | null
-          usou_quarenta_pct: boolean | null
+          tipo: string | null
+          tipo_receptivo: string | null
+          tipo_vinculo: string | null
           valor: number | null
-          valor_total: number | null
           vencimento: string | null
           vinculo_operador_id: string | null
           vinculo_operador_nome: string | null
@@ -2686,135 +3616,82 @@ export type Database = {
       }
     }
     Functions: {
-      admin_change_user_password: {
-        Args: { p_new_password: string; p_user_id: string }
-        Returns: undefined
-      }
-      buscar_email_por_usuario:
-        | { Args: { p_usuario: string }; Returns: string }
-        | {
-            Args: { p_empresa_slug?: string; p_usuario: string }
-            Returns: string
-          }
+      buscar_email_por_usuario: { Args: { p_usuario: string }; Returns: string }
       buscar_email_por_usuario_empresa: {
         Args: { p_empresa_slug?: string; p_usuario: string }
         Returns: string
       }
+      fn_api_rate_limit_consumir: {
+        Args: {
+          p_janela_segundos: number
+          p_limite: number
+          p_rota: string
+          p_usuario_id: string
+        }
+        Returns: {
+          permitido: boolean
+          restantes: number
+          tentar_novamente_em_s: number
+        }[]
+      }
+      fn_admin_apagar_acordos_do_usuario: {
+        Args: { p_empresa_id?: string; p_user_id: string }
+        Returns: number
+      }
       fn_admin_delete_user: {
+        Args: { p_apagar_acordos?: boolean; p_user_id: string }
+        Returns: Json
+      }
+      fn_admin_resumo_exclusao_usuario: {
         Args: { p_user_id: string }
-        Returns: undefined
+        Returns: Json
       }
       fn_analitico_atualizar_resumo: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: undefined
       }
-      // Migration 20260801a — comemorações v2.
-      // Fecha a comemoração. Dentro da janela, só quem criou; passada a
-      // janela, qualquer um que a enxergue (é o cliente que exibiu quem fecha).
-      fn_comemoracao_finalizar: {
-        Args: { p_id: string }
-        Returns: undefined
-      }
-      // Fixa/desafixa a mídia. Teto de 4 por tipo, por empresa — validado no
-      // banco porque não há policy de UPDATE em `comemoracao_midias`.
-      fn_comemoracao_midia_fixar: {
-        Args: { p_id: string; p_fixar: boolean }
-        Returns: {
-          id: string
-          empresa_id: string
-          tipo: string
-          nome: string
-          url: string
-          caminho: string
-          criado_por: string | null
-          criado_em: string
-          inicio_s: number | null
-          trecho_s: number | null
-          fixada: boolean
-          expira_em: string | null
-        }
-      }
-      // Apaga mídia vencida (linha + arquivo) e finaliza comemoração que passou
-      // da janela. Agendada no pg_cron; chamável à mão se a extensão faltar.
-      fn_comemoracao_faxina: {
-        Args: Record<string, never>
-        Returns: {
-          midias_apagadas: number
-          comemoracoes_finalizadas: number
-        }[]
-      }
       fn_analitico_dashboard_mes: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: {
           dia: string
-          operador_id: string
-          forma_pagamento: string
           forma_detalhe: string
+          forma_pagamento: string
+          operador_id: string
+          qtd: number
           status_tabulacao: string
           total: number
           total_ho: number
-          qtd: number
         }[]
       }
-      // Migration 20260729b — mesmo agregado da função acima, num único JSONB
-      // (sem max_rows, sem paginação, uma agregação só).
       fn_analitico_dashboard_mes_json: {
         Args: { p_empresa_id: string; p_mes: string }
-        Returns: Json
-      }
-      // Migration 20260730e — diretório mínimo de pessoas da empresa.
-      // SECURITY DEFINER: `perfis_select` só deixa lider/administrador lerem o
-      // perfil de outra pessoa, então join em `perfis` volta nulo para os demais.
-      // Devolve SÓ id/nome/foto — nada de e-mail, cargo ou setor.
-      fn_wpp_diretorio: {
-        Args: Record<string, never>
-        Returns: {
-          id: string
-          nome: string
-          foto_url: string | null
-        }[]
-      }
-      // (fn_wpp_buscar_cliente existiu na 20260730b e foi removida na 20260730c:
-      //  o auto-preenchimento passou a ler `profissionais` direto, que é o
-      //  cadastro canônico do cliente e não exige contornar RLS nenhuma.)
-      // Migration 20260728a — situação do operador e transferência de acordo.
-      fn_situacao_operador: {
-        Args: { p_operador_id: string }
-        Returns: string
-      }
-      fn_transferir_acordo_nr: {
-        Args: {
-          p_acordo_id: string
-          p_novo_operador_id: string | null
-          p_motivo: string
-        }
         Returns: Json
       }
       fn_analitico_destaques_dia: {
         Args: {
           p_empresa_id: string
-          p_mes: string
           p_equipe_id?: string
+          p_mes: string
           p_setor_id?: string
         }
         Returns: {
           dia: string
           operador_id: string
-          operador_usuario: string
           operador_nome: string
-          total_recebido: number
+          operador_usuario: string
           total_pagamentos: number
+          total_recebido: number
         }[]
       }
       fn_analitico_resumo_por_operador: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: {
           operador_id: string
-          operador_usuario: string
           operador_nome: string
-          total_recebido: number
+          operador_usuario: string
           total_ho: number
           total_pagamentos: number
+          total_recebido: number
         }[]
       }
       fn_arquivar_desligados_anteriores: {
@@ -2825,12 +3702,51 @@ export type Database = {
         Args: { target_empresa_id: string }
         Returns: boolean
       }
+      fn_comemoracao_faxina: {
+        Args: never
+        Returns: {
+          comemoracoes_finalizadas: number
+          midias_apagadas: number
+        }[]
+      }
+      fn_comemoracao_finalizar: { Args: { p_id: string }; Returns: undefined }
+      fn_comemoracao_midia_fixar: {
+        Args: { p_fixar: boolean; p_id: string }
+        Returns: {
+          caminho: string
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          expira_em: string | null
+          fixada: boolean
+          id: string
+          inicio_s: number
+          nome: string
+          tipo: string
+          trecho_s: number | null
+          url: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "comemoracao_midias"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      fn_comemoracao_pode_criar: { Args: never; Returns: boolean }
+      fn_composicao_mes_congelar: { Args: never; Returns: number }
+      fn_composicao_mes_snapshot: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: number
+      }
       fn_converter_para_extra: {
         Args: {
           p_acordo_id: string
+          p_instituicao: string
           p_nome_cliente: string
           p_novo_direto_op_id: string
           p_novo_direto_op_nome: string
+          p_nr_cliente: string
           p_parcelas?: number
           p_tipo: string
           p_valor: number
@@ -2842,171 +3758,270 @@ export type Database = {
       fn_diario_resumo_mensal: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: {
-          operador_id: string | null
-          operador_usuario: string
-          operador_nome: string | null
-          setor_geral: string | null
           dia_referencia: string
           fora_vinculo: boolean
-          total_recebido: number
+          operador_id: string
+          operador_nome: string
+          operador_usuario: string
+          setor_geral: string
           total_pagamentos: number
+          total_recebido: number
+        }[]
+      }
+      fn_diario_resumo_mes: {
+        Args: { p_empresa_id: string; p_mes: string }
+        Returns: {
+          total_dias: number
+          total_recebido: number
         }[]
       }
       fn_direto_extra_ativo: {
         Args: { p_empresa_id: string; p_user_id: string }
         Returns: boolean
       }
+      fn_eh_cpf: { Args: { p_valor: string }; Returns: boolean }
+      fn_equipes_do_operador: {
+        Args: { p_operador: string }
+        Returns: {
+          equipe_id: string
+          setor_id: string
+        }[]
+      }
+      fn_expurgar_cpf_chat: { Args: never; Returns: number }
       fn_get_perfil_usuario: { Args: { uid: string }; Returns: string }
-      // ── Logs 2.0 (migration 20260812a) ──────────────────────────────────
-      fn_log_registrar: {
-        Args: {
-          p_acao: string
-          p_categoria?: string
-          p_severidade?: string
-          p_descricao?: string | null
-          p_empresa_id?: string | null
-          p_tabela?: string | null
-          p_registro_id?: string | null
-          p_alvo_tipo?: string | null
-          p_alvo_rotulo?: string | null
-          p_antes?: Json | null
-          p_depois?: Json | null
-          p_campos?: string[] | null
-          p_detalhes?: Json | null
-          p_origem?: string
-          p_rota?: string | null
-          p_usuario_id?: string | null
-        }
-        Returns: string | null
+      fn_get_setor_usuario: { Args: { uid: string }; Returns: string }
+      fn_log_contexto: { Args: { p_header: string }; Returns: string }
+      fn_log_diff: {
+        Args: { p_antes: Json; p_depois: Json; p_ignorar?: string[] }
+        Returns: Json
       }
       fn_log_login_recusado: {
         Args: { p_identificador: string; p_motivo?: string }
         Returns: undefined
       }
+      fn_log_mascarar: { Args: { p_dados: Json }; Returns: Json }
+      fn_log_registrar: {
+        Args: {
+          p_acao: string
+          p_alvo_rotulo?: string
+          p_alvo_tipo?: string
+          p_antes?: Json
+          p_campos?: string[]
+          p_categoria?: string
+          p_depois?: Json
+          p_descricao?: string
+          p_detalhes?: Json
+          p_empresa_id?: string
+          p_origem?: string
+          p_registro_id?: string
+          p_rota?: string
+          p_severidade?: string
+          p_tabela?: string
+          p_usuario_id?: string
+        }
+        Returns: string
+      }
+      fn_log_rotulo_campo: { Args: { p_campo: string }; Returns: string }
+      fn_logs_expurgar: {
+        Args: { p_dias?: number; p_empresa_id?: string }
+        Returns: number
+      }
       fn_logs_resumo: {
         Args: {
-          p_empresa_id?: string | null
-          p_de?: string | null
-          p_ate?: string | null
-          p_categoria?: string | null
-          p_severidade?: string | null
-          p_acao?: string | null
-          p_usuario_id?: string | null
-          p_tabela?: string | null
-          p_origem?: string | null
-          p_busca?: string | null
+          p_acao?: string
+          p_ate?: string
+          p_busca?: string
+          p_categoria?: string
+          p_de?: string
+          p_empresa_id?: string
+          p_origem?: string
+          p_severidade?: string
+          p_tabela?: string
+          p_usuario_id?: string
         }
         Returns: Json
       }
-      fn_logs_expurgar: {
-        Args: { p_dias?: number; p_empresa_id?: string | null }
-        Returns: number
-      }
-      fn_get_setor_usuario: { Args: { uid: string }; Returns: string }
       fn_meta_esta_bloqueada: {
         Args: {
-          p_tipo: string
-          p_referencia_id: string
+          p_ano: number
           p_empresa_id: string
           p_mes: number
-          p_ano: number
+          p_referencia_id: string
+          p_tipo: string
         }
         Returns: boolean
       }
       fn_metas_esta_validada: {
-        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
+        Args: {
+          p_ano: number
+          p_empresa_id: string
+          p_mes: number
+          p_setor_id: string
+        }
         Returns: boolean
       }
       fn_metas_reabrir_setor: {
         Args: {
-          p_empresa_id: string
-          p_setor_id: string
-          p_mes: number
           p_ano: number
+          p_empresa_id: string
+          p_mes: number
           p_motivo: string
+          p_setor_id: string
         }
-        Returns: { ok: boolean; erro: string | null }[]
+        Returns: {
+          erro: string
+          ok: boolean
+        }[]
       }
       fn_metas_upsert: {
         Args: { p_payloads: Json }
-        Returns: { salvos: number; bloqueados: Json }[]
+        Returns: {
+          bloqueados: Json
+          salvos: number
+        }[]
       }
       fn_metas_validar_setor: {
-        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
-        Returns: { ok: boolean; erro: string | null }[]
-      }
-      fn_profissional_registrar_uf: {
         Args: {
+          p_ano: number
           p_empresa_id: string
-          p_codigo: string
-          p_estado_uf: string
-          p_nome?: string | null
+          p_mes: number
+          p_setor_id: string
+        }
+        Returns: {
+          erro: string
+          ok: boolean
+        }[]
+      }
+      fn_nr_campo_chave: {
+        Args: { p_instituicao: string; p_nr_cliente: string }
+        Returns: string
+      }
+      fn_nr_dono_conflitante: {
+        Args: {
+          p_campo: string
+          p_empresa_id: string
+          p_grupo_id?: string
+          p_nr: string
+          p_operador_id: string
         }
         Returns: string
       }
-      fn_pet_admin_ajustar_moedas: {
-        Args: { p_usuario: string; p_delta: number; p_motivo: string }
-        Returns: { ok: boolean; moedas_total: number }[]
+      fn_nr_exigir_livre: {
+        Args: {
+          p_campo: string
+          p_empresa_id: string
+          p_grupo_id?: string
+          p_nr: string
+          p_operador_id: string
+        }
+        Returns: undefined
       }
-      fn_pet_discrepancias_validacao: {
-        Args: { p_empresa_id: string; p_mes: number; p_ano: number }
-        Returns: {
-          setor_id: string
-          setor_nome: string
-          dia_referencia: string
-          valor_validado: number
-          valor_atual: number
-          diferenca: number
-          usuario_id: string | null
-          usuario_nome: string | null
-          moedas_creditadas: number | null
-        }[]
+      fn_operador_clonado_no_setor: {
+        Args: { p_operador_id: string; p_setor_id: string }
+        Returns: boolean
       }
+      fn_operador_setor_id: { Args: { p_operador_id: string }; Returns: string }
+      fn_ouvidoria_nivel: {
+        Args: { target_empresa_id: string }
+        Returns: string
+      }
+      fn_pet_admin_ajustar_moedas:
+        | {
+            Args: { p_delta: number; p_usuario: string }
+            Returns: {
+              moedas_total: number
+              ok: boolean
+            }[]
+          }
+        | {
+            Args: { p_delta: number; p_motivo: string; p_usuario: string }
+            Returns: {
+              moedas_total: number
+              ok: boolean
+            }[]
+          }
       fn_pet_admin_listar: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
-          usuario_id: string
-          nome: string
           cargo: string
           moedas: number
           moedas_ganhas_total: number
           moedas_gastas_total: number
-          xp: number
           nivel: number
-          streak: number
+          nome: string
           qtd_itens: number
           roupa_equipada: string
-          ultimo_dia_ativo: string | null
+          streak: number
+          ultimo_dia_ativo: string
+          usuario_id: string
+          xp: number
         }[]
       }
       fn_pet_comprar_item: {
         Args: { p_item_id: string }
-        Returns: { ok: boolean; erro: string | null; moedas_total: number }[]
+        Returns: {
+          erro: string
+          moedas_total: number
+          ok: boolean
+        }[]
+      }
+      fn_pet_dias_disponiveis: {
+        Args: never
+        Returns: {
+          delta: number
+          dia: string
+          ja_resgatado: number
+          setor_id: string
+          total_dia: number
+        }[]
+      }
+      fn_pet_discrepancias_validacao: {
+        Args: { p_ano: number; p_empresa_id: string; p_mes: number }
+        Returns: {
+          dia_referencia: string
+          diferenca: number
+          moedas_creditadas: number
+          setor_id: string
+          setor_nome: string
+          usuario_id: string
+          usuario_nome: string
+          valor_atual: number
+          valor_validado: number
+        }[]
       }
       fn_pet_estado_get: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
-          usuario_id: string
+          atualizado_em: string
+          criado_em: string
+          dormindo: boolean
+          itens_desbloqueados: Json
           moedas: number
           moedas_ganhas_total: number
           moedas_gastas_total: number
-          xp: number
           nivel: number
+          roupa_equipada: string
           streak: number
           ultimo_dia_ativo: string | null
-          roupa_equipada: string
-          itens_desbloqueados: Json
-          dormindo: boolean
-          criado_em: string
-          atualizado_em: string
+          usuario_id: string
+          xp: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pet_estado"
+          isOneToOne: true
+          isSetofReturn: false
         }
       }
       fn_pet_gastar_moedas: {
-        Args: { p_valor: number; p_item?: string }
-        Returns: { ok: boolean; moedas_total: number }[]
+        Args: { p_item?: string; p_valor: number }
+        Returns: {
+          moedas_total: number
+          ok: boolean
+        }[]
       }
       fn_pet_nome_resultado: {
-        Args: Record<PropertyKey, never>
+        Args: never
         Returns: {
           empresa_id: string
           empresa_slug: string
@@ -3015,52 +4030,127 @@ export type Database = {
         }[]
       }
       fn_pet_recompensa_disponivel: {
-        Args: Record<PropertyKey, never>
-        Returns: { valor_disponivel: number; moedas_disponivel: number }[]
+        Args: never
+        Returns: {
+          moedas_disponivel: number
+          valor_disponivel: number
+        }[]
       }
       fn_pet_resgatar_recompensa: {
-        Args: Record<PropertyKey, never>
-        Returns: { moedas_creditadas: number; valor_base: number; moedas_total: number }[]
+        Args: never
+        Returns: {
+          moedas_creditadas: number
+          moedas_total: number
+          valor_base: number
+        }[]
       }
       fn_pet_salvar_visual: {
-        Args: { p_roupa: string; p_dormindo: boolean }
+        Args: { p_dormindo: boolean; p_roupa: string }
         Returns: undefined
+      }
+      fn_pet_taxa: { Args: never; Returns: number }
+      fn_pix_dias_uteis_apos: {
+        Args: { p_base: string; p_dias: number }
+        Returns: string
+      }
+      fn_pix_expurga_desaprovados: {
+        Args: { p_empresa_id: string }
+        Returns: number
+      }
+      fn_pix_lixeira_purgar: { Args: { p_empresa_id: string }; Returns: number }
+      fn_pix_log: {
+        Args: {
+          p_acao: string
+          p_acordo_id: string
+          p_antes?: Json
+          p_depois?: Json
+          p_descricao: string
+          p_empresa_id: string
+          p_nr: string
+          p_operador_id: string
+          p_operador_nome: string
+          p_valor: number
+        }
+        Returns: undefined
+      }
+      fn_pix_nr_normalizar: { Args: { p_nr: string }; Returns: string }
+      fn_pix_restaurar_lixeira: { Args: { p_item_id: string }; Returns: string }
+      fn_pix_valor_br: { Args: { p_valor: number }; Returns: string }
+      fn_pode_editar_foto_setor: {
+        Args: { p_setor_id: string }
+        Returns: boolean
+      }
+      fn_pode_gerir_acordo: {
+        Args: { p_operador_id: string; p_setor_id: string }
+        Returns: boolean
+      }
+      fn_profissional_registrar_uf: {
+        Args: {
+          p_codigo: string
+          p_empresa_id: string
+          p_estado_uf: string
+          p_nome?: string
+        }
+        Returns: string
       }
       fn_relatorio_reabrir_setor: {
         Args: {
-          p_empresa_id: string
-          p_setor_id: string
-          p_mes: number
           p_ano: number
+          p_empresa_id: string
+          p_mes: number
           p_motivo: string
           p_origem?: string
+          p_setor_id: string
         }
-        Returns: { ok: boolean; erro: string | null; dias_removidos: number }[]
+        Returns: {
+          dias_removidos: number
+          erro: string
+          ok: boolean
+        }[]
       }
       fn_relatorio_status_validacao: {
-        Args: { p_empresa_id: string; p_setor_id: string; p_mes: number; p_ano: number }
+        Args: {
+          p_ano: number
+          p_empresa_id: string
+          p_mes: number
+          p_setor_id: string
+        }
         Returns: {
-          origem: string
           dias_com_dado: number
           dias_validados: number
+          origem: string
           valor_atual: number
           valor_validado: number
         }[]
       }
       fn_relatorio_validar_setor: {
         Args: {
-          p_empresa_id: string
-          p_setor_id: string
-          p_mes: number
           p_ano: number
+          p_empresa_id: string
+          p_mes: number
           p_origem?: string
+          p_setor_id: string
         }
-        Returns: { ok: boolean; erro: string | null; dias_validados: number }[]
+        Returns: {
+          dias_validados: number
+          erro: string
+          ok: boolean
+        }[]
+      }
+      fn_set_setor_foto: {
+        Args: { p_campo?: string; p_foto_url: string; p_setor_id: string }
+        Returns: boolean
+      }
+      fn_setores_do_operador: {
+        Args: { p_operador: string }
+        Returns: string[]
       }
       fn_sincronizar_cartoes_pagos: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: number
       }
+      fn_situacao_operador: { Args: { p_operador_id: string }; Returns: string }
+      fn_super_admin_permissoes_completas: { Args: never; Returns: Json }
       fn_sync_par_vinculo: {
         Args: {
           p_acordo_id: string
@@ -3074,7 +4164,27 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_texto_censurado_cpf: { Args: never; Returns: string }
+      fn_texto_tem_cpf: { Args: { p_texto: string }; Returns: boolean }
+      fn_transferencia_desfazer: {
+        Args: { p_transferencia_id: string }
+        Returns: Json
+      }
+      fn_transferencia_mover_empresa: {
+        Args: { p_empresa_id: string; p_perfil_id: string; p_setor_id: string }
+        Returns: Json
+      }
+      fn_transferir_acordo_nr: {
+        Args: {
+          p_acordo_id: string
+          p_motivo?: string
+          p_novo_operador_id?: string
+        }
+        Returns: Json
+      }
       fn_user_empresa_id: { Args: never; Returns: string }
+      fn_user_empresa_is_bookplay: { Args: never; Returns: boolean }
+      fn_user_empresa_is_pagueplay: { Args: never; Returns: boolean }
       fn_user_has_any_role: { Args: { roles: string[] }; Returns: boolean }
       fn_user_is_super_admin: { Args: never; Returns: boolean }
       fn_user_perfil: { Args: never; Returns: string }
@@ -3084,7 +4194,9 @@ export type Database = {
           p_direto_id: string
           p_extra_op_id: string
           p_extra_op_nome: string
+          p_instituicao: string
           p_nome_cliente: string
+          p_nr_cliente: string
           p_parcelas?: number
           p_tipo: string
           p_valor: number
@@ -3093,17 +4205,34 @@ export type Database = {
         }
         Returns: undefined
       }
-      // ── Escrito à mão (migration 20260810c) ──────────────────────────────
-      fn_pix_restaurar_lixeira: {
-        Args: { p_item_id: string }
-        /** Id do registro recriado em pix_automatico_acordos. */
-        Returns: string
+      fn_wpp_chat_aberto: {
+        Args: { p_solicitacao_id: string }
+        Returns: boolean
       }
-      fn_pix_lixeira_purgar: {
+      fn_wpp_diretorio: {
+        Args: never
+        Returns: {
+          foto_url: string
+          id: string
+          nome: string
+        }[]
+      }
+      fn_wpp_eh_responsavel: { Args: never; Returns: boolean }
+      fn_wpp_marcar_nao_concluidos: {
         Args: { p_empresa_id: string }
-        /** Quantos itens vencidos foram apagados. */
         Returns: number
       }
+      fn_wpp_pode_falar: {
+        Args: { p_solicitacao_id: string }
+        Returns: boolean
+      }
+      fn_wpp_pode_ver_solicitacao: {
+        Args: { p_solicitacao_id: string }
+        Returns: boolean
+      }
+      fn_wpp_tem_visao_geral: { Args: never; Returns: boolean }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       perfil_usuario:
@@ -3114,6 +4243,7 @@ export type Database = {
         | "elite"
         | "gerencia"
         | "diretoria"
+        | "ouvidoria"
       status_acordo:
         | "pendente"
         | "pago"
@@ -3257,6 +4387,7 @@ export const Constants = {
         "elite",
         "gerencia",
         "diretoria",
+        "ouvidoria",
       ],
       status_acordo: [
         "pendente",

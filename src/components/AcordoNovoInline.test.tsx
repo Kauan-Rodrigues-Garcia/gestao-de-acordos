@@ -98,6 +98,7 @@ const routes: {
 
 interface SupabaseCall { table: string; op: string; payload?: unknown; id?: unknown; }
 const supabaseCalls: SupabaseCall[] = [];
+const supabaseRpcMock = vi.fn(async () => ({ data: null, error: null }));
 
 vi.mock('@/lib/supabase', () => {
   const makeBuilder = (table: string) => {
@@ -128,9 +129,7 @@ vi.mock('@/lib/supabase', () => {
   return {
     supabase: {
       from: vi.fn((t: string) => makeBuilder(t)),
-      // RPCs falham por padrão → o código cai nos fallbacks de update direto,
-      // que são os caminhos assertados nos testes do CASO A.
-      rpc: vi.fn(async () => ({ data: null, error: { message: 'rpc indisponível no teste' } })),
+      rpc: (...args: unknown[]) => supabaseRpcMock(...args),
     },
   };
 });
@@ -262,6 +261,7 @@ beforeEach(() => {
   fetchIsDiretoExtraAtivoMock.mockReset().mockResolvedValue(false);
   toastError.mockReset();
   toastSuccess.mockReset();
+  supabaseRpcMock.mockReset().mockResolvedValue({ data: null, error: null });
   supabaseCalls.length = 0;
   routes.insertAcordo       = { data: null, error: null };
   routes.updateAcordo       = { data: null, error: null };
@@ -630,7 +630,7 @@ describe('AcordoNovoInline — fluxo salvar() (mesmo operador)', () => {
 });
 
 describe('AcordoNovoInline — fluxo salvar() (CASO A — eu tenho a lógica)', () => {
-  it('insere como EXTRA, atualiza acordo direto antigo e notifica o operador', async () => {
+  it('insere como EXTRA, vincula o DIRETO por RPC e notifica o operador', async () => {
     isAtivoParaUsuarioMock.mockReturnValue(true);
 
     const onSaved = vi.fn();
@@ -660,13 +660,19 @@ describe('AcordoNovoInline — fluxo salvar() (CASO A — eu tenho a lógica)', 
       vinculo_operador_nome: 'Outro Op',
     });
 
-    // Update no acordo direto antigo para referenciar o EXTRA.
-    const updateCall = supabaseCalls.find(c => c.table === 'acordos' && c.op === 'update' && c.id === 'a-outro');
-    expect(updateCall).toBeTruthy();
-    expect(updateCall?.payload).toMatchObject({
-      vinculo_operador_id:   'me-1',
-      vinculo_operador_nome: 'Eu Operador',
-    });
+    // O acordo do outro operador só pode ser alterado pelo RPC protegido.
+    expect(supabaseRpcMock).toHaveBeenCalledWith(
+      'fn_vincular_extra_ao_direto',
+      expect.objectContaining({
+        p_direto_id: 'a-outro',
+        p_extra_op_id: 'me-1',
+        p_nr_cliente: '777',
+      }),
+    );
+    const updateDireto = supabaseCalls.find(
+      c => c.table === 'acordos' && c.op === 'update' && c.id === 'a-outro',
+    );
+    expect(updateDireto).toBeUndefined();
 
     // Notificação para o operador direto.
     expect(criarNotificacaoMock).toHaveBeenCalledWith(expect.objectContaining({

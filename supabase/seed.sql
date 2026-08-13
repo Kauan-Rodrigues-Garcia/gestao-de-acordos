@@ -1,0 +1,3 @@
+-- Seeds permanentes devem ficar aqui e ser idempotentes.
+-- Os dados históricos ainda vivem nas migrations legadas; este arquivo existe
+-- para que `supabase db reset` use a configuração oficial sem caminho ausente.

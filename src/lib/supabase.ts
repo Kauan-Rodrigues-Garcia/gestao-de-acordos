@@ -169,8 +169,10 @@ export interface Acordo {
   pago_em?: string | null;
   /** Data real em que o pagamento foi recebido (preenchida manualmente pelo operador) */
   data_pagamento?: string | null;
-  perfis?: Perfil;
-  setores?: Setor;
+  /** Join parcial: cada consulta seleciona somente os campos de perfil usados na tela. */
+  perfis?: (Pick<Perfil, 'id' | 'nome'> & Partial<Perfil>) | null;
+  /** Join parcial pelo mesmo motivo de `perfis`: PostgREST tipa o select exato. */
+  setores?: (Pick<Setor, 'id' | 'nome'> & Partial<Setor>) | null;
   empresas?: Empresa;
 }
 

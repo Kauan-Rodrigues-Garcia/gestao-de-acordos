@@ -4,6 +4,7 @@ import { preprocessarParaOcrForte, type ModoPreprocess } from '@/lib/ocr/preproc
 import { extrairDadosBookplay, mesclarDadosBookplay } from './parserBookplay';
 import { sanitizarDadosAcordo } from './sanitizar';
 import { contarCamposPreenchidos, type DadosExtraidosAcordo } from './types';
+import { obterTokenSessaoVisao, solicitarLeituraIa } from './visionApi';
 
 /**
  * Motor híbrido de leitura de acordo por imagem (BookPlay).
@@ -17,8 +18,6 @@ import { contarCamposPreenchidos, type DadosExtraidosAcordo } from './types';
  * O formulário consome sempre o mesmo `DadosExtraidosAcordo`, sem saber qual
  * motor respondeu (`_fonte` indica a origem).
  */
-
-const ENDPOINT_IA = '/api/ler-acordo-imagem';
 
 // ── OCR local (Tesseract) — worker reaproveitado entre leituras ───────────
 let workerPromise: Promise<Worker> | null = null;
@@ -62,34 +61,25 @@ export async function encerrarOcrAcordo(): Promise<void> {
 
 // ── Caminho IA ────────────────────────────────────────────────────────────
 async function lerViaIa(files: File[]): Promise<DadosExtraidosAcordo | null> {
+  const accessToken = await obterTokenSessaoVisao();
+  if (!accessToken) return null;
+
   // Reduz cada imagem antes de enviar (custo + limite de body da Vercel).
   const imagens = await Promise.all(
     files.map(async (f) => canvasParaDataUrl(await fileParaCanvas(f))),
   );
 
-  let resp: Response;
+  let dadosBrutos: DadosExtraidosAcordo | null;
   try {
-    resp = await fetch(ENDPOINT_IA, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ origem: 'bookplay', imagens }),
-    });
+    dadosBrutos = await solicitarLeituraIa(imagens, accessToken);
   } catch {
     // Sem rede ou endpoint inexistente (vite dev) → deixa o OCR assumir.
     return null;
   }
 
-  // 404: endpoint não servido (vite puro). 501/503: IA não configurada.
-  if (resp.status === 404 || resp.status === 501 || resp.status === 503) return null;
-  if (!resp.ok) {
-    const msg = await resp.text().catch(() => '');
-    throw new Error(`Falha na IA de visão (${resp.status}). ${msg}`.trim());
-  }
+  if (!dadosBrutos) return null;
 
-  const json = (await resp.json()) as { configured?: boolean; dados?: DadosExtraidosAcordo };
-  if (!json?.configured || !json.dados) return null;
-
-  const dados = sanitizarDadosAcordo(json.dados);
+  const dados = sanitizarDadosAcordo(dadosBrutos);
   dados._fonte = 'ia';
   return dados;
 }

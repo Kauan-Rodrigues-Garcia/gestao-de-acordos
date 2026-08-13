@@ -146,16 +146,17 @@ src/
 
 ### Migrations
 
-Os arquivos vivem em `supabase/migrations/` e são aplicados **em ordem
-alfabética do nome** — que, com o padrão de nomes por data (`AAAAMMDD` + sufixo
-`a`/`b`/`c`), é também a ordem cronológica. São ~150 arquivos, então listar
-todos aqui garantiria só uma lista velha; o que vale saber é a convenção:
+Os arquivos vivem em `supabase/migrations/`. Há **177 scripts legados**, criados
+antes da adoção da CLI oficial, e migrations novas com timestamp de 14 dígitos.
+O legado inclui prefixos repetidos e nomes que a CLI atual não reconhece como
+histórico formal; por isso ele não deve ser enviado com `db push --include-all`.
 
 | Faixa | Convenção |
 |---|---|
 | `01_` … `20_` | Fundação (schema, RLS, multi-tenant, cargos). Numeração sequencial simples. |
 | `<nome>_AAAA_MM_DD.sql` | Sprints de abril/2026 (NR, Direto/Extra, view deduplicada). |
-| `AAAAMMDD<letra>_<assunto>.sql` | Padrão atual, desde maio/2026. A letra ordena migrations do mesmo dia. |
+| `AAAAMMDD<letra>_<assunto>.sql` | Legado de maio a agosto/2026; a letra ordenava scripts do mesmo dia. |
+| `AAAAMMDDHHMMSS_<assunto>.sql` | Padrão oficial atual, criado por `supabase migration new`. |
 
 > **Sufixos (a/b/c):** mesmo dia, ordem obrigatória. O `b` é complemento direto
 > do `a` — `14a_add_equipes` cria a tabela que `14b_auth_username` usa.
@@ -165,11 +166,9 @@ As migrations que estabeleceram as regras vigentes estão tabeladas em
 ao lado da regra que cada uma criou — é o lugar para procurar "de onde veio esse
 comportamento".
 
-> ⚠️ O **status de aplicação** de cada migration no Supabase é controlado fora
-> do repositório. A presença do arquivo aqui **não** garante que ela rodou em
-> produção. Vários serviços toleram a tabela/RPC ausente de propósito
-> (`equipesClones`, `equipesLideres`, `expurgarDesaprovadosVencidos`, pet): o
-> recurso some da tela e o resto segue funcionando.
+O procedimento seguro, a limitação atual do baseline legado e os comandos da
+CLI estão em [supabase/MIGRATIONS.md](./supabase/MIGRATIONS.md). A presença de
+um script legado no repositório não prova que ele foi aplicado em produção.
 
 ### Setores Iniciais
 
@@ -541,8 +540,11 @@ Ver `src/services/impersonacao.service.ts` no cliente.
 
 ### `api/ler-acordo-imagem.ts`
 
-Leitura de acordo BookPlay por imagem via IA. Provider-agnóstica: escolhe o
-provedor por `VISION_PROVIDER` + `VISION_API_KEY`. Sem chave, responde 503 e o
+Leitura de acordo BookPlay por imagem via IA. Exige JWT Supabase válido, perfil
+ativo e uma cota persistente por usuário antes de chamar o provedor. A rota
+aceita somente PNG/JPEG/WebP, no máximo 5 imagens e 3 MB decodificados (para
+respeitar o limite de 4,5 MB do payload Vercel após Base64). A cota
+padrão é 10 leituras por 10 minutos; sem configuração ou em indisponibilidade o
 front cai no OCR local (Tesseract).
 
 ---
@@ -594,8 +596,10 @@ no `.env.local` para o `npm run dev`, via plugin `dev-api`):
 
 | Variável | Usada por |
 |---|---|
-| `SUPABASE_SERVICE_ROLE_KEY` | `api/alterar-senha.ts`, `api/impersonar-usuario.ts` — **ignora todo o RLS** |
-| `VISION_PROVIDER` / `VISION_API_KEY` / `VISION_MODEL` | `api/ler-acordo-imagem.ts` (sem elas, cai no OCR local) |
+| `SUPABASE_SERVICE_ROLE_KEY` | Rotas administrativas e controle de cota da visão — **ignora todo o RLS** |
+| `SUPABASE_PUBLISHABLE_KEY` | Validação do JWT na API de visão; cai em `VITE_SUPABASE_ANON_KEY` quando omitida |
+| `VISION_PROVIDER` / `VISION_API_KEY` / `VISION_MODEL` | Provedor da leitura por imagem (sem elas, cai no OCR local) |
+| `VISION_RATE_LIMIT_MAX` / `VISION_RATE_LIMIT_WINDOW_SECONDS` | Cota da visão; defaults 10 requisições / 600 segundos |
 | `SENTRY_AUTH_TOKEN` / `SENTRY_ORG` / `SENTRY_PROJECT` | Upload de source maps no build — segredo de verdade (acesso de escrita ao Sentry) |
 
 O [.env.example](./.env.example) documenta cada uma com o porquê.
@@ -830,7 +834,7 @@ src/lib/supabase.ts             # + interface DiarioRecebimento
 
 | Frente | Como está |
 |---|---|
-| **Testes** | Vitest + Testing Library (happy-dom). ~1750 testes em ~102 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
+| **Testes** | Vitest + Testing Library (happy-dom). 2302 testes em 138 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
 | **Cobertura** | `vitest.config.ts` tem thresholds como **catraca**: cada valor fica logo abaixo do que a suíte entrega hoje. Ao subir a cobertura, suba os números **no mesmo commit**. |
 | **E2E** | Playwright em `tests/e2e/`. |
 | **CI** | `.github/workflows/ci.yml`: lint → typecheck → testes com cobertura → build. |
