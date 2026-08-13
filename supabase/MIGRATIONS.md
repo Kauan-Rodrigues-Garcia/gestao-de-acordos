@@ -26,7 +26,9 @@ As lacunas de fundação encontradas foram corrigidas no código legado:
 
 1. Instale Docker Desktop e use a CLI fixada nos exemplos:
    `npx supabase@2.114.0 start`.
-2. Crie mudanças apenas com `npx supabase@2.114.0 migration new <nome>`.
+2. Até concluir o baseline, preserve a convenção do projeto
+   `YYYYMMDD[a-z]_nome.sql`; depois da consolidação, migre todo o histórico de
+   uma vez para versões oficiais geradas por `migration new`.
 3. Rode `npx supabase@2.114.0 db reset` antes do commit.
 4. Gere os tipos novamente após aplicar a migration.
 5. Publique uma migration por vez e confira os advisors de segurança e
@@ -60,7 +62,7 @@ ordem:
    legada. O endpoint de visão cai no OCR local enquanto a função de cota ainda
    não existir.
 2. Supabase depois: aplique
-   `20260813191449_harden_privileged_rpcs_and_vision_rate_limit.sql`. Ela remove
+   `20260813e_harden_privileged_rpcs_and_vision_rate_limit.sql`. Ela remove
    as assinaturas legadas, ativa as validações de identidade/empresa/regra e
    cria o controle persistente de cota.
 3. Force a recarga do schema PostgREST caso `PGRST202` persista, execute os

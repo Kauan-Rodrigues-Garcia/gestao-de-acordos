@@ -147,7 +147,8 @@ src/
 ### Migrations
 
 Os arquivos vivem em `supabase/migrations/`. Há **177 scripts legados**, criados
-antes da adoção da CLI oficial, e migrations novas com timestamp de 14 dígitos.
+antes da adoção da CLI oficial. Enquanto esse legado não for consolidado, novas
+migrations mantêm a convenção sequencial do projeto: `YYYYMMDD[a-z]_nome.sql`.
 O legado inclui prefixos repetidos e nomes que a CLI atual não reconhece como
 histórico formal; por isso ele não deve ser enviado com `db push --include-all`.
 
