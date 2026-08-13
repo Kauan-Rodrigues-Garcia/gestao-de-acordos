@@ -27,46 +27,6 @@ INSERT INTO public.empresas (nome, slug) VALUES
   ('PAGUEPLAY', 'pagueplay')
 ON CONFLICT (slug) DO NOTHING;
 
--- `profissionais` existia em produção sem migration de criação. Ela depende
--- de empresas, portanto nasce aqui (antes do primeiro backfill que a consulta).
-CREATE TABLE IF NOT EXISTS public.profissionais (
-  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  empresa_id    UUID NOT NULL REFERENCES public.empresas(id) ON DELETE CASCADE,
-  codigo        TEXT NOT NULL,
-  nome          TEXT NOT NULL,
-  telefone      TEXT,
-  estado_uf     CHAR(2),
-  criado_em     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (empresa_id, codigo)
-);
-
-CREATE INDEX IF NOT EXISTS idx_profissionais_empresa_codigo
-  ON public.profissionais(empresa_id, codigo);
-ALTER TABLE public.profissionais ENABLE ROW LEVEL SECURITY;
-
-DROP POLICY IF EXISTS "prof_select" ON public.profissionais;
-CREATE POLICY "prof_select" ON public.profissionais FOR SELECT USING (
-  empresa_id = (SELECT p.empresa_id FROM public.perfis p WHERE p.id = auth.uid())
-);
-DROP POLICY IF EXISTS "prof_insert_admin" ON public.profissionais;
-CREATE POLICY "prof_insert_admin" ON public.profissionais FOR INSERT WITH CHECK (
-  EXISTS (
-    SELECT 1 FROM public.perfis p
-     WHERE p.id = auth.uid() AND p.perfil::TEXT IN ('administrador', 'super_admin')
-  )
-);
-DROP POLICY IF EXISTS "prof_upsert_admin" ON public.profissionais;
-CREATE POLICY "prof_upsert_admin" ON public.profissionais FOR UPDATE USING (
-  EXISTS (
-    SELECT 1 FROM public.perfis p
-     WHERE p.id = auth.uid() AND p.perfil::TEXT IN ('administrador', 'super_admin')
-  )
-);
-
-GRANT SELECT ON TABLE public.profissionais TO authenticated;
-GRANT ALL ON TABLE public.profissionais TO service_role;
-
 -- ── 2. Adicionar empresa_id nas tabelas (nullable primeiro) ───────────────
 
 -- perfis

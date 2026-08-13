@@ -13,14 +13,12 @@ prefixo. Produção também não possuía `supabase_migrations.schema_migrations
 Portanto, **não execute `db push --include-all` nesse histórico**: isso tentaria
 reaplicar scripts já presentes em produção e não constitui um baseline válido.
 
-As lacunas de fundação encontradas foram corrigidas no código legado:
-
-- `01_schema_completo.sql` agora cria `setores`, `lixeira_acordos` e a tabela
-  legada `profiles` antes de qualquer uso;
-- `09_multi_empresa.sql` cria `profissionais` depois de `empresas` e antes do
-  primeiro backfill;
-- `database.types.ts` foi regenerado do schema remoto e inclui a migration-alvo
-  ainda pendente de publicação.
+Os scripts históricos são imutáveis. A análise encontrou objetos existentes em
+produção sem uma criação reproduzível no legado (`setores`, `lixeira_acordos`,
+`profiles` e `profissionais`), mas eles não devem ser enxertados em migrations
+já aplicadas. O baseline definitivo deverá incorporá-los a partir do snapshot
+remoto. `database.types.ts` foi regenerado do schema remoto e inclui a
+migration-alvo ainda pendente de publicação.
 
 ## Fluxo obrigatório daqui para a frente
 
