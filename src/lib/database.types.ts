@@ -2112,7 +2112,7 @@ export type Database = {
           },
         ]
       }
-      // Migration 20260813a — registro de transferência de pessoa entre setores
+      // Migration 20260813b — registro de transferência de pessoa entre setores
       // e entre empresas. Escrito à mão pelo mesmo motivo de
       // `analitico_exclusoes_setor`: o service precisa de INSERT e UPDATE, e
       // `tabelaSemTipo` só serve leitura de propósito.

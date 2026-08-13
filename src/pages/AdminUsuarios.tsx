@@ -10,6 +10,7 @@ import {
   executarTransferencia, type AlvoTransferencia,
 } from '@/services/admin/transferenciaUsuario.service';
 import { DialogoTransferencia } from '@/components/admin/DialogoTransferencia';
+import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferencias';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -1082,6 +1083,20 @@ export default function AdminUsuarios() {
                )}
              </div>
           </div>
+
+          {/* ── Seção: Transferências ──────────────────────────────────────
+              Fica aqui, e não numa tela de auditoria, porque é aqui que o admin
+              chega quando moveu alguém errado. Some sozinha para quem nunca foi
+              transferido, que é a maioria. */}
+          {editando && (
+            <HistoricoTransferencias
+              perfilId={editando.id}
+              podeDesfazer={isAdmin || isSuperAdmin}
+              nomeDoSetor={nomeDoSetor}
+              nomeDaEmpresa={nomeDaEmpresa}
+              onDesfeita={() => { setDialogOpen(false); fetchDados(); }}
+            />
+          )}
 
           {/* ── Seção: Redefinir senha (edição, só admin/super_admin) ───
               A senha atual não é exibida porque não existe para ser exibida: o

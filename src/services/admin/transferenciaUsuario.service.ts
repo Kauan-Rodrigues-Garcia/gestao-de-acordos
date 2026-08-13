@@ -382,7 +382,7 @@ async function registrarTransferencia(params: {
 
   if (error || !data) {
     const detalhe = /relation|does not exist|schema cache/i.test(error?.message ?? '')
-      ? 'Migration 20260813a pendente.'
+      ? 'Migration 20260813b pendente.'
       : (error?.message ?? 'motivo desconhecido');
     return {
       id: null,
@@ -457,6 +457,7 @@ export interface TransferenciaRegistrada {
   perfilId: string;
   mes: string;
   tipo: 'setor' | 'empresa';
+  origemEmpresaId: string;
   origemSetorId: string | null;
   origemEquipeId: string | null;
   destinoEmpresaId: string;
@@ -510,6 +511,8 @@ function linhaParaRegistro(l: Record<string, unknown>): TransferenciaRegistrada 
     perfilId:         String(l.perfil_id),
     mes:              String(l.mes),
     tipo:             l.tipo === 'empresa' ? 'empresa' : 'setor',
+    // `empresa_id` na tabela é a empresa de ORIGEM — é ela que sofre o efeito.
+    origemEmpresaId:  String(l.empresa_id),
     origemSetorId:    (l.origem_setor_id as string | null) ?? null,
     origemEquipeId:   (l.origem_equipe_id as string | null) ?? null,
     destinoEmpresaId: String(l.destino_empresa_id),
@@ -566,7 +569,7 @@ export function traduzirTransferencia(mensagem: string): string {
       + 'Renomeie um dos dois e tente de novo.';
   }
   if (/could not find the function|does not exist|schema cache/i.test(mensagem)) {
-    return 'Migration 20260813a pendente — aplique-a no Supabase para transferir usuários.';
+    return 'Migration 20260813b pendente — aplique-a no Supabase para transferir usuários.';
   }
   if (/sem permiss[aã]o/i.test(mensagem)) return mensagem;
   return `Erro ao transferir: ${mensagem}`;

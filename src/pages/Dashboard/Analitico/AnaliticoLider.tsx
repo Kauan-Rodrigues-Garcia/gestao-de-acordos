@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3,
+  TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,6 +51,8 @@ import {
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 // Limpar o mês do analítico apaga o mês do diário junto (BookPlay).
 import { limparMesRecebimentos } from '@/services/analitico/limparMesRecebimentos';
+import type { MarcaTransferido } from '@/services/analitico/fantasmaTransferencia';
+import { removerFantasma } from '@/services/admin/transferenciaUsuario.service';
 import {
   buscarExclusoesSetor, salvarExclusoesSetor,
 } from '@/services/analitico/exclusoesSetor.service';
@@ -147,6 +149,10 @@ export function AnaliticoLider({
   // ── Equipes ───────────────────────────────────────────────────────────────
   const [equipes,           setEquipes]           = useState<EquipeAnalitico[]>([]);
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, OperadorEquipeInfo>>({});
+  // Transferidos neste mês cujo recebimento ficou na equipe de origem.
+  const [transferidos, setTransferidos] = useState<Record<string, MarcaTransferido>>({});
+  // Quem o líder já tirou nesta sessão — some da tela antes do próximo refetch.
+  const [fantasmasTirados, setFantasmasTirados] = useState<Set<string>>(new Set());
   const [equipesExtras,     setEquipesExtras]     = useState<Record<string, string[]>>({});
   const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
   // Item 5: ids que somem do ranking/quartil (férias/desligado). Só exibição —
@@ -250,10 +256,14 @@ export function AnaliticoLider({
     // Passa o mês: fechado usa o retrato congelado da composição, senão mover
     // alguém de equipe hoje reescreveria a lista do mês passado (20260803c).
     buscarEquipesComOperadores(empresaId, mes).then(
-      ({ equipes: eq, operadorEquipeMap: oem, equipesExtrasPorOperador, situacaoPorOperador }) => {
+      ({ equipes: eq, operadorEquipeMap: oem, equipesExtrasPorOperador, situacaoPorOperador,
+         transferidos }) => {
         setEquipes(eq);
         setOperadorEquipeMap(oem);
         setEquipesExtras(equipesExtrasPorOperador);
+        // Quem saiu do setor/empresa neste mês e continua aparecendo na equipe
+        // de origem (migration 20260813b). Vazio no caso normal.
+        setTransferidos(transferidos ?? {});
         // Situação daquele mês — férias/desligamento de hoje não apagam alguém
         // do ranking de um mês que ele trabalhou inteiro.
         setOperadoresOcultos(idsOcultosRankingQuartil(situacaoPorOperador as Record<string, SituacaoUsuario>));
@@ -403,6 +413,31 @@ export function AnaliticoLider({
       onRefetch();
     }
     setRemovendoTodos(false);
+  }
+
+  /**
+   * O líder tira da equipe o recebimento de quem foi transferido.
+   *
+   * Nada é apagado: o valor continua no total da empresa e no do setor. Ele só
+   * deixa de aparecer nesta equipe — que é exatamente a pergunta que o líder
+   * está respondendo ao clicar.
+   */
+  async function tirarDaEquipe(operadorId: string, nome: string) {
+    const marca = transferidos[operadorId];
+    if (!marca) return;
+    setFantasmasTirados(prev => new Set(prev).add(operadorId));
+
+    const { error } = await removerFantasma(marca.transferenciaId, perfil?.id ?? null);
+    if (error) {
+      toast.error(`Não foi possível tirar: ${error}`);
+      setFantasmasTirados(prev => { const s = new Set(prev); s.delete(operadorId); return s; });
+      return;
+    }
+    toast.success(
+      `Recebimento de ${nome} saiu desta equipe. Ele continua no total do setor e da empresa.`,
+    );
+    void carregarResumos();
+    onRefetch();
   }
 
   async function limparMes() {
@@ -701,7 +736,22 @@ export function AnaliticoLider({
                               ? <ChevronDown  className="w-4 h-4 text-muted-foreground" />
                               : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
                           <div>
-                            <CardTitle className="text-sm">{r.operador_nome ?? r.operador_usuario}</CardTitle>
+                            <CardTitle className="text-sm flex items-center gap-1.5 flex-wrap">
+                              {r.operador_nome ?? r.operador_usuario}
+                              {transferidos[r.operador_id] && (
+                                <Badge
+                                  variant="outline"
+                                  className="text-[10px] font-normal gap-1 border-amber-500/50 text-amber-600 dark:text-amber-400"
+                                  title={
+                                    'Transferido neste mês. O recebimento continua aqui até a '
+                                    + 'liderança decidir tirar.'
+                                  }
+                                >
+                                  <ArrowRightLeft className="w-3 h-3" />
+                                  transferido
+                                </Badge>
+                              )}
+                            </CardTitle>
                             <p className="text-xs text-muted-foreground font-mono">{r.operador_usuario}</p>
                           </div>
                         </div>
@@ -717,6 +767,23 @@ export function AnaliticoLider({
                             </div>
                           )}
                           <Badge variant="outline" className="shrink-0">{r.total_pagamentos} pgto.</Badge>
+                          {/* Tirar da equipe o recebimento de quem foi
+                              transferido. Não apaga nada: o valor continua no
+                              total da empresa e no do setor — só deixa de
+                              aparecer aqui, que é a pergunta do líder. */}
+                          {transferidos[r.operador_id] && temPermissaoImportar && (
+                            <Button
+                              size="sm" variant="ghost"
+                              className="h-7 px-2 text-[11px] text-muted-foreground hover:text-destructive shrink-0"
+                              disabled={fantasmasTirados.has(r.operador_id)}
+                              onClick={e => {
+                                e.stopPropagation();
+                                void tirarDaEquipe(r.operador_id, r.operador_nome ?? r.operador_usuario);
+                              }}
+                            >
+                              Tirar da equipe
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardHeader>
