@@ -191,7 +191,7 @@ vi.mock('react-router-dom', async () => {
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 /**
- * O Dashboard monta `MetaProgressoHeader`, que consome `useAnaliticoDashboard` —
+ * O Dashboard monta o `PainelMetas`, que consome `useAnaliticoDashboard` —
  * e esse hook usa React Query para compartilhar uma única busca do mês entre os
  * seus dois consumidores. O `QueryClientProvider` existe no App real (`App.tsx`);
  * aqui ele precisa ser fornecido, senão o hook lança "No QueryClient set".

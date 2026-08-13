@@ -20,8 +20,9 @@ import { formatBRL } from '@/lib/money';
 import { getTodayISO } from '@/lib/index';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
-  diasUteisDoMes, diasUteisDecorridos, quartilAtual, QUARTIS_PADRAO, COR_QUARTIL,
+  diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO, COR_QUARTIL,
 } from '@/lib/diasUteis';
+import { calcularProjecao } from '@/lib/projecaoMetas';
 import {
   mapaSetorDaEquipe, setoresDoOperador,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
@@ -146,19 +147,15 @@ export function QuartisOperadores({
       const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
       const meta = metasOp[op.id] ?? null;
       const recebido = recebidoMap[op.id] ?? 0;
-      let diaria: number | null = null;
-      let hoje: number | null = null;
-      let diferenca: number | null = null;
-      let projecao: number | null = null;
-      let q: QuartilConfig | null = null;
 
-      if (meta && totalUteis > 0) {
-        diaria    = meta / totalUteis;
-        hoje      = diaria * decorridos;
-        diferenca = recebido - hoje;
-        projecao  = hoje > 0 ? Math.round((recebido / hoje) * 100) : 0;
-        q = quartilAtual(projecao, quartis);
-      }
+      // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
+      // pessoal. Ver `EntradaProjecao` em lib/projecaoMetas.
+      const proj = calcularProjecao({ meta, recebido, totalUteis, decorridos, quartis });
+      const diaria: number | null    = proj?.metaDiaria ?? null;
+      const hoje: number | null      = proj?.esperado ?? null;
+      const diferenca: number | null = proj?.diferenca ?? null;
+      const projecao: number | null  = proj?.projecaoPct ?? null;
+      const q: QuartilConfig | null  = proj?.quartil ?? null;
 
       const equipeNome = (op.equipe_id ? nomeDaEquipe.get(op.equipe_id) : null)
         ?? operadorEquipeMap[op.id]?.equipe_nome

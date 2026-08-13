@@ -240,6 +240,9 @@ export type Database = {
           pagamentos_detalhados: Json | null
           setor_id: string | null
           status_tabulacao: string
+          // Coluna "Tipo comissão" do relatório (migration 20260813a).
+          // NULL nas linhas importadas antes dela.
+          tipo_comissao: string | null
           total_ho: number
           valor_recebido: number
           visto: boolean
@@ -263,6 +266,7 @@ export type Database = {
           pagamentos_detalhados?: Json | null
           setor_id?: string | null
           status_tabulacao?: string
+          tipo_comissao?: string | null
           total_ho?: number
           valor_recebido?: number
           visto?: boolean
@@ -286,6 +290,7 @@ export type Database = {
           pagamentos_detalhados?: Json | null
           setor_id?: string | null
           status_tabulacao?: string
+          tipo_comissao?: string | null
           total_ho?: number
           valor_recebido?: number
           visto?: boolean

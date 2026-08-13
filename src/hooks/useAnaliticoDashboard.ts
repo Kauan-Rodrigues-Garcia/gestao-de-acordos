@@ -11,8 +11,8 @@
  *
  * ## Deduplicação (performance)
  *
- * Dois componentes montam este hook ao mesmo tempo — `AnalyticsPanel` e
- * `MetaProgressoHeader`. Na versão anterior (useState + useEffect) cada um fazia
+ * Dois consumidores montam este hook ao mesmo tempo — `AnalyticsPanel` e
+ * `usePainelMetas`. Na versão anterior (useState + useEffect) cada um fazia
  * a SUA busca paginada do mês e abria o SEU canal de realtime: tudo em dobro, e
  * em dobro outra vez a cada importação. O `canalId` aleatório que existia aqui
  * tratava a colisão de tópico, não a duplicação do trabalho.
@@ -47,8 +47,14 @@ export interface AgregadoAnalitico {
   naoTabuladoBruto: number;
   naoTabuladoHO: number;
   naoTabuladoQtd: number;
-  /** dia do mês (1..31) → { bruto, ho } */
-  porDia: Record<number, { bruto: number; ho: number }>;
+  /**
+   * dia do mês (1..31) → { bruto, ho, qtd }
+   *
+   * `qtd` existe para o card "Recebido baixa anterior", que informa quantos
+   * registros o último dia com movimento trouxe — a soma sozinha não diz se
+   * foram 121 pagamentos pequenos ou um só grande.
+   */
+  porDia: Record<number, { bruto: number; ho: number; qtd: number }>;
   /** operador_id → { bruto, ho, qtd } (líder+ recebe todos; operador só a si) */
   porOperador: Record<string, { bruto: number; ho: number; qtd: number }>;
   /** rótulo da forma (forma_detalhe; fallback boleto_pix/cartao) → { bruto, qtd } */
@@ -98,9 +104,10 @@ export function agregarAnalitico(
     }
 
     const diaNum = Number(l.dia.slice(8, 10));
-    if (!agg.porDia[diaNum]) agg.porDia[diaNum] = { bruto: 0, ho: 0 };
+    if (!agg.porDia[diaNum]) agg.porDia[diaNum] = { bruto: 0, ho: 0, qtd: 0 };
     agg.porDia[diaNum].bruto += total;
     agg.porDia[diaNum].ho    += ho;
+    agg.porDia[diaNum].qtd   += qtd;
 
     if (l.operador_id) {
       if (!agg.porOperador[l.operador_id]) agg.porOperador[l.operador_id] = { bruto: 0, ho: 0, qtd: 0 };

@@ -63,7 +63,7 @@ function formaEnum(label: string): FormaPagementoAnalitico {
   return label.startsWith('Cartão') ? 'cartao' : 'boleto_pix';
 }
 
-type ColKeys = 'op' | 'cli' | 'nr' | 'emp' | 'tp' | 'dt' | 'rec';
+type ColKeys = 'op' | 'cli' | 'nr' | 'emp' | 'tp' | 'dt' | 'rec' | 'tc';
 
 const COL_ALIASES: Record<ColKeys, string[]> = {
   op:  ['cobradora', 'operador', 'cobrador'],
@@ -73,6 +73,11 @@ const COL_ALIASES: Record<ColKeys, string[]> = {
   tp:  ['tpdoc', 'formadepagamento', 'formapagamento'],
   dt:  ['dtpgto', 'datapgto', 'datapagamento', 'datadopagamento'],
   rec: ['recebido', 'valorrecebido'],
+  // "Tipo comissão" (Extra / Integral) — é o ERP dizendo de quem é o vínculo.
+  // Fica FORA de `required`: relatório antigo não tem a coluna, e recusar o
+  // arquivo por causa dela quebraria a importação de todo mundo.
+  // Sem 'comissao' solto — casaria com coluna de VALOR de comissão.
+  tc:  ['tipocomissao', 'tipodecomissao'],
 };
 
 function resolveCols(headers: unknown[]): Partial<Record<ColKeys, number>> | null {
@@ -106,6 +111,8 @@ interface LinhaBruta {
   forma: FormaPagementoAnalitico;
   valor_recebido: number;
   data_pagamento: Date;
+  /** Texto cru da coluna "Tipo comissão" (Extra / Integral). */
+  tipo_comissao: string;
 }
 
 /**
@@ -147,6 +154,7 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     const rec = parsearValor(row[cols.rec!]);
     const emp = cols.emp != null ? String(row[cols.emp] ?? '').trim() : '';
     const cli = cols.cli != null ? row[cols.cli] : '';
+    const tc  = cols.tc  != null ? String(row[cols.tc]  ?? '').trim() : '';
 
     // BookPlay tem vários setores: linha sem operador não tem como ser
     // atribuída a um setor, então continua descartada (diferente da PP).
@@ -165,6 +173,7 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
       forma:            formaEnum(label),
       valor_recebido:   rec,
       data_pagamento:   dt,
+      tipo_comissao:    tc,
     });
   }
 
@@ -175,6 +184,10 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     const existe = mapA.get(chave);
     if (existe) {
       existe.valor_recebido += l.valor_recebido;
+      // Linha do mesmo NR/operador com o tipo preenchido enquanto a primeira
+      // veio em branco: fica o que informa. Não sobrescreve um valor já lido —
+      // o mesmo vínculo não muda no meio do relatório.
+      if (!existe.tipo_comissao && l.tipo_comissao) existe.tipo_comissao = l.tipo_comissao;
     } else {
       mapA.set(chave, {
         operador_usuario: l.operador_usuario,
@@ -188,6 +201,7 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
         valor_recebido:   l.valor_recebido,
         total_ho:         0,
         data_pagamento:   l.data_pagamento,
+        tipo_comissao:    l.tipo_comissao || undefined,
       });
     }
   }

@@ -27,15 +27,9 @@ import {
   buscarResumoOperadoresAnalitico,
   type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
-import {
-  diasUteisDoMes, diasUteisDecorridos, quartilAtual, proximoQuartil,
-} from '@/lib/diasUteis';
+import { diasUteisDoMes, diasUteisDecorridos } from '@/lib/diasUteis';
+import { calcularProjecao, pctLimitado } from '@/lib/projecaoMetas';
 import { cn } from '@/lib/utils';
-
-function pct(realizado: number, base: number): number {
-  if (!base || base <= 0) return 0;
-  return Math.min(Math.round((realizado / base) * 100), 999);
-}
 
 export function MetaProgressoHeader() {
   const { perfil }  = useAuth();
@@ -152,20 +146,21 @@ export function MetaProgressoHeader() {
     if (!perfil?.id || metaValor == null || metaValor <= 0 || !config) return null;
 
     const recebido = analitico.total.porOperador[perfil.id]?.bruto ?? 0;
-    const percMeta = pct(recebido, metaValor);
+    const percMeta = pctLimitado(recebido, metaValor);
 
     const inicioTreino = treinoInicio ?? undefined;
     const totalUteis = diasUteisDoMes(ano, mes, config.feriados, inicioTreino);
-    if (totalUteis === 0) return null;
-    const decorridos  = diasUteisDecorridos(
+    const decorridos = diasUteisDecorridos(
       ano, mes, config.feriados, getTodayISO(), inicioTreino, config.contar_dia_atual === true,
     );
-    const metaDiaria  = metaValor / totalUteis;
-    const esperado    = metaDiaria * Math.max(decorridos, 1);
-    const projecao    = pct(recebido, esperado);
-    const quartil     = quartilAtual(projecao, config.quartis);
-    const proximo     = proximoQuartil(quartil, config.quartis);
-    const paraSubir   = proximo ? Math.max(0, (esperado * proximo.min_pct) / 100 - recebido) : null;
+
+    // `limitePct: 999` é o teto histórico desta tela — ver `EntradaProjecao`.
+    const proj = calcularProjecao({
+      meta: metaValor, recebido, totalUteis, decorridos,
+      quartis: config.quartis, limitePct: 999,
+    });
+    if (!proj) return null;   // sem meta ou sem dias úteis: o header some
+    const { metaDiaria, esperado, projecaoPct: projecao, quartil, proximo, paraSubir } = proj;
 
     // Metas em cascata: [1ª, 2ª, 3ª…] — quartil/percentual usam SÓ a 1ª;
     // depois de batida, a barra informa quanto falta para a próxima

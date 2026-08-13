@@ -642,7 +642,7 @@ export default function Dashboard() {
               <Building2 className="w-3 h-3" /> {empresa.nome}
             </p>
           )}
-          {/* PP: barra de meta, posição no ranking e quartil (dados do analítico) */}
+          {/* Barra de meta, posição no ranking e quartil (dados do analítico) */}
           <MetaProgressoHeader />
         </div>
         <div className="flex gap-2 flex-wrap items-center">
@@ -709,7 +709,7 @@ export default function Dashboard() {
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}
           operadorFiltroExterno={operadorFiltroAtivo}
-          temLogicaDiretoExtra={isPP && usuarioTemLogicaDiretoExtra}
+          temLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
         />
       </div>
 

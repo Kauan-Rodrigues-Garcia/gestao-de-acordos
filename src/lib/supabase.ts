@@ -344,6 +344,8 @@ export interface AnaliticoRecebimento {
   /** Rótulo real da forma de pagamento na BookPlay (Boleto, Pix, Pix Automático,
    *  Cartão Recorrente, Cartão de Crédito); null na PaguePlay. */
   forma_detalhe?: string | null;
+  /** Coluna "Tipo comissão" do relatório (Extra / Integral). Migration 20260813a. */
+  tipo_comissao?: string | null;
   valor_recebido: number;
   total_ho: number;
   data_pagamento: string;   // DATE → 'yyyy-MM-dd'
