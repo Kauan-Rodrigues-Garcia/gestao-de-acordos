@@ -20,11 +20,8 @@
  * ## As duas escolhas, e o que cada uma faz
  *
  * **Levar os acordos** (só troca de setor): tudo vai junto — as tabulações
- * mudam de setor com a pessoa e os VÍNCULOS ficam de pé. Vínculo aqui é o par
- * EXTRA/pareado (`tipo_vinculo`, `vinculo_operador_id`): mexer nele
- * desmancharia o acordo do OUTRO operador, que não foi transferido nem pediu
- * nada. Caso raro, para quando o setor inteiro de alguém muda de nome na
- * prática.
+ * mudam de setor com a pessoa e os VÍNCULOS ficam de pé. Caso raro, para quando
+ * o setor inteiro de alguém muda de nome na prática.
  *
  * **Chegar limpo** (padrão, e o único caminho na troca de empresa): baixa o
  * relatório das tabulações, apaga o histórico e libera os NRs para outros
@@ -216,11 +213,9 @@ export async function executarTransferencia(params: {
 
   // ── 1. Relatório, antes de qualquer DELETE ────────────────────────────────
   let relatorio: string | null = null;
-  let acordosParaApagar = 0;
   if (!levarAcordos) {
     try {
       const acordos = await buscarAcordosDoUsuario(alvo.perfilId, alvo.origemEmpresaId);
-      acordosParaApagar = acordos.length;
       if (acordos.length) {
         relatorio = await baixarRelatorioAcordos(
           alvo.nome, acordos, tipo === 'empresa' ? 'empresa-anterior' : 'setor-anterior',
@@ -243,11 +238,14 @@ export async function executarTransferencia(params: {
   const clonesRemovidos = await limparClones(alvo.perfilId);
 
   // ── 4. Acordos ────────────────────────────────────────────────────────────
-  let acordosApagados = 0;
+  let acordosApagados = moveu.acordosApagados;
   let acordosMovidos  = 0;
   if (levarAcordos) {
     acordosMovidos = await recarimbarSetorDosAcordos(alvo);
-  } else if (acordosParaApagar > 0) {
+  } else if (tipo === 'setor') {
+    // Mesmo com zero acordos próprios a RPC precisa rodar: o perfil pode ser o
+    // DIRETO/EXTRA referenciado por um acordo de outra pessoa. A migration
+    // 20260813f limpa esse vínculo sobrevivente na mesma transação do DELETE.
     const apagados = await apagarAcordos(alvo);
     if (apagados.erro) {
       // O perfil JÁ mudou. Dizer as duas coisas: a transferência valeu, a
@@ -303,7 +301,7 @@ export async function executarTransferencia(params: {
  */
 async function moverPerfil(
   alvo: AlvoTransferencia, tipo: 'setor' | 'empresa',
-): Promise<{ erro: string | null }> {
+): Promise<{ erro: string | null; acordosApagados: number }> {
   if (tipo === 'empresa') {
     const cliente = supabase as unknown as {
       rpc: (n: string, a: Record<string, unknown>) => Promise<{
@@ -311,14 +309,23 @@ async function moverPerfil(
       }>;
     };
     try {
-      const { error } = await cliente.rpc('fn_transferencia_mover_empresa', {
+      const { data, error } = await cliente.rpc('fn_transferencia_mover_empresa', {
         p_perfil_id:  alvo.perfilId,
         p_empresa_id: alvo.destinoEmpresaId,
         p_setor_id:   alvo.destinoSetorId,
       });
-      return { erro: error ? traduzirTransferencia(error.message) : null };
+      const retorno = data && typeof data === 'object'
+        ? data as { acordos_apagados?: unknown }
+        : null;
+      return {
+        erro: error ? traduzirTransferencia(error.message) : null,
+        acordosApagados: error ? 0 : Number(retorno?.acordos_apagados) || 0,
+      };
     } catch (e) {
-      return { erro: e instanceof Error ? e.message : String(e) };
+      return {
+        erro: e instanceof Error ? e.message : String(e),
+        acordosApagados: 0,
+      };
     }
   }
 
@@ -330,9 +337,11 @@ async function moverPerfil(
     .eq('id', alvo.perfilId)
     .select('id');
 
-  if (error) return { erro: traduzirTransferencia(error.message) };
-  if (!data?.length) return { erro: 'Sem permissão para transferir este usuário.' };
-  return { erro: null };
+  if (error) return { erro: traduzirTransferencia(error.message), acordosApagados: 0 };
+  if (!data?.length) {
+    return { erro: 'Sem permissão para transferir este usuário.', acordosApagados: 0 };
+  }
+  return { erro: null, acordosApagados: 0 };
 }
 
 /** Tira a pessoa de toda equipe em que era clone, devolvendo o que tirou. */

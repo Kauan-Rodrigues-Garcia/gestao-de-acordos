@@ -137,7 +137,7 @@ beforeEach(() => {
   ops.length = 0;
   rpcCalls.length = 0;
   respostas.clear();
-  respostaRpc = { data: 7, error: null };
+  respostaRpc = { data: { acordos_apagados: 7 }, error: null };
   buscarAcordosMock.mockReset().mockResolvedValue([]);
   baixarRelatorioMock.mockReset().mockResolvedValue('acordos-bruno-setor-anterior.xlsx');
   respostas.set('perfis_transferencias::insert', { data: { id: 'transf-1' }, error: null });
@@ -309,7 +309,7 @@ describe('executarTransferencia — o perfil', () => {
 // ── Empresa nunca leva ───────────────────────────────────────────────────────
 
 describe('executarTransferencia — troca de empresa', () => {
-  it('IGNORA levarAcordos e apaga mesmo assim', async () => {
+  it('IGNORA levarAcordos e apaga atomicamente na RPC que move a empresa', async () => {
     comAcordos(4);
 
     const r = await executarTransferencia({
@@ -319,7 +319,8 @@ describe('executarTransferencia — troca de empresa', () => {
     });
 
     expect(baixarRelatorioMock).toHaveBeenCalledTimes(1);
-    expect(rpcCalls.some(c => c.nome === 'fn_admin_apagar_acordos_do_usuario')).toBe(true);
+    expect(rpcCalls.some(c => c.nome === 'fn_admin_apagar_acordos_do_usuario')).toBe(false);
+    expect(rpcCalls.some(c => c.nome === 'fn_transferencia_mover_empresa')).toBe(true);
     if (r.status === 'ok') {
       expect(r.acordosMovidos).toBe(0);
       expect(r.acordosApagados).toBe(7);
@@ -370,6 +371,19 @@ describe('executarTransferencia — levar as tabulações (setor)', () => {
       alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1',
     });
     expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe('executarTransferencia — chegar limpo sem acordos próprios', () => {
+  it('ainda chama a limpeza para remover vínculos em acordos de terceiros', async () => {
+    comAcordos(0);
+
+    const r = await executarTransferencia({
+      alvo: ALVO_SETOR, levarAcordos: false, executadoPorId: 'admin-1',
+    });
+
+    expect(r.status).toBe('ok');
+    expect(rpcCalls.some(c => c.nome === 'fn_admin_apagar_acordos_do_usuario')).toBe(true);
   });
 });
 
