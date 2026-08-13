@@ -236,22 +236,8 @@ export async function executarTransferencia(params: {
   }
 
   // ── 2. O perfil muda de lugar ─────────────────────────────────────────────
-  // `equipe_id: null` porque a equipe pertence ao setor de origem. Quem devolve
-  // a pessoa ao card daquela equipe no mês corrente é o fantasma, não este campo.
-  const { data: atualizadas, error: errPerfil } = await supabase
-    .from('perfis')
-    .update({
-      empresa_id: alvo.destinoEmpresaId,
-      setor_id:   alvo.destinoSetorId,
-      equipe_id:  null,
-    })
-    .eq('id', alvo.perfilId)
-    .select('id');
-
-  if (errPerfil) return { status: 'falha', mensagem: traduzirTransferencia(errPerfil.message) };
-  if (!atualizadas?.length) {
-    return { status: 'falha', mensagem: 'Sem permissão para transferir este usuário.' };
-  }
+  const moveu = await moverPerfil(alvo, tipo);
+  if (moveu.erro) return { status: 'falha', mensagem: moveu.erro };
 
   // ── 3. Clones ─────────────────────────────────────────────────────────────
   const clonesRemovidos = await limparClones(alvo.perfilId);
@@ -290,6 +276,63 @@ export async function executarTransferencia(params: {
     relatorio,
     avisoRegistro: registro.erro,
   };
+}
+
+/**
+ * Move o perfil — por caminhos diferentes conforme atravesse ou não a empresa.
+ *
+ * ## Por que dois caminhos
+ *
+ * `perfis` tem o trigger `block_empresa_id_update`, que recusa QUALQUER mudança
+ * de `empresa_id`. Ele é anterior a esta feature e está certo no que protege:
+ * `empresa_id` é a fronteira entre os dois CNPJs. O efeito colateral é que a
+ * troca de empresa nunca funcionou neste projeto — o campo "Empresa" do modal
+ * de editar usuário existia desde 05/08/2026 e sempre morria nessa linha.
+ *
+ *   • **mesma empresa** → UPDATE direto. O trigger não dispara (o valor não
+ *     muda) e a RLS de `perfis` faz o trabalho dela: `perfis_admin_all` para
+ *     administrador, `perfis_lider_update` para líder/elite/gerência dentro do
+ *     próprio setor. Passar isto para uma função SECURITY DEFINER significaria
+ *     reescrever essas regras à mão — e errar uma delas abre o que a RLS fecha.
+ *   • **outra empresa** → `fn_transferencia_mover_empresa` (20260813c). Ela liga
+ *     uma chave local à transação que o trigger reconhece, confere super_admin,
+ *     confere que o setor é DA empresa de destino e checa a colisão de login.
+ *     Precisa ser SECURITY DEFINER de qualquer jeito: o WITH CHECK de
+ *     `perfis_admin_all` exige `empresa_id = fn_user_empresa_id()`, então a
+ *     escrita com a empresa NOVA seria recusada mesmo com o trigger liberado.
+ */
+async function moverPerfil(
+  alvo: AlvoTransferencia, tipo: 'setor' | 'empresa',
+): Promise<{ erro: string | null }> {
+  if (tipo === 'empresa') {
+    const cliente = supabase as unknown as {
+      rpc: (n: string, a: Record<string, unknown>) => Promise<{
+        data: unknown; error: { message: string } | null;
+      }>;
+    };
+    try {
+      const { error } = await cliente.rpc('fn_transferencia_mover_empresa', {
+        p_perfil_id:  alvo.perfilId,
+        p_empresa_id: alvo.destinoEmpresaId,
+        p_setor_id:   alvo.destinoSetorId,
+      });
+      return { erro: error ? traduzirTransferencia(error.message) : null };
+    } catch (e) {
+      return { erro: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  // `equipe_id: null` porque a equipe pertence ao setor de origem. Quem devolve
+  // a pessoa ao card daquela equipe no mês corrente é o fantasma, não este campo.
+  const { data, error } = await supabase
+    .from('perfis')
+    .update({ setor_id: alvo.destinoSetorId, equipe_id: null })
+    .eq('id', alvo.perfilId)
+    .select('id');
+
+  if (error) return { erro: traduzirTransferencia(error.message) };
+  if (!data?.length) return { erro: 'Sem permissão para transferir este usuário.' };
+  return { erro: null };
 }
 
 /** Tira a pessoa de toda equipe em que era clone, devolvendo o que tirou. */
@@ -580,9 +623,27 @@ export function traduzirTransferencia(mensagem: string): string {
     return 'Já existe um usuário com esse login na empresa de destino. '
       + 'Renomeie um dos dois e tente de novo.';
   }
+  // O trigger `block_empresa_id_update` sem a exceção da 20260813c. A frase
+  // dele ("Não é permitido alterar o empresa_id") não diz o que fazer.
+  if (/alterar o empresa_id/i.test(mensagem)) {
+    return 'Migration 20260813c pendente — sem ela o banco recusa qualquer troca de '
+      + 'empresa, inclusive esta. Aplique-a no Supabase.';
+  }
+  if (/fn_transferencia_mover_empresa/i.test(mensagem)
+      && /could not find|does not exist/i.test(mensagem)) {
+    return 'Migration 20260813c pendente — aplique-a no Supabase para transferir '
+      + 'usuários entre empresas.';
+  }
   if (/could not find the function|does not exist|schema cache/i.test(mensagem)) {
     return 'Migration 20260813b pendente — aplique-a no Supabase para transferir usuários.';
   }
   if (/sem permiss[aã]o/i.test(mensagem)) return mensagem;
+  if (/escolha o setor de destino/i.test(mensagem)) {
+    return 'Escolha o setor de destino.';
+  }
+  if (/n[aã]o pertence [aà] empresa de destino/i.test(mensagem)) {
+    return 'O setor escolhido não pertence à empresa de destino. Recarregue a tela '
+      + 'e escolha de novo.';
+  }
   return `Erro ao transferir: ${mensagem}`;
 }

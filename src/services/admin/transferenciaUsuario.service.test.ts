@@ -243,19 +243,54 @@ describe('executarTransferencia — sem setor de destino', () => {
 // ── O perfil ─────────────────────────────────────────────────────────────────
 
 describe('executarTransferencia — o perfil', () => {
-  it('grava empresa, setor e ZERA a equipe', async () => {
+  it('mesma empresa: UPDATE direto, sem tocar em empresa_id', async () => {
     await executarTransferencia({
       alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1',
     });
 
     const up = ops.find(o => o.tabela === 'perfis' && o.verbo === 'update');
     expect(up?.payload).toEqual({
-      empresa_id: BOOKPLAY,
-      setor_id:   PLAY_5,
+      setor_id: PLAY_5,
       // A equipe pertence ao setor de origem. Quem devolve a pessoa ao card
       // daquela equipe no mês corrente é o fantasma, não este campo.
-      equipe_id:  null,
+      equipe_id: null,
     });
+    // `empresa_id` fora do payload de propósito: o trigger
+    // `block_empresa_id_update` recusa a coluna quando o valor MUDA, e mandá-la
+    // à toa só aproxima o UPDATE de um erro que ele não precisa correr.
+    expect(up?.payload).not.toHaveProperty('empresa_id');
+    // E não vai pela RPC: a RLS de `perfis` já cobre o caso de mesma empresa,
+    // inclusive a regra do líder restrito ao próprio setor.
+    expect(rpcCalls.some(c => c.nome === 'fn_transferencia_mover_empresa')).toBe(false);
+  });
+
+  it('outra empresa: vai pela RPC, que atravessa o trigger', async () => {
+    await executarTransferencia({
+      alvo: ALVO_EMPRESA, levarAcordos: false, executadoPorId: 'admin-1',
+    });
+
+    const chamada = rpcCalls.find(c => c.nome === 'fn_transferencia_mover_empresa');
+    expect(chamada?.args).toEqual({
+      p_perfil_id:  'p-bruno',
+      p_empresa_id: PAGUEPLAY,
+      p_setor_id:   'setor-pp',
+    });
+    // Nenhum UPDATE solto em perfis: ele morreria em
+    // `block_empresa_id_update`, e foi assim que a troca de empresa ficou
+    // quebrada desde 05/08/2026 sem ninguém ver.
+    expect(ops.some(o => o.tabela === 'perfis' && o.verbo === 'update')).toBe(false);
+  });
+
+  it('erro da RPC de empresa interrompe e traduz', async () => {
+    respostaRpc = { data: null, error: { message: 'Não é permitido alterar o empresa_id' } };
+
+    const r = await executarTransferencia({
+      alvo: ALVO_EMPRESA, levarAcordos: false, executadoPorId: 'admin-1',
+    });
+
+    expect(r.status).toBe('falha');
+    if (r.status === 'falha') expect(r.mensagem).toContain('20260813c');
+    expect(ops.some(o => o.tabela === 'perfis_transferencias')).toBe(false);
   });
 
   it('sem permissão (0 linhas) devolve falha e não segue', async () => {
