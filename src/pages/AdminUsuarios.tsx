@@ -3,9 +3,13 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Users, Plus, Edit, Shield, RefreshCw, Save, Building2, ArrowRightLeft, Camera, X, Trash2, KeyRound, Users2, LogIn, Loader2, Target, PartyPopper, AlertTriangle } from 'lucide-react';
 import {
-  resumoExclusao, excluirUsuarioComAcordos, limparAcordosDaEmpresaAnterior,
+  resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
 } from '@/services/admin/exclusaoUsuario.service';
+import {
+  executarTransferencia, type AlvoTransferencia,
+} from '@/services/admin/transferenciaUsuario.service';
+import { DialogoTransferencia } from '@/components/admin/DialogoTransferencia';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -121,6 +125,10 @@ export default function AdminUsuarios() {
   // o fluxo principal usa `editando` + `novaSenha`).
   const [senhaTarget,     setSenhaTarget]     = useState<Perfil | null>(null);
   const [novaSenha,       setNovaSenha]       = useState('');
+  // Transferência: mudar Setor/Empresa passa por confirmação própria, porque as
+  // consequências (apagar tabulação, liberar NR, tirar de equipe) não cabem no
+  // botão "Salvar" junto com trocar o nome.
+  const [alvoTransferencia, setAlvoTransferencia] = useState<AlvoTransferencia | null>(null);
   const [salvandoSenha,   setSalvandoSenha]   = useState(false);
   const [impersonando,    setImpersonando]    = useState<string | null>(null);
 
@@ -250,65 +258,61 @@ export default function AdminUsuarios() {
   // ajustando o campo "Setor" e clicando em Salvar. Os handlers dedicados
   // foram removidos em 2026-04-22 junto com o dialog separado.)
 
+  /**
+   * Grava os campos que não são vínculo: nome, cargo, login.
+   *
+   * Setor e empresa NÃO entram aqui de propósito. Mudá-los é uma transferência,
+   * e transferência apaga tabulação, libera NR e tira a pessoa de equipe — não
+   * pode viajar de carona no mesmo `update` que corrige um nome mal digitado.
+   */
+  async function salvarCamposBasicos(alvoId: string): Promise<void> {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payload parcial e heterogêneo p/ update(); tipar exigiria o shape completo de Perfil.
+    const updatePayload: Record<string, any> = {
+      nome:   form.nome,
+      perfil: form.perfil,
+    };
+    if (form.usuario.trim()) {
+      updatePayload.usuario = form.usuario.trim().toLowerCase();
+    }
+    const { data: linhasAtualizadas, error } = await supabase.from('perfis')
+      .update(updatePayload)
+      .eq('id', alvoId)
+      .select('id');
+    if (error) throw error;
+    if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
+      throw new Error('Sem permissão para editar este usuário');
+    }
+  }
+
   async function salvar() {
     const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
     if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
+
+    // Mudou de setor ou de empresa? Isso é transferência: passa pela confirmação
+    // que mostra o que será movido e deixa escolher o destino das tabulações.
+    if (editando) {
+      const trocouSetor   = (editando.setor_id ?? '') !== (form.setor_id ?? '');
+      const trocouEmpresa = !!editando.empresa_id && editando.empresa_id !== empresaId;
+      if (trocouSetor || trocouEmpresa) {
+        setAlvoTransferencia({
+          perfilId:         editando.id,
+          nome:             form.nome || editando.nome || 'usuario',
+          usuario:          (form.usuario.trim() || editando.usuario || '').toLowerCase() || null,
+          origemEmpresaId:  editando.empresa_id ?? empresaId,
+          origemSetorId:    editando.setor_id ?? null,
+          origemEquipeId:   editando.equipe_id ?? null,
+          destinoEmpresaId: empresaId,
+          destinoSetorId:   form.setor_id || null,
+        });
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       if (editando) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- payload parcial e heterogêneo p/ update(); tipar exigiria o shape completo de Perfil.
-        const updatePayload: Record<string, any> = {
-          nome:       form.nome,
-          perfil:     form.perfil,
-          setor_id:   form.setor_id || null,
-          empresa_id: empresaId,
-        };
-
-        // Se o setor mudou, remove o usuário de qualquer equipe do setor antigo
-        if (editando.setor_id !== form.setor_id) {
-          updatePayload.equipe_id = null;
-        }
-
-        if (form.usuario.trim()) {
-          updatePayload.usuario = form.usuario.trim().toLowerCase();
-        }
-        const { data: linhasAtualizadas, error } = await supabase.from('perfis')
-          .update(updatePayload)
-          .eq('id', editando.id)
-          .select('id');
-        if (error) throw error;
-        if (!linhasAtualizadas || linhasAtualizadas.length === 0) {
-          throw new Error('Sem permissão para editar este usuário');
-        }
-
-        // Trocou de empresa: o usuário chega LIMPO na nova e os acordos da
-        // anterior são apagados, com relatório baixado antes (regra de
-        // 05/08/2026, mesma da exclusão). Sem isto ele levaria junto as
-        // tabulações da outra empresa, que dividem o mesmo banco.
-        const empresaAnterior = editando.empresa_id;
-        if (empresaAnterior && empresaAnterior !== empresaId) {
-          const r = await limparAcordosDaEmpresaAnterior({
-            userId:            editando.id,
-            nome:              form.nome || editando.nome || 'usuario',
-            empresaAnteriorId: empresaAnterior,
-          });
-          if (r.status === 'falha') {
-            // O perfil JÁ mudou de empresa; só a limpeza falhou. Dizer as duas
-            // coisas, senão o admin acha que a troca inteira foi por água abaixo.
-            toast.warning(`Usuário movido de empresa, mas os acordos da anterior não foram apagados. ${r.mensagem}`);
-          } else if (r.acordosApagados > 0) {
-            toast.success(
-              `Usuário movido de empresa. ${r.acordosApagados.toLocaleString('pt-BR')} `
-              + `tabulaç${r.acordosApagados === 1 ? 'ão' : 'ões'} da empresa anterior apagada${r.acordosApagados === 1 ? '' : 's'}`
-              + `${r.relatorio ? ` — relatório salvo em ${r.relatorio}` : ''}.`,
-            );
-            setDialogOpen(false);
-            fetchDados();
-            return;
-          }
-        }
-
+        await salvarCamposBasicos(editando.id);
         toast.success('Usuário atualizado!');
       } else {
         if (!form.senha) { toast.error('Senha obrigatória para novo usuário'); setSaving(false); return; }
@@ -362,9 +366,70 @@ export default function AdminUsuarios() {
     }
   }
 
-  // (confirmarMover removido em 2026-04-22 — a mudança de setor agora
-  // acontece via campo "Setor" no modal unificado de editar usuário,
-  // persistido pela função salvar() que já trata `editando.setor_id !== form.setor_id`.)
+  /** Nome do setor para o diálogo — "sem setor" quando não há. */
+  function nomeDoSetor(id: string | null): string {
+    if (!id) return 'sem setor';
+    return setores.find(s => s.id === id)?.nome ?? 'setor desconhecido';
+  }
+
+  function nomeDaEmpresa(id: string | null): string {
+    if (!id) return 'empresa';
+    return empresas.find(e => e.id === id)?.nome ?? empresaAtual?.nome ?? 'empresa';
+  }
+
+  /**
+   * A transferência confirmada no diálogo.
+   *
+   * Ordem: campos básicos primeiro, vínculo depois. Se o nome falhar (RLS), a
+   * transferência não acontece — o inverso deixaria a pessoa transferida com o
+   * cadastro pela metade, e transferir é a parte cara de desfazer.
+   */
+  async function confirmarTransferencia(levarAcordos: boolean) {
+    if (!alvoTransferencia || !editando) return;
+    setSaving(true);
+    try {
+      await salvarCamposBasicos(editando.id);
+
+      const r = await executarTransferencia({
+        alvo: alvoTransferencia,
+        levarAcordos,
+        executadoPorId: perfilAtual?.id ?? null,
+      });
+
+      if (r.status === 'falha') { toast.error(r.mensagem); return; }
+
+      const partes: string[] = ['Usuário transferido.'];
+      if (r.acordosApagados > 0) {
+        partes.push(
+          `${r.acordosApagados.toLocaleString('pt-BR')} tabulaç${r.acordosApagados === 1 ? 'ão' : 'ões'} `
+          + `apagada${r.acordosApagados === 1 ? '' : 's'}`
+          + `${r.relatorio ? ` — relatório salvo em ${r.relatorio}` : ''}.`,
+        );
+      }
+      if (r.acordosMovidos > 0) {
+        partes.push(`${r.acordosMovidos.toLocaleString('pt-BR')} tabulações foram junto.`);
+      }
+      if (r.clonesRemovidos > 0) {
+        partes.push(`Removido de ${r.clonesRemovidos} equipe(s) em que era clone.`);
+      }
+      toast.success(partes.join(' '), { duration: 8000 });
+
+      // Sem registro não há desfazer NEM fantasma. O admin precisa saber agora,
+      // não no dia em que tentar desfazer.
+      if (r.avisoRegistro) toast.warning(r.avisoRegistro, { duration: 12000 });
+
+      setAlvoTransferencia(null);
+      setDialogOpen(false);
+      fetchDados();
+    } catch (e) {
+      const msg = e instanceof Error
+        ? e.message
+        : ((e as { message?: string })?.message ?? 'Erro ao transferir usuário');
+      toast.error(msg);
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function fazerUploadFotoParaUsuario(targetId: string, file: File) {
     setUploadando(true);
@@ -999,7 +1064,7 @@ export default function AdminUsuarios() {
               {editando && form.setor_id !== (editando.setor_id ?? '') && (
                 <p className="text-[11px] text-primary flex items-center gap-1">
                   <ArrowRightLeft className="w-3 h-3" />
-                  O usuário será movido para o novo setor ao salvar. A equipe atual será removida.
+                  Ao salvar, a transferência será confirmada numa tela à parte.
                 </p>
               )}
             </div>
@@ -1152,6 +1217,19 @@ export default function AdminUsuarios() {
           }
           e.target.value = '';
         }}
+      />
+
+      {/* Transferência: confirmação própria de mudar Setor/Empresa */}
+      <DialogoTransferencia
+        aberto={!!alvoTransferencia}
+        alvo={alvoTransferencia}
+        origemSetorNome={nomeDoSetor(alvoTransferencia?.origemSetorId ?? null)}
+        destinoSetorNome={nomeDoSetor(alvoTransferencia?.destinoSetorId ?? null)}
+        origemEmpresaNome={nomeDaEmpresa(alvoTransferencia?.origemEmpresaId ?? null)}
+        destinoEmpresaNome={nomeDaEmpresa(alvoTransferencia?.destinoEmpresaId ?? null)}
+        salvando={saving}
+        onCancelar={() => setAlvoTransferencia(null)}
+        onConfirmar={levar => void confirmarTransferencia(levar)}
       />
 
       {/* Recorte da foto antes do upload */}

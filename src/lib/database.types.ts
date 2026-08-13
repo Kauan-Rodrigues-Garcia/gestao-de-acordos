@@ -2112,6 +2112,94 @@ export type Database = {
           },
         ]
       }
+      // Migration 20260813a — registro de transferência de pessoa entre setores
+      // e entre empresas. Escrito à mão pelo mesmo motivo de
+      // `analitico_exclusoes_setor`: o service precisa de INSERT e UPDATE, e
+      // `tabelaSemTipo` só serve leitura de propósito.
+      perfis_transferencias: {
+        Row: {
+          acordos_apagados: number
+          clones_removidos: Json
+          criado_em: string
+          criado_por: string | null
+          desfeita_em: string | null
+          desfeita_por: string | null
+          destino_empresa_id: string
+          destino_setor_id: string | null
+          empresa_id: string
+          fantasma_ativo: boolean
+          fantasma_removido_em: string | null
+          fantasma_removido_por: string | null
+          id: string
+          levou_acordos: boolean
+          mes: string
+          origem_equipe_id: string | null
+          origem_setor_id: string | null
+          perfil_id: string
+          relatorio_arquivo: string | null
+          tipo: 'setor' | 'empresa'
+        }
+        Insert: {
+          acordos_apagados?: number
+          clones_removidos?: Json
+          criado_em?: string
+          criado_por?: string | null
+          desfeita_em?: string | null
+          desfeita_por?: string | null
+          destino_empresa_id: string
+          destino_setor_id?: string | null
+          empresa_id: string
+          fantasma_ativo?: boolean
+          fantasma_removido_em?: string | null
+          fantasma_removido_por?: string | null
+          id?: string
+          levou_acordos: boolean
+          mes: string
+          origem_equipe_id?: string | null
+          origem_setor_id?: string | null
+          perfil_id: string
+          relatorio_arquivo?: string | null
+          tipo: 'setor' | 'empresa'
+        }
+        Update: {
+          acordos_apagados?: number
+          clones_removidos?: Json
+          criado_em?: string
+          criado_por?: string | null
+          desfeita_em?: string | null
+          desfeita_por?: string | null
+          destino_empresa_id?: string
+          destino_setor_id?: string | null
+          empresa_id?: string
+          fantasma_ativo?: boolean
+          fantasma_removido_em?: string | null
+          fantasma_removido_por?: string | null
+          id?: string
+          levou_acordos?: boolean
+          mes?: string
+          origem_equipe_id?: string | null
+          origem_setor_id?: string | null
+          perfil_id?: string
+          relatorio_arquivo?: string | null
+          tipo?: 'setor' | 'empresa'
+        }
+        Relationships: [
+          {
+            foreignKeyName: "perfis_transferencias_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_transferencias_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pix_automatico_acordos: {
         Row: {
           atualizado_em: string

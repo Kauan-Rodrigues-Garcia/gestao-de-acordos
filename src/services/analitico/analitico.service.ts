@@ -21,6 +21,10 @@ import {
   montarOrigens, totalLiquido, totalExcluido,
   type ExclusoesPorSetor, type OrigemDoAcumulado,
 } from './composicaoAcumulado';
+import {
+  aplicarFantasmas,
+  type FantasmaTransferencia, type MarcaTransferido,
+} from './fantasmaTransferencia';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -1235,6 +1239,14 @@ export interface ComposicaoEquipes {
   situacaoPorOperador: Record<string, string>;
   /** true = veio do retrato congelado do mês; false = estado de hoje. */
   doRetrato: boolean;
+  /**
+   * Quem está aqui só como FANTASMA: foi transferido neste mês e o recebimento
+   * ficou na equipe de origem (migration 20260813b, `fantasmaTransferencia.ts`).
+   *
+   * Ausente no caso normal — nenhuma tela paga nada por isso. Quem renderiza
+   * equipe usa para destacar a pessoa e oferecer ao líder o botão de tirar.
+   */
+  transferidos?: Record<string, MarcaTransferido>;
 }
 
 /**
@@ -1263,7 +1275,41 @@ export async function buscarEquipesComOperadores(
     const retrato = await buscarComposicaoDoRetrato(empresaId, mes);
     if (retrato) return retrato;
   }
-  return buscarComposicaoAoVivo(empresaId);
+  return buscarComposicaoAoVivo(empresaId, mes ?? null);
+}
+
+/**
+ * Quem foi transferido NESTE mês e ainda deixa o recebimento na equipe antiga.
+ *
+ * Só o mês corrente pergunta isso: os anteriores leem `composicao_mes`, o
+ * retrato congelado, onde a pessoa já está registrada no lugar em que estava.
+ *
+ * Tolerante à migration 20260813b pendente — lista vazia em vez de tela
+ * quebrada, mesmo padrão de `buscarExclusoesSetor`.
+ */
+async function buscarFantasmasDoMes(
+  empresaId: string, mes: string,
+): Promise<FantasmaTransferencia[]> {
+  // Cliente tipado, não `tabelaSemTipo`: a tabela já está em
+  // `database.types.ts`, e o helper sem tipo só expõe `eq(string)` — não daria
+  // para filtrar o booleano nem o `IS NULL` que definem "fantasma de pé".
+  const { data, error } = await supabase
+    .from('perfis_transferencias')
+    .select('id, perfil_id, origem_equipe_id, origem_setor_id, tipo')
+    .eq('empresa_id', empresaId)
+    .eq('mes', mes)
+    .eq('fantasma_ativo', true)
+    .is('desfeita_em', null);
+
+  if (error || !data) return [];
+
+  return data.map(l => ({
+    id:             l.id,
+    perfilId:       l.perfil_id,
+    origemEquipeId: l.origem_equipe_id,
+    origemSetorId:  l.origem_setor_id,
+    tipo:           l.tipo === 'empresa' ? 'empresa' as const : 'setor' as const,
+  }));
 }
 
 interface LinhaComposicao {
@@ -1327,7 +1373,9 @@ async function buscarComposicaoDoRetrato(
   };
 }
 
-async function buscarComposicaoAoVivo(empresaId: string): Promise<ComposicaoEquipes> {
+async function buscarComposicaoAoVivo(
+  empresaId: string, mes: string | null,
+): Promise<ComposicaoEquipes> {
   const { data } = await supabase
     .from('perfis')
     .select('id, equipe_id, setor_id, situacao, equipes(id, nome, setor_id)')
@@ -1389,17 +1437,29 @@ async function buscarComposicaoAoVivo(empresaId: string): Promise<ComposicaoEqui
     if (p.equipe_id) comGente.add(p.equipe_id);
   }
 
-  const equipes: EquipeAnalitico[] = ((equipesData ?? []) as {
+  const todasAsEquipes = ((equipesData ?? []) as {
     id: string; nome: string; setor_id: string | null;
-  }[])
+  }[]);
+
+  const equipes: EquipeAnalitico[] = todasAsEquipes
     .filter(e => comGente.has(e.id))
     .map(e => ({ id: e.id, nome: e.nome, setor_id: e.setor_id ?? null }))
     .sort((a, b) => a.nome.localeCompare(b.nome));
 
-  return {
+  const viva: ComposicaoEquipes = {
     equipes, operadorEquipeMap, equipesExtrasPorOperador,
     situacaoPorOperador, doRetrato: false,
   };
+
+  // Transferido no meio do mês continua contando na equipe de onde saiu, até a
+  // liderança de lá decidir o contrário. Sem `mes` não há o que perguntar: o
+  // fantasma é por mês, e quem chama sem mês quer o estado de hoje puro.
+  if (!mes) return viva;
+  const fantasmas = await buscarFantasmasDoMes(empresaId, mes);
+  if (!fantasmas.length) return viva;
+
+  const nomes = new Map(todasAsEquipes.map(e => [e.id, e.nome]));
+  return aplicarFantasmas(viva, fantasmas, id => nomes.get(id));
 }
 
 /** Congela o retrato do mês. Chamado depois de importar o analítico daquele
