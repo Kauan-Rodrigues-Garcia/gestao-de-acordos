@@ -51,6 +51,7 @@ function composicaoBase(): ComposicaoEquipes {
 const FANTASMA_BRUNO: FantasmaTransferencia = {
   id: 'transf-1',
   perfilId: 'bruno',
+  nome: 'Bruno Silva',
   origemEquipeId: EQUIPE_A,
   origemSetorId: SETOR_A,
   tipo: 'setor',
@@ -81,8 +82,16 @@ describe('aplicarFantasmas — troca de setor', () => {
   it('marca a pessoa como transferida, com o id para o botão do líder', () => {
     const r = aplicarFantasmas(composicaoBase(), [FANTASMA_BRUNO], nomeDaEquipe);
 
+    // `nome` e `equipeId` viajam na marca porque o quadro de membros (aba
+    // Equipes) não tem o perfil à mão: numa troca de empresa ele nem aparece
+    // na consulta de perfis da origem.
     expect(r.transferidos).toEqual({
-      bruno: { transferenciaId: 'transf-1', tipo: 'setor' },
+      bruno: {
+        transferenciaId: 'transf-1',
+        tipo: 'setor',
+        nome: 'Bruno Silva',
+        equipeId: EQUIPE_A,
+      },
     });
   });
 

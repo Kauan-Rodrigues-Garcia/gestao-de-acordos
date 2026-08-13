@@ -53,6 +53,7 @@ import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 import { limparMesRecebimentos } from '@/services/analitico/limparMesRecebimentos';
 import type { MarcaTransferido } from '@/services/analitico/fantasmaTransferencia';
 import { removerFantasma } from '@/services/admin/transferenciaUsuario.service';
+import { ConfirmarTirarFantasma } from '@/components/admin/ConfirmarTirarFantasma';
 import {
   buscarExclusoesSetor, salvarExclusoesSetor,
 } from '@/services/analitico/exclusoesSetor.service';
@@ -153,6 +154,10 @@ export function AnaliticoLider({
   const [transferidos, setTransferidos] = useState<Record<string, MarcaTransferido>>({});
   // Quem o líder já tirou nesta sessão — some da tela antes do próximo refetch.
   const [fantasmasTirados, setFantasmasTirados] = useState<Set<string>>(new Set());
+  // Confirmação de tirar o fantasma: mostra QUANTO a equipe perde antes do ato.
+  const [confirmandoFantasma, setConfirmandoFantasma] =
+    useState<{ perfilId: string; nome: string; equipeNome: string } | null>(null);
+  const [tirandoFantasma, setTirandoFantasma] = useState(false);
   const [equipesExtras,     setEquipesExtras]     = useState<Record<string, string[]>>({});
   const [filtroEquipeId,    setFiltroEquipeId]    = useState<string | null>(null);
   // Item 5: ids que somem do ranking/quartil (férias/desligado). Só exibição —
@@ -422,19 +427,24 @@ export function AnaliticoLider({
    * deixa de aparecer nesta equipe — que é exatamente a pergunta que o líder
    * está respondendo ao clicar.
    */
-  async function tirarDaEquipe(operadorId: string, nome: string) {
-    const marca = transferidos[operadorId];
+  async function tirarDaEquipe() {
+    const alvo = confirmandoFantasma;
+    if (!alvo) return;
+    const marca = transferidos[alvo.perfilId];
     if (!marca) return;
-    setFantasmasTirados(prev => new Set(prev).add(operadorId));
 
+    setTirandoFantasma(true);
     const { error } = await removerFantasma(marca.transferenciaId, perfil?.id ?? null);
-    if (error) {
-      toast.error(`Não foi possível tirar: ${error}`);
-      setFantasmasTirados(prev => { const s = new Set(prev); s.delete(operadorId); return s; });
-      return;
-    }
+    setTirandoFantasma(false);
+
+    if (error) { toast.error(`Não foi possível tirar: ${error}`); return; }
+
+    setFantasmasTirados(prev => new Set(prev).add(alvo.perfilId));
+    setConfirmandoFantasma(null);
     toast.success(
-      `Recebimento de ${nome} saiu desta equipe. Ele continua no total do setor e da empresa.`,
+      `Recebimento de ${alvo.nome} saiu desta equipe. Ele continua no total do setor `
+      + 'e da empresa, e some também do quadro de membros.',
+      { duration: 8000 },
     );
     void carregarResumos();
     onRefetch();
@@ -778,7 +788,11 @@ export function AnaliticoLider({
                               disabled={fantasmasTirados.has(r.operador_id)}
                               onClick={e => {
                                 e.stopPropagation();
-                                void tirarDaEquipe(r.operador_id, r.operador_nome ?? r.operador_usuario);
+                                setConfirmandoFantasma({
+                                  perfilId:   r.operador_id,
+                                  nome:       r.operador_nome ?? r.operador_usuario,
+                                  equipeNome: grupo.equipeNome,
+                                });
                               }}
                             >
                               Tirar da equipe
@@ -1168,6 +1182,17 @@ export function AnaliticoLider({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Tirar o fantasma da equipe — mesma confirmação do quadro de membros,
+          porque é o mesmo registro dos dois lados. */}
+      <ConfirmarTirarFantasma
+        alvo={confirmandoFantasma}
+        empresaId={empresaId}
+        mes={mes}
+        removendo={tirandoFantasma}
+        onCancelar={() => setConfirmandoFantasma(null)}
+        onConfirmar={() => void tirarDaEquipe()}
+      />
 
       <ImportarModal aberto={modalImportar} onFechar={handlePosImport} hook={importHook} />
     </div>

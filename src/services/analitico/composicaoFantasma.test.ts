@@ -82,7 +82,7 @@ function montarBanco(opts: { comFantasma: boolean }) {
   respostas.set('perfis_transferencias', {
     data: opts.comFantasma
       ? [{
-          id: 'transf-1', perfil_id: THAYRA,
+          id: 'transf-1', perfil_id: THAYRA, perfil_nome: 'Thayra Ferreira Silva',
           origem_equipe_id: DIGITAL, origem_setor_id: CONECTA, tipo: 'empresa',
         }]
       : [],
@@ -109,8 +109,13 @@ describe('buscarEquipesComOperadores — fantasma da transferência', () => {
       equipe_nome: 'Digital',
       setor_id:    CONECTA,
     });
+    // O nome vem da COLUNA `perfil_nome` (20260813d), não de um JOIN: a
+    // PaguePlay não enxerga mais o perfil dela, e é lá que o fantasma aparece.
     expect(c.transferidos?.[THAYRA]).toEqual({
-      transferenciaId: 'transf-1', tipo: 'empresa',
+      transferenciaId: 'transf-1',
+      tipo: 'empresa',
+      nome: 'Thayra Ferreira Silva',
+      equipeId: DIGITAL,
     });
   });
 

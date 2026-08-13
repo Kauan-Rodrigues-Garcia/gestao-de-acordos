@@ -2136,6 +2136,7 @@ export type Database = {
           origem_equipe_id: string | null
           origem_setor_id: string | null
           perfil_id: string
+          perfil_nome: string | null
           relatorio_arquivo: string | null
           tipo: 'setor' | 'empresa'
         }
@@ -2158,6 +2159,7 @@ export type Database = {
           origem_equipe_id?: string | null
           origem_setor_id?: string | null
           perfil_id: string
+          perfil_nome?: string | null
           relatorio_arquivo?: string | null
           tipo: 'setor' | 'empresa'
         }
@@ -2180,6 +2182,7 @@ export type Database = {
           origem_equipe_id?: string | null
           origem_setor_id?: string | null
           perfil_id?: string
+          perfil_nome?: string | null
           relatorio_arquivo?: string | null
           tipo?: 'setor' | 'empresa'
         }

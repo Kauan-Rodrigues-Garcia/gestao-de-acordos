@@ -420,6 +420,9 @@ async function registrarTransferencia(params: {
     .insert({
       empresa_id:         alvo.origemEmpresaId,
       perfil_id:          alvo.perfilId,
+      // Cópia proposital (20260813d): numa troca de empresa, a origem deixa de
+      // enxergar o perfil, e é justamente lá que o fantasma aparece.
+      perfil_nome:        alvo.nome,
       mes:                mesDeHoje(),
       tipo,
       origem_setor_id:    alvo.origemSetorId,
@@ -510,6 +513,8 @@ export async function desfazerTransferencia(
 export interface TransferenciaRegistrada {
   id: string;
   perfilId: string;
+  /** Nome no momento da transferência. `null` em linha anterior à 20260813d. */
+  perfilNome: string | null;
   mes: string;
   tipo: 'setor' | 'empresa';
   origemEmpresaId: string;
@@ -564,6 +569,7 @@ function linhaParaRegistro(l: Record<string, unknown>): TransferenciaRegistrada 
   return {
     id:               String(l.id),
     perfilId:         String(l.perfil_id),
+    perfilNome:       (l.perfil_nome as string | null) ?? null,
     mes:              String(l.mes),
     tipo:             l.tipo === 'empresa' ? 'empresa' : 'setor',
     // `empresa_id` na tabela é a empresa de ORIGEM — é ela que sofre o efeito.

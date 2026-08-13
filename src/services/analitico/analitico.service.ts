@@ -1287,15 +1287,18 @@ export async function buscarEquipesComOperadores(
  * Tolerante à migration 20260813b pendente — lista vazia em vez de tela
  * quebrada, mesmo padrão de `buscarExclusoesSetor`.
  */
-async function buscarFantasmasDoMes(
+export async function buscarFantasmasDoMes(
   empresaId: string, mes: string,
 ): Promise<FantasmaTransferencia[]> {
   // Cliente tipado, não `tabelaSemTipo`: a tabela já está em
   // `database.types.ts`, e o helper sem tipo só expõe `eq(string)` — não daria
   // para filtrar o booleano nem o `IS NULL` que definem "fantasma de pé".
+  //
+  // `perfil_nome` vem da coluna, não de JOIN: a empresa de ORIGEM não enxerga o
+  // perfil de quem foi para a outra empresa, e é nela que o fantasma aparece.
   const { data, error } = await supabase
     .from('perfis_transferencias')
-    .select('id, perfil_id, origem_equipe_id, origem_setor_id, tipo')
+    .select('id, perfil_id, perfil_nome, origem_equipe_id, origem_setor_id, tipo')
     .eq('empresa_id', empresaId)
     .eq('mes', mes)
     .eq('fantasma_ativo', true)
@@ -1306,10 +1309,39 @@ async function buscarFantasmasDoMes(
   return data.map(l => ({
     id:             l.id,
     perfilId:       l.perfil_id,
+    nome:           l.perfil_nome ?? null,
     origemEquipeId: l.origem_equipe_id,
     origemSetorId:  l.origem_setor_id,
     tipo:           l.tipo === 'empresa' ? 'empresa' as const : 'setor' as const,
   }));
+}
+
+/**
+ * Quanto o fantasma leva embora se a liderança tirá-lo da equipe.
+ *
+ * É o número que a confirmação mostra. Sai das linhas do analítico daquele
+ * operador, naquele mês, NA EMPRESA DE ORIGEM — as linhas continuam lá, com o
+ * `operador_id` dele; o que muda ao tirar o fantasma é elas deixarem de ter
+ * equipe, e portanto de somar em qualquer card de equipe.
+ *
+ * O valor NÃO sai do total da empresa nem do setor: aqueles somam pelo carimbo
+ * do relatório, que não depende de quem é a pessoa hoje.
+ */
+export async function buscarValorDoFantasma(
+  empresaId: string, mes: string, perfilId: string,
+): Promise<{ total: number; linhas: number }> {
+  const { primeiro, fim } = limitesDoMes(mes);
+  const { data, error } = await supabase
+    .from('analitico_recebimentos')
+    .select('valor_recebido')
+    .eq('empresa_id', empresaId)
+    .eq('operador_id', perfilId)
+    .gte('data_pagamento', primeiro)
+    .lte('data_pagamento', fim);
+
+  if (error || !data) return { total: 0, linhas: 0 };
+  const total = data.reduce((s, l) => s + (Number(l.valor_recebido) || 0), 0);
+  return { total, linhas: data.length };
 }
 
 interface LinhaComposicao {

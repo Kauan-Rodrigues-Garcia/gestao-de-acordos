@@ -41,6 +41,13 @@ import type { ComposicaoEquipes, OperadorEquipeInfo } from './analitico.service'
 export interface FantasmaTransferencia {
   id: string;
   perfilId: string;
+  /**
+   * Nome gravado no registro (20260813d).
+   *
+   * Não sai de JOIN: numa troca de empresa a origem não enxerga mais o perfil,
+   * e é na origem que o fantasma aparece.
+   */
+  nome: string | null;
   /** Equipe de onde a pessoa saiu. `null` = ela não tinha equipe. */
   origemEquipeId: string | null;
   origemSetorId: string | null;
@@ -52,6 +59,10 @@ export interface FantasmaTransferencia {
 export interface MarcaTransferido {
   transferenciaId: string;
   tipo: 'setor' | 'empresa';
+  /** Para a tela que não tem o perfil à mão (quadro de membros da origem). */
+  nome: string | null;
+  /** Equipe onde o fantasma está pendurado. */
+  equipeId: string | null;
 }
 
 /**
@@ -99,7 +110,12 @@ export function aplicarFantasmas(
     // explícita ele cairia em "desligado" ou sumiria de filtros que exigem
     // 'ativo'. Ele trabalhou o mês; a marca de transferido é que conta a história.
     situacaoPorOperador[f.perfilId] ??= 'ativo';
-    transferidos[f.perfilId] = { transferenciaId: f.id, tipo: f.tipo };
+    transferidos[f.perfilId] = {
+      transferenciaId: f.id,
+      tipo:            f.tipo,
+      nome:            f.nome,
+      equipeId:        f.origemEquipeId,
+    };
     if (f.origemEquipeId) equipesQueVoltam.add(f.origemEquipeId);
   }
 

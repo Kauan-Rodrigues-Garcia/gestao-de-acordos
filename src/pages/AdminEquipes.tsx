@@ -7,7 +7,7 @@
  * 3. Drag & drop para mover membros entre equipes
  * 4. Visual redesenhado: sidebar de membros disponíveis + grid de equipes
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import {
@@ -26,7 +26,16 @@ import {
   Copy,
   GraduationCap,
   Crown,
+  ArrowRightLeft,
 } from 'lucide-react';
+// O fantasma da transferência aparece no quadro de membros: quem saiu no mês
+// mas cujo recebimento ainda conta nesta equipe (20260813b).
+import {
+  buscarFantasmasDoMes,
+} from '@/services/analitico/analitico.service';
+import type { FantasmaTransferencia } from '@/services/analitico/fantasmaTransferencia';
+import { removerFantasma } from '@/services/admin/transferenciaUsuario.service';
+import { ConfirmarTirarFantasma } from '@/components/admin/ConfirmarTirarFantasma';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -116,10 +125,21 @@ interface OperadorChipProps {
   /** Nomes dos setores (fora do dele) em que o operador está clonado — o
    *  recebimento conta lá também. Aparece no setor de origem. */
   setoresEmprestado?: string[];
+  /**
+   * Ele não é mais desta equipe: foi transferido neste mês e está aqui só
+   * porque o recebimento dele ainda conta (`fantasmaTransferencia.ts`).
+   *
+   * Muda três coisas: fica esmaecido, perde o arrastar (não há para onde
+   * mover alguém que já saiu) e o X passa a "tirar o fantasma" em vez de
+   * "tirar da equipe" — são ações diferentes, e confundi-las apagaria vínculo
+   * de quem está de fato na equipe.
+   */
+  transferido?: boolean;
 }
 
 function OperadorChip({
   operador, onRemove, onDragStart, compact = false, setoresEmprestado = [],
+  transferido = false,
 }: OperadorChipProps) {
   const cargoLabel = PERFIL_LABELS[operador.perfil] ?? operador.perfil;
   const cargoCss = PERFIL_COLORS[operador.perfil] ?? 'bg-muted/10 text-muted-foreground border-border';
@@ -129,17 +149,36 @@ function OperadorChip({
       initial={{ opacity: 0, scale: 0.9 }}
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.85 }}
-      draggable
-      onDragStart={() => onDragStart(operador.id)}
-      className={`flex items-center gap-1.5 bg-muted/60 border border-border rounded-lg cursor-grab active:cursor-grabbing select-none group hover:bg-muted hover:border-primary/30 transition-all ${compact ? 'px-2 py-1' : 'px-2.5 py-1.5'}`}
+      draggable={!transferido}
+      onDragStart={() => { if (!transferido) onDragStart(operador.id); }}
+      title={transferido
+        ? 'Transferido neste mês. Continua aqui porque o recebimento dele ainda '
+          + 'conta nesta equipe até alguém tirar.'
+        : undefined}
+      className={`flex items-center gap-1.5 border rounded-lg select-none group transition-all ${
+        compact ? 'px-2 py-1' : 'px-2.5 py-1.5'
+      } ${transferido
+        ? 'bg-muted/20 border-dashed border-amber-500/40 opacity-60 cursor-default'
+        : 'bg-muted/60 border-border cursor-grab active:cursor-grabbing hover:bg-muted hover:border-primary/30'}`}
     >
-      <GripVertical className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />
+      {transferido
+        ? <ArrowRightLeft className="w-3 h-3 text-amber-500 flex-shrink-0" />
+        : <GripVertical className="w-3 h-3 text-muted-foreground/50 flex-shrink-0" />}
       <span className={`font-medium text-foreground truncate ${compact ? 'text-xs max-w-[90px]' : 'text-sm max-w-[110px]'}`}>
         {operador.nome}
       </span>
       <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'} ${cargoCss}`}>
         {cargoLabel}
       </span>
+      {transferido && (
+        <span
+          className={`inline-flex items-center rounded-full border border-dashed border-amber-500/50 bg-amber-500/5 text-amber-600 dark:text-amber-400 font-medium flex-shrink-0 ${
+            compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'
+          }`}
+        >
+          transferido
+        </span>
+      )}
       {setoresEmprestado.map(nome => (
         <span
           key={nome}
@@ -154,8 +193,15 @@ function OperadorChip({
         <button
           type="button"
           onClick={() => onRemove(operador.id)}
-          className="ml-0.5 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 opacity-0 group-hover:opacity-100"
-          title="Remover da equipe"
+          className={`ml-0.5 text-muted-foreground hover:text-destructive transition-colors flex-shrink-0 ${
+            // O fantasma fica sempre visível: ele é a única ação possível num
+            // card que não se arrasta, e esconder até o hover a deixaria
+            // invisível em toque.
+            transferido ? 'opacity-70 hover:opacity-100' : 'opacity-0 group-hover:opacity-100'
+          }`}
+          title={transferido
+            ? 'Tirar o recebimento dele desta equipe'
+            : 'Remover da equipe'}
         >
           <X className="w-3 h-3" />
         </button>
@@ -248,6 +294,54 @@ export default function AdminEquipes() {
   const lideresHabilitados = lideresEq !== null;
 
   const empresaId = empresa?.id;
+
+  // ─── Fantasmas da transferência ────────────────────────────────────────────
+  //
+  // Quem foi transferido NESTE mês e cujo recebimento continua contando na
+  // equipe de origem. Eles não estão em `operadores` (o `equipe_id` foi zerado,
+  // e numa troca de empresa nem aparecem na consulta de perfis desta empresa),
+  // então precisam ser carregados à parte e injetados na lista da equipe.
+  const [fantasmas, setFantasmas] = useState<FantasmaTransferencia[]>([]);
+  /** Tirados nesta sessão — somem antes do próximo recarregamento. */
+  const [fantasmasTirados, setFantasmasTirados] = useState<Set<string>>(new Set());
+  const [confirmandoFantasma, setConfirmandoFantasma] =
+    useState<{ perfilId: string; nome: string; equipeNome: string } | null>(null);
+  const [tirandoFantasma, setTirandoFantasma] = useState(false);
+
+  /** Mês corrente: é o único em que o fantasma vale (os fechados têm retrato). */
+  const mesCorrente = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  }, []);
+
+  const carregarFantasmas = useCallback(async () => {
+    if (!empresaId) { setFantasmas([]); return; }
+    setFantasmas(await buscarFantasmasDoMes(empresaId, mesCorrente));
+  }, [empresaId, mesCorrente]);
+
+  useEffect(() => { void carregarFantasmas(); }, [carregarFantasmas]);
+
+  /** Tira o fantasma — o MESMO registro que a aba Analítico desliga. */
+  async function tirarFantasma() {
+    const alvo = confirmandoFantasma;
+    if (!alvo) return;
+    const f = fantasmas.find(x => x.perfilId === alvo.perfilId);
+    if (!f) return;
+
+    setTirandoFantasma(true);
+    const { error } = await removerFantasma(f.id, perfil?.id ?? null);
+    setTirandoFantasma(false);
+
+    if (error) { toast.error(`Não foi possível tirar: ${error}`); return; }
+
+    setFantasmasTirados(prev => new Set(prev).add(alvo.perfilId));
+    setConfirmandoFantasma(null);
+    toast.success(
+      `Recebimento de ${alvo.nome} saiu de ${alvo.equipeNome}. Ele continua no total `
+      + 'do setor e da empresa, e some também da aba Analítico.',
+      { duration: 8000 },
+    );
+  }
 
   // ─── Load ──────────────────────────────────────────────────────────────────
 
@@ -367,8 +461,37 @@ export default function AdminEquipes() {
     !buscaMembro || o.nome.toLowerCase().includes(buscaMembro.toLowerCase())
   );
 
-  const operadoresDaEquipe = (equipeId: string) =>
-    operadores.filter(o => o.equipe_id === equipeId && !ehLiderExcluido(o));
+  /**
+   * Membros da equipe, mais os FANTASMAS pendurados nela.
+   *
+   * Fantasma é quem foi transferido neste mês e cujo recebimento continua
+   * contando aqui (`fantasmaTransferencia.ts`). Ele não está em `operadores` —
+   * `equipe_id` foi zerado na transferência, e numa troca de empresa ele nem
+   * aparece na consulta de perfis desta empresa. Sem injetá-lo, o quadro de
+   * membros mostra uma equipe que soma um dinheiro de alguém que não está na
+   * lista, e ninguém consegue ligar uma coisa à outra.
+   *
+   * Entram no fim, esmaecidos: são um resíduo do mês, não integrantes.
+   */
+  const operadoresDaEquipe = (equipeId: string): Operador[] => {
+    const reais = operadores.filter(o => o.equipe_id === equipeId && !ehLiderExcluido(o));
+    const fantasmasAqui = fantasmas
+      .filter(f => f.origemEquipeId === equipeId && !fantasmasTirados.has(f.perfilId))
+      .map<Operador>(f => ({
+        id:         f.perfilId,
+        nome:       f.nome ?? 'Usuário transferido',
+        email:      '',
+        perfil:     'operador',
+        setor_id:   f.origemSetorId,
+        equipe_id:  equipeId,
+        empresa_id: empresaId ?? '',
+      }));
+    return [...reais, ...fantasmasAqui];
+  };
+
+  /** Este id é um fantasma nesta tela? Decide o visual e o que o X faz. */
+  const ehFantasma = (operadorId: string) =>
+    fantasmas.some(f => f.perfilId === operadorId);
 
   // Nomes de equipe/setor que podem estar fora do setor carregado: procura na
   // lista principal e cai no catálogo da empresa.
@@ -1254,11 +1377,25 @@ export default function AdminEquipes() {
                                       <OperadorChip
                                         key={op.id}
                                         operador={op}
-                                        onRemove={podeGerenciarEquipe ? handleRemoverDaEquipe : undefined}
+                                        transferido={ehFantasma(op.id)}
+                                        // O X do fantasma é outra ação: desliga
+                                        // o recebimento, não o vínculo — que
+                                        // nem existe mais.
+                                        onRemove={
+                                          !podeGerenciarEquipe
+                                            ? undefined
+                                            : ehFantasma(op.id)
+                                              ? () => setConfirmandoFantasma({
+                                                  perfilId:   op.id,
+                                                  nome:       op.nome,
+                                                  equipeNome: equipe.nome,
+                                                })
+                                              : handleRemoverDaEquipe
+                                        }
                                         onDragStart={handleDragStart}
                                         compact
                                         setoresEmprestado={
-                                          clonesHabilitados
+                                          clonesHabilitados && !ehFantasma(op.id)
                                             ? setoresEmprestadoDoOperador(op.id, op.setor_id)
                                             : []
                                         }
@@ -1356,6 +1493,17 @@ export default function AdminEquipes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Tirar o fantasma da equipe — a MESMA confirmação da aba Analítico,
+          porque é o mesmo registro: tirar aqui tira lá. */}
+      <ConfirmarTirarFantasma
+        alvo={confirmandoFantasma}
+        empresaId={empresaId ?? ''}
+        mes={mesCorrente}
+        removendo={tirandoFantasma}
+        onCancelar={() => setConfirmandoFantasma(null)}
+        onConfirmar={() => void tirarFantasma()}
+      />
     </div>
   );
 }
