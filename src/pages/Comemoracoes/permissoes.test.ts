@@ -1,7 +1,7 @@
 /**
  * permissoes.test.ts — o front e a RLS falam a mesma coisa?
  *
- * Este teste LÊ a migration e compara com a constante do front. Sem ele, mudar
+ * Este teste LÊ a baseline ativa e compara com a constante do front. Sem ele, mudar
  * a lista de um lado só produz botão que aparece e banco que recusa — foi
  * exatamente o que aconteceu com as 12 permissões mortas do Admin → Cargos.
  */
@@ -13,16 +13,13 @@ import { EFEITOS, SONS, efeitoValido, somValido } from './catalogo';
 
 const MIGRATION = resolve(
   process.cwd(),
-  'supabase/migrations/20260731e_comemoracoes.sql',
+  'supabase/migrations/20260813225412_remote_schema_baseline.sql',
 );
 
-const sql = readFileSync(MIGRATION, 'utf-8');
+const sql = readFileSync(MIGRATION, 'utf-8').replaceAll('"', '');
 
-/** Alvo por equipe e a pergunta do clone. */
-const SQL_20260810A = readFileSync(
-  resolve(process.cwd(), 'supabase/migrations/20260810a_comemoracao_equipe_e_clones.sql'),
-  'utf-8',
-);
+/** Alvo por equipe e a pergunta do clone no estado atual do banco. */
+const SQL_ATIVO = sql;
 
 describe('cargos que criam comemoração', () => {
   it('a lista do front bate com fn_comemoracao_pode_criar', () => {
@@ -58,7 +55,7 @@ describe('garantias que estão no banco', () => {
   });
 
   it('a duração é limitada por CHECK', () => {
-    expect(sql).toMatch(/duracao_s[\s\S]*?CHECK \(duracao_s BETWEEN 5 AND 60\)/);
+    expect(sql).toMatch(/duracao_s[\s\S]*?CHECK[\s\S]*?duracao_s >= 5[\s\S]*?duracao_s <= 60/);
   });
 
   it('setores_alvo vem de trigger, não do cliente', () => {
@@ -79,19 +76,19 @@ describe('garantias que estão no banco', () => {
   });
 });
 
-describe('alvo por equipe e clone escolhido (20260810a)', () => {
+describe('alvo por equipe e clone escolhido na baseline ativa', () => {
   it('as colunas novas nascem com o comportamento antigo', () => {
     // Vazio/false = "não estreita" e "sem escolha": toda comemoração já
     // existente continua se comportando como antes da migration.
-    expect(SQL_20260810A).toMatch(/somente_equipe BOOLEAN NOT NULL DEFAULT false/);
-    expect(SQL_20260810A).toMatch(/equipes_alvo\s+UUID\[\]\s+NOT NULL DEFAULT '\{\}'/);
-    expect(SQL_20260810A).toMatch(/setores_escolhidos UUID\[\] NOT NULL DEFAULT '\{\}'/);
+    expect(SQL_ATIVO).toMatch(/somente_equipe boolean DEFAULT false NOT NULL/i);
+    expect(SQL_ATIVO).toMatch(/equipes_alvo\s+uuid\[\]\s+DEFAULT '\{\}'::uuid\[\] NOT NULL/i);
+    expect(SQL_ATIVO).toMatch(/setores_escolhidos uuid\[\] DEFAULT '\{\}'::uuid\[\] NOT NULL/i);
   });
 
   it('a união automática dos clones saiu do cálculo do alvo', () => {
     // O que decide `setores_alvo` agora é `setores_escolhidos`. Se alguém
     // reintroduzir `fn_setores_do_operador` aqui, a pergunta vira decoração.
-    const trigger = SQL_20260810A.match(
+    const trigger = SQL_ATIVO.match(
       /FUNCTION public\.fn_comemoracao_setores_alvo[\s\S]*?\$\$;/,
     );
     expect(trigger, 'fn_comemoracao_setores_alvo não encontrada').toBeTruthy();
@@ -101,16 +98,16 @@ describe('alvo por equipe e clone escolhido (20260810a)', () => {
 
   it('meta de setor não pode ser estreitada para uma equipe', () => {
     // É a comemoração da empresa inteira; recortar por equipe se contradiz.
-    expect(SQL_20260810A).toMatch(/alvo_tipo = 'setor'[\s\S]*?somente_equipe\s*:=\s*false/);
+    expect(SQL_ATIVO).toMatch(/alvo_tipo = 'setor'[\s\S]*?somente_equipe\s*:=\s*false/);
   });
 
   it('equipes_alvo do alvo por operadores é recortado pelos setores alvo', () => {
     // Clone cujo setor NÃO foi escolhido não pode arrastar a equipe dele.
-    expect(SQL_20260810A).toMatch(/eq\.setor_id = ANY \(c\.setores_alvo\)/);
+    expect(SQL_ATIVO).toMatch(/eq\.setor_id = ANY \(c\.setores_alvo\)/);
   });
 
   it('ligar a opção num UPDATE recalcula a plateia', () => {
-    expect(SQL_20260810A).toMatch(
+    expect(SQL_ATIVO).toMatch(
       /BEFORE INSERT OR UPDATE OF alvo_tipo, equipe_id, setor_id, somente_equipe/,
     );
   });
@@ -120,8 +117,8 @@ describe('catálogo', () => {
   it('o padrão do banco existe no catálogo do front', () => {
     // A migration nasce com efeito 'confete' e som 'fanfarra'; se alguém
     // renomear no front, a comemoração criada pelo default some da tela.
-    expect(sql).toMatch(/efeito\s+TEXT NOT NULL DEFAULT 'confete'/);
-    expect(sql).toMatch(/som\s+TEXT NOT NULL DEFAULT 'fanfarra'/);
+    expect(sql).toMatch(/efeito\s+text DEFAULT 'confete'::text NOT NULL/i);
+    expect(sql).toMatch(/som\s+text DEFAULT 'fanfarra'::text NOT NULL/i);
     expect(EFEITOS.some((e) => e.id === 'confete')).toBe(true);
     expect(SONS.some((s) => s.id === 'fanfarra')).toBe(true);
   });

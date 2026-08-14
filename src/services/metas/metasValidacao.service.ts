@@ -1,6 +1,6 @@
 /**
  * metasValidacao.service.ts — trava de meta por setor (Fase 1 de validação).
- * Ver supabase/migrations/20260721a_fase1_trava_metas.sql.
+ * Ver a função correspondente na baseline ativa do Supabase.
  */
 import { supabase } from '@/lib/supabase';
 

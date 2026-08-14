@@ -1,70 +1,64 @@
 # Banco e migrations
 
 O schema remoto de referência é o projeto Supabase `vfrvvoetidtsqbbhdkmj`
-(PostgreSQL 17). O arquivo `config.toml` foi gerado pela CLI 2.114.0 e mantém a
-exposição automática de tabelas desativada; toda tabela/RPC nova deve receber
-`GRANT` explícito e RLS quando aplicável.
+(PostgreSQL 17). A pasta executável `supabase/migrations/` começa em uma única
+baseline oficial:
 
-## Estado do histórico legado
+- `20260813225412_remote_schema_baseline.sql`
 
-O diretório contém 177 scripts anteriores à adoção da CLI oficial. Desses, 174
-não usam a versão de 14 dígitos exigida pela CLI e alguns compartilham o mesmo
-prefixo. Produção também não possuía `supabase_migrations.schema_migrations`.
-Portanto, **não execute `db push --include-all` nesse histórico**: isso tentaria
-reaplicar scripts já presentes em produção e não constitui um baseline válido.
+Essa baseline é um snapshot **somente do schema `public`**, extraído depois das
+correções P1 de 2026-08-13. Ela inclui as extensões `uuid-ossp` e `pg_trgm`,
+tabelas, tipos, funções, views, índices, constraints, triggers, políticas RLS e
+permissões existentes no remoto naquela data. Dados de produção não fazem parte
+do arquivo.
 
-Os scripts históricos são imutáveis. A análise encontrou objetos existentes em
-produção sem uma criação reproduzível no legado (`setores`, `lixeira_acordos`,
-`profiles` e `profissionais`), mas eles não devem ser enxertados em migrations
-já aplicadas. O baseline definitivo deverá incorporá-los a partir do snapshot
-remoto. `database.types.ts` foi regenerado do schema remoto e inclui a
-migration-alvo ainda pendente de publicação.
+## Histórico legado
+
+Os 180 scripts anteriores foram preservados em `supabase/legacy_migrations/`
+apenas para auditoria. Eles usam convenções antigas de nome, têm sobreposição
+com objetos já presentes em produção e **não podem ser copiados de volta para
+`supabase/migrations/`, passados à CLI ou reaplicados**.
+
+O histórico remoto da CLI foi reconciliado para considerar a baseline já
+aplicada. Isso altera somente os metadados de migrations; não reaplica a
+baseline nem modifica tabelas ou dados de produção.
 
 ## Fluxo obrigatório daqui para a frente
 
-1. Instale Docker Desktop e use a CLI fixada nos exemplos:
-   `npx supabase@2.114.0 start`.
-2. Até concluir o baseline, preserve a convenção do projeto
-   `YYYYMMDD[a-z]_nome.sql`; depois da consolidação, migre todo o histórico de
-   uma vez para versões oficiais geradas por `migration new`.
-3. Rode `npx supabase@2.114.0 db reset` antes do commit.
-4. Gere os tipos novamente após aplicar a migration.
-5. Publique uma migration por vez e confira os advisors de segurança e
-   performance.
+1. Crie cada arquivo com `supabase migration new <nome_descritivo>`; nunca
+   invente manualmente o timestamp.
+2. Escreva uma mudança pequena e reversível por migration.
+3. Revise RLS, permissões, funções privilegiadas e os advisors do Supabase.
+4. Execute `supabase db reset` antes do commit para reconstruir um banco local
+   do zero com toda a cadeia ativa.
+5. Confira `supabase migration list` antes de `supabase db push`.
+6. Regenere `database.types.ts` quando o schema público mudar.
 
-## Baseline definitivo do legado
+Os nomes ativos devem obedecer a
+`YYYYMMDDHHMMSS_nome_em_snake_case.sql`. A CI rejeita qualquer arquivo fora
+desse padrão.
 
-Para transformar os scripts antigos em um baseline único será necessário um
-acesso de CLI ao banco (Personal Access Token + senha do Postgres), que não é
-exposto pelo conector usado nesta análise. Faça em uma janela coordenada:
+## Exposição pela Data API
 
-1. gere e teste um backup;
-2. em um diretório temporário com `migrations/` vazio, execute `supabase link`
-   e `supabase db pull` para produzir o snapshot oficial do schema remoto;
-3. valide o snapshot com `db reset` em um banco local limpo;
-4. arquive os 177 scripts legados somente depois dessa validação;
-5. use `migration repair --status applied` apenas quando o snapshot local e o
-   schema remoto tiverem sido comparados e forem equivalentes.
+O `config.toml` mantém a exposição automática de tabelas desativada. Toda nova
+tabela ou RPC que precise ser acessada pelo frontend deve receber `GRANT`
+explícito e proteção RLS adequada; criar a tabela em `public` não é suficiente.
 
-Até essa reconciliação, aplique a migration nova pelo conector/CI e não tente
-marcar em massa o legado como executado.
+## Validação da baseline
 
-## Rollout da migration de segurança de 2026-08-13
+A baseline foi aplicada em um PostgreSQL 17.11 vazio, com apenas os papéis e
+stubs padrão de Auth necessários. O resultado foi comparado ao remoto:
 
-A migration altera as assinaturas de `fn_converter_para_extra` e
-`fn_vincular_extra_ao_direto`. Para evitar indisponibilidade, publique nesta
-ordem:
+| Objeto | Total |
+| --- | ---: |
+| Tabelas | 62 |
+| Views | 1 |
+| Funções | 177 |
+| Triggers | 79 |
+| Policies | 236 |
+| Índices | 216 |
+| Constraints | 275 |
 
-1. Vercel primeiro: a versão nova tenta a assinatura protegida e, somente para
-   o erro `PGRST202` (assinatura ainda inexistente), usa temporariamente a RPC
-   legada. O endpoint de visão cai no OCR local enquanto a função de cota ainda
-   não existir.
-2. Supabase depois: aplique
-   `20260813e_harden_privileged_rpcs_and_vision_rate_limit.sql`. Ela remove
-   as assinaturas legadas, ativa as validações de identidade/empresa/regra e
-   cria o controle persistente de cota.
-3. Force a recarga do schema PostgREST caso `PGRST202` persista, execute os
-   fluxos Direto/Extra e leitura por imagem, e confira os advisors.
-
-O fallback nunca é usado para erros de autorização, RLS ou regra de negócio e
-não faz escritas privilegiadas diretamente nas tabelas.
+As definições foram comparadas por fingerprints normalizados; diferenças
+puramente físicas, como numeração de colunas removidas e finais de linha, foram
+desconsideradas.

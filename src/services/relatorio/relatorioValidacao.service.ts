@@ -1,7 +1,7 @@
 /**
  * relatorioValidacao.service.ts — validação de relatório (Analítico + Diário)
  * por setor/mês (Fase 1 de validação). Watermark por dia: uma correção pontual
- * não derruba o mês inteiro. Ver supabase/migrations/20260721b_fase1_validacao_relatorio.sql.
+ * não derruba o mês inteiro. Ver a função correspondente na baseline ativa do Supabase.
  */
 import { supabase } from '@/lib/supabase';
 

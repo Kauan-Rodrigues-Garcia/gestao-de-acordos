@@ -23,7 +23,7 @@
  * navegador descreveria apenas a página, e "3 exclusões hoje" seria falso
  * quando houve 300.
  *
- * @see supabase/migrations/20260812a_logs_2_0.sql
+ * @see supabase/migrations/20260813225412_remote_schema_baseline.sql
  */
 import { supabase } from '@/lib/supabase';
 import type { LogSistema } from '@/lib/supabase';

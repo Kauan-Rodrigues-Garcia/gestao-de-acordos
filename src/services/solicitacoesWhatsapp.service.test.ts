@@ -14,6 +14,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+const SQL_BASELINE = readFileSync(
+  resolve(__dirname, '../../supabase/migrations/20260813225412_remote_schema_baseline.sql'),
+  'utf-8',
+).replaceAll('"', '');
+
 // ── Mock do Supabase (padrão thenable do projeto) ───────────────────────────
 
 type MockResult<T = unknown> = { data: T; error: { message: string } | null };
@@ -149,38 +154,38 @@ describe('chatAindaAberto', () => {
 // Caixa de texto desabilitada é sugestão; a garantia é a policy. Se as duas
 // divergirem, o usuário digita e o banco recusa.
 
-describe('encerramento espelha a migration 20260730d', () => {
-  const SQL = readFileSync(
-    resolve(__dirname, '../../supabase/migrations/20260730d_wpp_chat_encerra_24h.sql'),
-    'utf-8',
-  );
+describe('encerramento espelha a baseline ativa', () => {
+  const SQL = SQL_BASELINE;
 
   it('a janela do front é o mesmo INTERVAL da função', () => {
-    const m = SQL.match(/INTERVAL\s+'(\d+)\s+hours?'/i);
+    const i = SQL.indexOf('FUNCTION public.fn_wpp_chat_aberto');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = SQL.slice(i, SQL.indexOf('$$;', i));
+    const m = corpo.match(/INTERVAL\s+'(\d+)\s+hours?'/i);
     expect(m).not.toBeNull();
     expect(Number(m![1])).toBe(HORAS_CHAT_APOS_FECHAR);
   });
 
   it('a policy de INSERT exige a conversa aberta', () => {
-    const i = SQL.indexOf('CREATE POLICY "sol_wpp_msg_insert"');
+    const i = SQL.indexOf('CREATE POLICY sol_wpp_msg_insert');
     expect(i).toBeGreaterThan(-1);
     expect(SQL.slice(i, SQL.indexOf(');', i))).toContain('fn_wpp_chat_aberto');
   });
 
-  it('o SELECT das mensagens NÃO é tocado — histórico é anexo permanente', () => {
-    // Encerrar a conversa fecha a escrita, nunca a leitura.
-    expect(SQL).not.toContain('CREATE POLICY "sol_wpp_msg_select"');
+  it('o SELECT das mensagens independe da janela — histórico é anexo permanente', () => {
+    const i = SQL.indexOf('CREATE POLICY sol_wpp_msg_select');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = SQL.slice(i, SQL.indexOf(');', i));
+    expect(corpo).toContain('fn_wpp_pode_ver_solicitacao');
+    expect(corpo).not.toContain('fn_wpp_chat_aberto');
   });
 });
 
-describe('chat restrito espelha a migration 20260730f', () => {
-  const SQL = readFileSync(
-    resolve(__dirname, '../../supabase/migrations/20260730f_wpp_transferencia_e_chat_restrito.sql'),
-    'utf-8',
-  );
+describe('chat restrito espelha a baseline ativa', () => {
+  const SQL = SQL_BASELINE;
 
   it('a policy de INSERT exige ser um dos dois envolvidos', () => {
-    const i = SQL.indexOf('CREATE POLICY "sol_wpp_msg_insert"');
+    const i = SQL.indexOf('CREATE POLICY sol_wpp_msg_insert');
     expect(i).toBeGreaterThan(-1);
     const corpo = SQL.slice(i, SQL.indexOf(');', i));
     // Caixa de texto escondida é sugestão; a garantia é a policy.
@@ -190,7 +195,7 @@ describe('chat restrito espelha a migration 20260730f', () => {
   });
 
   it('fn_wpp_pode_falar considera solicitante OU responsável atual', () => {
-    const i = SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_wpp_pode_falar');
+    const i = SQL.indexOf('FUNCTION public.fn_wpp_pode_falar');
     expect(i).toBeGreaterThan(-1);
     const corpo = SQL.slice(i, SQL.indexOf('$$;', i));
     expect(corpo).toContain('s.solicitante_id = auth.uid()');
@@ -198,14 +203,17 @@ describe('chat restrito espelha a migration 20260730f', () => {
   });
 
   it('o histórico passa a registrar troca de responsável', () => {
-    const i = SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_wpp_registrar_evento');
+    const i = SQL.indexOf('FUNCTION public.fn_wpp_registrar_evento');
     const corpo = SQL.slice(i, SQL.indexOf('$$;', i));
     expect(corpo).toContain('NEW.responsavel_id IS DISTINCT FROM OLD.responsavel_id');
     expect(corpo).toContain("'responsavel'");
   });
 
-  it('o SELECT das mensagens continua intocado', () => {
-    expect(SQL).not.toContain('CREATE POLICY "sol_wpp_msg_select"');
+  it('o SELECT das mensagens continua sem depender da janela de escrita', () => {
+    const i = SQL.indexOf('CREATE POLICY sol_wpp_msg_select');
+    expect(i).toBeGreaterThan(-1);
+    const corpo = SQL.slice(i, SQL.indexOf(');', i));
+    expect(corpo).not.toContain('fn_wpp_chat_aberto');
   });
 });
 

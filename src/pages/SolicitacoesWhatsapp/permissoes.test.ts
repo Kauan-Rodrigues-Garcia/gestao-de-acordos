@@ -5,7 +5,7 @@
  * o botão aparece e o banco recusa — foi assim que o Admin → Cargos acumulou 12
  * permissões que existem na tela e nunca foram ligadas no código.
  *
- * Este teste LÊ A MIGRATION e compara os cargos declarados lá com as constantes
+ * Este teste LÊ A BASELINE ATIVA e compara os cargos declarados lá com as constantes
  * do front. Editar um lado sem o outro quebra aqui, não em produção.
  */
 import { describe, it, expect } from 'vitest';
@@ -17,11 +17,11 @@ import {
 } from './permissoes';
 
 const MIGRATION = resolve(
-  __dirname, '../../../supabase/migrations/20260730b_solicitacoes_whatsapp.sql',
+  __dirname, '../../../supabase/migrations/20260813225412_remote_schema_baseline.sql',
 );
 
 function lerMigration(): string {
-  return readFileSync(MIGRATION, 'utf-8');
+  return readFileSync(MIGRATION, 'utf-8').replaceAll('"', '');
 }
 
 /** Extrai os cargos de um `ARRAY['a','b',...]` a partir de um trecho do SQL. */
@@ -30,18 +30,18 @@ function cargosDoArray(trecho: string): string[] {
   if (!m) return [];
   return m[1]
     .split(',')
-    .map(s => s.trim().replace(/^'|'$/g, ''))
+    .map(s => s.trim().replace(/::text/g, '').replace(/^'|'$/g, ''))
     .filter(Boolean);
 }
 
-describe('permissões espelham a migration 20260730b', () => {
-  it('a migration existe no caminho esperado', () => {
+describe('permissões espelham a baseline ativa', () => {
+  it('a baseline existe no caminho esperado', () => {
     expect(() => lerMigration()).not.toThrow();
   });
 
   it('PERFIS_VISAO_GERAL_WPP == cargos de fn_wpp_tem_visao_geral', () => {
     const sql = lerMigration();
-    const i = sql.indexOf('CREATE OR REPLACE FUNCTION public.fn_wpp_tem_visao_geral');
+    const i = sql.indexOf('FUNCTION public.fn_wpp_tem_visao_geral');
     expect(i).toBeGreaterThan(-1);
 
     const corpo  = sql.slice(i, sql.indexOf('$$;', i));
@@ -52,7 +52,7 @@ describe('permissões espelham a migration 20260730b', () => {
 
   it('PERFIS_DEFINE_RESPONSAVEL_WPP == cargos da policy atend_resp_insert', () => {
     const sql = lerMigration();
-    const i = sql.indexOf('CREATE POLICY "atend_resp_insert"');
+    const i = sql.indexOf('CREATE POLICY atend_resp_insert');
     expect(i).toBeGreaterThan(-1);
 
     const corpo  = sql.slice(i, sql.indexOf(');', i));

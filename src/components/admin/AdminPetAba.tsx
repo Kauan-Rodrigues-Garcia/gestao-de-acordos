@@ -9,8 +9,8 @@
  *    RLS de admin). Item novo ainda exige arte no código (PetAura) — o
  *    painel gerencia o que já existe.
  *
- * Se a migration 20260711b_pet_loja_servidor.sql não foi aplicada, mostra
- * um aviso com o nome do arquivo em vez de quebrar.
+ * Se as RPCs do pet não estiverem disponíveis, mostra um aviso de schema
+ * desatualizado em vez de quebrar.
  */
 import { useEffect, useState } from 'react';
 import { PawPrint, RefreshCw, AlertTriangle, Coins } from 'lucide-react';
@@ -24,8 +24,6 @@ import {
   listarJogadoresPet, listarItensPetAdmin, ajustarMoedasPet, atualizarItemPet,
   type PetJogador,
 } from '@/services/pet/petAdmin.service';
-
-const MIGRATION_PENDENTE = 'supabase/migrations/20260711b_pet_loja_servidor.sql';
 
 export default function AdminPetAba() {
   const [jogadores, setJogadores] = useState<PetJogador[] | null>(null);
@@ -104,11 +102,11 @@ export default function AdminPetAba() {
           <CardContent className="flex items-start gap-3 p-4">
             <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
             <div className="text-xs text-muted-foreground space-y-1">
-              <p className="text-sm font-medium text-foreground">Migration pendente</p>
+              <p className="text-sm font-medium text-foreground">Schema desatualizado</p>
               <p>
-                Execute <code className="font-mono bg-muted px-1 py-0.5 rounded">{MIGRATION_PENDENTE}</code>{' '}
-                no Supabase Dashboard → SQL Editor para habilitar o painel (compra validada
-                no servidor, catálogo no banco e ajuste de moedas).
+                O Supabase não possui as RPCs esperadas do pet. Verifique as migrations ativas
+                antes de habilitar o painel (compra validada no servidor, catálogo no banco e
+                ajuste de moedas).
               </p>
             </div>
           </CardContent>
