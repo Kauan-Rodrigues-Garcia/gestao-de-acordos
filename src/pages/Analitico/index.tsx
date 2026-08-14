@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins } from 'lucide-react';
+import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -24,6 +24,7 @@ import {
   type RespostaTabulacaoAnalitico,
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
 import { AbaDiario } from './Diario';
+import { AbaColchao } from './Colchao';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 
 export default function PaginaAnalitico() {
@@ -51,8 +52,12 @@ export default function PaginaAnalitico() {
   // `?aba=diario` abre direto no Recebimento diário. É o destino da notificação
   // de importação do diário — sem isto ela largava o usuário na aba errada.
   const [searchParams] = useSearchParams();
-  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario'>(
-    () => (searchParams.get('aba') === 'diario' ? 'diario' : 'analitico'),
+  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario' | 'colchao'>(
+    () => {
+      const aba = searchParams.get('aba');
+      if (aba === 'diario' || aba === 'colchao') return aba;
+      return 'analitico';
+    },
   );
 
   // Clicar em outra notificação de diário já estando na página só troca a query;
@@ -61,6 +66,7 @@ export default function PaginaAnalitico() {
   useEffect(() => {
     if (abaDaUrl === 'diario')    setAbaPrincipal('diario');
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
+    if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
   }, [abaDaUrl]);
 
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
@@ -315,6 +321,7 @@ export default function PaginaAnalitico() {
         {([
           { key: 'analitico', label: 'Analítico',          Icon: BarChart2 },
           { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins },
+          { key: 'colchao', label: 'Colchão', Icon: Layers3 },
         ] as const).map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setAbaPrincipal(key)}
             className={cn(
@@ -330,7 +337,7 @@ export default function PaginaAnalitico() {
       </div>
 
       {/* Seletor de mês + filtro de setor (somente aba Analítico) */}
-      {abaPrincipal === 'analitico' && (
+      {abaPrincipal !== 'diario' && (
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
@@ -434,6 +441,16 @@ export default function PaginaAnalitico() {
           operadorId={perfil.id}
           visaoGeral={mostrarVisaoGeral}
           temPermissaoImportar={temPermissao('importar_diario')}
+        />
+      )}
+
+      {/* Conteúdo isolado — nunca participa dos totais do Analítico */}
+      {abaPrincipal === 'colchao' && (
+        <AbaColchao
+          empresaId={empresa.id}
+          mes={mesFiltro}
+          setorId={mostrarVisaoGeral ? (veTodosSetores ? filtroSetorId : setorProprio) : null}
+          operadorId={mostrarVisaoIndividual ? perfil.id : null}
         />
       )}
 

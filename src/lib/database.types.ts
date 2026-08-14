@@ -300,6 +300,103 @@ export type Database = {
           },
         ]
       }
+      analitico_colchao_fora_meta: {
+        Row: {
+          chave_deduplicacao: string
+          codigo: string
+          data_pagamento: string
+          empresa_id: string
+          equipe: string
+          forma_pagamento: string
+          id: number
+          importado_em: string
+          importado_por_id: string | null
+          lote_id: string
+          mes_referencia: string
+          nome_cliente: string | null
+          nr_documento: string
+          operador_id: string | null
+          operador_usuario: string
+          parcela: string
+          setor_id: string | null
+          tipo_comissao: string | null
+          titulo: string
+          total_ho: number
+          tpdoc_original: string
+          valor_recebido: number
+        }
+        Insert: {
+          chave_deduplicacao: string
+          codigo: string
+          data_pagamento: string
+          empresa_id: string
+          equipe?: string
+          forma_pagamento: string
+          id?: never
+          importado_em?: string
+          importado_por_id?: string | null
+          lote_id: string
+          mes_referencia: string
+          nome_cliente?: string | null
+          nr_documento?: string
+          operador_id?: string | null
+          operador_usuario: string
+          parcela?: string
+          setor_id?: string | null
+          tipo_comissao?: string | null
+          titulo?: string
+          total_ho?: number
+          tpdoc_original: string
+          valor_recebido?: number
+        }
+        Update: {
+          chave_deduplicacao?: string
+          codigo?: string
+          data_pagamento?: string
+          empresa_id?: string
+          equipe?: string
+          forma_pagamento?: string
+          id?: never
+          importado_em?: string
+          importado_por_id?: string | null
+          lote_id?: string
+          mes_referencia?: string
+          nome_cliente?: string | null
+          nr_documento?: string
+          operador_id?: string | null
+          operador_usuario?: string
+          parcela?: string
+          setor_id?: string | null
+          tipo_comissao?: string | null
+          titulo?: string
+          total_ho?: number
+          tpdoc_original?: string
+          valor_recebido?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitico_colchao_fora_meta_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_colchao_fora_meta_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_colchao_fora_meta_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analitico_recebimentos: {
         Row: {
           acordo_id: string | null

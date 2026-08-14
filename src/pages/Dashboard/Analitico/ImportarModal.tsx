@@ -106,6 +106,18 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                 <p className="text-xs text-muted-foreground">já existiam</p>
               </div>
             </div>
+            {(resultado.colchaoInseridos > 0 || resultado.colchaoDuplicados > 0) && (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-600">{resultado.colchaoInseridos}</p>
+                  <p className="text-xs text-muted-foreground">Colchão fora da meta inserido</p>
+                </div>
+                <div className="rounded-lg border bg-muted p-3 text-center">
+                  <p className="text-2xl font-bold">{resultado.colchaoDuplicados}</p>
+                  <p className="text-xs text-muted-foreground">linhas do Colchão já existentes</p>
+                </div>
+              </div>
+            )}
             {resultado.erros.length > 0 && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
                 <p className="text-xs font-semibold text-amber-700">Avisos:</p>
@@ -193,6 +205,22 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   linha{preview.retencaoRemovidas !== 1 ? 's' : ''} da equipe de{' '}
                   <strong>Retenção</strong> {preview.retencaoRemovidas !== 1 ? 'foram removidas' : 'foi removida'}{' '}
                   do arquivo — esse recebimento não conta para o Receptivo.
+                </p>
+              </div>
+            )}
+
+            {(preview.colchaoNaMeta.linhas > 0 || preview.linhasColchao.length > 0) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 p-3 space-y-1">
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  <strong>{preview.colchaoNaMeta.linhas}</strong>{' '}
+                  linha{preview.colchaoNaMeta.linhas !== 1 ? 's' : ''} do Colchão até 12/08/2026{' '}
+                  {preview.colchaoNaMeta.linhas !== 1 ? 'contam' : 'conta'} na meta
+                  {' '}({formatBRL(preview.colchaoNaMeta.valor)}).
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-300">
+                  <strong>{preview.linhasColchao.length}</strong>{' '}
+                  linha{preview.linhasColchao.length !== 1 ? 's' : ''} fora da meta{' '}
+                  {preview.linhasColchao.length !== 1 ? 'serão enviadas' : 'será enviada'} somente para a aba Colchão e não entra na meta.
                 </p>
               </div>
             )}
@@ -341,9 +369,9 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
             )}
 
             {/* Tabela de preview */}
-            <div>
+            {preview.linhas.length > 0 && <div>
               <p className="text-xs font-semibold text-muted-foreground mb-2">
-                Primeiros {Math.min(preview.linhas.length, 20)} de {preview.linhas.length} registros:
+                Primeiros {Math.min(preview.linhas.length, 20)} de {preview.linhas.length} registros que entram no Analítico:
               </p>
               <div className="border rounded-lg overflow-hidden">
                 <table className="w-full text-xs">
@@ -398,7 +426,7 @@ export function ImportarModal({ aberto, onFechar, hook }: ImportarModalProps) {
                   </tbody>
                 </table>
               </div>
-            </div>
+            </div>}
           </div>
 
           <DialogFooter className="mt-4 border-t pt-4">

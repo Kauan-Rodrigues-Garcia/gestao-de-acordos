@@ -58,6 +58,28 @@ export interface LinhaRelatorio {
   pagamentos_detalhados?: PagamentoDetalhe[];
 }
 
+/**
+ * Linha detalhada do Colchão que NÃO entra no Analítico/meta.
+ *
+ * Diferente de `LinhaRelatorio`, esta estrutura não pode ser consolidada: o NR,
+ * o título e a parcela precisam continuar disponíveis para cópia e exportação.
+ */
+export interface LinhaColchao {
+  operador_usuario: string;
+  equipe: string;
+  codigo: string;
+  nome_cliente: string;
+  nr_documento: string;
+  titulo: string;
+  parcela: string;
+  forma_pagamento: FormaPagementoAnalitico;
+  tpdoc_original: string;
+  tipo_comissao?: string;
+  valor_recebido: number;
+  total_ho: number;
+  data_pagamento: Date;
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 /** Normaliza string para comparação de cabeçalhos: remove acentos, lower, sem espaços */
@@ -136,6 +158,21 @@ export function ehEquipeRetencao(equipe: unknown): boolean {
   return norm(equipe).includes('retencao');
 }
 
+/** A coluna "Colchão?" do ERP marca com "Sim" os vínculos recorrentes. */
+export function ehLinhaColchao(valor: unknown): boolean {
+  return norm(valor) === 'sim';
+}
+
+/**
+ * Exceção única autorizada para a meta: Colchão pago até 12/08/2026.
+ * A partir de 13/08/2026 — e em qualquer outro mês — fica só no acompanhamento.
+ */
+export function colchaoContaNaMeta(dataPagamento: Date): boolean {
+  return dataPagamento.getFullYear() === 2026
+    && dataPagamento.getMonth() === 7
+    && dataPagamento.getDate() <= 12;
+}
+
 /**
  * A linha é comissão EXTRA? (coluna "Tipo comissão" do relatório)
  *
@@ -162,7 +199,9 @@ export function classificarComissao(tipoComissao: unknown): 'extra' | 'direto' |
 
 // ── Resolução de colunas ─────────────────────────────────────────────────────
 
-export type ColKeys = 'op' | 'eq' | 'cli' | 'tp' | 'dt' | 'rec' | 'ho' | 'tc';
+export type ColKeys =
+  | 'op' | 'eq' | 'cli' | 'tp' | 'dt' | 'rec' | 'ho' | 'tc'
+  | 'colchao' | 'nr' | 'titulo' | 'parcela';
 
 const COL_ALIASES: Record<ColKeys, string[]> = {
   op:  ['cobradora', 'operador', 'cobrador'],
@@ -180,6 +219,10 @@ const COL_ALIASES: Record<ColKeys, string[]> = {
   // (a PaguePlay tem métricas de comissão em reais), e aí um número monetário
   // seria gravado como se fosse o rótulo do vínculo.
   tc:  ['tipocomissao', 'tipodecomissao'],
+  colchao: ['colchao?', 'colchao'],
+  nr:      ['nrdocumento', 'numerodocumento'],
+  titulo:  ['titulo'],
+  parcela: ['parcela'],
 };
 
 export function resolveCols(headers: unknown[]): Record<ColKeys, number> | null {

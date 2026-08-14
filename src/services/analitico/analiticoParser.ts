@@ -21,13 +21,16 @@
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
 import {
   consolidar,
+  colchaoContaNaMeta,
   ehEquipeRetencao,
+  ehLinhaColchao,
   extrairCodigo,
   extrairNome,
   mapearFormaPgto,
   parsearValor,
   resolveCols,
   toDate,
+  type LinhaColchao,
   type LinhaRelatorio,
 } from './analiticoComum';
 
@@ -38,6 +41,10 @@ export * from './analiticoComum';
 
 export interface ResultadoParseRelatorio {
   linhas: LinhaRelatorio[];
+  /** Colchão posterior ao corte: não entra na meta e mantém o detalhe por NR. */
+  linhasColchao: LinhaColchao[];
+  /** Quantidade/valor do Colchão excepcionalmente aceito na meta até 12/08/2026. */
+  colchaoNaMeta: { linhas: number; valor: number };
   erros: string[];
   /** Linhas da equipe de Retenção descartadas — ver `ehEquipeRetencao`. */
   retencaoRemovidas: number;
@@ -51,10 +58,30 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
   const buffer = await arquivo.arrayBuffer();
   const wb = xlsxRead(buffer, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return { linhas: [], erros: ['Planilha vazia ou inválida.'], retencaoRemovidas: 0 };
+  if (!ws) return resultadoVazio(['Planilha vazia ou inválida.']);
 
   const rows: unknown[][] = xlsxUtils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][];
-  if (rows.length < 2) return { linhas: [], erros: ['Planilha sem dados.'], retencaoRemovidas: 0 };
+  if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
+
+  return parseRelatorioRows(rows);
+}
+
+function resultadoVazio(erros: string[]): ResultadoParseRelatorio {
+  return {
+    linhas: [],
+    linhasColchao: [],
+    colchaoNaMeta: { linhas: 0, valor: 0 },
+    erros,
+    retencaoRemovidas: 0,
+  };
+}
+
+/**
+ * Transforma as linhas já lidas do Excel. Exportado para testar a regra de
+ * corte sem criar arquivos binários com dados pessoais do relatório real.
+ */
+export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
+  if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
 
   const headerRow = rows[0] as unknown[];
   const cols = resolveCols(headerRow);
@@ -66,12 +93,16 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
         `Colunas obrigatórias não encontradas. Cabeçalhos lidos: ${encontrados}. ` +
         'Verifique se o arquivo é o relatório correto do ERP.',
       ],
+      linhasColchao: [],
+      colchaoNaMeta: { linhas: 0, valor: 0 },
       retencaoRemovidas: 0,
     };
   }
 
   const erros: string[] = [];
   const linhasBrutas: LinhaRelatorio[] = [];
+  const linhasColchao: LinhaColchao[] = [];
+  const colchaoNaMeta = { linhas: 0, valor: 0 };
   let retencaoRemovidas = 0;
 
   for (let i = 1; i < rows.length; i++) {
@@ -80,7 +111,11 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
 
     const op  = String(row[cols.op]  ?? '').trim();
     const cli = row[cols.cli];
-    const tp  = String(row[cols.tp]  ?? '').trim();
+    // O relatório 58 traz acordos válidos com TpDoc vazio. Essas linhas eram
+    // descartadas e faziam o Detalhado perder centenas de recebimentos. Sem um
+    // rótulo de cartão, a classificação conservadora é a forma não-cartão.
+    const tpInformado = String(row[cols.tp] ?? '').trim();
+    const tp = tpInformado || 'NÃO INFORMADO';
     const dt  = toDate(row[cols.dt]);
     const rec = parsearValor(row[cols.rec]);
     const ho  = cols.ho != null ? parsearValor(row[cols.ho]) : 0;
@@ -89,7 +124,7 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
     // Retenção não é Receptivo: a linha sai antes de virar recebimento.
     if (ehEquipeRetencao(eq)) { retencaoRemovidas++; continue; }
 
-    if (!op || !cli || !tp || !dt) {
+    if (!op || !cli || !dt) {
       erros.push(`Linha ${i + 1}: dados incompletos (operador="${op}", cliente="${cli}", tipo="${tp}", data="${row[cols.dt]}") — ignorada.`);
       continue;
     }
@@ -100,7 +135,11 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
       continue;
     }
 
-    linhasBrutas.push({
+    const tipoComissao = cols.tc != null
+      ? (String(row[cols.tc] ?? '').trim() || undefined)
+      : undefined;
+
+    const linhaBase: LinhaRelatorio = {
       operador_usuario: op,
       equipe:           eq,
       codigo,
@@ -111,12 +150,41 @@ export async function parseRelatorioExcel(arquivo: File): Promise<ResultadoParse
       total_ho:         ho,
       data_pagamento:   dt,
       // "Tipo comissão" (Extra / Integral) — opcional, ver COL_ALIASES.
-      tipo_comissao:    cols.tc != null
-        ? (String(row[cols.tc] ?? '').trim() || undefined)
-        : undefined,
-    });
+      tipo_comissao:    tipoComissao,
+    };
+
+    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao])) {
+      if (colchaoContaNaMeta(dt)) {
+        colchaoNaMeta.linhas++;
+        colchaoNaMeta.valor += rec;
+        linhasBrutas.push(linhaBase);
+      } else {
+        const nrDocumento = cols.nr != null ? String(row[cols.nr] ?? '').trim() : '';
+        if (!nrDocumento) {
+          erros.push(`Linha ${i + 1}: Colchão sem NrDocumento — mantida para conferência, mas sem NR para copiar.`);
+        }
+        linhasColchao.push({
+          operador_usuario: op,
+          equipe: eq,
+          codigo,
+          nome_cliente: extrairNome(cli),
+          nr_documento: nrDocumento,
+          titulo: cols.titulo != null ? String(row[cols.titulo] ?? '').trim() : '',
+          parcela: cols.parcela != null ? String(row[cols.parcela] ?? '').trim() : '',
+          forma_pagamento: mapearFormaPgto(tp),
+          tpdoc_original: tp,
+          tipo_comissao: tipoComissao,
+          valor_recebido: rec,
+          total_ho: ho,
+          data_pagamento: dt,
+        });
+      }
+      continue;
+    }
+
+    linhasBrutas.push(linhaBase);
   }
 
   const linhas = consolidar(linhasBrutas);
-  return { linhas, erros, retencaoRemovidas };
+  return { linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas };
 }

@@ -8,6 +8,9 @@ import {
   mapearFormaPgto,
   resolveCols,
   ehEquipeRetencao,
+  ehLinhaColchao,
+  colchaoContaNaMeta,
+  parseRelatorioRows,
 } from './analiticoParser';
 
 // ── norm ────────────────────────────────────────────────────────────────────
@@ -130,7 +133,7 @@ describe('mapearFormaPgto', () => {
 describe('resolveCols', () => {
   it('resolve colunas do relatório real', () => {
     const headers = [
-      'Cobradora', 'Equipe/SubGrupo', 'Cliente', 'Email', 'Título',
+      'Cobradora', 'Equipe/SubGrupo', 'Cliente', 'Email', 'Título', 'Colchão?',
       'Parcela', 'NrDocumento', 'Empresa', 'Tipo Venda', 'TpDoc',
       'DtLig', 'DtPgto', 'Dias em atraso', 'Recebido',
       'Dias entre ligação e baixa', 'Total HO',
@@ -140,10 +143,13 @@ describe('resolveCols', () => {
     expect(cols!.op).toBe(0);   // Cobradora
     expect(cols!.eq).toBe(1);   // Equipe/SubGrupo
     expect(cols!.cli).toBe(2);  // Cliente
-    expect(cols!.tp).toBe(9);   // TpDoc (índice 9 — NÃO Tipo Venda que é índice 8)
-    expect(cols!.dt).toBe(11);  // DtPgto
-    expect(cols!.rec).toBe(13); // Recebido
-    expect(cols!.ho).toBe(15);  // Total HO
+    expect(cols!.colchao).toBe(5);
+    expect(cols!.parcela).toBe(6);
+    expect(cols!.nr).toBe(7);
+    expect(cols!.tp).toBe(10);   // TpDoc (NÃO Tipo Venda)
+    expect(cols!.dt).toBe(12);   // DtPgto
+    expect(cols!.rec).toBe(14);  // Recebido
+    expect(cols!.ho).toBe(16);   // Total HO
   });
 
   it('rejeita planilha sem colunas obrigatórias', () => {
@@ -166,6 +172,17 @@ describe('resolveCols', () => {
     expect(cols).not.toBeNull();
     expect(cols!.tp).toBe(3); // TpDoc, não Tipo Venda (índice 2)
   });
+
+  it('mantém acordo válido quando a célula TpDoc está vazia', () => {
+    const resultado = parseRelatorioRows([
+      ['Cobradora', 'Equipe/SubGrupo', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido'],
+      ['OPERADOR', 'RECEPTIVO', '123 - CLIENTE', null, '13/08/2026', 249],
+    ]);
+    expect(resultado.erros).toEqual([]);
+    expect(resultado.linhas).toHaveLength(1);
+    expect(resultado.linhas[0].forma_pagamento).toBe('boleto_pix');
+    expect(resultado.linhas[0].tpdoc_original).toBe('NÃO INFORMADO');
+  });
 });
 
 // ── ehEquipeRetencao ─────────────────────────────────────────────────────────
@@ -175,6 +192,7 @@ describe('ehEquipeRetencao', () => {
     expect(ehEquipeRetencao('Retenção')).toBe(true);
     expect(ehEquipeRetencao('RETENCAO')).toBe(true);
     expect(ehEquipeRetencao('retencao')).toBe(true);
+    expect(ehEquipeRetencao('EQUIPE RETENÇÃO')).toBe(true);
   });
 
   it('reconhece as variações com subgrupo', () => {
@@ -190,5 +208,54 @@ describe('ehEquipeRetencao', () => {
     expect(ehEquipeRetencao('')).toBe(false);
     expect(ehEquipeRetencao(null)).toBe(false);
     expect(ehEquipeRetencao(undefined)).toBe(false);
+  });
+});
+
+describe('regra do Colchão', () => {
+  it('reconhece somente a marcação Sim', () => {
+    expect(ehLinhaColchao('Sim')).toBe(true);
+    expect(ehLinhaColchao(' SIM ')).toBe(true);
+    expect(ehLinhaColchao('Não')).toBe(false);
+    expect(ehLinhaColchao(null)).toBe(false);
+  });
+
+  it('conta na meta somente até 12/08/2026', () => {
+    expect(colchaoContaNaMeta(new Date(2026, 7, 12))).toBe(true);
+    expect(colchaoContaNaMeta(new Date(2026, 7, 13))).toBe(false);
+    expect(colchaoContaNaMeta(new Date(2026, 8, 1))).toBe(false);
+    expect(colchaoContaNaMeta(new Date(2027, 7, 1))).toBe(false);
+  });
+
+  it('separa o Colchão fora da meta, preserva parcelas e remove Retenção', () => {
+    const headers = [
+      'Cobradora', 'Equipe/SubGrupo', 'Cliente', 'Email', 'Título', 'Colchão?',
+      'Parcela', 'NrDocumento', 'Empresa', 'Tipo Venda', 'TpDoc', 'DtLig',
+      'DtPgto', 'Dias em atraso', 'Recebido', 'Dias entre ligação e baixa',
+      'Total HO', 'Tipo comissão',
+    ];
+    const linha = (
+      operador: string, equipe: string, colchao: string, parcela: number,
+      nr: number, data: string, recebido: number,
+    ) => [
+      operador, equipe, '123 - CLIENTE TESTE', null, 4191831, colchao,
+      parcela, nr, 'FACULDADE BOOKPLAY', 'PEC', 'PIX AUTOMÁTICO', '01/07/2026',
+      data, 0, recebido, 0, 0, 'Integral',
+    ];
+
+    const resultado = parseRelatorioRows([
+      headers,
+      linha('OPERADOR_A', 'RECEPTIVO', 'Não', 1, 1001, '13/08/2026', 10),
+      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 2, 1002, '12/08/2026', 20),
+      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 15, 12847788, '13/08/2026', 30),
+      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 16, 12847788, '13/08/2026', 40),
+      linha('OPERADOR_B', 'EQUIPE RETENÇÃO', 'Não', 1, 1003, '10/08/2026', 50),
+    ]);
+
+    expect(resultado.retencaoRemovidas).toBe(1);
+    expect(resultado.colchaoNaMeta).toEqual({ linhas: 1, valor: 20 });
+    expect(resultado.linhas).toHaveLength(2);
+    expect(resultado.linhasColchao).toHaveLength(2);
+    expect(resultado.linhasColchao.map(l => l.nr_documento)).toEqual(['12847788', '12847788']);
+    expect(resultado.linhasColchao.map(l => l.parcela)).toEqual(['15', '16']);
   });
 });

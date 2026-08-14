@@ -200,7 +200,38 @@ export interface ResultadoImportacao {
   /** Linhas já existentes cujo valor foi corrigido para cima (novas parcelas
    *  do mesmo NR desde a última importação). */
   atualizados: number;
+  /** Linhas antigas que já não existem no relatório mensal completo. */
+  removidos: number;
   erros: string[];
+}
+
+type GrupoRelatorioAnalitico = {
+  operador_usuario: string;
+  codigo: string;
+  mes_referencia: string;
+};
+
+const chaveGrupoAnalitico = (r: GrupoRelatorioAnalitico) =>
+  `${r.operador_usuario}::${r.codigo}::${r.mes_referencia}`;
+
+/** IDs do mesmo empresa/setor/mês que sobraram fora do relatório completo. */
+export function idsAusentesDoRelatorioMensal(
+  existentes: Array<GrupoRelatorioAnalitico & { id: string }>,
+  relatorio: GrupoRelatorioAnalitico[],
+): string[] {
+  const presentes = new Set(relatorio.map(chaveGrupoAnalitico));
+  return existentes
+    .filter(linha => !presentes.has(chaveGrupoAnalitico(linha)))
+    .map(linha => linha.id);
+}
+
+export interface OpcoesImportacaoAnalitico {
+  /**
+   * BookPlay/Receptivo: remove do mesmo setor/mês registros antigos que não
+   * aparecem mais no relatório 58 completo. Desligado por padrão para preservar
+   * importações parciais, como as da PaguePlay.
+   */
+  sincronizarAusentesDoSetor?: boolean;
 }
 
 /**
@@ -212,8 +243,9 @@ export interface ResultadoImportacao {
  * (o NR recebeu novas parcelas e a consolidação cai na mesma chave), o valor
  * é atualizado — antes o ignoreDuplicates descartava a linha nova e a
  * diferença nunca entrava no sistema (card menor que o total do relatório).
- * Só aumenta, nunca diminui: um relatório parcial (de um dia) não rebaixa o
- * acumulado do mês já importado.
+ * Por padrão só aumenta: um relatório parcial não rebaixa o acumulado já
+ * importado. O relatório 58 completo da BookPlay ativa explicitamente a
+ * sincronização de ausentes no mesmo setor/mês.
  */
 export async function importarLoteAnalitico(
   empresaId: string,
@@ -224,8 +256,11 @@ export async function importarLoteAnalitico(
   /** BookPlay: setor da importação — dá dono às linhas SEM operador (órfãos),
    *  que passam a contar no card do setor. Requer a migration 20260712a. */
   setorImportacaoId?: string | null,
+  opcoes: OpcoesImportacaoAnalitico = {},
 ): Promise<ResultadoImportacao> {
-  if (!linhas.length) return { inseridos: 0, duplicados: 0, atualizados: 0, erros: [] };
+  if (!linhas.length) {
+    return { inseridos: 0, duplicados: 0, atualizados: 0, removidos: 0, erros: [] };
+  }
 
   const rows = linhas.map(l => ({
     empresa_id:      empresaId,
@@ -265,6 +300,7 @@ export async function importarLoteAnalitico(
   let inseridos = 0;
   let duplicados = 0;
   let atualizados = 0;
+  let removidos = 0;
   const erros: string[] = [];
 
   /**
@@ -288,7 +324,8 @@ export async function importarLoteAnalitico(
       severidade: erros.length > 0 ? 'aviso' : 'info',
       descricao:
         `Importou relatório analítico: ${inseridos} linha(s) nova(s), `
-        + `${duplicados} já existente(s), ${atualizados} reconciliada(s)`
+        + `${duplicados} já existente(s), ${atualizados} reconciliada(s), `
+        + `${removidos} ausente(s) removida(s)`
         + (erros.length > 0 ? ` — ${erros.length} problema(s)` : ''),
       empresaId,
       tabela: 'analitico_recebimentos',
@@ -302,6 +339,7 @@ export async function importarLoteAnalitico(
         inseridos,
         duplicados,
         atualizados,
+        removidos,
         reconciliacao_executada: reconciliou,
         meses: mesesDoLote,
         operadores_sem_vinculo: [...new Set(rows.filter(r => !r.operador_id).map(r => r.operador_usuario))].slice(0, 20),
@@ -367,8 +405,6 @@ export async function importarLoteAnalitico(
     data_pagamento: string; forma_pagamento: string; valor_recebido: number; total_ho: number;
   };
   type RowImport = (typeof rows)[number];
-  const grupoDe = (r: { operador_usuario: string; codigo: string; mes_referencia: string }) =>
-    `${r.operador_usuario}::${r.codigo}::${r.mes_referencia}`;
 
   // Agrega as linhas do relatório por grupo (operador, NR, mês). Um NR pode vir
   // em VÁRIAS linhas no mês (datas/formas diferentes) — cada uma vira uma linha
@@ -381,7 +417,7 @@ export async function importarLoteAnalitico(
   const alvoPorGrupo = new Map<string, AlvoAgg>();
   const chavesVistasPorGrupo = new Map<string, Set<string>>();
   for (const r of rows) {
-    const k  = grupoDe(r);
+    const k  = chaveGrupoAnalitico(r);
     const dk = `${r.data_pagamento}::${r.forma_pagamento}`;
     let vistas = chavesVistasPorGrupo.get(k);
     if (!vistas) { vistas = new Set(); chavesVistasPorGrupo.set(k, vistas); }
@@ -431,12 +467,12 @@ export async function importarLoteAnalitico(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, erros };
+    return { inseridos, duplicados, atualizados, removidos, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
   for (const ex of existentes) {
-    const k = grupoDe(ex);
+    const k = chaveGrupoAnalitico(ex);
     if (!alvoPorGrupo.has(k)) continue;
     const lista = dbPorGrupo.get(k);
     if (lista) lista.push(ex); else dbPorGrupo.set(k, [ex]);
@@ -482,8 +518,48 @@ export async function importarLoteAnalitico(
     else atualizados++;
   }
 
+  // No relatório 58 da BookPlay, o arquivo é o retrato completo do mês.
+  // Filtrar Retenção e Colchão impede novas inclusões, mas não apaga linhas que
+  // entraram antes da regra. A sincronização é explícita para não alterar o
+  // comportamento incremental dos relatórios parciais da PaguePlay.
+  if (opcoes.sincronizarAusentesDoSetor) {
+    if (!setorImportacaoId) {
+      erros.push('Sincronização mensal não executada: o setor da importação não foi informado.');
+    } else if (erros.length === 0) {
+      const leituraSetor = await paginarParalelo<ExRow>(async (de, ate) => {
+        const r = await supabase
+          .from('analitico_recebimentos')
+          .select('id, codigo, operador_usuario, mes_referencia, data_pagamento, forma_pagamento, valor_recebido, total_ho')
+          .eq('empresa_id', empresaId)
+          .eq('setor_id', setorImportacaoId)
+          .in('mes_referencia', meses)
+          .order('id', { ascending: true })
+          .range(de, ate);
+        return { data: (r.data as unknown as ExRow[]) ?? [], error: r.error?.message ?? null };
+      });
+
+      if (leituraSetor.error) {
+        erros.push(`Leitura para sincronização mensal: ${leituraSetor.error}`);
+      } else {
+        const idsAusentes = idsAusentesDoRelatorioMensal(leituraSetor.data, rows);
+        for (let i = 0; i < idsAusentes.length; i += CHUNK) {
+          const fatia = idsAusentes.slice(i, i + CHUNK);
+          const { error } = await supabase
+            .from('analitico_recebimentos')
+            .delete()
+            .in('id', fatia);
+          if (error) {
+            erros.push(`Remoção de registros ausentes: ${error.message}`);
+            break;
+          }
+          removidos += fatia.length;
+        }
+      }
+    }
+  }
+
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, erros };
+  return { inseridos, duplicados, atualizados, removidos, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────

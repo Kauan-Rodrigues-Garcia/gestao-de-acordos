@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 // ~484 KB) são importados dinamicamente nos handlers — só quando o usuário
 // escolhe de fato um arquivo. Sem isso o chunk do xlsx entraria no bundle da
 // aba Analítico, que apenas exibe dados.
-import type { LinhaRelatorio } from '@/services/analitico/analiticoComum';
+import type { LinhaColchao, LinhaRelatorio } from '@/services/analitico/analiticoComum';
 import {
   diaReferencia, dayKeyDiario, type LinhaDiario,
 } from '@/services/diario/diarioComum';
@@ -28,6 +28,10 @@ import {
   type ResultadoImportacao,
 } from '@/services/analitico/analitico.service';
 import {
+  importarLoteColchao,
+  revincularOrfaosColchao,
+} from '@/services/analitico/colchao.service';
+import {
   importarLoteDiario,
   revincularOrfaosDiario,
   notificarImportacaoDiario,
@@ -43,6 +47,10 @@ export interface PreviewImport {
   operadoresNaoEncontrados: string[];
   errosParse:       string[];
   linhas:           LinhaRelatorio[];
+  /** Colchão fora da meta, preservado linha a linha para a aba própria. */
+  linhasColchao:    LinhaColchao[];
+  /** Colchão excepcionalmente aceito no Analítico até 12/08/2026. */
+  colchaoNaMeta:    { linhas: number; valor: number };
   operadoresMap:    OperadorResolvidoMap;
   matches:          Record<string, OperadorMatchDetalhe | null>;
   todosPerfis:      PerfilResumido[];
@@ -54,6 +62,11 @@ export interface PreviewImport {
   dia?:             string;
   /** Linhas da equipe de Retenção descartadas do relatório do Receptivo. */
   retencaoRemovidas: number;
+}
+
+export interface ResultadoImportacaoCompleta extends ResultadoImportacao {
+  colchaoInseridos: number;
+  colchaoDuplicados: number;
 }
 
 /** Soma pagamentos/valores por operador de duas listas (inseridos + revinculados). */
@@ -78,7 +91,7 @@ export function useAnaliticoImport() {
 
   const [estado,      setEstado]    = useState<EstadoImport>('idle');
   const [preview,     setPreview]   = useState<PreviewImport | null>(null);
-  const [resultado,   setResultado] = useState<ResultadoImportacao | null>(null);
+  const [resultado,   setResultado] = useState<ResultadoImportacaoCompleta | null>(null);
   const [erroGeral,   setErroGeral] = useState<string | null>(null);
 
   // Vínculos manuais definidos pelo usuário no preview: username_arquivo → perfil_id
@@ -132,21 +145,37 @@ export function useAnaliticoImport() {
     setErroGeral(null);
     setVinculosManuais({});
 
-    // ── BookPlay: um único relatório alimenta Analítico + Recebimento diário ──
+    // ── BookPlay: um relatório alimenta Analítico + Diário + Colchão ─────────
     if (!tenant.isPaguePlay) {
       // xlsx entra aqui, sob demanda (ver comentário do import no topo).
       const { parseRelatorioBookplay } = await import('@/services/bookplay/bookplayRecebimentoParser');
-      const { analitico, diario, erros: errosBP } = await parseRelatorioBookplay(file);
-      if (!analitico.length) {
-        setErroGeral(errosBP.length ? errosBP.join('\n') : 'Nenhuma linha válida encontrada no arquivo.');
+      const {
+        analitico,
+        diario,
+        colchao,
+        colchaoNaMeta,
+        retencaoRemovidas,
+        erros: errosBP,
+      } = await parseRelatorioBookplay(file);
+      if (!analitico.length && !colchao.length) {
+        setErroGeral(
+          retencaoRemovidas > 0 && !errosBP.length
+            ? `Nenhuma linha a importar: as ${retencaoRemovidas} linhas do arquivo são da equipe de Retenção, que não conta para o Receptivo.`
+            : errosBP.length
+              ? errosBP.join('\n')
+              : 'Nenhuma linha válida encontrada no arquivo.',
+        );
         setEstado('error');
         return;
       }
-      const usuariosBP = [...new Set(analitico.map(l => l.operador_usuario))];
+      const usuariosBP = [...new Set([
+        ...analitico.map(l => l.operador_usuario),
+        ...colchao.map(l => l.operador_usuario),
+      ])];
       const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuariosBP);
       const naoEncontradosBP = usuariosBP.filter(u => map[u] === null);
 
-      const mesesBP = analitico.map(l => {
+      const mesesBP = [...analitico, ...colchao].map(l => {
         const d = l.data_pagamento;
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       });
@@ -154,12 +183,14 @@ export function useAnaliticoImport() {
       const mesBP = Object.entries(mesCountBP).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
       setPreview({
-        linhasTotais:     analitico.length,
-        linhasNovas:      analitico.length,
+        linhasTotais:     analitico.length + colchao.length,
+        linhasNovas:      analitico.length + colchao.length,
         duplicadasEst:    0,
         operadoresNaoEncontrados: naoEncontradosBP,
         errosParse:       errosBP,
         linhas:           analitico,
+        linhasColchao:    colchao,
+        colchaoNaMeta,
         linhasDiario:     diario,
         dia:              diaReferencia(diario) ?? dayKeyDiario(new Date()),
         operadoresMap:    map,
@@ -167,8 +198,7 @@ export function useAnaliticoImport() {
         todosPerfis,
         loteId:           crypto.randomUUID(),
         mes:              mesBP,
-        // O relatório BookPlay não tem coluna de equipe — nada a descartar.
-        retencaoRemovidas: 0,
+        retencaoRemovidas,
       });
       setEstado('preview');
       return;
@@ -177,9 +207,11 @@ export function useAnaliticoImport() {
     // ── PaguePlay: fluxo original (relatório analítico dedicado) ──
     // xlsx entra aqui, sob demanda (ver comentário do import no topo).
     const { parseRelatorioExcel } = await import('@/services/analitico/analiticoParser');
-    const { linhas, erros, retencaoRemovidas } = await parseRelatorioExcel(file);
+    const {
+      linhas, linhasColchao, colchaoNaMeta, erros, retencaoRemovidas,
+    } = await parseRelatorioExcel(file);
 
-    if (!linhas.length) {
+    if (!linhas.length && !linhasColchao.length) {
       setErroGeral(
         // Arquivo só de Retenção: "nenhuma linha válida" mandaria procurar
         // defeito num arquivo que está certo — o filtro é que levou tudo.
@@ -193,11 +225,14 @@ export function useAnaliticoImport() {
       return;
     }
 
-    const usuarios = [...new Set(linhas.map(l => l.operador_usuario))];
+    const usuarios = [...new Set([
+      ...linhas.map(l => l.operador_usuario),
+      ...linhasColchao.map(l => l.operador_usuario),
+    ])];
     const { map, matches, todosPerfis } = await resolverOperadores(empresa.id, usuarios);
     const naoEncontrados = usuarios.filter(u => map[u] === null);
 
-    const meses = linhas.map(l => {
+    const meses = [...linhas, ...linhasColchao].map(l => {
       const d = l.data_pagamento;
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
     });
@@ -207,12 +242,14 @@ export function useAnaliticoImport() {
     const mes = Object.entries(mesCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? '';
 
     setPreview({
-      linhasTotais:     linhas.length,
-      linhasNovas:      linhas.length,
+      linhasTotais:     linhas.length + linhasColchao.length,
+      linhasNovas:      linhas.length + linhasColchao.length,
       duplicadasEst:    0,
       operadoresNaoEncontrados: naoEncontrados,
       errosParse:       erros,
       linhas,
+      linhasColchao,
+      colchaoNaMeta,
       operadoresMap:    map,
       matches,
       todosPerfis,
@@ -245,6 +282,18 @@ export function useAnaliticoImport() {
       mapFinal[usuario] = perfilId;
     }
 
+    // O Colchão fora da meta vai primeiro para a tabela isolada. Se a migration
+    // ainda não estiver disponível, o erro fica visível no resultado e o fluxo
+    // normal continua — uma falha de acompanhamento não pode apagar o relatório.
+    const resColchao = await importarLoteColchao(
+      empresa.id,
+      perfil.id,
+      preview.loteId,
+      preview.linhasColchao,
+      mapFinal,
+      setorImportacao,
+    );
+
     const res = await importarLoteAnalitico(
       empresa.id,
       perfil.id,
@@ -256,11 +305,17 @@ export function useAnaliticoImport() {
       // acabavam no setor de QUEM IMPORTOU, por fallback, em vez do setor a que
       // o relatório pertence.
       setorImportacao,
+      // Na BookPlay, o relatório 58 é o retrato completo do mês. Assim, uma
+      // reimportação também remove do mesmo setor/mês linhas antigas que foram
+      // filtradas agora (Retenção/Colchão) ou que sumiram da origem. PaguePlay
+      // continua incremental porque seus relatórios podem ser parciais.
+      { sincronizarAusentesDoSetor: !tenant.isPaguePlay },
     );
 
     // Revincula linhas órfãs de operadores criados após uma importação anterior.
     // Sem isto, reimportar o mesmo relatório não atribui os dados ao novo usuário
     // (as linhas já existem e a dedupe as ignora, mantendo operador_id = null).
+    await revincularOrfaosColchao(empresa.id, mapFinal);
     const revinc = await revincularOrfaosAnalitico(empresa.id, mapFinal);
     if (revinc.revinculados > 0) {
       toast.success(
@@ -270,7 +325,12 @@ export function useAnaliticoImport() {
       );
     }
 
-    setResultado(res);
+    setResultado({
+      ...res,
+      erros: [...res.erros, ...resColchao.erros],
+      colchaoInseridos: resColchao.inseridos,
+      colchaoDuplicados: resColchao.duplicados,
+    });
 
     if (res.atualizados > 0) {
       toast.success(
@@ -283,7 +343,9 @@ export function useAnaliticoImport() {
 
     // Salva snapshot de totais imediatamente após inserção + revínculo
     // (o revínculo altera a contagem de operadores distintos do mês)
-    await atualizarResumoMensal(empresa.id, preview.mes);
+    if (preview.linhas.length > 0) {
+      await atualizarResumoMensal(empresa.id, preview.mes);
+    }
 
     // Refaz o retrato da composição daquele mês (migration 20260803c).
     //
@@ -291,7 +353,9 @@ export function useAnaliticoImport() {
     // ÚNICA coisa de hoje que pode mexer nele é a reimportação do relatório
     // daquele mês — que é exatamente este ponto. Mover alguém de equipe ou
     // colocar em férias não mexe, e é o defeito que isto corrige.
-    await congelarComposicaoDoMes(empresa.id, preview.mes);
+    if (preview.linhas.length > 0) {
+      await congelarComposicaoDoMes(empresa.id, preview.mes);
+    }
 
     if (!tenant.isPaguePlay && preview.linhasDiario && preview.dia) {
       // ── BookPlay: o MESMO relatório também alimenta o Recebimento diário ──
@@ -301,7 +365,7 @@ export function useAnaliticoImport() {
       const revDiario = await revincularOrfaosDiario(empresa.id, preview.dia, mapFinal);
       const notifsDiario = mesclarNovosPorOperador(resDiario.novosPorOperador, revDiario.novosPorOperador);
       await notificarImportacaoDiario(empresa.id, preview.dia, notifsDiario);
-    } else {
+    } else if (preview.linhas.length > 0) {
       // ── PaguePlay: sincroniza acordos de cartão com mesmo operador ──
       const { atualizados } = await sincronizarCartoesPagos(empresa.id, preview.mes);
       if (atualizados > 0) {
@@ -314,15 +378,24 @@ export function useAnaliticoImport() {
 
     // Notificação escopada: só o setor do importador + operadores do lote
     // (linhas de gente de outro setor seguem para o setor delas).
-    await notificarImportacaoAnalitico(
-      empresa.id,
-      preview.mes,
-      perfil.nome ?? 'Líder',
-      {
-        setorId:     setorImportacao,
-        operadorIds: [...new Set(Object.values(mapFinal).filter((v): v is string => !!v))],
-      },
-    );
+    if (preview.linhas.length > 0) {
+      await notificarImportacaoAnalitico(
+        empresa.id,
+        preview.mes,
+        perfil.nome ?? 'Líder',
+        {
+          setorId:     setorImportacao,
+          operadorIds: [...new Set(Object.values(mapFinal).filter((v): v is string => !!v))],
+        },
+      );
+    }
+    if (res.removidos > 0) {
+      toast.success(
+        `${res.removidos} recebimento${res.removidos !== 1 ? 's antigos foram removidos' : ' antigo foi removido'} ` +
+        'porque não aparecem mais no relatório mensal.',
+        { duration: 6000 },
+      );
+    }
 
     setEstado('done');
   }, [preview, vinculosManuais, empresa?.id, perfil?.id, perfil?.nome, setorImportacao, tenant.isPaguePlay]);

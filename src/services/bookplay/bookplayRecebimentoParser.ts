@@ -2,12 +2,14 @@
  * bookplayRecebimentoParser.ts
  * Parser ÚNICO do relatório de recebimentos da BookPlay.
  *
- * Um mesmo relatório alimenta as DUAS abas (Analítico e Recebimento diário),
+ * Um mesmo relatório alimenta Analítico, Recebimento diário e Colchão,
  * diferente da PaguePlay que usa dois relatórios distintos.
  *
  * Colunas do relatório BookPlay (por cabeçalho, ordem real):
  *   A Cobradora   → operador (username)
+ *   B Equipe/SubGrupo → setor/equipe; Retenção é descartada
  *   C Cliente     → "<código PP> - NOME"; usamos SÓ o nome
+ *   E Título / F Colchão? / G Parcela → detalhe do Colchão
  *   G NrDocumento → NR (código usado para tabular na BookPlay)
  *   H Empresa     → instituição (bookplay, mundial editora, faculdade bookplay…)
  *   J TpDoc       → forma de pagamento (ver `labelPagamentoBookplay`)
@@ -36,13 +38,25 @@
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
-import { norm, toDate, extrairNome, type LinhaRelatorio } from '@/services/analitico/analiticoComum';
+import {
+  colchaoContaNaMeta,
+  ehEquipeRetencao,
+  ehLinhaColchao,
+  extrairNome,
+  norm,
+  toDate,
+  type LinhaColchao,
+  type LinhaRelatorio,
+} from '@/services/analitico/analiticoComum';
 import { dayKeyDiario, type LinhaDiario } from '@/services/diario/diarioComum';
 import type { FormaPagementoAnalitico } from '@/lib/supabase';
 
 export interface ResultadoParseBookplay {
   analitico: LinhaRelatorio[];
   diario:    LinhaDiario[];
+  colchao:   LinhaColchao[];
+  colchaoNaMeta: { linhas: number; valor: number };
+  retencaoRemovidas: number;
   erros:     string[];
 }
 
@@ -63,10 +77,13 @@ function formaEnum(label: string): FormaPagementoAnalitico {
   return label.startsWith('Cartão') ? 'cartao' : 'boleto_pix';
 }
 
-type ColKeys = 'op' | 'cli' | 'nr' | 'emp' | 'tp' | 'dt' | 'rec' | 'tc';
+type ColKeys =
+  | 'op' | 'eq' | 'cli' | 'nr' | 'emp' | 'tp' | 'dt' | 'rec' | 'tc'
+  | 'colchao' | 'titulo' | 'parcela';
 
 const COL_ALIASES: Record<ColKeys, string[]> = {
   op:  ['cobradora', 'operador', 'cobrador'],
+  eq:  ['equipe/subgrupo', 'equipe', 'subgrupo'],
   cli: ['cliente'],
   nr:  ['nrdocumento', 'nrdoc', 'nr', 'documento'],
   emp: ['empresa', 'instituicao'],
@@ -78,6 +95,9 @@ const COL_ALIASES: Record<ColKeys, string[]> = {
   // arquivo por causa dela quebraria a importação de todo mundo.
   // Sem 'comissao' solto — casaria com coluna de VALOR de comissão.
   tc:  ['tipocomissao', 'tipodecomissao'],
+  colchao: ['colchao?', 'colchao'],
+  titulo:  ['titulo'],
+  parcela: ['parcela'],
 };
 
 function resolveCols(headers: unknown[]): Partial<Record<ColKeys, number>> | null {
@@ -117,31 +137,49 @@ interface LinhaBruta {
 
 /**
  * Lê o relatório Excel (.xlsx/.xls) da BookPlay e devolve as linhas prontas
- * para as duas abas. Rejeita o arquivo se as colunas obrigatórias faltarem.
+ * para as três áreas. Rejeita o arquivo se as colunas obrigatórias faltarem.
  */
 export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoParseBookplay> {
   const buffer = await arquivo.arrayBuffer();
   const wb = xlsxRead(buffer, { cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) return { analitico: [], diario: [], erros: ['Planilha vazia ou inválida.'] };
+  if (!ws) return resultadoVazio(['Planilha vazia ou inválida.']);
 
   const rows: unknown[][] = xlsxUtils.sheet_to_json(ws, { header: 1, defval: null }) as unknown[][];
-  if (rows.length < 2) return { analitico: [], diario: [], erros: ['Planilha sem dados.'] };
+  if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
+
+  return parseRelatorioBookplayRows(rows);
+}
+
+function resultadoVazio(erros: string[]): ResultadoParseBookplay {
+  return {
+    analitico: [],
+    diario: [],
+    colchao: [],
+    colchaoNaMeta: { linhas: 0, valor: 0 },
+    retencaoRemovidas: 0,
+    erros,
+  };
+}
+
+/** Versão pura do parser, usada pelos testes das regras do relatório 58. */
+export function parseRelatorioBookplayRows(rows: unknown[][]): ResultadoParseBookplay {
+  if (rows.length < 2) return resultadoVazio(['Planilha sem dados.']);
 
   const cols = resolveCols(rows[0] as unknown[]);
   if (!cols) {
     const encontrados = (rows[0] as unknown[]).map(h => `"${h}"`).join(', ');
-    return {
-      analitico: [], diario: [],
-      erros: [
+    return resultadoVazio([
         `Colunas obrigatórias (Cobradora, NrDocumento, DtPgto, Recebido) não encontradas. ` +
         `Cabeçalhos lidos: ${encontrados}. Verifique se é o relatório correto da BookPlay.`,
-      ],
-    };
+    ]);
   }
 
   const erros: string[] = [];
   const brutas: LinhaBruta[] = [];
+  const colchao: LinhaColchao[] = [];
+  const colchaoNaMeta = { linhas: 0, valor: 0 };
+  let retencaoRemovidas = 0;
 
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i] as unknown[];
@@ -155,6 +193,14 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     const emp = cols.emp != null ? String(row[cols.emp] ?? '').trim() : '';
     const cli = cols.cli != null ? row[cols.cli] : '';
     const tc  = cols.tc  != null ? String(row[cols.tc]  ?? '').trim() : '';
+    const eq  = cols.eq  != null ? String(row[cols.eq]  ?? '').trim() : '';
+
+    // Retenção não pertence à meta do Receptivo. O descarte ocorre antes de
+    // montar qualquer uma das saídas para que a linha não vaze para o Diário.
+    if (ehEquipeRetencao(eq)) {
+      retencaoRemovidas++;
+      continue;
+    }
 
     // BookPlay tem vários setores: linha sem operador não tem como ser
     // atribuída a um setor, então continua descartada (diferente da PP).
@@ -164,6 +210,31 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     }
 
     const label = labelPagamentoBookplay(tp);
+
+    if (cols.colchao != null && ehLinhaColchao(row[cols.colchao])) {
+      if (colchaoContaNaMeta(dt)) {
+        colchaoNaMeta.linhas++;
+        colchaoNaMeta.valor += rec;
+      } else {
+        colchao.push({
+          operador_usuario: op,
+          equipe:           eq,
+          codigo:           nr,
+          nome_cliente:     extrairNome(cli),
+          nr_documento:     nr,
+          titulo:           cols.titulo != null ? String(row[cols.titulo] ?? '').trim() : '',
+          parcela:          cols.parcela != null ? String(row[cols.parcela] ?? '').trim() : '',
+          forma_pagamento:  formaEnum(label),
+          tpdoc_original:   label,
+          tipo_comissao:    tc || undefined,
+          valor_recebido:   rec,
+          total_ho:         0,
+          data_pagamento:   dt,
+        });
+        continue;
+      }
+    }
+
     brutas.push({
       operador_usuario: op,
       codigo:           nr,
@@ -237,5 +308,12 @@ export async function parseRelatorioBookplay(arquivo: File): Promise<ResultadoPa
     }
   }
 
-  return { analitico: [...mapA.values()], diario: [...mapD.values()], erros };
+  return {
+    analitico: [...mapA.values()],
+    diario: [...mapD.values()],
+    colchao,
+    colchaoNaMeta,
+    retencaoRemovidas,
+    erros,
+  };
 }
