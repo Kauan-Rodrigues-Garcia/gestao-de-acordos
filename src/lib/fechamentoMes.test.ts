@@ -87,6 +87,29 @@ describe('estadoFechamento', () => {
     expect(estadoFechamento({ mes: '2026-07', cargo: 'super_admin', hoje: HOJE }))
       .toEqual({ fechado: true, liberadoPorCargo: true, bloqueado: false });
   });
+
+  it('a permissão `ignorar_fechamento_mes` libera quem o cargo bloqueava', () => {
+    expect(estadoFechamento({
+      mes: '2026-07', cargo: 'gerencia', liberadoPorPermissao: true, hoje: HOJE,
+    })).toEqual({ fechado: true, liberadoPorCargo: true, bloqueado: false });
+  });
+
+  it('a permissão não abre mês que ainda nem fechou', () => {
+    // Liberar o cadeado é sobre AUTORIDADE; `fechado` é fato de calendário e não
+    // muda para ninguém. Confundir os dois faria a tela avisar "você está
+    // editando mês fechado" em agosto, dentro de agosto.
+    expect(estadoFechamento({
+      mes: '2026-08', cargo: 'gerencia', liberadoPorPermissao: true, hoje: HOJE,
+    })).toEqual({ fechado: false, liberadoPorCargo: false, bloqueado: false });
+  });
+
+  it('sem a permissão, nada muda para quem não é super_admin', () => {
+    for (const cargo of ['operador', 'lider', 'gerencia', 'diretoria', 'administrador']) {
+      expect(estadoFechamento({
+        mes: '2026-07', cargo, liberadoPorPermissao: false, hoje: HOJE,
+      }).bloqueado, `${cargo} deixou de ser bloqueado`).toBe(true);
+    }
+  });
 });
 
 describe('estadoFechamentoDaData', () => {
@@ -95,6 +118,14 @@ describe('estadoFechamentoDaData', () => {
       .toBe(true);
     expect(estadoFechamentoDaData({ data: '2026-08-01', cargo: 'lider', hoje: HOJE }).bloqueado)
       .toBe(false);
+  });
+
+  it('encaminha a permissão para a regra do mês', () => {
+    // O cadeado por linha da tabela usa esta função. Esquecer de repassar o
+    // parâmetro deixaria a permissão valendo no cabeçalho e não nas linhas.
+    expect(estadoFechamentoDaData({
+      data: '2026-07-31', cargo: 'gerencia', liberadoPorPermissao: true, hoje: HOJE,
+    }).bloqueado).toBe(false);
   });
 
   it('sem data não há cadeado — não dá para fechar o que não tem mês', () => {
@@ -111,7 +142,12 @@ describe('mensagens', () => {
     expect(msg).toContain('fechamento');
   });
 
-  it('a de cargo liberado avisa que está passando por cima', () => {
-    expect(mensagemFechamentoLiberado('2026-07')).toContain('super admin');
+  it('a de quem passa por cima nomeia o mês e diz a consequência', () => {
+    const msg = mensagemFechamentoLiberado('2026-07');
+    expect(msg).toContain('Julho 2026');
+    expect(msg).toContain('já foi apresentado');
+    // Não nomeia cargo: desde `ignorar_fechamento_mes`, quem lê isto pode ser
+    // gerência, e dizer "você é super admin" faria a pessoa ignorar o aviso.
+    expect(msg).not.toContain('super admin');
   });
 });

@@ -25,9 +25,16 @@
  *
  * ## A exceção
  *
- * Só `super_admin` passa pelo cadeado — e passa com aviso visível na tela, não
- * em silêncio. Administrador comum fica bloqueado como todo mundo: a decisão foi
- * que reabrir mês é ato de manutenção, não rotina de gestão.
+ * `super_admin` passa pelo cadeado sempre — e passa com aviso visível na tela,
+ * não em silêncio. É saída de manutenção, e por isso mora aqui em código: se
+ * dependesse de linha de tabela, desligá-la sem querer trancaria o sistema com a
+ * chave do lado de dentro.
+ *
+ * Qualquer outro cargo passa só com a permissão `ignorar_fechamento_mes`, ligada
+ * nominalmente em Configurações › Permissões. Ela nasce desligada para todo
+ * mundo, administrador incluído: a decisão original foi que reabrir mês é ato de
+ * manutenção, não rotina de gestão, e o catálogo não deve revogar sozinho uma
+ * decisão que alguém tomou de propósito (ver `PERMISSOES_EXPLICITAS`).
  *
  * Puro e sem React de propósito, como `mesReferencia.ts`: são regras de
  * calendário e cargo, a parte que precisa ser a mesma em toda tela que pergunta.
@@ -82,7 +89,13 @@ export function mesDaData(iso: string | null | undefined): string | null {
 export interface EstadoFechamento {
   /** O mês em si já fechou (fato de calendário, igual para todo mundo). */
   fechado: boolean;
-  /** O cargo passa pelo cadeado (`super_admin`). */
+  /**
+   * Esta pessoa passa pelo cadeado — por ser `super_admin` ou por ter a
+   * permissão `ignorar_fechamento_mes`.
+   *
+   * O nome ficou de quando a única saída era o cargo. Vale para a tela como
+   * sempre valeu: é o sinal de "você está escrevendo em mês já apresentado".
+   */
   liberadoPorCargo: boolean;
   /** Fechado E sem liberação — é isto que a tela usa para desabilitar. */
   bloqueado: boolean;
@@ -102,13 +115,22 @@ const ABERTO: EstadoFechamento = {
 export function estadoFechamento(params: {
   mes: string | null | undefined;
   cargo: string | null | undefined;
+  /**
+   * A permissão `ignorar_fechamento_mes` já resolvida por quem chamou.
+   *
+   * Entra como parâmetro, e não como consulta aqui dentro, para este arquivo
+   * seguir puro: quem lê permissão precisa de React, e a regra de calendário é
+   * usada em teste, em serviço e em componente.
+   */
+  liberadoPorPermissao?: boolean;
   /** Mês corrente. Só os testes passam — a produção usa o de São Paulo. */
   hoje?: string;
 }): EstadoFechamento {
   const fechado = mesFechado(params.mes, params.hoje ?? mesAtual());
   if (!fechado) return ABERTO;
 
-  const liberadoPorCargo = podeIgnorarFechamento(params.cargo);
+  const liberadoPorCargo =
+    podeIgnorarFechamento(params.cargo) || params.liberadoPorPermissao === true;
   return { fechado: true, liberadoPorCargo, bloqueado: !liberadoPorCargo };
 }
 
@@ -116,11 +138,17 @@ export function estadoFechamento(params: {
 export function estadoFechamentoDaData(params: {
   data: string | null | undefined;
   cargo: string | null | undefined;
+  liberadoPorPermissao?: boolean;
   hoje?: string;
 }): EstadoFechamento {
   const mes = mesDaData(params.data);
   if (!mes) return ABERTO;
-  return estadoFechamento({ mes, cargo: params.cargo, hoje: params.hoje });
+  return estadoFechamento({
+    mes,
+    cargo: params.cargo,
+    liberadoPorPermissao: params.liberadoPorPermissao,
+    hoje: params.hoje,
+  });
 }
 
 /** Rótulo curto do cadeado, para chip e tooltip. */
@@ -137,8 +165,14 @@ export function mensagemFechamento(mes: string | null | undefined): string {
     + 'Baixe o relatório de fechamento para consultar os números do mês.';
 }
 
-/** A frase para quem tem cargo que passa por cima. */
+/**
+ * A frase para quem passa por cima do cadeado.
+ *
+ * Não diz mais "como super admin": desde que a exceção virou permissão, quem lê
+ * isto pode ser gerência com `ignorar_fechamento_mes` ligada, e nomear o cargo
+ * errado faria a pessoa descartar o aviso como se não fosse com ela.
+ */
 export function mensagemFechamentoLiberado(mes: string | null | undefined): string {
-  return `${rotuloDoMes(mes)} está fechado. Você está editando como super admin — `
-    + 'a alteração muda um mês que já foi apresentado.';
+  return `${rotuloDoMes(mes)} está fechado, e você tem permissão para escrever `
+    + 'assim mesmo — a alteração muda um mês que já foi apresentado.';
 }

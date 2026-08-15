@@ -18,8 +18,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   PERMISSOES, CHAVES_PERMISSAO, PERMISSOES_POR_CHAVE,
-  CARGOS_CONFIGURAVEIS, CARGOS_ACESSO_TOTAL,
+  CARGOS_CONFIGURAVEIS, CARGOS_ACESSO_TOTAL, PERMISSOES_EXPLICITAS,
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
+  exigeConcessaoExplicita,
 } from './permissoes-catalogo';
 
 const RAIZ_SRC = path.resolve(__dirname, '..');
@@ -54,6 +55,9 @@ const CODIGO = varrer(RAIZ_SRC)
 function chavesFiscalizadas(): Set<string> {
   const achadas = new Set<string>();
   for (const m of CODIGO.matchAll(/temPermissao\(\s*['"]([a-z_]+)['"]\s*\)/g)) achadas.add(m[1]);
+  // As chaves que o acesso total não concede sozinho passam por outra função.
+  // Sem esta linha elas pareceriam decorativas e o primeiro teste acusaria.
+  for (const m of CODIGO.matchAll(/temPermissaoExplicita\(\s*['"]([a-z_]+)['"]\s*\)/g)) achadas.add(m[1]);
   for (const m of CODIGO.matchAll(/requiredPermissao=["']([a-z_]+)["']/g)) achadas.add(m[1]);
   for (const m of CODIGO.matchAll(/permissao:\s*['"]([a-z_]+)['"]/g)) achadas.add(m[1]);
   return achadas;
@@ -95,6 +99,16 @@ describe('catálogo — integridade', () => {
       expect(p.label.trim(), `rótulo vazio em ${p.key}`).not.toBe('');
       expect(p.descricao.trim(), `descrição vazia em ${p.key}`).not.toBe('');
     }
+  });
+
+  it('toda chave explícita existe no catálogo', () => {
+    // Uma chave em `PERMISSOES_EXPLICITAS` que não esteja no catálogo seria um
+    // poder impossível de conceder: nenhuma tela desenharia o toggle.
+    for (const k of PERMISSOES_EXPLICITAS) {
+      expect(PERMISSOES_POR_CHAVE[k], `${k} não está no catálogo`).toBeDefined();
+      expect(exigeConcessaoExplicita(k)).toBe(true);
+    }
+    expect(exigeConcessaoExplicita('ver_analitico')).toBe(false);
   });
 
   it('as duas chaves aposentadas não voltaram', () => {
@@ -177,10 +191,12 @@ describe('padrões de semeadura', () => {
     expect(operador.ver_logs).toBe(false);
   });
 
-  it('administrador e super_admin nascem com tudo ligado', () => {
+  it('administrador e super_admin nascem com tudo ligado, menos o que exige concessão', () => {
     for (const cargo of CARGOS_ACESSO_TOTAL) {
       const mapa = permissoesPadraoDoCargo(cargo);
-      expect(Object.values(mapa).every(Boolean), `${cargo} não veio completo`).toBe(true);
+      const desligadas = Object.entries(mapa).filter(([, v]) => !v).map(([k]) => k);
+      expect(desligadas.sort(), `${cargo} veio errado`)
+        .toEqual([...PERMISSOES_EXPLICITAS].sort());
     }
   });
 
@@ -189,6 +205,20 @@ describe('padrões de semeadura', () => {
     expect(operador.criar_acordos).toBe(true);
     expect(operador.editar_acordos).toBe(true);
     expect(operador.ver_analitico).toBe(true);
+  });
+
+  /**
+   * O contrato que eu prometi ao ligar o cadeado do mês no catálogo: nenhuma
+   * pessoa passa a poder algo que não podia antes. Se um `padrao` for editado
+   * para conceder uma chave explícita, este teste denuncia.
+   */
+  it('nenhum cargo nasce podendo escrever em mês fechado', () => {
+    for (const cargo of [...CARGOS_CONFIGURAVEIS, ...CARGOS_ACESSO_TOTAL]) {
+      const mapa = permissoesPadraoDoCargo(cargo);
+      for (const chave of PERMISSOES_EXPLICITAS) {
+        expect(mapa[chave], `${cargo} nasceu com ${chave} ligada`).toBe(false);
+      }
+    }
   });
 
   it('ouvidoria nasce com a própria aba e sem as de gestão', () => {

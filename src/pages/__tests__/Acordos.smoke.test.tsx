@@ -53,6 +53,9 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     todasPermissoes: [],
     loading: false,
     temPermissao: vi.fn(() => false),
+    // As chaves que o acesso total não concede sozinho (`ignorar_fechamento_mes`)
+    // passam por aqui; sem a função, `useFechamentoMes` estoura.
+    temPermissaoExplicita: vi.fn(() => false),
     isAdmin: false,
     refresh: vi.fn(),
   }),

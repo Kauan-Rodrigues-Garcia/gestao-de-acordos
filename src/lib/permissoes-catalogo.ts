@@ -41,6 +41,30 @@ export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
  */
 export const CARGOS_ACESSO_TOTAL = ['administrador', 'super_admin'] as const;
 
+/**
+ * Chaves que o acesso total NÃO concede sozinho.
+ *
+ * "Administrador pode tudo" é verdade sobre o produto do dia a dia, e deixa de
+ * ser verdade quando a permissão desfaz um fato já publicado. Reabrir mês
+ * fechado é assim: o relatório de agosto já circulou por WhatsApp, e reescrevê-lo
+ * em setembro muda um número que a diretoria leu — em silêncio, porque quem
+ * recebeu o arquivo não é avisado.
+ *
+ * Sem esta lista, ligar `ignorar_fechamento_mes` no catálogo teria liberado o
+ * cadeado para TODO administrador no mesmo deploy, sem ninguém decidir isso: o
+ * `temPermissao` responde `true` para acesso total antes de consultar tabela
+ * nenhuma. A lista existe para que ampliar a exceção continue sendo uma escolha
+ * registrada, e não efeito colateral de uma chave nova.
+ *
+ * Quem lê estas chaves é `temPermissaoExplicita`, nunca `temPermissao`.
+ */
+export const PERMISSOES_EXPLICITAS = ['ignorar_fechamento_mes'] as const;
+
+/** A chave precisa de concessão nominal, mesmo para quem tem acesso total? */
+export function exigeConcessaoExplicita(key: string): boolean {
+  return (PERMISSOES_EXPLICITAS as readonly string[]).includes(key);
+}
+
 export type TenantSlug = 'bookplay' | 'pagueplay';
 
 export const GRUPOS_PERMISSAO = [
@@ -276,6 +300,14 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Aprovar ou desaprovar um Pix — decide comissão',
     grupo: 'Ações específicas', tenants: ['bookplay'], padrao: LIDERANCA,
   },
+  {
+    key: 'ignorar_fechamento_mes', label: 'Escrever em mês fechado',
+    descricao:
+      'Criar, editar e excluir em mês já encerrado. O super admin sempre pode; '
+      + 'ligue aqui para abrir a exceção a outro cargo — a alteração muda um mês '
+      + 'cujo relatório já circulou',
+    grupo: 'Ações específicas', padrao: {},
+  },
 ];
 
 /** Índice por chave, para consulta direta. */
@@ -308,13 +340,21 @@ export function gruposDoTenant(slug: string | null | undefined): GrupoPermissao[
  * É o que a migration semeia e o que a tela usa quando o banco ainda não tem a
  * linha. Chave ausente do `padrao` nasce `false`: depois de 2026-08-15, ausência
  * significa NEGADO, e não mais "provavelmente pode".
+ *
+ * Acesso total nasce com tudo ligado, exceto as chaves de `PERMISSOES_EXPLICITAS`
+ * — inclusive para o super admin. Não é contradição: o que libera o super admin
+ * do cadeado do mês é `CARGOS_QUE_IGNORAM_FECHAMENTO`, em código, justamente para
+ * que a saída de emergência não dependa de uma linha de tabela que alguém possa
+ * desligar sem querer.
  */
 export function permissoesPadraoDoCargo(cargo: string): Record<string, boolean> {
   const total = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
   return Object.fromEntries(
     PERMISSOES.map(p => [
       p.key,
-      total ? true : (p.padrao[cargo as CargoConfiguravel] ?? false),
+      total && !exigeConcessaoExplicita(p.key)
+        ? true
+        : (p.padrao[cargo as CargoConfiguravel] ?? false),
     ]),
   );
 }

@@ -70,6 +70,15 @@ interface UseCargoPermissoesReturn {
   loading: boolean;
   /** A pergunta que o app inteiro faz. */
   temPermissao: (key: string) => boolean;
+  /**
+   * A mesma pergunta, SEM o atalho do acesso total.
+   *
+   * Para as chaves de `PERMISSOES_EXPLICITAS`: o passo 1 da regra lá em cima
+   * responde "sim" para administrador antes de olhar tabela nenhuma, e há poder
+   * que ninguém deve receber por herança de cargo — só por concessão nominal.
+   * Ver o comentário da lista em `permissoes-catalogo.ts`.
+   */
+  temPermissaoExplicita: (key: string) => boolean;
   /** admin e super_admin: acesso total por construção (migration 20260812b). */
   isAdmin: boolean;
   /** Resolve para OUTRA pessoa — a tela de administração usa para prever. */
@@ -183,6 +192,15 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     [isAdmin, excecoes, permissoes],
   );
 
+  const temPermissaoExplicita = useCallback(
+    (key: string): boolean => {
+      if (key in excecoes)   return !!excecoes[key];
+      if (key in permissoes) return !!permissoes[key];
+      return false;
+    },
+    [excecoes, permissoes],
+  );
+
   const resolverParaUsuario = useCallback(
     (usuarioId: string, cargoAlvo: string, key: string): boolean => {
       if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
@@ -219,6 +237,7 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     todasExcecoes,
     loading,
     temPermissao,
+    temPermissaoExplicita,
     isAdmin,
     resolverParaUsuario,
     valorDoCargo,

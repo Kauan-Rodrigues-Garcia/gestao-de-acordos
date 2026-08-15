@@ -6,6 +6,18 @@
  * mês?" toda vez, e a resposta errada só apareceria depois de o arquivo já ter
  * sido enviado para alguém.
  *
+ * ## Só existe em mês fechado
+ *
+ * Mês corrente não tem fechamento — tem parcial. O arquivo sai igual ao de um
+ * mês encerrado, com o mesmo nome e o mesmo cabeçalho, e ninguém que o recebesse
+ * por WhatsApp saberia que os números ainda vão mudar até o dia 31.
+ *
+ * Por isso o botão SOME, em vez de ficar desabilitado: um botão cinza convida a
+ * perguntar "por que não posso baixar?", e a resposta ("porque o mês não acabou")
+ * é justamente o que a ausência dele já diz. É a mesma regra de calendário de
+ * `mesFechado`, então não há cargo que mude isso: super admin também não baixa
+ * fechamento de mês aberto, porque o arquivo não existiria.
+ *
  * ## Quem baixa o quê
  *
  * O nível sai do cargo, pela mesma função do painel (`veTodosOsSetores`), e é
@@ -29,6 +41,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
 import { isPerfilAdminOuLider } from '@/lib/index';
 import { rotuloDoMes } from '@/lib/mesReferencia';
+import { mesFechado } from '@/lib/fechamentoMes';
 import { baixarRelatorioFechamento } from '@/services/fechamento/baixarFechamento';
 import type { NivelFechamento } from '@/services/fechamento/tipos';
 import { cn } from '@/lib/utils';
@@ -51,6 +64,10 @@ export function BotaoFechamento({
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
   const [gerando, setGerando] = useState(false);
+
+  // Depois dos hooks, nunca antes: a ordem tem de ser a mesma em todo render,
+  // e `mes` muda no seletor sem desmontar o componente.
+  if (!mesFechado(mes)) return null;
 
   const cargo = perfil?.perfil ?? '';
   const vejoTudo = veTodosOsSetores(cargo, temPermissao);

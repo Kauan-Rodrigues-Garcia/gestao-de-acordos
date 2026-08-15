@@ -49,6 +49,27 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => AUTH_FIXO,
 }));
 
+// O cadeado de mês fechado entrou nesta tela, e ele consulta permissão — que
+// por sua vez consulta a empresa. Sem estes dois, o `useEmpresa` real cobra o
+// provider e a moldura nem chega a montar.
+vi.mock('@/hooks/useEmpresa', () => ({
+  useEmpresa: () => ({ empresa: { id: 'e-1', nome: 'Teste' }, tenantSlug: 'bookplay' }),
+}));
+
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({
+    permissoes: {},
+    excecoes: {},
+    todasPermissoes: [],
+    todasExcecoes: [],
+    loading: false,
+    temPermissao: () => true,
+    temPermissaoExplicita: () => false,
+    isAdmin: false,
+    refresh: vi.fn(),
+  }),
+}));
+
 /** Resposta de `.single()` no carregamento do acordo em modo edição. */
 let acordoCarregado: { data: unknown; error: { message: string } | null } = {
   data: { id: 'acordo-1', nome_cliente: 'Joao', nr_cliente: '777' },

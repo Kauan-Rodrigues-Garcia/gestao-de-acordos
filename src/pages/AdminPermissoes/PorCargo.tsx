@@ -143,6 +143,14 @@ export function PorCargo() {
             banco, e o app responde &laquo;pode&raquo; antes mesmo de consultar a tabela.
             Para tirar o acesso de alguém, <strong>troque o cargo da pessoa</strong>.
           </p>
+          {/* A exceção existe; omiti-la faria o painel prometer mais do que
+              entrega, justamente no ponto em que a diferença aparece. */}
+          <p className="text-muted-foreground mt-2 leading-relaxed border-t border-border/60 pt-2">
+            <strong className="text-foreground">Uma exceção:</strong> escrever em
+            mês já fechado não vem junto. Só o super admin passa por esse cadeado,
+            e ele passa por regra de código — não por esta tela. É o único poder
+            aqui que ninguém herda de &laquo;acesso total&raquo;.
+          </p>
         </div>
       ) : (
         <>
