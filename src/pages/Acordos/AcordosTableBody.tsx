@@ -18,8 +18,9 @@ import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
 import { VinculoTag } from '@/components/VinculoTag';
+import { AcordoTags } from '@/components/AcordoTags';
 import { OperadorCell } from '@/components/OperadorCell';
-import type { Acordo } from '@/lib/supabase';
+import type { Acordo, AcordoTag } from '@/lib/supabase';
 import type { AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { ensureAbsoluteUrl } from './helpers';
 
@@ -40,6 +41,8 @@ export interface AcordosTableBodyProps {
   atualizandoStatus: string | null;
   excluindoId: string | null;
   operadoresMap: Record<string, string>;
+  /** Definições de tag da empresa; `tag_ids` do acordo só guarda o id. */
+  empresaTags: AcordoTag[];
   temFiltros: boolean;
   selecionarTodos: () => void;
   toggleSelecionado: (id: string) => void;
@@ -58,7 +61,7 @@ export interface AcordosTableBodyProps {
 export function AcordosTableBody({
   acordosParaExibir, acordosCount, isPP, colSpanFull, mostrarColunaOperador, podeEditar, podeExcluir, novoInlineAberto,
   hoje, highlightedId, selecionados, editandoInlineId, detalheInlineId,
-  atualizandoStatus, excluindoId, operadoresMap, temFiltros,
+  atualizandoStatus, excluindoId, operadoresMap, empresaTags, temFiltros,
   selecionarTodos, toggleSelecionado, setNovoInlineAberto,
   addAcordo, removeAcordo, patchAcordo,
   setEditandoInlineId, setDetalheInlineId,
@@ -183,8 +186,9 @@ export function AcordosTableBody({
                 {isPP ? (
                   <>
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                        <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
                         <VinculoTag acordo={a} />
                       </div>
                     </td>
@@ -237,8 +241,9 @@ export function AcordosTableBody({
                       <CodigoAcordoCopiavel codigo={a.nr_cliente} label="NR" />
                     </td>
                     <td className="px-3 py-2.5">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <p className="font-medium text-foreground leading-none">{a.nome_cliente}</p>
+                        <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
                         <VinculoTag acordo={a} />
                       </div>
                       {a.instituicao && (

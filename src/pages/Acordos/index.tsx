@@ -11,6 +11,7 @@ import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
@@ -99,6 +100,8 @@ export default function Acordos() {
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos',
   );
+
+  const { tags: empresaTags } = useEmpresaTags();
 
   const [operadoresMap, setOperadoresMap] = useState<Record<string, string>>({});
   const [selecionados, setSelecionados]   = useState<string[]>([]);
@@ -716,6 +719,7 @@ export default function Acordos() {
                     atualizandoStatus={atualizandoStatus}
                     excluindoId={excluindoId}
                     operadoresMap={operadoresMap}
+                    empresaTags={empresaTags}
                     temFiltros={temFiltros}
                     selecionarTodos={selecionarTodos}
                     toggleSelecionado={toggleSelecionado}

@@ -13,6 +13,7 @@ import { acordoTemCpf } from '@/lib/cpf';
 import { AvisoCpfAcordo } from '@/components/AvisoCpfAcordo';
 import { CodigoAcordoCopiavel } from '@/components/CodigoAcordoCopiavel';
 import { VinculoTag } from '@/components/VinculoTag';
+import { AcordoTags } from '@/components/AcordoTags';
 import { OperadorCell } from '@/components/OperadorCell';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
 import { AcordoDetalheInline } from '@/components/AcordoDetalheInline';
@@ -157,20 +158,7 @@ export function PPTableBody({
                   <CodigoAcordoCopiavel codigo={a.instituicao} label="Código" />
                   <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                     <p className="font-medium text-foreground leading-none text-[10px] text-muted-foreground font-mono">{a.nome_cliente}</p>
-                    {(a.tag_ids ?? []).map(tid => {
-                      const tag = empresaTags.find(t => t.id === tid);
-                      if (!tag) return null;
-                      return (
-                        <span
-                          key={tid}
-                          className="inline-flex items-center font-bold uppercase rounded-full border px-1.5 py-0.5 text-[9px] whitespace-nowrap"
-                          style={{ backgroundColor: `${tag.cor}22`, color: tag.cor, borderColor: `${tag.cor}55` }}
-                          title={tag.nome}
-                        >
-                          {tag.nome}
-                        </span>
-                      );
-                    })}
+                    <AcordoTags tagIds={a.tag_ids} tags={empresaTags} />
                     <VinculoTag acordo={a} />
                   </div>
                 </div>
