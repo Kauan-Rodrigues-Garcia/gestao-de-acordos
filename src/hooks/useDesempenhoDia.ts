@@ -13,16 +13,14 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
-import { useCargoPermissoes } from './useCargoPermissoes';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarAnaliticoPeriodo, somarPorDia, buscarAcordosDoDia,
   contarFormalizadosDoDia, buscarPixDoDia, buscarMetaDoEscopo,
-  escopoDoPainel, diasAntes,
-  type AcordoDoDia, type LinhaPixDia,
+  resolverEscopoDoDia, diasAntes,
+  type AcordoDoDia, type LinhaPixDia, type EscopoDoDia,
 } from '@/services/desempenhoDia/desempenhoDia.service';
 import {
   barraEstados, metaDoDia, variacao, mediaDiasUteisAnteriores,
@@ -31,7 +29,6 @@ import {
   type ResumoPixDia, type FatiaTag,
 } from '@/lib/desempenhoDia';
 import { metaNaUnidade, type UnidadeValor } from '@/lib/unidadeValor';
-import { isPerfilAdmin, isPerfilLider } from '@/lib/index';
 import type { AcordoTag } from '@/lib/supabase';
 
 /**
@@ -42,8 +39,6 @@ import type { AcordoTag } from '@/lib/supabase';
  * inflar a página.
  */
 const JANELA_DIAS = 14;
-
-export interface OperadorItem { id: string; nome: string }
 
 export interface ParametrosDesempenhoDia {
   /**
@@ -62,8 +57,6 @@ export interface ParametrosDesempenhoDia {
   aberto: boolean;
   /** 'yyyy-MM-dd' */
   dia: string;
-  /** `null` = todas as pessoas que eu enxergo. */
-  operadorId: string | null;
   /** PaguePlay: H.O. ou bruto. Ignorado na BookPlay. */
   unidade: UnidadeValor;
   /** O setor tem a lógica Direto/Extra? Só então o bloco aparece. */
@@ -100,8 +93,8 @@ export interface DadosDesempenhoDia {
   pix: ResumoPixDia | null;
   tags: FatiaTag[];
 
-  operadores: OperadorItem[];
-  podeVerOutros: boolean;
+  /** O que o painel está somando: «Equipe Matheus», «Setor Receptivo»… */
+  escopoRotulo: string;
   refetch: () => Promise<void>;
 }
 
@@ -112,20 +105,14 @@ const SEM_VARIACAO: Variacao = { pct: null, base: 0 };
 
 export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempenhoDia {
   const {
-    aberto, dia, operadorId, unidade, temLogicaDiretoExtra, isPaguePlay, tags,
+    aberto, dia, unidade, temLogicaDiretoExtra, isPaguePlay, tags,
   } = params;
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
 
   const cargo = perfil?.perfil ?? '';
-  const ehAdmin = isPerfilAdmin(cargo);
-  const ehLider = isPerfilLider(cargo);
-  const ehDiretoria = cargo === 'diretoria';
-  const podeVerOutros = ehAdmin || ehLider || ehDiretoria || temPermissao('ver_acordos_gerais');
-  const vejoTodos = ehAdmin || ehDiretoria || temPermissao('ver_todos_setores');
 
-  const [operadores, setOperadores] = useState<OperadorItem[]>([]);
+  const [escopoDoDia, setEscopoDoDia] = useState<EscopoDoDia | null>(null);
   const [porDiaBruto, setPorDiaBruto] = useState<Record<string, number>>({});
   const [porDiaHo, setPorDiaHo]       = useState<Record<string, number>>({});
   const [acordos, setAcordos]         = useState<AcordoDoDia[]>([]);
@@ -144,64 +131,56 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
    */
   const requisicao = useRef(0);
 
-  /** O setor que recorta a leitura quando não vejo a empresa toda. */
-  const setorDoRecorte = useMemo(
-    () => (!vejoTodos && ehLider ? perfil?.setor_id ?? null : null),
-    [vejoTodos, ehLider, perfil?.setor_id],
-  );
-
-  // ── Operadores do seletor ──────────────────────────────────────────────────
+  // ── Escopo: consequência do cargo, resolvido uma vez ───────────────────────
+  // A regra inteira mora em `resolverEscopoDoDia`. Aqui só se guarda o
+  // resultado, para as seis consultas do dia partirem todas do mesmo recorte.
   useEffect(() => {
     let cancelado = false;
-    async function carregar() {
-      if (!aberto || !empresa?.id || !podeVerOutros) { setOperadores([]); return; }
-
-      let q = supabase
-        .from('perfis')
-        .select('id, nome')
-        .eq('empresa_id', empresa.id)
-        .in('perfil', ['operador', 'elite', 'gerencia'])
-        .order('nome');
-
-      if (setorDoRecorte) q = q.eq('setor_id', setorDoRecorte);
-
-      const { data } = await q;
-      if (cancelado) return;
-      setOperadores(((data as OperadorItem[] | null) ?? []).map(o => ({ id: o.id, nome: o.nome })));
+    async function resolver() {
+      if (!aberto || !empresa?.id || !perfil?.id || !cargo) return;
+      const r = await resolverEscopoDoDia({
+        empresaId: empresa.id,
+        perfilId: perfil.id,
+        cargo,
+        setorId: perfil.setor_id ?? null,
+      });
+      if (!cancelado) setEscopoDoDia(r);
     }
-    void carregar();
+    void resolver();
     return () => { cancelado = true; };
-  }, [aberto, empresa?.id, podeVerOutros, setorDoRecorte]);
+  }, [aberto, empresa?.id, perfil?.id, perfil?.setor_id, cargo]);
 
-  const idsVisiveis = useMemo(() => operadores.map(o => o.id), [operadores]);
-  const idsChave = idsVisiveis.join(',');
-
-  const escopo = useMemo(
-    () => escopoDoPainel({
-      operadorSelecionado: operadorId,
-      vejoTodos,
-      meuId: perfil?.id ?? '',
-      operadoresVisiveis: idsChave ? idsChave.split(',') : [],
-    }),
-    // `idsChave` no lugar do array: identidade estável evita refazer a busca a
-    // cada render só porque o array é novo.
-    [operadorId, vejoTodos, perfil?.id, idsChave],
-  );
-
-  /** Quando o escopo é uma pessoa só, o filtro desce ao banco. */
-  const operadorDaQuery = operadorId ?? (podeVerOutros ? null : perfil?.id ?? null);
+  /**
+   * Identidade estável do escopo.
+   *
+   * O objeto vem de uma consulta, então é novo a cada resolução; sem uma chave
+   * de texto nas dependências, o `useCallback` da busca mudaria de identidade a
+   * cada render e o painel entraria em laço de consulta.
+   */
+  const escopoChave = escopoDoDia
+    ? `${escopoDoDia.rotulo}|${escopoDoDia.operadorId ?? ''}|${escopoDoDia.setorId ?? ''}|`
+      + (escopoDoDia.escopo.tipo === 'equipe'
+        ? [...escopoDoDia.escopo.operadores].sort().join(',')
+        : escopoDoDia.escopo.tipo)
+    : '';
 
   const buscar = useCallback(async () => {
     // Fechado: sai sem mexer em `carregando`. Zerá-lo aqui faria a primeira
     // abertura mostrar «nenhum acordo» por um quadro, antes de a busca começar —
     // um vazio que parece resposta.
     if (!aberto) return;
-    if (!empresa?.id || !perfil?.id || !dia) { setCarregando(false); return; }
+    // Sem escopo resolvido não há o que buscar: sair antes evita uma primeira
+    // rodada com o recorte errado, que apareceria como número piscando.
+    if (!empresa?.id || !perfil?.id || !dia || !escopoDoDia) { return; }
 
     const meu = ++requisicao.current;
     setCarregando(true);
 
     const [ano, mesNum] = dia.split('-').map(Number);
+    const { operadorId: opDaQuery, setorId: setorDaQuery } = escopoDoDia;
+    const membros = escopoDoDia.escopo.tipo === 'equipe'
+      ? [...escopoDoDia.escopo.operadores]
+      : [];
 
     try {
       const [analitico, doDia, qtdFormalizados, pix, meta, config] = await Promise.all([
@@ -209,32 +188,35 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
           empresaId: empresa.id,
           de: diasAntes(dia, JANELA_DIAS),
           ate: dia,
-          operadorId: operadorDaQuery,
+          operadorId: opDaQuery,
         }),
         buscarAcordosDoDia({
           empresaId: empresa.id, dia,
-          operadorId: operadorDaQuery, setorId: setorDoRecorte,
+          operadorId: opDaQuery, setorId: setorDaQuery,
+          operadores: membros,
         }),
         contarFormalizadosDoDia({
           empresaId: empresa.id, dia,
-          operadorId: operadorDaQuery, setorId: setorDoRecorte,
+          operadorId: opDaQuery, setorId: setorDaQuery,
+          operadores: membros,
         }),
         buscarPixDoDia({
           empresaId: empresa.id, dia, isPaguePlay,
-          operadorId: operadorDaQuery, setorId: setorDoRecorte,
+          operadorId: opDaQuery, setorId: setorDaQuery,
+          operadores: membros,
         }),
         buscarMetaDoEscopo({
           empresaId: empresa.id, mes: mesNum, ano,
-          operadorId: operadorDaQuery,
-          setorId: setorDoRecorte,
-          operadoresDoEscopo: idsChave ? idsChave.split(',') : [],
+          operadorId: opDaQuery,
+          setorId: setorDaQuery,
+          operadoresDoEscopo: membros,
         }),
         getMetasConfig(empresa.id, mesNum, ano),
       ]);
 
       if (meu !== requisicao.current) return;   // chegou tarde: outra data manda
 
-      const somas = somarPorDia(analitico.linhas, escopo);
+      const somas = somarPorDia(analitico.linhas, escopoDoDia.escopo);
       setPorDiaBruto(somas.bruto);
       setPorDiaHo(somas.ho);
       setAcordos(doDia.acordos);
@@ -250,10 +232,10 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     } finally {
       if (meu === requisicao.current) setCarregando(false);
     }
-  }, [
-    aberto, empresa?.id, perfil?.id, dia, operadorDaQuery, setorDoRecorte,
-    isPaguePlay, idsChave, escopo,
-  ]);
+    // `escopoChave` e não `escopoDoDia`: o objeto é novo a cada resolução, e a
+    // referência nas dependências poria a busca em laço.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto, empresa?.id, perfil?.id, dia, isPaguePlay, escopoChave]);
 
   useEffect(() => { void buscar(); }, [buscar]);
 
@@ -335,8 +317,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     diretoExtra,
     pix,
     tags: fatias,
-    operadores,
-    podeVerOutros,
+    escopoRotulo: escopoDoDia?.rotulo ?? '',
     refetch: buscar,
   };
 }

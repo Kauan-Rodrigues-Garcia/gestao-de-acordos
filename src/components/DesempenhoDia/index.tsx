@@ -36,9 +36,6 @@ import { useDesempenhoDia } from '@/hooks/useDesempenhoDia';
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { getTodayISO } from '@/lib/index';
 import { lerUnidade, gravarUnidade, type UnidadeValor } from '@/lib/unidadeValor';
 import { cn } from '@/lib/utils';
@@ -67,7 +64,6 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const semMovimento = useReducedMotion();
 
   const [dia, setDia] = useState(getTodayISO());
-  const [operadorId, setOperadorId] = useState<string | null>(null);
   const [unidade, setUnidade] = useState<UnidadeValor>(() => lerUnidade(perfil?.id));
 
   const ehHoje = dia === getTodayISO();
@@ -81,7 +77,6 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const dados = useDesempenhoDia({
     aberto,
     dia,
-    operadorId,
     unidade,
     temLogicaDiretoExtra,
     isPaguePlay: tenant.isPaguePlay,
@@ -124,8 +119,6 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
     window.addEventListener('keydown', aoPressionar);
     return () => window.removeEventListener('keydown', aoPressionar);
   }, [aberto, onClose, andar]);
-
-  const operadorAtual = dados.operadores.find(o => o.id === operadorId);
 
   /** Entrada escalonada por faixa. Com movimento reduzido, tudo aparece junto. */
   const faixa = (indice: number) => (semMovimento ? {} : {
@@ -185,12 +178,14 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
                 </span>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold leading-none">Desempenho do Dia</p>
+                  {/*
+                    O escopo é dito, não escolhido. Ele sai do cargo — equipe
+                    para líder, setor para gerência — e a regra inteira mora em
+                    `resolverEscopoDoDia`.
+                  */}
                   <p className="mt-1 flex items-center gap-1 truncate text-[11px] leading-none text-muted-foreground">
-                    {operadorAtual
-                      ? <><Users className="h-3 w-3 shrink-0" />{operadorAtual.nome}</>
-                      : dados.podeVerOutros
-                        ? 'Todas as pessoas que você enxerga'
-                        : 'Os seus números'}
+                    <Users className="h-3 w-3 shrink-0" />
+                    {dados.escopoRotulo || '—'}
                   </p>
                 </div>
               </div>
@@ -218,7 +213,13 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
             </header>
 
             {/* ── Controles ── */}
-            <div className="shrink-0 space-y-2 border-b border-border/60 px-4 py-2.5">
+            {/*
+              Só a data. O seletor de pessoa que havia aqui saiu: o painel é uma
+              espiada rápida, não a ferramenta de análise, e obrigava a responder
+              «o dia de quem?» toda vez para uma resposta quase sempre igual.
+              Quem precisa recortar por pessoa tem a aba Analítico.
+            */}
+            <div className="shrink-0 border-b border-border/60 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
@@ -245,23 +246,6 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
                   </Button>
                 )}
               </div>
-
-              {dados.podeVerOutros && dados.operadores.length > 0 && (
-                <Select
-                  value={operadorId ?? '__todos'}
-                  onValueChange={v => setOperadorId(v === '__todos' ? null : v)}
-                >
-                  <SelectTrigger className="h-7 w-full rounded-lg border-border/70 text-xs">
-                    <SelectValue placeholder="Todas as pessoas" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__todos">Todas as pessoas</SelectItem>
-                    {dados.operadores.map(o => (
-                      <SelectItem key={o.id} value={o.id}>{o.nome}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
             </div>
 
             {/* ── Conteúdo ── */}

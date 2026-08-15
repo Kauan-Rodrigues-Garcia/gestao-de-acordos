@@ -122,28 +122,54 @@ export function somarPorDia(
 }
 
 /**
+ * O recorte que as consultas de `acordos` e de Pix recebem.
+ *
+ * Exatamente uma das três formas vale, na ordem: uma pessoa, um conjunto de
+ * pessoas (equipe), ou um setor. Os três campos existem porque o escopo do
+ * painel produz um deles conforme o cargo — ver `resolverEscopoDoDia`.
+ */
+interface RecorteConsulta {
+  empresaId: string;
+  operadorId?: string | null;
+  operadores?: readonly string[];
+  setorId?: string | null;
+}
+
+/**
+ * Aplica o recorte a uma consulta já montada.
+ *
+ * Numa função só para as quatro consultas não divergirem — foi assim que as
+ * quatro listas de autorização de tabulação passaram a discordar entre si (ver
+ * `PERFIS_AUTORIZADORES` em `lib/index.ts`).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- o builder do PostgREST muda de tipo a cada filtro encadeado.
+function aplicarRecorte<T extends { eq: any; in: any }>(q: T, r: RecorteConsulta): T {
+  if (r.operadorId) return q.eq('operador_id', r.operadorId);
+  if (r.operadores?.length) return q.in('operador_id', [...r.operadores]);
+  if (r.setorId) return q.eq('setor_id', r.setorId);
+  return q;
+}
+
+/**
  * Os acordos com vencimento no dia.
  *
  * O recorte é por VENCIMENTO, e não pela data em que alguém marcou como pago:
  * tabular hoje um acordo que venceu ontem tem de contar ontem, senão o dia de
  * ontem muda de número toda vez que alguém abre o sistema.
  */
-export async function buscarAcordosDoDia(params: {
-  empresaId: string;
+export async function buscarAcordosDoDia(params: RecorteConsulta & {
   dia: string;
-  operadorId?: string | null;
-  setorId?: string | null;
 }): Promise<{ acordos: AcordoDoDia[]; erro: string | null }> {
-  const { empresaId, dia, operadorId, setorId } = params;
+  const { empresaId, dia } = params;
 
-  let q = supabase
-    .from('acordos')
-    .select('status, valor, tipo_vinculo, tag_ids')
-    .eq('empresa_id', empresaId)
-    .eq('vencimento', dia);
-
-  if (operadorId)   q = q.eq('operador_id', operadorId);
-  else if (setorId) q = q.eq('setor_id', setorId);
+  const q = aplicarRecorte(
+    supabase
+      .from('acordos')
+      .select('status, valor, tipo_vinculo, tag_ids')
+      .eq('empresa_id', empresaId)
+      .eq('vencimento', dia),
+    params,
+  );
 
   const { data, error } = await q;
   if (error) return { acordos: [], erro: error.message };
@@ -151,24 +177,21 @@ export async function buscarAcordosDoDia(params: {
 }
 
 /** Quantos acordos foram CRIADOS no dia — o outro lado do trabalho. */
-export async function contarFormalizadosDoDia(params: {
-  empresaId: string;
+export async function contarFormalizadosDoDia(params: RecorteConsulta & {
   dia: string;
-  operadorId?: string | null;
-  setorId?: string | null;
 }): Promise<number> {
-  const { empresaId, dia, operadorId, setorId } = params;
+  const { empresaId, dia } = params;
   const amanha = diaSeguinte(dia);
 
-  let q = supabase
-    .from('acordos')
-    .select('id', { count: 'exact', head: true })
-    .eq('empresa_id', empresaId)
-    .gte('criado_em', `${dia}T00:00:00`)
-    .lt('criado_em', `${amanha}T00:00:00`);
-
-  if (operadorId)   q = q.eq('operador_id', operadorId);
-  else if (setorId) q = q.eq('setor_id', setorId);
+  const q = aplicarRecorte(
+    supabase
+      .from('acordos')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .gte('criado_em', `${dia}T00:00:00`)
+      .lt('criado_em', `${amanha}T00:00:00`),
+    params,
+  );
 
   const { count, error } = await q;
   if (error) return 0;
@@ -182,26 +205,23 @@ export async function contarFormalizadosDoDia(params: {
  * de ontem aprovado hoje continua sendo produção de ontem, e mudá-lo de dia
  * reescreveria um número que a equipe já leu.
  */
-export async function buscarPixDoDia(params: {
-  empresaId: string;
+export async function buscarPixDoDia(params: RecorteConsulta & {
   dia: string;
   isPaguePlay: boolean;
-  operadorId?: string | null;
-  setorId?: string | null;
 }): Promise<LinhaPixDia[]> {
-  const { empresaId, dia, isPaguePlay, operadorId, setorId } = params;
+  const { empresaId, dia, isPaguePlay } = params;
   if (isPaguePlay) return [];
 
   const amanha = diaSeguinte(dia);
-  let q = supabase
-    .from('pix_automatico_acordos')
-    .select('status, valor, pct_comissao')
-    .eq('empresa_id', empresaId)
-    .gte('criado_em', `${dia}T00:00:00`)
-    .lt('criado_em', `${amanha}T00:00:00`);
-
-  if (operadorId)   q = q.eq('operador_id', operadorId);
-  else if (setorId) q = q.eq('setor_id', setorId);
+  const q = aplicarRecorte(
+    supabase
+      .from('pix_automatico_acordos')
+      .select('status, valor, pct_comissao')
+      .eq('empresa_id', empresaId)
+      .gte('criado_em', `${dia}T00:00:00`)
+      .lt('criado_em', `${amanha}T00:00:00`),
+    params,
+  );
 
   const { data, error } = await q;
   if (error) return [];
@@ -266,28 +286,162 @@ export async function buscarMetaDoEscopo(params: {
 }
 
 /**
- * O escopo do analítico a partir de quem está olhando.
+ * O que o painel mostra, por cargo.
  *
- * `equipe` é o tipo usado para «as pessoas que eu enxergo» — ele casa a linha
- * pelo conjunto de operadores, que é exatamente a pergunta. Ver o cabeçalho
- * deste arquivo para por que o painel não usa o carimbo de setor.
+ * ## A regra
+ *
+ * ```
+ * diretoria, administrador, super_admin ..... a empresa
+ * gerencia ................................. o setor dele
+ * lider .................................... as equipes que ele lidera
+ *          sem equipe nenhuma .............. o setor dele
+ * todos os demais .......................... só ele
+ * ```
+ *
+ * ## Por que não há filtro de pessoa
+ *
+ * Havia, e saiu. O painel é uma espiada rápida em «como vai o dia», não a
+ * ferramenta de análise — quem precisa recortar por pessoa tem a aba Analítico,
+ * que faz isso melhor e com o escopo completo (carimbo de setor, setor
+ * alternativo, origens excluídas).
+ *
+ * Um seletor aqui obrigava a responder «o dia de quem?» toda vez que o painel
+ * abria, para uma resposta que quase sempre era a mesma. Agora o escopo é
+ * consequência do cargo, e o cabeçalho diz qual é.
+ *
+ * ## Líder com mais de uma equipe
+ *
+ * Acontece: são 13 vínculos para 9 líderes na BookPlay. Nesse caso ele vê a SOMA
+ * das equipes que lidera — escolher uma delas seria esconder trabalho que também
+ * é dele, e oferecer um seletor devolveria a pergunta que acabamos de tirar.
+ *
+ * ## Líder sem equipe cai no setor
+ *
+ * Não é caso raro: 22 dos 31 líderes da BookPlay não estão em `equipe_lideres`.
+ * Devolver «só você» para eles esvaziaria o painel de quem mais o usa.
  */
-export function escopoDoPainel(params: {
-  operadorSelecionado?: string | null;
-  vejoTodos: boolean;
-  meuId: string;
-  operadoresVisiveis: readonly string[];
-}): EscopoAnalitico {
-  const { operadorSelecionado, vejoTodos, meuId, operadoresVisiveis } = params;
+export interface EscopoDoDia {
+  escopo: EscopoAnalitico;
+  /** O que o cabeçalho mostra: «Equipe Matheus», «Setor Receptivo»… */
+  rotulo: string;
+  /** Filtro que desce ao banco quando o escopo é uma pessoa só. */
+  operadorId: string | null;
+  /** Filtro de setor para as consultas de `acordos`. */
+  setorId: string | null;
+}
 
-  if (operadorSelecionado) {
-    return { tipo: 'operador', operadorId: operadorSelecionado };
+const CARGOS_EMPRESA = ['diretoria', 'administrador', 'super_admin'];
+
+export async function resolverEscopoDoDia(params: {
+  empresaId: string;
+  perfilId: string;
+  cargo: string;
+  setorId: string | null;
+}): Promise<EscopoDoDia> {
+  const { empresaId, perfilId, cargo, setorId } = params;
+
+  if (CARGOS_EMPRESA.includes(cargo)) {
+    return { escopo: ESCOPO_EMPRESA, rotulo: 'Empresa inteira', operadorId: null, setorId: null };
   }
-  if (vejoTodos) return ESCOPO_EMPRESA;
-  if (operadoresVisiveis.length > 0) {
-    return { tipo: 'equipe', operadores: new Set(operadoresVisiveis) };
+
+  if (cargo === 'gerencia') {
+    return escopoDeSetorInteiro(empresaId, setorId, perfilId);
   }
-  return { tipo: 'operador', operadorId: meuId };
+
+  if (cargo === 'lider') {
+    const equipes = await equipesQueLidera(empresaId, perfilId);
+    if (equipes.length === 0) return escopoDeSetorInteiro(empresaId, setorId, perfilId);
+
+    const membros = await membrosDasEquipes(empresaId, equipes.map(e => e.id));
+    // O próprio líder entra: o acordo que ele tabula é produção da equipe dele.
+    const operadores = new Set([...membros, perfilId]);
+
+    return {
+      escopo: { tipo: 'equipe', operadores },
+      rotulo: equipes.length === 1
+        ? `Equipe ${equipes[0].nome}`
+        : `${equipes.length} equipes`,
+      operadorId: null,
+      setorId: null,
+    };
+  }
+
+  return { escopo: { tipo: 'operador', operadorId: perfilId }, rotulo: 'Os seus números', operadorId: perfilId, setorId: null };
+}
+
+/** Setor inteiro — ou só a própria pessoa, quando ela não tem setor. */
+async function escopoDeSetorInteiro(
+  empresaId: string, setorId: string | null, perfilId: string,
+): Promise<EscopoDoDia> {
+  if (!setorId) {
+    // Sem setor não há o que somar além de si. Devolver «o setor» aqui daria um
+    // conjunto vazio e um painel zerado com cara de dado real.
+    return {
+      escopo: { tipo: 'operador', operadorId: perfilId },
+      rotulo: 'Os seus números',
+      operadorId: perfilId,
+      setorId: null,
+    };
+  }
+
+  const [nome, membros] = await Promise.all([
+    nomeDoSetor(setorId),
+    membrosDoSetor(empresaId, setorId),
+  ]);
+
+  return {
+    escopo: { tipo: 'equipe', operadores: new Set(membros) },
+    rotulo: nome ? `Setor ${nome}` : 'Seu setor',
+    operadorId: null,
+    setorId,
+  };
+}
+
+async function equipesQueLidera(
+  empresaId: string, liderId: string,
+): Promise<{ id: string; nome: string }[]> {
+  const { data, error } = await supabase
+    .from('equipe_lideres')
+    .select('equipe_id, equipes(id, nome)')
+    .eq('empresa_id', empresaId)
+    .eq('lider_id', liderId);
+
+  // Tabela ausente (migration pendente): o líder cai no setor, que é o
+  // comportamento antigo. Ver `equipesLideres.service.ts`.
+  if (error) return [];
+
+  type Linha = { equipes: { id: string; nome: string } | null };
+  return ((data as Linha[] | null) ?? [])
+    .map(l => l.equipes)
+    .filter((e): e is { id: string; nome: string } => e !== null);
+}
+
+async function membrosDasEquipes(empresaId: string, equipeIds: string[]): Promise<string[]> {
+  if (!equipeIds.length) return [];
+  const { data } = await supabase
+    .from('perfis')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .in('equipe_id', equipeIds);
+  return ((data as { id: string }[] | null) ?? []).map(p => p.id);
+}
+
+async function membrosDoSetor(empresaId: string, setorId: string): Promise<string[]> {
+  const { data } = await supabase
+    .from('perfis')
+    .select('id')
+    .eq('empresa_id', empresaId)
+    .eq('setor_id', setorId);
+  return ((data as { id: string }[] | null) ?? []).map(p => p.id);
+}
+
+async function nomeDoSetor(setorId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('setores')
+    .select('nome')
+    .eq('id', setorId)
+    .maybeSingle();
+  return (data as { nome: string } | null)?.nome ?? null;
 }
 
 /** 'yyyy-MM-dd' do dia seguinte. */
