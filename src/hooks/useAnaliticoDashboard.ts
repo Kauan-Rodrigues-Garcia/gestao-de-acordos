@@ -57,8 +57,15 @@ export interface AgregadoAnalitico {
   porDia: Record<number, { bruto: number; ho: number; qtd: number }>;
   /** operador_id → { bruto, ho, qtd } (líder+ recebe todos; operador só a si) */
   porOperador: Record<string, { bruto: number; ho: number; qtd: number }>;
-  /** rótulo da forma (forma_detalhe; fallback boleto_pix/cartao) → { bruto, qtd } */
-  porForma: Record<string, { bruto: number; qtd: number }>;
+  /**
+   * rótulo da forma (forma_detalhe; fallback boleto_pix/cartao) →
+   * { bruto, ho, qtd }
+   *
+   * `ho` existe porque o donut da PaguePlay é desenhado na unidade que o
+   * usuário escolheu no painel. Sem ele, alternar para H.O. deixava o total do
+   * card numa unidade e a fatia da forma em outra.
+   */
+  porForma: Record<string, { bruto: number; ho: number; qtd: number }>;
 }
 
 /**
@@ -95,8 +102,9 @@ export function agregarAnalitico(
     // Rótulo real (BookPlay); PaguePlay cai no consolidado boleto_pix/cartao
     const rotulo = l.forma_detalhe
       ?? (l.forma_pagamento === 'cartao' ? 'Cartão' : 'Pix/Boleto');
-    if (!agg.porForma[rotulo]) agg.porForma[rotulo] = { bruto: 0, qtd: 0 };
+    if (!agg.porForma[rotulo]) agg.porForma[rotulo] = { bruto: 0, ho: 0, qtd: 0 };
     agg.porForma[rotulo].bruto += total;
+    agg.porForma[rotulo].ho   += ho;
     agg.porForma[rotulo].qtd  += qtd;
 
     if (l.status_tabulacao === 'nao_tabulado') {

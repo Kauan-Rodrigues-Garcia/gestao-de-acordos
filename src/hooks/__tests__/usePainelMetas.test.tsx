@@ -55,6 +55,8 @@ vi.mock('@/services/analitico/diretoExtra.service', () => ({
     diretoExtraSpy(p);
     return Promise.resolve({
       direto: 37_870.98, extra: 27_740.64, naoTabulado: 0,
+      // Os lados em H.O. na proporção real da PaguePlay (24,96%).
+      diretoHO: 9_452.60, extraHO: 6_924.06, naoTabuladoHO: 0,
       qtdDireto: 40, qtdExtra: 12, qtdNaoTabulado: 0,
     });
   },
@@ -440,3 +442,120 @@ describe('usePainelMetas — relatório ausente', () => {
   });
 });
 
+
+// ─── Unidade H.O. × Bruto (PaguePlay) ────────────────────────────────────────
+
+/**
+ * Estes testes existem para impedir que o alternador vire duas verdades.
+ *
+ * Trocar a unidade só pode mudar a ESCALA dos números. Quem está acima ou
+ * abaixo do esperado, em que quartil está, e qual foi o último dia com baixa
+ * são fatos do mês — não podem depender do botão.
+ */
+describe('usePainelMetas — unidade H.O. × bruto', () => {
+  /** Meta real de operador da PaguePlay em agosto/2026. */
+  const META_PP = 72_115.38;
+
+  /** Linhas com H.O. em 24,96% do bruto, como o relatório da PP entrega. */
+  const LINHAS_PP = [
+    linha(1,   1_000, 3,  { total_ho:   249.60 }),
+    linha(8,  10_000, 40, { total_ho: 2_496.00 }),
+    linha(10, 20_000, 121,{ total_ho: 4_992.00 }),
+  ];
+
+  function comoPaguePlay() {
+    tenantRef.current    = { slug: 'pagueplay', isPaguePlay: true };
+    analiticoRef.current = linhasAnalitico(true, LINHAS_PP);
+    enfileirar('metas', { data: { meta_valor: META_PP }, error: null });
+  }
+
+  it('em H.O. mostra a coluna do relatório, não o bruto convertido', async () => {
+    comoPaguePlay();
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+
+    expect(result.current.unidade).toBe('ho');
+    expect(result.current.totalRecebido).toBeCloseTo(7_737.60, 2);
+    expect(result.current.totalRecebidoOposto).toBeCloseTo(31_000, 2);
+  });
+
+  it('converte a meta para H.O. e mantém a bruta na oposta', async () => {
+    comoPaguePlay();
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+
+    expect(result.current.meta).toBeCloseTo(18_000, 2);
+    expect(result.current.metaOposta).toBeCloseTo(META_PP, 2);
+  });
+
+  it('em bruto os dois lados trocam de lugar', async () => {
+    comoPaguePlay();
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ unidade: 'bruto' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+
+    expect(result.current.totalRecebido).toBeCloseTo(31_000, 2);
+    expect(result.current.totalRecebidoOposto).toBeCloseTo(7_737.60, 2);
+    expect(result.current.meta).toBeCloseTo(META_PP, 2);
+  });
+
+  it('CONCORDÂNCIA: a leitura de desempenho não muda com a unidade', async () => {
+    comoPaguePlay();
+    const ho = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(ho.result.current.carregando).toBe(false));
+
+    comoPaguePlay();
+    const bruto = renderHook(() => usePainelMetas(paramsBase({ unidade: 'bruto' })));
+    await waitFor(() => expect(bruto.result.current.carregando).toBe(false));
+
+    const pHO = ho.result.current.projecao!;
+    const pBR = bruto.result.current.projecao!;
+
+    // Estar acima ou abaixo do esperado é um fato do mês.
+    expect(Math.sign(pHO.diferenca)).toBe(Math.sign(pBR.diferenca));
+    expect(pHO.quartil?.quartil).toBe(pBR.quartil?.quartil);
+    // Com o H.O. exatamente proporcional, a projeção é a MESMA. Em produção a
+    // coluna real dá 25,00% contra os 24,96% da constante, e a diferença fica
+    // na casa decimal — por isso a comparação tolera 1 ponto.
+    expect(Math.abs(pHO.projecaoPct - pBR.projecaoPct)).toBeLessThanOrEqual(1);
+    // Dias úteis não são dinheiro: idênticos nas duas unidades.
+    expect(ho.result.current.diasUteisTotal).toBe(bruto.result.current.diasUteisTotal);
+    expect(ho.result.current.diasUteisPassados).toBe(bruto.result.current.diasUteisPassados);
+  });
+
+  it('a baixa anterior aponta o MESMO dia, com o valor na unidade', async () => {
+    comoPaguePlay();
+    const ho = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(ho.result.current.carregando).toBe(false));
+
+    comoPaguePlay();
+    const bruto = renderHook(() => usePainelMetas(paramsBase({ unidade: 'bruto' })));
+    await waitFor(() => expect(bruto.result.current.carregando).toBe(false));
+
+    expect(ho.result.current.baixaAnterior?.dia).toBe(bruto.result.current.baixaAnterior?.dia);
+    expect(ho.result.current.baixaAnterior?.bruto).toBeCloseTo(4_992, 2);
+    expect(bruto.result.current.baixaAnterior?.bruto).toBeCloseTo(20_000, 2);
+  });
+
+  it('as formas somam o total em qualquer unidade', async () => {
+    comoPaguePlay();
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+
+    const soma = Object.values(result.current.porForma)
+      .reduce((s, f) => s + f.valor, 0);
+    expect(soma).toBeCloseTo(result.current.totalRecebido, 2);
+  });
+
+  it('BookPlay ignora o pedido de H.O. — lá total_ho é sempre zero', async () => {
+    // Sem esta trava, um parâmetro errado transformaria o painel inteiro da
+    // BookPlay numa parede de R$ 0,00 que pareceria desempenho ruim.
+    tenantRef.current = { slug: 'bookplay', isPaguePlay: false };
+    enfileirar('metas', { data: { meta_valor: 50_000 }, error: null });
+    const { result } = renderHook(() => usePainelMetas(paramsBase({ unidade: 'ho' })));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+
+    expect(result.current.unidade).toBe('bruto');
+    expect(result.current.totalRecebido).toBeCloseTo(34_452.54, 2);
+    expect(result.current.meta).toBe(50_000);
+  });
+});

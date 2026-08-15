@@ -19,6 +19,7 @@ import { FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react';
 import { getTodayISO } from '@/lib/index';
 import { SkeletonCard, BannerNaoTabulado } from '@/components/AnalyticsPanel/SubComponents';
 import { usePainelMetas } from '@/hooks/usePainelMetas';
+import type { UnidadeValor } from '@/lib/unidadeValor';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
 import { CardsMetas } from './CardsMetas';
 import { EvolucaoDiaria } from './EvolucaoDiaria';
@@ -31,6 +32,12 @@ interface PainelMetasProps {
   equipeFiltroExterno?: string | null;
   operadorFiltroExterno?: string | null;
   temLogicaDiretoExtra?: boolean;
+  /**
+   * H.O. ou bruto. Vem de fora pelo mesmo motivo que o `mes`: o alternador
+   * mora na faixa "Dados Analíticos", que é o cabeçalho deste painel. Dois
+   * controles da mesma coisa em alturas diferentes é como os lados divergem.
+   */
+  unidade?: UnidadeValor;
   /**
    * Cards que sobreviveram do painel antigo (Agendado, Não Pagos, Ticket
    * médio…). Ficam recolhidos: são úteis, mas competiriam com os números de
@@ -45,6 +52,7 @@ export function PainelMetas({
   equipeFiltroExterno,
   operadorFiltroExterno,
   temLogicaDiretoExtra = false,
+  unidade,
   secundarios,
 }: PainelMetasProps) {
   const [secundariosAbertos, setSecundariosAbertos] = useState(false);
@@ -55,6 +63,7 @@ export function PainelMetas({
     equipeId:   equipeFiltroExterno,
     operadorId: operadorFiltroExterno,
     temLogicaDiretoExtra,
+    unidade,
   });
 
   if (dados.carregando) {
@@ -112,6 +121,7 @@ export function PainelMetas({
             porDia={dados.porDia}
             agendadoPorDia={dados.agendadoPorDia}
             mes={mes}
+            unidade={dados.unidade}
             metaDiaria={dados.projecao?.metaDiaria ?? null}
             // Mês fechado não tem "hoje" para destacar. `getTodayISO` e não
             // `new Date()`: o dia tem que ser o de São Paulo, não o da máquina.

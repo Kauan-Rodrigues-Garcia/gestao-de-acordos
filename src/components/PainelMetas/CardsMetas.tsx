@@ -61,9 +61,17 @@ interface CardsMetasProps {
 
 export function CardsMetas({ dados, mes }: CardsMetasProps) {
   const {
-    totalRecebido, diretoExtra, meta, projecao, escopoRotulo, modoAgregado,
-    diasUteisTotal, diasUteisPassados, baixaAnterior, porForma,
+    totalRecebido, totalRecebidoOposto, diretoExtra, meta, metaOposta,
+    projecao, escopoRotulo, modoAgregado,
+    diasUteisTotal, diasUteisPassados, baixaAnterior, porForma, unidade,
   } = dados;
+
+  /**
+   * A PaguePlay alterna entre H.O. e bruto; a BookPlay só tem bruto e nunca
+   * mostra a linha secundária (seria "Bruto: R$ 0,00" ao lado do próprio total).
+   */
+  const mostraOposta = unidade === 'ho';
+  const rotuloTotal = unidade === 'ho' ? 'H.O. recebido' : 'Total recebido';
 
   /**
    * Só vale separar por vínculo quando existe vínculo para separar.
@@ -74,6 +82,19 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
    */
   const temVinculoParaMostrar = !!diretoExtra
     && (diretoExtra.direto > 0 || diretoExtra.extra > 0);
+
+  /**
+   * Os três valores de vínculo na unidade ativa.
+   *
+   * A DECISÃO de mostrar continua sendo pelo bruto (acima): "existe vínculo
+   * classificado" é um fato do relatório, não da unidade — e no H.O. um valor
+   * pequeno arredondaria para perto de zero sem que o vínculo tivesse sumido.
+   */
+  const vinculo = diretoExtra && {
+    direto:      unidade === 'ho' ? diretoExtra.diretoHO      : diretoExtra.direto,
+    extra:       unidade === 'ho' ? diretoExtra.extraHO       : diretoExtra.extra,
+    naoTabulado: unidade === 'ho' ? diretoExtra.naoTabuladoHO : diretoExtra.naoTabulado,
+  };
 
   const corProj = projecao ? corProjecao(projecao.projecaoPct) : COR_QUARTIL[4];
   const corQuartil = projecao?.quartil
@@ -105,7 +126,7 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
       <div className="grid gap-3 lg:grid-cols-3 items-start">
         <div className="lg:col-span-2 grid gap-3 sm:grid-cols-2">
         <MetricCard
-          label="Total recebido"
+          label={rotuloTotal}
           icon={<DollarSign className="w-4 h-4" />}
           accentColor={COR_QUARTIL[1]}
           gradientFrom={COR_QUARTIL[1]}
@@ -113,6 +134,12 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
           value={<span className="text-emerald-500">{formatBRL(totalRecebido)}</span>}
           sub={[
             meta !== null ? `Meta ${escopoRotulo}: ${formatBRL(meta)}` : null,
+            // A outra unidade fica na MESMA linha de apoio, não num card ao
+            // lado: dois números grandes competindo foi o defeito que este
+            // painel veio corrigir.
+            mostraOposta
+              ? `Bruto: ${formatBRL(totalRecebidoOposto)}${metaOposta !== null ? ` de ${formatBRL(metaOposta)}` : ''}`
+              : null,
             modoAgregado ? 'Receptivo não entra: é por setor' : null,
           ].filter(Boolean).join(' · ') || undefined}
         />
@@ -120,14 +147,14 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
         {/* Direto × Extra saem do MESMO analítico do total acima: a linha é
             classificada pelo vínculo do acordo tabulado. O que não tem acordo
             vira "sem vínculo", e por isso os três fecham o total. */}
-        {temVinculoParaMostrar && diretoExtra && (
+        {temVinculoParaMostrar && diretoExtra && vinculo && (
           <>
             <MetricCard
               label="Recebimento direto"
               icon={<Wallet className="w-4 h-4" />}
               accentColor="#6366f1"
               gradientFrom="#6366f1"
-              value={<span className="text-indigo-500">{formatBRL(diretoExtra.direto)}</span>}
+              value={<span className="text-indigo-500">{formatBRL(vinculo.direto)}</span>}
               sub={`${diretoExtra.qtdDireto} pagamento${diretoExtra.qtdDireto !== 1 ? 's' : ''}`}
             />
             <MetricCard
@@ -135,7 +162,7 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
               icon={<Sparkles className="w-4 h-4" />}
               accentColor="#f59e0b"
               gradientFrom="#f59e0b"
-              value={<span className="text-amber-500">{formatBRL(diretoExtra.extra)}</span>}
+              value={<span className="text-amber-500">{formatBRL(vinculo.extra)}</span>}
               sub={`${diretoExtra.qtdExtra} pagamento${diretoExtra.qtdExtra !== 1 ? 's' : ''}`}
             />
             {diretoExtra.naoTabulado > 0 && (
@@ -144,7 +171,7 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
                 icon={<FileWarning className="w-4 h-4" />}
                 accentColor="#94a3b8"
                 gradientFrom="#94a3b8"
-                value={<span className="text-muted-foreground">{formatBRL(diretoExtra.naoTabulado)}</span>}
+                value={<span className="text-muted-foreground">{formatBRL(vinculo.naoTabulado)}</span>}
                 sub={`${diretoExtra.qtdNaoTabulado} pagamento${diretoExtra.qtdNaoTabulado !== 1 ? 's' : ''} sem acordo tabulado`}
               />
             )}

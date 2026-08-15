@@ -29,7 +29,9 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAxisColors } from '@/hooks/useChartColors';
 import { formatBRL } from '@/lib/money';
+import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { diasNoMes } from '@/lib/mesReferencia';
+import type { UnidadeValor } from '@/lib/unidadeValor';
 import { CHART_RECEBIDO, CHART_AGENDADO } from '@/components/AnalyticsPanel/constants';
 import { CustomTooltip } from '@/components/AnalyticsPanel/SubComponents';
 
@@ -49,6 +51,11 @@ export interface PontoAgendado {
 interface EvolucaoDiariaProps {
   /** dia do mês → agregado do analítico, direto de `agregarAnalitico`. */
   porDia: Record<number, { bruto: number; ho: number; qtd: number }>;
+  /**
+   * Unidade do gráfico. Precisa ser a MESMA dos cards acima — barra em bruto
+   * sob um card em H.O. faria a linha de meta diária cruzar no lugar errado.
+   */
+  unidade?: UnidadeValor;
   /** Agendado por dia (acordos). Vazio = a série simplesmente não aparece. */
   agendadoPorDia?: PontoAgendado[];
   mes: string;
@@ -85,7 +92,7 @@ export const OPACIDADES = {
 } as const;
 
 export function EvolucaoDiaria({
-  porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje,
+  porDia, agendadoPorDia = [], mes, metaDiaria, diaDeHoje, unidade = 'bruto',
 }: EvolucaoDiariaProps) {
   const { tickColor, gridColor } = useAxisColors();
 
@@ -100,16 +107,23 @@ export function EvolucaoDiaria({
   const dados = useMemo(() => {
     // Todos os dias entram no eixo, mesmo os sem recebimento: a sequência é o
     // que dá a leitura de ritmo. Dia zerado simplesmente não desenha barra.
+    //
+    // O AGENDADO sai de `acordos.valor`, que é sempre bruto — dinheiro que
+    // ainda não entrou não tem linha no relatório, logo não tem `total_ho`
+    // gravado. Em modo H.O. ele é estimado pela constante, que é a única
+    // tradução possível. O recebido, esse, continua vindo da coluna real.
+    const emHO = unidade === 'ho';
     return Array.from({ length: diasNoMes(mes) }, (_, i) => {
       const dia = i + 1;
+      const agendadoBruto = agendadoMap.get(dia) ?? 0;
       return {
         dia: String(dia).padStart(2, '0'),
         diaNum: dia,
-        recebido: porDia[dia]?.bruto ?? 0,
-        agendado: agendadoMap.get(dia) ?? 0,
+        recebido: (emHO ? porDia[dia]?.ho : porDia[dia]?.bruto) ?? 0,
+        agendado: emHO ? agendadoBruto * PP_HO_PERCENTUAL : agendadoBruto,
       };
     });
-  }, [porDia, agendadoMap, mes]);
+  }, [porDia, agendadoMap, mes, unidade]);
 
   const { diasComRecebimento, totalMes, melhorDia } = useMemo(() => {
     let dias = 0, soma = 0, melhor = 0;

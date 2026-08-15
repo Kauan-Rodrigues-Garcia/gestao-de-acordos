@@ -151,8 +151,26 @@ describe('recortes derivados respeitam o mesmo escopo', () => {
       linha({ operador_id: ANA, setor_id: PLAY4, total: 250, qtd: 2, forma_detalhe: 'Pix Automático', dia: '2026-07-11' }),
       linha({ operador_id: ANA, setor_id: PLAY4, total:  50, qtd: 1, forma_detalhe: 'Boleto' }),
     ], escopo);
-    expect(agg.porForma['Pix Automático']).toEqual({ bruto: 350, qtd: 3 });
-    expect(agg.porForma['Boleto']).toEqual({ bruto: 50, qtd: 1 });
+    // BookPlay não preenche `total_ho`: o lado H.O. existe no formato e fica 0.
+    expect(agg.porForma['Pix Automático']).toEqual({ bruto: 350, ho: 0, qtd: 3 });
+    expect(agg.porForma['Boleto']).toEqual({ bruto: 50, ho: 0, qtd: 1 });
+  });
+
+  // O donut da PaguePlay é desenhado na unidade escolhida no painel. Sem o H.O.
+  // por forma, alternar a unidade deixava o total num lado e as fatias no outro.
+  it('acumula o H.O. por forma junto do bruto (PaguePlay)', () => {
+    const agg = agregarAnalitico([
+      linha({ operador_id: ANA, setor_id: PLAY4, total: 1000, total_ho: 249.60, qtd: 1, forma_detalhe: 'Boleto' }),
+      linha({ operador_id: ANA, setor_id: PLAY4, total:  500, total_ho: 124.80, qtd: 1, forma_detalhe: 'Boleto', dia: '2026-07-11' }),
+      linha({ operador_id: ANA, setor_id: PLAY4, total:  200, total_ho:  49.92, qtd: 1, forma_detalhe: 'Cartão' }),
+    ], escopo);
+    expect(agg.porForma['Boleto']).toEqual({ bruto: 1500, ho: 374.40, qtd: 2 });
+    expect(agg.porForma['Cartão']).toEqual({ bruto: 200, ho: 49.92, qtd: 1 });
+
+    // A soma das formas fecha com o total, nas DUAS unidades.
+    const formas = Object.values(agg.porForma);
+    expect(formas.reduce((s, f) => s + f.bruto, 0)).toBeCloseTo(agg.bruto, 6);
+    expect(formas.reduce((s, f) => s + f.ho, 0)).toBeCloseTo(agg.ho, 6);
   });
 });
 

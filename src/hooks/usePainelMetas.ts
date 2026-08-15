@@ -36,6 +36,9 @@ import {
 import {
   normalizarMes, partesDoMes, diasNoMes, ehMesAtual,
 } from '@/lib/mesReferencia';
+import {
+  metaNaUnidade, UNIDADE_PADRAO, type UnidadeValor,
+} from '@/lib/unidadeValor';
 
 export interface ParametrosPainelMetas {
   /** Mês em análise ('yyyy-MM'). */
@@ -54,6 +57,15 @@ export interface ParametrosPainelMetas {
   operadorId?: string | null;
   /** O setor do usuário tem a lógica Direto/Extra ativa? */
   temLogicaDiretoExtra?: boolean;
+  /**
+   * PaguePlay: qual lado do recebimento a tela exibe — H.O. (o que fica) ou
+   * bruto (o que entrou). Ignorado na BookPlay, que tem `total_ho` zerado.
+   *
+   * NÃO é uma segunda conta: o hook escolhe qual campo JÁ AGREGADO lê. A meta,
+   * essa sim, é convertida — ela é gravada em bruto e o `metaNaUnidade` a
+   * traduz. Ver `lib/unidadeValor.ts` para o porquê.
+   */
+  unidade?: UnidadeValor;
 }
 
 export interface DadosPainelMetas {
@@ -68,16 +80,24 @@ export interface DadosPainelMetas {
   diasUteisPassados: number;
   diasUteisRestantes: number;
 
+  /** A unidade em que os valores abaixo estão expressos. */
+  unidade: UnidadeValor;
+  /** Recebido no mês, na unidade ativa. */
   totalRecebido: number;
+  /** O mesmo recebido na unidade OPOSTA — a linha secundária do card. */
+  totalRecebidoOposto: number;
   /** `null` quando o setor não tem a lógica Direto/Extra — o card some. */
   diretoExtra: TotaisDiretoExtra | null;
   /** Recebido do analítico ainda sem acordo tabulado (base do aviso). */
   naoTabulado: number;
   naoTabuladoQtd: number;
-  /** Rótulo da forma (Pix, Boleto, Cartão…) → total e quantidade. */
-  porForma: Record<string, { bruto: number; qtd: number }>;
+  /** Rótulo da forma (Pix, Boleto, Cartão…) → valor na unidade ativa e qtd. */
+  porForma: Record<string, { valor: number; qtd: number }>;
 
+  /** Meta na unidade ativa (a gravada é sempre bruta — ver `unidadeValor`). */
   meta: number | null;
+  /** A mesma meta na unidade oposta, para a linha secundária. */
+  metaOposta: number | null;
   quartis: QuartilConfig[];
   projecao: ResultadoProjecao | null;
 
@@ -172,6 +192,15 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { empresa } = useEmpresa();
   const tenant = useTenant();
   const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
+
+  /**
+   * H.O. só existe na PaguePlay: na BookPlay `total_ho` é 0,00 em toda linha.
+   * Forçar 'bruto' lá impede que um parâmetro errado transforme o painel numa
+   * parede de zeros.
+   */
+  const unidade: UnidadeValor = tenant.isPaguePlay
+    ? (params.unidade ?? UNIDADE_PADRAO)
+    : 'bruto';
 
   const perfilEquipeId = (perfil as { equipe_id?: string | null } | null)?.equipe_id ?? null;
 
@@ -393,13 +422,30 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
   const quartis = config?.quartis?.length ? config.quartis : QUARTIS_PADRAO;
 
+  // ── Unidade ────────────────────────────────────────────────────────────────
+  // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.
+  // Meta: convertida, porque só existe gravada em bruto.
+  const recebidoNaUnidade = unidade === 'ho' ? agregado.ho : agregado.bruto;
+  const recebidoOposto    = unidade === 'ho' ? agregado.bruto : agregado.ho;
+  const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade);
+  const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho');
+
   const projecao = useMemo(
     () => calcularProjecao({
-      meta, recebido: agregado.bruto,
+      meta: metaNaUnidadeAtiva, recebido: recebidoNaUnidade,
       totalUteis: diasUteisTotal, decorridos: diasUteisPassados, quartis,
     }),
-    [meta, agregado.bruto, diasUteisTotal, diasUteisPassados, quartis],
+    [metaNaUnidadeAtiva, recebidoNaUnidade, diasUteisTotal, diasUteisPassados, quartis],
   );
+
+  /** Formas na unidade ativa — o donut usa uma unidade só. */
+  const porFormaNaUnidade = useMemo(() => {
+    const saida: Record<string, { valor: number; qtd: number }> = {};
+    for (const [rotulo, f] of Object.entries(agregado.porForma)) {
+      saida[rotulo] = { valor: unidade === 'ho' ? f.ho : f.bruto, qtd: f.qtd };
+    }
+    return saida;
+  }, [agregado.porForma, unidade]);
 
   // ── Baixa anterior ─────────────────────────────────────────────────────────
   // Mês fechado não tem "hoje": todos os dias ficam elegíveis.
@@ -408,10 +454,16 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     ? Number(getTodayISO().slice(8, 10))
     : diasNoMes(mes) + 1;
 
-  const baixaAnterior = useMemo(
-    () => ultimoDiaComRecebimento(agregado.porDia, hojeDia),
-    [agregado.porDia, hojeDia],
-  );
+  /**
+   * QUAL dia é sempre decidido pelo bruto — "houve movimento" é um fato do
+   * calendário, não da unidade. Só o VALOR muda com o alternador. Procurar pelo
+   * H.O. faria o card apontar um dia diferente do que o gráfico ao lado destaca.
+   */
+  const baixaAnterior = useMemo(() => {
+    const dia = ultimoDiaComRecebimento(agregado.porDia, hojeDia);
+    if (!dia || unidade === 'bruto') return dia;
+    return { ...dia, bruto: agregado.porDia[dia.dia]?.ho ?? 0 };
+  }, [agregado.porDia, hojeDia, unidade]);
 
   /**
    * Segura a tela enquanto QUALQUER peça do número faltar.
@@ -449,13 +501,18 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     // precisam fechar entre si na tela.
     diasUteisRestantes: Math.max(diasUteisTotal - diasUteisPassados, 0),
 
-    totalRecebido: agregado.bruto,
+    unidade,
+    totalRecebido: recebidoNaUnidade,
+    totalRecebidoOposto: recebidoOposto,
     diretoExtra,
-    naoTabulado: agregado.naoTabuladoBruto,
+    naoTabulado: unidade === 'ho'
+      ? agregado.naoTabuladoHO
+      : agregado.naoTabuladoBruto,
     naoTabuladoQtd: agregado.naoTabuladoQtd,
-    porForma: agregado.porForma,
+    porForma: porFormaNaUnidade,
 
-    meta,
+    meta: metaNaUnidadeAtiva,
+    metaOposta,
     quartis,
     projecao,
 

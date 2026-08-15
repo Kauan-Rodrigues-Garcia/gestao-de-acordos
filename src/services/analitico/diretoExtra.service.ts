@@ -40,23 +40,37 @@ const UUID_IMPOSSIVEL = '00000000-0000-0000-0000-000000000000';
 
 const PAGINA = 1000;
 
+/**
+ * Os dois lados de cada total.
+ *
+ * O bruto é o que entrou; o H.O. é o que fica na PaguePlay. O painel exibe um
+ * ou outro conforme o alternador, e os dois precisam existir para que trocar de
+ * unidade não dispare uma segunda ida ao banco.
+ *
+ * Na BookPlay o lado `…HO` é sempre 0 — `total_ho` não é preenchido lá.
+ */
 export interface TotaisDiretoExtra {
   direto: number;
+  diretoHO: number;
   extra: number;
+  extraHO: number;
   /** Recebido sem acordo tabulado — fecha a soma com o total do analítico. */
   naoTabulado: number;
+  naoTabuladoHO: number;
   qtdDireto: number;
   qtdExtra: number;
   qtdNaoTabulado: number;
 }
 
 const ZERADO: TotaisDiretoExtra = {
-  direto: 0, extra: 0, naoTabulado: 0,
+  direto: 0, diretoHO: 0, extra: 0, extraHO: 0, naoTabulado: 0, naoTabuladoHO: 0,
   qtdDireto: 0, qtdExtra: 0, qtdNaoTabulado: 0,
 };
 
 interface LinhaAnalitico {
   valor_recebido: number | string | null;
+  /** Parcela retida pela PaguePlay, gravada linha a linha pelo relatório. */
+  total_ho: number | string | null;
   acordo_id: string | null;
   /** Coluna "Tipo comissão" do relatório (20260813a). */
   tipo_comissao: string | null;
@@ -189,7 +203,7 @@ export async function buscarDiretoExtraDoMes(params: {
     for (;;) {
       let q = supabase
         .from('analitico_recebimentos')
-        .select('valor_recebido, acordo_id, tipo_comissao')
+        .select('valor_recebido, total_ho, acordo_id, tipo_comissao')
         .eq('empresa_id', empresaId)
         .eq('mes_referencia', primeiroDiaDoMes(mes))
         .order('id', { ascending: true });
@@ -241,13 +255,18 @@ export async function buscarDiretoExtraDoMes(params: {
     const totais: TotaisDiretoExtra = { ...ZERADO };
     for (const l of linhas) {
       const valor = Number(l.valor_recebido) || 0;
+      const ho    = Number(l.total_ho) || 0;
       const tipo = classificarComissao(l.tipo_comissao)
         ?? (l.acordo_id ? vinculo.get(l.acordo_id) ?? null : null);
 
-      if (tipo === 'extra')       { totais.extra  += valor; totais.qtdExtra++; }
-      else if (tipo === 'direto') { totais.direto += valor; totais.qtdDireto++; }
-      // Nem o relatório nem a tabulação sabem: dizer "direto" inventaria número.
-      else { totais.naoTabulado += valor; totais.qtdNaoTabulado++; }
+      if (tipo === 'extra') {
+        totais.extra += valor; totais.extraHO += ho; totais.qtdExtra++;
+      } else if (tipo === 'direto') {
+        totais.direto += valor; totais.diretoHO += ho; totais.qtdDireto++;
+      } else {
+        // Nem o relatório nem a tabulação sabem: dizer "direto" inventaria número.
+        totais.naoTabulado += valor; totais.naoTabuladoHO += ho; totais.qtdNaoTabulado++;
+      }
     }
     return totais;
   } catch {

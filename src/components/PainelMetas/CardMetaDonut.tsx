@@ -39,7 +39,14 @@ export function corDaMeta(pct: number): string {
 
 export interface FatiaForma {
   label: string;
-  bruto: number;
+  /**
+   * Valor na unidade que o painel está exibindo — H.O. ou bruto.
+   *
+   * Chamava-se `bruto` quando só havia uma unidade possível. O nome neutro
+   * evita a leitura errada de que a fatia é sempre o valor cheio: com o
+   * alternador da PaguePlay em H.O., isto aqui é H.O.
+   */
+  valor: number;
   qtd: number;
   /** Participação no total recebido, em %. */
   perc: number;
@@ -52,20 +59,23 @@ export interface FatiaForma {
  * recebimento, "40% veio de Pix" precisa querer dizer 40% do dinheiro. O
  * card antigo dividia por quantidade de acordos, o que fazia dez boletos
  * pequenos pesarem mais que um cartão grande.
+ *
+ * A participação é a mesma nas duas unidades — o H.O. é uma fração do bruto —,
+ * então trocar o alternador reordena nada: só muda o valor impresso.
  */
 export function fatiasDeForma(
-  porForma: Record<string, { bruto: number; qtd: number }>,
+  porForma: Record<string, { valor: number; qtd: number }>,
 ): FatiaForma[] {
   const entradas = Object.entries(porForma);
-  const total = entradas.reduce((s, [, f]) => s + f.bruto, 0);
+  const total = entradas.reduce((s, [, f]) => s + f.valor, 0);
   return entradas
     .map(([label, f]) => ({
       label,
-      bruto: f.bruto,
+      valor: f.valor,
       qtd: f.qtd,
-      perc: total > 0 ? Math.round((f.bruto / total) * 1000) / 10 : 0,
+      perc: total > 0 ? Math.round((f.valor / total) * 1000) / 10 : 0,
     }))
-    .sort((a, b) => b.bruto - a.bruto);
+    .sort((a, b) => b.valor - a.valor);
 }
 
 function formatarPct(v: number): string {
@@ -77,7 +87,7 @@ interface CardMetaDonutProps {
   meta: number;
   /** "individual" ou "da equipe" — só muda o rótulo do rodapé. */
   escopoRotulo: string;
-  porForma: Record<string, { bruto: number; qtd: number }>;
+  porForma: Record<string, { valor: number; qtd: number }>;
 }
 
 export function CardMetaDonut({
@@ -186,7 +196,7 @@ export function CardMetaDonut({
                       innerRadius={44}
                       outerRadius={68}
                       paddingAngle={3}
-                      dataKey="bruto"
+                      dataKey="valor"
                       isAnimationActive
                       animationBegin={60}
                       animationDuration={700}
@@ -242,7 +252,7 @@ function LinhaForma({
       <div className="flex items-center gap-2 shrink-0">
         {detalhado && (
           <span className="text-[11px] text-muted-foreground tabular-nums font-mono">
-            {formatBRL(fatia.bruto)}
+            {formatBRL(fatia.valor)}
           </span>
         )}
         <span className="text-[11px] text-muted-foreground">

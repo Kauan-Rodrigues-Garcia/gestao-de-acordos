@@ -5,13 +5,12 @@
  *   • Ao expandir (clicar "Ver Breakdown"): mostra % por forma de pagamento
  */
 
-import { useState, useMemo, useEffect } from 'react';
-import { useAxisColors } from '@/hooks/useChartColors';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  BarChart2, TrendingUp, DollarSign, Calendar,
+  BarChart2, TrendingUp, Calendar,
   ChevronDown, ChevronUp, RefreshCw, XCircle,
-  Clock, Percent, Target, CreditCard, QrCode,
+  Clock, Percent, Target,
 } from 'lucide-react';
 import { useAnalytics } from '@/hooks/useAnalytics';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
@@ -24,19 +23,25 @@ import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
-  formatCurrency, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY, PP_HO_PERCENTUAL,
+  formatCurrency, PP_HO_PERCENTUAL,
   isPerfilAdminOuLider, isPerfilDiretoria,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { BREAKDOWN_COLORS, containerVariants, itemVariants } from './constants';
+import { containerVariants, itemVariants } from './constants';
 import { SeletorMes } from './SeletorMes';
 import { SkeletonCard, MetricCard, MiniSparkline } from './SubComponents';
 import { PainelMetas } from '@/components/PainelMetas';
+import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
+import {
+  lerUnidade, gravarUnidade, type UnidadeValor,
+} from '@/lib/unidadeValor';
+// `ChartsSection` deixou de ser renderizado aqui: os dois gráficos que ele
+// desenhava viraram a evolução diária e o donut do PainelMetas. O arquivo
+// segue no repositório enquanto houver quem o importe.
 import { PPMetrics } from './PPMetrics';
-import { ChartsSection } from './ChartsSection';
 import { CHART_RECEBIDO } from './constants';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -54,7 +59,6 @@ export function AnalyticsPanel({
   operadorFiltroExterno,
   temLogicaDiretoExtra = false,
 }: AnalyticsPanelProps = {}) {
-  const { tickColor, gridColor } = useAxisColors();
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -73,6 +77,30 @@ export function AnalyticsPanel({
    * painel de métricas tanto da PaguePlay quanto da BookPlay.
    */
   const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
+
+  /**
+   * H.O. ou bruto — PaguePlay.
+   *
+   * O estado mora aqui, e não dentro do `PainelMetas`, porque o alternador fica
+   * na faixa de cabeçalho junto do seletor de mês. Mesma razão pela qual o mês
+   * também mora aqui.
+   *
+   * A preferência é lida na montagem e regravada a cada troca; a chave leva o
+   * id do usuário para que máquina compartilhada não misture as escolhas.
+   */
+  const [unidade, setUnidade] = useState<UnidadeValor>(() => lerUnidade(perfil?.id));
+
+  // O perfil chega depois da primeira renderização (a sessão resolve em
+  // seguida). Sem isto, a preferência de quem escolheu "Bruto" era lida com a
+  // chave do anônimo e voltava para H.O. em todo carregamento.
+  useEffect(() => {
+    if (perfil?.id) setUnidade(lerUnidade(perfil.id));
+  }, [perfil?.id]);
+
+  const trocarUnidade = useCallback((u: UnidadeValor) => {
+    setUnidade(u);
+    gravarUnidade(perfil?.id, u);
+  }, [perfil?.id]);
   const noMesAtual = ehMesAtual(mesAnalise);
 
   const {
@@ -231,38 +259,9 @@ export function AnalyticsPanel({
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
   }, [operadorFiltroExterno]);
 
-  const porTipo = useMemo(() => {
-    if (!acordosMes?.length) return [];
-    const tipoLabels = isPP ? TIPO_LABELS_PAGUEPLAY : TIPO_LABELS;
-    const map: Record<string, { label: string; acordos: number; valor: number }> = {};
-    for (const a of acordosMes) {
-      const tipo = (a as any).tipo as string;
-      if (!tipo) continue;
-      let key = tipo;
-      let label: string;
-      if (isPP && (tipo === 'boleto' || tipo === 'pix')) {
-        key = 'boleto_pix';
-        label = 'Boleto/PIX';
-      } else if (isPP && tipo === 'cartao') {
-        key = 'cartao';
-        label = 'Cartão de Crédito';
-      } else {
-        label = tipoLabels[tipo] ?? tipo;
-      }
-      if (!map[key]) map[key] = { label, acordos: 0, valor: 0 };
-      map[key].acordos++;
-      map[key].valor += Number((a as any).valor) || 0;
-    }
-    const total = acordosMes.length || 1;
-    return Object.values(map)
-      .map(item => ({
-        label: item.label,
-        acordos: item.acordos,
-        valor: item.valor,
-        perc: Math.round((item.acordos / total) * 100),
-      }))
-      .sort((a, b) => b.acordos - a.acordos);
-  }, [acordosMes, isPP]);
+  // `porTipo` (distribuicao por forma de pagamento) saiu com o ChartsSection.
+  // A leitura por forma agora e o breakdown do donut do PainelMetas, que sai do
+  // ANALITICO e nao da tabulacao — e por isso responde ao alternador de unidade.
 
   const taxaConversao = totalAcordosMes > 0
     ? Math.round((totalPagosMes / totalAcordosMes) * 100)
@@ -307,13 +306,9 @@ export function AnalyticsPanel({
     ? '#f59e0b'
     : '#ef4444';
 
-  const donutPercent = meta
-    ? percMetaFinal
-    : totalAcordosMes > 0
-    ? Math.round((totalPagosMes / totalAcordosMes) * 100)
-    : 0;
-
-  const donutSublabel = meta ? 'da meta' : 'pagos';
+  // `donutPercent` e `donutSublabel` saíram junto com o `ChartsSection`: o
+  // donut da meta agora é o `CardMetaDonut`, dentro do PainelMetas, e calcula a
+  // própria porcentagem a partir de recebido e meta na unidade em exibição.
   const sparklineData = porDiaChart.map(d => ({ value: d.recebido ?? 0 }));
 
   /**
@@ -326,10 +321,51 @@ export function AnalyticsPanel({
   const carregando = loading || escopoPendente;
 
   /**
-   * O que sobrou do painel antigo: continua útil, mas não é sobre meta.
-   * Entra recolhido para não competir com os números de projeção.
+   * PaguePlay: os 11 cards do painel antigo, recolhidos.
+   *
+   * Continuam sendo a leitura detalhada de H.O. por forma, vínculo e agendado —
+   * o que eles não são é sobre META, e por isso saem da primeira dobra em vez
+   * de competir com projeção e quartil. Mesmo destino que os cards da BookPlay
+   * tiveram em `de5d5da`.
    */
-  const cardsSecundarios = !isPP && !carregando ? (
+  const ppSecundarios = isPP && !carregando ? (
+    <PPMetrics
+      temLogicaDiretoExtra={temLogicaDiretoExtra}
+      usarAnalitico={usarAnalitico}
+      analiticoBruto={anal.bruto}
+      analiticoHO={anal.ho}
+      analiticoQtd={anal.qtd}
+      pixBruto={anal.pixBruto}
+      pixHO={anal.pixHO}
+      cartaoBruto={anal.cartaoBruto}
+      cartaoHO={anal.cartaoHO}
+      naoTabuladoBruto={anal.naoTabuladoBruto}
+      naoTabuladoQtd={anal.naoTabuladoQtd}
+      valorHODireto={valorHODireto}
+      valorHOExtra={valorHOExtra}
+      valorHOMes={valorHOMes}
+      qtdDireto={qtdDireto}
+      qtdExtra={qtdExtra}
+      valorRecebidoDireto={valorRecebidoDireto}
+      valorRecebidoExtra={valorRecebidoExtra}
+      valorRecebidoMes={valorRecebidoMes}
+      totalAcordosMes={totalAcordosMes}
+      totalPagosMes={totalPagosMes}
+      totalPendentes={totalPendentes}
+      valorAgendadoMes={valorAgendadoMes}
+      valorHOAgendado={valorHOAgendado}
+      valorAgendadoRestanteMes={valorAgendadoRestanteMes}
+      totalAgendadoRestanteMes={totalAgendadoRestanteMes}
+      valorNaoPago={valorNaoPago}
+      totalNaoPagos={totalNaoPagos}
+    />
+  ) : null;
+
+  /**
+   * BookPlay: o que sobrou do painel antigo dela. Continua útil, mas não é
+   * sobre meta. Entra recolhido para não competir com os números de projeção.
+   */
+  const bpSecundarios = !isPP && !carregando ? (
     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <MetricCard
         label="Agendado no mês"
@@ -395,6 +431,9 @@ export function AnalyticsPanel({
     </div>
   ) : null;
 
+  /** O bloco recolhível do painel, seja qual for a operação. */
+  const cardsSecundarios = isPP ? ppSecundarios : bpSecundarios;
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-3">
@@ -412,8 +451,13 @@ export function AnalyticsPanel({
             </div>
             <div>
               <span className="text-sm font-semibold leading-none">Dados Analíticos</span>
-              <div className="mt-0.5 -ml-1.5">
+              <div className="mt-0.5 -ml-1.5 flex items-center gap-2 flex-wrap">
                 <SeletorMes mes={mesAnalise} onChange={setMesAnalise} desabilitado={carregando} />
+                {/* Ao lado do mês porque os dois recortam o MESMO painel logo
+                    abaixo. PaguePlay só: a BookPlay não tem H.O. */}
+                {isPP && (
+                  <SeletorUnidade valor={unidade} onChange={trocarUnidade} />
+                )}
               </div>
             </div>
           </div>
@@ -522,67 +566,21 @@ export function AnalyticsPanel({
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
                 </div>
-              ) : !isPP ? (
-                /* BookPlay: o corpo é o painel de metas. Ele SUBSTITUI os
-                   cards soltos e os dois gráficos que viviam aqui — o donut da
-                   meta e o Recebido vs Agendado foram absorvidos por ele, e o
-                   que sobrou virou o bloco recolhível `secundarios`. */
+              ) : (
+                /* O corpo é o painel de metas nas DUAS operações.
+                   Ele SUBSTITUI os cards soltos e os gráficos que viviam aqui —
+                   o donut da meta e o Recebido vs Agendado foram absorvidos por
+                   ele, e o que sobrou virou o bloco recolhível `secundarios`.
+                   A PaguePlay entrou nesse caminho em 2026-08-15; o que a
+                   distingue é o alternador H.O./Bruto no cabeçalho. */
                 <PainelMetas
                   mes={mesAnalise}
                   setorFiltro={setorEmFoco}
                   equipeFiltroExterno={equipeFiltroExterno}
                   operadorFiltroExterno={operadorFiltroExterno}
                   temLogicaDiretoExtra={temLogicaDiretoExtra}
+                  unidade={unidade}
                   secundarios={cardsSecundarios}
-                />
-              ) : (
-                <PPMetrics
-                  temLogicaDiretoExtra={temLogicaDiretoExtra}
-                  usarAnalitico={usarAnalitico}
-                  analiticoBruto={anal.bruto}
-                  analiticoHO={anal.ho}
-                  analiticoQtd={anal.qtd}
-                  pixBruto={anal.pixBruto}
-                  pixHO={anal.pixHO}
-                  cartaoBruto={anal.cartaoBruto}
-                  cartaoHO={anal.cartaoHO}
-                  naoTabuladoBruto={anal.naoTabuladoBruto}
-                  naoTabuladoQtd={anal.naoTabuladoQtd}
-                  valorHODireto={valorHODireto}
-                  valorHOExtra={valorHOExtra}
-                  valorHOMes={valorHOMes}
-                  qtdDireto={qtdDireto}
-                  qtdExtra={qtdExtra}
-                  valorRecebidoDireto={valorRecebidoDireto}
-                  valorRecebidoExtra={valorRecebidoExtra}
-                  valorRecebidoMes={valorRecebidoMes}
-                  totalAcordosMes={totalAcordosMes}
-                  totalPagosMes={totalPagosMes}
-                  totalPendentes={totalPendentes}
-                  valorAgendadoMes={valorAgendadoMes}
-                  valorHOAgendado={valorHOAgendado}
-                  valorAgendadoRestanteMes={valorAgendadoRestanteMes}
-                  totalAgendadoRestanteMes={totalAgendadoRestanteMes}
-                  valorNaoPago={valorNaoPago}
-                  totalNaoPagos={totalNaoPagos}
-                />
-              )}
-
-              {/* Charts row — só na PaguePlay. Na BookPlay o donut da meta e o
-                  Recebido vs Agendado passaram a viver dentro do PainelMetas. */}
-              {!carregando && isPP && (
-                <ChartsSection
-                  isPP={isPP}
-                  porDiaChart={porDiaChart}
-                  porTipo={porTipo}
-                  donutPercent={donutPercent}
-                  donutColor={donutColor}
-                  donutSublabel={donutSublabel}
-                  meta={meta}
-                  percMeta={percMetaFinal}
-                  valorRecebidoMes={usarAnalitico ? brutoComReceptivo : valorRecebidoMes}
-                  tickColor={tickColor}
-                  gridColor={gridColor}
                 />
               )}
 

@@ -101,7 +101,34 @@ percentuais são constantes em `src/lib/index.ts`:
 | Coren | 56,28 % | `PP_COREN_PERCENTUAL` |
 | Cofen | 18,76 % | `PP_COFEN_PERCENTUAL` |
 
-O **H.O. é a base de cálculo das metas** — não o valor bruto.
+#### A meta é PENSADA em H.O. e GRAVADA em bruto
+
+Esta linha dizia "o H.O. é a base de cálculo das metas — não o valor bruto", e
+induzia ao erro. O que acontece de fato:
+
+| | |
+|---|---|
+| `metas.meta_valor` de operador, agosto/2026 | R$ 72.115,38 |
+| × `PP_HO_PERCENTUAL` | **R$ 18.000,00** |
+
+O alvo que a operação combina é o H.O. redondo; o que vai para o banco é o
+bruto equivalente. Portanto:
+
+- **Comparar `bruto` contra `meta_valor` está correto** — é o que
+  `MetaProgressoHeader` e o painel de metas fazem. Comparar o H.O. contra a
+  meta gravada faria ninguém bater meta nunca (os primeiros colocados ficariam
+  em ~13%).
+- A aba Metas lê e grava **em bruto**. Nenhuma tela converte antes de salvar.
+- Para **exibir** a meta em H.O., converte-se na hora de mostrar
+  (`metaNaUnidade`, em `src/lib/unidadeValor.ts`). É o que o alternador
+  H.O./Bruto do dashboard da Pague Play faz.
+
+> **`total_ho` não é derivado da constante.** Ele vem gravado linha a linha
+> pelo relatório do ERP, e na prática soma 25,00% do bruto contra os 24,96% da
+> constante. Por isso o percentual da meta em H.O. fica ~0,16 ponto acima do
+> percentual em bruto — diferença verdadeira, não arredondamento. Use a coluna
+> para o recebido; use a constante só para converter meta e agendado, que não
+> têm coluna de H.O.
 
 ### 1.5 Módulos exclusivos de cada operação
 

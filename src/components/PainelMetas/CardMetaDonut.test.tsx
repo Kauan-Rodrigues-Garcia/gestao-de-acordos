@@ -11,9 +11,9 @@ import userEvent from '@testing-library/user-event';
 import { CardMetaDonut, fatiasDeForma, corDaMeta } from './CardMetaDonut';
 
 const FORMAS = {
-  'Pix':    { bruto: 40_000, qtd: 80 },
-  'Boleto': { bruto: 20_000, qtd: 30 },
-  'Cartão': { bruto: 5_000,  qtd: 4 },
+  'Pix':    { valor: 40_000, qtd: 80 },
+  'Boleto': { valor: 20_000, qtd: 30 },
+  'Cartão': { valor: 5_000,  qtd: 4 },
 };
 
 const render0 = (over: Partial<Parameters<typeof CardMetaDonut>[0]> = {}) =>
@@ -51,7 +51,7 @@ describe('fatiasDeForma', () => {
   });
 
   it('total zerado não vira NaN', () => {
-    const fatias = fatiasDeForma({ 'Pix': { bruto: 0, qtd: 0 } });
+    const fatias = fatiasDeForma({ 'Pix': { valor: 0, qtd: 0 } });
     expect(fatias[0].perc).toBe(0);
   });
 });
