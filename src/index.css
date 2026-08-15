@@ -730,3 +730,32 @@
 @media (prefers-reduced-motion: reduce) {
   .animate-sino { animation: none; }
 }
+
+/* ── Véu do Desempenho do Dia ───────────────────────────────────────────────
+   `backdrop-filter` cobrindo a viewport é caro: o navegador reamostra tudo que
+   está atrás dele. Três coisas o tornam barato aqui:
+
+     • raio pequeno (2px) — o custo cresce com o raio;
+     • `translateZ(0)` promove a camada, então o desfoque é calculado uma vez e
+       o fade passa a ser composição de textura, não recálculo por quadro;
+     • `will-change: opacity` avisa o navegador antes de a animação começar.
+
+   O que ainda o encarece é o fundo MUDAR enquanto o véu está aberto. Não é o
+   caso: o painel fica por cima, e a página atrás está parada.
+
+   `prefers-reduced-transparency` desliga o desfoque por completo — quem pede
+   menos transparência costuma pedir por legibilidade ou por custo de máquina, e
+   as duas razões valem aqui. */
+.veu-desfocado {
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transform: translateZ(0);
+  will-change: opacity;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .veu-desfocado {
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}

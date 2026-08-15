@@ -139,22 +139,23 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
       {aberto && (
         <>
           {/*
-            Sem `backdrop-blur`.
+            O desfoque voltou, agora em camada promovida — ver `.veu-desfocado`
+            em `index.css` para o porquê de cada propriedade.
 
-            Um `backdrop-filter` cobrindo a viewport inteira obriga o navegador a
-            reprocessar tudo que está atrás dele a cada quadro — e ele fica atrás
-            de uma tela de acordos com centenas de linhas. Era o item mais caro
-            do painel, e o que ele entregava era decoração.
+            Ele nunca foi a causa principal do engasgo: era um de cinco itens, e
+            o que pesava de verdade era o hook consultar 15 dias de analítico em
+            toda página com o painel fechado. Corrigido aquilo, um desfoque de
+            2px numa camada própria cabe no orçamento do quadro.
 
-            O escurecimento sozinho já separa o painel do fundo, e custa uma
-            camada de cor.
+            Se um dia voltar a pesar, trocar a classe por `bg-black/30` puro
+            resolve numa linha — e é só isso que se perde.
           */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-30 bg-black/30"
+            className="veu-desfocado fixed inset-0 z-30 bg-black/25"
             onClick={onClose}
           />
 
