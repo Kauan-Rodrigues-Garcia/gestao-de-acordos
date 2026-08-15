@@ -49,7 +49,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
 import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetDespedida } from './pet/PetDespedida';
-import { PainelDesempenhoDiario } from './PainelDesempenhoDiario';
+import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
@@ -359,8 +359,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       <Separator className="bg-sidebar-border" />
 
-      {/* Desempenho Diário (PaguePLAY only) */}
-      {isPP && (
+      {/*
+        Desempenho do Dia — nas DUAS operações desde a versão 2.0.
+        Era exclusivo da PaguePlay porque só ela tinha H.O.; o painel agora lê o
+        analítico, que a BookPlay também alimenta, e o alternador de unidade é
+        que fica escondido lá.
+
+        Gate por permissão e não por slug: é a mesma fonte da aba Analítico, e
+        quem não pode ver o Analítico não deveria ver o dia dele por outra porta.
+      */}
+      {temPermissao('ver_analitico') && (
         <div className="px-2 pt-2">
           <button
             onClick={() => setPainelDiaAberto(v => !v)}
@@ -381,7 +389,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   exit={{ opacity: 0 }}
                   className="flex-1 truncate text-left"
                 >
-                  📊 Desempenho do Dia
+                  Desempenho do Dia
                 </motion.span>
               )}
             </AnimatePresence>
@@ -660,12 +668,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       </div>
 
-      {isPP && (
-        <PainelDesempenhoDiario
-          aberto={painelDiaAberto}
-          onClose={() => setPainelDiaAberto(false)}
-        />
-      )}
+      <DesempenhoDia
+        aberto={painelDiaAberto}
+        onClose={() => setPainelDiaAberto(false)}
+      />
+
 
       {isPP && (
         <ChatplayOnboardingModal
