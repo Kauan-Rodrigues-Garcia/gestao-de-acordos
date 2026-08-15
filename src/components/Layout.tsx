@@ -92,6 +92,13 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
   { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
+  // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
+  // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
+  // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
+  // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
+  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           permissaoKey: 'ver_analitico' },
+  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
+  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             permissaoKey: 'importar_excel' },
 ];
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -348,74 +355,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
         ))}
 
-        {/* Analítico — PaguePlay e BookPlay, verificado direto no slug da empresa */}
-        {(empresa?.slug === 'pagueplay' || empresa?.slug === 'bookplay') && (
-          <NavLink
-            to={ROUTE_PATHS.ANALITICO}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              isActive
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-            )}
-          >
-            <BarChart2 className="w-4 h-4 flex-shrink-0" />
-            <AnimatePresence>
-              {(sidebarOpen || mobileOpen) && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
-                  Analítico
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </NavLink>
-        )}
-
-        {/* Campanha Fácil — BookPlay only, e apenas para cargos acima de operador */}
-        {empresa?.slug === 'bookplay' && userRole !== 'operador' && (
-          <NavLink
-            to={ROUTE_PATHS.CAMPANHA_FACIL}
-            onClick={() => setMobileOpen(false)}
-            className={({ isActive }) => cn(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-              isActive
-                ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-            )}
-          >
-            <Megaphone className="w-4 h-4 flex-shrink-0" />
-            <AnimatePresence>
-              {(sidebarOpen || mobileOpen) && (
-                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
-                  Campanha Fácil
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </NavLink>
-        )}
-
-        {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
-        {!permLoading && temPermissao('importar_excel') && (
-        <NavLink
-          to="/acordos/importar"
-          onClick={() => setMobileOpen(false)}
-          className={({ isActive }) => cn(
-            'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-            isActive
-              ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground'
-          )}
-        >
-          <Upload className="w-4 h-4 flex-shrink-0" />
-          <AnimatePresence>
-            {(sidebarOpen || mobileOpen) && (
-              <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate">
-                Importar Excel
-              </motion.span>
-            )}
-          </AnimatePresence>
-        </NavLink>
-        )}
       </nav>
 
       <Separator className="bg-sidebar-border" />
