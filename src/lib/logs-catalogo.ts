@@ -269,6 +269,12 @@ export const ACAO_LABEL: Record<string, string> = {
   importacao_iniciada:         'Importação iniciada',
   importacao_concluida:        'Importação concluída',
   importacao_falhou:           'Importação falhou',
+  composicao_mes_regerado:     'Composição do mês regerada',
+  // Legado: até 20260815 a composição era auditada linha a linha e uma única
+  // execução gravava ~240 destas. A trilha é append-only, então as antigas
+  // continuam aparecendo até saírem pela retenção.
+  composicao_mes_criado:       'Composição do mês (linha criada)',
+  composicao_mes_excluido:     'Composição do mês (linha excluída)',
 
   // ── WhatsApp ──────────────────────────────────────────────────────────────
   whatsapp_lembrete_enviado:   'Lembrete de WhatsApp enviado',
