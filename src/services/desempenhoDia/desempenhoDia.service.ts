@@ -298,28 +298,37 @@ export async function buscarMetaDoEscopo(params: {
  * todos os demais .......................... só ele
  * ```
  *
- * ## Por que não há filtro de pessoa
+ * ## O filtro é de EQUIPE, nunca de pessoa
  *
- * Havia, e saiu. O painel é uma espiada rápida em «como vai o dia», não a
- * ferramenta de análise — quem precisa recortar por pessoa tem a aba Analítico,
- * que faz isso melhor e com o escopo completo (carimbo de setor, setor
- * alternativo, origens excluídas).
+ * Quem enxerga mais de uma equipe pode recortar por uma delas, ou ver todas. O
+ * seletor de pessoa que existia antes saiu e não volta: ele obrigava a responder
+ * «o dia de quem?» toda vez que o painel abria, e quem precisa desse recorte tem
+ * a aba Analítico — que faz melhor, com o escopo completo (carimbo de setor,
+ * setor alternativo, origens excluídas).
  *
- * Um seletor aqui obrigava a responder «o dia de quem?» toda vez que o painel
- * abria, para uma resposta que quase sempre era a mesma. Agora o escopo é
- * consequência do cargo, e o cabeçalho diz qual é.
+ * Equipe é outra coisa. É a unidade que o líder acompanha e sobre a qual a
+ * gerência cobra, e são poucas por setor: o seletor tem três ou quatro opções,
+ * não cinquenta.
  *
  * ## Líder com mais de uma equipe
  *
- * Acontece: são 13 vínculos para 9 líderes na BookPlay. Nesse caso ele vê a SOMA
- * das equipes que lidera — escolher uma delas seria esconder trabalho que também
- * é dele, e oferecer um seletor devolveria a pergunta que acabamos de tirar.
+ * Acontece: 13 vínculos para 9 líderes na BookPlay. «Todas» soma as que ele
+ * lidera; o seletor deixa isolar uma.
  *
  * ## Líder sem equipe cai no setor
  *
  * Não é caso raro: 22 dos 31 líderes da BookPlay não estão em `equipe_lideres`.
- * Devolver «só você» para eles esvaziaria o painel de quem mais o usa.
+ * Devolver «só você» para eles esvaziaria o painel de quem mais o usa. E, caindo
+ * no setor, ele ganha o mesmo seletor da gerência.
  */
+
+/** Uma opção do seletor de equipe, com os membros já resolvidos. */
+export interface EquipeDoEscopo {
+  id: string;
+  nome: string;
+  membros: string[];
+}
+
 export interface EscopoDoDia {
   escopo: EscopoAnalitico;
   /** O que o cabeçalho mostra: «Equipe Matheus», «Setor Receptivo»… */
@@ -328,6 +337,13 @@ export interface EscopoDoDia {
   operadorId: string | null;
   /** Filtro de setor para as consultas de `acordos`. */
   setorId: string | null;
+  /**
+   * As equipes que esta pessoa pode isolar.
+   *
+   * Vazio ou com um item só = nenhum seletor na tela. Oferecer um controle com
+   * uma opção é oferecer uma escolha que não existe.
+   */
+  equipes: EquipeDoEscopo[];
 }
 
 const CARGOS_EMPRESA = ['diretoria', 'administrador', 'super_admin'];
@@ -341,32 +357,65 @@ export async function resolverEscopoDoDia(params: {
   const { empresaId, perfilId, cargo, setorId } = params;
 
   if (CARGOS_EMPRESA.includes(cargo)) {
-    return { escopo: ESCOPO_EMPRESA, rotulo: 'Empresa inteira', operadorId: null, setorId: null };
+    return {
+      escopo: ESCOPO_EMPRESA, rotulo: 'Empresa inteira',
+      operadorId: null, setorId: null, equipes: [],
+    };
   }
 
-  if (cargo === 'gerencia') {
-    return escopoDeSetorInteiro(empresaId, setorId, perfilId);
-  }
+  if (cargo === 'gerencia') return escopoDeSetorInteiro(empresaId, setorId, perfilId);
 
   if (cargo === 'lider') {
     const equipes = await equipesQueLidera(empresaId, perfilId);
     if (equipes.length === 0) return escopoDeSetorInteiro(empresaId, setorId, perfilId);
 
-    const membros = await membrosDasEquipes(empresaId, equipes.map(e => e.id));
-    // O próprio líder entra: o acordo que ele tabula é produção da equipe dele.
-    const operadores = new Set([...membros, perfilId]);
+    const porEquipe = await membrosPorEquipe(empresaId, equipes.map(e => e.id));
+    // O próprio líder entra no total: o acordo que ele tabula é produção da
+    // equipe dele. Fica fora das equipes individuais porque não é membro de
+    // nenhuma — está acima delas.
+    const todos = new Set([...porEquipe.values()].flat().concat(perfilId));
 
     return {
-      escopo: { tipo: 'equipe', operadores },
-      rotulo: equipes.length === 1
-        ? `Equipe ${equipes[0].nome}`
-        : `${equipes.length} equipes`,
+      escopo: { tipo: 'equipe', operadores: todos },
+      rotulo: equipes.length === 1 ? `Equipe ${equipes[0].nome}` : 'Todas as equipes',
       operadorId: null,
       setorId: null,
+      equipes: equipes.map(e => ({ ...e, membros: porEquipe.get(e.id) ?? [] })),
     };
   }
 
-  return { escopo: { tipo: 'operador', operadorId: perfilId }, rotulo: 'Os seus números', operadorId: perfilId, setorId: null };
+  return {
+    escopo: { tipo: 'operador', operadorId: perfilId },
+    rotulo: 'Os seus números',
+    operadorId: perfilId, setorId: null, equipes: [],
+  };
+}
+
+/**
+ * O escopo efetivo depois da escolha no seletor.
+ *
+ * `null` (todas) devolve a base intacta. Uma equipe escolhida troca o conjunto e
+ * o rótulo, e zera o filtro de setor: recortar por equipe E por setor ao mesmo
+ * tempo daria a interseção dos dois, que não é o que o seletor promete.
+ *
+ * Equipe desconhecida devolve a base — é o que acontece quando alguém escolhe
+ * uma equipe e ela é apagada, ou quando o escopo é recarregado com outra lista.
+ */
+export function aplicarEquipeEscolhida(
+  base: EscopoDoDia, equipeId: string | null,
+): EscopoDoDia {
+  if (!equipeId) return base;
+
+  const equipe = base.equipes.find(e => e.id === equipeId);
+  if (!equipe) return base;
+
+  return {
+    ...base,
+    escopo: { tipo: 'equipe', operadores: new Set(equipe.membros) },
+    rotulo: `Equipe ${equipe.nome}`,
+    operadorId: null,
+    setorId: null,
+  };
 }
 
 /** Setor inteiro — ou só a própria pessoa, quando ela não tem setor. */
@@ -379,22 +428,44 @@ async function escopoDeSetorInteiro(
     return {
       escopo: { tipo: 'operador', operadorId: perfilId },
       rotulo: 'Os seus números',
-      operadorId: perfilId,
-      setorId: null,
+      operadorId: perfilId, setorId: null, equipes: [],
     };
   }
 
-  const [nome, membros] = await Promise.all([
+  const [nome, pessoas, equipes] = await Promise.all([
     nomeDoSetor(setorId),
-    membrosDoSetor(empresaId, setorId),
+    pessoasDoSetor(empresaId, setorId),
+    equipesDoSetor(empresaId, setorId),
   ]);
 
+  // Agrupa em memória: as pessoas do setor já vieram com a equipe de cada uma,
+  // então montar o seletor não custa consulta nova.
+  const porEquipe = agruparPorEquipe(pessoas);
+
   return {
-    escopo: { tipo: 'equipe', operadores: new Set(membros) },
+    escopo: { tipo: 'equipe', operadores: new Set(pessoas.map(p => p.id)) },
     rotulo: nome ? `Setor ${nome}` : 'Seu setor',
     operadorId: null,
     setorId,
+    // Equipe sem ninguém não vira opção: escolhê-la zeraria o painel, e o zero
+    // pareceria resultado do dia.
+    equipes: equipes
+      .map(e => ({ ...e, membros: porEquipe.get(e.id) ?? [] }))
+      .filter(e => e.membros.length > 0),
   };
+}
+
+function agruparPorEquipe(
+  pessoas: readonly { id: string; equipe_id: string | null }[],
+): Map<string, string[]> {
+  const mapa = new Map<string, string[]>();
+  for (const p of pessoas) {
+    if (!p.equipe_id) continue;
+    const atual = mapa.get(p.equipe_id);
+    if (atual) atual.push(p.id);
+    else mapa.set(p.equipe_id, [p.id]);
+  }
+  return mapa;
 }
 
 async function equipesQueLidera(
@@ -413,26 +484,47 @@ async function equipesQueLidera(
   type Linha = { equipes: { id: string; nome: string } | null };
   return ((data as Linha[] | null) ?? [])
     .map(l => l.equipes)
-    .filter((e): e is { id: string; nome: string } => e !== null);
+    .filter((e): e is { id: string; nome: string } => e !== null)
+    .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 }
 
-async function membrosDasEquipes(empresaId: string, equipeIds: string[]): Promise<string[]> {
-  if (!equipeIds.length) return [];
+async function membrosPorEquipe(
+  empresaId: string, equipeIds: string[],
+): Promise<Map<string, string[]>> {
+  if (!equipeIds.length) return new Map();
+
   const { data } = await supabase
     .from('perfis')
-    .select('id')
+    .select('id, equipe_id')
     .eq('empresa_id', empresaId)
     .in('equipe_id', equipeIds);
-  return ((data as { id: string }[] | null) ?? []).map(p => p.id);
+
+  return agruparPorEquipe(
+    (data as { id: string; equipe_id: string | null }[] | null) ?? [],
+  );
 }
 
-async function membrosDoSetor(empresaId: string, setorId: string): Promise<string[]> {
+async function pessoasDoSetor(
+  empresaId: string, setorId: string,
+): Promise<{ id: string; equipe_id: string | null }[]> {
   const { data } = await supabase
     .from('perfis')
-    .select('id')
+    .select('id, equipe_id')
     .eq('empresa_id', empresaId)
     .eq('setor_id', setorId);
-  return ((data as { id: string }[] | null) ?? []).map(p => p.id);
+  return (data as { id: string; equipe_id: string | null }[] | null) ?? [];
+}
+
+async function equipesDoSetor(
+  empresaId: string, setorId: string,
+): Promise<{ id: string; nome: string }[]> {
+  const { data } = await supabase
+    .from('equipes')
+    .select('id, nome')
+    .eq('empresa_id', empresaId)
+    .eq('setor_id', setorId)
+    .order('nome');
+  return (data as { id: string; nome: string }[] | null) ?? [];
 }
 
 async function nomeDoSetor(setorId: string): Promise<string | null> {
@@ -444,16 +536,26 @@ async function nomeDoSetor(setorId: string): Promise<string | null> {
   return (data as { nome: string } | null)?.nome ?? null;
 }
 
+// ─── Datas ───────────────────────────────────────────────────────────────────
+//
+// Aritmética local, e não UTC: o `Date` do navegador vira o dia às 21h em
+// São Paulo quando calculado em UTC, e o painel mostraria o dia seguinte a
+// partir do fim da tarde.
+
 /** 'yyyy-MM-dd' do dia seguinte. */
 export function diaSeguinte(dia: string): string {
-  const [y, m, d] = dia.split('-').map(Number);
-  const next = new Date(y, m - 1, d + 1);
-  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+  return deslocar(dia, 1);
 }
 
 /** 'yyyy-MM-dd' de N dias antes. */
 export function diasAntes(dia: string, n: number): string {
-  const [y, m, d] = dia.split('-').map(Number);
-  const antes = new Date(y, m - 1, d - n);
-  return `${antes.getFullYear()}-${String(antes.getMonth() + 1).padStart(2, '0')}-${String(antes.getDate()).padStart(2, '0')}`;
+  return deslocar(dia, -n);
 }
+
+function deslocar(dia: string, delta: number): string {
+  const [y, m, d] = dia.split('-').map(Number);
+  const alvo = new Date(y, m - 1, d + delta);
+  return `${alvo.getFullYear()}-${String(alvo.getMonth() + 1).padStart(2, '0')}`
+    + `-${String(alvo.getDate()).padStart(2, '0')}`;
+}
+

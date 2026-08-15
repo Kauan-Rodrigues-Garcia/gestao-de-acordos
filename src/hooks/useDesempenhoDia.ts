@@ -19,8 +19,8 @@ import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarAnaliticoPeriodo, somarPorDia, buscarAcordosDoDia,
   contarFormalizadosDoDia, buscarPixDoDia, buscarMetaDoEscopo,
-  resolverEscopoDoDia, diasAntes,
-  type AcordoDoDia, type LinhaPixDia, type EscopoDoDia,
+  resolverEscopoDoDia, aplicarEquipeEscolhida, diasAntes,
+  type AcordoDoDia, type LinhaPixDia, type EscopoDoDia, type EquipeDoEscopo,
 } from '@/services/desempenhoDia/desempenhoDia.service';
 import {
   barraEstados, metaDoDia, variacao, mediaDiasUteisAnteriores,
@@ -57,6 +57,8 @@ export interface ParametrosDesempenhoDia {
   aberto: boolean;
   /** 'yyyy-MM-dd' */
   dia: string;
+  /** Equipe escolhida no seletor. `null` = todas as que o escopo alcança. */
+  equipeId: string | null;
   /** PaguePlay: H.O. ou bruto. Ignorado na BookPlay. */
   unidade: UnidadeValor;
   /** O setor tem a lógica Direto/Extra? Só então o bloco aparece. */
@@ -95,6 +97,8 @@ export interface DadosDesempenhoDia {
 
   /** O que o painel está somando: «Equipe Matheus», «Setor Receptivo»… */
   escopoRotulo: string;
+  /** As equipes que dá para isolar. Menos de duas = sem seletor na tela. */
+  equipes: EquipeDoEscopo[];
   refetch: () => Promise<void>;
 }
 
@@ -105,14 +109,14 @@ const SEM_VARIACAO: Variacao = { pct: null, base: 0 };
 
 export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempenhoDia {
   const {
-    aberto, dia, unidade, temLogicaDiretoExtra, isPaguePlay, tags,
+    aberto, dia, equipeId, unidade, temLogicaDiretoExtra, isPaguePlay, tags,
   } = params;
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
   const cargo = perfil?.perfil ?? '';
 
-  const [escopoDoDia, setEscopoDoDia] = useState<EscopoDoDia | null>(null);
+  const [escopoBase, setEscopoBase] = useState<EscopoDoDia | null>(null);
   const [porDiaBruto, setPorDiaBruto] = useState<Record<string, number>>({});
   const [porDiaHo, setPorDiaHo]       = useState<Record<string, number>>({});
   const [acordos, setAcordos]         = useState<AcordoDoDia[]>([]);
@@ -144,11 +148,23 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
         cargo,
         setorId: perfil.setor_id ?? null,
       });
-      if (!cancelado) setEscopoDoDia(r);
+      if (!cancelado) setEscopoBase(r);
     }
     void resolver();
     return () => { cancelado = true; };
   }, [aberto, empresa?.id, perfil?.id, perfil?.setor_id, cargo]);
+
+  /**
+   * O escopo efetivo: a base do cargo, recortada pela equipe escolhida.
+   *
+   * A base é resolvida UMA vez, com uma ida ao banco; trocar de equipe no
+   * seletor é aritmética de conjunto sobre o que já veio, sem consulta nova de
+   * membros.
+   */
+  const escopoDoDia = useMemo(
+    () => (escopoBase ? aplicarEquipeEscolhida(escopoBase, equipeId) : null),
+    [escopoBase, equipeId],
+  );
 
   /**
    * Identidade estável do escopo.
@@ -318,6 +334,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     pix,
     tags: fatias,
     escopoRotulo: escopoDoDia?.rotulo ?? '',
+    equipes: escopoBase?.equipes ?? [],
     refetch: buscar,
   };
 }

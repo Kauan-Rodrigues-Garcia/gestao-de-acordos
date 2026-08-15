@@ -20,6 +20,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const respostas = vi.hoisted(() => ({
   equipe_lideres: [] as unknown[],
   perfis: [] as unknown[],
+  equipes: [] as unknown[],
   setores: null as unknown,
 }));
 
@@ -29,6 +30,7 @@ vi.mock('@/lib/supabase', () => {
       select: () => alvo,
       eq: () => alvo,
       in: () => alvo,
+      order: () => alvo,
       maybeSingle: () => Promise.resolve({ data: respostas.setores, error: null }),
       then: (
         resolve: (v: { data: unknown; error: null }) => unknown,
@@ -39,13 +41,14 @@ vi.mock('@/lib/supabase', () => {
   return { supabase: { from: (t: string) => construtor(t as keyof typeof respostas) } };
 });
 
-import { resolverEscopoDoDia } from './desempenhoDia.service';
+import { resolverEscopoDoDia, aplicarEquipeEscolhida } from './desempenhoDia.service';
 
 const BASE = { empresaId: 'e-1', perfilId: 'u-1', setorId: 's-1' };
 
 beforeEach(() => {
   respostas.equipe_lideres = [];
   respostas.perfis = [];
+  respostas.equipes = [];
   respostas.setores = { nome: 'Receptivo' };
 });
 
@@ -62,12 +65,17 @@ describe('resolverEscopoDoDia — por cargo', () => {
   });
 
   it('gerência vê o setor inteiro, com o nome no rótulo', async () => {
-    respostas.perfis = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    respostas.perfis = [
+      { id: 'a', equipe_id: 'eq-1' },
+      { id: 'b', equipe_id: 'eq-1' },
+      { id: 'c', equipe_id: null },
+    ];
     const r = await resolverEscopoDoDia({ ...BASE, cargo: 'gerencia' });
 
     expect(r.rotulo).toBe('Setor Receptivo');
     expect(r.setorId).toBe('s-1');
     expect(r.escopo.tipo).toBe('equipe');
+    // Os três, inclusive quem não está em equipe nenhuma: «todas» é o setor.
     if (r.escopo.tipo === 'equipe') expect(r.escopo.operadores.size).toBe(3);
   });
 
@@ -89,7 +97,7 @@ describe('resolverEscopoDoDia — por cargo', () => {
 describe('resolverEscopoDoDia — líder', () => {
   it('vê a equipe que lidera, com o nome dela no rótulo', async () => {
     respostas.equipe_lideres = [{ equipes: { id: 'eq-1', nome: 'Matheus' } }];
-    respostas.perfis = [{ id: 'a' }, { id: 'b' }];
+    respostas.perfis = [{ id: 'a', equipe_id: 'eq-1' }, { id: 'b', equipe_id: 'eq-1' }];
 
     const r = await resolverEscopoDoDia({ ...BASE, cargo: 'lider' });
 
@@ -103,23 +111,30 @@ describe('resolverEscopoDoDia — líder', () => {
     }
   });
 
-  it('liderando mais de uma equipe, soma todas', async () => {
+  it('liderando mais de uma equipe, soma todas e oferece o seletor', async () => {
     // Acontece: 13 vínculos para 9 líderes na BookPlay.
     respostas.equipe_lideres = [
       { equipes: { id: 'eq-1', nome: 'Matheus' } },
       { equipes: { id: 'eq-2', nome: 'Bryan' } },
     ];
-    respostas.perfis = [{ id: 'a' }, { id: 'b' }, { id: 'c' }];
+    respostas.perfis = [
+      { id: 'a', equipe_id: 'eq-1' },
+      { id: 'b', equipe_id: 'eq-1' },
+      { id: 'c', equipe_id: 'eq-2' },
+    ];
 
     const r = await resolverEscopoDoDia({ ...BASE, cargo: 'lider' });
-    expect(r.rotulo).toBe('2 equipes');
+
+    expect(r.rotulo).toBe('Todas as equipes');
     if (r.escopo.tipo === 'equipe') expect(r.escopo.operadores.size).toBe(4);
+    // Ordenadas por nome, para o seletor não trocar de ordem entre aberturas.
+    expect(r.equipes.map(e => e.nome)).toEqual(['Bryan', 'Matheus']);
   });
 
   /** 22 dos 31 líderes da BookPlay estão neste caso. */
   it('sem equipe nenhuma, cai no setor', async () => {
     respostas.equipe_lideres = [];
-    respostas.perfis = [{ id: 'a' }, { id: 'b' }];
+    respostas.perfis = [{ id: 'a', equipe_id: null }, { id: 'b', equipe_id: null }];
 
     const r = await resolverEscopoDoDia({ ...BASE, cargo: 'lider' });
     expect(r.rotulo).toBe('Setor Receptivo');
@@ -137,5 +152,78 @@ describe('resolverEscopoDoDia — líder', () => {
     respostas.setores = null;
     const r = await resolverEscopoDoDia({ ...BASE, cargo: 'gerencia' });
     expect(r.rotulo).toBe('Seu setor');
+  });
+});
+
+describe('equipes disponíveis para o seletor', () => {
+  it('gerência pode isolar as equipes do setor', async () => {
+    respostas.equipes = [{ id: 'eq-1', nome: 'Bryan' }, { id: 'eq-2', nome: 'Matheus' }];
+    respostas.perfis = [
+      { id: 'a', equipe_id: 'eq-1' },
+      { id: 'b', equipe_id: 'eq-2' },
+      { id: 'c', equipe_id: null },
+    ];
+
+    const r = await resolverEscopoDoDia({ ...BASE, cargo: 'gerencia' });
+    expect(r.equipes.map(e => e.nome)).toEqual(['Bryan', 'Matheus']);
+    expect(r.equipes[0].membros).toEqual(['a']);
+  });
+
+  /** Escolhê-la zeraria o painel, e o zero pareceria resultado do dia. */
+  it('equipe sem ninguém não vira opção', async () => {
+    respostas.equipes = [{ id: 'eq-1', nome: 'Cheia' }, { id: 'eq-2', nome: 'Vazia' }];
+    respostas.perfis = [{ id: 'a', equipe_id: 'eq-1' }];
+
+    const r = await resolverEscopoDoDia({ ...BASE, cargo: 'gerencia' });
+    expect(r.equipes.map(e => e.nome)).toEqual(['Cheia']);
+  });
+
+  it('quem vê a empresa ou só a si não recebe seletor', async () => {
+    for (const cargo of ['diretoria', 'operador']) {
+      const r = await resolverEscopoDoDia({ ...BASE, cargo });
+      expect(r.equipes, cargo).toEqual([]);
+    }
+  });
+});
+
+describe('aplicarEquipeEscolhida', () => {
+  const base = {
+    escopo: { tipo: 'equipe' as const, operadores: new Set(['a', 'b', 'c']) },
+    rotulo: 'Setor Receptivo',
+    operadorId: null,
+    setorId: 's-1',
+    equipes: [
+      { id: 'eq-1', nome: 'Bryan', membros: ['a'] },
+      { id: 'eq-2', nome: 'Matheus', membros: ['b', 'c'] },
+    ],
+  };
+
+  it('«todas» devolve a base intacta', () => {
+    expect(aplicarEquipeEscolhida(base, null)).toBe(base);
+  });
+
+  it('a equipe escolhida troca o conjunto e o rótulo', () => {
+    const r = aplicarEquipeEscolhida(base, 'eq-2');
+    expect(r.rotulo).toBe('Equipe Matheus');
+    if (r.escopo.tipo === 'equipe') {
+      expect([...r.escopo.operadores].sort()).toEqual(['b', 'c']);
+    }
+  });
+
+  /**
+   * Recortar por equipe E por setor daria a interseção dos dois, que não é o
+   * que o seletor promete.
+   */
+  it('a equipe escolhida zera o filtro de setor', () => {
+    expect(aplicarEquipeEscolhida(base, 'eq-1').setorId).toBeNull();
+  });
+
+  it('equipe desconhecida devolve a base, em vez de esvaziar a tela', () => {
+    // Acontece quando a equipe é apagada com o painel aberto.
+    expect(aplicarEquipeEscolhida(base, 'sumiu')).toBe(base);
+  });
+
+  it('a lista de equipes sobrevive à escolha — o seletor não some', () => {
+    expect(aplicarEquipeEscolhida(base, 'eq-1').equipes).toHaveLength(2);
   });
 });

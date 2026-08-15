@@ -36,6 +36,9 @@ import { useDesempenhoDia } from '@/hooks/useDesempenhoDia';
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { Button } from '@/components/ui/button';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 import { getTodayISO } from '@/lib/index';
 import { lerUnidade, gravarUnidade, type UnidadeValor } from '@/lib/unidadeValor';
 import { cn } from '@/lib/utils';
@@ -64,6 +67,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const semMovimento = useReducedMotion();
 
   const [dia, setDia] = useState(getTodayISO());
+  const [equipeId, setEquipeId] = useState<string | null>(null);
   const [unidade, setUnidade] = useState<UnidadeValor>(() => lerUnidade(perfil?.id));
 
   const ehHoje = dia === getTodayISO();
@@ -77,6 +81,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const dados = useDesempenhoDia({
     aberto,
     dia,
+    equipeId,
     unidade,
     temLogicaDiretoExtra,
     isPaguePlay: tenant.isPaguePlay,
@@ -214,12 +219,12 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
 
             {/* ── Controles ── */}
             {/*
-              Só a data. O seletor de pessoa que havia aqui saiu: o painel é uma
-              espiada rápida, não a ferramenta de análise, e obrigava a responder
-              «o dia de quem?» toda vez para uma resposta quase sempre igual.
-              Quem precisa recortar por pessoa tem a aba Analítico.
+              Data e, para quem alcança mais de uma, equipe. O seletor de PESSOA
+              que havia aqui não volta: obrigava a responder «o dia de quem?»
+              toda vez, para uma resposta quase sempre igual, e quem precisa
+              desse recorte tem a aba Analítico.
             */}
-            <div className="shrink-0 border-b border-border/60 px-4 py-2.5">
+            <div className="shrink-0 space-y-2 border-b border-border/60 px-4 py-2.5">
               <div className="flex items-center gap-2">
                 <Button
                   variant="outline" size="icon" className="h-7 w-7 shrink-0 rounded-lg"
@@ -246,6 +251,32 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
                   </Button>
                 )}
               </div>
+
+              {/*
+                Com uma equipe só não há escolha a fazer, e um seletor de opção
+                única é um controle que promete recorte e não entrega.
+              */}
+              {dados.equipes.length > 1 && (
+                <Select
+                  value={equipeId ?? '__todas'}
+                  onValueChange={v => setEquipeId(v === '__todas' ? null : v)}
+                >
+                  <SelectTrigger className="h-7 w-full rounded-lg border-border/70 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__todas">Todas as equipes</SelectItem>
+                    {dados.equipes.map(e => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome}
+                        <span className="ml-1.5 text-muted-foreground">
+                          · {e.membros.length}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {/* ── Conteúdo ── */}
