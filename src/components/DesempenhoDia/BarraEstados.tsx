@@ -51,33 +51,47 @@ export function BarraEstados({ estados, valorPago }: BarraEstadosProps) {
 
   return (
     <div className="space-y-2">
+      {/*
+        A trilha é estática e quem anima é a fita inteira, com `scaleX`.
+
+        Antes cada segmento animava a própria `width`. Três animações de largura
+        no mesmo flex forçam o navegador a recalcular layout a cada quadro, e o
+        custo se multiplica pelas outras barras da tela — foi a maior fonte de
+        engasgo do painel. `transform` não sai do compositor: uma animação, sem
+        layout nenhum.
+      */}
       <div
-        className="flex h-2 w-full overflow-hidden rounded-full bg-muted/40"
+        className="h-2 w-full overflow-hidden rounded-full bg-muted/40"
         role="img"
         aria-label={
           `${estados.pago} pagos, ${estados.aVerificar} a verificar, `
           + `${estados.naoPago} não pagos, de ${total} agendados`
         }
       >
-        {SEGMENTOS.map(s => {
-          const qtd = estados[s.chave];
-          if (qtd === 0) return null;
-          const pct = (qtd / total) * 100;
-          return (
-            <motion.div
-              key={s.chave}
-              initial={semMovimento ? false : { width: 0 }}
-              animate={{ width: `${pct}%` }}
-              transition={{ duration: 0.45, ease: 'easeOut' }}
-              className={cn(s.classe, 'h-full first:rounded-l-full last:rounded-r-full')}
-              title={
-                s.chave === 'pago' && valorPago !== undefined
-                  ? `${qtd} ${s.rotulo} · ${formatCurrency(valorPago)}`
-                  : `${qtd} ${s.rotulo}`
-              }
-            />
-          );
-        })}
+        <motion.div
+          initial={semMovimento ? false : { scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          style={{ transformOrigin: 'left' }}
+          className="flex h-full w-full"
+        >
+          {SEGMENTOS.map(s => {
+            const qtd = estados[s.chave];
+            if (qtd === 0) return null;
+            return (
+              <div
+                key={s.chave}
+                style={{ width: `${(qtd / total) * 100}%` }}
+                className={cn(s.classe, 'h-full')}
+                title={
+                  s.chave === 'pago' && valorPago !== undefined
+                    ? `${qtd} ${s.rotulo} · ${formatCurrency(valorPago)}`
+                    : `${qtd} ${s.rotulo}`
+                }
+              />
+            );
+          })}
+        </motion.div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

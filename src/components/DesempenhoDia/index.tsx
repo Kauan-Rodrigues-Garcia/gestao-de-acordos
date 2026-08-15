@@ -79,6 +79,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   );
 
   const dados = useDesempenhoDia({
+    aberto,
     dia,
     operadorId,
     unidade,
@@ -137,26 +138,42 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
     <AnimatePresence>
       {aberto && (
         <>
+          {/*
+            Sem `backdrop-blur`.
+
+            Um `backdrop-filter` cobrindo a viewport inteira obriga o navegador a
+            reprocessar tudo que está atrás dele a cada quadro — e ele fica atrás
+            de uma tela de acordos com centenas de linhas. Era o item mais caro
+            do painel, e o que ele entregava era decoração.
+
+            O escurecimento sozinho já separa o painel do fundo, e custa uma
+            camada de cor.
+          */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
-            className="fixed inset-0 z-30 bg-black/25 backdrop-blur-[2px]"
+            className="fixed inset-0 z-30 bg-black/30"
             onClick={onClose}
           />
 
           <motion.div
             role="dialog"
             aria-label="Desempenho do dia"
-            initial={semMovimento ? { opacity: 0 } : { opacity: 0, y: 24, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            initial={semMovimento ? { opacity: 0 } : { opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
             // Saída mais rápida que a entrada: fechar deve parecer imediato.
-            exit={semMovimento ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.98 }}
-            transition={{ type: 'spring', stiffness: 420, damping: 34, mass: 0.7 }}
+            exit={semMovimento ? { opacity: 0 } : { opacity: 0, y: 10 }}
+            // Só `y` e `opacity`. O `scale` que havia aqui obrigava o navegador a
+            // rasterizar de novo, a cada quadro, um painel de 420px com sombra
+            // grande e cantos arredondados — caro, e imperceptível ao lado do
+            // deslizamento.
+            transition={{ type: 'spring', stiffness: 400, damping: 34, mass: 0.7 }}
+            style={{ willChange: 'transform, opacity' }}
             className={cn(
               'fixed bottom-4 left-4 z-40 flex max-h-[85vh] w-[420px] max-w-[calc(100vw-2rem)]',
-              'flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-2xl',
+              'flex-col overflow-hidden rounded-2xl border border-border/80 bg-card shadow-xl',
             )}
           >
             {/* ── Cabeçalho ── */}

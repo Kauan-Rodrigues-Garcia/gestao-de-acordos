@@ -65,19 +65,18 @@ function BlocoDiretoExtra({
         <span className="ml-1 font-normal normal-case opacity-70">· acordos pagos</span>
       </p>
 
-      <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-muted/40">
+      {/* Uma animação de transform para a fita inteira — ver `BarraEstados`. */}
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/40">
         <motion.div
-          initial={semMovimento ? false : { width: 0 }}
-          animate={{ width: `${pctDireto}%` }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-          className="h-full rounded-l-full bg-blue-500"
-        />
-        <motion.div
-          initial={semMovimento ? false : { width: 0 }}
-          animate={{ width: `${100 - pctDireto}%` }}
-          transition={{ duration: 0.45, ease: 'easeOut' }}
-          className="h-full rounded-r-full bg-violet-500"
-        />
+          initial={semMovimento ? false : { scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.4, ease: 'easeOut' }}
+          style={{ transformOrigin: 'left' }}
+          className="flex h-full w-full"
+        >
+          <div className="h-full bg-blue-500" style={{ width: `${pctDireto}%` }} />
+          <div className="h-full bg-violet-500" style={{ width: `${100 - pctDireto}%` }} />
+        </motion.div>
       </div>
 
       <div className="flex items-center justify-between gap-2 text-[11px]">
@@ -170,11 +169,15 @@ function BlocoTags({ tags, semMovimento }: { tags: FatiaTag[]; semMovimento: boo
             </div>
             <div className="h-1 w-full overflow-hidden rounded-full bg-muted/40">
               <motion.div
-                initial={semMovimento ? false : { width: 0 }}
-                animate={{ width: `${t.pct}%` }}
-                transition={{ duration: 0.45, ease: 'easeOut', delay: semMovimento ? 0 : i * 0.05 }}
+                initial={semMovimento ? false : { scaleX: 0 }}
+                animate={{ scaleX: 1 }}
+                transition={{ duration: 0.4, ease: 'easeOut', delay: semMovimento ? 0 : i * 0.04 }}
                 className="h-full rounded-full"
-                style={{ background: `linear-gradient(90deg, ${t.cor}88, ${t.cor})` }}
+                style={{
+                  width: `${t.pct}%`,
+                  transformOrigin: 'left',
+                  background: `linear-gradient(90deg, ${t.cor}88, ${t.cor})`,
+                }}
               />
             </div>
           </motion.div>

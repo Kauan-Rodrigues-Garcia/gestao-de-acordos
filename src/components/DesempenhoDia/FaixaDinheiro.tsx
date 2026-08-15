@@ -116,13 +116,18 @@ export function FaixaDinheiro({
             </span>
           </div>
 
+          {/* Largura fixa, `scaleX` animado: transform não força layout. */}
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted/50">
             <motion.div
-              initial={semMovimento ? false : { width: 0 }}
-              animate={{ width: `${pctBarra}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
+              initial={semMovimento ? false : { scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{ duration: 0.45, ease: 'easeOut' }}
               className="h-full rounded-full"
-              style={{ background: corProjecao(meta.percentual) }}
+              style={{
+                width: `${pctBarra}%`,
+                transformOrigin: 'left',
+                background: corProjecao(meta.percentual),
+              }}
             />
           </div>
 

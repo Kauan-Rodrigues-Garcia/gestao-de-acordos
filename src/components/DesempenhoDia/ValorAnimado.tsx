@@ -1,20 +1,31 @@
 /**
  * ValorAnimado — o número conta até o valor novo em vez de pular.
  *
- * O painel troca de dia com as setas do teclado, e trocar de dia trocava seis
- * números de uma vez. Sem transição, a tela pisca e o olho perde qual número
- * mudou para qual — a animação curta preserva a continuidade entre o antes e o
- * depois.
+ * O painel troca seis números de uma vez ao mudar de dia. Sem transição a tela
+ * pisca e o olho perde qual número virou qual; a contagem curta preserva a
+ * ligação entre o antes e o depois.
+ *
+ * ## Por que ele escreve direto no DOM
+ *
+ * A primeira versão guardava o valor em `useState` e o atualizava a cada quadro.
+ * Funcionava e era caro: 60 `setState` por segundo, cada um disparando
+ * reconciliação do React na faixa inteira — e havia mais de um número animando
+ * ao mesmo tempo. Em máquina modesta isso sozinho comia o orçamento de 16ms do
+ * quadro, e a animação que deveria ser suave engasgava.
+ *
+ * Agora o componente renderiza UMA vez e a contagem escreve em `textContent`
+ * pelo ref. Não é atalho: o valor exibido durante a transição é estado de
+ * apresentação, não estado da aplicação — nada mais na árvore precisa saber dele,
+ * e envolver o React nisso é pagar reconciliação por pixel.
  *
  * Curta de propósito (380ms): passar disso vira espera, e o painel existe para
- * responder em um relance.
+ * responder num relance.
  *
- * Com `prefers-reduced-motion` o valor aparece direto, sem contagem. Movimento
- * de números é um dos gatilhos mais citados de desconforto vestibular, e a
- * informação aqui não depende dele.
+ * Com `prefers-reduced-motion` o valor aparece direto. Movimento de números é um
+ * gatilho conhecido de desconforto vestibular, e a informação não depende dele.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useReducedMotion } from 'framer-motion';
 
 const DURACAO = 380;
@@ -33,37 +44,42 @@ interface ValorAnimadoProps {
 
 export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) {
   const semMovimento = useReducedMotion();
-  const [exibido, setExibido] = useState(valor);
+  const no = useRef<HTMLSpanElement>(null);
   const anterior = useRef(valor);
   const quadro = useRef<number | null>(null);
+  // Sem isto, mudar o formatador entre renders faria o efeito reiniciar a
+  // contagem — as funções chegam como literais e nunca são a mesma referência.
+  const formatarRef = useRef(formatar);
+  formatarRef.current = formatar;
 
   useEffect(() => {
-    if (semMovimento || anterior.current === valor) {
-      anterior.current = valor;
-      setExibido(valor);
+    const alvo = no.current;
+    if (!alvo) return;
+
+    const de = anterior.current;
+    anterior.current = valor;
+
+    if (semMovimento || de === valor) {
+      alvo.textContent = formatarRef.current(valor);
       return;
     }
 
-    const de = anterior.current;
-    const ate = valor;
     const inicio = performance.now();
-
     const passo = (agora: number) => {
       const t = Math.min(1, (agora - inicio) / DURACAO);
-      setExibido(de + (ate - de) * suavizar(t));
+      alvo.textContent = formatarRef.current(de + (valor - de) * suavizar(t));
       if (t < 1) quadro.current = requestAnimationFrame(passo);
-      else anterior.current = ate;
     };
-
     quadro.current = requestAnimationFrame(passo);
+
     return () => {
       if (quadro.current !== null) cancelAnimationFrame(quadro.current);
-      // Sem isto, desmontar no meio da contagem deixaria `anterior` num valor
-      // intermediário, e a próxima animação partiria de um número que a tela
-      // nunca chegou a mostrar por inteiro.
-      anterior.current = ate;
+      // Interrompida no meio, a próxima contagem parte do valor final e não de
+      // um número intermediário que a tela nunca chegou a mostrar por inteiro.
+      alvo.textContent = formatarRef.current(valor);
     };
   }, [valor, semMovimento]);
 
-  return <span className={className}>{formatar(exibido)}</span>;
+  // O texto inicial vem do render; daqui em diante quem escreve é o efeito.
+  return <span ref={no} className={className}>{formatar(valor)}</span>;
 }

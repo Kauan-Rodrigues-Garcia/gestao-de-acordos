@@ -46,6 +46,20 @@ const JANELA_DIAS = 14;
 export interface OperadorItem { id: string; nome: string }
 
 export interface ParametrosDesempenhoDia {
+  /**
+   * O painel está aberto?
+   *
+   * Fechado, o hook não consulta nada. Parece detalhe e não é: desde que o
+   * painel deixou de ser exclusivo da PaguePlay, ele é MONTADO em toda página —
+   * o `AnimatePresence` esconde o conteúdo, mas a função do componente roda
+   * igual, e com ela os hooks.
+   *
+   * Sem esta trava, abrir qualquer tela do sistema disparava a leitura de 15
+   * dias de analítico (até 12 páginas de 1.000 linhas) para um painel que
+   * ninguém pediu. Era esse trabalho competindo com o resto que deixava a
+   * navegação pesada.
+   */
+  aberto: boolean;
   /** 'yyyy-MM-dd' */
   dia: string;
   /** `null` = todas as pessoas que eu enxergo. */
@@ -97,7 +111,9 @@ const BARRA_VAZIA: BarraEstados = {
 const SEM_VARIACAO: Variacao = { pct: null, base: 0 };
 
 export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempenhoDia {
-  const { dia, operadorId, unidade, temLogicaDiretoExtra, isPaguePlay, tags } = params;
+  const {
+    aberto, dia, operadorId, unidade, temLogicaDiretoExtra, isPaguePlay, tags,
+  } = params;
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -138,7 +154,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
   useEffect(() => {
     let cancelado = false;
     async function carregar() {
-      if (!empresa?.id || !podeVerOutros) { setOperadores([]); return; }
+      if (!aberto || !empresa?.id || !podeVerOutros) { setOperadores([]); return; }
 
       let q = supabase
         .from('perfis')
@@ -155,7 +171,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
     }
     void carregar();
     return () => { cancelado = true; };
-  }, [empresa?.id, podeVerOutros, setorDoRecorte]);
+  }, [aberto, empresa?.id, podeVerOutros, setorDoRecorte]);
 
   const idsVisiveis = useMemo(() => operadores.map(o => o.id), [operadores]);
   const idsChave = idsVisiveis.join(',');
@@ -176,6 +192,10 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
   const operadorDaQuery = operadorId ?? (podeVerOutros ? null : perfil?.id ?? null);
 
   const buscar = useCallback(async () => {
+    // Fechado: sai sem mexer em `carregando`. Zerá-lo aqui faria a primeira
+    // abertura mostrar «nenhum acordo» por um quadro, antes de a busca começar —
+    // um vazio que parece resposta.
+    if (!aberto) return;
     if (!empresa?.id || !perfil?.id || !dia) { setCarregando(false); return; }
 
     const meu = ++requisicao.current;
@@ -231,7 +251,7 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
       if (meu === requisicao.current) setCarregando(false);
     }
   }, [
-    empresa?.id, perfil?.id, dia, operadorDaQuery, setorDoRecorte,
+    aberto, empresa?.id, perfil?.id, dia, operadorDaQuery, setorDoRecorte,
     isPaguePlay, idsChave, escopo,
   ]);
 
