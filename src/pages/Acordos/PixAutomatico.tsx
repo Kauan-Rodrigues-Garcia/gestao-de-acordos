@@ -47,6 +47,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
 import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
@@ -129,6 +130,8 @@ const PIX_LOG_ESTILO: Record<PixLogItem['acao'], string> = {
 export function PixAutomatico() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  const podeAprovar = temPermissao('aprovar_pix_automatico');
 
   const cargo   = String(perfil?.perfil ?? '').toLowerCase();
   const ehLider = isPerfilAdminOuLider(cargo);
@@ -529,6 +532,11 @@ export function PixAutomatico() {
 
   async function avaliar(item: PixAutoAcordo, aprovar: boolean) {
     if (!perfil?.id) return;
+    // Aprovar Pix decide comissão — é permissão separada de "ver o painel".
+    if (!temPermissao('aprovar_pix_automatico')) {
+      toast.error('Você não tem permissão para aprovar ou desaprovar Pix.');
+      return;
+    }
     setAvaliandoId(item.id);
     try {
       const pctDaLinha = item.setor_id != null
@@ -1504,14 +1512,18 @@ export function PixAutomatico() {
           <Button size="sm" onClick={copiarSelecionados} disabled={loteProcessando} className="h-7 gap-1.5 text-xs">
             <Copy className="w-3.5 h-3.5" /> Copiar
           </Button>
-          <button onClick={() => avaliarSelecionados(true)} disabled={loteProcessando}
-            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
-            <Check className="w-3.5 h-3.5" /> Aprovar
-          </button>
-          <button onClick={() => avaliarSelecionados(false)} disabled={loteProcessando}
-            className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
-            <XCircle className="w-3.5 h-3.5" /> Desaprovar
-          </button>
+          {podeAprovar && (
+            <>
+              <button onClick={() => avaliarSelecionados(true)} disabled={loteProcessando}
+                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-emerald-400 border border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50">
+                <Check className="w-3.5 h-3.5" /> Aprovar
+              </button>
+              <button onClick={() => avaliarSelecionados(false)} disabled={loteProcessando}
+                className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-red-400 border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-50">
+                <XCircle className="w-3.5 h-3.5" /> Desaprovar
+              </button>
+            </>
+          )}
           <button onClick={() => marcarPagosSelecionados(true)} disabled={loteProcessando}
             title="Marcar a comissão dos aprovados como paga"
             className="h-7 px-2 rounded-lg flex items-center gap-1 text-xs font-semibold text-teal-400 border border-teal-500/30 bg-teal-500/10 hover:bg-teal-500/20 disabled:opacity-50">
@@ -1697,7 +1709,7 @@ export function PixAutomatico() {
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {ehLider && item.status === 'pendente' && (
+                            {ehLider && podeAprovar && item.status === 'pendente' && (
                               <>
                                 <button title="Aprovar" disabled={avaliandoId === item.id}
                                   onClick={() => avaliar(item, true)}

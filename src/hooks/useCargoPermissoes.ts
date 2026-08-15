@@ -1,50 +1,44 @@
 /**
- * src/hooks/useCargoPermissoes.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * Hook que carrega e expõe as permissões de um cargo específico para a
- * empresa atual. Usado por toda a aplicação para aplicar RBAC no frontend.
+ * useCargoPermissoes — resolve o que a pessoa logada pode fazer.
  *
- * ## Uso
- * ```tsx
- * const { temPermissao, loading } = useCargoPermissoes();
- * if (temPermissao('ver_lixeira')) { ... }
+ * ## A regra, em quatro linhas
+ *
+ * ```
+ * 1. admin ou super_admin ............... sim, sempre
+ * 2. exceção da pessoa tem a chave ...... vale o valor dela
+ * 3. permissão do cargo tem a chave ..... vale o valor dela
+ * 4. nenhuma das duas ................... NÃO
  * ```
  *
- * ## Isolamento multi-tenant
- * As permissões são sempre filtradas por `empresa_id`, garantindo que
- * cada empresa tem seu próprio conjunto de permissões por cargo.
+ * ## Por que o passo 4 mudou
+ *
+ * Até 2026-08-15 existia aqui um `PERMISSOES_LEGADAS_PADRAO_TRUE`: chave
+ * ausente devolvia `true` para 13 permissões. Só que a TELA lia
+ * `permissoes[chave]` e renderizava o toggle DESLIGADO para a mesma ausência.
+ *
+ * A tela dizia "não" e o sistema dizia "sim" — em 25 casos medidos em produção,
+ * incluindo operador da BookPlay com `editar_usuarios` e `editar_equipes`.
+ *
+ * O fallback existia porque havia ausência para interpretar. A migration
+ * `20260815154058` acabou com a ausência: todo cargo tem o catálogo inteiro.
+ * Sem ausência, o fallback não tem função — e a divergência não tem como voltar.
+ *
+ * ## O que estas permissões NÃO fazem
+ *
+ * Elas governam navegação e interface. Quem manda no dado é a RLS. Forçar
+ * `ver_acordos_gerais` num operador não faz ele enxergar acordo alheio — a
+ * política do banco continua negando, e isso é o comportamento correto.
  */
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 
 export type PermissoesMap = Record<string, boolean>;
 
-/**
- * Permissões que antes eram "mortas" (nunca consultadas) e passaram a ser
- * fiscalizadas no código. Para não regredir o acesso de ninguém, quando a
- * chave estiver AUSENTE no banco (ex.: empresa nova ainda sem seed) o padrão
- * é `true` — espelhando o acesso amplo que existia. Se o admin salvar a chave
- * como `false` na tela de Cargos, o valor do banco prevalece e a restrição
- * passa a valer. As demais permissões continuam com padrão `false` (ausente
- * = negado), preservando a semântica original.
- */
-const PERMISSOES_LEGADAS_PADRAO_TRUE = new Set<string>([
-  'ver_acordos_proprios',
-  'editar_acordos',
-  'excluir_acordos',
-  'importar_excel',
-  'ver_analiticos_setor',
-  'gerenciar_metas',
-  'filtrar_por_setor',
-  'filtrar_por_equipe',
-  'ver_equipes',
-  'ver_operadores',
-  'editar_usuarios',
-  'editar_equipes',
-  'ver_logs',
-]);
+/** Estado de uma permissão na aba «Por pessoa». */
+export type EstadoExcecao = 'herda' | 'sim' | 'nao';
 
 export interface CargoPermissaoRow {
   id: string;
@@ -55,17 +49,33 @@ export interface CargoPermissaoRow {
   atualizado_em: string;
 }
 
-interface UseCargoPermissoesReturn {
-  /** Mapa de permissões do cargo do usuário atual */
+export interface PerfilPermissaoRow {
+  id: string;
+  empresa_id: string;
+  usuario_id: string;
   permissoes: PermissoesMap;
-  /** Todas as linhas de permissão da empresa (para admin) */
+  atualizado_em: string;
+  atualizado_por: string | null;
+}
+
+interface UseCargoPermissoesReturn {
+  /** Permissões do CARGO da pessoa logada (sem as exceções aplicadas). */
+  permissoes: PermissoesMap;
+  /** Exceções da própria pessoa. Chave presente sobrescreve o cargo. */
+  excecoes: PermissoesMap;
+  /** Todas as linhas de cargo da empresa — a aba «Por cargo» usa. */
   todasPermissoes: CargoPermissaoRow[];
+  /** Todas as exceções da empresa — a aba «Por pessoa» usa (só admin lê). */
+  todasExcecoes: PerfilPermissaoRow[];
   loading: boolean;
-  /** Verifica se o usuário tem determinada permissão */
+  /** A pergunta que o app inteiro faz. */
   temPermissao: (key: string) => boolean;
-  /** Admin/super_admin tem acesso total independente das permissões configuradas */
+  /** admin e super_admin: acesso total por construção (migration 20260812b). */
   isAdmin: boolean;
-  /** Recarrega dados do banco */
+  /** Resolve para OUTRA pessoa — a tela de administração usa para prever. */
+  resolverParaUsuario: (usuarioId: string, cargo: string, key: string) => boolean;
+  /** O estado da exceção de alguém numa permissão. */
+  estadoExcecao: (usuarioId: string, key: string) => EstadoExcecao;
   refresh: () => Promise<void>;
 }
 
@@ -73,12 +83,12 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const [permissoes, setPermissoes] = useState<PermissoesMap>({});
   const [todasPermissoes, setTodasPermissoes] = useState<CargoPermissaoRow[]>([]);
+  const [todasExcecoes, setTodasExcecoes]     = useState<PerfilPermissaoRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const cargo = perfil?.perfil ?? '';
-  const isAdmin = cargo === 'administrador' || cargo === 'super_admin';
+  const isAdmin = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
 
   const fetch = useCallback(async () => {
     if (!empresa?.id || !cargo) {
@@ -88,19 +98,27 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
 
     setLoading(true);
     try {
-      // Busca todas as permissões da empresa (para a tela de admin)
-      const { data: todas, error: erroTodas } = await supabase
-        .from('cargos_permissoes')
-        .select('*')
-        .eq('empresa_id', empresa.id)
-        .order('cargo');
+      const [resCargos, resExcecoes] = await Promise.all([
+        supabase.from('cargos_permissoes').select('*')
+          .eq('empresa_id', empresa.id).order('cargo'),
+        // A RLS já recorta: operador recebe só a própria linha, admin recebe
+        // todas. Não é preciso filtrar por usuário aqui.
+        //
+        supabase.from('perfis_permissoes').select('*')
+          .eq('empresa_id', empresa.id),
+      ]);
 
-      if (erroTodas) throw erroTodas;
-      setTodasPermissoes((todas as CargoPermissaoRow[]) ?? []);
+      if (resCargos.error) throw resCargos.error;
+      setTodasPermissoes((resCargos.data as CargoPermissaoRow[]) ?? []);
 
-      // Permissões do cargo atual
-      const minha = (todas as CargoPermissaoRow[])?.find(r => r.cargo === cargo);
-      setPermissoes(minha?.permissoes ?? {});
+      // Tabela nova: tolera ausência para o app não quebrar entre o deploy do
+      // frontend e a aplicação da migration.
+      if (resExcecoes.error) {
+        console.warn('[permissoes] exceções indisponíveis:', resExcecoes.error.message);
+        setTodasExcecoes([]);
+      } else {
+        setTodasExcecoes((resExcecoes.data as PerfilPermissaoRow[]) ?? []);
+      }
     } catch (e) {
       console.warn('[useCargoPermissoes] fetch error:', e);
     } finally {
@@ -108,29 +126,88 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     }
   }, [empresa?.id, cargo]);
 
+  useEffect(() => { void fetch(); }, [fetch]);
+
+  /**
+   * Realtime: mudou a permissão, quem está logado sente na hora.
+   *
+   * Antes o hook buscava uma vez na montagem, então salvar uma permissão só
+   * afetava a pessoa depois que ela recarregava a página — e ninguém avisava
+   * que era preciso recarregar.
+   */
   useEffect(() => {
-    fetch();
-  }, [fetch]);
+    if (!empresa?.id) return;
+    const canal = supabase
+      .channel(`rt-permissoes-${empresa.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cargos_permissoes',
+          filter: `empresa_id=eq.${empresa.id}` },
+        () => { void fetch(); })
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'perfis_permissoes',
+          filter: `empresa_id=eq.${empresa.id}` },
+        () => { void fetch(); })
+      .subscribe();
+
+    return () => { void supabase.removeChannel(canal); };
+  }, [empresa?.id, fetch]);
+
+  const permissoes = useMemo(
+    () => todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},
+    [todasPermissoes, cargo],
+  );
+
+  const excecoes = useMemo(
+    () => todasExcecoes.find(r => r.usuario_id === perfil?.id)?.permissoes ?? {},
+    [todasExcecoes, perfil?.id],
+  );
 
   const temPermissao = useCallback(
     (key: string): boolean => {
-      // Admin e super_admin têm acesso total
       if (isAdmin) return true;
-      // Se a chave existe no banco, o valor salvo prevalece (inclusive false).
+      if (key in excecoes)   return !!excecoes[key];
       if (key in permissoes) return !!permissoes[key];
-      // Chave ausente: permissões legadas espelham o acesso amplo (true);
-      // as demais permanecem negadas por padrão.
-      return PERMISSOES_LEGADAS_PADRAO_TRUE.has(key);
+      // Ausente = negado. Ver o cabeçalho: o fallback legado morreu com a
+      // migration que preencheu todas as chaves de todos os cargos.
+      return false;
     },
-    [isAdmin, permissoes]
+    [isAdmin, excecoes, permissoes],
+  );
+
+  const resolverParaUsuario = useCallback(
+    (usuarioId: string, cargoAlvo: string, key: string): boolean => {
+      if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
+      const exc = todasExcecoes.find(r => r.usuario_id === usuarioId)?.permissoes ?? {};
+      if (key in exc) return !!exc[key];
+      const doCargo = todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes ?? {};
+      if (key in doCargo) return !!doCargo[key];
+      return false;
+    },
+    [todasExcecoes, todasPermissoes],
+  );
+
+  const estadoExcecao = useCallback(
+    (usuarioId: string, key: string): EstadoExcecao => {
+      const exc = todasExcecoes.find(r => r.usuario_id === usuarioId)?.permissoes ?? {};
+      if (!(key in exc)) return 'herda';
+      return exc[key] ? 'sim' : 'nao';
+    },
+    [todasExcecoes],
   );
 
   return {
     permissoes,
+    excecoes,
     todasPermissoes,
+    todasExcecoes,
     loading,
     temPermissao,
     isAdmin,
+    resolverParaUsuario,
+    estadoExcecao,
     refresh: fetch,
   };
 }
+
+/** Nome novo, para o código que for escrito daqui para frente. */
+export const usePermissoes = useCargoPermissoes;

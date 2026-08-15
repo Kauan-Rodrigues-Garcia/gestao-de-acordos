@@ -13,6 +13,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { fetchMeuAcesso, OuvidoriaNivel } from '@/services/ouvidoria.service';
 
@@ -29,6 +30,7 @@ export function useOuvidoriaAcesso(): OuvidoriaAcessoInfo {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
   const tenant      = useTenant();
+  const { temPermissao } = useCargoPermissoes();
 
   const cargo         = perfil?.perfil ?? '';
   const isResponsavel = cargo === 'ouvidoria';
@@ -55,10 +57,25 @@ export function useOuvidoriaAcesso(): OuvidoriaAcessoInfo {
   }, [tenant.isPaguePlay, perfil?.id, empresa?.id, acessoTotal]);
 
   const pp = tenant.isPaguePlay;
+
+  /**
+   * A permissão configurável entra como um E, nunca como um OU.
+   *
+   * A concessão fina de `ouvidoria_acessos` continua mandando em QUEM foi
+   * habilitado individualmente; a permissão do cargo decide se aquele cargo
+   * pode a ação. Quem perder qualquer um dos dois lados perde o acesso — é o
+   * lado seguro, e mantém a regra da migration 20260717b intacta.
+   */
+  const podeVerPorPermissao       = temPermissao('ver_ouvidoria');
+  const podeEditarPorPermissao    = temPermissao('editar_ouvidoria');
+  const podeGerenciarPorPermissao = temPermissao('gerenciar_acessos_ouvidoria');
+
   return {
-    podeVer:              pp && (acessoTotal || nivelConcedido !== null),
-    podeEditar:           pp && (acessoTotal || nivelConcedido === 'editar'),
-    podeGerenciarAcessos: pp && acessoTotal,
+    podeVer:              pp && podeVerPorPermissao
+                             && (acessoTotal || nivelConcedido !== null),
+    podeEditar:           pp && podeEditarPorPermissao
+                             && (acessoTotal || nivelConcedido === 'editar'),
+    podeGerenciarAcessos: pp && podeGerenciarPorPermissao && acessoTotal,
     isResponsavel,
     loading,
   };

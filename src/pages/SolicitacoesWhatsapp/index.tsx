@@ -31,6 +31,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { supabase } from '@/lib/supabase';
@@ -91,6 +92,7 @@ function agruparPorSolicitante(lista: SolicitacaoWhatsapp[]): GrupoOperador[] {
 export default function SolicitacoesWhatsapp() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const tenant      = useTenant();
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
@@ -591,9 +593,13 @@ export default function SolicitacoesWhatsapp() {
             onClick={() => void recarregar()} title="Atualizar">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
           </Button>
-          <Button onClick={() => setNovaAberta(true)} className="gap-1.5">
-            <MessageSquarePlus className="w-4 h-4" /> Nova solicitação
-          </Button>
+          {/* Acompanhar e ABRIR pedido são coisas diferentes: o digital
+              acompanha, o setor de ligação é quem pede. */}
+          {temPermissao('criar_solicitacao_whatsapp') && (
+            <Button onClick={() => setNovaAberta(true)} className="gap-1.5">
+              <MessageSquarePlus className="w-4 h-4" /> Nova solicitação
+            </Button>
+          )}
         </div>
       </div>
 

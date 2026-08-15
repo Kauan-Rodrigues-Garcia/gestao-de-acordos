@@ -78,15 +78,15 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
-  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA },
+  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
-  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP },
+  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'] },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
   { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },

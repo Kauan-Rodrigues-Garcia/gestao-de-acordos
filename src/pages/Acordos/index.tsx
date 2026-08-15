@@ -689,8 +689,10 @@ export default function Acordos() {
           pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
         />
 
-        {/* Aba Pix Automático substitui a lista inteira */}
-        {pixAba ? <PixAutomatico /> : (
+        {/* Aba Pix Automático substitui a lista inteira. A permissão vale para
+            a aba inteira: quem não pode ver o painel cai de volta na lista, em
+            vez de abrir uma tela vazia. */}
+        {pixAba && temPermissao('ver_pix_automatico') ? <PixAutomatico /> : (
         <>
 
         {/* Âncora de scroll */}

@@ -17,7 +17,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { isPerfilAdmin } from '@/lib/index';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import AdminCargos from '@/pages/AdminCargos';
+import AdminPermissoes from '@/pages/AdminPermissoes';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
@@ -343,7 +343,7 @@ export default function AdminConfiguracoes() {
 
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
         <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
-          <AdminCargos />
+          <AdminPermissoes />
         </TabsContent>
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}

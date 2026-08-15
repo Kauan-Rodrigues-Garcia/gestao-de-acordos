@@ -2405,6 +2405,33 @@ export type Database = {
           },
         ]
       }
+      perfis_permissoes: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          empresa_id: string
+          id: string
+          permissoes: Json
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id: string
+          id?: string
+          permissoes?: Json
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id?: string
+          id?: string
+          permissoes?: Json
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       perfis_transferencias: {
         Row: {
           acordos_apagados: number

@@ -149,8 +149,13 @@ export default function App() {
               <Route path={ROUTE_PATHS.DASHBOARD} element={
                 <LayoutWrapper><Dashboard /></LayoutWrapper>
               } />
+              {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
-                <LayoutWrapper><Acordos /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_acordos">
+                    <Acordos />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
@@ -231,31 +236,51 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}>
+                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}
+                                  requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
 
-              {/* Analítico (PaguePlay + BookPlay — gate por slug dentro da página) */}
+              {/* Analítico (PaguePlay + BookPlay — o gate por slug continua
+                  dentro da página; a permissão decide QUEM abre) */}
               <Route path={ROUTE_PATHS.ANALITICO} element={
-                <LayoutWrapper><PaginaAnalitico /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_analitico">
+                    <PaginaAnalitico />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
-              {/* Ouvidoria (PaguePlay — acesso por cargo/concessão dentro da página) */}
+              {/* Ouvidoria [PP]. Era LIVRE — qualquer cargo logado entrava, com
+                  reclamação de cliente dentro. A concessão fina por
+                  `ouvidoria_acessos` continua valendo dentro da página. */}
               <Route path={ROUTE_PATHS.OUVIDORIA} element={
-                <LayoutWrapper><Ouvidoria /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_ouvidoria">
+                    <Ouvidoria />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
-              {/* Campanha Fácil (BookPlay — gate por slug dentro da página) */}
+              {/* Campanha Fácil [BP] — o gate por slug segue dentro da página. */}
               <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
-                <LayoutWrapper><CampanhaFacil /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_campanha_facil">
+                    <CampanhaFacil />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
-              {/* Solicitações de WhatsApp (PaguePlay — gate por slug e por
-                  cargo dentro da página; em teste, só admin/super_admin) */}
+              {/* Solicitações de WhatsApp — o chat interno entre o setor de
+                  ligação e o digital. */}
               <Route path={ROUTE_PATHS.SOLICITACOES_WHATSAPP} element={
-                <LayoutWrapper><SolicitacoesWpp /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_solicitacoes_whatsapp">
+                    <SolicitacoesWpp />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
 
               {/* /comemoracoes agora é aba dentro de /admin/usuarios.
