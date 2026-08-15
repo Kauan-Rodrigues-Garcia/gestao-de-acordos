@@ -19,6 +19,9 @@ import {
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
+import { CadeadoMes } from '@/components/CadeadoMes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
+import { mesDaData } from '@/lib/fechamentoMes';
 
 export default function AcordoDetalhe() {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +35,13 @@ export default function AcordoDetalhe() {
   const [historico, setHistorico] = useState<HistoricoAcordo[]>([]);
   const [loading, setLoading] = useState(true);
   const [atualizando, setAtualizando] = useState(false);
+
+  /**
+   * O cadeado desta tela sai do VENCIMENTO do acordo, e não de um seletor: aqui
+   * se olha um registro específico, que pode ter sido aberto por link direto de
+   * uma notificação antiga.
+   */
+  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento));
 
   async function fetchAcordo() {
     if (!id) return;
@@ -50,6 +60,7 @@ export default function AcordoDetalhe() {
 
   async function atualizarStatus(novoStatus: StatusAcordo) {
     if (!acordo || !perfil) return;
+    if (fechamento.impedirData(acordo.vencimento, 'mudar o status')) return;
     setAtualizando(true);
     const statusAnterior = acordo.status;
     const { error } = await supabase.from('acordos').update({ status: novoStatus }).eq('id', acordo.id);
@@ -70,6 +81,7 @@ export default function AcordoDetalhe() {
 
   function enviarWhatsapp() {
     if (!acordo?.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
+    if (fechamento.impedirData(acordo.vencimento, 'enviar WhatsApp')) return;
     let msg: string;
     if (acordo.status === 'nao_pago') {
       msg = `Olá, ${acordo.nome_cliente}, identificamos que o seu acordo NR ${acordo.nr_cliente}, no valor de ${formatCurrency(acordo.valor)}, com vencimento em ${formatDate(acordo.vencimento)}, encontra-se em atraso. Por favor, entre em contato conosco para regularizar sua situação. Estamos à disposição.`;
@@ -97,19 +109,35 @@ export default function AcordoDetalhe() {
               {statusLabels[acordo.status] || STATUS_LABELS[acordo.status]}
             </span>
             {atrasado && <Badge variant="destructive" className="text-xs">Atrasado</Badge>}
+            {fechamento.fechado && (
+              <CadeadoMes
+                mensagem={fechamento.mensagem}
+                liberado={fechamento.liberadoPorCargo}
+              />
+            )}
           </div>
         </div>
         <div className="flex gap-2">
-          {acordo.whatsapp && (
+          {acordo.whatsapp && !fechamento.bloqueado && (
             <Button variant="outline" size="sm" onClick={enviarWhatsapp} className="gap-2 text-success border-success/30 hover:bg-success/10">
               <MessageSquare className="w-4 h-4" /> WhatsApp
             </Button>
           )}
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/acordos/${acordo.id}/editar`}>
-              <Edit className="w-4 h-4 mr-2" /> Editar
-            </Link>
-          </Button>
+          {fechamento.bloqueado ? (
+            <Button
+              variant="outline" size="sm" className="gap-2 text-muted-foreground"
+              onClick={() => fechamento.impedirData(acordo.vencimento, 'editar o acordo')}
+              title={fechamento.mensagem}
+            >
+              <Edit className="w-4 h-4" /> Editar
+            </Button>
+          ) : (
+            <Button asChild variant="outline" size="sm">
+              <Link to={`/acordos/${acordo.id}/editar`}>
+                <Edit className="w-4 h-4 mr-2" /> Editar
+              </Link>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -253,7 +281,11 @@ export default function AcordoDetalhe() {
               <CardTitle className="text-sm font-semibold">Atualizar Status</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Select value={acordo.status} onValueChange={atualizarStatus} disabled={atualizando}>
+              <Select
+                value={acordo.status}
+                onValueChange={atualizarStatus}
+                disabled={atualizando || fechamento.bloqueado}
+              >
                 <SelectTrigger className="text-sm h-9">
                   <SelectValue />
                 </SelectTrigger>
@@ -266,12 +298,17 @@ export default function AcordoDetalhe() {
               <Button
                 className="w-full gap-2 bg-success hover:bg-success/90 text-white"
                 size="sm"
-                disabled={acordo.status === 'pago' || atualizando}
+                disabled={acordo.status === 'pago' || atualizando || fechamento.bloqueado}
                 onClick={() => atualizarStatus('pago')}
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Marcar como Pago
               </Button>
+              {fechamento.bloqueado && (
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {fechamento.mensagem}
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -283,7 +320,13 @@ export default function AcordoDetalhe() {
               {acordo.whatsapp ? (
                 <>
                   <p className="text-xs text-muted-foreground font-mono">{acordo.whatsapp}</p>
-                  <Button variant="outline" size="sm" className="w-full gap-2 text-success border-success/30 hover:bg-success/10" onClick={enviarWhatsapp}>
+                  <Button
+                    variant="outline" size="sm"
+                    className="w-full gap-2 text-success border-success/30 hover:bg-success/10"
+                    onClick={enviarWhatsapp}
+                    disabled={fechamento.bloqueado}
+                    title={fechamento.bloqueado ? fechamento.mensagem : undefined}
+                  >
                     <MessageSquare className="w-4 h-4" /> Enviar Lembrete
                   </Button>
                 </>

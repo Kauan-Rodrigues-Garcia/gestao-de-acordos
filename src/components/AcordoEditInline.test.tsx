@@ -7,7 +7,7 @@
  * Campo NR (Bookplay) foi removido por conformidade LGPD; testes de
  * deduplicação via NR input foram excluídos junto.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { Acordo } from '@/lib/supabase';
 
@@ -196,6 +196,22 @@ function makeAcordo(overrides: Partial<Acordo> = {}): Acordo {
     ...overrides,
   } as unknown as Acordo;
 }
+
+/**
+ * Relógio congelado em MAIO/2026, o mês do acordo de teste (`makeAcordo`).
+ *
+ * Desde o cadeado de mês fechado (`lib/fechamentoMes`), `handleSave` recusa
+ * edição de acordo cujo vencimento caia em mês anterior ao corrente. Com a data
+ * real da máquina, todo teste de salvamento deste arquivo passaria a falhar a
+ * partir de junho/2026 — por causa do calendário, não do comportamento testado.
+ *
+ * `toFake: ['Date']` para não interferir no `waitFor` do testing-library.
+ */
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-05-20T15:00:00Z'));
+});
+afterAll(() => { vi.useRealTimers(); });
 
 beforeEach(() => {
   verificarNrRegistroMock.mockReset();

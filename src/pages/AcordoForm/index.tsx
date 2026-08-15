@@ -31,6 +31,9 @@ import { ROUTE_PATHS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { AcordoNovoInline } from '@/components/AcordoNovoInline';
 import { AcordoEditInline } from '@/components/AcordoEditInline';
+import { CadeadoMes } from '@/components/CadeadoMes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
+import { mesDaData } from '@/lib/fechamentoMes';
 
 export default function AcordoForm() {
   const { id }   = useParams<{ id: string }>();
@@ -77,6 +80,10 @@ export default function AcordoForm() {
       });
   }, [id, isEdit, navigate]);
 
+  // Cadeado da EDIÇÃO. Na criação não há mês ainda — o vencimento é escolhido
+  // dentro do formulário, e a barreira fica no salvar (`AcordoNovoInline`).
+  const fechamento = useFechamentoMes(mesDaData(acordo?.vencimento));
+
   if (loadingData) return <div className="p-6 text-center text-muted-foreground">Carregando...</div>;
   if (!perfilLocal && perfilLoading) return <div className="p-6 text-center text-muted-foreground">Carregando perfil...</div>;
 
@@ -102,9 +109,26 @@ export default function AcordoForm() {
         </div>
       </div>
 
-      {/* Os dois componentes são <tr> — nasceram para a lista de Acordos. A
-          tabela de uma coluna é a moldura que permite reaproveitá-los aqui
-          sem duplicar o formulário. */}
+      {/* Mês fechado: a rota abre, o formulário não. Deixar o formulário
+          renderizado e recusar só no salvar faria a pessoa preencher tudo
+          para depois perder o trabalho. */}
+      {isEdit && fechamento.bloqueado ? (
+        <div className="rounded-xl border border-border bg-muted/20 p-6 space-y-3">
+          <CadeadoMes mensagem={fechamento.mensagem} />
+          <p className="text-sm text-foreground font-medium">
+            Este acordo pertence a um mês já fechado.
+          </p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            {fechamento.mensagem}
+          </p>
+          <Button variant="outline" size="sm" onClick={voltar}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+          </Button>
+        </div>
+      ) : (
+      /* Os dois componentes são <tr> — nasceram para a lista de Acordos. A
+         tabela de uma coluna é a moldura que permite reaproveitá-los aqui
+         sem duplicar o formulário. */
       <div className="rounded-xl border border-border overflow-hidden">
         <table className="w-full">
           <tbody>
@@ -127,6 +151,7 @@ export default function AcordoForm() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   );
 }

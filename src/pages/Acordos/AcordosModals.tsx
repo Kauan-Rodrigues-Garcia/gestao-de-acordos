@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, MessageSquare, X } from 'lucide-react';
+import { Trash2, MessageSquare, X, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -25,6 +25,13 @@ export interface AcordosModalsProps {
   temPermissao: (p: string) => boolean;
   prepararFila: (acordos: Acordo[]) => void;
   acordos: Acordo[];
+  /**
+   * Mês em somente-leitura. A barra flutuante de seleção perde as ações de
+   * escrita e passa a dizer o porquê — os handlers já barram sozinhos, mas
+   * oferecer "Excluir Selecionados" para depois recusar é pior que não oferecer.
+   */
+  mesBloqueado?: boolean;
+  mensagemFechamento?: string;
 }
 
 export function AcordosModals({
@@ -34,6 +41,7 @@ export function AcordosModals({
   filaAberta, setFilaAberta, filaWhatsApp,
   usuarioId, empresaId,
   temPermissao, prepararFila, acordos,
+  mesBloqueado = false, mensagemFechamento,
 }: AcordosModalsProps) {
   return (
     <>
@@ -128,26 +136,39 @@ export function AcordosModals({
                 {selecionados.length} selecionado(s)
               </span>
               <div className="w-px h-5 bg-white/20" />
-              <Button
-                size="sm" variant="ghost"
-                className="gap-1.5 text-green-400 hover:text-green-300 hover:bg-white/10 text-xs h-8 px-3"
-                onClick={() => {
-                  const lista = acordos.filter(a => selecionados.includes(a.id));
-                  prepararFila(lista);
-                }}
-              >
-                <MessageSquare className="w-3.5 h-3.5" />
-                Enviar Lembretes
-              </Button>
-              {temPermissao('excluir_em_lote') && (
-                <Button
-                  size="sm" variant="ghost"
-                  className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
-                  onClick={() => setConfirmandoExclusaoLote(true)}
+              {mesBloqueado ? (
+                <span
+                  className="flex items-center gap-1.5 text-xs text-white/70 max-w-[22rem]"
+                  title={mensagemFechamento}
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Excluir Selecionados
-                </Button>
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  Mês fechado — seleção serve para consulta e para o relatório de
+                  fechamento.
+                </span>
+              ) : (
+                <>
+                  <Button
+                    size="sm" variant="ghost"
+                    className="gap-1.5 text-green-400 hover:text-green-300 hover:bg-white/10 text-xs h-8 px-3"
+                    onClick={() => {
+                      const lista = acordos.filter(a => selecionados.includes(a.id));
+                      prepararFila(lista);
+                    }}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    Enviar Lembretes
+                  </Button>
+                  {temPermissao('excluir_em_lote') && (
+                    <Button
+                      size="sm" variant="ghost"
+                      className="gap-1.5 text-red-400 hover:text-red-300 hover:bg-white/10 text-xs h-8 px-3"
+                      onClick={() => setConfirmandoExclusaoLote(true)}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      Excluir Selecionados
+                    </Button>
+                  )}
+                </>
               )}
               <Button
                 size="sm" variant="ghost"

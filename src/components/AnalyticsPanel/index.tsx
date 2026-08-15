@@ -35,6 +35,7 @@ import { SeletorMes } from './SeletorMes';
 import { SkeletonCard, MetricCard, MiniSparkline } from './SubComponents';
 import { PainelMetas } from '@/components/PainelMetas';
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
+import { BotaoFechamento } from '@/components/Fechamento/BotaoFechamento';
 import {
   lerUnidade, gravarUnidade, type UnidadeValor,
 } from '@/lib/unidadeValor';
@@ -517,6 +518,13 @@ export function AnalyticsPanel({
         )}
 
         <div className="flex items-center gap-2">
+          {/* Baixa o fechamento do MÊS QUE ESTÁ NA TELA — por isso mora aqui, na
+              mesma faixa do seletor de mês, e não numa aba própria. */}
+          <BotaoFechamento
+            mes={mesAnalise}
+            setorId={setorEmFoco}
+            temLogicaDiretoExtra={temLogicaDiretoExtra}
+          />
           <Button
             variant="ghost"
             size="icon"

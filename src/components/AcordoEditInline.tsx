@@ -41,6 +41,9 @@ import {
 import { abrirChatplay } from '@/lib/chatplay';
 import { camposComCpf, ERRO_CPF_NO_CODIGO } from '@/lib/cpf';
 import {
+  estadoFechamentoDaData, mensagemFechamento, mesDaData,
+} from '@/lib/fechamentoMes';
+import {
   calcularParcelas, formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
 } from '@/lib/money';
 import { PARCELAS_MAX_DEFAULT } from '@/lib/index';
@@ -198,6 +201,15 @@ export function AcordoEditInline({
   async function handleSave(confirmouRemocao = false) {
     if (!isPaguePlay && !nomeCliente.trim()) { toast.error('Nome é obrigatório'); return; }
     if (!vencimento)         { toast.error('Vencimento é obrigatório'); return; }
+    // Os DOIS meses precisam estar abertos: o de origem (o mês que perderia o
+    // valor) e o de destino (o que ganharia). Checar só um deles deixaria mover
+    // dinheiro para dentro ou para fora de um fechamento já apresentado.
+    for (const data of [acordo.vencimento, vencimento]) {
+      if (estadoFechamentoDaData({ data, cargo: perfil?.perfil }).bloqueado) {
+        toast.error(mensagemFechamento(mesDaData(data)));
+        return;
+      }
+    }
 
     const valorNum = parseCurrencyInput(valor);
     if (isNaN(valorNum) || valorNum <= 0) { toast.error('Valor inválido'); return; }

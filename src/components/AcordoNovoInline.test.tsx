@@ -13,7 +13,7 @@
  *  • Mocks de todos os services e hooks para evitar rede/banco real.
  *  • Supabase mockado com rotas por tabela+operação.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import type { Acordo } from '@/lib/supabase';
 
@@ -252,6 +252,26 @@ function semearEstadoPP(extra: Record<string, string> = {}, estado = 'SP') {
     JSON.stringify({ estadoSel: estado, ...extra }),
   );
 }
+
+/**
+ * O relógio é congelado em MAIO/2026 porque o calendário mockado devolve
+ * sempre `2026-05-15`.
+ *
+ * Sem isto o arquivo depende da data real da máquina: desde o cadeado de mês
+ * fechado (`lib/fechamentoMes`), um vencimento em mês ANTERIOR ao corrente é
+ * recusado na validação — e a partir de junho/2026 todo teste que salva um
+ * acordo passaria a falhar por um motivo que nada tem a ver com o que ele
+ * verifica.
+ *
+ * `toFake: ['Date']` de propósito: falsear `setTimeout` também quebraria o
+ * `waitFor` do testing-library, que é quem espera o salvamento assíncrono.
+ */
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  // 15h UTC = 12h em São Paulo, então o dia é 20/05 no fuso que o app usa.
+  vi.setSystemTime(new Date('2026-05-20T15:00:00Z'));
+});
+afterAll(() => { vi.useRealTimers(); });
 
 beforeEach(() => {
   verificarNrRegistroMock.mockReset();

@@ -264,6 +264,9 @@ export const ACAO_LABEL: Record<string, string> = {
   pix_registro_excluido:       'Pix automático excluído',
   pix_config_alterado:         'Configuração do Pix alterada',
   pix_meta_alterado:           'Meta de Pix alterada',
+  // O arquivo sai do sistema com nome, valor e meta de cada operador — quem
+  // baixou e quando precisa ficar registrado.
+  fechamento_mes_baixado:      'Relatório de fechamento do mês baixado',
 
   // ── Importação ────────────────────────────────────────────────────────────
   importacao_iniciada:         'Importação iniciada',
@@ -334,6 +337,7 @@ const ALVO_LABEL: Record<string, string> = {
   composicao_mes:    'Composição do mês',
   campanha_desconto: 'Desconto de campanha',
   comemoracao:       'Comemoração',
+  relatorio_fechamento: 'Relatório de fechamento',
   registro:          'Registro',
 };
 

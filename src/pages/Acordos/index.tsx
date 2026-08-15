@@ -4,6 +4,8 @@ import {
   Plus, MessageSquare, RefreshCw, X,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight,
 } from 'lucide-react';
+import { CadeadoMes } from '@/components/CadeadoMes';
+import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
@@ -126,6 +128,26 @@ export default function Acordos() {
   const findAttemptsRef    = useRef(0);
 
   const [mesFiltro, setMesFiltro] = useState<string>(() => mesAtual());
+
+  /**
+   * Cadeado do mês. A lista é recortada por `vencimento` dentro de `mesFiltro`,
+   * então o mês do filtro é o mês de TODA linha visível — mas as ações também
+   * checam a data do próprio acordo (`impedirData`), porque um item pode chegar
+   * por link direto, por realtime ou de um formulário que já estava aberto
+   * quando o mês virou.
+   */
+  const fechamento = useFechamentoMes(mesFiltro);
+
+  // Formulário aberto + usuário volta um mês = formulário que grava num mês
+  // fechado. Fechar o inline é mais honesto que deixá-lo aberto e recusar no
+  // salvar, depois de a pessoa ter digitado tudo.
+  const mesEstaBloqueado = fechamento.bloqueado;
+  useEffect(() => {
+    if (mesEstaBloqueado) {
+      setNovoInlineAberto(false);
+      setEditandoInlineId(null);
+    }
+  }, [mesEstaBloqueado]);
 
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
@@ -299,6 +321,7 @@ export default function Acordos() {
   }
 
   function marcarComoPago(a: Acordo) {
+    if (fechamento.impedirData(a.vencimento, 'mudar o status')) return;
     if (a.status === 'nao_pago') {
       setConfirmarPgtoAcordo(a);
     } else {
@@ -359,6 +382,12 @@ export default function Acordos() {
 
   async function handleReagendarAcordos(params: ReagendarParams) {
     if (!reagendarAcordo || !empresa?.id) return;
+    // A parcela NOVA nasce na data escolhida, então é ela que decide o cadeado:
+    // reagendar de um mês fechado para o mês aberto continua valendo.
+    if (fechamento.impedirData(params.novoVencimento, 'agendar a próxima parcela')) {
+      setReagendarAcordo(null);
+      return;
+    }
     setSalvandoReagendar(true);
     try {
       const parcelaAtual  = reagendarAcordo;
@@ -413,6 +442,7 @@ export default function Acordos() {
   }
 
   function prepararFila(listaAcordos: Acordo[]) {
+    if (fechamento.impedir('disparar WhatsApp')) return;
     const comWhats = listaAcordos.filter(a => a.whatsapp);
     const semWhats = listaAcordos.filter(a => !a.whatsapp);
     if (comWhats.length === 0) { toast.warning('Nenhum acordo selecionado possui WhatsApp cadastrado'); return; }
@@ -439,6 +469,10 @@ export default function Acordos() {
   }
 
   async function excluirAcordo(a: Acordo) {
+    if (fechamento.impedirData(a.vencimento, 'excluir o acordo')) {
+      setConfirmandoExclusao(null);
+      return;
+    }
     setConfirmandoExclusao(null);
     setExcluindoId(a.id);
     try {
@@ -460,6 +494,10 @@ export default function Acordos() {
   }
 
   async function excluirSelecionados() {
+    if (fechamento.impedir('excluir em lote')) {
+      setConfirmandoExclusaoLote(false);
+      return;
+    }
     setConfirmandoExclusaoLote(false);
     let deletedCount = 0;
     let failedCount  = 0;
@@ -513,6 +551,7 @@ export default function Acordos() {
   }
 
   function enviarUmWhatsapp(a: Acordo) {
+    if (fechamento.impedirData(a.vencimento, 'enviar WhatsApp')) return;
     if (!a.whatsapp) { toast.warning('WhatsApp não cadastrado'); return; }
     const mensagem = buildMensagem(a);
     window.open(`https://wa.me/55${a.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(mensagem)}`, '_blank');
@@ -576,8 +615,12 @@ export default function Acordos() {
   // para operador (só vê os próprios) a coluna é removida.
   const mostrarColunaOperador = temPermissao('ver_acordos_gerais');
   const colSpanFull = (isPP ? 11 : 10) - (mostrarColunaOperador ? 0 : 1);
-  const podeEditarAcordos = temPermissao('editar_acordos');
-  const podeExcluirAcordos = temPermissao('excluir_acordos');
+  // O cadeado do mês entra AQUI, no mesmo lugar da permissão, e não numa
+  // checagem separada dentro da tabela: para a linha, "não posso editar por
+  // cargo" e "não posso editar porque o mês fechou" levam ao mesmo botão
+  // desabilitado. O que muda é a explicação, e essa vem do toast do handler.
+  const podeEditarAcordos  = temPermissao('editar_acordos')  && !fechamento.bloqueado;
+  const podeExcluirAcordos = temPermissao('excluir_acordos') && !fechamento.bloqueado;
 
   return (
     <div className="p-6">
@@ -620,6 +663,16 @@ export default function Acordos() {
                 >
                   Mês atual
                 </Button>
+                {/* O selo fica colado no seletor de mês porque é ele que
+                    determina o cadeado — o usuário vê a causa e o efeito
+                    juntos, em vez de um aviso solto no topo da página. */}
+                {fechamento.fechado && (
+                  <CadeadoMes
+                    mensagem={fechamento.mensagem}
+                    liberado={fechamento.liberadoPorCargo}
+                    className="ml-1"
+                  />
+                )}
               </div>
             )}
             <p className="text-sm text-muted-foreground mt-0.5">
@@ -630,7 +683,7 @@ export default function Acordos() {
             </p>
           </div>
           <div className="flex gap-2 flex-wrap justify-end">
-            {acordosHoje.length > 0 && selecionados.length === 0 && (
+            {acordosHoje.length > 0 && selecionados.length === 0 && !fechamento.bloqueado && (
               <Button
                 variant="outline" size="sm"
                 className={cn('gap-1.5 border-success/40 text-success hover:bg-success/10', isPP && 'hidden')}
@@ -656,16 +709,31 @@ export default function Acordos() {
             <Button
               size="sm"
               data-tour="novo-acordo"
-              onClick={() => setNovoInlineAberto(v => !v)}
+              // Desabilitar sem explicar é o defeito que o cadeado veio evitar:
+              // o clique bloqueado ainda dispara `impedir`, que diz o motivo.
+              // Por isso o handler roda mesmo com o mês fechado.
+              onClick={() => {
+                if (fechamento.impedir('criar acordo')) return;
+                setNovoInlineAberto(v => !v);
+              }}
               className={cn(
                 'gap-1.5 shadow-sm transition-all',
-                novoInlineAberto
-                  ? 'bg-muted text-foreground border border-border hover:bg-muted/80'
-                  : 'bg-primary text-primary-foreground hover:bg-primary/90',
+                fechamento.bloqueado
+                  ? 'bg-muted text-muted-foreground border border-border hover:bg-muted cursor-not-allowed'
+                  : novoInlineAberto
+                    ? 'bg-muted text-foreground border border-border hover:bg-muted/80'
+                    : 'bg-primary text-primary-foreground hover:bg-primary/90',
               )}
+              title={fechamento.bloqueado ? fechamento.mensagem : undefined}
             >
-              <Plus className={cn('w-4 h-4 transition-transform', novoInlineAberto && 'rotate-45')} />
-              {novoInlineAberto ? 'Fechar' : 'Novo Acordo'}
+              {fechamento.bloqueado ? (
+                <><CadeadoMes mensagem={fechamento.mensagem} variante="icone" className="w-4 h-4 border-0 bg-transparent" /> Novo Acordo</>
+              ) : (
+                <>
+                  <Plus className={cn('w-4 h-4 transition-transform', novoInlineAberto && 'rotate-45')} />
+                  {novoInlineAberto ? 'Fechar' : 'Novo Acordo'}
+                </>
+              )}
             </Button>
           </div>
         </div>
@@ -814,6 +882,7 @@ export default function Acordos() {
         filaWhatsApp={filaWhatsApp}
         usuarioId={perfil?.id} empresaId={empresa?.id}
         temPermissao={temPermissao} prepararFila={prepararFila} acordos={acordos}
+        mesBloqueado={fechamento.bloqueado} mensagemFechamento={fechamento.mensagem}
       />
     </div>
   );
