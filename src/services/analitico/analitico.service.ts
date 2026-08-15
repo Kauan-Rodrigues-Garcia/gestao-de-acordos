@@ -202,6 +202,13 @@ export interface ResultadoImportacao {
   atualizados: number;
   /** Linhas antigas que já não existem no relatório mensal completo. */
   removidos: number;
+  /**
+   * Linhas que já estavam no banco e ganharam o "Tipo comissão" agora.
+   *
+   * Opcional para não obrigar quem só monta um resultado vazio em teste. Ver o
+   * bloco de preenchimento em `importarLoteAnalitico`.
+   */
+  tiposPreenchidos?: number;
   erros: string[];
 }
 
@@ -223,6 +230,46 @@ export function idsAusentesDoRelatorioMensal(
   return existentes
     .filter(linha => !presentes.has(chaveGrupoAnalitico(linha)))
     .map(linha => linha.id);
+}
+
+/**
+ * `codigo` → "Tipo comissão" do relatório, só para os NRs que a resposta é ÚNICA.
+ *
+ * Existe para consertar um buraco do `ignoreDuplicates: true` do upsert: linha
+ * que JÁ ESTÁ no banco é descartada inteira, então a coluna `tipo_comissao`
+ * (migration 20260813a) nunca chegava nas linhas importadas antes dela. O
+ * comentário do desenho dizia "reimportar o relatório preenche `tipo_comissao`
+ * e a cobertura sobe sozinha" — não subia: reimportar não mudava nada.
+ *
+ * O efeito, medido no Receptivo em 2026-08: das 2.934 linhas do mês, 2.535
+ * tinham sido importadas em 12/08 (antes da coluna existir) e ficaram `NULL`
+ * para sempre. Para o operador da tela, 200 dos 231 pagamentos caíam em "Sem
+ * vínculo definido" — R$ 60.637,66 de R$ 69.949,23 — enquanto o relatório de
+ * origem sabia, linha a linha, quais eram Direto e quais eram Extra.
+ *
+ * NR ambíguo (o mesmo `codigo` aparecendo como Extra numa linha e Integral em
+ * outra) fica de FORA do mapa: preencher com um dos dois seria escolher no
+ * escuro, e "não sei" já tem representação própria na tela.
+ */
+export function mapearTipoComissaoPorCodigo(
+  linhas: ReadonlyArray<{ codigo: string; tipo_comissao?: string | null }>,
+): Map<string, string> {
+  const porCodigo = new Map<string, string>();
+  const ambiguos  = new Set<string>();
+
+  for (const l of linhas) {
+    const tipo = (l.tipo_comissao ?? '').trim();
+    if (!tipo) continue;
+    const codigo = normCodigo(l.codigo);
+    if (!codigo) continue;
+
+    const jaVisto = porCodigo.get(codigo);
+    if (jaVisto === undefined) porCodigo.set(codigo, tipo);
+    else if (jaVisto !== tipo) ambiguos.add(codigo);
+  }
+
+  for (const c of ambiguos) porCodigo.delete(c);
+  return porCodigo;
 }
 
 export interface OpcoesImportacaoAnalitico {
@@ -301,6 +348,8 @@ export async function importarLoteAnalitico(
   let duplicados = 0;
   let atualizados = 0;
   let removidos = 0;
+  /** Linhas antigas que ganharam o "Tipo comissão" nesta reimportação. */
+  let tiposPreenchidos = 0;
   const erros: string[] = [];
 
   /**
@@ -340,6 +389,7 @@ export async function importarLoteAnalitico(
         duplicados,
         atualizados,
         removidos,
+        tipos_comissao_preenchidos: tiposPreenchidos,
         reconciliacao_executada: reconciliou,
         meses: mesesDoLote,
         operadores_sem_vinculo: [...new Set(rows.filter(r => !r.operador_id).map(r => r.operador_usuario))].slice(0, 20),
@@ -388,6 +438,53 @@ export async function importarLoteAnalitico(
         .is('operador_id', null)
         .is('setor_id', null)
         .in('codigo', codigosOrfaos.slice(i, i + CHUNK));
+    }
+  }
+
+  // ── "Tipo comissão" nas linhas que já existiam ─────────────────────────────
+  // O upsert acima usa `ignoreDuplicates`, então linha repetida é DESCARTADA
+  // inteira — inclusive a coluna que o banco ainda não tem preenchida. Sem este
+  // passo, reimportar o mês não move a classificação Direto/Extra de nenhuma
+  // linha antiga, e o painel segue mostrando o mês inteiro em "Sem vínculo
+  // definido". Ver `mapearTipoComissaoPorCodigo` para o caso do NR ambíguo.
+  //
+  // `is('tipo_comissao', null)` é o que torna o passo seguro: só preenche o que
+  // está vazio. O relatório nunca sobrescreve uma classificação já gravada.
+  {
+    const tipoPorCodigo = mapearTipoComissaoPorCodigo(rows);
+    if (tipoPorCodigo.size) {
+      const mesesDoLote = [...new Set(rows.map(r => r.mes_referencia))];
+      // Agrupado por VALOR (na prática dois: Extra e Integral), para que cada
+      // update leve uma lista de códigos em vez de uma requisição por linha.
+      const codigosPorTipo = new Map<string, string[]>();
+      for (const [codigo, tipo] of tipoPorCodigo) {
+        const lista = codigosPorTipo.get(tipo);
+        if (lista) lista.push(codigo); else codigosPorTipo.set(tipo, [codigo]);
+      }
+
+      for (const [tipo, codigos] of codigosPorTipo) {
+        for (let i = 0; i < codigos.length; i += CHUNK) {
+          const { data, error } = await supabase
+            .from('analitico_recebimentos')
+            .update({ tipo_comissao: tipo })
+            .eq('empresa_id', empresaId)
+            .in('mes_referencia', mesesDoLote)
+            .in('codigo', codigos.slice(i, i + CHUNK))
+            .is('tipo_comissao', null)
+            .select('id');
+          // Falha aqui não invalida a importação: as linhas novas já entraram e
+          // a classificação volta a ser "não sei", que é o estado anterior.
+          if (error) {
+            // Coluna ausente (migration 20260813a pendente) não é problema a
+            // reportar — é um banco mais antigo que o código.
+            if (!/tipo_comissao/i.test(error.message)) {
+              erros.push(`Preenchimento de "Tipo comissão": ${error.message}`);
+            }
+            break;
+          }
+          tiposPreenchidos += data?.length ?? 0;
+        }
+      }
     }
   }
 
@@ -467,7 +564,7 @@ export async function importarLoteAnalitico(
   if (!leituraCompleta) {
     erros.push('Conferência de valores não executada (falha ao ler o mês). Reimporte para refazê-la.');
     registrarResumo(false);
-    return { inseridos, duplicados, atualizados, removidos, erros };
+    return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, erros };
   }
 
   const dbPorGrupo = new Map<string, ExRow[]>();
@@ -559,7 +656,7 @@ export async function importarLoteAnalitico(
   }
 
   registrarResumo(true);
-  return { inseridos, duplicados, atualizados, removidos, erros };
+  return { inseridos, duplicados, atualizados, removidos, tiposPreenchidos, erros };
 }
 
 // ── Revínculo de órfãos (operador criado após importação anterior) ────────────

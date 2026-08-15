@@ -341,6 +341,19 @@ export function useAnaliticoImport() {
       );
     }
 
+    // Linhas antigas que estavam sem a coluna "Tipo comissão" e agora têm.
+    // Vale um aviso próprio porque é o que move dinheiro de "Sem vínculo
+    // definido" para Direto/Extra no painel de metas — quem reimporta
+    // justamente para consertar aquele card precisa ver que funcionou.
+    const tiposPreenchidos = res.tiposPreenchidos ?? 0;
+    if (tiposPreenchidos > 0) {
+      toast.success(
+        `${tiposPreenchidos} recebimento${tiposPreenchidos !== 1 ? 's' : ''} antigo${tiposPreenchidos !== 1 ? 's' : ''} ` +
+        `${tiposPreenchidos !== 1 ? 'ganharam' : 'ganhou'} a classificação Direto/Extra do relatório.`,
+        { duration: 6000 },
+      );
+    }
+
     // Salva snapshot de totais imediatamente após inserção + revínculo
     // (o revínculo altera a contagem de operadores distintos do mês)
     if (preview.linhas.length > 0) {
