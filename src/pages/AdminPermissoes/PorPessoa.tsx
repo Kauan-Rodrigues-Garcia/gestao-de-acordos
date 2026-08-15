@@ -46,7 +46,9 @@ const ESTADOS: { valor: EstadoExcecao; label: string; classe: string }[] = [
 export function PorPessoa() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
-  const { todasExcecoes, resolverParaUsuario, estadoExcecao, refresh } = useCargoPermissoes();
+  const {
+    todasExcecoes, resolverParaUsuario, valorDoCargo, estadoExcecao, refresh,
+  } = useCargoPermissoes();
   const { pessoas, carregando } = usePessoasDaEmpresa(empresa?.id);
 
   const [busca, setBusca] = useState('');
@@ -257,7 +259,7 @@ export function PorPessoa() {
                 alterada={p => p.key in rascunho.alteracoes}
                 renderControle={p => {
                   const estado = estadoDe(p.key);
-                  const doCargo = resolverParaUsuario(pessoa.id, pessoa.perfil, p.key);
+                  const doCargo = valorDoCargo(pessoa.perfil, p.key);
                   return (
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">

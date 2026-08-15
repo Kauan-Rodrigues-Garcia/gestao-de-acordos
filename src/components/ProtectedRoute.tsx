@@ -55,7 +55,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
-  const { permissoes, isAdmin, loading: permLoading } = useCargoPermissoes();
+  const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
   if (loading || (requiredPermissao && permLoading)) {
     return (
@@ -72,21 +72,27 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
 
   if (requiredPermissao) {
-    // Admin/super_admin sempre têm acesso total
-    if (isAdmin) return <>{children}</> as React.ReactElement;
-
-    const valorExplicito = permissoes[requiredPermissao];
-
-    // Permissão explicitamente habilitada no painel → acesso
-    if (valorExplicito === true) return <>{children}</> as React.ReactElement;
-
-    // Permissão explicitamente desabilitada → bloqueado (sobrepõe cargo)
-    if (valorExplicito === false) return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
-
-    // Sem configuração no banco (empresa nova ou cargo sem row) →
-    // fallback para allowedProfiles para não quebrar acessos existentes
-    const perfilFallback = roles ?? allowedProfiles;
-    if (perfilFallback && !perfilFallback.includes(perfil?.perfil ?? '')) {
+    /**
+     * Uma pergunta só, feita a quem sabe responder.
+     *
+     * Este guard lia `permissoes[chave]` direto — o mapa do CARGO. Com isso ele
+     * era cego para a exceção por pessoa das Permissões 2.0: desligar
+     * `ver_analitico` para a Aline salvava certo, o menu escondia certo, e a
+     * rota deixava entrar assim mesmo, porque o cargo `operador` concede.
+     *
+     * `temPermissao` já resolve as quatro camadas (admin → exceção da pessoa →
+     * permissão do cargo → negado). Reimplementar a regra aqui foi o que fez os
+     * dois lados divergirem.
+     *
+     * O antigo fallback para `allowedProfiles` também saiu. Ele existia para
+     * chave ausente no banco, e ausência não existe mais: a migration
+     * `20260815154058` preencheu todo o catálogo em todo cargo, e a trigger em
+     * `empresas` faz empresa nova nascer completa. Pior, o fallback abria a
+     * rota inteira quando ela não declarava `allowedProfiles` — que é o caso de
+     * `/analitico`, `/ouvidoria`, `/campanha-facil` e `/solicitacoes-whatsapp`.
+     * Ausência agora nega, como em todo o resto do sistema.
+     */
+    if (!temPermissao(requiredPermissao)) {
       return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
     }
     return <>{children}</> as React.ReactElement;

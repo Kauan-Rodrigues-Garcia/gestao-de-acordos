@@ -74,6 +74,15 @@ interface UseCargoPermissoesReturn {
   isAdmin: boolean;
   /** Resolve para OUTRA pessoa — a tela de administração usa para prever. */
   resolverParaUsuario: (usuarioId: string, cargo: string, key: string) => boolean;
+  /**
+   * O que o CARGO concede, sem aplicar exceção nenhuma.
+   *
+   * A aba «Por pessoa» mostra este valor ao lado da escolha, para o admin saber
+   * o que está sobrescrevendo. Usar `resolverParaUsuario` ali fazia o rótulo
+   * "cargo: não" aparecer justamente quando o cargo dizia SIM e a exceção é que
+   * negava — o número mostrado era o resultado, não a origem.
+   */
+  valorDoCargo: (cargo: string, key: string) => boolean;
   /** O estado da exceção de alguém numa permissão. */
   estadoExcecao: (usuarioId: string, key: string) => EstadoExcecao;
   refresh: () => Promise<void>;
@@ -186,6 +195,14 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     [todasExcecoes, todasPermissoes],
   );
 
+  const valorDoCargo = useCallback(
+    (cargoAlvo: string, key: string): boolean => {
+      if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
+      return !!todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes?.[key];
+    },
+    [todasPermissoes],
+  );
+
   const estadoExcecao = useCallback(
     (usuarioId: string, key: string): EstadoExcecao => {
       const exc = todasExcecoes.find(r => r.usuario_id === usuarioId)?.permissoes ?? {};
@@ -204,6 +221,7 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     temPermissao,
     isAdmin,
     resolverParaUsuario,
+    valorDoCargo,
     estadoExcecao,
     refresh: fetch,
   };

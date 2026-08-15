@@ -269,21 +269,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (item.hiddenForPaguePay && isPP) return false;
     if (item.hiddenForBookplay && tenant.slug === 'bookplay') return false;
 
+    // A permissão configurável vem PRIMEIRO e vale para todo item que a
+    // declara. Ela ficava depois dos casos especiais abaixo, que retornam cedo
+    // — então Ouvidoria e Solicitar Atendimento nunca chegavam a consultá-la, e
+    // o menu continuava mostrando a aba de quem tinha a permissão desligada.
+    if (item.permissaoKey && (permLoading || !temPermissao(item.permissaoKey))) {
+      return false;
+    }
+
     // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
-    // usuários com acesso concedido em ouvidoria_acessos.
+    // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
+    // continua valendo POR CIMA da permissão já verificada acima.
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
       return isPP && ouvidoriaAcesso.podeVer;
     }
 
-    // Solicitar Atendimento: PaguePlay. Aberta a todos os cargos — o operador
-    // enxerga só os pedidos dele, e quem garante isso é a RLS, não este filtro.
+    // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
+    // e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
       return isPP && podeAcessarAbaWpp(userRole);
     }
 
-    if (item.permissaoKey) {
-      return !permLoading && temPermissao(item.permissaoKey);
-    }
+    if (item.permissaoKey) return true;
 
     return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });
