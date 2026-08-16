@@ -795,10 +795,21 @@
   pointer-events: none;
 }
 
-/* Quem pediu menos movimento não recebe piscada nenhuma. */
-@media (prefers-reduced-motion: reduce) {
-  .creators-logo-eco,
-  .creators-logo-forte {
-    animation: none;
-  }
-}
+/* ---------------------------------------------------------------------------
+   Por que estas duas NÃO estão sob `prefers-reduced-motion`
+   ---------------------------------------------------------------------------
+   Estavam, e o efeito colateral foi ruim: o Windows 10/11 costuma vir com
+   "Efeitos de animação" desligado nas imagens corporativas, e nessas máquinas o
+   logo não dava reação nenhuma — quem clicava não recebia sinal de que estava
+   perto de alguma coisa, e o Easter Egg ficava praticamente inencontrável
+   justamente nos computadores em que essas pessoas passam o dia.
+
+   A reação só dispara a partir do TERCEIRO clique rápido no logo: é impossível
+   receber isto sem estar clicando de propósito e repetidamente no mesmo lugar.
+   Dura 0,22 s no pior caso e não se repete sozinha.
+
+   O resto do Gestão continua respeitando a preferência normalmente — as regras
+   acima, de slide e de sino, seguem sob a media query. A exceção vale só para
+   o Easter Egg, que tem a própria regra de movimento (ver
+   `src/pages/CreatorsLab/theme/CreatorsProvider.tsx`).
+   --------------------------------------------------------------------------- */

@@ -1,12 +1,22 @@
 /**
- * A janela dos cinco cliques.
+ * A janela dos cinco cliques, e o distintivo de quem já descobriu.
  *
- * A regra parece trivial e tem três armadilhas: um clique não pode abrir, cinco
- * cliques lentos não podem abrir, e a janela precisa recomeçar em vez de travar
- * quem clicou devagar.
+ * A regra dos cliques parece trivial e tem três armadilhas: um clique não pode
+ * abrir, cinco cliques lentos não podem abrir, e a janela precisa recomeçar em
+ * vez de travar quem clicou devagar.
+ *
+ * O distintivo tem uma armadilha só, mas pior: ele pertence à PESSOA, e uma
+ * falha de rede não pode tirar dela algo que já foi conquistado.
  */
-import { describe, it, expect } from 'vitest';
-import { proximoEstado, JANELA_MS, CLIQUES_NECESSARIOS } from '../useEasterEggCriadores';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { renderHook, waitFor } from '@testing-library/react';
+import {
+  proximoEstado, JANELA_MS, CLIQUES_NECESSARIOS, DURACAO_ESCURECIMENTO_MS,
+  useDescobriuCreatorsLab, esquecerDescobertaRemota, CHAVE_DESCOBERTO,
+} from '../useEasterEggCriadores';
+
+const jaDescobriuOLab = vi.hoisted(() => vi.fn<() => Promise<boolean>>());
+vi.mock('@/services/creatorsLab.service', () => ({ jaDescobriuOLab }));
 
 /** Simula uma sequência de cliques com intervalos dados, em ms. */
 function sequencia(intervalos: number[]): { cliques: number; abriu: boolean } {
@@ -99,5 +109,92 @@ describe('proximoEstado', () => {
     const r = proximoEstado(cliques, primeiro, agora);
     expect(r.abrir).toBe(false);
     expect(r.cliques).toBe(1);
+  });
+});
+
+describe('escurecimento antes de abrir', () => {
+  /**
+   * O quinto clique não joga a pessoa direto na abertura: a tela apaga antes.
+   * O `Layout` usa esta constante tanto na animação quanto no atraso da
+   * navegação, então ela precisa ser um tempo de transição de verdade — nem
+   * instantânea (vira corte seco), nem longa a ponto de parecer travamento.
+   */
+  it('dura o suficiente para ser passagem, e pouco para não parecer travada', () => {
+    expect(DURACAO_ESCURECIMENTO_MS).toBeGreaterThanOrEqual(700);
+    expect(DURACAO_ESCURECIMENTO_MS).toBeLessThanOrEqual(2000);
+  });
+});
+
+/**
+ * Até 16/08/2026 o distintivo morava só no `localStorage`, o que o prendia ao
+ * NAVEGADOR: quem descobria o Lab em casa chegava no trabalho sem a marca, e
+ * limpar cache apagava a descoberta. Agora a resposta vem do banco.
+ */
+describe('useDescobriuCreatorsLab', () => {
+  beforeEach(() => {
+    esquecerDescobertaRemota();
+    localStorage.clear();
+    jaDescobriuOLab.mockReset();
+  });
+
+  afterEach(() => { localStorage.clear(); });
+
+  it('sem nada em lugar nenhum, não há distintivo', async () => {
+    jaDescobriuOLab.mockResolvedValue(false);
+    const { result } = renderHook(() => useDescobriuCreatorsLab());
+    expect(result.current).toBe(false);
+    await waitFor(() => expect(jaDescobriuOLab).toHaveBeenCalled());
+    expect(result.current).toBe(false);
+  });
+
+  it('o banco sabendo, o distintivo aparece mesmo em navegador limpo', async () => {
+    jaDescobriuOLab.mockResolvedValue(true);
+    const { result } = renderHook(() => useDescobriuCreatorsLab());
+    await waitFor(() => expect(result.current).toBe(true));
+    // E fica em cache local, para o próximo carregamento não piscar.
+    expect(localStorage.getItem(CHAVE_DESCOBERTO)).toBe('true');
+  });
+
+  /**
+   * O caso que importa: `false` do servidor significa "não sei" — tabela ainda
+   * não migrada, sessão expirada, rede caída. Dúvida não tira de ninguém um
+   * troféu já conquistado.
+   */
+  it('resposta negativa do servidor NÃO apaga o distintivo local', async () => {
+    localStorage.setItem(CHAVE_DESCOBERTO, 'true');
+    jaDescobriuOLab.mockResolvedValue(false);
+
+    const { result } = renderHook(() => useDescobriuCreatorsLab());
+    expect(result.current).toBe(true);
+    await waitFor(() => expect(jaDescobriuOLab).toHaveBeenCalled());
+    expect(result.current).toBe(true);
+  });
+
+  it('promessa rejeitada não derruba nada e mantém o que havia', async () => {
+    localStorage.setItem(CHAVE_DESCOBERTO, 'true');
+    jaDescobriuOLab.mockRejectedValue(new Error('offline'));
+
+    const { result } = renderHook(() => useDescobriuCreatorsLab());
+    await waitFor(() => expect(jaDescobriuOLab).toHaveBeenCalled());
+    expect(result.current).toBe(true);
+  });
+
+  /**
+   * O `Layout` monta em toda tela do Gestão. Sem a memória de módulo, trocar
+   * de aba seis vezes viraria seis consultas para responder a mesma pergunta
+   * de enfeite.
+   */
+  it('consulta o banco uma vez só, por mais que monte', async () => {
+    jaDescobriuOLab.mockResolvedValue(true);
+
+    const a = renderHook(() => useDescobriuCreatorsLab());
+    const b = renderHook(() => useDescobriuCreatorsLab());
+    await waitFor(() => expect(a.result.current).toBe(true));
+    await waitFor(() => expect(b.result.current).toBe(true));
+
+    a.unmount();
+    renderHook(() => useDescobriuCreatorsLab());
+
+    expect(jaDescobriuOLab).toHaveBeenCalledTimes(1);
   });
 });

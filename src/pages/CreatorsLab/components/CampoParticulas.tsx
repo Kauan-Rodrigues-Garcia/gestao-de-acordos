@@ -16,8 +16,10 @@
  *   • sem alocação dentro do laço: as partículas são criadas uma vez e
  *     atualizadas no lugar.
  *
- * Com `prefers-reduced-motion` o componente não renderiza nada — quem pediu
- * menos movimento não deveria receber cem pontos flutuando.
+ * Quem escolheu movimento reduzido não monta este componente: cem pontos
+ * flutuando é exatamente o que essa escolha quer evitar. Repare que a decisão
+ * vem da PESSOA, pelo provider, e não direto do `prefers-reduced-motion` — ver
+ * `theme/CreatorsProvider.tsx` para o porquê.
  */
 import { useEffect, useRef } from 'react';
 import { distancia, influencia, repulsao, limitar } from '../lib/matematica';

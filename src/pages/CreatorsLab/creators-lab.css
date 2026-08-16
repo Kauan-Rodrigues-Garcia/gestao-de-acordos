@@ -8,6 +8,28 @@
  * As cores não estão escritas aqui: vêm das variáveis `--creator-*` que o
  * `CreatorsProvider` aplica no elemento raiz conforme o tema ativo. Este
  * arquivo só diz FORMA — cor é decisão do tema.
+ *
+ * ───────────────────────────────────────────────────────────────────────────
+ * ## Movimento: por que NÃO existe `@media (prefers-reduced-motion)` aqui
+ *
+ * Existia, e derrubou o Lab inteiro em dois computadores do trabalho.
+ *
+ * O Windows 10/11 tem "Efeitos de animação" em Acessibilidade, e imagem
+ * corporativa costuma vir com isso DESLIGADO por padrão, para economizar
+ * máquina. Quando está desligado o navegador responde
+ * `prefers-reduced-motion: reduce` — e a regra antiga zerava
+ * `animation-duration` e `transition-duration` de tudo dentro de
+ * `.creators-lab`, com `!important`. Resultado: em casa o Lab tinha abertura,
+ * partículas e brilho; no trabalho, uma página parada. Ninguém tinha mexido em
+ * acessibilidade nenhuma — a máquina veio assim.
+ *
+ * A decisão de movimento agora é do PROVIDER, que escreve
+ * `data-movimento="reduzido"` na raiz. A preferência do sistema continua sendo
+ * lida, mas como SUGESTÃO: o Lab abre com movimento completo e oferece o
+ * botão para reduzir. Isto é uma área escondida que a pessoa procurou; ela
+ * decide, não a política de energia do parque de máquinas.
+ *
+ * O Gestão em si continua respeitando `prefers-reduced-motion` normalmente.
  */
 
 .creators-lab {
@@ -18,6 +40,11 @@
   font-family: var(--creator-font-body);
   overflow-x: hidden;
   isolation: isolate;
+}
+
+.creators-lab ::selection {
+  background: var(--creator-primary);
+  color: var(--creator-bg);
 }
 
 /* ── Fundo em camadas ─────────────────────────────────────────────────── */
@@ -64,18 +91,21 @@
   position: absolute;
   inset: 0;
   background: repeating-linear-gradient(
-    0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px
+    0deg, rgba(0,0,0,.30) 0 1px, transparent 1px 3px
   );
-  opacity: .5;
+  opacity: .55;
 }
 
+/* O Arcade tem CRT de verdade: trama de pixels MAIS o abaulamento escuro nas
+   bordas, que é o que faz o olho aceitar a tela como um tubo e não um plano. */
 .creators-lab[data-tema="arcade"] .creators-lab__textura {
   position: absolute;
   inset: 0;
   background:
-    repeating-linear-gradient(0deg,  rgba(0,0,0,.16) 0 2px, transparent 2px 4px),
-    repeating-linear-gradient(90deg, rgba(0,0,0,.10) 0 2px, transparent 2px 4px);
-  opacity: .6;
+    radial-gradient(ellipse 120% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.65) 100%),
+    repeating-linear-gradient(0deg,  rgba(0,0,0,.22) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.12) 0 2px, transparent 2px 4px);
+  opacity: .75;
 }
 
 .creators-lab__conteudo { position: relative; z-index: 1; }
@@ -96,12 +126,18 @@
   text-transform: uppercase;
   /* Contorno duro em vez de brilho — é o que separa o Arcade do Cyberpunk
      sem trocar uma cor sequer. */
-  text-shadow: 3px 3px 0 rgba(0,0,0,.6);
+  text-shadow:
+    3px 3px 0 rgba(0,0,0,.75),
+    0 0 22px color-mix(in srgb, var(--creator-primary) 45%, transparent);
 }
 
+/* No Cyberpunk o título é placa: condensado, apertado, sem brilho difuso — a
+   luz vem da cor, não de uma sombra borrada. */
 .creators-lab[data-tema="cyberpunk"] h1,
 .creators-lab[data-tema="cyberpunk"] h2 {
-  text-shadow: 0 0 18px var(--creator-glow);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 700;
 }
 
 .creators-lab__rotulo {
@@ -112,9 +148,88 @@
   color: var(--creator-primary);
 }
 
+/*
+ * O prefixo do rótulo (`// ` no Cyberpunk, `— … —` no Arcade) é escrito pelo
+ * `SecaoLab`, não por um `::before` daqui. Se os dois fizessem, o rótulo
+ * sairia com o prefixo em dobro.
+ */
+
 .creators-lab__mono {
   font-family: var(--creator-font-mono);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Texto com falha (Cyberpunk) ──────────────────────────────────────── */
+/*
+ * A falha é feita de duas cópias do MESMO texto, deslocadas em ciano e
+ * vermelho, recortadas em faixas. Vem de `data-texto`, então o conteúdo real
+ * continua sendo um só nó no DOM — leitor de tela lê uma vez, não três.
+ */
+.creators-lab__falha {
+  position: relative;
+  display: inline-block;
+}
+
+.creators-lab__falha::before,
+.creators-lab__falha::after {
+  content: attr(data-texto);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.creators-lab__falha::before {
+  color: var(--creator-secondary);
+  transform: translateX(-2px);
+  clip-path: inset(12% 0 62% 0);
+  animation: creators-falha-a 3.4s steps(1) infinite;
+}
+
+.creators-lab__falha::after {
+  color: var(--creator-accent);
+  transform: translateX(2px);
+  clip-path: inset(64% 0 8% 0);
+  animation: creators-falha-b 2.7s steps(1) infinite;
+}
+
+@keyframes creators-falha-a {
+  0%, 92%  { opacity: 0; transform: translateX(-2px); }
+  93%      { opacity: .9; transform: translateX(-5px); }
+  95%      { opacity: .9; transform: translateX(3px); }
+  97%,100% { opacity: 0; transform: translateX(-2px); }
+}
+
+@keyframes creators-falha-b {
+  0%, 88%  { opacity: 0; transform: translateX(2px); }
+  90%      { opacity: .85; transform: translateX(5px); }
+  93%      { opacity: .85; transform: translateX(-3px); }
+  96%,100% { opacity: 0; transform: translateX(2px); }
+}
+
+/* ── Faixa de perigo (Cyberpunk) ──────────────────────────────────────── */
+/*
+ * A tarja diagonal amarelo/preto. É o elemento mais reconhecível da
+ * sinalização do gênero e não existe no Arcade — serve de separador de seção
+ * e de moldura de aviso.
+ */
+.creators-lab__tarja {
+  height: 10px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--creator-primary) 0 12px,
+    #000 12px 24px
+  );
+  opacity: .85;
+}
+
+.creators-lab[data-tema="arcade"] .creators-lab__tarja {
+  /* No Arcade a mesma faixa vira fita de neon, não fita de perigo. */
+  background: repeating-linear-gradient(
+    90deg,
+    var(--creator-primary) 0 10px,
+    var(--creator-secondary) 10px 20px
+  );
+  height: 6px;
 }
 
 /* ── Superfícies ──────────────────────────────────────────────────────── */
@@ -127,9 +242,41 @@
   box-shadow: var(--creator-shadow);
 }
 
-/* Canto cortado — só no Cyberpunk, e é forma, não cor. */
-.creators-lab[data-tema="cyberpunk"] .creators-lab__painel--cortado {
-  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+/*
+ * Canto chanfrado — no Cyberpunk é a forma padrão de todo painel, não um
+ * enfeite opcional. O corte é grande o bastante para ser lido como forma.
+ *
+ * O `--reto` existe para painéis baixos, como a barra de controles: um corte
+ * de 18 px numa barra de 44 px de altura entraria nos botões das pontas.
+ */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__painel:not(.creators-lab__painel--reto) {
+  clip-path: polygon(
+    0 0, calc(100% - 18px) 0, 100% 18px,
+    100% 100%, 18px 100%, 0 calc(100% - 18px)
+  );
+}
+
+/* Cantos em colchete: quatro marcas finas nas quinas, como mira de HUD.
+   Feitas com dois gradientes por elemento, sem nós extras no DOM. */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__painel--marcado::before {
+  content: '';
+  position: absolute;
+  inset: 6px;
+  pointer-events: none;
+  background:
+    linear-gradient(var(--creator-primary), var(--creator-primary)) 0    0    / 14px 1px no-repeat,
+    linear-gradient(var(--creator-primary), var(--creator-primary)) 0    0    / 1px 14px no-repeat,
+    linear-gradient(var(--creator-primary), var(--creator-primary)) 100% 100% / 14px 1px no-repeat,
+    linear-gradient(var(--creator-primary), var(--creator-primary)) 100% 100% / 1px 14px no-repeat;
+  opacity: .7;
+}
+
+/* No Arcade o painel é gabinete: borda grossa, sombra dura e um filete claro
+   por dentro, como plástico moldado. */
+.creators-lab[data-tema="arcade"] .creators-lab__painel {
+  box-shadow:
+    inset 0 0 0 2px rgba(255,255,255,.10),
+    var(--creator-shadow);
 }
 
 /* ── Botões ───────────────────────────────────────────────────────────── */
@@ -153,13 +300,24 @@
   color: var(--creator-bg);
 }
 
+/* O botão do Cyberpunk é placa: canto cortado e preenchimento chapado. */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__btn {
+  clip-path: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  font-weight: 600;
+}
+
 .creators-lab[data-tema="cyberpunk"] .creators-lab__btn:hover {
-  box-shadow: 0 0 22px var(--creator-glow);
+  box-shadow: 0 0 26px var(--creator-glow);
+}
+
+.creators-lab[data-tema="arcade"] .creators-lab__btn {
+  font-weight: 700;
+  box-shadow: 3px 3px 0 rgba(0,0,0,.6);
 }
 
 .creators-lab[data-tema="arcade"] .creators-lab__btn:hover {
   transform: translate(-2px, -2px);
-  box-shadow: 4px 4px 0 rgba(0,0,0,.6);
+  box-shadow: 5px 5px 0 rgba(0,0,0,.6);
 }
 
 .creators-lab__btn:active { transform: translate(1px, 1px); }
@@ -174,6 +332,14 @@
 .creators-lab [tabindex]:focus-visible {
   outline: 2px solid var(--creator-accent);
   outline-offset: 3px;
+}
+
+/* Pulsar de "aperte" — o Arcade usa em chamada de ação, o Cyberpunk não usa. */
+.creators-lab__piscar { animation: creators-piscar 1.1s steps(1) infinite; }
+
+@keyframes creators-piscar {
+  0%, 55%   { opacity: 1; }
+  56%, 100% { opacity: .18; }
 }
 
 /* ── Card 3D ──────────────────────────────────────────────────────────── */
@@ -210,6 +376,13 @@
     90deg, var(--creator-primary) 0 6px, transparent 6px 9px
   );
   background-color: transparent;
+}
+
+/* No Cyberpunk a barra tem risco de escala por cima, como instrumento. */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__barra {
+  background-image: repeating-linear-gradient(
+    90deg, transparent 0 11px, rgba(255,255,255,.12) 11px 12px
+  );
 }
 
 /*
@@ -295,6 +468,156 @@
   display: inline-block;
 }
 
+/* ── Máquina de fliperama ─────────────────────────────────────────────── */
+/*
+ * O gabinete é desenhado em CSS ao redor de um `<canvas>`. Nada aqui conhece
+ * o jogo: são só as chapas, o vidro e os controles. O jogo em si está em
+ * `lib/fliperama.ts` e `sections/ArcadeCabinet.tsx`.
+ */
+
+.creators-lab__gabinete {
+  position: relative;
+  width: 100%;
+  /* A tela é 240×320: em 23rem o vidro fica com ~330×440 px, proporção de
+     gabinete vertical. Mais largo que isso e o móvel vira televisão. */
+  max-width: 23rem;
+  margin: 0 auto;
+  padding: .9rem .9rem 1.2rem;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--creator-surface) 92%, #000) 0%,
+      color-mix(in srgb, var(--creator-bg-alt) 96%, #000) 100%);
+  border: 3px solid var(--creator-border);
+  box-shadow:
+    inset 0 0 0 2px rgba(255,255,255,.08),
+    0 24px 50px -22px #000;
+}
+
+/* Marquise: a placa iluminada em cima do gabinete. */
+.creators-lab__marquise {
+  margin: -.9rem -.9rem .9rem;
+  padding: .55rem .8rem;
+  text-align: center;
+  font-family: var(--creator-font-display);
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--creator-bg);
+  background: linear-gradient(180deg,
+    var(--creator-primary) 0%,
+    color-mix(in srgb, var(--creator-primary) 72%, #000) 100%);
+  border-bottom: 3px solid var(--creator-border);
+}
+
+/* As lâmpadas em volta da marquise, acendendo em sequência. */
+.creators-lab__lampadas {
+  display: flex;
+  justify-content: space-between;
+  padding: .3rem .5rem 0;
+}
+
+.creators-lab__lampadas i {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--creator-secondary);
+  opacity: .25;
+  animation: creators-lampada 1.4s linear infinite;
+}
+
+@keyframes creators-lampada {
+  0%, 70%  { opacity: .22; box-shadow: none; }
+  35%      { opacity: 1;   box-shadow: 0 0 8px var(--creator-secondary); }
+}
+
+/* O vidro: a tela do jogo, com o abaulamento e o reflexo. */
+.creators-lab__vidro {
+  position: relative;
+  background: #05030F;
+  border: 2px solid #000;
+  box-shadow: inset 0 0 40px rgba(0,0,0,.9);
+  overflow: hidden;
+}
+
+.creators-lab__vidro canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+}
+
+.creators-lab__vidro::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 130% 110% at 50% 50%, transparent 58%, rgba(0,0,0,.75) 100%),
+    repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 2px, transparent 2px 4px),
+    linear-gradient(115deg, rgba(255,255,255,.07) 0 22%, transparent 32%);
+}
+
+/* Painel de controle: manche e botões. Decorativos — quem joga usa mouse,
+   toque ou setas —, mas os botões respondem ao apertar, senão parecem adesivo. */
+.creators-lab__controles {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1.2rem;
+  margin-top: .8rem;
+  padding: .7rem;
+  background: color-mix(in srgb, var(--creator-bg-alt) 80%, #000);
+  border: 2px solid var(--creator-border);
+}
+
+.creators-lab__manche {
+  position: relative;
+  width: 34px; height: 34px;
+}
+
+.creators-lab__manche b {
+  position: absolute;
+  left: 50%; top: 0;
+  width: 16px; height: 16px;
+  margin-left: -8px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--creator-accent) 30%, #6d0022 100%);
+  transform: translateX(var(--manche, 0px));
+  transition: transform .12s ease-out;
+}
+
+.creators-lab__manche i {
+  position: absolute;
+  left: 50%; top: 12px;
+  width: 4px; height: 16px;
+  margin-left: -2px;
+  background: linear-gradient(90deg, #666, #ddd, #666);
+  transform-origin: bottom center;
+  transform: rotate(calc(var(--manche, 0px) * 1.2deg));
+  transition: transform .12s ease-out;
+}
+
+.creators-lab__botao-fisico {
+  width: 26px; height: 26px;
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  background: radial-gradient(circle at 35% 30%, #fff 0 6%, var(--creator-primary) 26%,
+              color-mix(in srgb, var(--creator-primary) 45%, #000) 100%);
+  box-shadow: 0 4px 0 rgba(0,0,0,.6);
+  transition: transform .07s ease, box-shadow .07s ease;
+}
+
+.creators-lab__botao-fisico:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 rgba(0,0,0,.6);
+}
+
+/* Ranhura da ficha. */
+.creators-lab__ficha-slot {
+  width: 46px; height: 8px;
+  background: #000;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--creator-primary) 55%, #000);
+}
+
 /* ── Rolagem ──────────────────────────────────────────────────────────── */
 
 .creators-lab ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -307,18 +630,23 @@
 
 /* ── Movimento reduzido ───────────────────────────────────────────────── */
 /*
+ * Ligado pelo atributo, NÃO por media query — ver a explicação no topo do
+ * arquivo. Quem quiser menos movimento aperta o botão na barra do Lab; a
+ * preferência do sistema apenas sugere, e a sugestão aparece uma vez.
+ *
  * Não é só "animação mais curta": some com o que pisca e com o que se desloca
- * muito, que é o que atrapalha pessoas fotossensíveis. O acesso ao Lab
- * continua inteiro — o que muda é a forma de chegar.
+ * muito, que é o que atrapalha pessoas fotossensíveis.
  */
-@media (prefers-reduced-motion: reduce) {
-  .creators-lab *,
-  .creators-logo-eco,
-  .creators-logo-forte {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
-  .creators-lab__luz { display: none; }
-  .creators-lab__textura { opacity: .18; }
+.creators-lab[data-movimento="reduzido"] *,
+.creators-lab[data-movimento="reduzido"]::before,
+.creators-lab[data-movimento="reduzido"]::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
 }
+
+.creators-lab[data-movimento="reduzido"] .creators-lab__luz     { display: none; }
+.creators-lab[data-movimento="reduzido"] .creators-lab__textura { opacity: .18; }
+.creators-lab[data-movimento="reduzido"] .creators-lab__falha::before,
+.creators-lab[data-movimento="reduzido"] .creators-lab__falha::after { display: none; }
+.creators-lab[data-movimento="reduzido"] .creators-lab__piscar  { animation: none; opacity: 1; }

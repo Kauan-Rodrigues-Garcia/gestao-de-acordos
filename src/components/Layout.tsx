@@ -52,7 +52,7 @@ import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
-import { useEasterEggCriadores } from '@/hooks/useEasterEggCriadores';
+import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
@@ -324,7 +324,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * gaveta do celular) compartilham o mesmo contador — o que é o certo: são o
    * mesmo logo, em telas diferentes.
    */
-  const easterEgg = useEasterEggCriadores(() => navigate(ROUTE_PATHS.CREATORS_LAB));
+  /*
+   * O quinto clique NÃO navega na hora.
+   *
+   * Ele acende o escurecimento: a tela do Gestão some devagar, e só quando
+   * está preta a rota muda. Sem essa pausa, a pessoa sai de uma lista de
+   * acordos e cai numa tela de terminal em um quadro — o que o olho lê como
+   * defeito, não como passagem. O Lab já abre em preto, então a emenda é
+   * invisível.
+   */
+  const [abrindoLab, setAbrindoLab] = useState(false);
+  const easterEgg = useEasterEggCriadores(() => setAbrindoLab(true));
+
+  useEffect(() => {
+    if (!abrindoLab) return;
+    const t = setTimeout(() => navigate(ROUTE_PATHS.CREATORS_LAB), DURACAO_ESCURECIMENTO_MS);
+    return () => clearTimeout(t);
+  }, [abrindoLab, navigate]);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -733,6 +749,50 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           perfilId={perfil.id}
           onTrocada={() => setSenhaTrocadaLocal(true)}
         />
+      )}
+
+      {/*
+        Escurecimento antes do Creators Lab.
+        ───────────────────────────────────────────────────────────────────────
+        Três camadas em 1,15 s: o preto que engole a tela, uma interferência
+        curta por cima e, no fim, o risco horizontal de tubo desligando. Quando
+        o risco some, a rota já mudou e quem está atrás é o Lab.
+
+        Fica FORA da `AnimatePresence` do resto porque não tem saída: a página
+        inteira é substituída, e animar a saída de algo que vai ser desmontado
+        pela navegação só gera trabalho perdido.
+
+        O movimento aqui é curto e sem piscar, e não passa pelo controle de
+        movimento do Lab — este é o Gestão, e é o único ponto em que ele mostra
+        que o Lab existe.
+      */}
+      {abrindoLab && (
+        <div className="fixed inset-0 z-[200] overflow-hidden" aria-hidden="true">
+          <motion.div
+            className="absolute inset-0 bg-black"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.82, ease: [0.4, 0, 0.6, 1] }}
+          />
+          <motion.div
+            className="absolute inset-0"
+            style={{
+              background:
+                'repeating-linear-gradient(0deg, rgba(252,238,10,.10) 0 1px, transparent 1px 4px)',
+              mixBlendMode: 'screen',
+            }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: [0, 0.9, 0.15, 0.7, 0] }}
+            transition={{ duration: 0.95, times: [0, 0.35, 0.55, 0.75, 1], ease: 'linear' }}
+          />
+          <motion.div
+            className="absolute left-0 right-0 top-1/2 h-[2px] origin-center bg-[#FCEE0A]"
+            style={{ boxShadow: '0 0 24px rgba(252,238,10,.9)' }}
+            initial={{ scaleX: 0, opacity: 0 }}
+            animate={{ scaleX: [0, 1, 1, 0.02], opacity: [0, 1, 1, 0] }}
+            transition={{ delay: 0.62, duration: 0.5, times: [0, 0.3, 0.7, 1], ease: 'easeInOut' }}
+          />
+        </div>
       )}
 
       {/* Recorte da foto de perfil antes do upload */}

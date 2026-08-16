@@ -30,6 +30,7 @@ import { CreatorsHero } from './sections/CreatorsHero';
 import { PersonalDatabase } from './sections/PersonalDatabase';
 import { ProjectArchive } from './sections/ProjectArchive';
 import { CodePlayground } from './sections/CodePlayground';
+import { ArcadeCabinet } from './sections/ArcadeCabinet';
 import { MathLab } from './sections/MathLab';
 import { SecretTerminal } from './sections/SecretTerminal';
 import { DevStatus } from './sections/DevStatus';
@@ -48,7 +49,8 @@ type Etapa = 'boot' | 'realidade' | 'lab';
 function LabInterno() {
   const navigate = useNavigate();
   const {
-    tema, tokens, trocarTema, progresso, registrar, movimentoReduzido,
+    tema, tokens, trocarTema, registrar, movimentoReduzido,
+    ofertaReduzirMovimento, alternarMovimento, recusarOferta,
   } = useCreators();
 
   // Quem já escolheu uma realidade antes pula direto para o conteúdo.
@@ -116,6 +118,14 @@ function LabInterno() {
       ref={raizRef}
       className="creators-lab"
       data-tema={tema}
+      /*
+       * O CSS lê ESTE atributo para decidir sobre movimento, e não uma
+       * `@media (prefers-reduced-motion)`. Foi a media query que deixou o Lab
+       * completamente parado em duas máquinas do trabalho, onde o Windows vem
+       * com "Efeitos de animação" desligado de fábrica. Ver o cabeçalho de
+       * `creators-lab.css`.
+       */
+      data-movimento={movimentoReduzido ? 'reduzido' : 'completo'}
       style={estilo}
     >
       {/* ── Fundo ── */}
@@ -165,6 +175,7 @@ function LabInterno() {
             <PersonalDatabase />
             <ProjectArchive />
             <CodePlayground />
+            <ArcadeCabinet />
             <MathLab />
             <SecretTerminal
               aoSair={sair}
@@ -179,15 +190,50 @@ function LabInterno() {
         )}
 
         {etapa === 'lab' && (
-          <BarraLab
-            aoSair={sair}
-            aoAbrirConquistas={() => setConquistasAbertas(true)}
-            totalConquistas={progresso.entrou ? undefined : undefined}
-          />
+          <BarraLab aoSair={sair} aoAbrirConquistas={() => setConquistasAbertas(true)} />
         )}
       </div>
 
       {/* ── Sobreposições ── */}
+
+      {/*
+        A oferta de movimento reduzido.
+        ───────────────────────────────────────────────────────────────────────
+        O sistema pediu redução e ninguém decidiu nada ainda. O Lab NÃO obedece
+        sozinho — ver o cabeçalho de `theme/CreatorsProvider.tsx` —, mas seria
+        grosseiro ignorar o pedido em silêncio. Então ele pergunta, uma vez, e
+        guarda a resposta dos dois lados: aceitar reduz, dispensar mantém.
+
+        Aparece só com o Lab montado: no meio da abertura seria um convite a
+        clicar em algo que ninguém leu.
+      */}
+      {etapa === 'lab' && ofertaReduzirMovimento && (
+        <div
+          className="creators-lab__painel creators-lab__painel--marcado fixed bottom-24 left-1/2 z-[80] w-[min(92vw,26rem)] -translate-x-1/2 p-4"
+          role="dialog"
+          aria-label="Preferência de movimento"
+        >
+          <p className="text-sm" style={{ color: tokens.cores.texto }}>
+            Seu sistema pede menos animação. Aqui elas estão <strong>ligadas</strong>.
+          </p>
+          <p className="mt-1 text-xs" style={{ color: tokens.cores.textoSuave }}>
+            Dá para reduzir agora ou pelo botão <span aria-hidden>◐</span> na barra, quando quiser.
+          </p>
+          <div className="mt-3 flex gap-2">
+            <button className="creators-lab__btn" onClick={alternarMovimento}>
+              reduzir
+            </button>
+            <button
+              className="creators-lab__btn"
+              onClick={recusarOferta}
+              style={{ borderColor: tokens.cores.borda }}
+            >
+              manter
+            </button>
+          </div>
+        </div>
+      )}
+
       <PainelConquistas
         aberto={conquistasAbertas}
         aoFechar={() => setConquistasAbertas(false)}

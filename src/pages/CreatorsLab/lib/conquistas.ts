@@ -37,7 +37,7 @@ export const CONQUISTAS: Conquista[] = [
   { id: 'math-doesnt-lie',  icone: '📐', secreta: false,
     titulo: "Math Doesn't Lie", descricao: 'Mexeu em todos os experimentos do Math Lab.' },
   { id: 'arcade-master',    icone: '🕹️', secreta: true,
-    titulo: 'Arcade Master',   descricao: 'Achou o segredo da máquina.' },
+    titulo: 'Arcade Master',   descricao: 'Zerou a máquina de fliperama.' },
   { id: 'dont-touch-this',  icone: '💣', secreta: true,
     titulo: 'Listening Skills: 0', descricao: 'Você apertou. Cinco vezes.' },
   { id: 'free-time',        icone: '🛋️', secreta: true,
@@ -111,4 +111,72 @@ export function novasConquistas(
   antes: Set<IdConquista>, depois: Set<IdConquista>,
 ): IdConquista[] {
   return [...depois].filter(id => !antes.has(id));
+}
+
+/** Chaves de lista do progresso — as que se unem em vez de se substituir. */
+const LISTAS = [
+  'temasVistos', 'itensAbertos', 'comandosUsados', 'experimentosUsados',
+] as const;
+
+/** Chaves numéricas — vale o maior, nunca o mais recente. */
+const NUMEROS = ['totalItens', 'totalExperimentos', 'cliquesProibidos'] as const;
+
+/**
+ * Junta dois progressos.
+ *
+ * Existe porque o progresso agora tem DUAS moradas: o navegador (instantâneo)
+ * e o banco (preso à pessoa). Ao abrir o Lab as duas versões podem discordar —
+ * alguém jogou no celular ontem, hoje abre no computador do trabalho onde o
+ * localStorage está vazio.
+ *
+ * A regra é que progresso **não retrocede**: lista vira união, número vira o
+ * maior, booleano vira "algum dos dois". Não existe caso em que "esqueci" seja
+ * a resposta certa — ninguém des-descobre um Easter Egg.
+ *
+ * Repare que isso torna a ordem dos argumentos irrelevante, o que é
+ * exatamente o que se quer de uma junção que não tem árbitro de relógio.
+ */
+export function mesclarProgresso(a: Progresso, b: Progresso): Progresso {
+  const juntos: Progresso = { ...a, ...b };
+
+  for (const chave of LISTAS) {
+    juntos[chave] = [...new Set([...(a[chave] ?? []), ...(b[chave] ?? [])])];
+  }
+  for (const chave of NUMEROS) {
+    juntos[chave] = Math.max(a[chave] ?? 0, b[chave] ?? 0);
+  }
+  juntos.entrou        = !!a.entrou || !!b.entrou;
+  juntos.segredoArcade = !!a.segredoArcade || !!b.segredoArcade;
+
+  return juntos;
+}
+
+/**
+ * Um objeto qualquer virado `Progresso` confiável.
+ *
+ * O que volta do banco é `jsonb`: pode estar velho, incompleto ou com o tipo
+ * errado se alguém editou à mão. Em vez de confiar, normaliza campo a campo
+ * contra `PROGRESSO_VAZIO` — assim uma linha estragada vira progresso zerado,
+ * e não uma página que quebra ao chamar `.length` de `undefined`.
+ */
+export function normalizarProgresso(cru: unknown): Progresso {
+  if (!cru || typeof cru !== 'object') return { ...PROGRESSO_VAZIO };
+  const o = cru as Record<string, unknown>;
+
+  const lista = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const numero = (v: unknown): number =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : 0;
+
+  return {
+    entrou:             o.entrou === true,
+    temasVistos:        lista(o.temasVistos),
+    itensAbertos:       lista(o.itensAbertos),
+    totalItens:         numero(o.totalItens),
+    comandosUsados:     lista(o.comandosUsados),
+    experimentosUsados: lista(o.experimentosUsados),
+    totalExperimentos:  numero(o.totalExperimentos),
+    cliquesProibidos:   numero(o.cliquesProibidos),
+    segredoArcade:      o.segredoArcade === true,
+  };
 }

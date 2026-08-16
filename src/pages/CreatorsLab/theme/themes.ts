@@ -12,6 +12,25 @@
  *
  * As cores viram variáveis CSS `--creator-*` aplicadas na raiz do Lab, então o
  * CSS não precisa saber qual tema está ativo.
+ *
+ * ## Por que os dois não podem dividir a mesma cor
+ *
+ * Até 16/08/2026 os dois temas eram ciano/magenta e amarelo/vermelho sobre
+ * fundo escuro, com a mesma grade e a mesma varredura. Ficavam parecidos
+ * demais: trocar de realidade mudava o texto, não a sensação. Agora cada um
+ * tem uma cor DOMINANTE que o outro não usa —
+ *
+ *   Cyberpunk → amarelo de sinalização sobre preto puro; ciano e vermelho
+ *               entram só como estado. Faixas de perigo, cantos chanfrados,
+ *               HUD, tipografia condensada.
+ *   Arcade    → magenta de neon sobre roxo profundo; ciano e verde-limão como
+ *               co-estrelas. Bloco, sombra dura, CRT abaulado, tipo pesado.
+ *
+ * A regra dura, com teste em `__tests__/temas.test.ts`: **amarelo é exclusivo
+ * do Cyberpunk**, e as duas cores dominantes ficam longe uma da outra no
+ * círculo cromático. Ciano aparece nos dois de propósito — é secundária nos
+ * dois casos, e o que separa os mundos é a dominante, o fundo e a forma, não a
+ * ausência total de cor comum.
  */
 
 export type TemaCreators = 'cyberpunk' | 'arcade';
@@ -25,6 +44,8 @@ export interface VocabularioTema {
   habilidades:   string;
   playground:    string;
   matematica:    string;
+  /** A máquina de fliperama jogável. */
+  fliperama:     string;
   terminal:      string;
   conquistas:    string;
   contato:       string;
@@ -79,38 +100,45 @@ export interface TokensTema {
 }
 
 /**
- * Cyberpunk — HUD técnico, holográfico, frio.
+ * Cyberpunk — sinalização industrial num mundo que já quebrou.
  *
- * Identidade própria: ciano e magenta sobre quase-preto azulado, tipografia
- * monoespaçada em toda a interface, cantos cortados e linhas de varredura. Não
- * copia nenhum jogo — o vocabulário é de banco de dados e transmissão, que é o
- * que este sistema realmente é.
+ * A cor que manda é o amarelo de placa de perigo sobre preto puro; ciano e
+ * vermelho só aparecem como estado (informação e alerta), nunca como
+ * decoração. É o oposto do Arcade, que é neon frio brincando sobre roxo.
+ *
+ * O vocabulário é de banco de dados e transmissão, que é o que este sistema
+ * realmente é.
  */
 const CYBERPUNK: TokensTema = {
   id: 'cyberpunk',
   nome: 'CYBERPUNK',
-  descricao: 'Interface técnica. Terminal, holograma e grade.',
+  descricao: 'Sinalização industrial, HUD e ruído. Amarelo sobre preto.',
   cores: {
-    fundo:      '#05080D',
-    fundoAlt:   '#0A1018',
-    superficie: '#0D1622',
-    texto:      '#D6F5FF',
-    textoSuave: '#6E8CA0',
-    primaria:   '#00E5FF',
-    secundaria: '#FF2E97',
-    acento:     '#B6FF3C',
-    borda:      '#1B3A4B',
-    brilho:     'rgba(0,229,255,.45)',
-    grade:      'rgba(0,229,255,.07)',
+    fundo:      '#000000',
+    fundoAlt:   '#0A0A0A',
+    superficie: '#101012',
+    texto:      '#F2F2F2',
+    textoSuave: '#8A8A85',
+    primaria:   '#FCEE0A',   // o amarelo de sinalização; a cor da marca
+    secundaria: '#02D7F2',   // ciano: informação, dado, leitura
+    acento:     '#FF003C',   // vermelho: alerta, perigo, irreversível
+    borda:      '#2B2B1A',
+    brilho:     'rgba(252,238,10,.38)',
+    grade:      'rgba(252,238,10,.055)',
   },
   fontes: {
-    display: '"JetBrains Mono", ui-monospace, monospace',
-    corpo:   '"JetBrains Mono", ui-monospace, monospace',
-    mono:    '"JetBrains Mono", ui-monospace, monospace',
+    /*
+     * Bahnschrift acompanha o Windows 10/11 e é condensada e técnica — a
+     * família mais próxima da sinalização do jogo que dá para usar sem baixar
+     * fonte nenhuma. As seguintes cobrem macOS e Linux; a última é o desespero.
+     */
+    display: 'Bahnschrift, "Archivo Narrow", "Roboto Condensed", "Arial Narrow", Impact, sans-serif',
+    corpo:   '"Segoe UI", system-ui, -apple-system, "Helvetica Neue", sans-serif',
+    mono:    '"JetBrains Mono", Consolas, "SF Mono", ui-monospace, monospace',
   },
-  raio: '2px',
+  raio: '0px',
   bordaLargura: '1px',
-  sombra: '0 0 0 1px rgba(0,229,255,.15), 0 0 24px rgba(0,229,255,.12)',
+  sombra: '0 0 0 1px rgba(252,238,10,.10), 0 18px 40px -24px rgba(0,0,0,.9)',
   duracao: 0.45,
   easing: [0.16, 1, 0.3, 1],
   textura: 'scanlines',
@@ -123,6 +151,7 @@ const CYBERPUNK: TokensTema = {
     habilidades: 'SYSTEM STATS',
     playground:  'COMPILER',
     matematica:  'MATH // LAB',
+    fliperama:   'BRAINDANCE',
     terminal:    'TERMINAL',
     conquistas:  'LOG',
     contato:     'TRANSMISSION',
@@ -137,37 +166,39 @@ const CYBERPUNK: TokensTema = {
 };
 
 /**
- * Arcade — máquina de fliperama, CRT, seleção de personagem.
+ * Arcade — a máquina do fliperama, com o CRT ligado.
  *
- * Amarelo e vermelho quentes sobre azul-noite, tipografia pesada e blocada,
- * cantos duros, sem brilho difuso — o Arcade é opaco onde o Cyberpunk é
- * luminoso. O vocabulário é de jogo de luta.
+ * Magenta e ciano de neon sobre roxo profundo, verde-limão para acerto. Nada
+ * de amarelo: essa cor é do Cyberpunk agora. Tudo é bloco, sombra dura e
+ * contorno — o Arcade é opaco onde o Cyberpunk é luminoso.
+ *
+ * O vocabulário é de jogo de luta dos anos 90.
  */
 const ARCADE: TokensTema = {
   id: 'arcade',
   nome: 'ARCADE',
-  descricao: 'Fliperama. Seleção de lutador, CRT e placar.',
+  descricao: 'Fliperama de verdade. Neon, CRT, placar e ficha.',
   cores: {
-    fundo:      '#12082B',
-    fundoAlt:   '#1B0D3D',
-    superficie: '#241150',
-    texto:      '#FFF3D6',
-    textoSuave: '#B79BE0',
-    primaria:   '#FFD23F',
-    secundaria: '#FF3864',
-    acento:     '#31E7B6',
-    borda:      '#4A2A8C',
-    brilho:     'rgba(255,210,63,.5)',
-    grade:      'rgba(255,210,63,.06)',
+    fundo:      '#0D0522',
+    fundoAlt:   '#160A38',
+    superficie: '#22105A',
+    texto:      '#FFFFFF',
+    textoSuave: '#B9A7F0',
+    primaria:   '#FF3DCB',   // magenta de neon: a cor do gabinete
+    secundaria: '#22D3FF',   // ciano: o segundo tubo de neon
+    acento:     '#8CFF3D',   // verde-limão: acerto, ponto, vitória
+    borda:      '#6A32D8',
+    brilho:     'rgba(255,61,203,.5)',
+    grade:      'rgba(34,211,255,.07)',
   },
   fontes: {
-    display: 'Impact, "Arial Black", "Inter", sans-serif',
-    corpo:   'Inter, system-ui, sans-serif',
-    mono:    '"JetBrains Mono", ui-monospace, monospace',
+    display: 'Impact, Haettenschweiler, "Arial Black", "Franklin Gothic Heavy", sans-serif',
+    corpo:   'Inter, "Segoe UI", system-ui, sans-serif',
+    mono:    '"JetBrains Mono", Consolas, ui-monospace, monospace',
   },
   raio: '0px',
   bordaLargura: '3px',
-  sombra: '4px 4px 0 rgba(0,0,0,.55)',
+  sombra: '5px 5px 0 rgba(0,0,0,.65)',
   duracao: 0.22,
   easing: [0.34, 1.56, 0.64, 1],
   textura: 'pixels',
@@ -180,6 +211,7 @@ const ARCADE: TokensTema = {
     habilidades: 'FIGHTER STATS',
     playground:  'TRAINING MODE',
     matematica:  'BONUS STAGE',
+    fliperama:   'ARCADE CABINET',
     terminal:    'CHEAT CONSOLE',
     conquistas:  'HIGH SCORES',
     contato:     'CONTINUE?',
@@ -225,5 +257,6 @@ export function variaveisCss(t: TokensTema): Record<string, string> {
     '--creator-radius':       t.raio,
     '--creator-border-w':     t.bordaLargura,
     '--creator-shadow':       t.sombra,
+    '--creator-duracao':      `${t.duracao}s`,
   };
 }

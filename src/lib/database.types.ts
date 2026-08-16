@@ -1152,6 +1152,35 @@ export type Database = {
           },
         ]
       }
+      creators_lab_progresso: {
+        Row: {
+          atualizado_em: string
+          descoberto_em: string
+          progresso: Json
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          descoberto_em?: string
+          progresso?: Json
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          descoberto_em?: string
+          progresso?: Json
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creators_lab_progresso_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       diario_recebimentos: {
         Row: {
           acordo_codigo: string | null

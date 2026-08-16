@@ -19,10 +19,24 @@
  * hook só observa, não impede nada.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { jaDescobriuOLab } from '@/services/creatorsLab.service';
 
 /** Tempo máximo entre o primeiro e o quinto clique. */
 export const JANELA_MS = 3000;
 export const CLIQUES_NECESSARIOS = 5;
+
+/**
+ * Quanto tempo a tela leva para apagar antes de o Lab abrir.
+ *
+ * O quinto clique não joga a pessoa direto na abertura: a tela do Gestão
+ * escurece primeiro, com uma interferência curta no fim. Corte seco de uma
+ * planilha de acordos para uma tela de terminal parece bug; apagar a luz antes
+ * transforma o mesmo salto em passagem.
+ *
+ * Quem quiser mexer, mexa aqui: o `Layout` usa este número tanto na animação
+ * quanto no atraso da navegação, então os dois nunca saem de sincronia.
+ */
+export const DURACAO_ESCURECIMENTO_MS = 1150;
 
 export const CHAVE_DESCOBERTO = 'creatorsLab:descoberto';
 
@@ -45,13 +59,65 @@ export function proximoEstado(
   return { cliques, primeiroEm, abrir: cliques >= CLIQUES_NECESSARIOS };
 }
 
-/** Já encontrou o Lab alguma vez neste navegador? */
+/**
+ * Já encontrou o Lab alguma vez NESTE NAVEGADOR?
+ *
+ * É só um cache local, para o distintivo aparecer no primeiro quadro sem
+ * esperar rede. A resposta que vale é a do banco — ver
+ * `useDescobriuCreatorsLab` logo abaixo.
+ */
 export function jaDescobriu(): boolean {
   try { return localStorage.getItem(CHAVE_DESCOBERTO) === 'true'; } catch { return false; }
 }
 
 export function marcarDescoberto(): void {
   try { localStorage.setItem(CHAVE_DESCOBERTO, 'true'); } catch { /* modo privado */ }
+}
+
+/*
+ * Uma consulta por carregamento de página, no máximo.
+ *
+ * O `Layout` monta em toda tela do Gestão. Sem esta memória de módulo, trocar
+ * de aba seis vezes faria seis idas ao banco para responder a mesma pergunta
+ * de enfeite. A promessa é guardada, não o resultado, para duas montagens
+ * simultâneas dividirem a mesma requisição.
+ */
+let promessaDescoberta: Promise<boolean> | null = null;
+
+/** Zera a memória. Existe para os testes, e é o único uso legítimo. */
+export function esquecerDescobertaRemota(): void {
+  promessaDescoberta = null;
+}
+
+/**
+ * O distintivo pertence à PESSOA, não ao navegador.
+ *
+ * Antes de 16/08/2026 isto era só `localStorage`: quem descobria o Lab em casa
+ * chegava no trabalho sem a marca, e limpar cache apagava a descoberta. Agora
+ * a resposta vem da tabela `creators_lab_progresso`, com o localStorage
+ * servindo de resposta imediata enquanto a rede não volta.
+ *
+ * Falha de rede ou tabela ausente não removem a marca de quem já a tinha
+ * localmente: `false` do servidor significa "não sei", e a dúvida não pode
+ * tirar da pessoa algo que ela já conquistou.
+ */
+export function useDescobriuCreatorsLab(): boolean {
+  const [descoberto, setDescoberto] = useState(jaDescobriu);
+
+  useEffect(() => {
+    let vivo = true;
+    promessaDescoberta ??= jaDescobriuOLab();
+
+    promessaDescoberta.then(remoto => {
+      if (!vivo || !remoto) return;
+      marcarDescoberto();
+      setDescoberto(true);
+    }).catch(() => { /* offline: fica com o que o navegador sabia */ });
+
+    return () => { vivo = false; };
+  }, []);
+
+  return descoberto;
 }
 
 export interface EasterEggCriadores {
@@ -74,7 +140,8 @@ export function useEasterEggCriadores(
 ): EasterEggCriadores {
   const [estagio, setEstagio] = useState(0);
   const [ativado, setAtivado] = useState(false);
-  const [descoberto, setDescoberto] = useState(jaDescobriu);
+  const [descobertoLocal, setDescobertoLocal] = useState(jaDescobriu);
+  const descobertoRemoto = useDescobriuCreatorsLab();
 
   const cliquesRef    = useRef(0);
   const primeiroRef   = useRef<number | null>(null);
@@ -106,7 +173,7 @@ export function useEasterEggCriadores(
       setEstagio(0);
       setAtivado(true);
       marcarDescoberto();
-      setDescoberto(true);
+      setDescobertoLocal(true);
       aoAtivarRef.current();
       return;
     }
@@ -121,5 +188,8 @@ export function useEasterEggCriadores(
     }, restante + 40);
   }, [limparTimer]);
 
-  return { aoClicar, estagio, ativado, descoberto };
+  // Um "sim" de qualquer uma das duas memórias basta. O banco é a verdade, o
+  // navegador é a resposta rápida — e nenhum dos dois pode desfazer a
+  // descoberta do outro.
+  return { aoClicar, estagio, ativado, descoberto: descobertoLocal || descobertoRemoto };
 }

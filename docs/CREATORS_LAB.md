@@ -11,12 +11,13 @@ Tudo vive em `src/pages/CreatorsLab/`, mais dois arquivos fora dela.
 zera. Um clique não abre; cinco cliques lentos também não.
 
 O logo reage progressivamente: nada, nada, leve aumento, falha curta,
-interferência forte. No quinto, navega para `/creators`.
+interferência forte. No quinto, **a tela do Gestão escurece** por
+`DURACAO_ESCURECIMENTO_MS` (1,15 s) e só então a rota muda.
 
 | Onde | Arquivo |
 |---|---|
 | A regra de tempo | `src/hooks/useEasterEggCriadores.ts` |
-| O gatilho no logo | `src/components/Layout.tsx` (procure `easterEgg`) |
+| O gatilho e o escurecimento | `src/components/Layout.tsx` (procure `abrindoLab`) |
 | A animação de falha | `src/index.css`, classes `creators-logo-*` |
 
 > ⚠️ O hook **precisa** ser chamado no corpo de `Layout`, nunca dentro de
@@ -24,8 +25,23 @@ interferência forte. No quinto, navega para `/creators`.
 > como `<SidebarContent />` — a identidade da função muda a cada render, o React
 > remonta tudo, e o contador nunca passaria de 1.
 
-Depois da primeira descoberta, `localStorage` guarda
-`creatorsLab:descoberto` e o logo ganha um `✦` discreto.
+### Por que o escurecimento
+
+Sem ele, o quinto clique trocava uma lista de acordos por uma tela de terminal
+em um quadro — o que o olho lê como defeito, não como passagem. O `Layout`
+anima três camadas (preto, interferência, risco de tubo desligando) e usa a
+**mesma constante** no atraso da navegação, para os dois nunca saírem de
+sincronia. O Lab já abre em preto, então a emenda é invisível.
+
+### O distintivo é da pessoa, não do navegador
+
+Depois da primeira descoberta o logo ganha um `✦` discreto. Essa marca vem da
+tabela `creators_lab_progresso` (ver *Progresso na conta*), com `localStorage`
+servindo só de resposta imediata enquanto a rede não volta.
+
+`false` do servidor significa **"não sei"** — tabela não migrada, sessão
+expirada, offline — e nunca apaga a marca de quem já a tinha. Há teste para
+isso.
 
 ---
 
@@ -83,12 +99,119 @@ Sem foto, o card mostra as iniciais. Não quebra.
 
 ---
 
+## Movimento — leia antes de "consertar"
+
+**O Lab não obedece sozinho ao `prefers-reduced-motion`. É de propósito.**
+
+O Lab abria com tudo animado em casa e **completamente parado** em dois
+computadores do trabalho. Ninguém tinha mexido em acessibilidade: o Windows
+10/11 traz *Efeitos de animação* desligado em boa parte das imagens
+corporativas, e com ele desligado o navegador responde
+`prefers-reduced-motion: reduce`. Uma `@media` no CSS zerava
+`animation-duration` e `transition-duration` de tudo, com `!important`, sem
+botão nem aviso.
+
+A regra que ficou:
+
+| | |
+|---|---|
+| Padrão | movimento **completo**, em qualquer máquina |
+| Quem decide | a pessoa, pelo botão `◉ / ◐` na `BarraLab` |
+| O sistema | **oferece** uma vez, e a resposta fica guardada |
+| Onde o CSS lê | `data-movimento="reduzido"` na raiz do Lab |
+
+O Gestão continua respeitando a preferência normalmente — a exceção vale só
+aqui, numa área escondida que se abre de propósito. A única outra exceção é a
+falha do logo (`creators-logo-*` em `index.css`), porque sem ela o Easter Egg
+ficava inencontrável justamente nas máquinas dessas pessoas; ela só dispara a
+partir do terceiro clique rápido e dura 0,22 s.
+
+> ⚠️ Se você acrescentar `@media (prefers-reduced-motion)` a
+> `creators-lab.css`, o teste `theme/__tests__/movimento.test.tsx` quebra. Ele
+> existe exatamente para isso.
+
+---
+
+## Progresso na conta
+
+Tabela `creators_lab_progresso` — migration `20260816210000`. Uma linha por
+usuário, com o objeto `Progresso` em `jsonb`. RLS fecha por padrão e cada
+pessoa só enxerga a própria linha.
+
+Fluxo: ao abrir, o provider lê o remoto e **junta** com o local por
+`mesclarProgresso` — lista vira união, número vira o maior, booleano vira
+"algum dos dois". Progresso não retrocede: ninguém des-descobre um Easter Egg.
+Depois disso, toda mudança é gravada com 1,2 s de espera.
+
+O que volta do banco passa por `normalizarProgresso` antes de ser usado: é
+`jsonb`, pode estar velho ou editado à mão, e uma linha estragada tem que virar
+progresso zerado em vez de página quebrada.
+
+> Tudo aqui tolera a tabela **não existir**: entre o deploy do front e a
+> aplicação da migration existe uma janela, e nela o Lab segue em localStorage.
+> `src/services/creatorsLab.service.ts` nunca lança.
+
+---
+
+## Máquina de fliperama
+
+Um quebra-blocos de verdade, em `sections/ArcadeCabinet.tsx`. O gabinete
+(marquise, lâmpadas, vidro abaulado, manche, botão, ranhura de ficha) é CSS; a
+tela é `<canvas>` 240×320 esticado com `image-rendering: pixelated`.
+
+**A regra do jogo está em `lib/fliperama.ts` e não conhece canvas nem React.**
+`avancar(estado, dt, entrada)` é pura: nada lê relógio, sorteia ou escreve
+fora do estado devolvido. É o que permite jogar uma partida inteira num teste,
+em milissegundos, sem tela.
+
+Detalhes que os testes trancam:
+
+- `DT_MAX` limita o passo. Sem ele, uma aba que dormiu 4 s volta com `dt = 4` e
+  a bola atravessa parede, tijolo e chão sem tocar em nada.
+- **Um tijolo por quadro.** Dois no mesmo passo inverteriam o mesmo eixo duas
+  vezes e a bola seguiria em frente.
+- `ANGULO_MIN` (10°) impede a devolução perfeitamente vertical. Com a raquete
+  exatamente sob a bola, ela subiria e desceria na mesma coluna para sempre — a
+  partida ficava sem fim. Quem joga acompanhando a bola com o mouse cai nisso
+  sem querer.
+- Bater na parede **reposiciona** além de inverter, senão a bola encravada fica
+  tremendo lá dentro.
+
+Zerar a tela desbloqueia `arcade-master`. O recorde fica em
+`creatorsLab:fliperamaRecorde`.
+
+O laço para sozinho quando a aba some (`visibilitychange`) **e** quando o
+gabinete sai da tela (`IntersectionObserver`) — as duas condições, porque
+nenhuma cobre a outra.
+
+---
+
 ## Theme Engine
 
 Dois temas: **Cyberpunk** e **Arcade**. Toda diferença entre eles vive em
 `theme/themes.ts` — cor, fonte, raio, sombra, duração, textura, cursor e o
 **vocabulário** (a mesma seção se chama `DATABASE` num e `CHARACTER SELECT` no
 outro).
+
+### A regra que separa os dois
+
+A primeira versão errou aqui: ciano e magenta contra amarelo e vermelho, mesma
+grade, mesma varredura, mesmo brilho. Trocar de realidade mudava o texto e
+quase nada mais.
+
+| | Cyberpunk | Arcade |
+|---|---|---|
+| Dominante | amarelo `#FCEE0A` | magenta `#FF3DCB` |
+| Fundo | preto puro | roxo profundo |
+| Forma | chanfro, tarja de perigo, HUD | bloco, sombra dura, CRT abaulado |
+| Tipo | condensada (Bahnschrift) | pesada (Impact) |
+| Tempo | desliza (0,45 s) | estala (0,22 s) |
+
+**Amarelo é exclusivo do Cyberpunk** — `theme/__tests__/temas.test.ts` falha se
+alguém puser amarelo no Arcade, se as dominantes chegarem perto no círculo
+cromático, ou se alguma cor for repetida nos dois. Ciano aparece nos dois de
+propósito: é secundária em ambos, e o que separa os mundos é a dominante, o
+fundo e a forma.
 
 > Se você encontrar `tema === 'cyberpunk'` dentro de um componente, faltou um
 > token. Acrescente o token em vez de espalhar a condicional.
@@ -195,14 +318,24 @@ não baixa o Lab.
 ## Testes
 
 ```
-src/pages/CreatorsLab/lib/__tests__/   matematica, projecao3d, conquistas,
-                                        terminal, miniApps
+src/pages/CreatorsLab/lib/__tests__/     matematica, projecao3d, conquistas,
+                                          terminal, miniApps, fliperama
+src/pages/CreatorsLab/theme/__tests__/   movimento, temas
 src/hooks/__tests__/useEasterEggCriadores.test.ts
 ```
 
-118 testes. Os que mais importam:
+190 testes. Os que mais importam:
 
 - **cinco cliques lentos NÃO abrem** — evita abertura acidental;
+- **o sistema pedindo redução, o Lab abre animado** — o defeito dos dois
+  computadores do trabalho, trancado;
+- **o CSS do Lab não tem `@media (prefers-reduced-motion)`** — guarda de
+  arquivo, porque media query roda antes de qualquer JavaScript;
+- **resposta negativa do servidor não apaga o distintivo local**;
+- **amarelo é exclusivo do Cyberpunk** e nenhuma cor se repete nos dois temas;
+- **uma partida inteira termina** — 120 s de jogo simulados provam que não
+  existe estado de onde nada mais sai;
+- **um quadro gigantesco não teleporta a bola**;
 - **o terminal não executa nada** — inclusive `eval`, `require`, `DROP TABLE`;
 - **repulsão com distância zero** não vira infinito nem `NaN`;
 - **conquista não cai de graça** quando não há conteúdo para explorar;

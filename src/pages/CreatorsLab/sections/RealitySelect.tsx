@@ -22,9 +22,9 @@ function CartaoRealidade({
     <motion.button
       type="button"
       onClick={() => aoEscolher(t.id)}
-      initial={movimentoReduzido ? false : { opacity: 0, y: 24 }}
+      initial={movimentoReduzido ? false : { opacity: 0, y: 34 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.12 + indice * 0.1, duration: 0.4 }}
+      transition={{ delay: 0.45 + indice * 0.28, duration: 0.85, ease: [0.16, 1, 0.3, 1] }}
       whileHover={movimentoReduzido ? undefined : { y: -6, scale: 1.015 }}
       whileTap={{ scale: 0.985 }}
       className="group relative w-full max-w-sm overflow-hidden text-left"
@@ -36,18 +36,39 @@ function CartaoRealidade({
         padding: '1.75rem',
         minHeight: '15rem',
         color: t.cores.texto,
+        /* O canto chanfrado é do Cyberpunk; o Arcade é bloco inteiro. A
+           diferença precisa aparecer ANTES da escolha, senão os dois cartões
+           são o mesmo retângulo com texto trocado. */
+        clipPath: cyber
+          ? 'polygon(0 0, calc(100% - 22px) 0, 100% 22px, 100% 100%, 22px 100%, 0 calc(100% - 22px))'
+          : undefined,
       }}
       aria-label={`Entrar na realidade ${t.nome}: ${t.descricao}`}
     >
-      {/* Textura própria de cada tema, para o cartão já parecer o mundo dele. */}
+      {/* Textura própria de cada tema, para o cartão já parecer o mundo dele:
+          varredura fina no Cyberpunk, tubo abaulado no Arcade. */}
       <span
         aria-hidden
         className="pointer-events-none absolute inset-0"
         style={{
           background: cyber
             ? 'repeating-linear-gradient(0deg, rgba(0,0,0,.3) 0 1px, transparent 1px 3px)'
-            : 'repeating-linear-gradient(0deg, rgba(0,0,0,.2) 0 2px, transparent 2px 4px)',
-          opacity: 0.5,
+            : 'radial-gradient(ellipse 130% 110% at 50% 50%, transparent 55%, rgba(0,0,0,.6) 100%),'
+              + 'repeating-linear-gradient(0deg, rgba(0,0,0,.24) 0 2px, transparent 2px 4px)',
+          opacity: cyber ? 0.5 : 0.75,
+        }}
+      />
+
+      {/* A assinatura de cada mundo: fita de perigo no Cyberpunk, fita de neon
+          no Arcade. Mesma faixa, dois significados. */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0"
+        style={{
+          height: cyber ? 8 : 5,
+          background: cyber
+            ? `repeating-linear-gradient(45deg, ${t.cores.primaria} 0 10px, #000 10px 20px)`
+            : `repeating-linear-gradient(90deg, ${t.cores.primaria} 0 10px, ${t.cores.secundaria} 10px 20px)`,
         }}
       />
       <span
@@ -120,14 +141,15 @@ export function RealitySelect({
   return (
     <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center gap-8 bg-black px-5 py-10 overflow-y-auto">
       <motion.div
-        initial={movimentoReduzido ? false : { opacity: 0, y: -12 }}
+        initial={movimentoReduzido ? false : { opacity: 0, y: -14 }}
         animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
         className="text-center"
       >
-        <p className="font-mono text-[.65rem] tracking-[.35em] text-[#00E5FF] uppercase">
+        <p className="font-mono text-[.65rem] uppercase tracking-[.35em] text-[#FCEE0A]">
           escolha uma
         </p>
-        <h1 className="mt-2 font-mono text-2xl sm:text-4xl font-bold tracking-[.2em] text-white">
+        <h1 className="mt-2 font-mono text-2xl font-bold tracking-[.2em] text-white sm:text-4xl">
           SELECT YOUR REALITY
         </h1>
         <p className="mt-3 font-mono text-xs text-white/40">
