@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { Camera, Loader2, MonitorCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
+import { logger } from '@/lib/logger';
 import { isPerfilAdmin } from '@/lib/index';
 import { useCapturaMundialErp } from '@/hooks/useCapturaMundialErp';
 import { lerPrintMundialErp, preaquecerOcr, encerrarOcr } from '@/services/pagueplay/printOcr';
@@ -56,10 +57,21 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
       toast.dismiss('ocr-init');
       setModeloPronto(true);
 
-      // Sempre loga o texto bruto para facilitar diagnóstico (visível no console do navegador)
+      /*
+       * Diagnóstico do OCR — só em desenvolvimento.
+       *
+       * Até 16/08/2026 estes dois logs eram `console.log` incondicional, com o
+       * comentário "sempre loga para facilitar diagnóstico". O que sai daqui é
+       * o texto BRUTO da captura da tela do ERP: nome do cliente, valores, e o
+       * que mais estivesse visível no momento. Em produção isso ficava no
+       * console do navegador — legível por qualquer extensão instalada e
+       * preservado no devtools.
+       *
+       * `logger.debug` já existe e só escreve quando `import.meta.env.DEV`.
+       */
       if (dados._textoOcr) {
-        console.log('[OCR-DEBUG] Texto capturado:\n', dados._textoOcr);
-        console.log('[OCR-DEBUG] Campos extraídos:', {
+        logger.debug('[OCR] Texto capturado:\n', dados._textoOcr);
+        logger.debug('[OCR] Campos extraídos:', {
           instituicao: dados.instituicao,
           tipo: dados.tipo,
           parcelas: dados.parcelas,
