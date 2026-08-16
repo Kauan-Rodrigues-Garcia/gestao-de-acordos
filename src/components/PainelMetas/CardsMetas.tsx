@@ -262,9 +262,10 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
         )}
       </div>
 
-      {/* Ranking e "faça X hoje para subir de quartil" NÃO ficam aqui: são o
-          `MetaProgressoHeader`, logo abaixo da saudação. Repetir a informação
-          em dois lugares da mesma tela só cria a chance de discordarem. */}
+      {/* Ranking e "faça X hoje para subir de quartil" nunca ficaram aqui: eram
+          do `MetaProgressoHeader`, abaixo da saudação, removido em 16/08/2026.
+          O Dashboard não mostra mais ranking pessoal em lugar nenhum — quem
+        quiser trazer de volta, traga para UM lugar só. */}
 
       {/* Sem meta o painel não fica mudo: diz por que a faixa de projeção não
           está lá, em vez de simplesmente não ter nada. */}

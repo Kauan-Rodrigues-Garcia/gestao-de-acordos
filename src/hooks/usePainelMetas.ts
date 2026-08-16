@@ -396,9 +396,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     return () => { cancelado = true; };
   }, [empresa?.id, mes, escopo, escopoPendente]);
 
-  // Ranking NÃO mora aqui: é o `MetaProgressoHeader`, logo abaixo da saudação.
-  // Buscar de novo o mesmo `fn_analitico_resumo_por_operador` seria uma segunda
-  // ida ao banco para mostrar o mesmo número duas vezes na mesma tela.
+  // Ranking não mora aqui. Morava no `MetaProgressoHeader` (abaixo da saudação),
+  // removido em 16/08/2026 — hoje o Dashboard não mostra ranking pessoal. Se
+  // voltar, custa uma ida a `fn_analitico_resumo_por_operador`.
 
   // ── Dias úteis ─────────────────────────────────────────────────────────────
   // O início de treinamento é o da equipe em foco: no modo "eu", a do próprio

@@ -274,9 +274,13 @@ export function AcordosTableBody({
                         {STATUS_LABELS[a.status]}
                       </span>
                     </td>
+                    {/* Mesma célula da PaguePlay: nome COMPLETO e, quando há
+                        vínculo, o segundo operador na linha de baixo. Até
+                        16/08/2026 aqui só saía o primeiro nome, o que tornava
+                        indistinguíveis dois operadores homônimos. */}
                     {mostrarColunaOperador && (
                       <td className="px-3 py-2.5 text-muted-foreground text-[11px]">
-                        {(a.perfis as { nome?: string } | undefined)?.nome?.split(' ')[0] || '—'}
+                        <OperadorCell acordo={a} operadoresMap={operadoresMap} />
                       </td>
                     )}
                   </>

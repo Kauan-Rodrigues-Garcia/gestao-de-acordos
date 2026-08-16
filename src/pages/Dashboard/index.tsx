@@ -30,7 +30,6 @@ import { enviarParaLixeira } from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
-import { MetaProgressoHeader } from '@/components/MetaProgressoHeader';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
@@ -642,8 +641,13 @@ export default function Dashboard() {
               <Building2 className="w-3 h-3" /> {empresa.nome}
             </p>
           )}
-          {/* Barra de meta, posição no ranking e quartil (dados do analítico) */}
-          <MetaProgressoHeader />
+          {/*
+           * Aqui ficavam a barra da meta do mês, a posição no ranking e o
+           * quartil (o componente `MetaProgressoHeader`). Removidos em
+           * 16/08/2026 a pedido: a saudação é a porta de entrada e essas três
+           * barras empurravam o resto da tela para baixo, repetindo o que o
+           * Painel de Metas já mostra com mais espaço e melhor recorte.
+           */}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
