@@ -23,6 +23,12 @@ export const ROUTE_PATHS = {
   CAMPANHA_FACIL: '/campanha-facil',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   COMEMORACOES: '/comemoracoes',
+  /**
+   * Área dos criadores. NÃO entra em menu nenhum de propósito — chega-se aqui
+   * por cinco cliques rápidos no logo (ver `useEasterEggCriadores`). A rota
+   * existir não é falha de segurança: não há dado do Gestão nela.
+   */
+  CREATORS_LAB: '/creators',
 } as const;
 
 export const STATUS_LABELS: Record<string, string> = {

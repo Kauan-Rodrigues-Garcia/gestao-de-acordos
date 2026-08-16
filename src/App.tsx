@@ -51,6 +51,9 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
+// Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
+// Gestão e nunca descobre o Easter Egg não baixa um byte dele.
+const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
 // Comemorações não tem mais rota própria: virou aba de /admin/usuarios e é
 // carregada de lá (lazy também, para não entrar no bundle de quem não abre).
 
@@ -292,6 +295,21 @@ export default function App() {
 
               {/* /admin/cargos agora é aba dentro de /admin/configuracoes */}
               <Route path={ROUTE_PATHS.ADMIN_CARGOS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=permissoes'} replace />} />
+
+              {/*
+                Creators Lab — a área escondida.
+
+                Sem `LayoutWrapper` de propósito: ela substitui a tela inteira,
+                sem barra lateral nem cabeçalho do Gestão. Continua dentro de
+                `ProtectedRoute` (só quem está logado), mas sem exigir permissão
+                — não há dado do Gestão ali, e o ponto é justamente qualquer
+                pessoa curiosa poder encontrar.
+              */}
+              <Route path={ROUTE_PATHS.CREATORS_LAB} element={
+                <ProtectedRoute>
+                  <CreatorsLab />
+                </ProtectedRoute>
+              } />
 
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -52,6 +52,7 @@ import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
+import { useEasterEggCriadores } from '@/hooks/useEasterEggCriadores';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
@@ -310,16 +311,47 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     navigate(ROUTE_PATHS.LOGIN);
   }
 
+  /*
+   * Easter Egg do logo — cinco cliques rápidos abrem o Creators Lab.
+   *
+   * Precisa ficar AQUI, no corpo do Layout, e não dentro de `SidebarContent`.
+   * Aquele componente é declarado no corpo desta função e usado como
+   * `<SidebarContent />`: a identidade dele muda a cada render, então o React
+   * desmonta e remonta tudo que houver lá dentro. O contador de cliques nunca
+   * passaria de 1.
+   *
+   * Como o hook vive aqui, os dois lugares onde o logo aparece (barra lateral e
+   * gaveta do celular) compartilham o mesmo contador — o que é o certo: são o
+   * mesmo logo, em telas diferentes.
+   */
+  const easterEgg = useEasterEggCriadores(() => navigate(ROUTE_PATHS.CREATORS_LAB));
+
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="w-8 h-8 flex-shrink-0 flex items-center justify-center">
+        {/* O logo continua sendo só o logo. O clique não navega, não abre menu
+            e não impede nada — só é contado. Quem clicar uma vez sem querer não
+            percebe diferença nenhuma (ver `useEasterEggCriadores`). */}
+        <button
+          type="button"
+          onClick={easterEgg.aoClicar}
+          title={branding.appName}
+          aria-label={branding.appName}
+          className={cn(
+            'w-8 h-8 flex-shrink-0 flex items-center justify-center rounded transition-transform',
+            easterEgg.descoberto && 'creators-logo-marca',
+            // Reação progressiva: nada, nada, leve, falha curta, interferência.
+            easterEgg.estagio === 2 && 'scale-105',
+            easterEgg.estagio === 3 && 'creators-logo-eco',
+            easterEgg.estagio === 4 && 'creators-logo-forte',
+          )}
+        >
           {isPP
             ? <img src="/logo-pagueplay.png" alt="Logo PaguePLAY" className="w-8 h-8 object-contain" />
             : <img src="/logo-bookplay.png" alt="Logo BookPlay" className="w-8 h-8 object-contain" />
           }
-        </div>
+        </button>
         <AnimatePresence>
           {(sidebarOpen || mobileOpen) && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="overflow-hidden">

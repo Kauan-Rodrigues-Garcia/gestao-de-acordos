@@ -759,3 +759,46 @@
     -webkit-backdrop-filter: none;
   }
 }
+
+/* ==========================================================================
+   Easter Egg do logo — Creators Lab
+   --------------------------------------------------------------------------
+   Estas três classes vivem aqui, e não no CSS do Creators Lab, porque quem as
+   usa é o `Layout` do Gestão — que nunca importa aquele arquivo.
+
+   O prefixo `creators-logo-` é a garantia de isolamento: nenhuma regra abaixo
+   alcança qualquer outro elemento do sistema.
+   ========================================================================== */
+
+@keyframes creators-glitch {
+  0%   { transform: translate(0, 0);    filter: none; }
+  20%  { transform: translate(-2px, 1px);  filter: hue-rotate(90deg) saturate(3); }
+  40%  { transform: translate(2px, -1px);  filter: hue-rotate(-60deg) saturate(2); }
+  60%  { transform: translate(-1px, -1px); filter: invert(1); }
+  100% { transform: translate(0, 0);    filter: none; }
+}
+
+.creators-logo-eco   { animation: creators-glitch .13s steps(2) 1; }
+.creators-logo-forte { animation: creators-glitch .22s steps(3) 2; }
+
+/* Marca de quem já descobriu. Discreta de propósito: é uma cicatriz, não um
+   botão — transformá-la em chamada estragaria o segredo. */
+.creators-logo-marca { position: relative; }
+.creators-logo-marca::after {
+  content: '✦';
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  font-size: 8px;
+  line-height: 1;
+  opacity: .55;
+  pointer-events: none;
+}
+
+/* Quem pediu menos movimento não recebe piscada nenhuma. */
+@media (prefers-reduced-motion: reduce) {
+  .creators-logo-eco,
+  .creators-logo-forte {
+    animation: none;
+  }
+}

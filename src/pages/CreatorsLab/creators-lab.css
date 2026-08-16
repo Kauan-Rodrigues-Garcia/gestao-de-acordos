@@ -1,0 +1,324 @@
+/*
+ * creators-lab.css — estilos do Creators Lab.
+ * ───────────────────────────────────────────────────────────────────────────
+ * ISOLAMENTO: todo seletor aqui começa com `.creators-lab`. Nenhuma regra toca
+ * `:root`, `body`, `html` ou qualquer elemento por tag solta. É isso que
+ * impede o Cyberpunk de vazar para o Dashboard, o Login e os modais do Gestão.
+ *
+ * As cores não estão escritas aqui: vêm das variáveis `--creator-*` que o
+ * `CreatorsProvider` aplica no elemento raiz conforme o tema ativo. Este
+ * arquivo só diz FORMA — cor é decisão do tema.
+ */
+
+.creators-lab {
+  position: relative;
+  min-height: 100vh;
+  background: var(--creator-bg);
+  color: var(--creator-text);
+  font-family: var(--creator-font-body);
+  overflow-x: hidden;
+  isolation: isolate;
+}
+
+/* ── Fundo em camadas ─────────────────────────────────────────────────── */
+
+.creators-lab__fundo {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Grade em perspectiva — a mesma malha serve aos dois temas, com cor e
+   densidade diferentes. */
+.creators-lab__grade {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(var(--creator-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--creator-grid) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 90% 70% at 50% 0%, #000 20%, transparent 75%);
+}
+
+.creators-lab[data-tema="arcade"] .creators-lab__grade {
+  background-size: 32px 32px;
+}
+
+/* Brilho que segue o cursor. A posição vem de duas variáveis atualizadas por
+   JS — mexer em variável CSS não dispara layout, ao contrário de reposicionar
+   um elemento. */
+.creators-lab__luz {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    420px circle at var(--creator-mx, 50%) var(--creator-my, 40%),
+    var(--creator-glow), transparent 65%
+  );
+  opacity: .5;
+  transition: opacity .4s ease;
+}
+
+/* Linhas de varredura (Cyberpunk) e trama de pixels (Arcade). */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__textura {
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg, rgba(0,0,0,.22) 0 1px, transparent 1px 3px
+  );
+  opacity: .5;
+}
+
+.creators-lab[data-tema="arcade"] .creators-lab__textura {
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(0deg,  rgba(0,0,0,.16) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(90deg, rgba(0,0,0,.10) 0 2px, transparent 2px 4px);
+  opacity: .6;
+}
+
+.creators-lab__conteudo { position: relative; z-index: 1; }
+
+/* ── Tipografia ───────────────────────────────────────────────────────── */
+
+.creators-lab h1,
+.creators-lab h2,
+.creators-lab h3 {
+  font-family: var(--creator-font-display);
+  letter-spacing: .02em;
+  margin: 0;
+}
+
+.creators-lab[data-tema="arcade"] h1,
+.creators-lab[data-tema="arcade"] h2 {
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  /* Contorno duro em vez de brilho — é o que separa o Arcade do Cyberpunk
+     sem trocar uma cor sequer. */
+  text-shadow: 3px 3px 0 rgba(0,0,0,.6);
+}
+
+.creators-lab[data-tema="cyberpunk"] h1,
+.creators-lab[data-tema="cyberpunk"] h2 {
+  text-shadow: 0 0 18px var(--creator-glow);
+}
+
+.creators-lab__rotulo {
+  font-family: var(--creator-font-mono);
+  font-size: .68rem;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--creator-primary);
+}
+
+.creators-lab__mono {
+  font-family: var(--creator-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Superfícies ──────────────────────────────────────────────────────── */
+
+.creators-lab__painel {
+  position: relative;
+  background: color-mix(in srgb, var(--creator-surface) 88%, transparent);
+  border: var(--creator-border-w) solid var(--creator-border);
+  border-radius: var(--creator-radius);
+  box-shadow: var(--creator-shadow);
+}
+
+/* Canto cortado — só no Cyberpunk, e é forma, não cor. */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__painel--cortado {
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px));
+}
+
+/* ── Botões ───────────────────────────────────────────────────────────── */
+
+.creators-lab__btn {
+  font-family: var(--creator-font-mono);
+  font-size: .78rem;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  padding: .6rem 1.1rem;
+  color: var(--creator-text);
+  background: transparent;
+  border: var(--creator-border-w) solid var(--creator-primary);
+  border-radius: var(--creator-radius);
+  cursor: pointer;
+  transition: background .18s ease, color .18s ease, transform .12s ease, box-shadow .18s ease;
+}
+
+.creators-lab__btn:hover {
+  background: var(--creator-primary);
+  color: var(--creator-bg);
+}
+
+.creators-lab[data-tema="cyberpunk"] .creators-lab__btn:hover {
+  box-shadow: 0 0 22px var(--creator-glow);
+}
+
+.creators-lab[data-tema="arcade"] .creators-lab__btn:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 4px 4px 0 rgba(0,0,0,.6);
+}
+
+.creators-lab__btn:active { transform: translate(1px, 1px); }
+
+.creators-lab__btn:focus-visible {
+  outline: 2px solid var(--creator-accent);
+  outline-offset: 3px;
+}
+
+.creators-lab a:focus-visible,
+.creators-lab button:focus-visible,
+.creators-lab [tabindex]:focus-visible {
+  outline: 2px solid var(--creator-accent);
+  outline-offset: 3px;
+}
+
+/* ── Card 3D ──────────────────────────────────────────────────────────── */
+
+.creators-lab__cena { perspective: 900px; }
+
+.creators-lab__card3d {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+/* As camadas ficam à frente do card no eixo Z — é o que cria profundidade
+   real quando o card inclina, em vez de uma imagem plana girando. */
+.creators-lab__camada { transform: translateZ(var(--z, 0px)); }
+
+/* ── Barras de status ─────────────────────────────────────────────────── */
+
+.creators-lab__barra {
+  height: 10px;
+  background: color-mix(in srgb, var(--creator-border) 60%, transparent);
+  overflow: hidden;
+  border-radius: var(--creator-radius);
+}
+
+.creators-lab__barra > span {
+  display: block;
+  height: 100%;
+  background: var(--creator-primary);
+}
+
+/* No Arcade a barra é feita de blocos, não de preenchimento contínuo. */
+.creators-lab[data-tema="arcade"] .creators-lab__barra > span {
+  background-image: repeating-linear-gradient(
+    90deg, var(--creator-primary) 0 6px, transparent 6px 9px
+  );
+  background-color: transparent;
+}
+
+/*
+ * As classes do logo (`creators-logo-*`) NÃO ficam aqui: elas são usadas no
+ * Layout do Gestão, que nunca importa este arquivo. Moram em `index.css`, com
+ * o prefixo que garante que não alcancem mais nada.
+ */
+
+/* ── Cursor ───────────────────────────────────────────────────────────── */
+
+.creators-lab--cursor-proprio,
+.creators-lab--cursor-proprio * { cursor: none; }
+
+.creators-lab__cursor {
+  position: fixed;
+  top: 0; left: 0;
+  width: 26px; height: 26px;
+  pointer-events: none;
+  z-index: 9999;
+  will-change: transform;
+}
+
+/* ── Terminal ─────────────────────────────────────────────────────────── */
+
+.creators-lab__terminal {
+  font-family: var(--creator-font-mono);
+  font-size: .8rem;
+  line-height: 1.55;
+  background: color-mix(in srgb, var(--creator-bg) 92%, #000);
+  border: var(--creator-border-w) solid var(--creator-border);
+  border-radius: var(--creator-radius);
+}
+
+.creators-lab__terminal-scroll {
+  max-height: 300px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.creators-lab__terminal input {
+  font-family: inherit;
+  font-size: inherit;
+  background: transparent;
+  border: 0;
+  outline: 0;
+  color: var(--creator-text);
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Tabelas de dados ─────────────────────────────────────────────────── */
+
+.creators-lab__ficha {
+  font-family: var(--creator-font-mono);
+  font-size: .74rem;
+  line-height: 1.9;
+}
+
+.creators-lab__ficha dt {
+  color: var(--creator-text-soft);
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+/* Os pontinhos que ligam rótulo e valor, como numa ficha técnica. */
+.creators-lab__pontilhado {
+  flex: 1;
+  border-bottom: 1px dotted color-mix(in srgb, var(--creator-text-soft) 45%, transparent);
+  margin: 0 .5rem;
+  transform: translateY(-4px);
+}
+
+/* ── Faixa de pendência ───────────────────────────────────────────────── */
+
+.creators-lab__pendente {
+  font-family: var(--creator-font-mono);
+  font-size: .68rem;
+  letter-spacing: .06em;
+  color: var(--creator-secondary);
+  border: 1px dashed color-mix(in srgb, var(--creator-secondary) 60%, transparent);
+  border-radius: var(--creator-radius);
+  padding: .18rem .45rem;
+  display: inline-block;
+}
+
+/* ── Rolagem ──────────────────────────────────────────────────────────── */
+
+.creators-lab ::-webkit-scrollbar { width: 8px; height: 8px; }
+.creators-lab ::-webkit-scrollbar-track { background: var(--creator-bg-alt); }
+.creators-lab ::-webkit-scrollbar-thumb {
+  background: var(--creator-border);
+  border-radius: var(--creator-radius);
+}
+.creators-lab ::-webkit-scrollbar-thumb:hover { background: var(--creator-primary); }
+
+/* ── Movimento reduzido ───────────────────────────────────────────────── */
+/*
+ * Não é só "animação mais curta": some com o que pisca e com o que se desloca
+ * muito, que é o que atrapalha pessoas fotossensíveis. O acesso ao Lab
+ * continua inteiro — o que muda é a forma de chegar.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .creators-lab *,
+  .creators-logo-eco,
+  .creators-logo-forte {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+  .creators-lab__luz { display: none; }
+  .creators-lab__textura { opacity: .18; }
+}

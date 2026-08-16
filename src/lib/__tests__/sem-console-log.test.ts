@@ -51,10 +51,25 @@ describe('nenhum console.log em código de produção', () => {
 
       const linhas = readFileSync(arquivo, 'utf-8').split('\n');
       linhas.forEach((linha, i) => {
-        // Ignora ocorrência dentro de comentário — os comentários desta base
-        // citam `console.log` justamente para explicar por que ele saiu.
+        /*
+         * Só interessa CHAMADA de verdade. Duas fontes de falso positivo
+         * precisam sair antes de olhar:
+         *
+         *   • comentários — esta base cita `console.log` justamente para
+         *     explicar por que ele foi removido;
+         *   • strings — `creators.config.ts` guarda o texto de exemplo
+         *     `console.log("funcionou")` como conteúdo, não como código.
+         *
+         * Um guarda que não separa código de dado acusa o próprio texto que
+         * documenta a regra.
+         */
         const semComentario = linha.replace(/\/\/.*$/, '').replace(/^\s*\*.*$/, '');
-        if (/\bconsole\.(log|debug)\s*\(/.test(semComentario)) {
+        const semStrings = semComentario
+          .replace(/'(?:[^'\\]|\\.)*'/g, "''")
+          .replace(/"(?:[^"\\]|\\.)*"/g, '""')
+          .replace(/`(?:[^`\\]|\\.)*`/g, '``');
+
+        if (/\bconsole\.(log|debug)\s*\(/.test(semStrings)) {
           ofensores.push(`${rel}:${i + 1}`);
         }
       });
