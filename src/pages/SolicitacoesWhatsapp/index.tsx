@@ -10,14 +10,26 @@
  *   operador            → só os próprios pedidos
  *   líder+ / responsável → todos os da empresa, com edição
  *
- * Aberta a todos os cargos desde 30/07/2026. O operador enxerga só os pedidos
- * dele porque a policy `sol_wpp_select` decide isso — não porque a tela esconde.
+ * ## A divisão em quatro blocos (16/08/2026)
+ *
+ * Antes eram duas listas: "em aberto" e "finalizados". Em produção isso era 67
+ * pedidos numa fila corrida — de 15 solicitantes, atendidos por 3 pessoas — e
+ * 32 dos 59 em andamento já tinham passado do prazo de 5 dias. Metade da lista
+ * ficava vermelha, e uma marca que pinta metade da tela deixa de apontar.
+ *
+ * Agora: minha mesa, a fila, a mesa dos outros, e o histórico. As regras da
+ * divisão moram em `agrupamento.ts`, fora daqui, porque são o coração da tela e
+ * merecem teste próprio.
+ *
+ * Não há ramo por papel: quem só vê os próprios pedidos nunca é responsável,
+ * então o bloco "comigo" nasce vazio e some sozinho, e "com outra pessoa",
+ * agrupado por responsável, vira "João está com 3 pedidos seus".
  */
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
   MessageSquarePlus, Inbox, CheckCircle2, Filter, RefreshCw, ShieldAlert, Loader2,
-  Search, X, ChevronDown,
+  Search, X, PlayCircle, Users, Sparkles,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -42,50 +54,54 @@ import {
 import {
   criarSolicitacao, atualizarStatus, excluirSolicitacao,
   definirResponsavel, removerResponsavel, buscarEventos,
-  MAX_PENDENTES, chatAindaAberto, podeFalarNaConversa, transferirAtendimento,
-  marcarNaoConcluidos,
+  MAX_PENDENTES, DIAS_HISTORICO_PADRAO, chatAindaAberto, podeFalarNaConversa,
+  transferirAtendimento, marcarNaoConcluidos,
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
 import { podeAcessarAbaWpp, temVisaoGeralPorCargo, podeDefinirResponsavel } from './permissoes';
 import { combinaBusca, naoConcluido } from './formatacao';
-import { ordenarEmAberto } from './ordenacao';
+import {
+  separarEmBaldes, agruparPor, valeAgrupar, SEM_PESSOA,
+  type Eixo, type GrupoPessoa,
+} from './agrupamento';
 import { Input } from '@/components/ui/input';
 import { FormNovaSolicitacao, type DadosNovaSolicitacao } from './FormNovaSolicitacao';
 import { CardSolicitacao } from './CardSolicitacao';
 import { PainelResponsaveis } from './PainelResponsaveis';
 import { ChatSolicitacao } from './ChatSolicitacao';
+import { BlocoSolicitacoes } from './BlocoSolicitacoes';
+import { FaixaContadores } from './FaixaContadores';
 
 const TODOS = '__todos__';
 
 interface OpcaoSimples { id: string; nome: string }
 
-interface GrupoOperador {
-  id:     string;
-  pessoa: PessoaResumo | null;
-  itens:  SolicitacaoWhatsapp[];
-}
-
 /** De quanto em quanto tempo o "tempo de espera" dos cards é redesenhado. */
 const PASSO_RELOGIO_MS = 30_000;
 
-/**
- * Agrupa os pedidos por quem os abriu, preservando a ordem em que chegaram
- * (mais recentes primeiro, como a query devolve). Grupos ordenados pelo nome.
- */
-function agruparPorSolicitante(lista: SolicitacaoWhatsapp[]): GrupoOperador[] {
-  const mapa = new Map<string, GrupoOperador>();
-  for (const s of lista) {
-    const id = s.solicitante_id;
-    let grupo = mapa.get(id);
-    if (!grupo) {
-      grupo = { id, pessoa: s.solicitante ?? null, itens: [] };
-      mapa.set(id, grupo);
-    }
-    grupo.itens.push(s);
-  }
-  return [...mapa.values()].sort((a, b) =>
-    (a.pessoa?.nome ?? '').localeCompare(b.pessoa?.nome ?? '', 'pt-BR'),
+/** Cabeçalho de um grupo de pessoa dentro de um bloco. */
+function CabecalhoGrupo({ grupo }: { grupo: GrupoPessoa }) {
+  const nome = grupo.id === SEM_PESSOA
+    ? 'Sem responsável'
+    : grupo.pessoa?.nome ?? 'Sem nome';
+
+  return (
+    <div className="flex items-center gap-2 px-0.5">
+      <Avatar className="w-6 h-6 shrink-0">
+        {grupo.pessoa?.foto_url && (
+          <AvatarImage src={grupo.pessoa.foto_url} alt={nome} className="object-cover" />
+        )}
+        <AvatarFallback className="bg-muted text-[9px] font-bold">
+          {nome.charAt(0).toUpperCase()}
+        </AvatarFallback>
+      </Avatar>
+      <p className="text-xs font-semibold truncate">{nome}</p>
+      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+        {grupo.itens.length}
+      </Badge>
+      <div className="flex-1 h-px bg-border" />
+    </div>
   );
 }
 
@@ -126,18 +142,12 @@ export default function SolicitacoesWhatsapp() {
   const [busca, setBusca] = useState('');
 
   /**
-   * Os finalizados nascem RECOLHIDOS para quem enxerga os pedidos dos outros —
-   * para essa pessoa a lista de concluídos é a maior da tela e empurra para
-   * fora do campo de visão justamente o que ainda precisa de alguém. Quem só vê
-   * os próprios pedidos abre a aba com tudo à mostra, como sempre foi.
+   * Janela do histórico. `null` = tudo.
    *
-   * O líder é conhecido pelo cargo, então já entra certo. O responsável só é
-   * descoberto depois que a lista de responsáveis carrega — daí o efeito, que
-   * roda UMA vez (mesmo desenho de `ajustouSetorRef`) para não desfazer o
-   * clique de quem já tiver aberto a seção.
+   * Nasce em 30 dias porque a consulta trazia a empresa inteira sem limite, e
+   * os concluídos só crescem — ver `buscarSolicitacoes`.
    */
-  const [finalizadosAbertos, setFinalizadosAbertos] = useState(!ehLiderOuAcima);
-  const recolheuFinalizadosRef = useRef(false);
+  const [diasHistorico, setDiasHistorico] = useState<number | null>(DIAS_HISTORICO_PADRAO);
 
   // Um relógio para a lista toda. Sem ele o "tempo de espera" dos cards só
   // mudaria quando algo mais provocasse um render.
@@ -187,8 +197,8 @@ export default function SolicitacoesWhatsapp() {
     // RLS já devolve só os dele, e filtrar por setor o faria PERDER os próprios
     // pedidos antigos se mudasse de setor (o setor é congelado na abertura).
     temVisaoGeral
-      ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel }
-      : {},
+      ? { setorId: setorSel, equipeId: equipeSel === TODOS ? null : equipeSel, dias: diasHistorico }
+      : { dias: diasHistorico },
     habilitado,
   );
   /**
@@ -242,34 +252,27 @@ export default function SolicitacoesWhatsapp() {
     [podeEditarPedidos, usuarioId],
   );
 
-  // ── Listas: em aberto × finalizados ────────────────────────────────────────
-  // A busca corta antes de separar, então os dois blocos e os contadores falam
+  // ── Os quatro baldes ───────────────────────────────────────────────────────
+  // A busca corta ANTES da divisão, então os blocos e os contadores falam todos
   // do mesmo recorte.
-  const { emAberto, finalizados } = useMemo(() => {
-    const abertos: SolicitacaoWhatsapp[] = [];
-    const feitos:  SolicitacaoWhatsapp[] = [];
-    for (const s of solicitacoes) {
-      if (!combinaBusca(s, busca)) continue;
-      (s.status === 'feito' ? feitos : abertos).push(s);
-    }
-    // Finalizados seguem do mais novo para o mais antigo: é histórico, e o de
-    // ontem interessa mais que o do mês passado.
-    return { emAberto: ordenarEmAberto(abertos, usuarioId), finalizados: feitos };
-  }, [solicitacoes, busca, usuarioId]);
+  const baldes = useMemo(
+    () => separarEmBaldes(solicitacoes.filter(s => combinaBusca(s, busca)), usuarioId),
+    [solicitacoes, busca, usuarioId],
+  );
+
+  /** Quantos passaram dos 5 dias, em cada balde e no total. */
+  const atrasados = useMemo(() => {
+    const conta = (lista: SolicitacaoWhatsapp[]) =>
+      lista.filter(s => naoConcluido(s, agora)).length;
+    const comigo = conta(baldes.comigo);
+    const fila   = conta(baldes.fila);
+    const outros = conta(baldes.outros);
+    return { comigo, fila, outros, total: comigo + fila + outros };
+  }, [baldes, agora]);
 
   const meusPendentes = useMemo(
     () => solicitacoes.filter(s => s.solicitante_id === usuarioId && s.status === 'pendente').length,
     [solicitacoes, usuarioId],
-  );
-
-  /**
-   * Quantos passaram dos 5 dias sem ninguém assumir. O número no cabeçalho
-   * existe porque a tag mora no card: com a lista longa, ela só é vista por
-   * quem rola até lá.
-   */
-  const totalNaoConcluidos = useMemo(
-    () => emAberto.filter(s => naoConcluido(s, agora)).length,
-    [emAberto, agora],
   );
 
   // O responsável atende a fila da empresa inteira, então não pode nascer preso
@@ -283,23 +286,6 @@ export default function SolicitacoesWhatsapp() {
       setSetorSel(null);
     }
   }, [souResponsavel, ehLiderOuAcima]);
-
-  // Ver o comentário de `finalizadosAbertos`: o responsável ganha visão geral
-  // depois do carregamento, e é aqui que a seção de concluídos se recolhe.
-  useEffect(() => {
-    if (recolheuFinalizadosRef.current) return;
-    if (souResponsavel) {
-      recolheuFinalizadosRef.current = true;
-      setFinalizadosAbertos(false);
-    }
-  }, [souResponsavel]);
-
-  /**
-   * Escolher uma equipe separa a lista por operador. Sem equipe, a lista corre
-   * direto — agrupar a empresa inteira por pessoa daria dezenas de blocos de
-   * uma linha cada.
-   */
-  const agruparPorOperador = temVisaoGeral && equipeSel !== TODOS;
 
   const equipesDoSetor = useMemo(
     () => (setorSel ? equipes.filter(e => e.setor_id === setorSel) : equipes),
@@ -477,6 +463,9 @@ export default function SolicitacoesWhatsapp() {
   }
 
   const precisaEscolherSetor = veMaisDeUmSetor && !setorSel;
+  const nadaParaMostrar =
+    baldes.comigo.length === 0 && baldes.fila.length === 0
+    && baldes.outros.length === 0 && baldes.concluidos.length === 0;
 
   function renderCard(s: SolicitacaoWhatsapp, compacto = false) {
     return (
@@ -522,43 +511,33 @@ export default function SolicitacoesWhatsapp() {
     );
   }
 
-  function renderLista(lista: SolicitacaoWhatsapp[], vazio: string, compacto = false) {
-    if (lista.length === 0) {
-      return <p className="text-xs text-muted-foreground py-6 text-center">{vazio}</p>;
-    }
+  /** Lista corrida. */
+  function renderCorrida(lista: SolicitacaoWhatsapp[], compacto = false) {
+    return (
+      <div className={compacto ? 'space-y-1' : 'space-y-2'}>
+        {lista.map(s => renderCard(s, compacto))}
+      </div>
+    );
+  }
 
-    // Sem equipe escolhida, lista corrida.
-    if (!agruparPorOperador) {
-      return (
-        <div className={compacto ? 'space-y-1' : 'space-y-2'}>
-          {lista.map(s => renderCard(s, compacto))}
-        </div>
-      );
-    }
+  /**
+   * Lista agrupada por pessoa — **sempre**, sem depender de filtro de equipe.
+   *
+   * Era esse o defeito da versão anterior: o agrupamento só ligava quando uma
+   * equipe era escolhida, e a aba abre sem filtro nenhum.
+   *
+   * Com um grupo só, cai para lista corrida: um cabeçalho repetindo o nome de
+   * quem já está no topo da tela é custo visual sem informação.
+   */
+  function renderAgrupada(lista: SolicitacaoWhatsapp[], eixo: Eixo, compacto = false) {
+    const grupos = agruparPor(lista, eixo);
+    if (!valeAgrupar(grupos)) return renderCorrida(lista, compacto);
 
-    // Com equipe escolhida: um bloco por operador da equipe. É a visão que o
-    // líder quer nesse recorte — quem pediu o quê, e quanto cada um tem aberto.
     return (
       <div className="space-y-4">
-        {agruparPorSolicitante(lista).map(grupo => (
+        {grupos.map(grupo => (
           <div key={grupo.id} className="space-y-2">
-            <div className="flex items-center gap-2 px-0.5">
-              <Avatar className="w-6 h-6 shrink-0">
-                {grupo.pessoa?.foto_url && (
-                  <AvatarImage src={grupo.pessoa.foto_url} alt={grupo.pessoa.nome} className="object-cover" />
-                )}
-                <AvatarFallback className="bg-muted text-[9px] font-bold">
-                  {(grupo.pessoa?.nome ?? '?').charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <p className="text-xs font-semibold truncate">
-                {grupo.pessoa?.nome ?? 'Sem operador'}
-              </p>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                {grupo.itens.length}
-              </Badge>
-              <div className="flex-1 h-px bg-border" />
-            </div>
+            <CabecalhoGrupo grupo={grupo} />
             <div className={cn('sm:pl-8', compacto ? 'space-y-1' : 'space-y-2')}>
               {grupo.itens.map(s => renderCard(s, compacto))}
             </div>
@@ -585,7 +564,12 @@ export default function SolicitacoesWhatsapp() {
           </h1>
           <p className="text-xs text-muted-foreground mt-0.5">
             Peça ao time do digital para enviar uma mensagem ao cliente.
-            {!temVisaoGeral && ` Você pode ter até ${MAX_PENDENTES} pendentes.`}
+            {/* O limite vale para QUEM CRIA — o trigger `fn_wpp_limite_pendentes`
+                não olha cargo. Até 16/08/2026 o aviso só aparecia para quem não
+                tinha visão geral, e o líder que abria pedido descobria o teto
+                pela mensagem de erro. */}
+            {temPermissao('criar_solicitacao_whatsapp')
+              && ` Você pode ter até ${MAX_PENDENTES} pendentes.`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -699,56 +683,102 @@ export default function SolicitacoesWhatsapp() {
           ))}
         </div>
       ) : (
-        <div className="space-y-5">
-          {/* Em aberto */}
-          <section className="space-y-2">
-            <div className="flex items-center gap-2">
-              <Inbox className="w-4 h-4 text-primary" />
-              <h2 className="text-sm font-semibold">Pendentes e em andamento</h2>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                {emAberto.length}
-              </Badge>
-              {totalNaoConcluidos > 0 && (
-                <Badge
-                  variant="outline"
-                  className="text-[10px] px-1.5 py-0 h-4 border-destructive/50 bg-destructive/15 text-destructive"
-                  title="Pendentes há mais de 5 dias sem ninguém assumir"
-                >
-                  {totalNaoConcluidos} não concluído{totalNaoConcluidos > 1 ? 's' : ''}
-                </Badge>
-              )}
-            </div>
-            {renderLista(emAberto, busca
-              ? 'Nenhum pedido em aberto para essa busca.'
-              : temVisaoGeral
-                ? 'Nenhuma solicitação em aberto.'
-                : 'Você não tem solicitações em aberto.')}
-          </section>
+        <>
+          {/* Os números ficam aqui e não nos blocos: assim um bloco vazio pode
+              sumir sem levar a informação junto. "Na fila: 0" é notícia boa. */}
+          <FaixaContadores
+            comigo={baldes.comigo.length}
+            fila={baldes.fila.length}
+            outros={baldes.outros.length}
+            atrasados={atrasados.total}
+            mostrarComigo={temVisaoGeral}
+          />
 
-          {/* Finalizados — recolhido, e em linha enxuta quando aberto.
-              É histórico: quem abre a aba está atrás do que falta fazer, e a
-              lista de concluídos empurrava isso para fora da tela. */}
-          <section className="space-y-2">
-            <button
-              type="button"
-              onClick={() => setFinalizadosAbertos(v => !v)}
-              className="flex items-center gap-2 w-full text-left rounded-lg -mx-1 px-1 py-0.5 hover:bg-accent/40 transition-colors"
-            >
-              <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-              <h2 className="text-sm font-semibold">Finalizados</h2>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                {finalizados.length}
-              </Badge>
-              <ChevronDown className={cn(
-                'w-4 h-4 text-muted-foreground transition-transform',
-                finalizadosAbertos && 'rotate-180',
-              )} />
-            </button>
-            {finalizadosAbertos && renderLista(finalizados, busca
-              ? 'Nenhum finalizado para essa busca.'
-              : 'Nada finalizado ainda.', true)}
-          </section>
-        </div>
+          {nadaParaMostrar ? (
+            <div className="flex flex-col items-center gap-2 py-14 text-center text-muted-foreground">
+              <Sparkles className="w-7 h-7 opacity-40" />
+              <p className="text-sm max-w-xs">
+                {busca
+                  ? 'Nenhuma solicitação para essa busca.'
+                  : temVisaoGeral
+                    ? 'Nenhuma solicitação por aqui. A fila está limpa.'
+                    : 'Você ainda não abriu nenhuma solicitação.'}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* 1 — a minha mesa. Lista corrida: agrupar por mim mesmo não diz
+                  nada. Some para quem não atende, porque nasce vazio. */}
+              <BlocoSolicitacoes
+                titulo="Comigo agora"
+                descricao="atendimentos que você assumiu"
+                icone={<PlayCircle className="w-4 h-4" />}
+                total={baldes.comigo.length}
+                atrasados={atrasados.comigo}
+              >
+                {() => renderCorrida(baldes.comigo)}
+              </BlocoSolicitacoes>
+
+              {/* 2 — a fila, agrupada por quem pediu. Sempre, com ou sem filtro
+                  de equipe: era esse o defeito da versão anterior. */}
+              <BlocoSolicitacoes
+                titulo="Aguardando alguém"
+                descricao="ninguém assumiu ainda"
+                icone={<Inbox className="w-4 h-4" />}
+                total={baldes.fila.length}
+                atrasados={atrasados.fila}
+              >
+                {() => renderAgrupada(baldes.fila, 'solicitante')}
+              </BlocoSolicitacoes>
+
+              {/* 3 — a mesa dos outros, agrupada por quem atende. É aqui que os
+                  atrasados ganham dono e nome, em vez de virarem uma parede
+                  vermelha na lista única. Recolhido: não é o meu trabalho.
+                  Para quem só vê os próprios pedidos, este bloco é o "João está
+                  com 3 pedidos seus" — e por isso nasce ABERTO para essa
+                  pessoa: é a única coisa em andamento que ela tem. */}
+              <BlocoSolicitacoes
+                titulo={temVisaoGeral ? 'Com outra pessoa' : 'Quem está atendendo'}
+                descricao={temVisaoGeral
+                  ? 'assumidos por outro atendente'
+                  : 'quem está cuidando dos seus pedidos'}
+                icone={<Users className="w-4 h-4" />}
+                total={baldes.outros.length}
+                atrasados={atrasados.outros}
+                recolhivel
+                abertoInicial={!temVisaoGeral}
+              >
+                {() => renderAgrupada(baldes.outros, 'responsavel')}
+              </BlocoSolicitacoes>
+
+              {/* 4 — histórico. Linha enxuta, recolhido, e com janela: ver
+                  `buscarSolicitacoes` para por que a janela existe. */}
+              <BlocoSolicitacoes
+                titulo="Concluídos"
+                descricao={diasHistorico
+                  ? `últimos ${diasHistorico} dias`
+                  : 'histórico completo'}
+                icone={<CheckCircle2 className="w-4 h-4" />}
+                total={baldes.concluidos.length}
+                recolhivel
+                abertoInicial={false}
+                acao={diasHistorico !== null ? (
+                  <div className="pt-1 text-center">
+                    <Button
+                      variant="ghost" size="sm"
+                      className="h-7 text-xs text-muted-foreground"
+                      onClick={() => setDiasHistorico(null)}
+                    >
+                      Ver histórico completo
+                    </Button>
+                  </div>
+                ) : undefined}
+              >
+                {() => renderCorrida(baldes.concluidos, true)}
+              </BlocoSolicitacoes>
+            </div>
+          )}
+        </>
       )}
 
       {/* Nova solicitação */}

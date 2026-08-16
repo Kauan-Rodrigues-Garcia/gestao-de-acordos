@@ -61,7 +61,7 @@ interface CardsMetasProps {
 
 export function CardsMetas({ dados, mes }: CardsMetasProps) {
   const {
-    totalRecebido, totalRecebidoOposto, diretoExtra, meta, metaOposta,
+    totalRecebido, totalRecebidoOposto, diretoExtra, extraTabulado, meta, metaOposta,
     projecao, escopoRotulo, modoAgregado,
     diasUteisTotal, diasUteisPassados, baixaAnterior, porForma, unidade,
   } = dados;
@@ -81,7 +81,17 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
    * R$ 0,00. O aviso de não tabulado logo acima já conta essa história.
    */
   const temVinculoParaMostrar = !!diretoExtra
-    && (diretoExtra.direto > 0 || diretoExtra.extra > 0);
+    && (diretoExtra.direto > 0 || diretoExtra.extra > 0 || (extraTabulado?.bruto ?? 0) > 0);
+
+  /**
+   * PaguePlay: o extra vem da TABULAÇÃO, não do relatório — lá ele nunca chega
+   * pelo analítico (0 de 1.859 linhas com "Tipo comissão" em agosto/2026).
+   *
+   * Quando existe, ele SUBSTITUI o número do analítico neste card, porque o do
+   * analítico é zero por construção. Fora da PaguePlay é `null` e o card segue
+   * lendo o vínculo do relatório, como sempre.
+   */
+  const extraDeTabulacao = extraTabulado && extraTabulado.qtd > 0 ? extraTabulado : null;
 
   /**
    * Os três valores de vínculo na unidade ativa.
@@ -157,13 +167,25 @@ export function CardsMetas({ dados, mes }: CardsMetasProps) {
               value={<span className="text-indigo-500">{formatBRL(vinculo.direto)}</span>}
               sub={`${diretoExtra.qtdDireto} pagamento${diretoExtra.qtdDireto !== 1 ? 's' : ''}`}
             />
+            {/* O extra da PaguePlay sai da tabulação e NÃO está somado no total
+                acima — não conta em meta, projeção nem quartil. A linha de
+                apoio diz isso, senão alguém soma de cabeça e estranha a
+                diferença. */}
             <MetricCard
               label="Recebimento extra"
               icon={<Sparkles className="w-4 h-4" />}
               accentColor="#f59e0b"
               gradientFrom="#f59e0b"
-              value={<span className="text-amber-500">{formatBRL(vinculo.extra)}</span>}
-              sub={`${diretoExtra.qtdExtra} pagamento${diretoExtra.qtdExtra !== 1 ? 's' : ''}`}
+              value={
+                <span className="text-amber-500">
+                  {formatBRL(extraDeTabulacao
+                    ? (unidade === 'ho' ? extraDeTabulacao.ho : extraDeTabulacao.bruto)
+                    : vinculo.extra)}
+                </span>
+              }
+              sub={extraDeTabulacao
+                ? `${extraDeTabulacao.qtd} acordo${extraDeTabulacao.qtd !== 1 ? 's' : ''} pago${extraDeTabulacao.qtd !== 1 ? 's' : ''} · fora da meta, só acompanhamento`
+                : `${diretoExtra.qtdExtra} pagamento${diretoExtra.qtdExtra !== 1 ? 's' : ''}`}
             />
             {diretoExtra.naoTabulado > 0 && (
               <MetricCard

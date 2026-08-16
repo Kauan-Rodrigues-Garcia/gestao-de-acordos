@@ -34,11 +34,20 @@ vi.mock('@/lib/realtime', () => ({
 /** Mensagens que a query de contagem enxerga. Cada teste ajusta se precisar. */
 let mensagensNoBanco: unknown[] = [];
 
+// Desde 16/08/2026 a contagem é recortada pelos pedidos que estão na tela
+// (`.in('solicitacao_id', …)`) em vez de varrer a empresa — daí o `in` aqui.
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    from: () => ({
-      select: () => ({ eq: () => Promise.resolve({ data: mensagensNoBanco, error: null }) }),
-    }),
+    from: () => {
+      const resposta = Promise.resolve({ data: mensagensNoBanco, error: null });
+      const alvo = {
+        select: () => alvo,
+        eq: () => alvo,
+        in: () => resposta,
+        then: (r: (v: unknown) => unknown) => resposta.then(r),
+      };
+      return alvo;
+    },
   },
 }));
 
@@ -60,6 +69,7 @@ vi.mock('@/services/solicitacoesWhatsapp.service', () => ({
   buscarLeituras: vi.fn(() => Promise.resolve(leiturasNoBanco)),
   buscarResponsaveis: vi.fn(() => Promise.resolve([])),
   buscarEventos: vi.fn(() => Promise.resolve([])),
+  DIAS_HISTORICO_PADRAO: 30,
 }));
 
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: vi.fn(), info: vi.fn() } }));

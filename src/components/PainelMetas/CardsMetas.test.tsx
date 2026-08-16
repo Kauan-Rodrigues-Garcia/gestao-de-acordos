@@ -21,6 +21,7 @@ function dados(over: Partial<DadosPainelMetas> = {}): DadosPainelMetas {
     diasUteisRestantes: 15,
     totalRecebido: 65_611.62,
     diretoExtra: null,
+    extraTabulado: null,
     naoTabulado: 0,
     naoTabuladoQtd: 0,
     porForma: {},
@@ -129,6 +130,88 @@ describe('CardsMetas — Direto/Extra', () => {
     }));
     expect(screen.getByText('Recebimento extra')).toBeInTheDocument();
     expect(screen.getByText('Sem vínculo definido')).toBeInTheDocument();
+  });
+});
+
+/**
+ * PaguePlay: o extra vem da TABULAÇÃO, não do relatório.
+ *
+ * Em agosto/2026 o analítico da PaguePlay tem 0 de 1.859 linhas com "Tipo
+ * comissão", e nenhuma das 792 linhas com acordo aponta para um acordo extra —
+ * o card mostrava R$ 0,00 com 29 extras tabulados no mesmo mês.
+ */
+describe('CardsMetas — extra por tabulação (PaguePlay)', () => {
+  /** Números reais de agosto/2026: 27 acordos pagos. */
+  const EXTRA_PP = { bruto: 35_348.64, ho: 8_823.02, qtd: 27 };
+
+  /** É o caso da PaguePlay: o analítico não sabe classificar nenhum extra. */
+  const SO_DIRETO = {
+    direto: 463_653.86, extra: 0, naoTabulado: 577_563.95,
+    qtdDireto: 792, qtdExtra: 0, qtdNaoTabulado: 1_067,
+  };
+
+  it('o valor do card vem da tabulação, não do zero do analítico', () => {
+    render0(dados({ diretoExtra: SO_DIRETO, extraTabulado: EXTRA_PP }));
+    expect(screen.getByText('Recebimento extra')).toBeInTheDocument();
+    expect(screen.getByText(/R\$\s*35\.348,64/)).toBeInTheDocument();
+  });
+
+  /**
+   * A linha mais importante do card. Sem ela alguém soma extra + total de
+   * cabeça e conclui que a meta está errada.
+   */
+  it('avisa que está fora da meta', () => {
+    render0(dados({ diretoExtra: SO_DIRETO, extraTabulado: EXTRA_PP }));
+    expect(screen.getByText(/27 acordos pagos · fora da meta, só acompanhamento/))
+      .toBeInTheDocument();
+  });
+
+  /**
+   * O erro fácil seria somar o extra ao total. 65.611,62 + 35.348,64 =
+   * 100.960,26 — se esse número aparecer em qualquer lugar da tela, alguém
+   * somou.
+   */
+  it('não soma o extra ao total recebido', () => {
+    render0(dados({
+      totalRecebido: 65_611.62, diretoExtra: SO_DIRETO, extraTabulado: EXTRA_PP,
+    }));
+    expect(screen.queryByText(/R\$\s*100\.960,26/)).not.toBeInTheDocument();
+    // O total segue sendo o do analítico — aparece no card e no rodapé do donut.
+    expect(screen.getAllByText(/R\$\s*65\.611,62/).length).toBeGreaterThan(0);
+  });
+
+  /**
+   * Sem esta regra o bloco inteiro sumiria justamente no setor da PaguePlay que
+   * tabula extra: `extra` do analítico é 0 e a decisão olhava só para ele.
+   */
+  it('extra só de tabulação já abre o bloco de vínculo', () => {
+    render0(dados({
+      diretoExtra: { ...SO_DIRETO, direto: 0, qtdDireto: 0 },
+      extraTabulado: EXTRA_PP,
+    }));
+    expect(screen.getByText('Recebimento extra')).toBeInTheDocument();
+  });
+
+  it('nenhum extra tabulado no mês volta a ler o analítico', () => {
+    render0(dados({
+      diretoExtra: DIRETO_EXTRA,
+      extraTabulado: { bruto: 0, ho: 0, qtd: 0 },
+    }));
+    expect(screen.getByText(/12 pagamentos/)).toBeInTheDocument();
+  });
+
+  it('singular não escreve "1 acordos pagos"', () => {
+    render0(dados({
+      diretoExtra: SO_DIRETO,
+      extraTabulado: { bruto: 291.07, ho: 72.66, qtd: 1 },
+    }));
+    expect(screen.getByText(/1 acordo pago · fora da meta/)).toBeInTheDocument();
+  });
+
+  /** BookPlay: `tipo_comissao` vem preenchido e o caminho normal está certo. */
+  it('sem tabulação (BookPlay) o card segue vindo do relatório', () => {
+    render0(dados({ diretoExtra: DIRETO_EXTRA, extraTabulado: null }));
+    expect(screen.getByText(/12 pagamentos/)).toBeInTheDocument();
   });
 });
 

@@ -32,6 +32,7 @@
 
 import { supabase } from '@/lib/supabase';
 import { primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
+import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { classificarComissao } from '@/services/analitico/analiticoComum';
 import type { EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
 
@@ -184,6 +185,106 @@ export async function buscarAgendadoPorDia(params: {
   return [...porDia.entries()]
     .map(([dia, agendado]) => ({ dia, agendado }))
     .sort((a, b) => a.dia - b.dia);
+}
+
+// ── Extra por TABULAÇÃO (PaguePlay) ─────────────────────────────────────────
+
+/**
+ * O extra da PaguePlay, somado dos acordos em vez do relatório.
+ *
+ * ## Por que existe
+ *
+ * O relatório da PaguePlay **não traz a coluna "Tipo comissão"** — em
+ * agosto/2026 são 0 linhas preenchidas de 1.859. Sem ela, `buscarDiretoExtraDoMes`
+ * cai no caminho reserva (`acordo_id` → `acordos.tipo_vinculo`), e ali o
+ * resultado é ZERO: nenhuma das 792 linhas com acordo aponta para um acordo
+ * extra — todas são diretas. O card mostrava R$ 0,00 com 29 extras tabulados no
+ * mesmo mês.
+ *
+ * A causa é que o recebimento extra da PaguePlay não entra no relatório. Não é
+ * dado faltando, é dado que nunca vem por ali. A única fonte é a tabulação.
+ *
+ * ## As quatro regras do recorte
+ *
+ *   • `tipo_vinculo = 'extra'`  — o que o operador marcou
+ *   • `vencimento` dentro do mês — a MESMA régua do card "Recebimento direto"
+ *     ao lado e do gráfico de agendado, para os dois números serem comparáveis
+ *   • `status = 'pago'`          — o card se chama *recebimento*
+ *   • escopo                     — o mesmo filtro do resto do painel
+ *
+ * ## Não fecha com o total, e isso é proposital
+ *
+ * `direto + extra + naoTabulado = total do analítico` continua valendo para
+ * `TotaisDiretoExtra`. Este número vive FORA daquela soma: é dinheiro que o
+ * relatório não conhece. Não entra no total recebido, não entra na meta, não
+ * mexe na projeção nem no quartil — é acompanhamento. Somar seria contar
+ * receita que a régua da meta nunca viu.
+ *
+ * ## Na BookPlay isto não roda
+ *
+ * Lá `tipo_comissao` vem preenchido e o caminho normal está certo. Quem decide
+ * é o chamador (`usePainelMetas`), pelo tenant.
+ */
+export interface ExtraTabulado {
+  /** Soma de `acordos.valor`. */
+  bruto: number;
+  /** A parcela que fica na PaguePlay — ver `PP_HO_PERCENTUAL`. */
+  ho: number;
+  qtd: number;
+}
+
+const EXTRA_ZERADO: ExtraTabulado = { bruto: 0, ho: 0, qtd: 0 };
+
+export async function buscarExtraTabuladoDoMes(params: {
+  empresaId: string;
+  mes: string;
+  escopo: EscopoAnalitico | null;
+}): Promise<ExtraTabulado> {
+  const { empresaId, mes, escopo } = params;
+  if (!empresaId || !escopo) return EXTRA_ZERADO;
+
+  const filtro = filtroDoEscopo(escopo);
+  let bruto = 0;
+  let qtd = 0;
+
+  try {
+    let offset = 0;
+    for (;;) {
+      let q = supabase
+        .from('acordos')
+        .select('valor')
+        .eq('empresa_id', empresaId)
+        .eq('tipo_vinculo', 'extra')
+        .eq('status', 'pago')
+        .gte('vencimento', primeiroDiaDoMes(mes))
+        .lte('vencimento', ultimoDiaDoMes(mes))
+        .order('id', { ascending: true });
+
+      if (filtro && 'igual' in filtro)  q = q.eq(filtro.coluna, filtro.igual);
+      if (filtro && 'dentro' in filtro) q = q.in(filtro.coluna, filtro.dentro);
+
+      const { data, error } = await q.range(offset, offset + PAGINA - 1);
+      if (error) {
+        console.warn('[extraTabulado] erro na leitura dos acordos:', error.message);
+        break;
+      }
+      const lote = (data as { valor: number | string | null }[]) ?? [];
+      for (const a of lote) {
+        bruto += Number(a.valor) || 0;
+        qtd++;
+      }
+      if (lote.length < PAGINA) break;
+      offset += PAGINA;
+    }
+  } catch {
+    return EXTRA_ZERADO;
+  }
+
+  // `acordos` não guarda H.O. linha a linha como o analítico guarda: aqui ele é
+  // derivado, com a mesma constante que `useAnalytics`, `AnalyticsPanel` e
+  // `EvolucaoDiaria` usam. Régua nova aqui faria o mesmo dinheiro valer duas
+  // coisas diferentes em duas telas.
+  return { bruto, ho: bruto * PP_HO_PERCENTUAL, qtd };
 }
 
 export async function buscarDiretoExtraDoMes(params: {

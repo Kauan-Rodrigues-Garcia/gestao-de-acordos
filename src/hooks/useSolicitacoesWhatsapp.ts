@@ -18,7 +18,7 @@ import { assinarTabela } from '@/lib/realtime';
 import { logger } from '@/lib/logger';
 import {
   buscarSolicitacoes, buscarMensagens, enviarMensagem, marcarConversaLida,
-  buscarLeituras, buscarResponsaveis, buscarEventos,
+  buscarLeituras, buscarResponsaveis, buscarEventos, DIAS_HISTORICO_PADRAO,
   type SolicitacaoWhatsapp, type MensagemSolicitacao, type EventoSolicitacao,
   type PessoaResumo, type Leitura,
 } from '@/services/solicitacoesWhatsapp.service';
@@ -52,7 +52,20 @@ function notificarSO(titulo: string, corpo: string, tag: string): void {
 export interface FiltrosSolicitacoes {
   setorId?:  string | null;
   equipeId?: string | null;
+  /**
+   * Janela dos CONCLUÍDOS, em dias. `null` traz o histórico inteiro.
+   * Pedido em aberto entra sempre — ver `buscarSolicitacoes`.
+   */
+  dias?:     number | null;
 }
+
+/**
+ * Quantos ids cabem num `in(...)` por vez.
+ *
+ * O filtro vai na URL, e uma lista de UUIDs cresce rápido: 300 ids já dão ~11
+ * kB de querystring. Acima disso servidores e proxies começam a recusar.
+ */
+const LOTE_IDS = 300;
 
 /**
  * Responsáveis pelo atendimento — hook SEPARADO de propósito.
@@ -106,16 +119,17 @@ export function useSolicitacoesWhatsapp(
 
   const setorId  = filtros.setorId  ?? null;
   const equipeId = filtros.equipeId ?? null;
+  const dias     = filtros.dias === undefined ? DIAS_HISTORICO_PADRAO : filtros.dias;
 
   const recarregar = useCallback(async () => {
     if (!empresaId || !habilitado) { setLoading(false); return; }
-    const res = await buscarSolicitacoes({ empresaId, setorId, equipeId });
+    const res = await buscarSolicitacoes({ empresaId, setorId, equipeId, dias });
     if (!montadoRef.current) return;
     setSolicitacoes(res.data);
     setDbAtiva(res.dbAtiva);
     setErro(res.erro);
     setLoading(false);
-  }, [empresaId, habilitado, setorId, equipeId]);
+  }, [empresaId, habilitado, setorId, equipeId, dias]);
 
   const recarregarRef = useRef(recarregar);
   recarregarRef.current = recarregar;
@@ -147,18 +161,39 @@ export function useSolicitacoesWhatsapp(
   // do carimbo `lida_em` da mensagem. Aquele era um só para a thread inteira, e
   // por isso a bolinha sumia da tela de todos quando qualquer um — um líder,
   // por exemplo — abria a conversa.
+  /**
+   * Os pedidos que estão de fato na tela, como chave estável.
+   *
+   * As contagens são recortadas por esta lista em vez de varrerem a empresa
+   * inteira: elas alimentam badges, e badge de pedido que não está na tela é
+   * trabalho jogado fora — trabalho que cresceria junto com o histórico.
+   */
+  const idsChave = useMemo(() => solicitacoes.map(s => s.id).join(','), [solicitacoes]);
+
   const recarregarContagens = useCallback(async () => {
     if (!empresaId || !usuarioId || !habilitado) return;
-    const [{ data, error }, leituras] = await Promise.all([
-      supabase
+    const ids = idsChave ? idsChave.split(',') : [];
+    if (!ids.length) {
+      if (montadoRef.current) { setTotaisMensagens({}); setNaoLidas({}); }
+      return;
+    }
+
+    // Em lotes: o `in(...)` viaja na URL, e uma lista longa de UUIDs estoura o
+    // tamanho aceito antes de estourar qualquer limite do banco.
+    const mensagens: { solicitacao_id: string; autor_id: string; criado_em: string }[] = [];
+    for (let i = 0; i < ids.length; i += LOTE_IDS) {
+      const fatia = ids.slice(i, i + LOTE_IDS);
+      const { data, error } = await supabase
         .from('solicitacoes_whatsapp_mensagens')
         .select('solicitacao_id, autor_id, criado_em')
-        .eq('empresa_id', empresaId),
-      buscarLeituras(empresaId),
-    ]);
-    if (error || !montadoRef.current) return;
+        .eq('empresa_id', empresaId)
+        .in('solicitacao_id', fatia);
+      if (error) return;
+      mensagens.push(...((data ?? []) as typeof mensagens));
+    }
 
-    const mensagens = (data ?? []) as { solicitacao_id: string; autor_id: string; criado_em: string }[];
+    const leituras = await buscarLeituras(empresaId, ids);
+    if (!montadoRef.current) return;
 
     const totais: Record<string, number> = {};
     for (const m of mensagens) {
@@ -166,7 +201,7 @@ export function useSolicitacoesWhatsapp(
     }
     setTotaisMensagens(totais);
     setNaoLidas(contarNaoLidas(mensagens, leituras, usuarioId));
-  }, [empresaId, usuarioId, habilitado]);
+  }, [empresaId, usuarioId, habilitado, idsChave]);
 
   const recarregarContagensRef = useRef(recarregarContagens);
   recarregarContagensRef.current = recarregarContagens;
@@ -335,16 +370,17 @@ export function useChatSolicitacao(params: {
       setMensagens([]); setEventos([]); setLeituras([]);
       return;
     }
+    // Só os cursores desta conversa: o ✓✓ pergunta sobre esta thread, e o
+    // recorte agora vai no banco em vez de descartar o resto aqui.
     const [msgs, evts, lidos] = await Promise.all([
       buscarMensagens(solicitacaoId, empresaId),
       buscarEventos(solicitacaoId, empresaId),
-      buscarLeituras(empresaId),
+      buscarLeituras(empresaId, [solicitacaoId]),
     ]);
     if (!montadoRef.current) return;
     setMensagens(msgs);
     setEventos(evts);
-    // Só os cursores desta conversa: o ✓✓ pergunta sobre esta thread.
-    setLeituras(lidos.filter(l => l.solicitacao_id === solicitacaoId));
+    setLeituras(lidos);
     setLoading(false);
   }, [solicitacaoId, empresaId]);
 

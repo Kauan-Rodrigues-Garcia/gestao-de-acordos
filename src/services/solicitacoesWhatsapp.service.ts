@@ -250,12 +250,48 @@ export interface ResultadoSolicitacoes {
   erro:    string | null;
 }
 
+/** Quanto histórico de concluídos a aba carrega por padrão. */
+export const DIAS_HISTORICO_PADRAO = 30;
+
+/**
+ * O corte do histórico, como data (`yyyy-MM-dd`), a partir de hoje.
+ *
+ * Só a data, sem hora, por dois motivos. O primeiro é que a janela é contada em
+ * dias — meia-noite é o limite certo. O segundo é o parser do PostgREST: dentro
+ * de um `or(...)` o filtro é lido como `coluna.operador.valor`, separado por
+ * ponto, e um ISO completo (`…T12:00:00.123Z`) leva pontos DENTRO do valor.
+ *
+ * Exportado para a tela poder rotular o bloco com o mesmo número que a query
+ * usou — dizer "últimos 30 dias" e trazer outra coisa seria pior que não dizer.
+ */
+export function inicioDoHistorico(dias: number, agora = Date.now()): string {
+  return new Date(agora - dias * 86_400_000).toISOString().slice(0, 10);
+}
+
 /**
  * Lista as solicitações visíveis para o usuário atual.
  *
  * Não filtra por papel aqui de propósito: a RLS já devolve só o que a pessoa
  * pode ver (operador → as próprias; líder+/responsável → todas da empresa).
  * Duplicar a regra no cliente só criaria uma segunda verdade para divergir.
+ *
+ * ## A janela do histórico
+ *
+ * Até 16/08/2026 esta consulta trazia a empresa INTEIRA, sem `limit` e sem
+ * janela. Passava com folga (195 linhas contra o teto de 1000 do PostgREST),
+ * mas os concluídos só crescem: 128 em duas semanas. No ritmo de então, em
+ * cerca de quatro meses a lista **começaria a truncar em silêncio** — sem erro,
+ * sem aviso, só pedidos sumindo do fim.
+ *
+ * `dias` corta apenas os CONCLUÍDOS. Pedido em aberto entra sempre, por mais
+ * velho que seja: são justamente os antigos que precisam de alguém (32 dos 59
+ * em andamento já passavam de 5 dias). Uma janela que os escondesse resolveria
+ * o problema errado.
+ *
+ * O corte é por `atualizado_em`, e não por `criado_em`: um pedido aberto há 40
+ * dias e concluído ontem é história recente, e sumiria de uma janela ancorada
+ * na abertura. `finalizado_em` seria o carimbo exato, mas é nulo em dado
+ * antigo; `atualizado_em` nunca é.
  */
 export async function buscarSolicitacoes(params: {
   empresaId: string;
@@ -263,6 +299,8 @@ export async function buscarSolicitacoes(params: {
   setorId?:  string | null;
   /** Filtro do líder por equipe. */
   equipeId?: string | null;
+  /** Janela dos concluídos. `null` traz tudo (o "ver histórico completo"). */
+  dias?:     number | null;
 }): Promise<ResultadoSolicitacoes> {
   try {
     let q = supabase
@@ -273,6 +311,9 @@ export async function buscarSolicitacoes(params: {
 
     if (params.setorId)  q = q.eq('setor_id',  params.setorId);
     if (params.equipeId) q = q.eq('equipe_id', params.equipeId);
+    if (params.dias != null) {
+      q = q.or(`status.neq.feito,atualizado_em.gte.${inicioDoHistorico(params.dias)}`);
+    }
 
     // O diretório vai junto: sem ele o card não sabe de quem é o pedido.
     const [{ data, error }, pessoas] = await Promise.all([
@@ -534,12 +575,27 @@ export async function marcarConversaLida(params: {
   if (error) console.warn('[solicitacoesWhatsapp] erro ao marcar conversa lida:', error.message);
 }
 
-/** Cursores de leitura da empresa — os meus alimentam o badge, os outros o ✓✓. */
-export async function buscarLeituras(empresaId: string): Promise<Leitura[]> {
-  const { data, error } = await supabase
+/**
+ * Cursores de leitura — os meus alimentam o badge, os outros o ✓✓.
+ *
+ * `solicitacaoIds` recorta a leitura ao que está de fato na tela. Sem ele a
+ * consulta cresce junto com o histórico inteiro da empresa para alimentar
+ * badges de pedidos que ninguém está vendo.
+ */
+export async function buscarLeituras(
+  empresaId: string,
+  solicitacaoIds?: readonly string[],
+): Promise<Leitura[]> {
+  if (solicitacaoIds && solicitacaoIds.length === 0) return [];
+
+  let q = supabase
     .from('solicitacoes_whatsapp_leitura')
     .select('solicitacao_id, usuario_id, lido_ate')
     .eq('empresa_id', empresaId);
+
+  if (solicitacaoIds) q = q.in('solicitacao_id', solicitacaoIds as string[]);
+
+  const { data, error } = await q;
 
   if (error) {
     console.warn('[solicitacoesWhatsapp] erro nas leituras:', error.message);

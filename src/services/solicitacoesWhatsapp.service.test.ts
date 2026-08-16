@@ -88,7 +88,7 @@ import {
   marcarConversaLida, buscarLeituras, definirResponsavel, buscarClientePorCodigo, buscarResponsaveis,
   ehErroLimitePendentes, MAX_PENDENTES, STATUS_EM_ABERTO,
   chatAindaAberto, HORAS_CHAT_APOS_FECHAR,
-  podeFalarNaConversa, transferirAtendimento,
+  podeFalarNaConversa, transferirAtendimento, inicioDoHistorico,
 } from './solicitacoesWhatsapp.service';
 
 const EMPRESA = 'emp-1';
@@ -649,5 +649,29 @@ describe('buscarClientePorCodigo', () => {
     const r = await buscarClientePorCodigo('7777', EMPRESA);
 
     expect(r).toEqual({ nome_cliente: 'Fulano', estado_uf: null, whatsapp: null });
+  });
+});
+
+// ── Janela do histórico (16/08/2026) ─────────────────────────────────────────
+
+describe('inicioDoHistorico', () => {
+  const AGORA = new Date('2026-08-16T18:30:00.000Z').getTime();
+
+  it('volta o número de dias pedido', () => {
+    expect(inicioDoHistorico(30, AGORA)).toBe('2026-07-17');
+  });
+
+  /**
+   * Dentro de um `or(...)` o PostgREST lê `coluna.operador.valor` separando por
+   * ponto. Um ISO completo levaria pontos no meio do valor e o filtro viraria
+   * outra coisa — em silêncio.
+   */
+  it('devolve só a data, sem hora nem ponto', () => {
+    expect(inicioDoHistorico(30, AGORA)).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+
+  it('atravessa a virada do mês', () => {
+    expect(inicioDoHistorico(30, new Date('2026-03-05T00:00:00Z').getTime()))
+      .toBe('2026-02-03');
   });
 });

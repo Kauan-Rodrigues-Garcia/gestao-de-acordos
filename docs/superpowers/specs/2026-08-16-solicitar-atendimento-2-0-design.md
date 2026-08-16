@@ -1,7 +1,11 @@
 # Solicitar Atendimento 2.0 + ajustes de Dashboard e lista de acordos
 
 Data: 2026-08-16
-Status: aguardando revisão
+Status: **implementado**
+
+Três desvios em relação ao desenho original, todos anotados na seção a que
+pertencem: o título do bloco 3 para quem não atende, o destino de
+`ordenacao.ts`, e o recorte das leituras.
 
 Três pedidos independentes chegaram juntos. Os dois pequenos já foram
 entregues e estão registrados aqui para o histórico; o grande é o desenho
@@ -78,8 +82,21 @@ Quem **atende** vê os quatro blocos.
 
 O que muda entre os dois é apenas o eixo do agrupamento: `solicitante_id`
 ou `responsavel_id`. Isso é uma função pura sobre a lista, não um ramo de
-componente — vive em `agrupamento.ts`, ao lado de `ordenacao.ts`, e é
-testável sem montar tela.
+componente — vive em `agrupamento.ts` e é testável sem montar tela.
+
+**Desvio 1 — o título do bloco 3.** O desenho previa "Em atendimento" para
+quem não atende, mas a faixa de contadores usa esse mesmo rótulo, e as duas
+palavras iguais na mesma tela confundiam. Ficou **"Quem está atendendo"**,
+que além de resolver a colisão descreve melhor o que o bloco faz: agrupar
+por responsável.
+
+**Desvio 2 — `ordenacao.ts` foi apagado.** O arquivo codificava três faixas
+de prioridade (assumido por mim → fila dos outros → o resto) para ordenar
+uma lista única. Os quatro baldes *são* essas faixas, promovidas a seções
+com título. O que sobrava era a ordem interna, que agora é só "mais antigo
+primeiro" — uma linha dentro de `separarEmBaldes`. Manter o arquivo deixaria
+sessenta linhas de comentário explicando uma precedência que não governa
+mais nada. `ordenacao.test.ts` foi junto.
 
 ### Faixa de contadores no topo
 
@@ -99,6 +116,27 @@ meses** — sem erro, sem aviso, só pedidos que somem.
 O bloco 4 carregando 30 dias por vez resolve os dois de uma vez: a
 listagem passa a ter janela, e a contagem de mensagens passa a ser
 recortada pelos pedidos efetivamente carregados.
+
+A janela corta **apenas os concluídos**: `or(status.neq.feito,
+atualizado_em.gte.<data>)`. Pedido em aberto entra sempre, por mais velho
+que seja — são justamente os antigos que precisam de alguém. E o corte é
+por `atualizado_em`, não por `criado_em`: um pedido aberto há 40 dias e
+concluído ontem é história recente e sumiria de uma janela ancorada na
+abertura. `finalizado_em` seria o carimbo exato, mas é nulo em dado antigo.
+
+O corte é uma **data**, sem hora. Dentro de um `or(...)` o PostgREST lê
+`coluna.operador.valor` separando por ponto, e um ISO completo
+(`…T12:00:00.123Z`) levaria pontos dentro do valor — o filtro viraria outra
+coisa em silêncio. A janela é contada em dias, então meia-noite é o limite
+certo de qualquer forma.
+
+**Desvio 3 — as leituras também foram recortadas.** `buscarLeituras` lia
+todos os cursores da empresa (219 linhas, crescendo com as mensagens) para
+alimentar badges, e o chat lia a mesma coisa para depois descartar tudo
+menos uma thread. Ganhou um parâmetro opcional de ids: a lista passa os
+pedidos que estão na tela, o chat passa o único que abriu. Não estava no
+desenho, mas é a mesma consulta sem recorte, na mesma tela, encontrada ao
+mexer na de cima.
 
 ### Decisões de detalhe
 
@@ -194,21 +232,28 @@ não houve consulta nova.
 
 ## Testes
 
-**Puros, sem montar tela:**
+Suíte completa: **2.536 passando**, 158 arquivos. Typecheck limpo.
 
-- `agrupamento.ts` — agrupar por solicitante e por responsável; ordem
-  estável por nome; pedido sem responsável não some
-- a divisão nos quatro baldes a partir de `(status, responsavel_id, eu)`,
-  incluindo `falta_info` caindo no balde certo conforme quem atende
-- o extra da PaguePlay: filtro de mês, filtro de pago, conversão H.O.
+**Puros (`agrupamento.test.ts`, 21 casos):** a divisão nos quatro baldes a
+partir de `(status, responsavel_id, eu)`, com `falta_info` seguindo quem
+atende e o pedido em andamento sem responsável voltando para a fila;
+agrupamento pelos dois eixos; ordem estável por nome; grupo sem pessoa por
+último; um pedido sem o join resolvido não deixa o grupo anônimo.
 
-**De contrato:**
+**Janela (`solicitacoesWhatsapp.service.test.ts`):** o corte volta o número
+de dias pedido, atravessa a virada do mês, e devolve só data — sem ponto,
+que é o que quebraria o `or(...)`.
 
-- o extra da PaguePlay **não** entra no total recebido nem na projeção —
-  é o erro fácil de cometer e o que o usuário pediu explicitamente
+**Da página (`SolicitacoesWhatsapp.blocos.test.tsx`, 11 casos):** o
+agrupamento acontece **sem filtro de equipe**, que é o defeito relatado; um
+solicitante só não vira cabeçalho; os blocos frios nascem recolhidos e
+**não montam os cards**; quem só acompanha não ganha o bloco "Comigo agora"
+e vê os próprios pedidos agrupados por quem atende; os contadores mostram
+zero mesmo quando o bloco correspondente sumiu.
 
-**De componente:**
-
-- solicitante e atendente veem estruturas diferentes a partir da mesma
-  lista
-- os blocos 3 e 4 nascem recolhidos
+**Do card de extra (`CardsMetas.test.tsx`, 7 casos novos):** o valor vem da
+tabulação e não do zero do analítico; a linha "fora da meta" aparece; a
+soma `total + extra` **não** existe em lugar nenhum da tela; extra só de
+tabulação já abre o bloco de vínculo; mês sem extra volta a ler o
+analítico; singular não escreve "1 acordos pagos"; e a BookPlay segue vindo
+do relatório.

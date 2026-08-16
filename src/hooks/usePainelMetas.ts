@@ -22,8 +22,8 @@ import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
-  buscarDiretoExtraDoMes, buscarAgendadoPorDia,
-  type TotaisDiretoExtra, type PontoAgendadoDia,
+  buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
+  type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
 } from '@/services/analitico/diretoExtra.service';
 import { getTodayISO, isPerfilAdminOuLider, isPerfilDiretoria } from '@/lib/index';
 import {
@@ -88,6 +88,13 @@ export interface DadosPainelMetas {
   totalRecebidoOposto: number;
   /** `null` quando o setor não tem a lógica Direto/Extra — o card some. */
   diretoExtra: TotaisDiretoExtra | null;
+  /**
+   * PaguePlay: o extra somado da TABULAÇÃO, porque lá ele não vem no relatório.
+   * `null` na BookPlay e em quem não tem a lógica — ver o serviço.
+   *
+   * Vive fora de `totalRecebido` e fora da meta de propósito.
+   */
+  extraTabulado: ExtraTabulado | null;
   /** Recebido do analítico ainda sem acordo tabulado (base do aviso). */
   naoTabulado: number;
   naoTabuladoQtd: number;
@@ -377,6 +384,34 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     return () => { cancelado = true; };
   }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente]);
 
+  // ── Extra por tabulação (só PaguePlay) ─────────────────────────────────────
+  //
+  // Na PaguePlay o extra NÃO vem no relatório de recebimento, então o caminho
+  // acima devolve zero por construção: das 792 linhas com acordo em agosto/2026,
+  // nenhuma aponta para um acordo extra. Ver `buscarExtraTabuladoDoMes` para o
+  // levantamento e para o porquê de este número ficar fora do total e da meta.
+  //
+  // Na BookPlay `tipo_comissao` vem preenchido e o caminho normal está certo —
+  // buscar aqui seria uma segunda ida ao banco para contradizer a primeira.
+  const extraPorTabulacao = tenant.isPaguePlay && !!temLogicaDiretoExtra;
+  const [extraTabulado, setExtraTabulado] = useState<ExtraTabulado | null>(null);
+  const [extraCarregado, setExtraCarregado] = useState(false);
+  useEffect(() => {
+    let cancelado = false;
+    if (!extraPorTabulacao || !empresa?.id || escopoPendente) {
+      setExtraTabulado(null);
+      setExtraCarregado(!extraPorTabulacao);
+      return;
+    }
+    setExtraCarregado(false);
+    void buscarExtraTabuladoDoMes({ empresaId: empresa.id, mes, escopo }).then(t => {
+      if (cancelado) return;
+      setExtraTabulado(t);
+      setExtraCarregado(true);
+    });
+    return () => { cancelado = true; };
+  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente]);
+
   // ── Agendado por dia (mesmo escopo do recebimento) ─────────────────────────
   const [agendadoPorDia, setAgendadoPorDia] = useState<PontoAgendadoDia[]>([]);
   const [agendadoCarregado, setAgendadoCarregado] = useState(false);
@@ -480,7 +515,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
    * não depende delas.
    */
   const carregando = !analitico.carregado || escopoPendente || !configCarregada
-    || !metaCarregada || !dxCarregado || !equipesCarregadas || !agendadoCarregado;
+    || !metaCarregada || !dxCarregado || !extraCarregado || !equipesCarregadas
+    || !agendadoCarregado;
 
   // Segue `modo`, e não a mera presença de `equipeSelecionada`: com operador E
   // equipe escolhidos o operador vence (mesma ordem do `useEscopoAnalitico`), e
@@ -505,6 +541,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     totalRecebido: recebidoNaUnidade,
     totalRecebidoOposto: recebidoOposto,
     diretoExtra,
+    extraTabulado,
     naoTabulado: unidade === 'ho'
       ? agregado.naoTabuladoHO
       : agregado.naoTabuladoBruto,
