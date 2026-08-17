@@ -38,10 +38,26 @@ export interface ResultadoComando {
 export const COMANDOS_VALIDOS = [
   'help', 'about', 'kauan', 'cleber', 'projects', 'skills', 'stack',
   'stats', 'theme', 'cyberpunk', 'arcade', 'matrix', 'achievements',
-  'whoami', 'phi', 'clear', 'exit',
+  'whoami', 'phi', 'premio', 'clear', 'exit',
 ] as const;
 
 export type ComandoValido = typeof COMANDOS_VALIDOS[number];
+
+/**
+ * O que o terminal sabe sobre quem está digitando.
+ *
+ * Existe por causa do `premio`: ele só responde a quem zerou o fliperama. O
+ * comando continua na lista branca — o que muda é a RESPOSTA, e não o fato de
+ * o comando existir. Deixá-lo aparecer na lista para todos entregaria o
+ * segredo; escondê-lo do `help` e responder diferente é o que faz dele prêmio.
+ *
+ * Continua tudo puro: o contexto entra por parâmetro, não por leitura de
+ * estado global.
+ */
+export interface ContextoTerminal {
+  /** Zerou a máquina de fliperama. */
+  venceuFliperama?: boolean;
+}
 
 function saida(...textos: string[]): LinhaTerminal[] {
   return textos.map(texto => ({ tipo: 'saida' as const, texto }));
@@ -73,7 +89,10 @@ function fichaDoCriador(id: 'kauan' | 'cleber'): LinhaTerminal[] {
  * Pura: recebe texto, devolve linhas e, quando for o caso, um pedido de efeito.
  * Não mexe em estado, não escreve em lugar nenhum.
  */
-export function interpretar(entradaCrua: string): ResultadoComando {
+export function interpretar(
+  entradaCrua: string,
+  contexto: ContextoTerminal = {},
+): ResultadoComando {
   const entrada = entradaCrua.trim().toLowerCase();
 
   if (!entrada) return { linhas: [] };
@@ -112,6 +131,9 @@ export function interpretar(entradaCrua: string): ResultadoComando {
             'phi          1.618...',
             'achievements suas conquistas',
             'whoami       boa pergunta',
+            // Só quem zerou a máquina vê esta linha. Para o resto, o comando
+            // existe e não se anuncia — é o que faz dele prêmio.
+            ...(contexto.venceuFliperama ? ['premio       o que você ganhou'] : []),
             'clear        limpa a tela',
             'exit         volta ao Gestão',
           ),
@@ -212,6 +234,35 @@ export function interpretar(entradaCrua: string): ResultadoComando {
         ],
       };
 
+    case 'premio':
+      if (!contexto.venceuFliperama) {
+        return {
+          linhas: [
+            { tipo: 'erro', texto: 'o gabinete não te conhece.' },
+            { tipo: 'saida', texto: 'zere a máquina com a sua única ficha e volte aqui.' },
+          ],
+        };
+      }
+      return {
+        linhas: [
+          { tipo: 'destaque', texto: '★ PRÊMIO — PARA QUEM ZEROU A MÁQUINA ★' },
+          ...saida(
+            '',
+            'Você é uma das poucas pessoas que:',
+            '  1. clicou cinco vezes num logo só para ver o que acontecia;',
+            '  2. achou um fliperama dentro de um sistema de cobrança;',
+            '  3. e o zerou com uma ficha só.',
+            '',
+            'Nada disso estava no roteiro de ninguém. Você foi procurar.',
+            '',
+            'Seu nome fica com a coroa no ranking e no painel de',
+            'descobridores, e este comando passa a responder só para você.',
+            '',
+            '                                        — Kauan e Cleber',
+          ),
+        ],
+      };
+
     case 'achievements':
       return { linhas: saida('abrindo registro...'), efeito: { tipo: 'conquistas' } };
 
@@ -239,10 +290,24 @@ export function interpretar(entradaCrua: string): ResultadoComando {
   }
 }
 
-/** Sugestão de completar com Tab. */
-export function completar(parcial: string): string | null {
+/**
+ * Sugestão de completar com Tab.
+ *
+ * Recebe o mesmo contexto do `interpretar` porque o Tab também entrega
+ * segredo: sem isto, qualquer pessoa digitaria `pr` + Tab e o terminal
+ * ofereceria `premio` de bandeja.
+ */
+export function completar(
+  parcial: string,
+  contexto: ContextoTerminal = {},
+): string | null {
   const p = parcial.trim().toLowerCase();
   if (!p) return null;
-  const achados = COMANDOS_VALIDOS.filter(c => c.startsWith(p));
+
+  const visiveis = contexto.venceuFliperama
+    ? COMANDOS_VALIDOS
+    : COMANDOS_VALIDOS.filter(c => c !== 'premio');
+
+  const achados = visiveis.filter(c => c.startsWith(p));
   return achados.length === 1 ? achados[0] : null;
 }

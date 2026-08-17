@@ -126,3 +126,48 @@ describe('completar', () => {
     expect(completar('  ')).toBeNull();
   });
 });
+
+/**
+ * O prêmio de quem zerou o fliperama.
+ *
+ * O comando existe para todo mundo — está na lista branca, como tudo. O que
+ * muda é a RESPOSTA. Um comando que não existisse seria descoberto do mesmo
+ * jeito por quem lê o pacote; o que faz dele prêmio é responder só a quem
+ * ganhou, e não se anunciar para o resto.
+ */
+describe('premio', () => {
+  const ganhou = { venceuFliperama: true };
+
+  it('sem ter zerado, o gabinete não reconhece', () => {
+    const r = interpretar('premio');
+    expect(r.linhas[0].tipo).toBe('erro');
+    expect(r.linhas.some(l => l.texto.includes('coroa'))).toBe(false);
+  });
+
+  it('depois de zerar, entrega o prêmio', () => {
+    const r = interpretar('premio', ganhou);
+    expect(r.linhas[0].tipo).toBe('destaque');
+    expect(r.linhas.some(l => l.texto.includes('coroa'))).toBe(true);
+    // Continua sendo um brinquedo: nenhum comando pede efeito colateral aqui.
+    expect(r.efeito).toBeUndefined();
+  });
+
+  it('o `help` não entrega o segredo a quem não ganhou', () => {
+    const semGanhar = interpretar('help').linhas.map(l => l.texto).join('\n');
+    const comGanhar  = interpretar('help', ganhou).linhas.map(l => l.texto).join('\n');
+    expect(semGanhar).not.toContain('premio');
+    expect(comGanhar).toContain('premio');
+  });
+
+  /** O Tab também entrega segredo: `pr` + Tab ofereceria o comando de bandeja. */
+  it('o Tab não completa `premio` para quem não ganhou', () => {
+    expect(completar('pre')).toBeNull();
+    expect(completar('pre', ganhou)).toBe('premio');
+  });
+
+  it('ganhar não muda mais nada do terminal', () => {
+    for (const cmd of ['about', 'whoami', 'phi', 'stack']) {
+      expect(interpretar(cmd, ganhou)).toEqual(interpretar(cmd));
+    }
+  });
+});

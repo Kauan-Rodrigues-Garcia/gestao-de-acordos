@@ -26,7 +26,15 @@ export function SecretTerminal({
   aoMatrix: () => void;
   aoAbrirConquistas: () => void;
 }) {
-  const { tokens, tema, registrar } = useCreators();
+  const { tokens, tema, registrar, progresso } = useCreators();
+
+  /*
+   * O que o terminal sabe sobre quem digita. Hoje é uma coisa só: se a pessoa
+   * zerou o fliperama, porque o comando `premio` só responde a ela — e o Tab
+   * também precisa saber, senão entrega o segredo ao completar.
+   */
+  const contexto = { venceuFliperama: progresso.segredoArcade };
+
   const [linhas, setLinhas] = useState<LinhaTerminal[]>(BOAS_VINDAS);
   const [entrada, setEntrada] = useState('');
   const [historico, setHistorico] = useState<string[]>([]);
@@ -43,7 +51,7 @@ export function SecretTerminal({
     const cru = entrada.trim();
     if (!cru) return;
 
-    const r = interpretar(cru);
+    const r = interpretar(cru, contexto);
     const comando = cru.toLowerCase().split(/\s+/)[0];
     registrar({ comandosUsados: [comando] });
 
@@ -72,7 +80,7 @@ export function SecretTerminal({
     if (e.key === 'Enter') { e.preventDefault(); enviar(); return; }
 
     if (e.key === 'Tab') {
-      const sugestao = completar(entrada);
+      const sugestao = completar(entrada, contexto);
       if (sugestao) { e.preventDefault(); setEntrada(sugestao); }
       return;   // sem sugestão, Tab sai do campo — o foco não fica preso
     }

@@ -31,6 +31,7 @@ import { PersonalDatabase } from './sections/PersonalDatabase';
 import { ProjectArchive } from './sections/ProjectArchive';
 import { CodePlayground } from './sections/CodePlayground';
 import { ArcadeCabinet } from './sections/ArcadeCabinet';
+import { HallDescobridores } from './sections/HallDescobridores';
 import { MathLab } from './sections/MathLab';
 import { SecretTerminal } from './sections/SecretTerminal';
 import { DevStatus } from './sections/DevStatus';
@@ -50,7 +51,7 @@ function LabInterno() {
   const navigate = useNavigate();
   const {
     tema, tokens, trocarTema, registrar, movimentoReduzido,
-    ofertaReduzirMovimento, alternarMovimento, recusarOferta,
+    ofertaReduzirMovimento, alternarMovimento, recusarOferta, maquinaEmFoco,
   } = useCreators();
 
   // Quem já escolheu uma realidade antes pula direto para o conteúdo.
@@ -146,6 +147,39 @@ function LabInterno() {
 
       {/* ── Conteúdo ── */}
       <div className="creators-lab__conteudo">
+        {/*
+          A cortina que escurece a página quando a câmera entra na máquina de
+          fliperama.
+          ─────────────────────────────────────────────────────────────────────
+          Mora AQUI por causa de empilhamento, e o lugar é exato — nem dentro da
+          seção da máquina, nem fora deste elemento:
+
+            • `.creators-lab__conteudo` tem `position: relative; z-index: 1`, o
+              que faz dele um contexto de empilhamento. Cortina posta FORA dele
+              cobriria todo o conteúdo, gabinete incluído, por mais alto que
+              fosse o `z-index` de lá dentro;
+            • ela é `position: fixed`, e elemento fixo dentro de ancestral com
+              `transform` passa a se posicionar em relação a esse ancestral em
+              vez da janela. Este elemento nunca recebe `transform`; as seções
+              recebem, ao entrar.
+
+          Aqui, os dois problemas somem: mesmo contexto do gabinete (que sobe
+          para `z-index: 61`) e nenhum `transform` acima dela.
+        */}
+        <AnimatePresence>
+          {maquinaEmFoco && (
+            <motion.div
+              key="cortina"
+              className="creators-lab__cortina"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.8 }}
+              aria-hidden="true"
+            />
+          )}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait">
           {etapa === 'boot' && (
             <BootSequence
@@ -184,6 +218,9 @@ function LabInterno() {
               aoAbrirConquistas={() => setConquistasAbertas(true)}
             />
             <DevStatus />
+            {/* O painel de descobridores fica no fim, perto do contato: é o
+                fecho da visita, não a vitrine da entrada. */}
+            <HallDescobridores />
             <ContatoSecao />
             <FinalSecret aoSair={sair} />
           </motion.main>

@@ -1152,22 +1152,63 @@ export type Database = {
           },
         ]
       }
+      creators_lab_fliperama: {
+        Row: {
+          duracao_ms: number | null
+          finalizado_em: string | null
+          iniciado_em: string
+          pontos: number
+          usuario_id: string
+          venceu: boolean
+          vidas_usadas: number
+        }
+        Insert: {
+          duracao_ms?: number | null
+          finalizado_em?: string | null
+          iniciado_em?: string
+          pontos?: number
+          usuario_id: string
+          venceu?: boolean
+          vidas_usadas?: number
+        }
+        Update: {
+          duracao_ms?: number | null
+          finalizado_em?: string | null
+          iniciado_em?: string
+          pontos?: number
+          usuario_id?: string
+          venceu?: boolean
+          vidas_usadas?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "creators_lab_fliperama_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: true
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       creators_lab_progresso: {
         Row: {
           atualizado_em: string
           descoberto_em: string
+          elegivel_painel: boolean
           progresso: Json
           usuario_id: string
         }
         Insert: {
           atualizado_em?: string
           descoberto_em?: string
+          elegivel_painel?: boolean
           progresso?: Json
           usuario_id: string
         }
         Update: {
           atualizado_em?: string
           descoberto_em?: string
+          elegivel_painel?: boolean
           progresso?: Json
           usuario_id?: string
         }
@@ -3854,6 +3895,30 @@ export type Database = {
       fn_can_access_empresa: {
         Args: { target_empresa_id: string }
         Returns: boolean
+      }
+      fn_creators_lab_descobridores: {
+        Args: never
+        Returns: {
+          descoberto_em: string
+          foto_url: string | null
+          nome: string
+          posicao: number
+          usuario_id: string
+        }[]
+      }
+      fn_creators_lab_ranking: {
+        Args: never
+        Returns: {
+          duracao_ms: number | null
+          foto_url: string | null
+          jogado_em: string
+          nome: string
+          pontos: number
+          posicao: number
+          usuario_id: string
+          venceu: boolean
+          vidas_usadas: number
+        }[]
       }
       fn_comemoracao_faxina: {
         Args: never

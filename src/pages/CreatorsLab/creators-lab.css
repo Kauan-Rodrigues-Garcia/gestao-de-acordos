@@ -470,49 +470,82 @@
 
 /* ── Máquina de fliperama ─────────────────────────────────────────────── */
 /*
- * O gabinete é desenhado em CSS ao redor de um `<canvas>`. Nada aqui conhece
- * o jogo: são só as chapas, o vidro e os controles. O jogo em si está em
- * `lib/fliperama.ts` e `sections/ArcadeCabinet.tsx`.
+ * Um gabinete de fliperama desenhado inteiro em CSS ao redor de um `<canvas>`.
+ * Nada aqui conhece o jogo: são as chapas, o vidro e os controles. A regra do
+ * jogo está em `lib/fliperama.ts`; quem monta as peças é
+ * `components/GabineteFliperama.tsx`.
+ *
+ * A referência é a arte vetorial de gabinete retrô AZUL: cabeça inclinada com
+ * marquise iluminada, grade de alto-falante, moldura funda em volta do tubo,
+ * painel de controle em plano inclinado com manche de bola vermelha e botões
+ * redondos, frente com ranhura de ficha e devolução, pés separados do chão.
+ *
+ * O corpo é azul no Arcade — como na referência — e chumbo no Cyberpunk, que
+ * não tem azul na paleta. As cores do móvel são variáveis próprias
+ * (`--gab-*`), separadas dos tokens de tema, porque são a MATÉRIA do objeto
+ * (plástico, metal, vidro) e não a identidade da interface.
  */
 
-.creators-lab__gabinete {
+.creators-lab__maquina {
+  --gab-corpo:  #1E4FD1;
+  --gab-corpo2: #0C2A86;
+  --gab-vinco:  rgba(255,255,255,.16);
+  --gab-fundo:  #060916;
+
   position: relative;
   width: 100%;
-  /* A tela é 240×320: em 23rem o vidro fica com ~330×440 px, proporção de
+  /* A tela é 240×320. Em 23rem o tubo fica com ~300×400 px: proporção de
      gabinete vertical. Mais largo que isso e o móvel vira televisão. */
   max-width: 23rem;
   margin: 0 auto;
-  padding: .9rem .9rem 1.2rem;
-  background:
-    linear-gradient(180deg,
-      color-mix(in srgb, var(--creator-surface) 92%, #000) 0%,
-      color-mix(in srgb, var(--creator-bg-alt) 96%, #000) 100%);
-  border: 3px solid var(--creator-border);
-  box-shadow:
-    inset 0 0 0 2px rgba(255,255,255,.08),
-    0 24px 50px -22px #000;
+  filter: drop-shadow(0 26px 34px rgba(0,0,0,.55));
 }
 
-/* Marquise: a placa iluminada em cima do gabinete. */
+.creators-lab[data-tema="cyberpunk"] .creators-lab__maquina {
+  --gab-corpo:  #26262B;
+  --gab-corpo2: #101013;
+  --gab-vinco:  rgba(252,238,10,.16);
+}
+
+/* ── Cabeça ── */
+/*
+ * O topo é mais estreito que o corpo e tem os ombros cortados — é o que faz o
+ * desenho ser lido como gabinete e não como caixa. O corte vem de `clip-path`,
+ * então continua sendo um retângulo para o layout.
+ */
+.creators-lab__maquina-cabeca {
+  position: relative;
+  margin: 0 4%;
+  padding: .5rem .6rem .35rem;
+  background: linear-gradient(180deg, var(--gab-corpo) 0%, var(--gab-corpo2) 100%);
+  clip-path: polygon(8% 0, 92% 0, 100% 100%, 0 100%);
+}
+
+/* Marquise: a placa iluminada, com o brilho vindo de dentro. */
 .creators-lab__marquise {
-  margin: -.9rem -.9rem .9rem;
-  padding: .55rem .8rem;
+  padding: .5rem .7rem;
   text-align: center;
   font-family: var(--creator-font-display);
-  letter-spacing: .18em;
+  font-size: .82rem;
+  letter-spacing: .2em;
   text-transform: uppercase;
-  color: var(--creator-bg);
-  background: linear-gradient(180deg,
-    var(--creator-primary) 0%,
-    color-mix(in srgb, var(--creator-primary) 72%, #000) 100%);
-  border-bottom: 3px solid var(--creator-border);
+  color: #14060A;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--creator-primary) 92%, #fff) 0%,
+      var(--creator-primary) 45%,
+      color-mix(in srgb, var(--creator-primary) 68%, #000) 100%);
+  border: 2px solid rgba(0,0,0,.55);
+  box-shadow:
+    inset 0 0 14px rgba(255,255,255,.5),
+    0 0 26px color-mix(in srgb, var(--creator-primary) 45%, transparent);
 }
 
-/* As lâmpadas em volta da marquise, acendendo em sequência. */
+/* As lâmpadas da moldura, acendendo em sequência. */
 .creators-lab__lampadas {
   display: flex;
   justify-content: space-between;
-  padding: .3rem .5rem 0;
+  padding: .32rem .35rem 0;
 }
 
 .creators-lab__lampadas i {
@@ -528,12 +561,51 @@
   35%      { opacity: 1;   box-shadow: 0 0 8px var(--creator-secondary); }
 }
 
-/* O vidro: a tela do jogo, com o abaulamento e o reflexo. */
+/* ── Grade do alto-falante ── */
+/*
+ * Furos de verdade, feitos com um gradiente radial repetido. Sai mais barato
+ * que 60 elementos e não custa um nó a mais no DOM.
+ */
+.creators-lab__maquina-grade {
+  height: 14px;
+  margin: 0 4%;
+  background:
+    radial-gradient(circle at 3px 3px, rgba(0,0,0,.72) 0 2px, transparent 2.5px) 0 0 / 8px 7px,
+    linear-gradient(180deg, var(--gab-corpo2), color-mix(in srgb, var(--gab-corpo2) 60%, #000));
+  border-inline: 2px solid rgba(0,0,0,.35);
+}
+
+/* ── Moldura do tubo ── */
+
+.creators-lab__maquina-moldura {
+  position: relative;
+  padding: .8rem;
+  background: linear-gradient(180deg, var(--gab-corpo) 0%, var(--gab-corpo2) 100%);
+  border-top: 2px solid var(--gab-vinco);
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.28);
+}
+
+/* O vinco lateral do plástico moldado, dos dois lados do móvel. */
+.creators-lab__maquina-moldura::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg,
+      rgba(255,255,255,.14) 0 3px, transparent 3px calc(100% - 3px),
+      rgba(0,0,0,.35) calc(100% - 3px) 100%);
+}
+
+/* O vidro: a tela, com o abaulamento do tubo e o reflexo do vidro curvo. */
 .creators-lab__vidro {
   position: relative;
-  background: #05030F;
-  border: 2px solid #000;
-  box-shadow: inset 0 0 40px rgba(0,0,0,.9);
+  background: var(--gab-fundo);
+  border: 3px solid #05050A;
+  border-radius: 10px / 14px;
+  box-shadow:
+    inset 0 0 46px rgba(0,0,0,.95),
+    0 0 0 2px rgba(255,255,255,.05);
   overflow: hidden;
 }
 
@@ -550,72 +622,181 @@
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(ellipse 130% 110% at 50% 50%, transparent 58%, rgba(0,0,0,.75) 100%),
-    repeating-linear-gradient(0deg, rgba(0,0,0,.28) 0 2px, transparent 2px 4px),
-    linear-gradient(115deg, rgba(255,255,255,.07) 0 22%, transparent 32%);
+    radial-gradient(ellipse 130% 110% at 50% 50%, transparent 56%, rgba(0,0,0,.8) 100%),
+    repeating-linear-gradient(0deg, rgba(0,0,0,.3) 0 2px, transparent 2px 4px),
+    linear-gradient(118deg, rgba(255,255,255,.09) 0 20%, transparent 30%);
 }
 
-/* Painel de controle: manche e botões. Decorativos — quem joga usa mouse,
-   toque ou setas —, mas os botões respondem ao apertar, senão parecem adesivo. */
-.creators-lab__controles {
+/* ── Painel de controle ── */
+/*
+ * O plano inclinado onde ficam manche e botões. O topo mais estreito que a
+ * base é o que sugere a inclinação sem precisar de perspectiva de verdade —
+ * `perspective` aqui empurraria o canvas para uma camada composta à toa.
+ */
+.creators-lab__maquina-painel {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 1.2rem;
-  margin-top: .8rem;
-  padding: .7rem;
-  background: color-mix(in srgb, var(--creator-bg-alt) 80%, #000);
-  border: 2px solid var(--creator-border);
+  gap: 1.4rem;
+  padding: .8rem 1rem;
+  background:
+    linear-gradient(180deg,
+      color-mix(in srgb, var(--gab-corpo) 76%, #fff) 0%,
+      var(--gab-corpo) 38%,
+      var(--gab-corpo2) 100%);
+  clip-path: polygon(3% 0, 97% 0, 100% 100%, 0 100%);
+  border-top: 2px solid rgba(0,0,0,.5);
 }
 
 .creators-lab__manche {
   position: relative;
-  width: 34px; height: 34px;
+  width: 38px; height: 38px;
+  flex: none;
 }
 
-.creators-lab__manche b {
+/* A base de metal em que a haste se apoia. */
+.creators-lab__manche::before {
+  content: '';
   position: absolute;
-  left: 50%; top: 0;
-  width: 16px; height: 16px;
-  margin-left: -8px;
+  left: 50%; bottom: 0;
+  width: 30px; height: 9px;
+  margin-left: -15px;
   border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fff 0 8%, var(--creator-accent) 30%, #6d0022 100%);
-  transform: translateX(var(--manche, 0px));
-  transition: transform .12s ease-out;
+  background: radial-gradient(ellipse at 50% 35%, #d8d8de 0 40%, #6a6a72 100%);
+  box-shadow: 0 2px 0 rgba(0,0,0,.45);
 }
 
 .creators-lab__manche i {
   position: absolute;
-  left: 50%; top: 12px;
-  width: 4px; height: 16px;
-  margin-left: -2px;
-  background: linear-gradient(90deg, #666, #ddd, #666);
+  left: 50%; top: 14px;
+  width: 5px; height: 20px;
+  margin-left: -2.5px;
+  background: linear-gradient(90deg, #5a5a62, #e6e6ec 45%, #5a5a62);
   transform-origin: bottom center;
-  transform: rotate(calc(var(--manche, 0px) * 1.2deg));
+  transform: rotate(calc(var(--manche, 0px) * 1.3deg));
   transition: transform .12s ease-out;
 }
 
+/* A bola vermelha. Vermelha nos dois temas: é a cor do manche de fliperama,
+   não uma cor da interface. */
+.creators-lab__manche b {
+  position: absolute;
+  left: 50%; top: 0;
+  width: 18px; height: 18px;
+  margin-left: -9px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 34% 28%, #fff 0 9%, #ff4b5c 26%, #8c0016 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,.5);
+  transform: translateX(var(--manche, 0px));
+  transition: transform .12s ease-out;
+}
+
+.creators-lab__botoes {
+  display: flex;
+  gap: .55rem;
+  align-items: flex-start;
+}
+
+/*
+ * Os botões são de verdade: apertam, afundam e acionam o jogo. Um controle
+ * desenhado que não faz nada é adesivo, e adesivo estraga o objeto.
+ */
 .creators-lab__botao-fisico {
-  width: 26px; height: 26px;
+  width: 27px; height: 27px;
   border: 0;
   border-radius: 50%;
   cursor: pointer;
-  background: radial-gradient(circle at 35% 30%, #fff 0 6%, var(--creator-primary) 26%,
-              color-mix(in srgb, var(--creator-primary) 45%, #000) 100%);
-  box-shadow: 0 4px 0 rgba(0,0,0,.6);
+  background: radial-gradient(circle at 34% 28%, #fff 0 8%,
+              var(--botao, var(--creator-primary)) 26%,
+              color-mix(in srgb, var(--botao, var(--creator-primary)) 40%, #000) 100%);
+  box-shadow: 0 4px 0 rgba(0,0,0,.55), inset 0 0 0 2px rgba(0,0,0,.25);
   transition: transform .07s ease, box-shadow .07s ease;
 }
 
+/* Dois botões, desalinhados de propósito — em painel de fliperama eles nunca
+   ficam em linha reta. O primeiro é o de ação; o segundo, o de saque. */
+.creators-lab__botoes > :nth-child(1) { --botao: var(--creator-primary); }
+.creators-lab__botoes > :nth-child(2) { --botao: var(--creator-secondary); margin-top: .5rem; }
+
 .creators-lab__botao-fisico:active {
   transform: translateY(3px);
-  box-shadow: 0 1px 0 rgba(0,0,0,.6);
+  box-shadow: 0 1px 0 rgba(0,0,0,.55), inset 0 0 0 2px rgba(0,0,0,.25);
 }
 
-/* Ranhura da ficha. */
+/* ── Frente: fichas ── */
+
+.creators-lab__maquina-frente {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: .8rem;
+  padding: .7rem .9rem .9rem;
+  background: linear-gradient(180deg, var(--gab-corpo2) 0%,
+              color-mix(in srgb, var(--gab-corpo2) 55%, #000) 100%);
+  border-top: 2px solid rgba(0,0,0,.55);
+}
+
 .creators-lab__ficha-slot {
-  width: 46px; height: 8px;
+  width: 40px; height: 9px;
   background: #000;
-  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--creator-primary) 55%, #000);
+  border-radius: 2px;
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--creator-primary) 60%, #000),
+    inset 0 3px 5px rgba(0,0,0,.9);
+}
+
+.creators-lab__maquina-selo {
+  font-family: var(--creator-font-mono);
+  font-size: .56rem;
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--creator-primary) 80%, #fff);
+  border: 1px solid color-mix(in srgb, var(--creator-primary) 45%, transparent);
+  padding: .12rem .4rem;
+  white-space: nowrap;
+}
+
+/* ── Pés ── */
+/*
+ * Dois blocos com um vão no meio. É o vão que tira o móvel do chão — sem ele,
+ * o gabinete parece um pôster colado na parede.
+ */
+.creators-lab__maquina-pes {
+  display: flex;
+  justify-content: space-between;
+  margin: 0 6%;
+}
+
+.creators-lab__maquina-pes span {
+  width: 26%;
+  height: 14px;
+  background: linear-gradient(180deg,
+    color-mix(in srgb, var(--gab-corpo2) 70%, #000) 0%, #05050A 100%);
+  border-radius: 0 0 3px 3px;
+}
+
+/* ── Câmera: o gabinete em primeiro plano ── */
+/*
+ * Enquanto a partida corre, o gabinete sobe de camada e o resto da página
+ * escurece atrás. A translação e a escala vêm do JS (`lib/enquadramento.ts`),
+ * porque dependem de onde o elemento está na hora.
+ *
+ * O `z-index: 61` do gabinete NÃO está aqui: fica no elemento animado que
+ * envolve o móvel (`sections/ArcadeCabinet.tsx`), porque é ele que carrega o
+ * `transform` e, com isso, o contexto de empilhamento. Um `z-index` posto na
+ * peça de dentro ficaria preso ali e a cortina passaria por cima.
+ */
+.creators-lab__cortina {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0,0,0,.86);
+  backdrop-filter: blur(3px);
+}
+
+/* Enquanto focado, o móvel ganha um halo — separa o objeto do escuro atrás. */
+.creators-lab__maquina--focada {
+  filter: drop-shadow(0 0 40px color-mix(in srgb, var(--creator-primary) 28%, transparent));
 }
 
 /* ── Rolagem ──────────────────────────────────────────────────────────── */

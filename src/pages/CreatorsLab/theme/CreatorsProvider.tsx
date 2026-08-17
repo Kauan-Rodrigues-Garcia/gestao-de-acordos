@@ -72,6 +72,18 @@ interface ContextoCreators {
   recusarOferta: () => void;
   /** O progresso veio do banco (e não só do navegador). */
   progressoNaConta: boolean;
+  /**
+   * A câmera está em cima da máquina de fliperama.
+   *
+   * Sobe até aqui por um motivo de empilhamento, não de arquitetura: a cortina
+   * que escurece a página é `position: fixed`, e elemento fixo dentro de um
+   * ancestral com `transform` passa a se posicionar em relação a ESSE
+   * ancestral, não à janela. As seções do Lab animam com `transform`. Renderizar
+   * a cortina como filha direta da raiz do Lab tira o problema da mesa em vez
+   * de depender de a animação da seção ter terminado.
+   */
+  maquinaEmFoco: boolean;
+  focarMaquina: (v: boolean) => void;
 }
 
 const Ctx = createContext<ContextoCreators | null>(null);
@@ -248,16 +260,18 @@ export function CreatorsProvider({ children }: { children: ReactNode }) {
 
   const desbloqueadas = useMemo(() => conquistasDesbloqueadas(progresso), [progresso]);
 
+  const [maquinaEmFoco, focarMaquina] = useState(false);
+
   const valor = useMemo<ContextoCreators>(() => ({
     tema, tokens: TEMAS[tema], trocarTema,
     somLigado, alternarSom,
     progresso, registrar, desbloqueadas,
     fila, avisou,
     movimentoReduzido, alternarMovimento, ofertaReduzirMovimento, recusarOferta,
-    progressoNaConta,
+    progressoNaConta, maquinaEmFoco, focarMaquina,
   }), [tema, trocarTema, somLigado, alternarSom, progresso, registrar,
        desbloqueadas, fila, avisou, movimentoReduzido, alternarMovimento,
-       ofertaReduzirMovimento, recusarOferta, progressoNaConta]);
+       ofertaReduzirMovimento, recusarOferta, progressoNaConta, maquinaEmFoco]);
 
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
 }
