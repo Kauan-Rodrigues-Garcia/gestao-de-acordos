@@ -479,6 +479,7 @@ declare
   v_gatilhos  int;
   v_contexto  int;
   v_morta     int;
+  v_apontam   text;
 begin
   -- 1. Ninguém mais vê a aba sem poder ler o conteúdo dela.
   select count(*) into v_promete
@@ -527,12 +528,30 @@ begin
   if v_morta <> 0 then
     raise exception 'logs_whatsapp ainda existe';
   end if;
-  if exists (
-    select 1 from pg_proc
-     where pronamespace = 'public'::regnamespace
-       and pg_get_functiondef(oid) ilike '%logs_whatsapp%'
-  ) then
-    raise exception 'ainda existe funcao referenciando logs_whatsapp';
+
+  /*
+   * A busca ignora COMENTÁRIOS, e isto não é preciosismo: a primeira versão
+   * desta verificação derrubou a própria migration.
+   *
+   * `fn_admin_apagar_acordos_do_usuario` explica, num comentário, que ali havia
+   * um `DELETE FROM logs_whatsapp` e por que ele não ganhou substituto — texto
+   * que vale mais que a linha que ele descreve. `pg_get_functiondef` devolve o
+   * corpo COM os comentários, então um `ilike` cru acusa a prosa que documenta
+   * a regra como se fosse a infração.
+   *
+   * Guarda que não distingue código de comentário acusa a própria explicação.
+   * O que interessa é REFERÊNCIA, então os comentários saem antes de olhar.
+   */
+  select string_agg(p.proname, ', ' order by p.proname) into v_apontam
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace
+     and regexp_replace(
+           regexp_replace(pg_get_functiondef(p.oid), '/\*.*?\*/', '', 'gs'),
+           '--[^\n]*', '', 'g'
+         ) ilike '%logs_whatsapp%';
+
+  if v_apontam is not null then
+    raise exception 'ainda existe funcao referenciando logs_whatsapp: %', v_apontam;
   end if;
 
   raise notice 'Logs: permissao alinhada, contexto garantido, ruido fora, +4 tabelas auditadas, tabela morta removida. OK.';

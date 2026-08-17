@@ -106,3 +106,58 @@ describe('o banco completa o contexto de quem esqueceu', () => {
     );
   });
 });
+
+/**
+ * A verificação da migration não pode confundir prosa com referência.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * A primeira tentativa de aplicar `20260817120000` falhou na própria
+ * verificação:
+ *
+ *   ERROR: P0001: ainda existe funcao referenciando logs_whatsapp
+ *
+ * Não existia. `fn_admin_apagar_acordos_do_usuario` traz um comentário
+ * explicando que ali havia um `DELETE FROM logs_whatsapp` e por que ele não
+ * ganhou substituto — e `pg_get_functiondef` devolve o corpo COM comentários.
+ * Um `ilike` cru acusava o texto que documenta a regra como se fosse a
+ * infração.
+ *
+ * É a mesma armadilha do guarda de `console.log` em `sem-console-log.test.ts`,
+ * que acusava a string de exemplo dentro de `creators.config.ts`. Guarda que
+ * não distingue código de comentário acusa a própria explicação.
+ *
+ * Este bloco existe para que ninguém "simplifique" a verificação de volta.
+ */
+describe('a verificação que busca em corpo de função descarta comentários', () => {
+  const migration = fs.readdirSync(MIGRATIONS)
+    .filter(f => /logs_higiene_e_cobertura/.test(f))
+    .map(f => fs.readFileSync(path.join(MIGRATIONS, f), 'utf8'))[0];
+
+  it('a migration existe', () => {
+    expect(migration, 'migration 20260817120000 não encontrada').toBeTruthy();
+  });
+
+  it('o comentário que explica o DELETE removido continua lá', () => {
+    // Se este comentário sair, a explicação vai com ele — e a próxima pessoa
+    // reintroduz o DELETE achando que foi esquecimento.
+    expect(migration).toMatch(/Aqui existia .DELETE FROM logs_whatsapp./i);
+  });
+
+  it('a busca por referências limpa comentários de linha e de bloco antes de olhar', () => {
+    const bloco = /select\s+string_agg\(p\.proname[\s\S]*?ilike\s+'%logs_whatsapp%'/i.exec(migration);
+    expect(bloco, 'a verificação de referências mudou de forma').not.toBeNull();
+
+    expect(bloco![0], 'comentário de bloco não é descartado').toMatch(/\/\\\*\.\*\?\\\*\//);
+    expect(bloco![0], 'comentário de linha não é descartado').toMatch(/--\[\^\\n\]\*/);
+  });
+
+  /**
+   * A mensagem tem de dizer QUAIS funções apontam. A primeira versão só dizia
+   * "ainda existe função referenciando", e descobrir qual custou uma consulta a
+   * `pg_proc` no meio de uma migration que havia acabado de reverter inteira.
+   */
+  it('a exceção nomeia as funções culpadas', () => {
+    expect(migration).toMatch(
+      /raise\s+exception\s+'ainda existe funcao referenciando logs_whatsapp:\s*%'/i,
+    );
+  });
+});
