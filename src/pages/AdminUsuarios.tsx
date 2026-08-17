@@ -33,7 +33,7 @@ import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empre
 import { definirSituacao, arquivarDesligadosAnteriores } from '@/services/situacaoUsuario.service';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS } from '@/lib/index';
+import { PERFIL_LABELS, TODAS_EMPRESAS_SELECT_VALUE, PERFIL_COLORS, ehEscopoEmpresa } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
@@ -213,7 +213,11 @@ export default function AdminUsuarios() {
     setUsuarios(usuariosData.filter(u => !u.arquivado));
     setSetores(setoresData);
     setEmpresas(emps);
-    if (setoresData.length > 0 && !form.setor_id) {
+    // Escolhe um setor de partida só para quem PERTENCE a um setor. Este
+    // preenchimento automático é a origem do `setor_id` que a cúpula carregava
+    // sem ninguém ter decidido — e que fazia a diretoria ver um setor só nas
+    // abas do Painel Líder. Ver `PERFIS_ESCOPO_EMPRESA`.
+    if (setoresData.length > 0 && !form.setor_id && !ehEscopoEmpresa(form.perfil)) {
       setForm(f => ({
         ...f,
         setor_id: setoresData.find(s => s.empresa_id === (f.empresa_id || empresaAtual?.id))?.id ?? setoresData[0].id,
@@ -306,7 +310,9 @@ export default function AdminUsuarios() {
               nome: form.nome.trim(),
               perfil: form.perfil,
               usuario: form.usuario.trim() ? form.usuario.trim().toLowerCase() : null,
-              setor_id: form.setor_id || null,
+              // Cúpula nasce sem setor. O gatilho no banco também zeraria, mas
+              // mandar o valor certo mantém a tela honesta sobre o que gravou.
+              setor_id: cargoEscopoEmpresa ? null : (form.setor_id || null),
               empresa_id: empresaId,
               empresa_slug: empresas.find(e => e.id === empresaId)?.slug ?? empresaAtual?.slug,
             }
@@ -466,6 +472,15 @@ export default function AdminUsuarios() {
     () => (form.empresa_id ? setores.filter(s => s.empresa_id === form.empresa_id) : setores),
     [setores, form.empresa_id],
   );
+
+  /**
+   * O cargo escolhido no formulário pertence à empresa em vez de a um setor?
+   *
+   * Lido do `form`, não do usuário sendo editado: trocar o cargo para Diretoria
+   * já esconde o campo de setor na mesma hora, antes de salvar. Ver
+   * `PERFIS_ESCOPO_EMPRESA`.
+   */
+  const cargoEscopoEmpresa = ehEscopoEmpresa(form.perfil);
 
   const nomeSetor = (u: Perfil) => (u.setores as { nome?: string } | undefined)?.nome ?? '—';
   const nomeEmpresa = (u: Perfil) => (u.empresas as { nome?: string } | undefined)?.nome ?? '—';
@@ -968,9 +983,23 @@ export default function AdminUsuarios() {
                 — este campo, o mesmo campo de empresa e o botão "Transferir" da
                 aba Setores, que fazia um `update` cru sem nada disso. Agora a
                 porta é uma só, na aba Setores. */}
+            {/* Cúpula (diretoria/administrador/super_admin) pertence à EMPRESA,
+                não a um setor — o campo sai da tela em vez de ficar desabilitado
+                com um valor que o banco vai descartar. O gatilho
+                `a_trg_perfis_escopo_empresa` zera setor_id/equipe_id na
+                gravação, então mesmo um payload antigo não recria o vínculo. */}
             <div className="space-y-1.5">
               <Label className="text-xs">Setor</Label>
-              {editando ? (
+              {cargoEscopoEmpresa ? (
+                <>
+                  <Input value="Empresa inteira" readOnly className="h-9 text-sm bg-muted/40" />
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Building2 className="w-3 h-3 shrink-0" />
+                    {PERFIL_LABELS[form.perfil] ?? form.perfil} não pertence a um setor:
+                    a visão é da empresa toda.
+                  </p>
+                </>
+              ) : editando ? (
                 <>
                   <Input
                     value={setores.find(s => s.id === editando.setor_id)?.nome ?? 'Sem setor'}

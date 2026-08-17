@@ -27,8 +27,11 @@ const MIGRATIONS = path.join(RAIZ, 'supabase/migrations');
 
 /** A migration que estabelece a política, pelo nome. */
 const SQL = (() => {
+  // `endsWith('.sql')`: um `.sql.bk`/`.sql.orig` no diretório casaria com o
+  // padrão e, mais longo com o mesmo prefixo, ordenaria à frente do arquivo real
+  // — a guarda leria o backup e aprovaria divergência no arquivo verdadeiro.
   const arquivo = fs.readdirSync(MIGRATIONS)
-    .filter(f => /logs_retencao/.test(f))
+    .filter(f => f.endsWith('.sql') && /logs_retencao/.test(f))
     .sort()
     .reverse()[0];
   if (!arquivo) throw new Error('Nenhuma migration de retenção de logs encontrada.');

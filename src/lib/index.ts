@@ -191,6 +191,47 @@ export function contaNoRecebimento(perfil: string | null | undefined): boolean {
     .includes(String(perfil ?? '').toLowerCase().trim());
 }
 
+/**
+ * Cargos que pertencem à EMPRESA, não a um setor.
+ *
+ * Diretoria, administrador e super_admin supervisionam a operação inteira. Ter
+ * um `setor_id` neles não descrevia nada verdadeiro — era um valor de
+ * preenchimento, herdado do formulário de criação, que escolhia sozinho o
+ * primeiro setor da lista.
+ *
+ * E não era inofensivo. Duas telas resolvem o setor com
+ * `setorId ?? perfil?.setor_id`: o pai passava `null` querendo dizer "todos os
+ * setores", o `??` caía no setor de preenchimento e a diretoria via UM setor —
+ * exatamente o contrário do que a tela pretendia. O sintoma aparecia em
+ * `DesempenhoEquipes` e em `QuartisOperadores`, onde a opção "Todos os setores"
+ * voltava calada para um setor só.
+ *
+ * Com `setor_id` nulo, esse `??` não tem para onde cair e a intenção do pai
+ * sobrevive. O nulo é sustentado em três frentes que precisam concordar:
+ *
+ *   • `perfis.setor_id` é nullable desde sempre — nada no banco exigia valor;
+ *   • `ver_todos_setores` é `true` para os três cargos nas DUAS empresas, então
+ *     todo guarda `if (!perfil?.setor_id && !verTodosSetores) return` passa;
+ *   • o gatilho `fn_perfis_escopo_empresa` (migration 20260817160000) zera
+ *     `setor_id`/`equipe_id` na gravação, para o nulo não depender de nenhuma
+ *     tela lembrar de mandá-lo.
+ *
+ * ⚠️ Não confunda com `PERFIS_ADMIN` (quem tem visão global) nem com
+ * `PERFIS_VISAO_EMPRESA_RESTRITA` (quem vê a empresa mas só do próprio cargo
+ * para cima). Aqui a pergunta é uma só: **esta pessoa pertence a um setor?**
+ * `gerencia` responde SIM — tem `ver_todos_setores = false` e continua sendo de
+ * um setor.
+ */
+export const PERFIS_ESCOPO_EMPRESA = [
+  'diretoria', 'administrador', 'super_admin',
+] as const;
+
+/** Este cargo pertence à empresa em vez de a um setor? Ver a lista acima. */
+export function ehEscopoEmpresa(perfil: string | null | undefined): boolean {
+  return (PERFIS_ESCOPO_EMPRESA as readonly string[])
+    .includes(String(perfil ?? '').toLowerCase().trim());
+}
+
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 
 /**
