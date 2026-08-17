@@ -97,3 +97,23 @@ export function horaMinuto(iso: string): string {
 export function numeroBr(n: number): string {
   return n.toLocaleString('pt-BR');
 }
+
+/**
+ * Segundos em duração legível: `6h12`, `45min`, `12s`.
+ *
+ * Sem casas decimais e sem "0h": o painel de uso compara ordens de grandeza
+ * ("quem usou horas, quem usou minutos"), e precisão ao segundo em cima de uma
+ * medição por amostragem daria falsa exatidão.
+ *
+ * Vive aqui, e não no componente, porque a lista de pessoas e a janela de
+ * detalhe têm de formatar igual — cada uma com a sua versão foi como o projeto
+ * acabou com duas contas para o mesmo dinheiro em outras telas.
+ */
+export function formatarDuracao(segundos: number): string {
+  const s = Math.max(0, Math.round(segundos));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h > 0) return `${h}h${String(m).padStart(2, '0')}`;
+  if (m > 0) return `${m}min`;
+  return `${s}s`;
+}

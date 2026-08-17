@@ -4051,16 +4051,42 @@ export type Database = {
         Returns: undefined
       }
       fn_uso_por_pessoa: {
-        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Args: {
+          p_empresa_id: string | null
+          p_desde: string
+          p_ate: string
+          p_cargo?: string | null
+        }
         Returns: {
           usuario_id: string
           nome: string
           cargo: string | null
+          empresa_id: string
+          empresa_nome: string
           aberturas: number
           segundos: number
           dias_ativos: number
           telas_usadas: number
           ultimo_em: string | null
+        }[]
+      }
+      fn_uso_detalhe_pessoa: {
+        Args: { p_usuario_id: string; p_desde: string; p_ate: string }
+        Returns: {
+          tela: string
+          aberturas: number
+          segundos: number
+          dias: number
+          primeiro_em: string | null
+          ultimo_em: string | null
+        }[]
+      }
+      fn_uso_detalhe_pessoa_dias: {
+        Args: { p_usuario_id: string; p_desde: string; p_ate: string }
+        Returns: {
+          dia: string
+          aberturas: number
+          segundos: number
         }[]
       }
       fn_uso_por_tela: {

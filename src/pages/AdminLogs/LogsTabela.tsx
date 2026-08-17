@@ -13,7 +13,7 @@
  */
 import { cn } from '@/lib/utils';
 import type { LogSistema } from '@/lib/supabase';
-import { descreverAcao, campoLabel, formatarValorLog, origemLabel } from '@/lib/logs-catalogo';
+import { descreverAcao, campoLabel, formatarValorLog, origemLabel, normalizarDescricao } from '@/lib/logs-catalogo';
 import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
 import { dataHoraCompleta, tempoRelativo } from './formatos';
 import { Vazio } from './LogsTimeline';
@@ -79,7 +79,7 @@ export default function LogsTabela({ logs, onAbrir, idDestacado, mostrarEmpresa 
 
                 <Td>
                   <p className="text-foreground leading-snug">
-                    {log.descricao || descreverAcao(log.acao)}
+                    {normalizarDescricao(log.descricao) || descreverAcao(log.acao)}
                   </p>
                   <div className="flex items-center gap-1.5 mt-0.5">
                     <span className="text-[10px] font-mono text-muted-foreground/70">{log.acao}</span>

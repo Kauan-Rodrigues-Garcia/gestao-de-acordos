@@ -24,7 +24,6 @@ import {
   Activity, Users, Clock, MousePointerClick, CalendarDays, AlertTriangle, Loader2,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
@@ -35,7 +34,8 @@ import {
   buscarUsoPorPessoa, buscarUsoPorTela, buscarUsoPorDia, buscarAdocaoTela,
   type UsoPorPessoa, type UsoPorTela, type UsoPorDia, type AdocaoTela,
 } from '@/services/uso.service';
-import { numeroBr, tempoRelativo } from './formatos';
+import ListaUsuariosUso from './ListaUsuariosUso';
+import { numeroBr, tempoRelativo, formatarDuracao } from './formatos';
 
 /** Períodos oferecidos. 7 dias é o padrão: responde "esta semana". */
 const PERIODOS = [
@@ -61,13 +61,6 @@ const TELAS_ADOCAO = [
   'lider:desempenho', 'lider:quartis', 'lider:grafico', 'lider:time',
   'lider', 'analitico', 'admin/metas', 'diretoria',
 ] as const;
-
-function horas(segundos: number): string {
-  const h = Math.floor(segundos / 3600);
-  const m = Math.round((segundos % 3600) / 60);
-  if (h === 0) return `${m}m`;
-  return `${h}h${String(m).padStart(2, '0')}`;
-}
 
 function isoDiasAtras(dias: number): string {
   const d = new Date();
@@ -103,13 +96,25 @@ function Barra({ valor, maximo, cor }: { valor: number; maximo: number; cor: str
 }
 
 interface Props {
-  empresaId: string;
+  /**
+   * Empresas que quem está olhando pode escolher. Uma só = o seletor não aparece.
+   *
+   * A lista vem do pai porque ele já a busca para o filtro da trilha. Ela NÃO é
+   * o gate: a policy de `uso_telas` recusa a empresa alheia de todo jeito.
+   */
+  empresas: { id: string; nome: string }[];
 }
 
-export default function MonitoramentoUso({ empresaId }: Props) {
+const TODAS_EMPRESAS = '__todas__';
+
+export default function MonitoramentoUso({ empresas }: Props) {
   const [dias, setDias]       = useState<number>(7);
   const [cargo, setCargo]     = useState<string>('lider');
   const [telaAdocao, setTelaAdocao] = useState<string>('lider:desempenho');
+  // Padrão: TODAS. O pedido é "mostra das 2 empresas" — quem enxerga só uma
+  // recebe só uma de volta, porque a RLS o restringe.
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>(TODAS_EMPRESAS);
+  const empresaId = filtroEmpresa === TODAS_EMPRESAS ? null : filtroEmpresa;
 
   const [pessoas, setPessoas] = useState<UsoPorPessoa[]>([]);
   const [telas, setTelas]     = useState<UsoPorTela[]>([]);
@@ -151,7 +156,6 @@ export default function MonitoramentoUso({ empresaId }: Props) {
   }, [pessoas]);
 
   const nunca = adocao.filter(a => Number(a.aberturas) === 0);
-  const maxSegPessoa = Math.max(...pessoas.map(p => Number(p.segundos)), 1);
   const maxSegTela   = Math.max(...telas.map(t => Number(t.segundos)), 1);
   const maxDia       = Math.max(...porDia.map(d => Number(d.segundos)), 1);
 
@@ -178,6 +182,18 @@ export default function MonitoramentoUso({ empresaId }: Props) {
             ))}
           </SelectContent>
         </Select>
+        {/* Uma empresa só não justifica seletor. */}
+        {empresas.length > 1 && (
+          <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+            <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={TODAS_EMPRESAS}>Todas as empresas</SelectItem>
+              {empresas.map(e => (
+                <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {carregando && <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />}
       </div>
 
@@ -201,7 +217,7 @@ export default function MonitoramentoUso({ empresaId }: Props) {
               valor={numeroBr(totais.ativos)}
               sub={cargo === '__todos__' ? 'com algum uso no período' : `${PERFIL_LABELS[cargo] ?? cargo} com uso`} />
             <Kpi icone={<Clock className="w-4 h-4" />} label="Tempo total"
-              valor={horas(totais.segundos)} sub="com a aba em foco" />
+              valor={formatarDuracao(totais.segundos)} sub="com a aba em foco" />
             <Kpi icone={<MousePointerClick className="w-4 h-4" />} label="Aberturas"
               valor={numeroBr(totais.aberturas)} sub="entradas em tela" />
             <Kpi icone={<CalendarDays className="w-4 h-4" />} label="Dias ativos"
@@ -219,7 +235,7 @@ export default function MonitoramentoUso({ empresaId }: Props) {
                   <div key={d.dia} className="flex-1 flex flex-col items-center gap-1 min-w-0 group">
                     <div className="w-full rounded-t bg-primary/70 group-hover:bg-primary transition-colors"
                       style={{ height: `${Math.max(3, (Number(d.segundos) / maxDia) * 100)}%` }}
-                      title={`${d.dia}: ${horas(Number(d.segundos))} · ${d.pessoas} pessoa(s)`} />
+                      title={`${d.dia}: ${formatarDuracao(Number(d.segundos))} · ${d.pessoas} pessoa(s)`} />
                     <span className="text-[9px] text-muted-foreground tabular-nums truncate w-full text-center">
                       {d.dia.slice(8, 10)}
                     </span>
@@ -229,44 +245,16 @@ export default function MonitoramentoUso({ empresaId }: Props) {
             </Card>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-2">
-            {/* ── Ranking de pessoas ───────────────────────────────────── */}
-            <Card className="p-4">
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-                Quem mais usa
-                {cargo !== '__todos__' && ` · ${PERFIL_LABELS[cargo] ?? cargo}`}
-              </p>
-              <div className="space-y-2.5">
-                {pessoas.slice(0, 12).map((p, i) => (
-                  <div key={p.usuario_id} className="flex items-center gap-2.5">
-                    <span className="text-[10px] font-bold text-muted-foreground w-4 text-right shrink-0 tabular-nums">
-                      {i + 1}
-                    </span>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-xs font-medium truncate">{p.nome}</span>
-                        <span className="text-[11px] font-mono tabular-nums font-semibold shrink-0">
-                          {horas(Number(p.segundos))}
-                        </span>
-                      </div>
-                      <Barra valor={Number(p.segundos)} maximo={maxSegPessoa} cor="var(--primary)" />
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-[10px] text-muted-foreground tabular-nums">
-                          {numeroBr(Number(p.aberturas))} aberturas · {p.dias_ativos} dia(s) ·{' '}
-                          {p.telas_usadas} tela(s)
-                        </span>
-                        {cargo === '__todos__' && p.cargo && (
-                          <Badge variant="outline" className="text-[9px] h-4 px-1 shrink-0">
-                            {PERFIL_LABELS[p.cargo] ?? p.cargo}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
+          {/* ── Lista de pessoas: busca, top 10 e detalhe ───────────────── */}
+          <ListaUsuariosUso
+            pessoas={pessoas}
+            mostrarEmpresa={empresaId === null}
+            desde={janela.desde}
+            ate={janela.ate}
+            carregando={carregando}
+          />
 
+          <div className="grid gap-4 lg:grid-cols-2">
             {/* ── Telas mais usadas ────────────────────────────────────── */}
             <Card className="p-4">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">
@@ -281,7 +269,7 @@ export default function MonitoramentoUso({ empresaId }: Props) {
                         {rotuloDaTela(t.tela)}
                       </span>
                       <span className="text-[11px] font-mono tabular-nums font-semibold shrink-0">
-                        {horas(Number(t.segundos))}
+                        {formatarDuracao(Number(t.segundos))}
                       </span>
                     </div>
                     <Barra valor={Number(t.segundos)} maximo={maxSegTela} cor="#6366f1" />
@@ -358,7 +346,7 @@ export default function MonitoramentoUso({ empresaId }: Props) {
                           {numeroBr(Number(p.aberturas))}
                         </td>
                         <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                          {zerado ? '—' : horas(Number(p.segundos))}
+                          {zerado ? '—' : formatarDuracao(Number(p.segundos))}
                         </td>
                         <td className="px-2 py-1.5 text-right text-muted-foreground">
                           {p.ultimo_em ? tempoRelativo(p.ultimo_em) : 'nunca'}

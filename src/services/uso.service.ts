@@ -17,11 +17,29 @@ export interface UsoPorPessoa {
   usuario_id:   string;
   nome:         string;
   cargo:        string | null;
+  empresa_id:   string;
+  empresa_nome: string;
   aberturas:    number;
   segundos:     number;
   dias_ativos:  number;
   telas_usadas: number;
   ultimo_em:    string | null;
+}
+
+/** Uma tela na janela de detalhe de uma pessoa. */
+export interface UsoDetalheTela {
+  tela:        string;
+  aberturas:   number;
+  segundos:    number;
+  dias:        number;
+  primeiro_em: string | null;
+  ultimo_em:   string | null;
+}
+
+export interface UsoDetalheDia {
+  dia:       string;
+  aberturas: number;
+  segundos:  number;
 }
 
 export interface UsoPorTela {
@@ -48,7 +66,14 @@ export interface AdocaoTela {
 }
 
 export interface JanelaUso {
-  empresaId: string;
+  /**
+   * Empresa a isolar. `null` = TODAS as que a RLS permitir.
+   *
+   * O parâmetro amplia o pedido, nunca o direito: a policy de `uso_telas` deixa
+   * super_admin ver as duas operações e prende o administrador na própria. Passar
+   * `null` sendo administrador devolve só a empresa dele.
+   */
+  empresaId: string | null;
   /** 'yyyy-MM-dd' */
   desde: string;
   ate:   string;
@@ -135,4 +160,35 @@ export function buscarUsoPorDia(j: JanelaUso): Promise<UsoPorDia[]> {
  */
 export function buscarAdocaoTela(j: JanelaUso, tela: string): Promise<AdocaoTela[]> {
   return ler<AdocaoTela>('fn_uso_adocao_tela', j, { p_tela: tela });
+}
+
+/**
+ * Detalhe de UMA pessoa: telas e série diária.
+ *
+ * Duas RPCs numa chamada só porque a janela de detalhe precisa das duas ao abrir,
+ * e emendar dois estados de carregamento na tela renderia meio painel.
+ *
+ * Não recebe empresa: a pessoa já pertence a uma, e a RLS de `uso_telas` recusa
+ * quem o solicitante não pode ver — pedir por id sem escopo de empresa é seguro
+ * porque a policy é o gate, não o parâmetro.
+ */
+export async function buscarDetalhePessoa(
+  usuarioId: string, desde: string, ate: string,
+): Promise<{ telas: UsoDetalheTela[]; dias: UsoDetalheDia[] }> {
+  const args = { p_usuario_id: usuarioId, p_desde: desde, p_ate: ate };
+  const chamar = async <T>(rpc: 'fn_uso_detalhe_pessoa' | 'fn_uso_detalhe_pessoa_dias') => {
+    try {
+      const { data, error } = await supabase.rpc(rpc, args);
+      if (error) { console.warn(`[uso.service] ${rpc}:`, error.message); return [] as T[]; }
+      return (data as T[]) ?? [];
+    } catch (e) {
+      console.warn(`[uso.service] ${rpc}:`, e instanceof Error ? e.message : e);
+      return [] as T[];
+    }
+  };
+  const [telas, dias] = await Promise.all([
+    chamar<UsoDetalheTela>('fn_uso_detalhe_pessoa'),
+    chamar<UsoDetalheDia>('fn_uso_detalhe_pessoa_dias'),
+  ]);
+  return { telas, dias };
 }

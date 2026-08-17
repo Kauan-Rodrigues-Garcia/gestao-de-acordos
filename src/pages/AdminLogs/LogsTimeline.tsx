@@ -12,15 +12,16 @@
  * 12345 — João da Silva de Verificar/Pendente para Pago" é a diferença entre um
  * log que existe e um log que serve.
  */
-import { Fragment, useMemo } from 'react';
-import { ChevronRight, ClipboardList } from 'lucide-react';
+import { Fragment, useMemo, useState } from 'react';
+import { ChevronRight, ChevronDown, ClipboardList, Layers } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { LogSistema } from '@/lib/supabase';
-import { descreverAcao, campoLabel } from '@/lib/logs-catalogo';
+import { descreverAcao, campoLabel, normalizarDescricao } from '@/lib/logs-catalogo';
 import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
 import {
   iconeDaCategoria, rotuloDoDia, dataHoraCompleta, horaMinuto, numeroBr,
 } from './formatos';
+import { agruparEventos, resumirGrupo, type GrupoEventos } from './agruparEventos';
 
 interface Props {
   logs: LogSistema[];
@@ -60,7 +61,113 @@ export default function LogsTimeline({ logs, onAbrir, idDestacado }: Props) {
             </span>
           </div>
 
-          {doDia.map((log) => (
+          {agruparEventos(doDia).map((grupo) =>
+            grupo.eventos.length === 1 ? (
+              <LinhaEvento
+                key={grupo.chave}
+                log={grupo.eventos[0]}
+                destacado={grupo.eventos[0].id === idDestacado}
+                onAbrir={() => onAbrir(grupo.eventos[0])}
+              />
+            ) : (
+              <CardGrupo
+                key={grupo.chave}
+                grupo={grupo}
+                idDestacado={idDestacado}
+                onAbrir={onAbrir}
+              />
+            ),
+          )}
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * Vários eventos que foram uma ação, num card que abre.
+ *
+ * O card FECHADO resume; o aberto lista os eventos um a um, cada um levando ao
+ * detalhe completo. Nada é escondido: agrupar aqui é decidir onde o olho pousa,
+ * não descartar evidência. Ver `agruparEventos.ts`.
+ */
+function CardGrupo({
+  grupo, idDestacado, onAbrir,
+}: {
+  grupo: GrupoEventos;
+  idDestacado?: string | null;
+  onAbrir: (log: LogSistema) => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const r = resumirGrupo(grupo);
+  const primeiro = grupo.eventos[0];
+  const perfis = primeiro.perfis as { nome?: string; foto_url?: string } | undefined;
+  const critico = grupo.eventos.some(e => e.severidade === 'critico');
+  // Um evento de dentro está selecionado no painel lateral: o card se destaca
+  // para a pessoa não perder de onde veio o detalhe aberto.
+  const contemDestacado = !!idDestacado && grupo.eventos.some(e => e.id === idDestacado);
+
+  return (
+    <div className={cn(
+      'border-l-2',
+      critico ? 'border-l-destructive' : 'border-l-transparent',
+      contemDestacado && 'bg-primary/5',
+    )}>
+      <button
+        type="button"
+        onClick={() => setAberto(v => !v)}
+        aria-expanded={aberto}
+        className="w-full text-left flex items-start gap-3 px-4 py-2.5 hover:bg-accent/40 transition-colors group"
+      >
+        <AvatarAutor nome={r.autor} foto={perfis?.foto_url} tamanho="sm" />
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start gap-2">
+            <Layers className="w-3.5 h-3.5 mt-[2px] text-muted-foreground shrink-0" />
+            <p className="text-xs text-foreground leading-snug flex-1">
+              <span className="font-semibold">
+                {numeroBr(r.quantidade)} alterações
+              </span>
+              {grupo.nr && <> no <span className="font-medium">NR {grupo.nr}</span></>}
+              {' '}
+              <span className="text-muted-foreground">
+                {/* A palavra muda com a certeza: carimbo de transação idêntico é
+                    fato, a janela de tempo é aproximação. */}
+                {grupo.mesmaTransacao ? 'na mesma operação' : 'em sequência'}
+              </span>
+            </p>
+            <span
+              className="text-[10px] text-muted-foreground shrink-0 tabular-nums"
+              title={dataHoraCompleta(primeiro.criado_em)}
+            >
+              {horaMinuto(primeiro.criado_em)}
+            </span>
+            <ChevronDown className={cn(
+              'w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 mt-[1px] transition-transform',
+              aberto && 'rotate-180 text-muted-foreground',
+            )} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5 mt-1 pl-[22px]">
+            <span className="text-[10px] text-muted-foreground">
+              {r.autor ?? 'Sistema'}
+              {primeiro.usuario_cargo && (
+                <span className="text-muted-foreground/60"> · {primeiro.usuario_cargo}</span>
+              )}
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <SeloCategoria categoria={primeiro.categoria} comIcone={false} />
+            {critico && <SeloSeveridade severidade="critico" />}
+            <span className="text-[10px] text-muted-foreground truncate max-w-[320px]">
+              {r.tabelas.join(' · ')}
+            </span>
+          </div>
+        </div>
+      </button>
+
+      {aberto && (
+        <div className="pl-4 border-t border-border/50 bg-muted/10">
+          {grupo.eventos.map(log => (
             <LinhaEvento
               key={log.id}
               log={log}
@@ -68,8 +175,8 @@ export default function LogsTimeline({ logs, onAbrir, idDestacado }: Props) {
               onAbrir={() => onAbrir(log)}
             />
           ))}
-        </Fragment>
-      ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -103,8 +210,12 @@ function LinhaEvento({
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-2">
           <Icone className="w-3.5 h-3.5 mt-[2px] text-muted-foreground shrink-0" />
+          {/* `normalizarDescricao` conserta na LEITURA o "NR NR" e os nomes de
+              coluna crus que duas falhas gravaram em ~872 linhas até 17/08/2026.
+              A migration 20260817200000 corrige a origem; a trilha é
+              somente-acréscimo e não se reescreve por causa de rótulo. */}
           <p className="text-xs text-foreground leading-snug flex-1">
-            {log.descricao || descreverAcao(log.acao)}
+            {normalizarDescricao(log.descricao) || descreverAcao(log.acao)}
           </p>
           <span
             className="text-[10px] text-muted-foreground shrink-0 tabular-nums"

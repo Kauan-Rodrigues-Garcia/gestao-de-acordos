@@ -28,7 +28,7 @@
 import { supabase } from '@/lib/supabase';
 import type { LogSistema } from '@/lib/supabase';
 import type { CategoriaLog, SeveridadeLog, OrigemLog } from '@/lib/logs-catalogo';
-import { descreverAcao, campoLabel, formatarValorLog, origemLabel } from '@/lib/logs-catalogo';
+import { descreverAcao, campoLabel, formatarValorLog, origemLabel, normalizarDescricao } from '@/lib/logs-catalogo';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Escrita
@@ -496,7 +496,7 @@ function linhaCsv(log: LogSistema): string {
     log.severidade ?? 'info',
     log.categoria ?? 'sistema',
     log.acao,
-    log.descricao ?? descreverAcao(log.acao),
+    normalizarDescricao(log.descricao) || descreverAcao(log.acao),
     log.usuario_nome ?? perfis?.nome ?? 'Sistema',
     log.usuario_cargo ?? '',
     log.usuario_email ?? perfis?.email ?? '',

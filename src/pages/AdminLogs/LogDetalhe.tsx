@@ -28,6 +28,7 @@ import { copiarTexto } from '@/lib/clipboard';
 import type { LogSistema } from '@/lib/supabase';
 import {
   descreverAcao, montarDiferencas, origemLabel, alvoLabel, campoLabel,
+  normalizarDescricao,
 } from '@/lib/logs-catalogo';
 import { fetchHistoricoRegistro } from '@/services/logs.service';
 import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
@@ -103,7 +104,7 @@ export default function LogDetalhe({ log, aberto, onFechar, onFiltrarCampo, onFi
           </div>
           <SheetTitle className="text-base leading-snug flex items-start gap-2">
             <Icone className="w-4 h-4 mt-0.5 text-primary shrink-0" />
-            <span>{log.descricao || descreverAcao(log.acao)}</span>
+            <span>{normalizarDescricao(log.descricao) || descreverAcao(log.acao)}</span>
           </SheetTitle>
           <SheetDescription id="log-detalhe-desc" className="text-xs">
             {dataHoraCompleta(log.criado_em)} · {tempoRelativo(log.criado_em)}
@@ -297,7 +298,7 @@ export default function LogDetalhe({ log, aberto, onFechar, onFiltrarCampo, onFi
                             'text-[11px] leading-snug',
                             h.id === log.id ? 'text-foreground font-medium' : 'text-muted-foreground',
                           )}>
-                            {h.descricao || descreverAcao(h.acao)}
+                            {normalizarDescricao(h.descricao) || descreverAcao(h.acao)}
                           </p>
                           <p className="text-[10px] text-muted-foreground/70 mt-0.5">
                             {dataHoraCompleta(h.criado_em)}

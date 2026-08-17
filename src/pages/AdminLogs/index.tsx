@@ -91,15 +91,6 @@ export default function AdminLogs() {
   // duas abas internas apareceriam somadas como uma só no monitoramento.
   useSubAbaUso(abaInterna === 'uso' ? 'uso' : 'logs');
 
-  /**
-   * Empresa que o monitoramento de uso deve ler.
-   *
-   * Acompanha o seletor de empresa dos filtros quando há um (super_admin), e cai
-   * no tenant atual quando não há. A RLS de `uso_telas` recusa a empresa alheia
-   * de todo jeito — isto é só para a tela pedir o que ela pode ver.
-   */
-  const empresaDoPainel = filtros.empresaId ?? tenantEmpresa?.id ?? null;
-
   // Lista de empresas só para super_admin — os demais nem veem o seletor, e
   // buscar a lista para eles seria uma chamada que o RLS recusa.
   useEffect(() => {
@@ -299,14 +290,11 @@ export default function AdminLogs() {
         ))}
       </div>
 
+      {/* O monitoramento não exige empresa: mostra todas as que a RLS permitir e
+          traz seletor próprio. Passar o filtro da trilha para cá acoplaria duas
+          perguntas diferentes ao mesmo controle. */}
       {abaInterna === 'uso' && (
-        empresaDoPainel
-          ? <MonitoramentoUso empresaId={empresaDoPainel} />
-          : (
-            <p className="text-sm text-muted-foreground text-center py-10">
-              Selecione uma empresa para ver o monitoramento de uso.
-            </p>
-          )
+        <MonitoramentoUso empresas={empresas.map(e => ({ id: e.id, nome: e.nome }))} />
       )}
 
       {abaInterna === 'trilha' && (

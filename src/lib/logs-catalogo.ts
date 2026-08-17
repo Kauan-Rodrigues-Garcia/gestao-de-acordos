@@ -527,6 +527,44 @@ export function campoLabel(campo: string): string {
   return CAMPO_LABEL[campo] ?? campo.replace(/_/g, ' ');
 }
 
+/**
+ * Limpa a frase que o banco gravou, para as linhas ANTIGAS.
+ *
+ * Duas falhas produziram texto ruim em ~872 linhas até 17/08/2026:
+ *
+ *   • `trg_log_nr_registros` passava `'a titularidade de NR'` como nome do alvo,
+ *     e a coluna de rótulo `nr_value` já recebia o prefixo `NR ` — o "NR" saía
+ *     duas vezes: *"Alterou a titularidade de NR NR 12983305"*;
+ *   • `fn_log_rotulo_campo` não conhecia `acordo_id`, então imprimia o nome da
+ *     coluna do banco: *"…: acordo id"*.
+ *
+ * A migration `20260817200000` corrige as duas na origem, mas só para linhas
+ * novas. A trilha é somente-acréscimo: `descricao` é texto derivado, e ainda
+ * assim não se reescreve o histórico por causa de rótulo. Quem conserta o
+ * passado é a leitura — aqui.
+ *
+ * Deliberadamente conservadora. Só troca padrões que este projeto produziu e
+ * reconhece; texto que não casa passa intacto. Uma limpeza esperta demais
+ * arriscaria alterar o sentido de uma frase de auditoria, que é a única coisa
+ * que esta função não pode fazer.
+ */
+export function normalizarDescricao(descricao: string | null | undefined): string {
+  if (!descricao) return '';
+  return descricao
+    // "de NR NR 123" → "do NR 123". Ancorado em `NR NR` seguido de dígito para
+    // não tocar num cliente que por acaso se chame "NR".
+    .replace(/\bde NR (NR \d)/g, 'do $1')
+    // Sobra de segurança: qualquer "NR NR" seguido de número vira um só.
+    .replace(/\bNR NR (\d)/g, 'NR $1')
+    // Nomes de coluna que escaparam do dicionário do banco. Só depois de ": ",
+    // que é onde a frase lista os campos alterados.
+    .replace(/: acordo id\b/g, ': acordo')
+    .replace(/: acordo grupo id\b/g, ': grupo de parcelas')
+    .replace(/: nr value\b/g, ': NR')
+    .replace(/: operador nome\b/g, ': operador')
+    .replace(/: vinculo operador id\b/g, ': operador do vínculo');
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // Valores
 // ═══════════════════════════════════════════════════════════════════════════

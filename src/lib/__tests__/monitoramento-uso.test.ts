@@ -17,14 +17,23 @@ import { telaComAba, TELA_LABEL } from '../telas-catalogo';
 const RAIZ = path.resolve(__dirname, '../../..');
 const MIGRATIONS = path.join(RAIZ, 'supabase/migrations');
 
+/**
+ * As migrations de uso, concatenadas.
+ *
+ * São DUAS: a `monitoramento_uso` criou a tabela e as primeiras funções, e a
+ * `logs_rotulos_e_uso_detalhe` refez `fn_uso_por_pessoa` (para aceitar empresa
+ * nula) e acrescentou o detalhe por pessoa. Ler só a primeira faria a guarda
+ * cobrar a versão antiga da assinatura.
+ *
+ * `endsWith('.sql')`: um `.sql.bk` no diretório entraria na lista e poderia
+ * mascarar o arquivo real. Já aconteceu neste projeto.
+ */
 const SQL = (() => {
-  // `endsWith('.sql')`: um `.sql.bk` no diretório ordenaria à frente do arquivo
-  // real e a guarda leria o backup. Já aconteceu neste projeto.
-  const arquivo = fs.readdirSync(MIGRATIONS)
-    .filter(f => f.endsWith('.sql') && /monitoramento_uso/.test(f))
-    .sort().reverse()[0];
-  if (!arquivo) throw new Error('migration monitoramento_uso não encontrada');
-  return fs.readFileSync(path.join(MIGRATIONS, arquivo), 'utf8');
+  const arquivos = fs.readdirSync(MIGRATIONS)
+    .filter(f => f.endsWith('.sql') && /(monitoramento_uso|uso_detalhe)/.test(f))
+    .sort();
+  if (arquivos.length === 0) throw new Error('migrations de uso não encontradas');
+  return arquivos.map(f => fs.readFileSync(path.join(MIGRATIONS, f), 'utf8')).join('\n');
 })();
 
 const SERVICO = fs.readFileSync(path.join(RAIZ, 'src/services/uso.service.ts'), 'utf8');
@@ -35,6 +44,8 @@ const FUNCOES = [
   'fn_uso_por_tela',
   'fn_uso_por_dia',
   'fn_uso_adocao_tela',
+  'fn_uso_detalhe_pessoa',
+  'fn_uso_detalhe_pessoa_dias',
 ] as const;
 
 /**

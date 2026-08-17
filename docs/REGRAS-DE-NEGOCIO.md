@@ -1255,6 +1255,59 @@ conversa; o ranking de quem olha, não.
 > — a tabela nasce vazia e o painel diz isso em vez de mostrar zeros como se
 > fossem dado.
 
+**Lista de pessoas.** Ordenada por tempo, do maior para o menor, com as duas
+operações juntas para quem pode ver as duas (`fn_uso_por_pessoa` aceita
+`p_empresa_id` nulo = todas as que a RLS permitir — o parâmetro amplia o pedido,
+nunca o direito). Mostra 10 e o resto vem em "ver mais"; a busca por nome filtra
+em memória, ignorando acento, porque a agregação já chega inteira e uma consulta
+por tecla digitada seria desperdício. Clicar numa pessoa abre o detalhe: tempo,
+aberturas, dias, série diária e a tabela de telas
+(`fn_uso_detalhe_pessoa`, `fn_uso_detalhe_pessoa_dias`).
+
+### 13.9 Agrupamento de eventos na trilha
+
+Eventos que foram **uma ação** aparecem num card só, que abre. Acrescentar uma
+parcela ao mesmo NR, por exemplo, produz três linhas — cria o acordo novo, move
+a titularidade do NR e atualiza a contagem de parcelas do antigo — e elas pareciam
+log duplicado.
+
+Dois níveis, e a diferença entre eles é dita na tela:
+
+| Regra | Natureza | O card diz |
+|---|---|---|
+| `criado_em` idêntico + mesmo autor | **exata** — `criado_em` tem default `now()`, o carimbo da **transação** no PostgreSQL | "na mesma operação" |
+| Mesmo autor + mesmo NR em até 15 s | **aproximação** — o caso acima são duas transações a 79 ms | "em sequência" |
+
+Em 17/08/2026 a regra exata cobria 2.943 das 5.357 linhas da semana, incluindo
+uma importação de 428 linhas que virou um card.
+
+**Nada é escondido.** O card guarda todos os eventos e cada um continua levando
+ao detalhe completo. Auditoria que perde granularidade para ficar bonita deixa de
+ser auditoria — o que se ganha aqui é apenas onde o olho pousa. E só agrupa
+eventos **vizinhos** na lista: reordenar para juntar quebraria a leitura
+cronológica.
+
+**Autores diferentes nunca agrupam**, nem na mesma transação: duas pessoas
+mexendo no mesmo NR no mesmo instante é exatamente o que um auditor precisa ver
+separado.
+
+#### Rótulos consertados
+
+Duas falhas produziam texto ruim em ~872 linhas:
+
+- `trg_log_nr_registros` passava `'a titularidade de NR'` como nome do alvo, e a
+  coluna de rótulo `nr_value` já recebia o prefixo `NR ` — daí *"a titularidade
+  de NR NR 12983305"*;
+- `fn_log_rotulo_campo` não conhecia `acordo_id` e imprimia o nome da coluna do
+  banco: *"…: acordo id"*.
+
+A migration `20260817200000` corrige a origem. As linhas já gravadas ficam como
+estão — a trilha é somente-acréscimo, e não se reescreve histórico por causa de
+rótulo. Quem conserta o passado é a leitura: `normalizarDescricao`
+(`src/lib/logs-catalogo.ts`), aplicada na linha do tempo, na tabela, no detalhe e
+no CSV. Ela é deliberadamente conservadora — um cliente chamado "NR NR SERVICOS
+LTDA" passa intacto.
+
 ---
 
 ## 14. Mapa: onde cada regra vive
