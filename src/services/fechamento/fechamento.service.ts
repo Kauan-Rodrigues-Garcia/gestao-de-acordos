@@ -59,10 +59,15 @@ import {
 } from '@/lib/mesReferencia';
 import { mesFechado } from '@/lib/fechamentoMes';
 import { getTodayISO } from '@/lib/index';
+import { coletarPix } from './coleta/pix';
+import { coletarMesAnterior } from './coleta/mesAnterior';
+import { coletarSeriesPorOperador, type SerieOperador } from './coleta/seriesPorOperador';
+import { montarCuriosidades } from './curiosidades';
+import { TETO_PAGINAS_INDIVIDUAIS } from './secoes/individual';
 import type {
   DadosFechamento, NivelFechamento, FatiaForma, PontoDia,
   LinhaOperadorFechamento, LinhaSetorFechamento, FaixaQuartilFechamento,
-  DestaqueDiaFechamento, ResumoFechamento,
+  DestaqueDiaFechamento, ResumoFechamento, BlocoPixFechamento, ComparativoMes,
 } from './tipos';
 
 export interface ParametrosFechamento {
@@ -94,6 +99,14 @@ interface MetaLinha {
   tipo: string;
   referencia_id: string;
   meta_valor: number;
+  /** Degraus adicionais do mês (JSONB). Ver `metas_extras` em `MetasConfig`. */
+  metas_extras?: unknown;
+}
+
+/** Meta principal e degraus, já ordenados e sem zeros. */
+interface MetaComDegraus {
+  valor: number;
+  extras: number[];
 }
 
 /** Formata "05/08 (Ter)" — o rótulo curto dos destaques. */
@@ -181,24 +194,54 @@ function melhorDiaDe(dias: PontoDia[]): PontoDia | null {
   return melhor;
 }
 
-/** metas do mês, indexadas por `tipo:referencia_id`. */
+/**
+ * Metas do mês, indexadas por `tipo:referencia_id`.
+ *
+ * Traz também os degraus em cascata (`metas_extras`). Eles são degraus, não
+ * alvos concorrentes: o percentual e o quartil continuam saindo da meta
+ * principal, como na tela — ver `MetaProgressoHeader`.
+ */
 async function buscarMetasDoMes(
   empresaId: string, mes: string,
-): Promise<Map<string, number>> {
+): Promise<Map<string, MetaComDegraus>> {
   const { ano, mes: mesNum } = partesDoMes(mes);
-  const mapa = new Map<string, number>();
-  const { data, error } = await supabase
+  const mapa = new Map<string, MetaComDegraus>();
+
+  // `metas_extras` é da migration das metas em cascata. Um banco mais antigo
+  // recusa a coluna, e aí o fallback pede só o que sempre existiu — perder os
+  // degraus é aceitável; perder a meta inteira não é.
+  let data: MetaLinha[] | null = null;
+  const comExtras = await supabase
     .from('metas')
-    .select('tipo, referencia_id, meta_valor')
-    .eq('empresa_id', empresaId)
-    .eq('mes', mesNum)
-    .eq('ano', ano);
-  if (error) return mapa;
-  for (const m of (data as MetaLinha[] | null) ?? []) {
+    .select('tipo, referencia_id, meta_valor, metas_extras')
+    .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', ano);
+
+  if (comExtras.error) {
+    const semExtras = await supabase
+      .from('metas')
+      .select('tipo, referencia_id, meta_valor')
+      .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', ano);
+    if (semExtras.error) return mapa;
+    data = semExtras.data as MetaLinha[] | null;
+  } else {
+    data = comExtras.data as MetaLinha[] | null;
+  }
+
+  for (const m of data ?? []) {
     const valor = Number(m.meta_valor) || 0;
-    if (valor > 0) mapa.set(`${m.tipo}:${m.referencia_id}`, valor);
+    if (valor <= 0) continue;
+    const extras = (Array.isArray(m.metas_extras) ? m.metas_extras : [])
+      .map(e => Number(e) || 0)
+      .filter(e => e > 0)
+      .sort((a, b) => a - b);
+    mapa.set(`${m.tipo}:${m.referencia_id}`, { valor, extras });
   }
   return mapa;
+}
+
+/** Só o valor da meta — a maioria dos usos não precisa dos degraus. */
+function valorMeta(metas: Map<string, MetaComDegraus>, chave: string): number | null {
+  return metas.get(chave)?.valor ?? null;
 }
 
 /**
@@ -208,17 +251,17 @@ async function buscarMetasDoMes(
  * zero — o recebimento dele continua contando, só a meta não.
  */
 function metaDoGrupo(
-  metas: Map<string, number>,
+  metas: Map<string, MetaComDegraus>,
   tipo: 'setor' | 'equipe',
   id: string | null,
   membros: Iterable<string>,
 ): number | null {
   if (id) {
-    const propria = metas.get(`${tipo}:${id}`);
+    const propria = valorMeta(metas, `${tipo}:${id}`);
     if (propria && propria > 0) return propria;
   }
   let soma = 0;
-  for (const m of membros) soma += metas.get(`operador:${m}`) ?? 0;
+  for (const m of membros) soma += valorMeta(metas, `operador:${m}`) ?? 0;
   return soma > 0 ? soma : null;
 }
 
@@ -291,10 +334,21 @@ export async function montarFechamento(
 
   // ── 4. Meta e projeção do escopo ───────────────────────────────────────────
   const metaEscopo = params.nivel === 'operador' && params.operadorId
-    ? (metas.get(`operador:${params.operadorId}`) ?? null)
+    ? valorMeta(metas, `operador:${params.operadorId}`)
     : params.nivel === 'setor'
       ? metaDoGrupo(metas, 'setor', params.setorId, membrosDoEscopo)
       : metaDoGrupo(metas, 'setor', null, membrosDoEscopo);
+
+  /**
+   * Degraus do ESCOPO.
+   *
+   * Só existem quando a meta do escopo é uma meta CADASTRADA (do operador ou
+   * do grupo). Quando ela é a soma das individuais, somar também os degraus de
+   * cada um produziria um "2º degrau" que ninguém definiu.
+   */
+  const metasExtrasEscopo = params.nivel === 'operador' && params.operadorId
+    ? (metas.get(`operador:${params.operadorId}`)?.extras ?? [])
+    : (params.setorId ? metas.get(`setor:${params.setorId}`)?.extras ?? [] : []);
 
   const projecaoEscopo = calcularProjecao({
     meta: metaEscopo,
@@ -304,12 +358,52 @@ export async function montarFechamento(
     quartis: quartisConfig,
   });
 
-  // ── 5. Direto / Extra ──────────────────────────────────────────────────────
-  // Só busca quando o escopo tem a lógica: sem ela o bloco não é renderizado, e
-  // a query varreria a tabela de linhas à toa.
+  // ── 5. Onda 2: o que enriquece o relatório, mas não pode derrubá-lo ────────
+  //
+  // Direto/Extra, Pix, mês anterior e as séries por operador rodam em paralelo
+  // e TOLERAM falha: cada um que não vier some da página e vira uma observação.
+  // Um fechamento sem a seção de Pix ainda é um fechamento; um botão que não
+  // produz arquivo nenhum não é nada.
+
+  const nomePorOperador = new Map<string, string>();
+  for (const p of perfis) nomePorOperador.set(p.id, p.nome);
+  const equipeDoOperador = new Map<string, string | null>();
+  for (const [id, info] of Object.entries(fontes.operadorEquipeMap)) {
+    equipeDoOperador.set(id, info.equipe_id);
+  }
+  const equipesDoEscopo = [...new Set(
+    [...membrosDoEscopo]
+      .map(id => fontes.operadorEquipeMap[id]?.equipe_id ?? null)
+      .filter((e): e is string => !!e),
+  )];
+
+  const diasUteis = { total: diasUteisTotal, decorridos: diasUteisDecorridosMes };
+
+  const [dxResp, pixResp, comparativoResp, seriesResp] = await Promise.allSettled([
+    params.temLogicaDiretoExtra
+      ? buscarDiretoExtraDoMes({ empresaId: params.empresaId, mes, escopo })
+      : Promise.resolve(null),
+    coletarPix({
+      empresaId: params.empresaId, mes, nivel: params.nivel,
+      setorId: params.setorId, operadorId: params.operadorId,
+      nomePorOperador, nomePorEquipe: nomeEquipe, equipeDoOperador,
+      equipesDoEscopo, diasUteis,
+    }),
+    coletarMesAnterior({
+      empresaId: params.empresaId, mes, escopo,
+      brutoAtual: agregado.bruto, qtdAtual: agregado.qtd,
+      metaAnterior: null,
+    }),
+    coletarSeriesPorOperador({
+      empresaId: params.empresaId, mes,
+      operadorId: params.nivel === 'operador' ? params.operadorId : null,
+      setorId: params.nivel === 'setor' ? params.setorId : null,
+    }),
+  ]);
+
   let vinculo: ResumoFechamento['vinculo'] = null;
-  if (params.temLogicaDiretoExtra) {
-    const dx = await buscarDiretoExtraDoMes({ empresaId: params.empresaId, mes, escopo });
+  const dx = dxResp.status === 'fulfilled' ? dxResp.value : null;
+  if (dx) {
     vinculo = {
       direto: dx.direto, extra: dx.extra, naoTabulado: dx.naoTabulado,
       qtdDireto: dx.qtdDireto, qtdExtra: dx.qtdExtra, qtdNaoTabulado: dx.qtdNaoTabulado,
@@ -327,6 +421,23 @@ export async function montarFechamento(
         + 'reimportar o mês preenche a classificação e o número se move para os cards corretos.',
       );
     }
+  } else if (params.temLogicaDiretoExtra) {
+    avisos.push('A classificação Direto/Extra não pôde ser lida — a composição por vínculo ficou de fora deste relatório.');
+  }
+
+  const pix: BlocoPixFechamento | null =
+    pixResp.status === 'fulfilled' ? pixResp.value : null;
+  if (pixResp.status === 'rejected') {
+    avisos.push('Os dados de Pix Automático não puderam ser lidos — a seção ficou de fora deste relatório.');
+  }
+
+  const comparativo: ComparativoMes | null =
+    comparativoResp.status === 'fulfilled' ? comparativoResp.value : null;
+
+  const series: Map<string, SerieOperador> =
+    seriesResp.status === 'fulfilled' ? seriesResp.value : new Map();
+  if (seriesResp.status === 'rejected') {
+    avisos.push('O detalhamento diário por operador não pôde ser lido — as páginas individuais saíram sem o gráfico de ritmo.');
   }
 
   const porFormaTotal = montarFormas(agregado.porForma, agregado.bruto);
@@ -357,7 +468,9 @@ export async function montarFechamento(
     total_recebido: number; total_ho: number; total_pagamentos: number;
   }): LinhaOperadorFechamento => {
     const p = perfilPorId.get(r.operador_id);
-    const meta = metas.get(`operador:${r.operador_id}`) ?? null;
+    const doBanco = metas.get(`operador:${r.operador_id}`);
+    const meta = doBanco?.valor ?? null;
+    const metasExtras = doBanco?.extras ?? [];
     const bruto = Number(r.total_recebido) || 0;
     const proj = calcularProjecao({
       meta, recebido: bruto,
@@ -365,6 +478,10 @@ export async function montarFechamento(
       quartis: quartisConfig,
     });
     const info = fontes.operadorEquipeMap[r.operador_id];
+    const serie = series.get(r.operador_id);
+    // A meta principal conta como degrau: "2 de 3 batidas" inclui ela.
+    const degraus = meta ? [meta, ...metasExtras] : [];
+
     return {
       id: r.operador_id,
       nome: r.operador_nome ?? p?.nome ?? r.operador_usuario,
@@ -379,6 +496,10 @@ export async function montarFechamento(
       projecaoPct: proj ? proj.projecaoPct : null,
       quartil: proj?.quartil?.quartil ?? null,
       diferenca: proj ? proj.diferenca : null,
+      metasExtras,
+      metasBatidas: degraus.filter(v => bruto >= v).length,
+      porDia: serie?.porDia ?? [],
+      porForma: serie?.porForma ?? [],
     };
   };
 
@@ -479,6 +600,17 @@ export async function montarFechamento(
     avisos.push('Feriados e quartis não foram configurados para o mês — a contagem de dias úteis usou apenas segunda a sexta.');
   }
 
+  // ── 11. Curiosidades ───────────────────────────────────────────────────────
+  // Derivadas do que já foi coletado. Cada uma se omite quando falta base.
+  const curiosidades = montarCuriosidades({
+    porDia,
+    porForma: porFormaTotal,
+    totalBruto: agregado.bruto,
+    metaDiaria: projecaoEscopo?.metaDiaria ?? null,
+    operadores,
+    comparativo,
+  });
+
   return {
     alvo: {
       nivel: params.nivel,
@@ -491,14 +623,22 @@ export async function montarFechamento(
       geradoEm: carimboDeHora(),
       mesFechado: mesFechado(mes),
     },
-    diasUteis: { total: diasUteisTotal, decorridos: diasUteisDecorridosMes },
+    diasUteis,
     quartisConfig,
     resumo,
-    operadores: params.nivel === 'operador' ? [] : operadores,
+    // O nível operador leva a PRÓPRIA linha — é ela que vira a página
+    // individual dele. A tabela comparativa de operadores não é renderizada
+    // nesse nível; quem decide isso é `montarSecoes`, no gerador de HTML.
+    operadores,
     ranking,
     quartis,
     setores: linhasSetores,
     destaques,
+    pix,
+    comparativo,
+    curiosidades,
+    operadoresSemPagina: Math.max(operadores.length - TETO_PAGINAS_INDIVIDUAIS, 0),
+    metasExtrasEscopo,
     avisos,
   };
 }
