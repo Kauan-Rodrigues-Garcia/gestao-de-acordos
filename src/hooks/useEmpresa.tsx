@@ -3,6 +3,7 @@ import { Empresa, supabase } from '@/lib/supabase';
 import { fetchEmpresaBySlug, fetchEmpresaAtual } from '@/services/empresas.service';
 import { getTenantRuntimeConfig, type TenantBranding, type TenantFeatures } from '@/lib/tenant';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { resolverEmpresaEscolhida } from '@/services/empresaAtiva.service';
 
 interface EmpresaContextType {
   empresa: Empresa | null;
@@ -38,6 +39,17 @@ export function EmpresaProvider({ children }: { children: ReactNode }) {
       if (getImpersonacaoAtiva()) {
         const empresaReal = await fetchEmpresaAtual();
         setEmpresa(empresaReal);
+        return;
+      }
+
+      // Super_admin escolheu outra empresa. Vem ANTES do slug do build pelo
+      // mesmo motivo da impersonação: o slug descreve o DOMÍNIO, e a escolha
+      // descreve onde a pessoa quer estar. `resolverEmpresaEscolhida` confere o
+      // cargo e devolve null se a escolha não valer mais — aí segue o fluxo
+      // normal, sem tela vazia e sem branding trocado.
+      const escolhida = await resolverEmpresaEscolhida();
+      if (escolhida) {
+        setEmpresa(escolhida);
         return;
       }
 

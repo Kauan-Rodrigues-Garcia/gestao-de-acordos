@@ -1,5 +1,6 @@
 import type { Empresa } from '@/lib/supabase';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
+import { getEmpresaEscolhida } from '@/services/empresaAtiva.service';
 
 export interface TenantBranding {
   appName: string;
@@ -108,12 +109,26 @@ export function getTenantBranding(slug: string, empresa?: Empresa | null): Tenan
 }
 
 export function getTenantRuntimeConfig(empresa?: Empresa | null): TenantRuntimeConfig {
-  // Impersonação cruza tenant (bookplay/pagueplay são deploys separados,
-  // cada um com VITE_TENANT_SLUG fixo no build) — durante impersonação, a
-  // empresa REAL do usuário impersonado manda no branding/capabilities,
-  // não o slug fixo do site onde o super_admin está logado.
+  // Dois casos cruzam tenant (bookplay/pagueplay são deploys separados, cada um
+  // com VITE_TENANT_SLUG fixo no build):
+  //
+  //   • IMPERSONAÇÃO — a empresa real do usuário impersonado manda, não o slug
+  //     do site onde o super_admin está logado;
+  //   • TROCA DE EMPRESA pelo super_admin — a empresa escolhida manda.
+  //
+  // Nos dois, o slug do build descreve o DOMÍNIO e não onde a pessoa está. Sem
+  // isto, trocar de empresa mudaria os dados e deixaria para trás o nome, as
+  // cores e `isPaguePlay` — que decide desde o rótulo "Pendente"/"Agendado" até
+  // o H.O. aparecer ou não.
+  //
+  // `getEmpresaEscolhida` lê a chave sem conferir cargo, o que basta aqui: quem
+  // valida é `useEmpresa`, e enquanto não validou o `empresa` continua sendo o do
+  // domínio — então `empresa?.slug` devolve o mesmo slug do build de qualquer
+  // forma. Conferir cargo nesta função exigiria torná-la assíncrona.
+  //
   // Prioridade normal: env var → hostname → slug da empresa no banco
-  const slug = getImpersonacaoAtiva()
+  const cruzaTenant = !!getImpersonacaoAtiva() || !!getEmpresaEscolhida();
+  const slug = cruzaTenant
     ? (normalizeSlug(empresa?.slug) || getConfiguredTenantSlug())
     : (getConfiguredTenantSlug() || normalizeSlug(empresa?.slug));
 

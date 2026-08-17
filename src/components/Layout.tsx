@@ -62,6 +62,7 @@ import { useMarcarAtrasados } from '@/hooks/useMarcarAtrasados';
 import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 import { ModalRecortarFoto } from './ModalRecortarFoto';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
+import { SeletorEmpresa } from './SeletorEmpresa';
 
 interface NavItem {
   label: string;
@@ -534,6 +535,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
+            {/* Troca de empresa — só super_admin, e o componente some sozinho
+                para os demais e durante impersonação. */}
+            <SeletorEmpresa />
             {/* Chatplay config — PaguePlay only */}
             {isPP && (
               <Button
