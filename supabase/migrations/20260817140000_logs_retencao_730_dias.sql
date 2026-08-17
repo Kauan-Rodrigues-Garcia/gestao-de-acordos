@@ -246,6 +246,7 @@ declare
   v_job      record;
   v_exposta  int;
   v_padrao   int;
+  v_aviso    text;
 begin
   select jobname, schedule, command, active, database into v_job
     from cron.job where jobname = 'logs-retencao-730d';
@@ -293,11 +294,24 @@ begin
     raise exception 'fn_logs_expurgar ainda tem padrao de % dias', v_padrao;
   end if;
 
-  raise notice
-    'Retencao: 730 dias, agendada mensalmente (cron "%" UTC, banco %). '
-    || 'A primeira execucao vai registrar ZERO remocoes — a trilha comeca em '
-    || '01/04/2026 e o corte de 2 anos so alcanca algo em abril/2028. '
-    || 'Linha de zero remocoes e prova de vida, nao falha.',
-    v_job.schedule, v_job.database;
+  /*
+   * A mensagem é montada ANTES, numa variável.
+   *
+   * O formato de `RAISE` tem de ser um literal — `RAISE NOTICE 'a' || 'b', x`
+   * é erro de sintaxe, não de execução, o que derruba a migration inteira no
+   * parse antes de qualquer linha rodar. Foi o que aconteceu na primeira
+   * tentativa desta aqui.
+   *
+   * `format()` numa variável resolve e ainda deixa a mensagem legível em várias
+   * linhas, que era o que eu queria com a concatenação.
+   */
+  v_aviso := format(
+    'Retencao: 730 dias, agendada mensalmente (cron "%s" UTC, banco %s). '
+    'A primeira execucao vai registrar ZERO remocoes: a trilha comeca em '
+    '01/04/2026 e o corte de 2 anos so alcanca algo em abril/2028. '
+    'Linha de zero remocoes e prova de vida, nao falha.',
+    v_job.schedule, v_job.database
+  );
+  raise notice '%', v_aviso;
 end
 $$;
