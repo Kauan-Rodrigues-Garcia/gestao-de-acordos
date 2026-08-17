@@ -1,21 +1,35 @@
 /**
- * QuartisOperadores — aba do Analítico (líder+): tabela dos operadores do setor
- * com meta, recebimento, ritmo diário, o esperado até hoje, a diferença, a % de
+ * QuartisOperadores — aba do Painel do Líder: tabela dos operadores em foco com
+ * meta, recebimento, ritmo diário, o esperado até hoje, a diferença, a % de
  * projeção e o quartil. Ao lado, a distribuição dos operadores por quartil.
  *
- * Mesma matemática do header do dashboard (lib/diasUteis): projeção =
- * recebido no analítico ÷ (meta diária × dias úteis trabalhados); os
- * quartis vêm da configuração da aba Metas.
+ * Mesma matemática do header do dashboard (lib/projecaoMetas): projeção =
+ * recebido no analítico ÷ (meta diária × dias úteis trabalhados); os quartis vêm
+ * da configuração da aba Metas.
+ *
+ * ## O recorte é do pai
+ *
+ * `setorId` e `equipeId` chegam prontos de `resolverEscopoPainel`, e `setorId`
+ * nulo significa "todos os setores". Nada aqui os completa.
+ *
+ * Esta tela tinha filtro PRÓPRIO, com dois defeitos: a lista de cargos era
+ * escrita à mão (gerência com `ver_todos_setores` via tudo e não ganhava
+ * seletor), e "Todos os setores" gravava `''` — que, num `filtroSetor ||
+ * setorProprio`, voltava para o setor da própria pessoa. Escolher "todos"
+ * mostrava um. O seletor subiu para o cabeçalho do painel, onde vale para as três
+ * abas de uma vez.
+ *
+ * ## Os dias úteis podem ser menos que o mês
+ *
+ * Operador de equipe em TREINAMENTO é projetado contra os dias a partir do início
+ * dela, não contra o mês cheio. Sem isso, esta tabela punha em faixa pior quem a
+ * aba Desempenho Equipes — que já reduzia — punha em faixa melhor: o mesmo
+ * operador, duas faixas, duas abas do mesmo painel.
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import { Building2, Layers } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from '@/components/ui/select';
 import { formatBRL } from '@/lib/money';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
@@ -32,7 +46,12 @@ import { PizzaQuartis3D } from './PizzaQuartis3D';
 interface QuartisOperadoresProps {
   empresaId: string;
   mes: string;                 // 'yyyy-MM'
-  setorId?: string | null;
+  /**
+   * Setor em foco. `null` = todos os setores. AUTORITATIVA — ver o cabeçalho.
+   */
+  setorId: string | null;
+  /** Equipe em foco. `null` = todas as equipes do setor. */
+  equipeId?: string | null;
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
@@ -57,17 +76,13 @@ interface LinhaQuartil {
 }
 
 export function QuartisOperadores({
-  empresaId, mes, setorId, equipes, resumos,
+  empresaId, mes, setorId, equipeId = null, equipes, resumos,
   operadorEquipeMap, equipesExtrasPorOperador = {}, loading,
 }: QuartisOperadoresProps) {
-  const { perfil } = useAuth();
-  // Admin/diretoria podem alternar entre setores; os demais ficam no próprio
-  const podeFiltrarSetor = ['administrador', 'super_admin', 'diretoria']
-    .includes(perfil?.perfil ?? '');
-  const [filtroSetor,  setFiltroSetor]  = useState<string>('');   // '' = todos
-  const [filtroEquipe, setFiltroEquipe] = useState<string>('');   // '' = todas
-  const setorProprio = setorId ?? perfil?.setor_id ?? null;
-  const setorEfetivo = podeFiltrarSetor ? (filtroSetor || setorProprio) : setorProprio;
+  // O recorte vem do pai, resolvido por `resolverEscopoPainel`. Nada aqui o
+  // completa nem o reinterpreta — ver o cabeçalho do arquivo.
+  const setorEfetivo = setorId;
+  const filtroEquipe = equipeId;
   const [anoNum, mesNum] = mes.split('-').map(Number);
 
   const [operadores, setOperadores] = useState<PerfilOp[]>([]);
@@ -75,6 +90,8 @@ export function QuartisOperadores({
   const [feriados, setFeriados]     = useState<string[]>([]);
   const [quartis, setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [setores, setSetores]       = useState<Record<string, string>>({});
+  // equipe_id → data de início do treinamento (só as `treinamento = true`).
+  const [treinoMap, setTreinoMap]   = useState<Record<string, string | null>>({});
   // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
   const [contarHoje, setContarHoje] = useState(false);
   const [carregado, setCarregado]   = useState(false);
@@ -83,19 +100,30 @@ export function QuartisOperadores({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }] = await Promise.all([
+        const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }, { data: equipesData }] = await Promise.all([
           // A lista de cargos sai de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`, e não
           // escrita à mão: era uma das quatro cópias da mesma pergunta, e o
           // Pix Automático tinha a sua discordando (elite sumia de lá).
+          // `.eq('ativo', true)`: um usuário DESATIVADO aparecia aqui e não
+          // aparecia na aba Acompanhamento, que sempre filtrou. O filtro de
+          // `situacao` (férias/desligado) é outra coisa e continua adiante — em
+          // agosto/2026 havia 1 pessoa desativada com `situacao = 'ativo'`, então
+          // um dos dois filtros sozinho não cobria o outro.
           supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao')
             .eq('empresa_id', empresaId)
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
+            .eq('ativo', true)
             .order('nome'),
           supabase.from('metas').select('referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
             .eq('mes', mesNum).eq('ano', anoNum),
           getMetasConfig(empresaId, mesNum, anoNum),
           supabase.from('setores').select('id, nome').eq('empresa_id', empresaId),
+          // Equipes de treinamento: dias úteis reduzidos para quem está nelas.
+          // Busca tolerante — coluna ausente devolve erro e o mapa fica vazio, o
+          // que só faz a tabela voltar ao comportamento de mês cheio.
+          supabase.from('equipes').select('id, treinamento, treinamento_inicio')
+            .eq('empresa_id', empresaId),
         ]);
         if (cancelado) return;
         setOperadores((ops as PerfilOp[]) ?? []);
@@ -111,6 +139,11 @@ export function QuartisOperadores({
         const sMap: Record<string, string> = {};
         for (const s of (setoresData as { id: string; nome: string }[]) ?? []) sMap[s.id] = s.nome;
         setSetores(sMap);
+        const tMap: Record<string, string | null> = {};
+        for (const e of (equipesData as { id: string; treinamento: boolean | null; treinamento_inicio: string | null }[]) ?? []) {
+          if (e.treinamento) tMap[e.id] = e.treinamento_inicio ?? null;
+        }
+        setTreinoMap(tMap);
       } catch { /* sem dados — lista vazia */ }
       if (!cancelado) setCarregado(true);
     }
@@ -133,6 +166,25 @@ export function QuartisOperadores({
     const recebidoMap: Record<string, number> = {};
     for (const r of resumos) recebidoMap[r.operador_id] = r.total_recebido;
 
+    /**
+     * Dias úteis de UM operador, reduzidos quando a equipe dele é de treinamento.
+     *
+     * Esta tabela usava o mês cheio para todo mundo, enquanto Desempenho Equipes
+     * já reduzia os dias da equipe em treinamento. O mesmo operador aparecia em
+     * duas faixas diferentes em duas abas do mesmo painel — e a de treinamento
+     * saía sempre pior, porque era cobrada por dias em que a equipe nem existia.
+     */
+    const diasDoOperador = (op: PerfilOp): { totalUteis: number; decorridos: number } => {
+      const inicio = op.equipe_id ? treinoMap[op.equipe_id] : null;
+      if (!inicio) return { totalUteis, decorridos };
+      return {
+        totalUteis: diasUteisDoMes(anoNum, mesNum, feriados, inicio),
+        decorridos: Math.max(
+          diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicio, contarHoje), 1,
+        ),
+      };
+    };
+
     // Clone: o operador conta no setor da equipe clonada, não só no dele.
     // Mesma fonte usada pelo Total recebido e por Desempenho Equipes.
     const visiveis = operadores
@@ -152,10 +204,13 @@ export function QuartisOperadores({
       const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
       const meta = metasOp[op.id] ?? null;
       const recebido = recebidoMap[op.id] ?? 0;
+      const dias = diasDoOperador(op);
 
       // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
       // pessoal. Ver `EntradaProjecao` em lib/projecaoMetas.
-      const proj = calcularProjecao({ meta, recebido, totalUteis, decorridos, quartis });
+      const proj = calcularProjecao({
+        meta, recebido, totalUteis: dias.totalUteis, decorridos: dias.decorridos, quartis,
+      });
       const diaria: number | null    = proj?.metaDiaria ?? null;
       const hoje: number | null      = proj?.esperado ?? null;
       const diferenca: number | null = proj?.diferenca ?? null;
@@ -177,7 +232,7 @@ export function QuartisOperadores({
     return porSetor;
   }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp,
       setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
-      setorDaEquipe, nomeDaEquipe]);
+      setorDaEquipe, nomeDaEquipe, treinoMap]);
 
   // Distribuição por quartil — só quem tem meta entra na base do 100%
   const distribuicao = useMemo(() => {
@@ -197,12 +252,6 @@ export function QuartisOperadores({
     };
   }, [grupos, quartis]);
 
-  // Equipes disponíveis no seletor: só as do setor em exibição
-  const equipesDoSetor = useMemo(
-    () => equipes.filter(e => !setorEfetivo || e.setor_id === setorEfetivo),
-    [equipes, setorEfetivo],
-  );
-
   if (loading || !carregado) {
     return (
       <div className="space-y-2 animate-pulse">
@@ -213,40 +262,6 @@ export function QuartisOperadores({
 
   return (
     <div className="space-y-4">
-      {/* Filtros: setor (admin/diretoria) + equipe */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {podeFiltrarSetor && Object.keys(setores).length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <Select value={filtroSetor || '__todos__'}
-              onValueChange={v => { setFiltroSetor(v === '__todos__' ? '' : v); setFiltroEquipe(''); }}>
-              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__todos__">Todos os setores</SelectItem>
-                {Object.entries(setores).map(([id, nome]) => (
-                  <SelectItem key={id} value={id}>{nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-        {equipesDoSetor.length > 0 && (
-          <div className="flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-            <Select value={filtroEquipe || '__todas__'}
-              onValueChange={v => setFiltroEquipe(v === '__todas__' ? '' : v)}>
-              <SelectTrigger className="h-8 w-44 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__todas__">Todas as equipes</SelectItem>
-                {equipesDoSetor.map(eq => (
-                  <SelectItem key={eq.id} value={eq.id}>{eq.nome}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
-      </div>
-
       {grupos.size === 0 && (
         <p className="text-sm text-muted-foreground text-center py-10">
           Nenhum operador encontrado com os filtros atuais.

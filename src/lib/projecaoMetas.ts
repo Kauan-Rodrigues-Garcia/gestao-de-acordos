@@ -97,6 +97,60 @@ export function calcularProjecao(entrada: EntradaProjecao): ResultadoProjecao | 
   return { metaDiaria, esperado, diferenca, projecaoPct, quartil, proximo, paraSubir };
 }
 
+export interface DegrauQuartil {
+  /** Número da faixa (1 = melhor). */
+  quartil: number;
+  /** % mínima que a faixa exige. */
+  minPct: number;
+  /** Quanto ainda precisa entrar para alcançar esta faixa. 0 = já alcançada. */
+  falta: number;
+  /** Já está nesta faixa ou acima dela? */
+  alcancado: boolean;
+}
+
+/**
+ * Quanto falta para CADA faixa acima, não só para a próxima.
+ *
+ * `calcularProjecao` devolve `paraSubir`, que responde "quanto falta para sair
+ * do 4º e chegar ao 3º". Quem está no 4º quartil, porém, precisa das três
+ * respostas: 3º, 2º e 1º. Com uma só, a equipe no fundo da tabela enxerga o
+ * degrau seguinte e não a distância até o alvo real, que é bater a meta.
+ *
+ * A conta é a mesma de `paraSubir`, aplicada faixa por faixa: alcançar uma faixa
+ * de `min_pct` P significa ter recebido `esperado × P ÷ 100`.
+ *
+ * Devolve da MELHOR faixa para a pior (1º, 2º, 3º…), que é a ordem de leitura da
+ * tela — "para o 1º faltam X, para o 2º faltam Y". Faixas já alcançadas vêm
+ * marcadas em vez de omitidas: o card mostra o caminho inteiro, com o que já
+ * passou riscado.
+ *
+ * `esperado` é o mesmo de `calcularProjecao` (meta diária × dias decorridos), e
+ * não a meta cheia do mês: a pergunta do card é sobre o RITMO de hoje, igual à
+ * % que aparece ao lado. Usar a meta cheia responderia outra coisa, e as duas
+ * leituras na mesma tela não bateriam.
+ */
+export function degrausQuartis(
+  entrada: { recebido: number; esperado: number; quartis: QuartilConfig[] },
+): DegrauQuartil[] {
+  const { recebido, esperado, quartis } = entrada;
+  if (esperado <= 0 || !quartis.length) return [];
+
+  return [...quartis]
+    .sort((a, b) => a.quartil - b.quartil)      // 1º, 2º, 3º, 4º
+    .map(q => {
+      const alvo = (esperado * q.min_pct) / 100;
+      const falta = Math.max(0, alvo - recebido);
+      return {
+        quartil: q.quartil,
+        minPct: q.min_pct,
+        falta,
+        // `falta === 0` e não `recebido >= alvo`: com min_pct 0 o alvo é 0 e a
+        // faixa está alcançada por definição, inclusive sem nada recebido.
+        alcancado: falta === 0,
+      };
+    });
+}
+
 /**
  * % de um valor sobre uma base, arredondada e limitada.
  *

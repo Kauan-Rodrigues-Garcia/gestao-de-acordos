@@ -38,13 +38,14 @@ import { cn } from '@/lib/utils';
 import {
   buscarEquipesComOperadores, buscarResumoOperadoresAnalitico,
   buscarTotalOrfaosPorSetor, buscarTotalPorSetor,
-  mapaSetorDaEquipe, operadoresDoSetor,
+  mapaSetorDaEquipe, operadoresDoSetor, operadoresDaEquipe,
   type EquipeAnalitico, type OperadorEquipeInfo, type ResumoOperadorAnalitico,
 } from '@/services/analitico/analitico.service';
+import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 import {
-  escopoDeSetor, setorSomaPorUsuarios,
+  escopoDeSetor, setorSomaPorUsuarios, ESCOPO_EMPRESA,
 } from '@/services/analitico/escopoAnalitico';
 import {
   buscarResumoMensalDiario, type ResumoMensalDiario,
@@ -52,6 +53,8 @@ import {
 import { DesempenhoEquipes } from '@/pages/Dashboard/Analitico/DesempenhoEquipes';
 import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores';
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
+import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
+import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
@@ -198,14 +201,68 @@ export default function PainelLider() {
     setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
   }, []);
   const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
-  // Líder/gerência restritos ao próprio setor; admin/diretoria veem tudo
-  const setorAbas = (!isAdmin && !verTodosSetores) ? (perfil?.setor_id ?? null) : null;
+
+  // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────
+  //
+  // Antes cada aba resolvia sozinha, e as três discordavam: Quartis tinha
+  // seletor próprio com lista de cargo escrita à mão (e a opção "Todos os
+  // setores" voltava para um setor só), Desempenho e Gráfico não tinham nenhum, e
+  // este arquivo passava `null` que os filhos completavam com `perfil.setor_id`.
+  // Agora quem decide é `resolverEscopoPainel`, e o valor desce pronto.
+  const [filtroSetorId, setFiltroSetorId]   = useState<string | null>(null);
+  const [filtroEquipeId, setFiltroEquipeId] = useState<string | null>(null);
+  const [setoresLista, setSetoresLista]     = useState<{ id: string; nome: string }[]>([]);
+
+  // Trocar o setor descarta a equipe escolhida antes: ela pode ser de outro
+  // setor, e o cruzamento devolveria lista vazia parecendo "não há ninguém".
+  // `resolverEscopoPainel` já ignora a equipe órfã; limpar o estado evita que o
+  // seletor continue exibindo um nome que não está mais valendo.
+  const mudarFiltroSetor = useCallback((sid: string | null) => {
+    setFiltroSetorId(sid);
+    setFiltroEquipeId(null);
+  }, []);
 
   const [equipesInfo, setEquipesInfo] = useState<{
     equipes: EquipeAnalitico[];
     operadorEquipeMap: Record<string, OperadorEquipeInfo>;
     equipesExtrasPorOperador: Record<string, string[]>;
   } | null>(null);
+
+  const escopoAbas = useMemo(() => resolverEscopoPainel({
+    cargo:           perfil?.perfil,
+    temPermissao,
+    setorDoPerfil:   perfil?.setor_id ?? null,
+    setorEscolhido:  filtroSetorId,
+    equipeEscolhida: filtroEquipeId,
+    equipes:         equipesInfo?.equipes ?? [],
+  }), [perfil?.perfil, perfil?.setor_id, temPermissao, filtroSetorId, filtroEquipeId, equipesInfo?.equipes]);
+
+  /** Setor em foco. `null` = todos. É este valor que as três abas recebem. */
+  const setorAbas = escopoAbas.setorId;
+  const nomeSetorTravado = useMemo(
+    () => (escopoAbas.podeFiltrarSetor || !setorAbas
+      ? null
+      : setoresLista.find(s => s.id === setorAbas)?.nome ?? null),
+    [escopoAbas.podeFiltrarSetor, setorAbas, setoresLista],
+  );
+
+  /**
+   * O recorte em palavras, para o cabeçalho do gráfico.
+   *
+   * O gráfico buscava o nome do setor sozinho e dizia "Todos os setores" quando
+   * não havia setor — o que passou a mentir com filtro só de equipe, caso de quem
+   * enxerga a empresa toda.
+   */
+  const rotuloDoEscopo = useMemo(() => {
+    const nomeSetor = setorAbas
+      ? setoresLista.find(s => s.id === setorAbas)?.nome ?? null
+      : null;
+    const nomeEquipe = escopoAbas.equipeId
+      ? escopoAbas.equipesDisponiveis.find(e => e.id === escopoAbas.equipeId)?.nome ?? null
+      : null;
+    const partes = [nomeSetor, nomeEquipe && `Equipe ${nomeEquipe}`].filter(Boolean);
+    return partes.length ? partes.join(' · ') : null;
+  }, [setorAbas, setoresLista, escopoAbas.equipeId, escopoAbas.equipesDisponiveis]);
   // Abas Desempenho Equipes / Quartis (e Gráfico na BookPlay) são alimentadas
   // pelo relatório ANALÍTICO nos dois tenants: resumos por operador + órfãos +
   // total do relatório por setor + setores alternativos. (PP: Gráfico = diário.)
@@ -277,7 +334,9 @@ export default function PainelLider() {
         buscarResumoOperadoresAnalitico(empresa.id, mesStr),
         buscarTotalOrfaosPorSetor(empresa.id, mesStr),
         buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
-        supabase.from('setores').select('id, alternativo').eq('empresa_id', empresa.id),
+        // `nome` entrou junto: o seletor de setor do cabeçalho precisa dele, e
+        // uma segunda query para a mesma tabela no mesmo efeito seria desperdício.
+        supabase.from('setores').select('id, nome, alternativo').eq('empresa_id', empresa.id),
       ]);
     }).then(([{ data }, orfaos, totSetor, setoresRes]) => {
       if (cancel) return;
@@ -285,11 +344,17 @@ export default function PainelLider() {
       setAnaliticoOrfaos(orfaos);
       setAnaliticoTotalPorSetor(totSetor);
       const alt = new Set<string>();
+      const lista: { id: string; nome: string }[] = [];
       if (!setoresRes.error) {
-        for (const s of (setoresRes.data as { id: string; alternativo: boolean | null }[]) ?? []) {
+        for (const s of (setoresRes.data as { id: string; nome: string; alternativo: boolean | null }[]) ?? []) {
           if (s.alternativo) alt.add(s.id);
+          lista.push({ id: s.id, nome: s.nome });
         }
       }
+      // Mesma ordem que o admin arrastou na aba Setores — o seletor e os grupos
+      // de cards precisam concordar, senão o filtro lista numa ordem e a tela
+      // renderiza em outra.
+      setSetoresLista(aplicarOrdemSetores(lista, empresa.id));
       setAnaliticoSetoresAlt(alt);
       setLoadingAnalitico(false);
     });
@@ -306,13 +371,30 @@ export default function PainelLider() {
    * origem desmarcada some dos dois juntos.
    */
   const escopoDoGrafico = useMemo(() => {
-    if (!setorAbas || !equipesInfo) return null;
+    if (!equipesInfo) return null;
     const fontes = {
       setoresAlternativos:      analiticoSetoresAlt,
       operadorEquipeMap:        equipesInfo.operadorEquipeMap,
       equipesExtrasPorOperador: equipesInfo.equipesExtrasPorOperador,
       setorDaEquipe:            mapaSetorDaEquipe(equipesInfo.equipes),
     };
+
+    // Filtro de EQUIPE manda sobre o de setor: é o recorte mais estreito, e a
+    // equipe já pertence a um setor. `linhaNoEscopo` no ramo 'equipe' deixa a
+    // linha órfã de fora de propósito — ela tem setor, não tem equipe.
+    if (escopoAbas.equipeId) {
+      return {
+        tipo: 'equipe' as const,
+        operadores: operadoresDaEquipe(escopoAbas.equipeId, fontes),
+      };
+    }
+
+    // Sem setor em foco o gráfico soma a empresa: é o mesmo total do relatório,
+    // e `linhaNoEscopo` no ramo 'empresa' aceita tudo, inclusive as órfãs.
+    // Antes esta função devolvia `null` aqui, e o gráfico caía numa regra
+    // própria — a que divergia do card em R$ 1.933,21.
+    if (!setorAbas) return ESCOPO_EMPRESA;
+
     return escopoDeSetor({
       setorId:     setorAbas,
       alternativo: setorSomaPorUsuarios({
@@ -326,7 +408,7 @@ export default function PainelLider() {
       origensExcluidas: analiticoExclusoes[setorAbas],
       setorDoOperador:  id => equipesInfo.operadorEquipeMap[id]?.setor_id ?? null,
     });
-  }, [setorAbas, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
+  }, [setorAbas, escopoAbas.equipeId, equipesInfo, analiticoSetoresAlt, analiticoExclusoes, isPP]);
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
@@ -555,6 +637,19 @@ export default function PainelLider() {
         </div>
       )}
 
+      {/* Recorte de setor/equipe: um só, valendo para as três abas analíticas.
+          Fica fora do conteúdo das abas de propósito — trocar de aba não deve
+          trocar o recorte, que era o efeito de cada aba ter o seu. */}
+      {mostrarAbasAnaliticas && abaAtiva !== 'time' && (
+        <FiltrosEscopo
+          escopo={escopoAbas}
+          setores={setoresLista}
+          onSetor={mudarFiltroSetor}
+          onEquipe={setFiltroEquipeId}
+          nomeSetorTravado={nomeSetorTravado}
+        />
+      )}
+
       {abaAtiva === 'time' && erro && (
         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex items-center justify-between">
           <span>{erro}</span>
@@ -576,6 +671,7 @@ export default function PainelLider() {
             empresaId={empresa.id}
             mes={mesStr}
             setorId={setorAbas}
+            equipeId={escopoAbas.equipeId}
             equipes={equipesInfo?.equipes ?? []}
             resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
@@ -597,6 +693,7 @@ export default function PainelLider() {
             empresaId={empresa.id}
             mes={mesStr}
             setorId={setorAbas}
+            equipeId={escopoAbas.equipeId}
             equipes={equipesInfo?.equipes ?? []}
             resumos={analiticoResumos}
             operadorEquipeMap={equipesInfo?.operadorEquipeMap ?? {}}
@@ -626,6 +723,7 @@ export default function PainelLider() {
               linhasExternas={isPP ? (resumoDiario?.linhasDia ?? []) : undefined}
               fonteLabel={isPP ? 'relatório de recebimento diário' : 'relatório analítico'}
               escopo={escopoDoGrafico}
+              rotuloEscopo={rotuloDoEscopo}
             />
           )}
         </div>

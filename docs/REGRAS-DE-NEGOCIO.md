@@ -60,10 +60,32 @@ Resolução do slug, em ordem de prioridade (`src/lib/tenant.ts`):
 2. o hostname — se contiver `pagueplay` ou `bookplay`;
 3. o slug da empresa do perfil logado.
 
-**Exceção — impersonação.** Quando um `super_admin` está impersonando alguém, a
-ordem inverte: a empresa **real do usuário impersonado** manda no branding e nas
-capacidades, não o slug fixo do site onde o admin entrou. Sem isso, o admin
-logado no site da Pague Play veria um usuário Book Play com regras de Pague Play.
+**Duas exceções invertem a ordem**, porque nas duas o slug do build descreve o
+*domínio* e não onde a pessoa está:
+
+**Impersonação.** Quando um `super_admin` está impersonando alguém, a empresa
+**real do usuário impersonado** manda no branding e nas capacidades. Sem isso, o
+admin logado no site da Pague Play veria um usuário Book Play com regras de
+Pague Play.
+
+**Troca de empresa pelo super_admin** (`empresaAtiva.service.ts`). Um seletor no
+cabeçalho permite ao `super_admin` alternar entre as empresas sem trocar de
+domínio. No banco isso já era permitido — `fn_can_access_empresa` deixa
+super_admin passar por qualquer `empresa_id`, e as tabelas grandes ainda têm uma
+policy `*_super_admin_total` por cima. Faltava a tela deixar escolher.
+
+> **O gate é o CARGO, não a leitura da tabela.** `empresas_select` é
+> `(ativo = true)`: qualquer usuário autenticado lê a linha de qualquer empresa.
+> Conseguir ler não prova nada. Quem não é super_admin com a chave forçada no
+> `localStorage` veria o nome e as cores da outra empresa com todas as telas
+> vazias — os dados seguem bloqueados pela RLS. Por isso a escolha confere o
+> cargo e é **apagada** quando a conferência falha. A barreira de segurança
+> continua sendo a RLS; a conferência existe para a tela não mentir.
+
+A troca **recarrega a página** em vez de chamar `refresh()`: resumos, listas,
+metas, permissões de cargo e assinaturas de realtime filtradas por `empresa_id`
+ficariam apontando para a empresa anterior. Um estado misto é pior que meio
+segundo de recarga — impersonação faz igual.
 
 ### 1.2 Isolamento no login
 
@@ -364,6 +386,35 @@ Setores padrão criados no seed (`src/services/setores.service.ts`): `Em dia`,
 Cada perfil tem `setor_id`. O acordo carimba `setor_id` na criação, a partir do
 setor do operador — acordos legados podem ter `setor_id` nulo, e nesse caso a
 RLS cai no setor do operador dono.
+
+### 4.0 Quem NÃO pertence a setor nenhum
+
+**Diretoria, administrador e super_admin pertencem à empresa, não a um setor.**
+`setor_id` e `equipe_id` são sempre nulos para esses três cargos
+(migration `20260817160000`).
+
+Sustentado em três frentes, que precisam concordar:
+
+| Onde | O quê |
+|---|---|
+| `PERFIS_ESCOPO_EMPRESA` (`src/lib/index.ts`) | a lista, lida pelo formulário de usuários para esconder o campo Setor |
+| `fn_perfis_escopo_empresa` | gatilho `BEFORE INSERT OR UPDATE` que zera os dois campos na gravação |
+| `perfis_cupula_sem_vinculo` | `CHECK` que recusa a linha se o gatilho for derrubado |
+
+O gatilho se chama `a_trg_perfis_escopo_empresa`: gatilhos do mesmo tipo disparam
+em ordem alfabética, e o prefixo garante que o vínculo é normalizado antes de
+`trg_impedir_escalada_de_cargo` julgar um valor que seria descartado.
+
+> **Por que isso não é cosmético.** Duas telas resolviam o setor com
+> `setorId ?? perfil?.setor_id`. O componente pai passava `null` querendo dizer
+> "todos os setores", o `??` caía no setor de preenchimento — que o formulário de
+> criação escolhia sozinho, o primeiro da lista — e a **diretoria via um setor
+> só**. Em Quartis, a opção "Todos os setores" voltava calada para um setor. Com
+> `setor_id` nulo o `??` não tem para onde cair.
+
+Rebaixar alguém de cúpula para líder **não** devolve setor: a pessoa fica sem
+vínculo e precisa de uma transferência explícita (aba Setores). Adivinhar um
+setor no rebaixamento reintroduziria o valor de preenchimento.
 
 ### 4.1 Setor alternativo `[BP]`
 
@@ -882,6 +933,58 @@ chega ao longo do dia. Há a flag `contar_dia_atual` em `metas_config_mes`
 
 O **quartil** é a faixa configurada cuja porcentagem mínima a projeção alcança.
 Feriados e quartis são configurados por empresa/mês/ano.
+
+### 12.2.1 Painel do Líder — o recorte é um só para as três abas
+
+Desempenho Equipes, Quartis e Gráfico recebem `setorId` e `equipeId` prontos de
+`resolverEscopoPainel` (`src/pages/Dashboard/Analitico/escopoDoPainel.ts`).
+**`setorId` nulo significa "todos os setores"** e nenhum componente filho
+completa esse valor.
+
+Quem enxerga mais de um setor — decidido por `veTodosOsSetores`, a mesma função
+do dashboard — ganha os seletores no cabeçalho do painel. Quem não enxerga fica
+travado no próprio setor e não vê seletor de setor.
+
+Quatro defeitos que existiam, todos da mesma pergunta respondida em quatro
+lugares:
+
+| Onde | O que acontecia |
+|---|---|
+| `DesempenhoEquipes` | `setorId ?? perfil?.setor_id` — diretoria via um setor só |
+| `QuartisOperadores` | "Todos os setores" gravava `''`, e `filtroSetor \|\| setorProprio` voltava ao setor da pessoa |
+| `QuartisOperadores` | lista de cargos escrita à mão: gerência com `ver_todos_setores` via tudo sem ganhar seletor |
+| `GraficoRecebimento` | sem filtro; e o escopo virava `null` sem setor, caindo na regra própria que divergia do card em R$ 1.933,21 |
+
+Trocar o setor descarta a equipe escolhida: uma equipe de outro setor devolveria
+lista vazia, parecendo "não há ninguém" quando o filtro é que era impossível.
+
+### 12.2.2 Card expansível de equipe/setor
+
+Cada card de Desempenho Equipes abre no clique. As contas vivem em
+`desempenhoEquipe.ts`, testadas à parte:
+
+- **degraus de quartil** — quanto falta para **cada** faixa acima, não só a
+  próxima (`degrausQuartis` em `lib/projecaoMetas.ts`). Quem está no 4º precisa
+  ver o 3º, o 2º e o 1º;
+- **ritmo** — a diária necessária no que **resta** do mês (sobe quando a equipe
+  atrasa, ao contrário da "diária p/ meta", que divide pelo mês inteiro) e onde
+  o mês fecha mantendo a média atual;
+- **pessoas** — quantas em cada faixa, quem puxa (maior recebimento) e quem
+  precisa de ajuda (**menor projeção**, não menor recebimento: quem tem meta
+  pequena e recebeu pouco pode estar em dia).
+
+Sem dia útil trabalhado, a estimativa de fechamento é o próprio acumulado — nem
+zero, nem extrapolação de um dia que não aconteceu.
+
+### 12.2.3 Duas divergências corrigidas entre as abas
+
+| Caso | Antes | Agora |
+|---|---|---|
+| Operador de equipe em **treinamento** | Desempenho reduzia os dias úteis; Quartis usava o mês cheio — o mesmo operador em duas faixas | as duas usam os dias da equipe |
+| Usuário **desativado** (`ativo = false`) | aparecia em Quartis, ausente em Acompanhamento | as duas filtram `ativo` **e** `situacao` |
+
+O segundo caso não era hipótese: em agosto/2026 havia 1 pessoa `ativo = false`
+com `situacao = 'ativo'` — nenhum dos dois filtros sozinho cobria o outro.
 
 ### 12.3 Trava de meta por setor
 

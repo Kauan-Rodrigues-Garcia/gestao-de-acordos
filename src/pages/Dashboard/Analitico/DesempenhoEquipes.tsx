@@ -1,27 +1,34 @@
 /**
- * DesempenhoEquipes — aba do Analítico (BookPlay, líder+).
+ * DesempenhoEquipes — aba do Painel do Líder (os dois tenants), versão 2.0.
  *
- * Painel por equipe no estilo "placar": foto e nome do líder, acumulado do
- * analítico, média diária real e projeção vs o que deveria ter acumulado
- * (meta da aba Metas ÷ dias úteis × dias trabalhados). Antes das equipes,
- * o mesmo painel consolidado do setor.
+ * Um card por equipe e um consolidado por setor: quem lidera, o acumulado do
+ * analítico, a barra que põe acumulado, esperado-até-hoje e meta no mesmo eixo, e
+ * a projeção. No clique, o card abre com os degraus de quartil, o ritmo
+ * necessário no que resta do mês e a distribuição das pessoas.
  *
- * Cada usuário vê apenas as equipes do próprio setor (prop setorId); admin
- * sem setor vê todos os setores em sequência.
+ * ## Duas responsabilidades que saíram daqui
+ *
+ * **As contas** foram para `desempenhoEquipe.ts` e **o card** para
+ * `CardEquipe.tsx`. Este arquivo ficou com o que é dele: buscar dado, montar as
+ * fontes e decidir quais cards aparecem.
+ *
+ * **O recorte** é do pai. A prop `setorId` é AUTORITATIVA: `null` significa
+ * "todos os setores", e nada aqui a completa com o setor do próprio perfil.
+ * Fazer isso era o defeito que mostrava um setor só à diretoria — o pai dizia
+ * "todos" e este arquivo respondia com `setorId ?? perfil?.setor_id`. Ver
+ * `escopoDoPainel.ts`.
  */
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Building2, Users, Headset, Pencil, Check, X, Camera, Loader2 } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { Building2, Headset, Pencil, Check, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
-import { formatBRL } from '@/lib/money';
-import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
+import type { QuartilConfig } from '@/lib/supabase';
+import { getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { cn } from '@/lib/utils';
 import { assinarTabela } from '@/lib/realtime';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
@@ -29,18 +36,29 @@ import {
   buscarContribuicoesReceptivo, salvarContribuicaoReceptivo,
   type ContribuicaoReceptivo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
-import { diasUteisDoMes, diasUteisDecorridos, corProjecao } from '@/lib/diasUteis';
+import { diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO } from '@/lib/diasUteis';
 import {
-  mapaSetorDaEquipe, setoresDoOperador,
+  mapaSetorDaEquipe, setoresDoOperador, operadoresDaEquipe, operadoresDoSetor,
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import { CardEquipe, type LiderInfo } from './CardEquipe';
+import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
   mes: string;                 // 'yyyy-MM'
-  setorId?: string | null;
+  /**
+   * Setor em foco. `null` = todos os setores.
+   *
+   * Obrigatória de propósito: era opcional, e o valor ausente virava um
+   * `?? perfil?.setor_id` que desfazia a decisão do pai. Com o tipo exigindo o
+   * valor, quem renderiza precisa dizer o que quer.
+   */
+  setorId: string | null;
+  /** Equipe em foco. `null` = todas as equipes do setor. */
+  equipeId?: string | null;
   equipes: EquipeAnalitico[];
   resumos: ResumoOperadorAnalitico[];
   operadorEquipeMap: Record<string, OperadorEquipeInfo>;
@@ -62,199 +80,12 @@ interface DesempenhoEquipesProps {
 }
 
 interface MetaRow { tipo: string; referencia_id: string; meta_valor: number }
-interface LiderInfo { nome: string; foto_url: string | null }
 
-/**
- * Avatar do próprio card (não de um líder): o do setor e o do Receptivo.
- * Clicável para enviar/trocar a foto quando `onEditar` vem preenchido.
- */
-interface AvatarProprio {
-  foto:      string | null;
-  /** Ausente = só exibe (quem não pode editar não vê o botão de câmera). */
-  onEditar?: () => void;
-  salvando?: boolean;
-  /** Ícone quando ainda não há foto: prédio no setor, headset no Receptivo. */
-  Icone:     LucideIcon;
-  /** Vai no alt/title — "Foto do setor", "Foto do Receptivo". */
-  rotulo:    string;
-}
-
-/** Avatares dos líderes da equipe, lado a lado (item 1: clone mantém foto/tag
- *  e uma equipe pode ter vários líderes). Cai no ícone quando não há líder. */
-function AvataresLideres({
-  lideres, proprio,
-}: {
-  lideres: LiderInfo[];
-  /** Presente = o card tem avatar próprio e ignora a lista de líderes. */
-  proprio?: AvatarProprio;
-}) {
-  // Cards de setor e Receptivo: avatar próprio, clicável para trocar a foto.
-  if (proprio) {
-    const { foto, onEditar, salvando, Icone, rotulo } = proprio;
-    const conteudo = foto ? (
-      <img src={foto} alt={rotulo}
-        className="w-full h-full rounded-full object-cover" />
-    ) : (
-      <Icone className="w-7 h-7" />
-    );
-    const classe = cn(
-      'relative w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0 overflow-hidden',
-      foto ? 'bg-card' : 'bg-primary/15 text-primary',
-    );
-    if (!onEditar) return <div className={classe} title={rotulo}>{conteudo}</div>;
-    return (
-      <button type="button" onClick={onEditar} disabled={salvando}
-        title={`Alterar ${rotulo.toLowerCase()}`}
-        className={cn(classe, 'group cursor-pointer')}>
-        {conteudo}
-        <span className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity text-white">
-          {salvando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Camera className="w-5 h-5" />}
-        </span>
-      </button>
-    );
-  }
-  if (lideres.length === 0) {
-    return (
-      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-border shrink-0 bg-muted text-muted-foreground">
-        <Users className="w-7 h-7" />
-      </div>
-    );
-  }
-  return (
-    <div className="flex -space-x-3 shrink-0">
-      {lideres.map((l, i) => (
-        l.foto_url ? (
-          <img key={i} src={l.foto_url} alt={l.nome} title={l.nome}
-            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full object-cover border-2 border-card shadow-sm bg-card" />
-        ) : (
-          <div key={i} title={l.nome}
-            className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center border-2 border-card bg-muted text-muted-foreground text-lg font-bold shadow-sm">
-            {l.nome.charAt(0).toUpperCase()}
-          </div>
-        )
-      ))}
-    </div>
-  );
-}
-
-// ── Painel de desempenho (setor ou equipe) ───────────────────────────────────
-
-/** Fonte diminui conforme o número cresce, para nunca cortar dígitos. */
-function fonteDoValor(valor: string, destaque?: boolean): string {
-  const n = valor.length;
-  if (n > 13) return destaque ? 'text-sm sm:text-base font-extrabold' : 'text-xs sm:text-sm font-bold';
-  if (n > 10) return destaque ? 'text-base sm:text-lg font-extrabold' : 'text-sm sm:text-base font-bold';
-  return destaque ? 'text-xl sm:text-2xl font-extrabold' : 'text-lg sm:text-xl font-bold';
-}
-
-function Tile({
-  label, valor, destaque, cor, hint, sub,
-}: { label: string; valor: string; destaque?: boolean; cor?: string; hint?: string; sub?: string }) {
-  return (
-    <div className="rounded-xl bg-muted/40 border border-border/50 px-3 py-2.5 min-w-0" title={hint}>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
-        {label}
-      </p>
-      <p
-        className={cn('tabular-nums font-mono leading-tight mt-0.5 whitespace-nowrap', fonteDoValor(valor, destaque))}
-        style={cor ? { color: cor } : undefined}
-      >
-        {valor}
-      </p>
-      {sub && (
-        <p className="text-[11px] text-muted-foreground tabular-nums font-mono truncate mt-0.5">{sub}</p>
-      )}
-    </div>
-  );
-}
-
-function PainelPlacar({
-  titulo, subtitulo, lideres, ehSetor, acumulado, acumuladoHO, mostrarHO, meta, totalUteis, decorridos,
-  avatarProprio,
-}: {
-  titulo: string;
-  subtitulo?: string;
-  /** Líderes da equipe (fotos lado a lado). Vazio/omisso = ícone. */
-  lideres?: LiderInfo[];
-  /** Só o destaque visual do card do setor — o avatar vem em `avatarProprio`. */
-  ehSetor?: boolean;
-  acumulado: number;
-  /** PaguePlay: H.O. do acumulado (soma de total_ho do analítico). */
-  acumuladoHO?: number;
-  mostrarHO?: boolean;
-  meta: number | null;
-  totalUteis: number;
-  decorridos: number;
-  /** Avatar do próprio card (setor, Receptivo) em vez das fotos dos líderes. */
-  avatarProprio?: AvatarProprio;
-}) {
-  const mediaDiaria = acumulado / Math.max(decorridos, 1);
-  const metaDiaria  = meta && totalUteis > 0 ? meta / totalUteis : null;
-  const esperado    = metaDiaria !== null ? metaDiaria * decorridos : null;
-  const projecao    = esperado && esperado > 0 ? Math.round((acumulado / esperado) * 100) : null;
-  const faltaMeta   = meta !== null ? Math.max(0, meta - acumulado) : null;
-  const metaBatida  = faltaMeta !== null && faltaMeta === 0;
-
-  const corDaProjecao = projecao === null ? undefined : corProjecao(projecao);
-
-  const hojeLabel = new Date().toLocaleDateString('pt-BR', {
-    day: '2-digit', month: 'short',
-  });
-
-  return (
-    <div className={cn(
-      'rounded-2xl border bg-card p-4 sm:p-5 shadow-sm',
-      ehSetor && 'border-primary/40 ring-1 ring-primary/10 bg-gradient-to-br from-primary/[0.06] to-transparent',
-    )}>
-      {/* Cabeçalho: foto(s) do(s) líder(es) + nome + data | projeção */}
-      <div className="flex items-center gap-3.5">
-        <AvataresLideres lideres={lideres ?? []} proprio={avatarProprio} />
-        <div className="flex-1 min-w-0">
-          <p className="text-base sm:text-lg font-bold leading-tight truncate">{titulo}</p>
-          <p className="text-xs text-muted-foreground truncate">
-            {subtitulo}{subtitulo ? ' · ' : ''}{hojeLabel}
-          </p>
-        </div>
-        {/* Projeção em destaque */}
-        <div
-          className="shrink-0 rounded-2xl px-4 py-2 text-center"
-          style={corDaProjecao ? { background: corDaProjecao + '1a' } : undefined}
-        >
-          <p
-            className="text-2xl sm:text-3xl font-extrabold tabular-nums font-mono leading-none"
-            style={{ color: corDaProjecao ?? 'var(--muted-foreground)' }}
-          >
-            {projecao !== null ? `${projecao}%` : '—'}
-          </p>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mt-1">
-            projeção
-          </p>
-        </div>
-      </div>
-
-      {/* Números */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-2 mt-4">
-        <Tile label="Acumulado" valor={formatBRL(acumulado)} destaque cor="#10b981"
-          sub={mostrarHO ? `H.O. ${formatBRL(acumuladoHO ?? 0)}` : undefined} />
-        <Tile label="Média diária" valor={formatBRL(mediaDiaria)}
-          hint="Acumulado ÷ dias úteis trabalhados" />
-        <Tile label="Meta" valor={meta ? formatBRL(meta) : '—'}
-          sub={mostrarHO && meta ? `H.O. ${formatBRL(meta * PP_HO_PERCENTUAL)}` : undefined} />
-        <Tile label="Falta p/ meta"
-          valor={faltaMeta === null ? '—' : metaBatida ? 'Batida! 🎉' : formatBRL(faltaMeta)}
-          cor={faltaMeta === null ? undefined : metaBatida ? '#22c55e' : '#6366f1'}
-          hint="Quanto falta para bater a meta do mês" />
-        <Tile label="Diária p/ meta" valor={metaDiaria !== null ? formatBRL(metaDiaria) : '—'}
-          hint="Valor por dia útil para bater a meta" />
-        <Tile label="Deveria ter" valor={esperado !== null ? formatBRL(esperado) : '—'} cor="#f59e0b"
-          hint="Quanto deveria ter acumulado até hoje" />
-      </div>
-    </div>
-  );
-}
+/** Identidade de quem conta no recebimento — alimenta a área expandida. */
+interface IdentidadeOperador { nome: string; fotoUrl: string | null }
 
 // ── Contribuição Receptivo (card manual por setor — BookPlay) ─────────────────
-// Card visual idêntico ao placar, preenchido À MÃO (acumulado + meta).
+// Card visual idêntico ao dos demais, preenchido À MÃO (acumulado + meta).
 //
 // O valor agora vive no banco (`contribuicao_receptivo`, migration 20260730a):
 // uma linha por (empresa, setor, mês), compartilhada — se um líder edita, todos
@@ -324,12 +155,13 @@ function paraInput(v: number): string {
 }
 
 function CardContribuicaoReceptivo({
-  dados, totalUteis, decorridos, podeEditar, salvando, somenteLocal, onSalvar,
+  dados, totalUteis, decorridos, quartis, podeEditar, salvando, somenteLocal, onSalvar,
   foto, onEditarFoto, salvandoFoto,
 }: {
   dados: ContribuicaoReceptivo | undefined;
   totalUteis: number;
   decorridos: number;
+  quartis: QuartilConfig[];
   podeEditar: boolean;
   salvando: boolean;
   /** true = migration pendente, o valor não é compartilhado ainda. */
@@ -360,13 +192,16 @@ function CardContribuicaoReceptivo({
   // visivelmente menor que os do setor e das equipes.
   return (
     <div className="relative">
-      <PainelPlacar
+      {/* Sem `operadores`: o valor é digitado à mão e não tem pessoas atrás
+          dele. O card fica não expansível em vez de abrir uma área vazia. */}
+      <CardEquipe
         titulo="Contribuição Receptivo"
         subtitulo={somenteLocal ? 'Manual · só neste navegador' : 'Preenchido manualmente'}
         acumulado={dados?.acumulado ?? 0}
         meta={dados && dados.meta > 0 ? dados.meta : null}
         totalUteis={totalUteis}
         decorridos={decorridos}
+        quartis={quartis}
         avatarProprio={{
           foto, onEditar: onEditarFoto, salvando: salvandoFoto,
           Icone: Headset, rotulo: 'Foto do Receptivo',
@@ -438,22 +273,26 @@ function CardContribuicaoReceptivo({
 // ── Aba ───────────────────────────────────────────────────────────────────────
 
 export function DesempenhoEquipes({
-  empresaId, mes, setorId, equipes, resumos, operadorEquipeMap,
+  empresaId, mes, setorId, equipeId = null, equipes, resumos, operadorEquipeMap,
   equipesExtrasPorOperador = {}, orfaosPorSetor = {},
   totalPorSetor = {}, setoresAlternativos = new Set(), setorSomaMembros = false, loading,
   fonteLabel = 'relatório analítico',
 }: DesempenhoEquipesProps) {
   const { perfil } = useAuth();
   const isPP = useTenant().isPaguePlay;
-  // O usuário só vê o PRÓPRIO setor: sem filtro externo, usa o setor do
-  // perfil. Só quem não tem setor (admin/diretoria) enxerga todos.
-  const setorEfetivo = setorId ?? perfil?.setor_id ?? null;
+  // `setorId` vem do pai e vale como está — `null` é "todos os setores". Não há
+  // fallback para `perfil.setor_id`: era ele que desfazia a decisão do pai e
+  // mostrava um setor só à diretoria. Ver o cabeçalho do arquivo.
+  const setorEfetivo = setorId;
   const [metas, setMetas]       = useState<MetaRow[]>([]);
   const [feriados, setFeriados] = useState<string[]>([]);
+  const [quartis, setQuartis]   = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   // metas_config_mes.contar_dia_atual — padrão false (o dia de hoje ainda corre)
   const [contarHoje, setContarHoje] = useState(false);
   const [lideres, setLideres]   = useState<Record<string, LiderInfo[]>>({});  // equipe_id → líderes (inclui clones)
   const [setores, setSetores]   = useState<Record<string, string>>({});    // setor_id → nome
+  // Quem conta no recebimento: nome e foto para a área expandida do card.
+  const [identidade, setIdentidade] = useState<Record<string, IdentidadeOperador>>({});
   // setor_id → foto. Duas fotos por setor: a do card do placar e a do card
   // "Contribuição Receptivo".
   const [setorFotos, setSetorFotos]         = useState<Record<string, string | null>>({});
@@ -595,10 +434,12 @@ export function DesempenhoEquipes({
     let cancelado = false;
     async function carregar() {
       try {
-        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: receptivoFotosData }, { data: clonesData }, { data: equipeLideresData }] = await Promise.all([
+        const [{ data: metasData }, cfg, { data: lideresData }, { data: setoresData }, { data: receptivoFotosData }, { data: clonesData }, { data: equipeLideresData }, { data: opsData }] = await Promise.all([
+          // `operador` entrou na lista: a área expandida distribui as pessoas por
+          // quartil, e sem a meta individual não há faixa a calcular.
           supabase.from('metas').select('tipo, referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('mes', mesNum).eq('ano', anoNum)
-            .in('tipo', ['setor', 'equipe']),
+            .in('tipo', ['setor', 'equipe', 'operador']),
           getMetasConfig(empresaId, mesNum, anoNum),
           // TODOS os líderes (id/nome/foto + equipe de origem). Sem filtro de
           // equipe_id: um líder pode ser só clone (sem equipe própria).
@@ -617,11 +458,27 @@ export function DesempenhoEquipes({
           // Tabela pode não existir (migration 20260725b pendente) → vazio.
           supabase.from('equipe_lideres').select('equipe_id, lider_id')
             .eq('empresa_id', empresaId),
+          // Quem conta no recebimento — nome e foto da área expandida. A lista de
+          // cargos sai de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`, a mesma dos quartis
+          // e do Painel do Líder. `ativo` E `situacao`: um usuário desativado não
+          // é operador da equipe, e férias/desligado saem da distribuição — era
+          // aqui que a aba Quartis divergia, filtrando só `situacao`.
+          supabase.from('perfis').select('id, nome, foto_url')
+            .eq('empresa_id', empresaId)
+            .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
+            .eq('ativo', true)
+            .eq('situacao', 'ativo'),
         ]);
         if (cancelado) return;
         setMetas((metasData as MetaRow[]) ?? []);
         setFeriados(cfg.data?.feriados ?? []);
         setContarHoje(cfg.data?.contar_dia_atual === true);
+        setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
+        const idMap: Record<string, IdentidadeOperador> = {};
+        for (const o of (opsData as { id: string; nome: string; foto_url: string | null }[]) ?? []) {
+          idMap[o.id] = { nome: o.nome, fotoUrl: o.foto_url };
+        }
+        setIdentidade(idMap);
         // Identidade de cada líder + equipe → líderes (origem + clones).
         const lideresById = new Map<string, LiderInfo>();
         const lMap: Record<string, LiderInfo[]> = {};
@@ -715,8 +572,21 @@ export function DesempenhoEquipes({
       return v > 0 ? v : null;
     };
 
-    // Agrupa por setor; com setor efetivo definido, só o setor do usuário
-    const visiveis = setorEfetivo ? equipes.filter(e => e.setor_id === setorEfetivo) : equipes;
+    // Recebido e meta POR OPERADOR: as duas fontes que a área expandida cruza
+    // para distribuir as pessoas por quartil.
+    const recebidoPorOperador: Record<string, number> = {};
+    for (const r of resumos) recebidoPorOperador[r.operador_id] = Number(r.total_recebido) || 0;
+    const metaPorOperador: Record<string, number> = {};
+    for (const m of metas) {
+      if (m.tipo !== 'operador') continue;
+      const v = Number(m.meta_valor) || 0;
+      if (v > 0) metaPorOperador[m.referencia_id] = v;
+    }
+
+    // Agrupa por setor. `setorEfetivo` nulo = todos os setores; `equipeId`
+    // recorta as equipes dentro do que sobrou.
+    let visiveis = setorEfetivo ? equipes.filter(e => e.setor_id === setorEfetivo) : equipes;
+    if (equipeId) visiveis = visiveis.filter(e => e.id === equipeId);
     const grupos = new Map<string, EquipeAnalitico[]>();
     for (const eq of visiveis) {
       const sid = eq.setor_id ?? 'sem_setor';
@@ -724,9 +594,46 @@ export function DesempenhoEquipes({
       grupos.get(sid)!.push(eq);
     }
 
-    return { totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos };
+    return {
+      totalUteis, decorridos, porEquipe, porSetor, metaDe, grupos,
+      recebidoPorOperador, metaPorOperador, setorDaEquipe,
+    };
   }, [anoNum, mesNum, feriados, contarHoje, resumos, operadorEquipeMap, equipesExtrasPorOperador,
-      orfaosPorSetor, equipes, metas, setorEfetivo]);
+      orfaosPorSetor, equipes, metas, setorEfetivo, equipeId]);
+
+  /**
+   * Operadores de um card, prontos para a área expandida.
+   *
+   * Card de EQUIPE: membros de origem + clones que contam nela.
+   * Card de SETOR: todo mundo que conta no setor, pela mesma regra do acumulado
+   * (`setoresDoOperador`) — inclusive quem está sem equipe e os clonados de
+   * outro setor. Usar outra regra aqui faria a soma das pessoas discordar do
+   * número no alto do próprio card.
+   */
+  const operadoresDoCard = useCallback((alvo:
+    | { tipo: 'equipe'; id: string }
+    | { tipo: 'setor';  id: string },
+  ): OperadorNaEquipe[] => {
+    // As MESMAS funções que o dashboard e a aba Analítico usam para decidir quem
+    // conta onde. A área expandida não pode ter regra própria de participação:
+    // seria a quinta cópia dessa pergunta, e a soma das pessoas discordaria do
+    // número no alto do próprio card.
+    const fontes = {
+      setoresAlternativos,
+      operadorEquipeMap,
+      equipesExtrasPorOperador,
+      setorDaEquipe: dados.setorDaEquipe,
+    };
+    const ids = alvo.tipo === 'equipe'
+      ? operadoresDaEquipe(alvo.id, fontes)
+      : operadoresDoSetor(alvo.id, fontes);
+    return enriquecerOperadores({
+      ids,
+      identidade,
+      recebidoPorOperador: dados.recebidoPorOperador,
+      metaPorOperador:     dados.metaPorOperador,
+    });
+  }, [identidade, dados, operadorEquipeMap, equipesExtrasPorOperador, setoresAlternativos]);
 
   /**
    * Setores na ordem que o admin arrastou na aba Setores.
@@ -788,35 +695,52 @@ export function DesempenhoEquipes({
         const baseSetorHO = usarSoma
           ? (dados.porSetor[sid]?.ho ?? 0)
           : (totalPorSetor[sid]?.ho ?? 0);
+        const metaSetor = dados.metaDe('setor', sid);
         return (
         <div key={sid} className="space-y-3">
-          {/* Painel consolidado do setor */}
-          <PainelPlacar
-            titulo={setores[sid] ?? 'Setor'}
-            subtitulo={ehAlternativo ? 'Setor alternativo · soma dos usuários' : setorSomaMembros ? 'Setor · soma dos operadores' : 'Setor geral · total do relatório'}
-            ehSetor
-            avatarProprio={{
-              foto: setorFotos[sid] ?? null,
-              onEditar: sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid, 'placar') : undefined,
-              salvando: salvandoFotoSetor && uploadAlvo?.setorId === sid && uploadAlvo.campo === 'placar',
-              Icone: Building2,
-              rotulo: 'Foto do setor',
-            }}
-            mostrarHO={isPP}
-            // Só o ACUMULADO do Receptivo soma aqui; a meta do setor segue
-            // sendo a da aba Metas (decisão do usuário em 30/07/2026).
-            acumulado={baseSetor + (contrib[sid]?.acumulado ?? 0)}
-            acumuladoHO={baseSetorHO}
-            meta={dados.metaDe('setor', sid)}
-            totalUteis={dados.totalUteis}
-            decorridos={dados.decorridos}
-          />
+          {/* Nome do setor acima do grupo: com "Todos os setores" a tela vira uma
+              sequência longa de cards, e o título fixo dá onde se apoiar. */}
+          {!setorEfetivo && (
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1 pt-1">
+              {setores[sid] ?? 'Sem setor'}
+            </p>
+          )}
+          {/* Consolidado do setor. Sai de cena quando há filtro de equipe: o
+              número dele é do setor inteiro e contradiria o recorte pedido. */}
+          {!equipeId && (
+            <CardEquipe
+              titulo={setores[sid] ?? 'Setor'}
+              subtitulo={ehAlternativo
+                ? 'Setor alternativo · soma dos usuários'
+                : setorSomaMembros ? 'Setor · soma dos operadores' : 'Setor geral · total do relatório'}
+              ehSetor
+              avatarProprio={{
+                foto: setorFotos[sid] ?? null,
+                onEditar: sid !== 'sem_setor' ? () => abrirUploadFotoSetor(sid, 'placar') : undefined,
+                salvando: salvandoFotoSetor && uploadAlvo?.setorId === sid && uploadAlvo.campo === 'placar',
+                Icone: Building2,
+                rotulo: 'Foto do setor',
+              }}
+              mostrarHO={isPP}
+              metaHO={metaSetor !== null ? metaSetor * PP_HO_PERCENTUAL : null}
+              // Só o ACUMULADO do Receptivo soma aqui; a meta do setor segue
+              // sendo a da aba Metas (decisão do usuário em 30/07/2026).
+              acumulado={baseSetor + (contrib[sid]?.acumulado ?? 0)}
+              acumuladoHO={baseSetorHO}
+              meta={metaSetor}
+              totalUteis={dados.totalUteis}
+              decorridos={dados.decorridos}
+              quartis={quartis}
+              operadores={sid === 'sem_setor' ? undefined : operadoresDoCard({ tipo: 'setor', id: sid })}
+            />
+          )}
           {/* Contribuição Receptivo — card manual do setor (BookPlay) */}
-          {!isPP && sid !== 'sem_setor' && (
+          {!isPP && !equipeId && sid !== 'sem_setor' && (
             <CardContribuicaoReceptivo
               dados={contrib[sid]}
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
+              quartis={quartis}
               podeEditar={podeEditarContrib}
               salvando={salvandoContrib === sid}
               somenteLocal={!contribDbAtiva}
@@ -832,6 +756,9 @@ export function DesempenhoEquipes({
             .sort((a, b) => (dados.porEquipe[b.id]?.bruto ?? 0) - (dados.porEquipe[a.id]?.bruto ?? 0))
             .map(eq => {
               // Equipe de treinamento com data de início → dias úteis reduzidos.
+              // Os MESMOS dias descem para os operadores dentro do card: era
+              // exatamente aqui que a aba Quartis divergia, projetando quem está
+              // em treinamento contra o mês cheio.
               const inicioTreino = treinoMap[eq.id] ?? undefined;
               const eqUteis = inicioTreino
                 ? diasUteisDoMes(anoNum, mesNum, feriados, inicioTreino)
@@ -839,18 +766,22 @@ export function DesempenhoEquipes({
               const eqDecorridos = inicioTreino
                 ? diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), inicioTreino, contarHoje)
                 : dados.decorridos;
+              const metaEquipe = dados.metaDe('equipe', eq.id);
               return (
-                <PainelPlacar
+                <CardEquipe
                   key={eq.id}
                   titulo={(lideres[eq.id]?.length === 1 ? lideres[eq.id][0].nome : eq.nome)}
                   subtitulo={inicioTreino ? `Equipe ${eq.nome} · treino` : `Equipe ${eq.nome}`}
                   lideres={lideres[eq.id] ?? []}
                   mostrarHO={isPP}
+                  metaHO={metaEquipe !== null ? metaEquipe * PP_HO_PERCENTUAL : null}
                   acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
                   acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
-                  meta={dados.metaDe('equipe', eq.id)}
+                  meta={metaEquipe}
                   totalUteis={eqUteis}
                   decorridos={eqDecorridos}
+                  quartis={quartis}
+                  operadores={operadoresDoCard({ tipo: 'equipe', id: eq.id })}
                 />
               );
             })}
@@ -859,7 +790,9 @@ export function DesempenhoEquipes({
       })}
       <p className="text-[11px] text-muted-foreground">
         Acumulado e diário vêm do {fonteLabel} · meta, dias úteis e feriados
-        vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis trabalhados).
+        vêm da aba Metas ({dados.decorridos} de {dados.totalUteis} dias úteis
+        trabalhados) · clique num card para ver os degraus de quartil, o ritmo
+        necessário e a distribuição das pessoas.
       </p>
     </div>
   );
