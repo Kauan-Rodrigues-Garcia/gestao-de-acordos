@@ -1212,6 +1212,49 @@ no prazo geral.
    de trabalho que parou de rodar. **Primeira remoção real esperada em
    abril/2028**, porque a trilha começa em 01/04/2026.
 
+### 13.8 Monitoramento de uso
+
+Aba interna de **Configurações → Logs**, ao lado da trilha. Responde uma pergunta
+diferente: a trilha diz **o que mudou**, o monitoramento diz **quem está usando**.
+
+`logs_sistema` registra quem **escreve**. Um líder que abre o Painel Líder, olha
+os cards e fecha não deixava linha nenhuma — a coluna `rota` existia e estava
+preenchida em 7,1% das linhas, sempre com o valor `/`. Daí a tabela nova
+(migration `20260817180000`).
+
+| Decisão | Por quê |
+|---|---|
+| Tabela **separada** (`uso_telas`) | a trilha roda a 500–750 linhas/dia; navegação são milhares. Misturar é o que produziu as 11.297 linhas de ruído expurgadas em `20260817120000` |
+| **Agregado diário**, não evento por clique | uma linha por `(empresa, usuário, dia, tela)`. Teto real ~540 linhas/dia |
+| Retenção de **180 dias** (contra 730 da trilha) | uso responde "como estão trabalhando agora"; retrato de dois anos não descreve mais nem as telas nem as pessoas |
+| Tempo só com a aba **em foco** | sem isso, quem deixa a planilha aberta o dia todo lidera qualquer ranking sem ter usado nada |
+| **Cargo gravado na linha** | promover alguém não pode reescrever meses de "uso de operador" como "uso de líder" |
+
+**Sub-aba conta como tela.** "Desempenho Equipes" é aba dentro do Painel Líder e
+a URL não muda ao trocar — sem esse nível, a pergunta que originou o painel
+ficaria sem resposta. O identificador fica `lider:desempenho`
+(`src/lib/telas-catalogo.ts`).
+
+**Escrita só por `fn_uso_registrar`.** `uso_telas` não tem policy de
+INSERT/UPDATE, e a RPC resolve a identidade por `auth.uid()` — nunca por
+parâmetro. Um painel de uso que aceitasse números vindos do cliente não mediria
+nada. A RPC também limita o nome da tela a 120 caracteres e cada envio a 3.600
+segundos, porque relógio errado, máquina hibernada ou payload adulterado
+mandariam horas numa tacada.
+
+**Leitura travada em super_admin e administrador** — a mesma trava de `ver_logs`.
+As quatro funções de agregação são `SECURITY INVOKER` de propósito: `DEFINER` ali
+seria um contorno da policy para qualquer um com EXECUTE.
+
+**O achado acionável é quem NÃO usa.** `fn_uso_adocao_tela` parte de `perfis` e
+traz o uso por `LEFT JOIN`, porque quem nunca abriu a tela não tem linha em
+`uso_telas`. O líder que não olha o Desempenho Equipes é o resultado que muda uma
+conversa; o ranking de quem olha, não.
+
+> **A medição começa quando sobe.** Não há histórico de navegação para recuperar
+> — a tabela nasce vazia e o painel diz isso em vez de mostrar zeros como se
+> fossem dado.
+
 ---
 
 ## 14. Mapa: onde cada regra vive

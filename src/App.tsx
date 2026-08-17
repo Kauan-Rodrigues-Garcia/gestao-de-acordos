@@ -17,6 +17,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RealtimeAcordosProvider } from '@/providers/RealtimeAcordosProvider';
 import { PresenceProvider } from '@/providers/PresenceProvider';
+import { RastreioUsoProvider } from '@/providers/RastreioUsoProvider';
 import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
@@ -140,6 +141,9 @@ export default function App() {
         <TenantThemeApplier />
         <VersionWatcher />
         <Router>
+          {/* DENTRO do Router: o rastreio lê a rota atual com `useLocation`, e
+              fora dele o hook estouraria. Não renderiza nada — só mede. */}
+          <RastreioUsoProvider>
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path={ROUTE_PATHS.LOGIN} element={
@@ -316,6 +320,7 @@ export default function App() {
           </Suspense>
           <ImpersonacaoBanner />
           <Toaster richColors position="top-right" />
+          </RastreioUsoProvider>
         </Router>
           </NotificacoesProvider>
           </PresenceProvider>

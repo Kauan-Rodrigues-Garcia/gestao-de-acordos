@@ -55,6 +55,7 @@ import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
@@ -200,6 +201,10 @@ export default function PainelLider() {
     setAbaAtiva(k);
     setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
   }, []);
+  // Monitoramento de uso: a URL não muda ao trocar de aba aqui, então sem isto
+  // "quais líderes abrem o Desempenho Equipes" ficaria sem resposta — as quatro
+  // abas apareceriam somadas como um único `/lider`.
+  useSubAbaUso(abaAtiva);
   const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
 
   // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────

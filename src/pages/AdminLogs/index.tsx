@@ -30,7 +30,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   ClipboardList, RefreshCw, Download, Radio, List, Table2, ArrowUp,
-  Loader2, ShieldCheck, Trash2, Info,
+  Loader2, ShieldCheck, Trash2, Info, Activity,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,9 +58,13 @@ import LogsFiltros from './LogsFiltros';
 import LogsTimeline from './LogsTimeline';
 import LogsTabela from './LogsTabela';
 import LogDetalhe from './LogDetalhe';
+import MonitoramentoUso from './MonitoramentoUso';
 import { numeroBr, tempoRelativo } from './formatos';
+import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 
 type Vista = 'timeline' | 'tabela';
+/** Trilha = o que mudou. Uso = quem está usando. Ver o comentário nas abas. */
+type AbaInterna = 'trilha' | 'uso';
 
 export default function AdminLogs() {
   const { perfil } = useAuth();
@@ -77,10 +81,24 @@ export default function AdminLogs() {
   } = useLogs();
 
   const [vista, setVista] = useState<Vista>('timeline');
+  const [abaInterna, setAbaInterna] = useState<AbaInterna>('trilha');
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [selecionado, setSelecionado] = useState<LogSistema | null>(null);
   const [exportando, setExportando] = useState(false);
   const [expurgoAberto, setExpurgoAberto] = useState(false);
+
+  // A própria tela é medida: `admin/configuracoes:logs` ou `:uso`. Sem isto, as
+  // duas abas internas apareceriam somadas como uma só no monitoramento.
+  useSubAbaUso(abaInterna === 'uso' ? 'uso' : 'logs');
+
+  /**
+   * Empresa que o monitoramento de uso deve ler.
+   *
+   * Acompanha o seletor de empresa dos filtros quando há um (super_admin), e cai
+   * no tenant atual quando não há. A RLS de `uso_telas` recusa a empresa alheia
+   * de todo jeito — isto é só para a tela pedir o que ela pode ver.
+   */
+  const empresaDoPainel = filtros.empresaId ?? tenantEmpresa?.id ?? null;
 
   // Lista de empresas só para super_admin — os demais nem veem o seletor, e
   // buscar a lista para eles seria uma chamada que o RLS recusa.
@@ -165,6 +183,11 @@ export default function AdminLogs() {
           </p>
         </div>
 
+        {/* A barra de ações pertence à TRILHA: "ao vivo", troca de vista,
+            exportar CSV e retenção não têm significado no monitoramento de uso,
+            e deixá-las visíveis ali convidaria a expurgar a trilha achando que
+            está mexendo no dado de uso. */}
+        {abaInterna === 'trilha' && (
         <div className="flex flex-wrap items-center gap-2">
           {/* Ao vivo */}
           <Button
@@ -247,8 +270,47 @@ export default function AdminLogs() {
             </Button>
           )}
         </div>
+        )}
       </div>
 
+      {/* ══ Abas internas ═══════════════════════════════════════════════════ */}
+      {/* Trilha responde "o que mudou"; uso responde "quem está usando". São
+          perguntas diferentes sobre dados diferentes — `logs_sistema` registra
+          escrita, `uso_telas` registra abertura de tela. Ficam juntas porque a
+          trava de acesso é a mesma. */}
+      <div className="flex items-center gap-1 border-b border-border">
+        {([
+          { key: 'trilha', label: 'Trilha de auditoria', Icon: ClipboardList },
+          { key: 'uso',    label: 'Monitoramento de uso', Icon: Activity },
+        ] as const).map(({ key, label, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setAbaInterna(key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
+              abaInterna === key
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
+            )}
+          >
+            <Icon className="w-3.5 h-3.5" /> {label}
+          </button>
+        ))}
+      </div>
+
+      {abaInterna === 'uso' && (
+        empresaDoPainel
+          ? <MonitoramentoUso empresaId={empresaDoPainel} />
+          : (
+            <p className="text-sm text-muted-foreground text-center py-10">
+              Selecione uma empresa para ver o monitoramento de uso.
+            </p>
+          )
+      )}
+
+      {abaInterna === 'trilha' && (
+      <>
       {/* ══ Painel ══════════════════════════════════════════════════════════ */}
       <LogsPainel
         resumo={resumo}
@@ -362,6 +424,9 @@ export default function AdminLogs() {
         onFiltrarCampo={(campo) => setFiltro('campo', campo)}
         onFiltrarAutor={(id) => setFiltro('usuarioId', id)}
       />
+
+      </>
+      )}
 
       {/* ══ Retenção ════════════════════════════════════════════════════════ */}
       <DialogRetencao

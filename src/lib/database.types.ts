@@ -3704,6 +3704,57 @@ export type Database = {
           },
         ]
       }
+      uso_telas: {
+        Row: {
+          aberturas: number
+          cargo: string | null
+          dia: string
+          empresa_id: string
+          primeiro_em: string
+          segundos: number
+          tela: string
+          ultimo_em: string
+          usuario_id: string
+        }
+        Insert: {
+          aberturas?: number
+          cargo?: string | null
+          dia: string
+          empresa_id: string
+          primeiro_em?: string
+          segundos?: number
+          tela: string
+          ultimo_em?: string
+          usuario_id: string
+        }
+        Update: {
+          aberturas?: number
+          cargo?: string | null
+          dia?: string
+          empresa_id?: string
+          primeiro_em?: string
+          segundos?: number
+          tela?: string
+          ultimo_em?: string
+          usuario_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "uso_telas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "uso_telas_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       acordos_deduplicados: {
@@ -3994,6 +4045,58 @@ export type Database = {
       fn_logs_expurgar: {
         Args: { p_dias?: number; p_empresa_id?: string }
         Returns: number
+      }
+      fn_uso_registrar: {
+        Args: { p_tela: string; p_segundos?: number; p_abertura?: boolean }
+        Returns: undefined
+      }
+      fn_uso_por_pessoa: {
+        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Returns: {
+          usuario_id: string
+          nome: string
+          cargo: string | null
+          aberturas: number
+          segundos: number
+          dias_ativos: number
+          telas_usadas: number
+          ultimo_em: string | null
+        }[]
+      }
+      fn_uso_por_tela: {
+        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Returns: {
+          tela: string
+          aberturas: number
+          segundos: number
+          pessoas: number
+        }[]
+      }
+      fn_uso_por_dia: {
+        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Returns: {
+          dia: string
+          aberturas: number
+          segundos: number
+          pessoas: number
+        }[]
+      }
+      fn_uso_adocao_tela: {
+        Args: {
+          p_empresa_id: string
+          p_desde: string
+          p_ate: string
+          p_tela: string
+          p_cargo?: string | null
+        }
+        Returns: {
+          usuario_id: string
+          nome: string
+          cargo: string | null
+          aberturas: number
+          segundos: number
+          ultimo_em: string | null
+        }[]
       }
       fn_logs_resumo: {
         Args: {
