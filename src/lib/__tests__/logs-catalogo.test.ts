@@ -187,3 +187,62 @@ describe('montarDiferencas', () => {
     expect(montarDiferencas(undefined, undefined, [])).toEqual([]);
   });
 });
+
+/**
+ * `campos` só existe em ALTERAÇÃO — e isso está certo.
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Ao auditar a produção em 17/08/2026 a coluna parecia vazia: 1.343 linhas com
+ * `campos` num total de 17.587, ou 7,6%. Parecia lacuna e não era. A conta certa
+ * é contra os eventos em que "campo alterado" significa algo:
+ *
+ *   logs de alteração ............ 1.367
+ *   com `campos` preenchido ...... 1.367   (100%)
+ *
+ * O total da tabela estava inflado por 11.309 linhas de ruído da composição do
+ * mês — todas INSERT e DELETE, onde não existe "campo que mudou". `fn_log_auditoria`
+ * só monta a lista no ramo UPDATE, de propósito.
+ *
+ * Este bloco existe para que ninguém "conserte" isso: preencher `campos` em
+ * criação com todas as colunas transformaria o filtro "quem mexeu no valor" —
+ * alcançado clicando um campo no detalhe do log — em "quem tocou num registro
+ * que tem a coluna valor", que é toda linha da tabela.
+ */
+describe('a semântica de `campos`', () => {
+  it('em criação, o diff sai das chaves de `depois` sem precisar de `campos`', () => {
+    const diff = montarDiferencas(null, { valor: 100, status: 'pago' }, null);
+    expect(diff.map((d) => d.campo)).toEqual(['status', 'valor']);
+    expect(diff.every((d) => d.novo)).toBe(true);
+  });
+
+  it('em exclusão, tudo é marcado como removido', () => {
+    const diff = montarDiferencas({ valor: 100 }, null, null);
+    expect(diff[0].removido).toBe(true);
+    expect(diff[0].novo).toBe(false);
+  });
+
+  it('em alteração, `campos` manda na ordem e no recorte', () => {
+    const diff = montarDiferencas(
+      { valor: 100, observacoes: 'x', status: 'nao_pago' },
+      { valor: 250, observacoes: 'x', status: 'pago' },
+      ['status', 'valor'],   // `observacoes` não mudou: fora do recorte
+    );
+    expect(diff.map((d) => d.campo)).toEqual(['status', 'valor']);
+  });
+});
+
+/**
+ * Tabelas que entraram na trilha na migration 20260817120000. Sem entrada de
+ * alvo, o log sairia "Pix nr registro criado" em vez de "Registro de NR do Pix
+ * criado" — que é o caso 1 dos testes acima, só que evitável.
+ */
+describe('alvos auditados a partir de 17/08/2026', () => {
+  it.each([
+    ['pix_nr_registro_criado',          'Registro de NR do Pix criado'],
+    ['pix_nr_registro_alterado',        'Registro de NR do Pix alterado'],
+    ['ai_config_alterado',              'Configuração de IA alterado'],
+    ['contribuicao_receptivo_alterado', 'Contribuição do receptivo alterado'],
+    ['atendimento_responsavel_criado',  'Responsável pelo atendimento criado'],
+  ])('%s sai legível', (acao, esperado) => {
+    expect(descreverAcao(acao)).toBe(esperado);
+  });
+});

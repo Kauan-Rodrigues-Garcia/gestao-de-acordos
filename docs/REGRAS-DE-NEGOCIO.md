@@ -242,6 +242,19 @@ nunca consultadas no código). Quando passaram a ser fiscalizadas, o padrão
 > permissão não-legada cai no padrão `false`. Se um cargo inteiro "perdeu"
 > acessos numa empresa, verifique primeiro se existe linha na tabela.
 
+> ⚠️ **`ver_logs` não é uma permissão como as outras.** Ela abre a ABA; quem
+> decide a LEITURA é o RLS de `logs_sistema` (política `logs_sis_admin`), que
+> admite apenas `super_admin` e o cargo legado `administrador`. Conceder
+> `ver_logs` a outro cargo não dá acesso: dá uma aba vazia, porque o RLS devolve
+> zero linhas e `fn_logs_resumo` — que é `SECURITY INVOKER` — devolve zeros. Sem
+> erro na tela.
+>
+> Foi o que se via até 17/08/2026: dois diretores da PaguePlay com a aba e nada
+> dentro dela. O padrão passou a ser **ninguém**, nos dois catálogos (TypeScript
+> e SQL), e a política segue sendo o piso. Para abrir a trilha a mais gente,
+> mexa nos **dois lados na mesma migration** — o teste
+> `src/lib/__tests__/logs-permissao-vs-rls.test.ts` quebra se só um mudar.
+
 ### 2.5 Proteção de rotas
 
 `src/components/ProtectedRoute.tsx` combina as duas camadas. Com

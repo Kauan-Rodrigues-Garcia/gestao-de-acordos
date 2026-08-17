@@ -24,7 +24,18 @@ export interface ResumoExclusao {
   empresaId: string | null;
   acordos:   number;
   historico: number;
-  logs:      number;
+  /**
+   * Eventos que esta pessoa deixou na trilha de auditoria.
+   *
+   * **Não sai na exclusão** — a trilha é append-only, e apagar auditoria por
+   * pedido de exclusão de usuário não é decisão técnica. O número está aqui
+   * para o administrador saber o tamanho do rastro que FICA.
+   *
+   * Até 17/08/2026 este campo contava `logs_whatsapp`, tabela vazia que nunca
+   * foi escrita: dizia zero para todo mundo, sempre. Agora vem de
+   * `logs_sistema`.
+   */
+  logsAuditoria: number;
 }
 
 export type ResultadoExclusao =
@@ -66,7 +77,7 @@ async function rpc<T>(nome: string, args: Record<string, unknown>): Promise<Resp
 export async function resumoExclusao(userId: string): Promise<ResumoExclusao | null> {
   const { data, error } = await rpc<{
     nome: string | null; empresa_id: string | null;
-    acordos: number; historico: number; logs: number;
+    acordos: number; historico: number; logs_auditoria: number;
   }>('fn_admin_resumo_exclusao_usuario', { p_user_id: userId });
 
   if (error || !data) {
@@ -78,7 +89,7 @@ export async function resumoExclusao(userId: string): Promise<ResumoExclusao | n
     empresaId: data.empresa_id,
     acordos:   Number(data.acordos)   || 0,
     historico: Number(data.historico) || 0,
-    logs:      Number(data.logs)      || 0,
+    logsAuditoria: Number(data.logs_auditoria) || 0,
   };
 }
 

@@ -29,6 +29,22 @@ function header(req: ReqLike, nome: string): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+/**
+ * Endereço de quem chamou, para a trilha de auditoria.
+ *
+ * `x-forwarded-for` chega como cadeia ("cliente, proxy1, proxy2") quando há
+ * intermediários; o PRIMEIRO é o cliente. Os seguintes são infraestrutura e
+ * registrá-los junto só polui a coluna.
+ *
+ * O corte em 400 caracteres é o mesmo que `fn_log_contexto` aplica no banco:
+ * cabeçalho é entrada externa, e a coluna não deve virar depósito.
+ */
+function enderecoCliente(req: ReqLike): string | null {
+  const cru = header(req, 'x-forwarded-for') ?? header(req, 'x-real-ip');
+  if (!cru) return null;
+  return cru.split(',')[0].trim().slice(0, 400) || null;
+}
+
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
   if (req.method !== 'POST') {
     res.status(405).json({ error: 'Method not allowed' });
@@ -158,6 +174,18 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
           alvo_nome: alvo.nome ?? null,
           alvo_email: alvo.email,
         },
+        /*
+         * De onde partiu.
+         *
+         * Até 17/08/2026 as 103 impersonações registradas não tinham IP nem
+         * navegador — nenhuma. O gatilho `trg_log_contexto_padrao` completa
+         * esses campos quando vêm nulos, mas ali ele veria o endereço do
+         * servidor da Vercel, não o de quem clicou. O endereço real só existe
+         * AQUI, no request que chegou, e é este o dado que importa: "quem
+         * entrou como quem, e de onde".
+         */
+        ip: enderecoCliente(req),
+        user_agent: header(req, 'user-agent') ?? null,
       }),
     }).catch(() => {/* auditoria falhou, segue */});
 

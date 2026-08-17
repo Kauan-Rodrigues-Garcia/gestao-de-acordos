@@ -37,6 +37,19 @@ function header(req: ReqLike, nome: string): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
 
+/**
+ * Endereço de quem chamou, para a trilha de auditoria.
+ *
+ * `x-forwarded-for` chega como cadeia ("cliente, proxy1, proxy2") quando há
+ * intermediários; o PRIMEIRO é o cliente. Corte em 400 caracteres, igual ao
+ * que `fn_log_contexto` faz no banco — cabeçalho é entrada externa.
+ */
+function enderecoCliente(req: ReqLike): string | null {
+  const cru = header(req, 'x-forwarded-for') ?? header(req, 'x-real-ip');
+  if (!cru) return null;
+  return cru.split(',')[0].trim().slice(0, 400) || null;
+}
+
 const MIN_SENHA = 6;
 
 export default async function handler(req: ReqLike, res: ResLike): Promise<void> {
@@ -189,6 +202,17 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
           // acesso, e registrar isso explica por que o botão de chave voltou.
           exige_troca_no_proximo_acesso: true,
         },
+        /*
+         * De onde partiu.
+         *
+         * Até 17/08/2026 as 28 redefinições de senha registradas não tinham IP
+         * nem navegador. O gatilho `trg_log_contexto_padrao` completa esses
+         * campos quando vêm nulos, mas ali ele veria o endereço do servidor da
+         * Vercel — o de quem clicou só existe neste request. Para quem audita,
+         * "quem redefiniu a senha de quem, de onde" é a pergunta inteira.
+         */
+        ip: enderecoCliente(req),
+        user_agent: header(req, 'user-agent') ?? null,
       }),
     }).catch(() => {/* auditoria falhou, segue */});
 

@@ -1859,55 +1859,6 @@ export type Database = {
           },
         ]
       }
-      logs_whatsapp: {
-        Row: {
-          acordo_id: string
-          empresa_id: string | null
-          enviado_em: string
-          id: string
-          mensagem: string
-          usuario_id: string
-        }
-        Insert: {
-          acordo_id: string
-          empresa_id?: string | null
-          enviado_em?: string
-          id?: string
-          mensagem: string
-          usuario_id: string
-        }
-        Update: {
-          acordo_id?: string
-          empresa_id?: string | null
-          enviado_em?: string
-          id?: string
-          mensagem?: string
-          usuario_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "logs_whatsapp_acordo_id_fkey"
-            columns: ["acordo_id"]
-            isOneToOne: false
-            referencedRelation: "acordos"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "logs_whatsapp_acordo_id_fkey"
-            columns: ["acordo_id"]
-            isOneToOne: false
-            referencedRelation: "acordos_deduplicados"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "logs_whatsapp_usuario_id_fkey"
-            columns: ["usuario_id"]
-            isOneToOne: false
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       metas: {
         Row: {
           ano: number

@@ -70,12 +70,35 @@ beforeEach(() => {
 describe('resumoExclusao', () => {
   it('normaliza as contagens que a RPC devolve', async () => {
     rpcMock.mockResolvedValue({
-      data: { nome: 'Fulano', empresa_id: 'emp-1', acordos: '47', historico: 3, logs: 0 },
+      data: {
+        nome: 'Fulano', empresa_id: 'emp-1',
+        acordos: '47', historico: 3, logs_auditoria: '812',
+      },
       error: null,
     });
     expect(await resumoExclusao('u-1')).toEqual({
-      nome: 'Fulano', empresaId: 'emp-1', acordos: 47, historico: 3, logs: 0,
+      nome: 'Fulano', empresaId: 'emp-1', acordos: 47, historico: 3, logsAuditoria: 812,
     });
+  });
+
+  /**
+   * Até 17/08/2026 o campo se chamava `logs` e contava `logs_whatsapp`, tabela
+   * vazia que nunca foi escrita: devolvia zero para todo usuário, sempre. Um
+   * resumo de exclusão que afirma "0 logs" é pior que um resumo sem o campo.
+   *
+   * Agora vem de `logs_sistema` e o nome diz o que é — inclusive que a trilha
+   * NÃO sai com o usuário.
+   */
+  it('a contagem de auditoria não é mais sempre zero', async () => {
+    rpcMock.mockResolvedValue({
+      data: {
+        nome: 'Fulano', empresa_id: 'emp-1',
+        acordos: 0, historico: 0, logs_auditoria: 1_204,
+      },
+      error: null,
+    });
+    const r = await resumoExclusao('u-1');
+    expect(r?.logsAuditoria).toBe(1_204);
   });
 
   it('RPC ausente devolve null, e a tela só omite o aviso', async () => {

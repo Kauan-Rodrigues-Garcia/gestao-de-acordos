@@ -273,9 +273,19 @@ export const ACAO_LABEL: Record<string, string> = {
   importacao_concluida:        'Importação concluída',
   importacao_falhou:           'Importação falhou',
   composicao_mes_regerado:     'Composição do mês regerada',
-  // Legado: até 20260815 a composição era auditada linha a linha e uma única
-  // execução gravava ~240 destas. A trilha é append-only, então as antigas
-  // continuam aparecendo até saírem pela retenção.
+  /*
+   * Legado, e já expurgado.
+   *
+   * Até 15/08/2026 a composição era auditada linha a linha: uma execução
+   * gravava ~240 destas, e em quatro dias elas somaram 11.309 linhas — 64% da
+   * trilha inteira. A fonte foi estancada na migration 20260815122118 e as
+   * linhas antigas saíram na 20260817120000, que registrou o expurgo.
+   *
+   * Os rótulos ficam porque a trilha não deve mostrar código cru para uma linha
+   * que volte de backup, e porque `composicao_mes` é tabela DERIVADA: se
+   * alguém reauditá-la linha a linha, é aqui que o nome vai aparecer de novo — e
+   * é o sinal de que a regressão voltou.
+   */
   composicao_mes_criado:       'Composição do mês (linha criada)',
   composicao_mes_excluido:     'Composição do mês (linha excluída)',
 
@@ -330,6 +340,11 @@ const ALVO_LABEL: Record<string, string> = {
   pix_config:        'Configuração do Pix',
   pix_meta:          'Meta de Pix',
   pix_lixeira:       'Pix na lixeira',
+  // Auditadas a partir da migration 20260817120000.
+  pix_nr_registro:        'Registro de NR do Pix',
+  ai_config:              'Configuração de IA',
+  contribuicao_receptivo: 'Contribuição do receptivo',
+  atendimento_responsavel: 'Responsável pelo atendimento',
   solicitacao_wpp:   'Solicitação de WhatsApp',
   ouvidoria_acesso:  'Acesso à ouvidoria',
   ouvidoria_atend:   'Atendimento de ouvidoria',

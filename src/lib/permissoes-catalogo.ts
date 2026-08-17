@@ -158,7 +158,24 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_logs', label: 'Logs do sistema',
     descricao: 'Abrir a trilha de auditoria em Configurações',
-    grupo: 'Abas e telas', padrao: { gerencia: true, diretoria: true },
+    /*
+     * Padrão VAZIO, e isto não é descuido.
+     *
+     * A leitura de `logs_sistema` é limitada pelo RLS a super_admin (e ao cargo
+     * legado `administrador`) — ver `logs_sis_admin`. Conceder `ver_logs` a
+     * outro cargo não dá acesso: dá uma ABA VAZIA, porque o RLS devolve zero
+     * linhas e `fn_logs_resumo` devolve zeros. Sem erro e sem explicação.
+     *
+     * Foi o que aconteceu: até 17/08/2026 este padrão era
+     * `{ gerencia: true, diretoria: true }`. Na PaguePlay isso deixou dois
+     * diretores com a aba e sem nada dentro dela, mais dois cargos (elite e
+     * gerência) armados para o próximo contratado.
+     *
+     * Se um dia a trilha precisar ser aberta a mais gente, mexa nos DOIS lados
+     * na mesma migration. O teste `logs-permissao-vs-rls.test.ts` quebra se só
+     * um dos lados mudar.
+     */
+    grupo: 'Abas e telas', padrao: {},
   },
   {
     key: 'ver_configuracoes', label: 'Configurações',
