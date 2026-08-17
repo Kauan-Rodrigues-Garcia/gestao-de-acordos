@@ -27,6 +27,14 @@ interface DatePickerFieldProps {
   size?: 'sm' | 'md';
   /** Data mínima no formato ISO (yyyy-MM-dd) */
   minDate?: string;
+  /**
+   * Data máxima no formato ISO (yyyy-MM-dd).
+   *
+   * Existe para o filtro de período do Analítico, que vive dentro de UM mês:
+   * sem o limite o calendário deixa escolher setembro enquanto a tela mostra
+   * agosto, e o recorte volta vazio sem explicar o motivo.
+   */
+  maxDate?: string;
   disabled?: boolean;
   /** Texto placeholder quando nenhuma data está selecionada */
   placeholder?: string;
@@ -41,12 +49,14 @@ export function DatePickerField({
   triggerClassName,
   size = 'sm',
   minDate,
+  maxDate,
   disabled = false,
   placeholder,
 }: DatePickerFieldProps) {
   const [open, setOpen] = useState(false);
   const selected = value ? parseISO(value) : undefined;
   const fromDate = minDate ? parseISO(minDate) : undefined;
+  const toDate   = maxDate ? parseISO(maxDate) : undefined;
 
   const isSm = size === 'sm';
 
@@ -83,6 +93,11 @@ export function DatePickerField({
             }}
             locale={ptBR}
             fromDate={fromDate}
+            toDate={toDate}
+            // Com teto definido, abre no mês do teto em vez de em "hoje": olhando
+            // um mês fechado, "hoje" mostraria um calendário todo desabilitado.
+            // Sem `maxDate` (todos os usos anteriores) nada muda.
+            defaultMonth={selected ?? toDate}
             initialFocus
           />
         </PopoverContent>

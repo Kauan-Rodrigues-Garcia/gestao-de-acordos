@@ -13,7 +13,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Upload, Users, Trophy, AlertCircle, ChevronDown, ChevronRight,
   Trash2, Loader2, Star, CalendarDays, X, Filter, Copy,
-  TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft,
+  TrendingUp, CreditCard, Calendar, BarChart3, ArrowRightLeft, Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -74,6 +74,7 @@ import { toast } from 'sonner';
 import { TabulacaoCell } from './TabulacaoCell';
 import { ImportarModal } from './ImportarModal';
 import { RankingView } from './RankingView';
+import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
@@ -118,7 +119,7 @@ export function AnaliticoLider({
   const mostrarHO = isPP;                 // HO só existe no relatório PaguePlay
 
   const [modalImportar, setModalImportar] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
+  const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'formas' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -665,9 +666,14 @@ export function AnaliticoLider({
 
       {/* Tabs + botão importar */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-1 border-b border-border">
+        {/* Com cinco abas a régua não cabe em tela estreita: rola na horizontal
+            em vez de quebrar linha — a borda inferior do strip é uma só. */}
+        <div className="flex items-center gap-1 border-b border-border max-w-full overflow-x-auto">
           {([
             { key: 'operadores', label: 'Por operador',     Icon: Users },
+            // Por onde o dinheiro entrou (Pix, Boleto, Cartão…), com período,
+            // equipe e operador — a leitura que antes só existia no ERP.
+            { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet },
             { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
             { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
             // Desempenho Equipes / Quartis / Gráfico moraram para o Painel Líder
@@ -677,7 +683,7 @@ export function AnaliticoLider({
           ] as const).map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
-                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
+                'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
                 abaAtiva === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
@@ -955,6 +961,24 @@ export function AnaliticoLider({
             </div>
           ))}
         </div>
+      )}
+
+      {/* ── Aba: Formas de pagamento ──────────────────────────────────────── */}
+      {abaAtiva === 'formas' && (
+        <FormasPagamento
+          empresaId={empresaId}
+          mes={mes}
+          setorId={setorId}
+          setorNome={setorId ? nomeDoSetor.get(setorId) : undefined}
+          isPaguePlay={isPP}
+          mostrarHO={mostrarHO}
+          // As mesmas equipes dos outros filtros da tela (já pelo setor em foco)
+          equipes={equipesFiltradas}
+          resumos={resumos}
+          vinculos={vinculos}
+          equipeId={filtroEquipeId}
+          onEquipeChange={mudarFiltroEquipe}
+        />
       )}
 
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}

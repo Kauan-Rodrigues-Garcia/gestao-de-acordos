@@ -31,6 +31,7 @@ import type { AnaliticoDashboardLinha } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { normalizarMes } from '@/lib/mesReferencia';
+import { rotuloDaForma } from '@/lib/formasPagamento';
 import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
@@ -99,9 +100,10 @@ export function agregarAnalitico(
     if (l.forma_pagamento === 'cartao') { agg.cartaoBruto += total; agg.cartaoHO += ho; }
     else                                { agg.pixBruto    += total; agg.pixHO    += ho; }
 
-    // Rótulo real (BookPlay); PaguePlay cai no consolidado boleto_pix/cartao
-    const rotulo = l.forma_detalhe
-      ?? (l.forma_pagamento === 'cartao' ? 'Cartão' : 'Pix/Boleto');
+    // Rótulo real (BookPlay); PaguePlay cai no consolidado boleto_pix/cartao.
+    // A regra é a de `rotuloDaForma` — a mesma que a aba Analítico e o Painel
+    // Diretoria usam para nomear a forma na tela.
+    const rotulo = rotuloDaForma(l.forma_pagamento, l.forma_detalhe);
     if (!agg.porForma[rotulo]) agg.porForma[rotulo] = { bruto: 0, ho: 0, qtd: 0 };
     agg.porForma[rotulo].bruto += total;
     agg.porForma[rotulo].ho   += ho;
