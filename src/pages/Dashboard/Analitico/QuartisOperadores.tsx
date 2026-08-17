@@ -17,7 +17,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
 import { formatBRL } from '@/lib/money';
-import { getTodayISO } from '@/lib/index';
+import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO, COR_QUARTIL,
@@ -84,8 +84,13 @@ export function QuartisOperadores({
     async function carregar() {
       try {
         const [{ data: ops }, { data: metasData }, cfg, { data: setoresData }] = await Promise.all([
+          // A lista de cargos sai de `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`, e não
+          // escrita à mão: era uma das quatro cópias da mesma pergunta, e o
+          // Pix Automático tinha a sua discordando (elite sumia de lá).
           supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao')
-            .eq('empresa_id', empresaId).in('perfil', ['operador', 'elite']).order('nome'),
+            .eq('empresa_id', empresaId)
+            .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
+            .order('nome'),
           supabase.from('metas').select('referencia_id, meta_valor')
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
             .eq('mes', mesNum).eq('ano', anoNum),

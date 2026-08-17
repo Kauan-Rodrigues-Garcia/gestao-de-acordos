@@ -26,6 +26,8 @@ const OPERADORES: OperadorInfo[] = [
   { id: 'maria', nome: 'Maria Silva',  equipe_id: 'eq-1', setor_id: 'setor-A', perfil: 'operador' },
   { id: 'joao',  nome: 'João Souza',   equipe_id: 'eq-2', setor_id: 'setor-B', perfil: 'operador' },
   { id: 'chefe', nome: 'Marina Lima',  equipe_id: 'eq-1', setor_id: 'setor-A', perfil: 'lider' },
+  // Operador que também lidera: o recebimento dele conta como o de qualquer um.
+  { id: 'elite', nome: 'Kauan Teixeira', equipe_id: 'eq-1', setor_id: 'setor-A', perfil: 'elite' },
 ];
 
 let seq = 0;
@@ -45,8 +47,12 @@ function item(over: Partial<PixAutoAcordo> = {}): PixAutoAcordo {
 
 describe('mapas de operador', () => {
   it('indexa equipe e setor por id', () => {
-    expect(mapaOperadorEquipe(OPERADORES)).toEqual({ maria: 'eq-1', joao: 'eq-2', chefe: 'eq-1' });
-    expect(mapaOperadorSetor(OPERADORES)).toEqual({ maria: 'setor-A', joao: 'setor-B', chefe: 'setor-A' });
+    // Os mapas indexam TODO MUNDO, inclusive quem não conta no recebimento: são
+    // para resolver nome, equipe e setor de qualquer id que apareça numa linha.
+    expect(mapaOperadorEquipe(OPERADORES))
+      .toEqual({ maria: 'eq-1', joao: 'eq-2', chefe: 'eq-1', elite: 'eq-1' });
+    expect(mapaOperadorSetor(OPERADORES))
+      .toEqual({ maria: 'setor-A', joao: 'setor-B', chefe: 'setor-A', elite: 'setor-A' });
   });
 
   it('lista vazia dá mapa vazio', () => {
@@ -56,15 +62,31 @@ describe('mapas de operador', () => {
 
 describe('apenasOperadores', () => {
   it('líder fica de fora do filtro e do vínculo', () => {
-    expect(apenasOperadores(OPERADORES).map(o => o.id)).toEqual(['maria', 'joao']);
+    expect(apenasOperadores(OPERADORES).map(o => o.id)).not.toContain('chefe');
+  });
+
+  /**
+   * O defeito relatado em 17/08/2026: `kauan_teixeira` é `elite`, aparecia no
+   * ranking e nos quartis, e sumia do filtro de operadores do Pix. Ele conta no
+   * recebimento como qualquer operador — ver
+   * `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`.
+   */
+  it('elite ENTRA — é operador que também lidera, e conta no recebimento', () => {
+    expect(apenasOperadores(OPERADORES).map(o => o.id)).toEqual(['maria', 'joao', 'elite']);
+  });
+
+  it('gerência e diretoria seguem fora: supervisionam, não recebem', () => {
+    const supervisores: OperadorInfo[] = ['gerencia', 'diretoria', 'administrador', 'super_admin']
+      .map(perfil => ({ ...OPERADORES[0], id: perfil, perfil }));
+    expect(apenasOperadores(supervisores)).toHaveLength(0);
   });
 
   it('cargo em maiúscula ou com espaço ainda é reconhecido', () => {
-    const ops = [{ ...OPERADORES[0], perfil: ' OPERADOR ' }];
-    // O trim não é feito aqui de propósito: o valor vem do banco em minúscula.
-    // Só o caso da maiúscula é tratado.
+    // `contaNoRecebimento` normaliza caixa E espaços: o cargo vem de coluna de
+    // texto, e um espaço no fim não deveria apagar a pessoa do filtro.
     expect(apenasOperadores([{ ...OPERADORES[0], perfil: 'OPERADOR' }])).toHaveLength(1);
-    expect(apenasOperadores(ops)).toHaveLength(0);
+    expect(apenasOperadores([{ ...OPERADORES[0], perfil: ' ELITE ' }])).toHaveLength(1);
+    expect(apenasOperadores([{ ...OPERADORES[0], perfil: '' }])).toHaveLength(0);
   });
 });
 

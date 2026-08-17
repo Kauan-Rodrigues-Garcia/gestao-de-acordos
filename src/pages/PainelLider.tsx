@@ -31,7 +31,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { formatBRL, sumSafe } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
@@ -353,7 +353,9 @@ export default function PainelLider() {
       .from('perfis')
       .select('*, setores(id, nome)')
       .eq('empresa_id', empresa.id)
-      .in('perfil', ['operador', 'elite'])
+      // Mesma lista do Pix, dos quartis e do ranking — ver
+      // `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`.
+      .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
       .eq('ativo', true);
     if (escopoSetor) {
       q = cloneIds.length

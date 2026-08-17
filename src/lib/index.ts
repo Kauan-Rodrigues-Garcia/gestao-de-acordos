@@ -151,6 +151,46 @@ export function podeAutorizarTabulacao(perfil: string | null | undefined): boole
   );
 }
 
+/**
+ * Cargos que CONTAM como operador no recebimento.
+ *
+ * `elite` é operador que também lidera: ele atende, tabula e o dinheiro dele
+ * entra no relatório como o de qualquer um. Por isso aparece no filtro de
+ * operadores, no ranking, nos quartis e no Painel do Líder — e por isso pode
+ * receber o vínculo de um acordo registrado por outra pessoa.
+ *
+ * ⚠️ Esta lista existe porque a mesma pergunta estava respondida em QUATRO
+ * lugares, e um deles discordava:
+ *
+ *   • `QuartisOperadores`  → `['operador', 'elite']`
+ *   • `PainelLider`        → `['operador', 'elite']`
+ *   • `pixAutomaticoView`  → `=== 'operador'`  ← elite sumia do Pix
+ *   • `useAnalytics`       → `['operador', 'elite', 'gerencia']`
+ *
+ * O efeito era um usuário `elite` visível no ranking e nos quartis, mas ausente
+ * do filtro de operadores do Pix Automático e das sugestões de vínculo — apesar
+ * de o recebimento dele contar em todos os lados. Mesmo defeito que
+ * `PERFIS_AUTORIZADORES` documenta para a autorização de tabulação.
+ *
+ * NÃO inclui `lider`, `gerencia`, `diretoria`, `administrador` nem `super_admin`:
+ * esses supervisionam, não recebem em nome próprio.
+ *
+ * O mapa de NOMES de `useAnalytics` continua mais amplo de propósito — ele
+ * resolve rótulo para exibição, e um acordo antigo pode apontar para alguém que
+ * hoje é gerência. Rotular é diferente de contar.
+ *
+ * As telas de GESTÃO de pessoas (`AdminEquipes`, `AdminDiretoExtra`) também têm
+ * lista própria com `lider`: lá a pergunta é "quem pode ser membro de equipe",
+ * e não "quem conta no recebimento".
+ */
+export const PERFIS_QUE_CONTAM_NO_RECEBIMENTO = ['operador', 'elite'] as const;
+
+/** Este cargo conta como operador no recebimento? Ver a lista acima. */
+export function contaNoRecebimento(perfil: string | null | undefined): boolean {
+  return (PERFIS_QUE_CONTAM_NO_RECEBIMENTO as readonly string[])
+    .includes(String(perfil ?? '').toLowerCase().trim());
+}
+
 export const TODAS_EMPRESAS_SELECT_VALUE = 'all';
 
 /**

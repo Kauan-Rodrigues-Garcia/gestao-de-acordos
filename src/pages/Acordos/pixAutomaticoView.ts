@@ -24,6 +24,7 @@ import {
   diasUteisDoMes, diasUteisDecorridos, quartilAtual,
 } from '@/lib/diasUteis';
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
+import { contaNoRecebimento } from '@/lib/index';
 import {
   comissaoDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor, PIX_DIAS_UTEIS_EXPURGO,
   type PixAutoAcordo, type PixAutoStatus,
@@ -51,9 +52,18 @@ export function mapaOperadorSetor(ops: OperadorInfo[]): Record<string, string | 
   return m;
 }
 
-/** Só quem tem cargo de operador — líder não aparece no filtro nem no vínculo. */
+/**
+ * Só quem conta no recebimento — líder e gerência ficam fora do filtro e do
+ * vínculo, porque supervisionam em vez de receber em nome próprio.
+ *
+ * `elite` ENTRA: é operador que também lidera, o recebimento dele conta no
+ * relatório como o de qualquer um, e ele já aparecia no ranking e nos quartis.
+ * A comparação estrita com `'operador'` que existia aqui era a única das quatro
+ * listas do projeto que o deixava de fora — ver
+ * `PERFIS_QUE_CONTAM_NO_RECEBIMENTO` em `lib/index.ts`.
+ */
 export function apenasOperadores(ops: OperadorInfo[]): OperadorInfo[] {
-  return ops.filter(o => String(o.perfil ?? '').toLowerCase() === 'operador');
+  return ops.filter(o => contaNoRecebimento(o.perfil));
 }
 
 export const MAX_SUGESTOES_VINCULO = 8;
