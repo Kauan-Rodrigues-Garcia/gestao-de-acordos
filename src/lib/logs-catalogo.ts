@@ -19,6 +19,38 @@
  */
 
 // ═══════════════════════════════════════════════════════════════════════════
+// Retenção
+// ═══════════════════════════════════════════════════════════════════════════
+/**
+ * Quanto tempo a trilha é guardada. Decidido em 17/08/2026: faixa única de
+ * 2 anos para tudo.
+ *
+ * ## Por que 730
+ *
+ *   • o piso legal é 6 meses (Marco Civil, Art. 15, registros de acesso);
+ *   • 2 anos é a janela para ajuizar ação trabalhista depois da rescisão, e os
+ *     logs são o que responde "esse operador tabulou esse acordo?" numa disputa
+ *     de comissão — a pergunta mais provável sobre esta trilha;
+ *   • minimização (LGPD, Art. 6º III): 97% das linhas da categoria `acordo`
+ *     carregam rótulo identificável de profissional do COREN/COFEN.
+ *     `fn_log_mascarar` protege CPF, telefone e token, mas não nome nem NR.
+ *
+ * O log não é o registro: o acordo continua em `acordos`, que não é expurgado.
+ *
+ * ## Este número vive em três lugares, e um teste os amarra
+ *
+ *   1. aqui, para o padrão do diálogo de expurgo;
+ *   2. no `DEFAULT` de `fn_logs_expurgar`, para uma chamada sem argumento;
+ *   3. no trabalho `logs-retencao-730d` do pg_cron, que aplica sozinho.
+ *
+ * `src/lib/__tests__/logs-retencao.test.ts` quebra se divergirem.
+ */
+export const RETENCAO_LOGS_DIAS = 730;
+
+/** Piso do expurgo manual. O banco recusa menos que isto. */
+export const RETENCAO_LOGS_MINIMA_DIAS = 30;
+
+// ═══════════════════════════════════════════════════════════════════════════
 // Categorias
 // ═══════════════════════════════════════════════════════════════════════════
 export const CATEGORIAS = [

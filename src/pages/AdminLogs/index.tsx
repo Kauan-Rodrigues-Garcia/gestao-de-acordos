@@ -52,6 +52,7 @@ import { useLogs } from '@/hooks/useLogs';
 import {
   exportarLogsCsv, baixarCsv, expurgarLogs, registrarLog,
 } from '@/services/logs.service';
+import { RETENCAO_LOGS_DIAS, RETENCAO_LOGS_MINIMA_DIAS } from '@/lib/logs-catalogo';
 import LogsPainel from './LogsPainel';
 import LogsFiltros from './LogsFiltros';
 import LogsTimeline from './LogsTimeline';
@@ -401,17 +402,24 @@ function DialogRetencao({
   empresaNome: string;
   onConcluido: () => void;
 }) {
-  const [dias, setDias] = useState('180');
+  /*
+   * O campo já vem com a POLÍTICA, não com um número solto.
+   *
+   * Era `'180'` fixo, de antes de existir política de retenção. Um diálogo que
+   * sugere 180 dias quando a política é 730 convida o administrador a apagar
+   * ano e meio de trilha sem perceber que está contrariando a decisão.
+   */
+  const [dias, setDias] = useState(String(RETENCAO_LOGS_DIAS));
   const [confirmacao, setConfirmacao] = useState('');
   const [processando, setProcessando] = useState(false);
 
   const diasNum = Number(dias);
-  const diasValido = Number.isInteger(diasNum) && diasNum >= 30;
+  const diasValido = Number.isInteger(diasNum) && diasNum >= RETENCAO_LOGS_MINIMA_DIAS;
   const podeExecutar = diasValido && confirmacao.trim().toUpperCase() === 'EXPURGAR' && !processando;
 
   useEffect(() => {
     if (aberto) {
-      setDias('180');
+      setDias(String(RETENCAO_LOGS_DIAS));
       setConfirmacao('');
     }
   }, [aberto]);
@@ -454,7 +462,7 @@ function DialogRetencao({
             <Label className="text-xs">Manter os últimos … dias</Label>
             <Input
               type="number"
-              min={30}
+              min={RETENCAO_LOGS_MINIMA_DIAS}
               value={dias}
               onChange={(e) => setDias(e.target.value)}
               className="h-9 text-sm"

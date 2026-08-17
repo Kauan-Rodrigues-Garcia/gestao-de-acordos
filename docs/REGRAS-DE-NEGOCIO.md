@@ -1065,6 +1065,50 @@ seção 1.1: a impersonação atravessa tenant de propósito.
   eventos de vínculo, transferência e importação.
 - **Tags** (`tags.service.ts`) — por empresa, aplicáveis aos acordos.
 
+### 13.7 Retenção da trilha de auditoria
+
+**730 dias (2 anos), faixa única para toda a trilha.** Decidido em 17/08/2026.
+
+| Onde o número vive | O quê |
+|---|---|
+| `RETENCAO_LOGS_DIAS` (`lib/logs-catalogo.ts`) | padrão do diálogo de expurgo |
+| `fn_logs_expurgar(p_dias default 730)` | expurgo manual, piso de 30 dias, exige super_admin e confirmação digitada |
+| `fn_logs_retencao_aplicar(730)` + cron `logs-retencao-730d` | aplica sozinho, mensal, dia 1 às 03:40 UTC |
+
+`src/lib/__tests__/logs-retencao.test.ts` quebra se os três divergirem —
+divergência aqui não dá erro, dá apagamento com o prazo errado, em silêncio.
+
+**Por que 2 anos:**
+
+- o piso legal é 6 meses (Marco Civil, Art. 15, registros de acesso);
+- 2 anos é a janela para ajuizar ação trabalhista após a rescisão, e os logs são
+  o que responde *"esse operador tabulou esse acordo?"* numa disputa de comissão;
+- minimização (LGPD, Art. 6º III): 97% das linhas da categoria `acordo` carregam
+  rótulo identificável de profissional do COREN/COFEN. `fn_log_mascarar` protege
+  CPF, telefone e token, mas **não** mascara nome de cliente nem NR.
+
+> **O log não é o registro.** O acordo continua em `acordos`, que não é
+> expurgado. A trilha responde "quem mexeu e quando", e essa pergunta envelhece
+> mais rápido que "o que foi contratado" — que é o que o prazo de 5 anos do
+> Código Civil (Art. 206, §5º, I) protege.
+
+**O que se perde, e foi aceito:** eventos de `seguranca` (impersonação, senha,
+permissão, cargo) com mais de 2 anos também saem. A recomendação técnica era
+5 anos para essa categoria; optou-se pela simplicidade de um número só. Para
+mudar, acrescente recorte por categoria em `fn_logs_retencao_aplicar` — não mexa
+no prazo geral.
+
+**Duas coisas a saber sobre o trabalho automático:**
+
+1. Ele tem piso próprio de **365 dias**, mais conservador que os 30 do botão. O
+   botão tem um humano que digitou "EXPURGAR"; o cron roda todo mês sem ninguém
+   olhando.
+2. Ele **registra a execução mesmo quando não apaga nada**. Nos primeiros dois
+   anos essa linha de zero remoções vai ser a única coisa que ele produz — e é
+   ela que prova que está vivo. Trabalho destrutivo silencioso é indistinguível
+   de trabalho que parou de rodar. **Primeira remoção real esperada em
+   abril/2028**, porque a trilha começa em 01/04/2026.
+
 ---
 
 ## 14. Mapa: onde cada regra vive

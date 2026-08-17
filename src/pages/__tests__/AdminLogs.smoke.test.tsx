@@ -21,6 +21,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import type { LogSistema } from '@/lib/supabase';
 import type { ResumoLogs } from '@/services/logs.service';
+import { RETENCAO_LOGS_DIAS } from '@/lib/logs-catalogo';
 
 // ── Estado controlável pelos testes ─────────────────────────────────────────
 let cargo = 'administrador';
@@ -312,8 +313,12 @@ describe('AdminLogs 2.0 — retenção', () => {
     expect(botao).toBeEnabled();
 
     fireEvent.click(botao);
+    // O prazo que o diálogo já vem preenchendo é o da POLÍTICA, não um literal.
+    // Era 180 fixo até 17/08/2026, de antes de existir política de retenção —
+    // e um diálogo que sugere meio ano quando a regra é 2 anos convida a apagar
+    // ano e meio de trilha sem perceber.
     await waitFor(() => {
-      expect(expurgarLogsMock).toHaveBeenCalledWith(180, 'emp-1');
+      expect(expurgarLogsMock).toHaveBeenCalledWith(RETENCAO_LOGS_DIAS, 'emp-1');
     });
   });
 
