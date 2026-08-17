@@ -71,6 +71,10 @@ $function$;
 comment on function public.fn_perfis_escopo_empresa() is
   'Cúpula (diretoria/administrador/super_admin) não pertence a setor nem a equipe: zera setor_id e equipe_id na gravação. Espelha PERFIS_ESCOPO_EMPRESA em src/lib/index.ts.';
 
+-- Os dois nomes: o próprio (para reaplicar a migration sem colidir com
+-- "trigger already exists") e o sem prefixo, caso alguma versão anterior o tenha
+-- criado. `create trigger` não tem `or replace`.
+drop trigger if exists a_trg_perfis_escopo_empresa on public.perfis;
 drop trigger if exists trg_perfis_escopo_empresa on public.perfis;
 
 -- Nome com prefixo que ordena ANTES de `trg_impedir_escalada_de_cargo` e
