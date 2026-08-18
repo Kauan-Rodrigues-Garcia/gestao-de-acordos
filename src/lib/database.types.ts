@@ -3717,6 +3717,7 @@ export type Database = {
           solicitante_id: string
           solicitante_nome: string
           setor_id: string | null
+          setores_escopo: string[]
           modo: string
           nr_label: string
           nr_valor: string

@@ -69,6 +69,12 @@ export interface PedidoAutorizacao {
  * `payload` fica de fora de propósito: é o acordo inteiro, pesa, e a gaveta não
  * precisa dele — `resumo` existe exatamente para isso. Quem executa o payload é
  * o servidor, que já o tem.
+ *
+ * `setores_escopo` também fica de fora, e por outro motivo: quem o usa é a
+ * policy, no servidor. Pedi-lo aqui não mudaria nada na tela e criaria uma
+ * dependência de ordem de deploy — a Vercel publica no push, a migration é
+ * aplicada à mão depois, e nomear uma coluna que ainda não existe derruba a
+ * consulta INTEIRA no PostgREST. A gaveta ficaria vazia no intervalo.
  */
 const COLUNAS = `
   id, empresa_id, solicitante_id, solicitante_nome, setor_id, modo,
@@ -189,29 +195,34 @@ export async function cancelarAutorizacao(id: string): Promise<boolean> {
 /**
  * Os pedidos que quem está logado pode ver.
  *
- * Não filtra por cargo: a policy de `autorizacoes_pedidos` já devolve os
- * pendentes que a pessoa pode decidir mais os que ela mesma criou. Repetir o
- * filtro aqui seria a terceira cópia da regra — e a que fica desatualizada.
+ * Não filtra por cargo: a policy de `autorizacoes_pedidos` já devolve os que a
+ * pessoa pode decidir mais os que ela mesma criou. Repetir o filtro aqui seria
+ * a terceira cópia da regra — e a que fica desatualizada.
+ *
+ * ## Nem por data
+ *
+ * Traz a tabela inteira que a policy permitir, e isso é de propósito: quem
+ * decide o recorte do tempo é a **faxina** (`fn_autorizacao_faxina`, migration
+ * `20260818200000`), que roda à meia-noite de São Paulo e apaga o que foi
+ * decidido antes de hoje.
+ *
+ * O efeito é o pedido aprovado ou recusado ficar na gaveta **o dia inteiro** —
+ * é o registro de que aquilo já foi resolvido, e por quem — e a lista amanhecer
+ * só com os pendentes. Um filtro por data aqui seria uma segunda régua para a
+ * mesma coisa, e as duas divergiriam no primeiro ajuste de horário.
  *
  * Erro vira lista vazia: a gaveta é um acessório de todas as telas, e derrubar
  * a navegação porque a consulta dela falhou seria trocar um recurso por um
  * defeito de produto.
  */
 export async function listarPedidos(params: {
-  /** Quantos dias de histórico decidido trazer junto. 0 = só pendentes. */
-  diasHistorico?: number;
   limite?: number;
 } = {}): Promise<PedidoAutorizacao[]> {
-  const { diasHistorico = 2, limite = 50 } = params;
+  const { limite = 100 } = params;
   try {
-    const desde = new Date(Date.now() - diasHistorico * 86_400_000).toISOString();
     const { data, error } = await supabase
       .from('autorizacoes_pedidos')
       .select(COLUNAS)
-      // Pendente sempre entra, independente da idade; decidido só o recente —
-      // a gaveta mostra "foi autorizado por fulano", que é a memória curta que
-      // impede duas pessoas de perguntarem a mesma coisa.
-      .or(`status.eq.pendente,criado_em.gte.${desde}`)
       .order('criado_em', { ascending: false })
       .limit(limite);
     if (error) {

@@ -154,7 +154,11 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         )}
       </div>
 
-      {/* ── Já decidido: só o registro, para todo mundo ver quem decidiu ── */}
+      {/* ── Já decidido: o registro fica até a virada do dia ───────────────
+          Não é enfeite: é o que impede duas pessoas de perguntarem a mesma
+          coisa, e o que mostra ao solicitante que já foi resolvido. À
+          meia-noite a faxina apaga a linha e a lista amanhece só com
+          pendentes. */}
       {pedido.status !== 'pendente' && (
         <div className="rounded-lg bg-muted/50 px-2 py-1.5">
           <p className="text-[11px]">
@@ -278,7 +282,14 @@ export function AutorizacaoDock() {
   const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(!!perfil?.id);
   const [aberta, setAberta] = useState(false);
 
-  /** Pendentes primeiro; dentro de cada grupo, o mais novo no topo. */
+  /**
+   * Pendentes primeiro; dentro de cada grupo, o mais novo no topo.
+   *
+   * O decidido continua na lista **até a virada do dia** — é o registro de que
+   * aquilo já foi resolvido e por quem. Quem apaga é a faxina de 00:00
+   * (`fn_autorizacao_faxina`), não esta tela: uma segunda régua de tempo aqui
+   * divergiria da do servidor no primeiro ajuste de horário.
+   */
   const ordenados = useMemo(() => {
     const peso = (p: PedidoAutorizacao) => (p.status === 'pendente' ? 0 : 1);
     return [...pedidos].sort((a, b) =>
@@ -286,6 +297,8 @@ export function AutorizacaoDock() {
       || new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
   }, [pedidos]);
 
+  // O contador da etiqueta conta só o que ainda EXIGE ação. Somar os decididos
+  // faria o número subir a cada decisão, que é o oposto do que ele significa.
   const qtd = pendentes.length;
 
   // Chegou pedido novo com a gaveta fechada: abre sozinha. É uma interrupção

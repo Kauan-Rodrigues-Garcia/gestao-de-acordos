@@ -1387,6 +1387,20 @@ export function mapaSetorDaEquipe(equipes: EquipeAnalitico[]): Map<string, strin
  *
  * Não vale para EXCLUSÃO: apagar dados continua sendo pelo setor dono do
  * operador (perfilIdsDoSetor), senão um setor apagaria dados de outro.
+ *
+ * ⚠️ A mesma regra existe em SQL: `fn_setores_do_operador(uuid)`, criada em
+ * `20260731e_comemoracoes.sql` para decidir na tela de quem a comemoração
+ * explode, e hoje também usada para rotear os pedidos de autorização
+ * (`20260818200000`). São duas implementações da mesma regra, e isso só se
+ * sustenta porque as perguntas são diferentes o bastante:
+ *
+ *   • aqui: "o recebimento desta pessoa entra na conta deste setor?" — em
+ *     memória, sobre mapas já carregados, para agregação em massa;
+ *   • lá: "quem supervisiona esta pessoa?" — no servidor. Não pode sair do
+ *     cliente: quem decide quem autoriza não pode ser o navegador de quem está
+ *     pedindo.
+ *
+ * Mudou a regra de clone, mudam as duas. Esta nota existe nos dois lugares.
  */
 export function setoresDoOperador(
   operadorId: string,

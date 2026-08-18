@@ -726,9 +726,52 @@ operador clica em Solicitar
 
 **Quem decide** são os mesmos seis cargos de `PERFIS_AUTORIZADORES` — nenhum
 poder novo, nenhum perdido. O **recorte** é que muda: líder, elite e gerência
-só veem pedidos do **próprio setor**; diretoria, administrador e super_admin
-veem a empresa. A regra vive em `fn_pode_autorizar_pedido`, usada pela policy
-**e** pelas duas RPCs — uma cópia só.
+veem os pedidos dos **setores do solicitante**; diretoria, administrador e
+super_admin veem a empresa. A regra vive em `fn_pode_autorizar_pedido`, usada
+pela policy **e** pelas duas RPCs — uma cópia só.
+
+**Setores, no plural: o clone conta** (migration `20260818200000`). Um operador
+emprestado a uma equipe de outro setor (`equipe_operadores_clones`) é
+supervisionado também pelo líder de lá, e o pedido dele chega aos dois. Na
+PaguePlay isso não é exceção: quase todo o setor *Amauri Digital* é formado por
+clones do Play 4 e do Play 5, e sem isso nenhum pedido deles chegava ao líder
+de lá.
+
+Os setores vão **congelados na linha** (`setores_escopo`), pela mesma razão de
+`setor_id` já ir: é o que decide quem vê o pedido, e ler os clones de agora
+faria um pedido de ontem mudar de dono quando alguém entra ou sai de uma equipe
+emprestada. `conta_recebimento` **não** entra no filtro — ele decide de quem é
+o dinheiro, e aqui a pergunta é de supervisão.
+
+> A regra "setor próprio + setores onde é clone" **não foi reescrita**:
+> `fn_setores_do_operador(uuid)` já existia desde `20260731e_comemoracoes.sql`,
+> onde decide na tela de quem a comemoração explode. A autorização passou a usar
+> a mesma. Continua havendo a versão em TypeScript (`setoresDoOperador`), que
+> agrega recebimento em memória — mudou a regra de clone, mudam as duas.
+
+**A gaveta zera na virada do dia.** Aprovado e recusado **ficam na lista o dia
+inteiro** — é o registro de que aquilo já foi resolvido e por quem, e é o que
+impede duas pessoas de perguntarem a mesma coisa. À meia-noite eles somem e a
+lista amanhece só com os pendentes.
+
+Quem apaga é `fn_autorizacao_faxina`, agendada para 00:05 (São Paulo) — **não** a
+tela. Um filtro por data no frontend seria uma segunda régua para a mesma coisa,
+e as duas divergiriam no primeiro ajuste de horário.
+
+| Passo | O que faz |
+|---|---|
+| pendente **vencido** vira `cancelado` | não é "limpar pendente": com `expira_em` no passado ele já não pode ser aprovado. Sem isso ficaria na tabela para sempre, porque o que o marcava era alguém **tentar** decidi-lo |
+| decidido **antes de hoje** é apagado | o corte é a meia-noite de São Paulo, não "agora menos 24 h": quem recusou às 23h59 vê o próprio trabalho até a virada, em vez de a linha sumir um minuto depois |
+
+> O corte é `timestamptz`, não `date`. Comparar `decidido_em < <date>` faria o
+> PostgreSQL converter a data no fuso do **servidor** (UTC), e meia-noite em São
+> Paulo é 03:00 UTC — o corte sairia três horas fora do lugar, e o que foi
+> decidido entre 21h e 24h sobreviveria um dia a mais.
+
+O histórico de longo prazo fica em `logs_sistema`, que registra **a aprovação e
+a recusa** e guarda 730 dias. Registrar a recusa foi consequência direta desta
+faxina: antes só a aprovação ia para a trilha, e apagar a linha levaria junto a
+única memória de que alguém recusou.
 
 **Aprovar não tem desfazer**, e a gaveta diz isso: o botão exige uma segunda
 confirmação na própria linha, com o nome de quem perde o acordo escrito nela.
