@@ -256,19 +256,13 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
         </>
       )}
 
-      {/* ── Pendente, e quem olha é quem pediu ────────────────────────────── */}
-      {pedido.status === 'pendente' && souSolicitante && (
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">
-            Aguardando um líder. Você recebe a resposta por notificação.
-          </p>
-          <button
-            onClick={cancelar} disabled={ocupado}
-            className="shrink-0 h-7 px-2 rounded-lg border border-border text-[10px] font-medium hover:bg-muted transition-colors disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-        </div>
+      {/* Um pedido PRÓPRIO aparece aqui só quando quem olha também autoriza —
+          e sem botão nenhum: ninguém decide o próprio pedido. Para o operador
+          comum a gaveta não existe; ele acompanha por notificação. */}
+      {souSolicitante && (
+        <p className="text-[11px] text-muted-foreground">
+          Seu pedido. A decisão é de outro autorizador.
+        </p>
       )}
     </div>
   );
@@ -277,9 +271,20 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
 export function AutorizacaoDock() {
   const { perfil } = useAuth();
   const souAutorizador = podeAutorizarTabulacao(perfil?.perfil);
-  // Operador comum também precisa da gaveta: é onde ele acompanha o próprio
-  // pedido. O hook é ligado para todo mundo com sessão; a RLS faz o recorte.
-  const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(!!perfil?.id);
+  /**
+   * A gaveta é só de quem decide.
+   *
+   * O operador não vê etiqueta nenhuma: ele solicita, a janela fecha, e a
+   * resposta chega por notificação — que é o caminho que já existe e não ocupa
+   * o canto da tela dele o dia inteiro. Nada aqui seria acionável para ele.
+   *
+   * O hook fica desligado, e não apenas escondido: sem isso, todo operador
+   * manteria um canal de realtime e uma consulta a cada evento para desenhar
+   * uma janela que ele nunca abre.
+   */
+  const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(
+    souAutorizador && !!perfil?.id,
+  );
   const [aberta, setAberta] = useState(false);
 
   /**

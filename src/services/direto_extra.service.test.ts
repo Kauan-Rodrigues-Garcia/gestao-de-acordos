@@ -66,8 +66,25 @@ function createBuilder(table: string) {
 }
 
 // Mock ANTES dos imports do SUT
+// ── Fila e captura das chamadas de RPC ────────────────────────────────────
+//
+// `setDiretoExtraConfig` deixou de fazer `upsert` direto: a gravação do escopo
+// e o alinhamento das exceções precisam ser atômicos, e isso mora em
+// `fn_direto_extra_definir`. Ver a migration 20260818220000.
+
+const rpcResults: MockResult[] = [];
+const rpcCalls: Array<{ fn: string; args: unknown }> = [];
+
+function enqueueRpc(r: MockResult) { rpcResults.push(r); }
+
 vi.mock('@/lib/supabase', () => ({
-  supabase: { from: vi.fn((t: string) => createBuilder(t)) },
+  supabase: {
+    from: vi.fn((t: string) => createBuilder(t)),
+    rpc: vi.fn((fn: string, args: unknown) => {
+      rpcCalls.push({ fn, args });
+      return Promise.resolve(rpcResults.shift() ?? { data: null, error: null });
+    }),
+  },
 }));
 
 // SUT — importado depois do vi.mock
@@ -102,6 +119,8 @@ function makeCfg(overrides: Partial<DiretoExtraConfig> = {}): DiretoExtraConfig 
 
 beforeEach(() => {
   calls.length = 0;
+  rpcCalls.length = 0;
+  rpcResults.length = 0;
   for (const k of Object.keys(resultsByTable)) delete resultsByTable[k];
   vi.restoreAllMocks();
 });
@@ -150,82 +169,79 @@ describe('fetchDiretoExtraConfigs', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('setDiretoExtraConfig', () => {
-  it('sucesso → retorna {ok:true} e passa payload+onConflict corretos ao upsert', async () => {
-    enqueue('direto_extra_config', { data: null, error: null });
-
-    const result = await setDiretoExtraConfig({
-      empresaId:    'emp-1',
-      escopo:       'setor',
-      referenciaId: 'setor-1',
-      ativo:        true,
-    });
-
-    expect(result).toEqual({ ok: true });
-
-    const c = calls[0];
-    expect(c.table).toBe('direto_extra_config');
-    expect(c.operation).toBe('upsert');
-
-    // Valida payload (atualizado_em deve ser string ISO válida)
-    const payload = c.payload as Record<string, unknown>;
-    expect(payload).toMatchObject({
-      empresa_id:    'emp-1',
-      escopo:        'setor',
-      referencia_id: 'setor-1',
-      ativo:         true,
-    });
-    expect(typeof payload.atualizado_em).toBe('string');
-    expect(() => new Date(payload.atualizado_em as string).toISOString()).not.toThrow();
-
-    // Valida onConflict
-    expect(c.upsertOpts).toEqual({ onConflict: 'empresa_id,escopo,referencia_id' });
-  });
-
-  it('erro → retorna {ok:false, error:mensagem} e emite warn', async () => {
-    enqueue('direto_extra_config', { data: null, error: { message: 'permission denied' } });
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  /**
+   * A gravação passou a ser RPC, e não `upsert` direto.
+   *
+   * O motivo é o defeito de 18/08/2026: ativar a lógica para uma equipe de 4
+   * pessoas pegava só para 1 — a única sem config de `usuario`. As outras três
+   * tinham uma, desligada, de semanas antes, e o mais específico vence. Agora o
+   * servidor grava o escopo E apaga as exceções que o contradizem, numa
+   * transação só (`fn_direto_extra_definir`).
+   */
+  it('sucesso → chama a RPC com os quatro parâmetros e devolve os alinhados', async () => {
+    enqueueRpc({ data: { ok: true, alinhados_usuario: 3, alinhados_equipe: 0 }, error: null });
 
     const result = await setDiretoExtraConfig({
       empresaId:    'emp-1',
       escopo:       'equipe',
       referenciaId: 'eq-1',
-      ativo:        false,
+      ativo:        true,
+    });
+
+    expect(result).toEqual({ ok: true, alinhados: 3 });
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0].fn).toBe('fn_direto_extra_definir');
+    expect(rpcCalls[0].args).toEqual({
+      p_empresa_id:    'emp-1',
+      p_escopo:        'equipe',
+      p_referencia_id: 'eq-1',
+      p_ativo:         true,
+    });
+  });
+
+  it('soma os alinhamentos de usuário e de equipe', async () => {
+    enqueueRpc({ data: { ok: true, alinhados_usuario: 5, alinhados_equipe: 2 }, error: null });
+
+    const result = await setDiretoExtraConfig({
+      empresaId: 'emp-1', escopo: 'setor', referenciaId: 'setor-1', ativo: true,
+    });
+
+    expect(result).toEqual({ ok: true, alinhados: 7 });
+  });
+
+  /** Nada a alinhar é o caso comum: a tela não deve anunciar coisa nenhuma. */
+  it('sem exceções contraditórias, alinhados é zero', async () => {
+    enqueueRpc({ data: { ok: true, alinhados_usuario: 0, alinhados_equipe: 0 }, error: null });
+
+    const result = await setDiretoExtraConfig({
+      empresaId: 'emp-1', escopo: 'usuario', referenciaId: 'user-7', ativo: false,
+    });
+
+    expect(result).toEqual({ ok: true, alinhados: 0 });
+    expect(rpcCalls[0].args).toMatchObject({ p_escopo: 'usuario', p_ativo: false });
+  });
+
+  it('erro de transporte → {ok:false, error} e warn no console', async () => {
+    enqueueRpc({ data: null, error: { message: 'permission denied' } });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    const result = await setDiretoExtraConfig({
+      empresaId: 'emp-1', escopo: 'equipe', referenciaId: 'eq-1', ativo: false,
     });
 
     expect(result).toEqual({ ok: false, error: 'permission denied' });
     expect(warn).toHaveBeenCalled();
   });
 
-  it('aceita escopo "equipe" e persiste referencia_id corretamente', async () => {
-    enqueue('direto_extra_config', { data: null, error: null });
+  /** A RPC recusa por regra de negócio devolvendo `ok:false`, sem erro HTTP. */
+  it('recusa da própria função → {ok:false} com a mensagem dela', async () => {
+    enqueueRpc({ data: { ok: false, erro: 'nao_autorizado' }, error: null });
 
-    await setDiretoExtraConfig({
-      empresaId:    'emp-2',
-      escopo:       'equipe',
-      referenciaId: 'eq-99',
-      ativo:        true,
+    const result = await setDiretoExtraConfig({
+      empresaId: 'emp-1', escopo: 'setor', referenciaId: 'setor-1', ativo: true,
     });
 
-    const payload = calls[0].payload as Record<string, unknown>;
-    expect(payload.escopo).toBe('equipe');
-    expect(payload.referencia_id).toBe('eq-99');
-    expect(payload.empresa_id).toBe('emp-2');
-  });
-
-  it('aceita escopo "usuario" e sinaliza ativo=false corretamente', async () => {
-    enqueue('direto_extra_config', { data: null, error: null });
-
-    await setDiretoExtraConfig({
-      empresaId:    'emp-1',
-      escopo:       'usuario',
-      referenciaId: 'user-7',
-      ativo:        false,
-    });
-
-    const payload = calls[0].payload as Record<string, unknown>;
-    expect(payload.escopo).toBe('usuario');
-    expect(payload.referencia_id).toBe('user-7');
-    expect(payload.ativo).toBe(false);
+    expect(result).toEqual({ ok: false, error: 'nao_autorizado' });
   });
 });
 

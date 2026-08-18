@@ -809,6 +809,27 @@ Tabela `direto_extra_config`. Resolução em cascata
 Uma config de nível mais específico **vence** as de cima, inclusive para
 desativar. Ex.: setor ativo + usuário inativo = usuário inativo.
 
+**Gravar um escopo amplo alinha as exceções que o contradizem** (migration
+`20260818220000`, RPC `fn_direto_extra_definir`). Ligar a equipe apaga as
+configs de `usuario` **desligadas** dela; desligar apaga as **ligadas**. Só o
+que contradiz é tocado. Para o setor, o mesmo um nível acima: alcança as
+equipes e as pessoas dentro delas, inclusive quem está ali como clone.
+
+> **O relato que originou isso:** "ativei a lógica para a equipe Atendimento
+> 0800, que tem 4 pessoas, e só pegou para 1". Não era aleatório — era a única
+> sem config de `usuario`. As outras três tinham uma, desligada, de semanas
+> antes, e o mais específico vencia em silêncio.
+
+A cascata **não mudou**. O que mudou é que um ato explícito do administrador
+sobre o escopo amplo deixa de ser anulado por uma decisão antiga de que ninguém
+se lembra. A exceção continua possível, na ordem que a pessoa espera: liga a
+equipe, depois desliga quem não deve ter. O que não sobrevive é a exceção
+anterior ao ato — e a tela diz quantas foram alinhadas, em vez de deixar o
+administrador descobrir sozinho.
+
+A escrita é atômica de propósito: em duas chamadas haveria uma janela com a
+equipe ligada e as exceções ainda valendo.
+
 Consulta pelo servidor: `fn_direto_extra_ativo` (`SECURITY DEFINER`), com
 fallback para query direta caso a RPC não exista.
 

@@ -176,9 +176,18 @@ export default function AdminDiretoExtra() {
     if (!res.ok) {
       toast.error(`Erro ao salvar: ${res.error ?? 'desconhecido'}`);
     } else {
+      const alinhados = res.alinhados ?? 0;
       toast.success(
         `${escopo === 'setor' ? 'Setor' : escopo === 'equipe' ? 'Equipe' : 'Usuário'} ${novoValor ? 'ativado' : 'desativado'}`,
-        { duration: 2000 },
+        {
+          // Sem esta frase, o administrador não tem como saber que havia ajustes
+          // individuais no caminho — foi o silêncio disso que produziu o relato
+          // de "ativei a equipe e só pegou para uma pessoa".
+          description: alinhados > 0
+            ? `${alinhados} ajuste(s) individual(is) que contradiziam foram alinhados.`
+            : undefined,
+          duration: alinhados > 0 ? 6000 : 2000,
+        },
       );
       await refetch();
     }

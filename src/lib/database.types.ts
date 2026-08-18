@@ -4116,6 +4116,15 @@ export type Database = {
         Args: { p_id: string }
         Returns: Json
       }
+      fn_direto_extra_definir: {
+        Args: {
+          p_empresa_id: string
+          p_escopo: string
+          p_referencia_id: string
+          p_ativo: boolean
+        }
+        Returns: Json
+      }
       fn_uso_por_pessoa: {
         Args: {
           p_empresa_id: string | null

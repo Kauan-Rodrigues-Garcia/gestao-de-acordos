@@ -57,34 +57,64 @@ export async function fetchDiretoExtraConfigs(empresaId: string): Promise<Direto
 }
 
 /**
- * Ativa ou atualiza uma config. Se não existir, cria; se existir, atualiza `ativo`.
+ * Grava a config de um escopo — e alinha as exceções que a contradizem.
+ *
+ * ## O defeito que isto corrige
+ *
+ * Ativar a lógica para uma equipe de 4 pessoas pegava só para 1. Não era
+ * aleatório: era a única sem config de `usuario`. As outras três tinham uma,
+ * desligada, de semanas antes — e `resolverDiretoExtraAtivo` faz o mais
+ * específico vencer, então a decisão antiga escondia a nova, em silêncio.
+ *
+ * Agora ligar a equipe apaga as configs de `usuario` **desligadas** dela;
+ * desligar apaga as **ligadas**. Só o que contradiz é tocado. Para o setor, o
+ * mesmo vale um nível acima: alcança as equipes e as pessoas dentro delas.
+ *
+ * A cascata não mudou — continua "o mais específico vence". O que mudou é que
+ * um ato explícito do administrador sobre o escopo amplo deixa de ser anulado
+ * por uma exceção anterior. A exceção continua possível, na ordem que a pessoa
+ * espera: liga a equipe, depois desliga quem não deve ter.
+ *
+ * A escrita vai por RPC (`fn_direto_extra_definir`) porque precisa ser atômica
+ * com o alinhamento — em duas chamadas haveria uma janela com a equipe ligada e
+ * as exceções ainda no lugar — e porque ler `perfis` de terceiros e os clones é
+ * coisa que a RLS não entrega ao líder por caminho direto.
+ *
+ * @returns `alinhados` = quantas exceções foram apagadas, para a tela dizer o
+ *   que aconteceu em vez de o administrador descobrir sozinho.
  */
 export async function setDiretoExtraConfig(params: {
   empresaId:    string;
   escopo:       DiretoExtraEscopo;
   referenciaId: string;
   ativo:        boolean;
-}): Promise<{ ok: boolean; error?: string }> {
+}): Promise<{ ok: boolean; error?: string; alinhados?: number }> {
   const { empresaId, escopo, referenciaId, ativo } = params;
 
-  const { error } = await supabase
-    .from('direto_extra_config')
-    .upsert(
-      {
-        empresa_id:    empresaId,
-        escopo,
-        referencia_id: referenciaId,
-        ativo,
-        atualizado_em: new Date().toISOString(),
-      },
-      { onConflict: 'empresa_id,escopo,referencia_id' },
-    );
+  const { data, error } = await supabase.rpc('fn_direto_extra_definir', {
+    p_empresa_id:    empresaId,
+    p_escopo:        escopo,
+    p_referencia_id: referenciaId,
+    p_ativo:         ativo,
+  });
 
   if (error) {
-    console.warn('[direto_extra.service] upsert error:', error.message);
+    console.warn('[direto_extra.service] fn_direto_extra_definir:', error.message);
     return { ok: false, error: error.message };
   }
-  return { ok: true };
+
+  const r = data as {
+    ok?: boolean; erro?: string;
+    alinhados_usuario?: number; alinhados_equipe?: number;
+  } | null;
+
+  if (!r?.ok) {
+    return { ok: false, error: r?.erro ?? 'Não foi possível salvar a configuração.' };
+  }
+  return {
+    ok: true,
+    alinhados: (Number(r.alinhados_usuario) || 0) + (Number(r.alinhados_equipe) || 0),
+  };
 }
 
 /**
