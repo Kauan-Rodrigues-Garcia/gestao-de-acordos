@@ -240,6 +240,14 @@ function DetalheOperador({
             label="Média diária atual" valor={formatBRL(d.mediaDiaria)}
             hint="Recebimento ÷ dias úteis trabalhados"
           />
+          {/* A coluna DIÁRIO saiu da tabela na PaguePlay para o H.O. entrar. O
+              número não sumiu do produto: desceu para cá, onde quem quer a meta
+              diária vai buscá-la. */}
+          <LinhaValor
+            label="Meta diária"
+            valor={linha.diaria !== null ? formatBRL(linha.diaria) : '—'}
+            hint="Meta ÷ dias úteis do mês. Fixa: não muda com o passar do mês"
+          />
           <LinhaValor
             label="Precisa por dia restante"
             valor={d.ritmoNecessario !== null ? formatBRL(d.ritmoNecessario) : '—'}
@@ -538,9 +546,21 @@ export function QuartisOperadores({
                         <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">OPERADOR</th>
                         <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">EQUIPE</th>
                         <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">META</th>
-                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">RECEBIMENTO</th>
-                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
-                          title="Quanto o operador deve receber por dia útil para bater a meta">DIÁRIO</th>
+                        {/* PaguePlay lê H.O., não bruto. A coluna de destaque é a
+                            dele; o bruto desce para onde ficava DIÁRIO, que saiu
+                            porque a diária já é a meta ÷ dias úteis e a leitura
+                            que interessa no dia a dia é o H.O. recebido. */}
+                        {isPP && (
+                          <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
+                            title="H.O. do recebimento — 24,96% do bruto">RECEBIMENTO H.O.</th>
+                        )}
+                        <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">
+                          {isPP ? 'RECEBIMENTO BRUTO' : 'RECEBIMENTO'}
+                        </th>
+                        {!isPP && (
+                          <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
+                            title="Quanto o operador deve receber por dia útil para bater a meta">DIÁRIO</th>
+                        )}
                         <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
                           title="Quanto deveria ter recebido até hoje (diário × dias úteis trabalhados)">HOJE</th>
                         <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
@@ -600,12 +620,22 @@ export function QuartisOperadores({
                             <td className="px-2 py-1 text-right tabular-nums font-mono">
                               {l.meta !== null ? formatBRL(l.meta) : '—'}
                             </td>
-                            <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold">
+                            {isPP && (
+                              <td className="px-2 py-1 text-right tabular-nums font-mono font-bold text-foreground">
+                                {formatBRL(l.ho)}
+                              </td>
+                            )}
+                            {/* Na PaguePlay o bruto é contexto do H.O., não o
+                                número principal — daí um tom abaixo dele. */}
+                            <td className={cn('px-2 py-1 text-right tabular-nums font-mono',
+                              isPP ? 'font-medium text-muted-foreground' : 'font-semibold')}>
                               {formatBRL(l.recebido)}
                             </td>
-                            <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">
-                              {l.diaria !== null ? formatBRL(l.diaria) : '—'}
-                            </td>
+                            {!isPP && (
+                              <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">
+                                {l.diaria !== null ? formatBRL(l.diaria) : '—'}
+                              </td>
+                            )}
                             <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">
                               {l.hoje !== null ? formatBRL(l.hoje) : '—'}
                             </td>
@@ -703,9 +733,13 @@ export function QuartisOperadores({
       <p className="text-[11px] text-muted-foreground">
         <strong>Clique na linha</strong> para ver a estimativa de fechamento do mês,
         quanto falta para cada quartil e os números do operador. ·
-        Diário = meta ÷ dias úteis do mês · Hoje = diário × dias úteis trabalhados ·
+        {isPP
+          ? ' H.O. = 24,96% do bruto recebido · '
+          : ' Diário = meta ÷ dias úteis do mês · '}
+        Hoje = meta diária × dias úteis trabalhados ·
         Falta/sobra = recebimento − hoje · % = recebimento ÷ hoje ·
         faixas de quartil configuradas na aba Metas.
+        {isPP && ' A meta diária ficou dentro da linha expandida.'}
       </p>
     </div>
   );

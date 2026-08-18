@@ -315,15 +315,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   /*
    * Easter Egg do logo — cinco cliques rápidos abrem o Creators Lab.
    *
-   * Precisa ficar AQUI, no corpo do Layout, e não dentro de `SidebarContent`.
-   * Aquele componente é declarado no corpo desta função e usado como
-   * `<SidebarContent />`: a identidade dele muda a cada render, então o React
-   * desmonta e remonta tudo que houver lá dentro. O contador de cliques nunca
-   * passaria de 1.
-   *
-   * Como o hook vive aqui, os dois lugares onde o logo aparece (barra lateral e
-   * gaveta do celular) compartilham o mesmo contador — o que é o certo: são o
-   * mesmo logo, em telas diferentes.
+   * Vive AQUI, no corpo do Layout, e os dois lugares onde o logo aparece (barra
+   * lateral e gaveta do celular) compartilham o mesmo contador — o que é o
+   * certo: são o mesmo logo, em telas diferentes.
    */
   /*
    * O quinto clique NÃO navega na hora.
@@ -343,7 +337,32 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(t);
   }, [abrindoLab, navigate]);
 
-  const SidebarContent = () => (
+  /**
+   * O conteúdo da barra lateral é um ELEMENTO, não um componente.
+   *
+   * Era `const SidebarContent = () => (…)`, declarado no corpo do Layout e usado
+   * como `<SidebarContent />`. Um componente declarado dentro de outro ganha
+   * identidade nova a cada render, e o React trata identidade nova como TIPO
+   * novo: desmonta a barra inteira e monta outra no lugar. A cada troca de rota,
+   * a cada notificação que chega, a cada tecla digitada em qualquer estado deste
+   * componente.
+   *
+   * Foi o que produziu o defeito visual relatado — "troco de tela e somem todas
+   * as letras do menu". Os rótulos são `motion.span` com
+   * `initial={{ opacity: 0 }}`: remontar reinicia cada um do zero, e uma
+   * animação interrompida no meio (ou iniciada com a aba em segundo plano, onde
+   * o navegador congela o `requestAnimationFrame` que a move) fica parada em
+   * `opacity: 0`. O texto some e só volta na próxima remontagem — que é o que
+   * "trocar de aba de novo" provocava.
+   *
+   * Como elemento, a barra é reconciliada pela posição na árvore: o estado, o
+   * scroll da navegação e as animações sobrevivem à troca de rota.
+   *
+   * O mesmo elemento aparece em dois lugares (desktop e gaveta do celular).
+   * Elemento React é descrição imutável, não instância — cada lugar reconcilia o
+   * seu, sem interferência.
+   */
+  const sidebarContent = (
     <div className="flex flex-col h-full">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
@@ -499,7 +518,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         onMouseEnter={handleSidebarMouseEnter}
         onMouseLeave={handleSidebarMouseLeave}
       >
-        <SidebarContent />
+        {sidebarContent}
       </motion.aside>
 
       {/* Mobile Overlay */}
@@ -511,7 +530,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
               transition={{ type: 'spring', damping: 30, stiffness: 300 }}
               className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 md:hidden">
-              <SidebarContent />
+              {sidebarContent}
             </motion.aside>
           </>
         )}
