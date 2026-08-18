@@ -143,6 +143,25 @@ admin. Onde a policy exige setor (`acordos_select` para gerência na BookPlay), 
 setor da empresa de origem não corresponde a nenhum setor da outra e a lista vem
 curta. `diretoria`, liberada por cargo na maioria das telas, atravessa inteira.
 
+> **A empresa do crachá não é a empresa da linha.** As quatro policies de
+> `acordos` ramificam entre regra BookPlay e regra PaguePlay. Elas perguntavam
+> `fn_user_empresa_is_bookplay()` — que responde sobre a empresa do **perfil**.
+> Antes do multiempresa as duas eram sempre a mesma coisa, porque o gate de
+> empresa garantia que toda linha visível era da empresa do usuário. Depois,
+> não: uma diretoria da PaguePlay olhando a BookPlay caía no ramo da PaguePlay
+> (`lider`/`administrador`) e via **zero acordos**. Desde
+> `20260818360000` a pergunta é sobre a linha: `empresa_id =
+> fn_empresa_id_bookplay()`. A função não recebe argumento de propósito — assim
+> vira InitPlan e roda uma vez por consulta, não por linha.
+>
+> Ao escrever policy nova, a pergunta é sempre sobre a **linha**. Sobre o
+> usuário, só cargo, setor e permissão.
+
+O ramo PaguePlay de `acordos` segue com `lider` e `administrador`, sem
+`diretoria` — herança de antes do multiempresa. Nunca incomodou porque Acordos é
+módulo só da BookPlay (`hiddenForPaguePay`). Abrir esse ramo é decisão de
+negócio, não conserto.
+
 Três funções seguem presas à empresa de origem por não receberem empresa por
 parâmetro: `fn_wpp_diretorio`, `fn_creators_lab_ranking` e
 `fn_creators_lab_descobridores`. São diretório de nomes e ranking de easter egg.
