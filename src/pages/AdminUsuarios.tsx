@@ -156,7 +156,10 @@ export default function AdminUsuarios() {
     try {
       let usersQuery = supabase
         .from('perfis')
-        .select('*, setores(id,nome), empresas(id,nome), foto_url')
+        // `empresas!perfis_empresa_id_fkey`: há mais de um caminho entre
+        // `perfis` e `empresas`, e sem o nome da chave o PostgREST recusa a
+        // consulta (PGRST201). Ver `EMBED_EMPRESA` em `empresas.service.ts`.
+        .select('*, setores(id,nome), empresas!perfis_empresa_id_fkey(id,nome), foto_url')
         .order('nome');
       if (!isSuperAdmin && empresaAtual?.id) {
         usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);

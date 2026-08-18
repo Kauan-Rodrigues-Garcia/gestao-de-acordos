@@ -122,10 +122,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const MAX_DELAY_MS = 8000;
 
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        // Tentativa primária: com join de setores e empresas
+        // Tentativa primária: com join de setores e empresas.
+        //
+        // `empresas!perfis_empresa_id_fkey` e não `empresas`: existe MAIS DE UM
+        // caminho entre `perfis` e `empresas`, e sem o nome da chave o PostgREST
+        // recusa a consulta inteira (PGRST201). Ver `EMBED_EMPRESA` em
+        // `services/empresas.service.ts` para o porquê.
         const { data, error } = await supabase
           .from('perfis')
-          .select('*, setores(id, nome), empresas(id, nome, slug, ativo, config, criado_em, atualizado_em)')
+          .select('*, setores(id, nome), empresas!perfis_empresa_id_fkey(id, nome, slug, ativo, config, criado_em, atualizado_em)')
           .eq('id', userId)
           .maybeSingle();
 
