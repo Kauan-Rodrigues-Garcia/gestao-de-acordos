@@ -98,6 +98,14 @@ export interface EntradaSolicitacao {
   extraAtualId?: string | null;
   extraAtualOpId?: string | null;
   extraAtualOpNome?: string | null;
+  /**
+   * Acordo que já existe e será ATUALIZADO ao aprovar (tela de edição).
+   *
+   * Ausente = criar um acordo novo (tela de novo acordo). O servidor confere
+   * que o acordo é do solicitante antes de aceitar: quem escolhe o alvo é o
+   * operador, e um alvo alheio seria escalada de privilégio.
+   */
+  acordoEditadoId?: string | null;
 }
 
 export type ResultadoSolicitacao =
@@ -111,6 +119,8 @@ const ERROS: Record<string, string> = {
   modo_invalido:       'Tipo de pedido inválido.',
   nr_vazio:            'O NR/Código do pedido está vazio.',
   nao_autorizado:      'Você não tem permissão para decidir este pedido.',
+  acordo_editado_invalido: 'O acordo que você está editando não é seu ou não existe mais.',
+  acordo_editado_sumiu:    'O acordo que seria atualizado não existe mais. Nada foi alterado nele.',
   pedido_inexistente:  'Pedido não encontrado — pode ter sido cancelado.',
   ja_decidido:         'Este pedido já foi decidido por outra pessoa.',
   expirado:            'Este pedido expirou. O operador precisa solicitar de novo.',
@@ -141,6 +151,7 @@ export async function solicitarAutorizacao(
     p_extra_atual_id: e.extraAtualId ?? null,
     p_extra_atual_op_id: e.extraAtualOpId ?? null,
     p_extra_atual_op_nome: e.extraAtualOpNome ?? null,
+    p_acordo_editado_id: e.acordoEditadoId ?? null,
   });
   if (error) return { ok: false, erro: error.message };
   const r = data as { ok?: boolean; id?: string; erro?: string; repetido?: boolean } | null;

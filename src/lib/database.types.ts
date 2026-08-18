@@ -3736,6 +3736,7 @@ export type Database = {
           motivo_recusa: string | null
           erro: string | null
           acordo_criado_id: string | null
+          acordo_editado_id: string | null
           criado_em: string
           expira_em: string
         }
@@ -4105,6 +4106,7 @@ export type Database = {
           p_extra_atual_id?: string | null
           p_extra_atual_op_id?: string | null
           p_extra_atual_op_nome?: string | null
+          p_acordo_editado_id?: string | null
         }
         Returns: Json
       }

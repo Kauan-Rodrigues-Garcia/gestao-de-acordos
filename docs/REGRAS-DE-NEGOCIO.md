@@ -778,13 +778,33 @@ confirmação na própria linha, com o nome de quem perde o acordo escrito nela.
 A decisão fica visível para todos os outros autorizadores ("Autorizado por
 Fulano"), que é o que impede duas pessoas de decidirem a mesma coisa.
 
-> **A tela de EDIÇÃO continua pedindo senha.** Lá o que se grava é um `update`
-> com o recálculo de parcelamento que `gravar()` faz (regra dos 40 %, entrada,
-> `valor_total`). Reproduzir isso no servidor criaria um segundo caminho de
-> gravação de acordo, para divergir do primeiro no primeiro ajuste. Enquanto
-> aquele recálculo não sair de dentro do componente, editar um acordo para um
-> NR já vinculado exige o líder na máquina — é o único caminho que ainda pede.
-> Ver `ModalAutorizacaoNRSenha.tsx`.
+**A tela de EDIÇÃO também.** O login do líder saiu do produto (migration
+`20260818260000`). O receio era ter de reproduzir no servidor o recálculo de
+parcelamento que a edição faz — o que seria um segundo caminho de gravação de
+acordo, para divergir do primeiro. Não precisa: o cliente **já monta o payload
+inteiro** antes de descobrir o conflito, e ele viaja no pedido como já acontecia
+na criação. O servidor aplica, não recalcula.
+
+| Pedido | Ao aprovar |
+|---|---|
+| sem `acordo_editado_id` | `INSERT` — veio da tela de novo acordo |
+| com `acordo_editado_id` | `UPDATE` naquele acordo — veio da edição |
+
+O `UPDATE` toca **só as chaves presentes** no payload. `coalesce` estaria
+errado: limpar uma observação é mandar `null` de propósito, e o coalesce reporia
+o valor antigo.
+
+A montagem do payload virou módulo puro (`payloadEdicaoAcordo.ts`, 16 testes)
+porque agora tem dois consumidores — o salvamento direto e o pedido. Duas
+montagens seriam duas verdades, e a edição autorizada gravaria coisa diferente
+da comum sem ninguém notar até o primeiro campo novo.
+
+> **A mudança de quantidade de parcelas não entra no pedido.** Ela é aplicada
+> **antes**, no cliente, porque é independente da autorização: mexer na
+> quantidade do próprio grupo nunca exigiu líder — quem exige é trocar a chave
+> para uma que é de outra pessoa. São duas edições que a tela juntava numa só.
+> O preço, assumido: pedido recusado deixa a quantidade já alterada. Só existe
+> na BookPlay — na PaguePlay `planoQuantidade` é sempre nulo.
 
 ---
 

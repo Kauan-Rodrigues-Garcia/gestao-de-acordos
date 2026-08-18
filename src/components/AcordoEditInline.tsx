@@ -25,17 +25,17 @@ import {
   coletarFatosConflitoNr, decidirConflitoNr, type DecisaoConflitoNr,
 } from '@/services/conflitoNr.service';
 import { criarNotificacao } from '@/services/notificacoes.service';
-import { registrarLog } from '@/services/logs.service';
-import { autenticarLider } from '@/services/autorizacao_lider.service';
+import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
+import { montarPayloadEdicao } from '@/components/payloadEdicaoAcordo';
 import {
-  transferirAcordoDeDesligado, transferirAcordoNoServidor, mensagemErroTransferencia,
+  transferirAcordoDeDesligado,
 } from '@/services/desligamento.service';
-import { ModalAutorizacaoNRSenha, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
+import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
 import type { ConflitNR } from '@/components/AcordoNovoInline';
 import {
   parseCurrencyInput,
   ESTADOS_BRASIL, STATUS_LABELS, STATUS_LABELS_PAGUEPLAY, TIPO_LABELS, TIPO_LABELS_PAGUEPLAY,
-  getEstadoFromAcordo, extractLinkAcordo, buildObservacoesComEstado, formatarTelefonePP,
+  getEstadoFromAcordo, extractLinkAcordo, formatarTelefonePP,
   INSTITUICOES_OPTIONS,
 } from '@/lib/index';
 import { abrirChatplay } from '@/lib/chatplay';
@@ -44,7 +44,7 @@ import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import {
-  calcularParcelas, formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
+  formatBRL, temEntrada, valorDemaisParcelas, totalComEntrada,
 } from '@/lib/money';
 import { PARCELAS_MAX_DEFAULT } from '@/lib/index';
 import { springPresets } from '@/lib/motion';
@@ -127,8 +127,6 @@ export function AcordoEditInline({
   // Antes a edição parava num toast de "não é possível duplicar" mesmo quando
   // a lógica Direto/Extra do dono liberava o caminho sem autorização nenhuma.
   const [pendencia,        setPendencia]        = useState<PendenciaConflitoNr | null>(null);
-  const [liderEmail,       setLiderEmail]       = useState('');
-  const [liderSenha,       setLiderSenha]       = useState('');
   const [autorizando,      setAutorizando]      = useState(false);
   const [confirmandoAviso, setConfirmandoAviso] = useState(false);
 
@@ -395,59 +393,42 @@ export function AcordoEditInline({
    * `override` entra por cima do payload: é como os casos Direto/Extra gravam
    * `tipo_vinculo` e o par do vínculo na mesma ida ao banco.
    */
+  /**
+   * O payload do estado ATUAL do formulário.
+   *
+   * Vive numa função para os dois consumidores lerem o mesmo objeto: `gravar`,
+   * que aplica na hora, e o pedido de autorização, que o guarda para o servidor
+   * aplicar na aprovação. A montagem em si é pura (`payloadEdicaoAcordo.ts`) e
+   * testada — a regra dos 40 % não podia continuar dentro de um `try`.
+   */
+  function montarPayloadAtual(override: Record<string, unknown> = {}): Record<string, unknown> {
+    return montarPayloadEdicao({
+      isPaguePlay,
+      nomeCliente, nrCliente, instituicao, vencimento,
+      valorNum:    parseCurrencyInput(valor),
+      tipo,
+      parcelasNum: parseInt(parcelas || '1', 10),
+      whatsapp, status, observacoes, estado,
+      isExtra, tagIds,
+      parcelamentoAlterado,
+      usouQuarentaPct: Boolean(acordo.usou_quarenta_pct),
+      numeroParcela:   acordo.numero_parcela ?? 1,
+      override,
+    });
+  }
+
   async function gravar(
     planoQuantidade: PlanoQuantidade | null,
     override: Record<string, unknown> = {},
   ) {
-    const valorNum    = parseCurrencyInput(valor);
     const parcelasNum = parseInt(parcelas || '1', 10);
 
     setSaving(true);
     try {
-      const payload: Record<string, unknown> = {
-        nome_cliente: nomeCliente.trim(),
-        nr_cliente:   nrCliente.trim(),
-        vencimento,
-        valor:        valorNum,
-        tipo,
-        // BookPlay: qualquer forma parcela, então o número vale sempre. Na
-        // PaguePlay a trava por forma continua valendo.
-        parcelas:     isPaguePlay
-          ? (TIPOS_PARCELADOS_PP.includes(tipo) && !Number.isNaN(parcelasNum) ? parcelasNum : 1)
-          : (Number.isNaN(parcelasNum) ? 1 : parcelasNum),
-        whatsapp:     isPaguePlay ? formatarTelefonePP(whatsapp) : (whatsapp.trim() || null),
-        status,
-        observacoes:  isPaguePlay
-          ? buildObservacoesComEstado(estado, observacoes)
-          : (observacoes.trim() || null),
-        tipo_vinculo: isExtra ? 'extra' : 'direto',
-        tag_ids: tagIds.length > 0 ? tagIds : null,
-      };
-
-      if (instituicao.trim() !== undefined) payload.instituicao = instituicao.trim() || null;
-
-      // Depois do payload base: os casos Direto/Extra mandam em `tipo_vinculo`
-      // e no par do vínculo, e o toggle da tela não pode desfazer a decisão.
-      Object.assign(payload, override);
-
-      // PP + parcelamento alterado: mesma fórmula do acordo novo. O valor
-      // digitado é lido como TOTAL; a linha guarda a parcela corrente (valor)
-      // e o total (valor_total), respeitando a regra dos 40% do acordo.
-      if (parcelamentoAlterado) {
-        const ehParcelado = ['boleto', 'cartao_recorrente', 'pix_automatico'].includes(tipo) && parcelasNum > 1;
-        if (ehParcelado) {
-          const quarentaEfetivo = Boolean(acordo.usou_quarenta_pct) && parcelasNum > 2;
-          const numeroParcela   = Math.min(acordo.numero_parcela ?? 1, parcelasNum);
-          const todas = calcularParcelas(valorNum, parcelasNum, quarentaEfetivo);
-          payload.valor             = todas[numeroParcela - 1];
-          payload.valor_total       = valorNum;
-          payload.usou_quarenta_pct = quarentaEfetivo;
-          payload.numero_parcela    = numeroParcela;
-        } else {
-          payload.valor_total       = null;
-          payload.usou_quarenta_pct = false;
-        }
-      }
+      // O payload sai de `payloadEdicaoAcordo.ts`, e não daqui. O mesmo objeto
+      // é usado pelo pedido de autorização — na aprovação quem grava é o
+      // servidor, aplicando este payload. Duas montagens seriam duas verdades.
+      const payload = montarPayloadAtual(override);
 
       const { data: updated, error } = await supabase
         .from('acordos')
@@ -579,105 +560,109 @@ export function AcordoEditInline({
    * ou apagar acordo alheio, e sem isso a tela dizia "acordo não encontrado"
    * mesmo com a senha certa.
    */
-  async function autorizarComLider() {
+  /**
+   * Pede autorização em vez de exigir a senha do líder.
+   *
+   * ## O que muda em relação ao fluxo antigo
+   *
+   * O líder atravessava a operação para digitar o próprio usuário e senha nesta
+   * máquina. Agora o operador manda o pedido, a janela fecha, e quem pode
+   * decidir resolve pela gaveta — de onde estiver. Na aprovação o SERVIDOR
+   * aplica o payload no acordo, porque o operador já saiu daqui.
+   *
+   * ## A mudança de quantidade de parcelas vai ANTES, e não no pedido
+   *
+   * Ela é independente da autorização: mexer na quantidade do próprio grupo
+   * nunca exigiu líder nenhum — quem exige é trocar a CHAVE para uma que é de
+   * outra pessoa. São duas edições que a tela juntava numa só.
+   *
+   * Aplicá-la aqui evita que ela se perca enquanto o pedido espera. O preço é
+   * assumido e pequeno: se o pedido for recusado, a quantidade fica mudada — e
+   * o operador tinha o direito de mudá-la sozinho de qualquer forma.
+   *
+   * (Só existe na BookPlay: na PaguePlay `planoQuantidade` é sempre nulo.)
+   */
+  async function solicitarAutorizacaoEdicao() {
     if (!pendencia || !empresa?.id || !perfil?.id) return;
-    if (!liderEmail.trim() || !liderSenha.trim()) {
-      toast.error('Informe o e-mail e a senha do líder');
-      return;
-    }
     const { decisao, label, valorChave, plano } = pendencia;
     if (decisao.caso !== 'autorizacao_lider' && decisao.caso !== 'troca_extra') return;
 
     setAutorizando(true);
     try {
-      const auth = await autenticarLider({ email: liderEmail, senha: liderSenha });
-      // `'erro' in auth` e não `!auth.ok`: com `strict: false` o TS não estreita
-      // união por discriminante booleano. Mesmo idioma de parcelas.service.
-      if ('erro' in auth) { toast.error(auth.erro); return; }
-
-      // Troca de EXTRA: quem sai é o EXTRA atual, e o DIRETO do dono continua
-      // intacto — por isso este caminho grava o acordo editado como EXTRA.
-      if (decisao.caso === 'troca_extra') {
-        if (decisao.extraAtualId) {
-          const { error: errDel } = await supabase
-            .from('acordos').delete().eq('id', decisao.extraAtualId);
-          if (errDel) { toast.error(`Erro ao remover o vínculo extra anterior: ${errDel.message}`); return; }
+      // 1. A parte que não depende de ninguém.
+      if (plano) {
+        const camposDoGrupo = entradaAtiva && demaisAtual != null
+          ? {
+              valor_entrada: entradaPrevista,
+              valor_total:   totalComEntrada(entradaPrevista, demaisAtual, parseInt(parcelas || '1', 10)),
+            }
+          : undefined;
+        const r = await aplicarQuantidade(acordo, plano, { isPaguePlay: false, camposDoGrupo });
+        if ('erro' in r) {
+          toast.error(`Não foi possível ajustar as parcelas: ${r.erro}`, { duration: 8000 });
+          return;
         }
-
-        setPendencia(null);
-        await gravar(plano, {
-          tipo_vinculo:          'extra',
-          vinculo_operador_id:   decisao.operadorId,
-          vinculo_operador_nome: decisao.operadorNome,
-        });
-
-        // A troca de Extra é uma DECISÃO com autorização de líder por trás; as
-        // triggers registram o delete e o insert que a executaram, mas não têm
-        // como saber que os dois foram a mesma decisão, nem quem a autorizou.
-        await registrarLog({
-          acao: 'acordo_extra_trocado',
-          categoria: 'acordo',
-          severidade: 'aviso',
-          descricao: `Assumiu o vínculo EXTRA do ${label} ${valorChave}, autorizado por ${auth.autorizador.nome}`,
-          empresaId: empresa.id,
-          tabela: 'acordos',
-          registroId: decisao.extraAtualId,
-          alvoTipo: 'acordo',
-          alvoRotulo: `${label} ${valorChave}`,
-          detalhes: {
-            origem: 'edicao',
-            aprovado_por: auth.autorizador.nome,
-            aprovado_por_id: auth.autorizador.uid,
-            operador_extra_anterior: decisao.extraAtualOpId,
-            operador_extra_novo: perfil.id,
-          },
-        });
-
-        if (decisao.extraAtualOpId) {
-          await criarNotificacao({
-            usuario_id: decisao.extraAtualOpId,
-            titulo:     'Seu vínculo EXTRA foi transferido',
-            mensagem:   `O ${label} "${valorChave}" (EXTRA) foi transferido para `
-                      + `${perfil.nome ?? 'outro operador'}. Autorizado por ${auth.autorizador.nome}.`,
-            empresa_id: empresa.id,
-          });
-        }
-        toast.success('Troca de vínculo EXTRA autorizada!');
-        setLiderEmail(''); setLiderSenha('');
-        return;
+        if (r.criadas.length)   toast.success(`${r.criadas.length} parcela(s) criada(s).`);
+        if (r.removidas.length) toast.success(`${r.removidas.length} parcela(s) apagada(s).`);
       }
 
-      // Transferência completa: o acordo do dono vai para a lixeira e a chave
-      // fica livre para o acordo que estou editando assumir.
-      const rt = await transferirAcordoNoServidor({
-        acordoId:       decisao.acordoId,
-        novoOperadorId: perfil.id,
-        token:          auth.autorizador.token,
+      // 2. O que precisa de autorização. O payload viaja inteiro: quem grava é
+      //    o servidor, e ele APLICA — não recalcula.
+      const override: Record<string, unknown> = decisao.caso === 'troca_extra'
+        ? {
+            tipo_vinculo:          'extra',
+            vinculo_operador_id:   decisao.operadorId,
+            vinculo_operador_nome: decisao.operadorNome,
+          }
+        : {};
+
+      const res = await solicitarAutorizacao({
+        modo:    decisao.caso === 'troca_extra' ? 'troca_extra' : 'transferencia_completa',
+        nrLabel: label,
+        nrValor: valorChave,
+        payload: montarPayloadAtual(override),
+        acordoEditadoId: acordo.id,
+        resumo: {
+          cliente:    nomeCliente.trim() || acordo.nome_cliente,
+          valor:      parseCurrencyInput(valor) || null,
+          vencimento: vencimento || null,
+          parcelas:   parseInt(parcelas || '1', 10) || null,
+          tipo,
+        },
+        acordoAlvoId:     decisao.acordoId,
+        donoId:           decisao.operadorId,
+        donoNome:         decisao.operadorNome,
+        extraAtualId:     decisao.caso === 'troca_extra' ? decisao.extraAtualId : null,
+        extraAtualOpId:   decisao.caso === 'troca_extra' ? decisao.extraAtualOpId : null,
+        extraAtualOpNome: decisao.caso === 'troca_extra' ? decisao.extraAtualOpNome : null,
       });
-      if (!rt.ok) { toast.error(mensagemErroTransferencia(rt.erro)); return; }
+
+      // `'erro' in res` e não `!res.ok`: com `strict: false` o TS não estreita
+      // união por discriminante booleano. Mesmo idioma de parcelas.service.
+      if ('erro' in res) { toast.error(res.erro); return; }
 
       setPendencia(null);
-      await gravar(plano);
-
-      await criarNotificacao({
-        usuario_id: decisao.operadorId,
-        titulo:     `Seu ${label} "${valorChave}" foi transferido`,
-        mensagem:   `O ${label} "${valorChave}" foi transferido para ${perfil.nome ?? 'outro operador'} `
-                  + `com autorização de ${auth.autorizador.nome}. Seu acordo foi movido para a lixeira.`,
-        empresa_id: empresa.id,
-      });
-      toast.success('Transferência autorizada!');
-      setLiderEmail(''); setLiderSenha('');
+      toast.info(
+        res.repetido
+          ? `Você já tem um pedido em análise para este ${label}.`
+          : 'Pedido enviado. Está sendo avaliado.',
+        {
+          description: 'Os líderes do seu setor foram avisados. Você recebe a '
+            + 'resposta por notificação — pode continuar trabalhando.',
+          duration: 8000,
+        },
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro inesperado na autorização');
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado ao solicitar autorização');
     } finally {
       setAutorizando(false);
     }
   }
 
   function cancelarPendencia() {
-    setPendencia(null); setLiderEmail(''); setLiderSenha('');
+    setPendencia(null);
   }
+
 
   // O modal de autorização fala a linguagem do cadastro novo (`ConflitNR`).
   // Aqui o "payload" só existe para ele mostrar a chave em conflito.
@@ -1103,14 +1088,10 @@ export function AcordoEditInline({
             onCancel={cancelarPendencia}
           />
 
-          <ModalAutorizacaoNRSenha
+          <ModalAutorizacaoNR
             conflito={conflitoParaModal}
-            liderEmail={liderEmail}
-            liderSenha={liderSenha}
             autorizando={autorizando}
-            onEmailChange={setLiderEmail}
-            onSenhaChange={setLiderSenha}
-            onAutorizar={() => { void autorizarComLider(); }}
+            onSolicitar={() => { void solicitarAutorizacaoEdicao(); }}
             onCancel={cancelarPendencia}
           />
         </td>

@@ -300,7 +300,10 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
       'INS-200', 'emp-1', 'instituicao', 'acordo-1',
     );
     // Ninguém tem a lógica Direto/Extra → CASO C: pede o líder, não salva.
-    await screen.findByText(/Autorização do Líder/i);
+    // Desde 18/08/2026 nao se digita a senha do lider: pede-se autorizacao.
+    await screen.findByRole('button', { name: /solicitar autorização/i });
+    // O login do lider saiu de vez desta tela.
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(onSaved).not.toHaveBeenCalled();
   });
 
@@ -342,7 +345,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     expect(diretoExtraAtivoMock).toHaveBeenCalledWith({ userId: 'op2', empresaId: 'emp-1' });
     expect(onSaved).not.toHaveBeenCalled();
     // Nenhuma autorização de líder neste caminho.
-    expect(screen.queryByText(/Autorização do Líder/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /solicitar autorização/i })).toBeNull();
   });
 
   it('(d) CASO B confirmado: converte o acordo do dono e grava o meu como DIRETO', async () => {
@@ -381,7 +384,7 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     // CASO A grava direto, sem modal: quem tem a lógica ativa não passa por
     // autorização nenhuma — é o ponto todo da lógica.
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(screen.queryByText(/Autorização do Líder/i)).toBeNull();
+    expect(screen.queryByRole('button', { name: /solicitar autorização/i })).toBeNull();
     const payload = updateCalls.at(-1)?.payload as Record<string, unknown>;
     expect(payload.tipo_vinculo).toBe('extra');
     expect(payload.vinculo_operador_id).toBe('op2');
@@ -400,7 +403,10 @@ describe('AcordoEditInline — bloqueio NR/Inscrição duplicado', () => {
     clickSalvar();
 
     // Tirar o lugar de um terceiro passa por líder — a lógica não dispensa.
-    await screen.findByText(/Autorização do Líder/i);
+    // Desde 18/08/2026 nao se digita a senha do lider: pede-se autorizacao.
+    await screen.findByRole('button', { name: /solicitar autorização/i });
+    // O login do lider saiu de vez desta tela.
+    expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(onSaved).not.toHaveBeenCalled();
   });
 

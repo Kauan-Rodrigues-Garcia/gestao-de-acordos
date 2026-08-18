@@ -48,12 +48,10 @@ import type { ConflitNR, AcordoNovoInlineProps, SharedFormState } from './types'
 
 // Re-export public API so callers using `@/components/AcordoNovoInline` keep working
 export { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
-export { ModalAutorizacaoNRSenha } from './ModalAutorizacaoNRSenha';
 export { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
 export type {
   ConflitNR,
   ModalAutorizacaoNRProps,
-  ModalAutorizacaoNRSenhaProps,
   ModalAvisoDiretoExtraProps,
   AcordoNovoInlineProps,
 } from './types';
