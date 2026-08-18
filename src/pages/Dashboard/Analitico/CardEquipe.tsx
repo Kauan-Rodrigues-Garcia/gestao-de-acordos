@@ -37,8 +37,16 @@ import { cn } from '@/lib/utils';
 import { detalharEquipe, type OperadorNaEquipe } from './desempenhoEquipe';
 
 import type { QuartilConfig } from '@/lib/supabase';
+/**
+ * O tipo vem de `lideresDaEquipe`, onde a lista é DECIDIDA.
+ *
+ * Havia duas declarações idênticas do mesmo tipo, uma em cada arquivo. Aqui só
+ * se desenha; quem escolhe quem aparece é o módulo puro. O reexport mantém
+ * `import { type LiderInfo } from './CardEquipe'` funcionando.
+ */
+import type { LiderInfo } from './lideresDaEquipe';
 
-export interface LiderInfo { nome: string; foto_url: string | null }
+export type { LiderInfo };
 
 /** Avatar do próprio card (setor, Receptivo) em vez das fotos dos líderes. */
 export interface AvatarProprio {

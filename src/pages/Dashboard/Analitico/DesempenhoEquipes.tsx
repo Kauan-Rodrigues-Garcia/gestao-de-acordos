@@ -45,6 +45,7 @@ import { setorSomaPorUsuarios } from '@/services/analitico/escopoAnalitico';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { CardEquipe, type LiderInfo } from './CardEquipe';
 import { enriquecerOperadores, type OperadorNaEquipe } from './desempenhoEquipe';
+import { lideresDaEquipe, type PerfilLider } from './lideresDaEquipe';
 
 interface DesempenhoEquipesProps {
   empresaId: string;
@@ -479,30 +480,23 @@ export function DesempenhoEquipes({
           idMap[o.id] = { nome: o.nome, fotoUrl: o.foto_url };
         }
         setIdentidade(idMap);
-        // Identidade de cada líder + equipe → líderes (origem + clones).
-        const lideresById = new Map<string, LiderInfo>();
-        const lMap: Record<string, LiderInfo[]> = {};
-        const addLider = (equipeId: string | null, info: LiderInfo) => {
-          if (!equipeId) return;
-          const lista = (lMap[equipeId] ??= []);
-          if (!lista.some(x => x.nome === info.nome)) lista.push(info);
-        };
-        for (const l of (lideresData as { id: string; nome: string; foto_url: string | null; equipe_id: string | null }[]) ?? []) {
-          const info = { nome: l.nome, foto_url: l.foto_url };
-          lideresById.set(l.id, info);
-          addLider(l.equipe_id, info);   // equipe de origem
-        }
-        for (const c of (clonesData as { equipe_id: string; operador_id: string }[]) ?? []) {
-          const info = lideresById.get(c.operador_id);
-          if (info) addLider(c.equipe_id, info);   // líder clonado nesta equipe
-        }
-        // Modelo novo (item 10): líderes definidos por equipe em equipe_lideres —
-        // inclui clones de líder de outro setor. addLider deduplica por nome.
-        for (const el of (equipeLideresData as { equipe_id: string; lider_id: string }[]) ?? []) {
-          const info = lideresById.get(el.lider_id);
-          if (info) addLider(el.equipe_id, info);
-        }
-        setLideres(lMap);
+        /*
+         * Quem lidera cada equipe — regra única, em `lideresDaEquipe.ts`.
+         *
+         * Aqui havia três laços que UNIAM as três fontes (perfis.equipe_id,
+         * clones e equipe_lideres). União fazia o vínculo legado sobreviver à
+         * remoção do explícito: a equipe Bryan mostrava Bryan Queiroz (explícito)
+         * E Kauan Rodrigues (legado), e o segundo não saía por tela nenhuma,
+         * porque a tela de Equipes só edita `equipe_lideres`.
+         *
+         * Agora o explícito manda e o legado é reserva. A função é testada à
+         * parte — decidir QUEM aparece é regra, não desenho.
+         */
+        setLideres(lideresDaEquipe({
+          lideres:    (lideresData as PerfilLider[]) ?? [],
+          explicitos: (equipeLideresData as { equipe_id: string; lider_id: string }[]) ?? [],
+          clones:     (clonesData as { equipe_id: string; operador_id: string }[]) ?? [],
+        }));
         const sMap: Record<string, string> = {};
         const fMap: Record<string, string | null> = {};
         for (const s of (setoresData as { id: string; nome: string; foto_url: string | null }[]) ?? []) {
