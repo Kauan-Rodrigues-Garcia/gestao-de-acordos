@@ -36,12 +36,29 @@
  *     e quanto isso sobra ou falta contra a meta;
  *   • **degraus de quartil** — quanto falta para CADA faixa, não só para a
  *     atual. Quem está no 4º precisa ver o 3º, o 2º e o 1º;
- *   • **os números por trás do valor** — pagamentos, ticket médio, H.O. `[PP]`,
- *     posição e participação no grupo exibido.
+ *   • **os números por trás do valor** — pagamentos, ticket médio, posição e
+ *     participação no grupo exibido.
  *
  * As contas ficam em `detalheOperador.ts`, testado à parte, e o ritmo vem de
  * `lib/projecaoMetas` — o mesmo que o card de equipe usa. Aqui não se calcula
  * nada além de cor e largura.
+ *
+ * ## H.O. ou bruto: um alternador, não duas colunas `[PP]`
+ *
+ * A aba já mostrou "RECEBIMENTO H.O." e "RECEBIMENTO BRUTO" lado a lado. Duas
+ * colunas do mesmo dinheiro obrigam a ler a linha duas vezes e não resolvem o
+ * resto: META, HOJE, FALTA/SOBRA e a linha expandida continuavam numa unidade
+ * só. Agora há um alternador no topo — o mesmo componente do Dashboard — e ele
+ * converte **tudo**, inclusive o detalhe que abre no clique.
+ *
+ * A conversão é assimétrica de propósito: a META é convertida (só existe
+ * gravada em bruto) e o RECEBIDO não (vem do relatório na coluna `total_ho`).
+ * Ver `lib/unidadeValor.ts` — é por isso que a % em H.O. fica ~0,16 ponto acima
+ * da % em bruto, e isso é diferença verdadeira.
+ *
+ * O QUARTIL muda pouco e pode mudar: meta e recebido não escalam pelo mesmo
+ * fator, então a faixa de quem está na fronteira pode virar. É o mesmo número
+ * que o Dashboard mostra na unidade correspondente.
  */
 
 import { Fragment, useState, useEffect, useMemo, useId } from 'react';
@@ -49,6 +66,10 @@ import { ChevronDown, Target, CalendarClock, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
+import {
+  metaNaUnidade, rotuloUnidade, UNIDADE_PADRAO, type UnidadeValor,
+} from '@/lib/unidadeValor';
+import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { cn } from '@/lib/utils';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
@@ -107,10 +128,8 @@ interface LinhaQuartil {
   diferenca: number | null;
   projecao: number | null;
   quartil: QuartilConfig | null;
-  /** Pagamentos e H.O. do analítico — alimentam a linha expandida. */
+  /** Pagamentos do analítico — alimentam o ticket médio da linha expandida. */
   pagamentos: number;
-  /** H.O. exibido: o do analítico mais o da frente indireta, quando ela vale. */
-  ho: number;
   /**
    * As duas frentes de meta `[PP]`. `dupla.ativa = false` para todo o resto —
    * e nesse caso `metaTotal`/`recebidoTotal` são a meta e o recebimento de
@@ -196,12 +215,13 @@ function Degrau({
  * setor. As contas vêm todas de `detalheOperador.ts`, testado à parte.
  */
 function DetalheOperador({
-  linha, quartis, recebidosDoGrupo, mostrarHO, nomeDoGrupo,
+  linha, quartis, recebidosDoGrupo, rotuloUnidadeAtiva, nomeDoGrupo,
 }: {
   linha: LinhaQuartil;
   quartis: QuartilConfig[];
   recebidosDoGrupo: readonly number[];
-  mostrarHO: boolean;
+  /** 'H.O.' ou 'Bruto' — o painel inteiro já vem convertido; isto só rotula. */
+  rotuloUnidadeAtiva: string;
   nomeDoGrupo: string;
 }) {
   const d = detalharOperador({
@@ -211,7 +231,6 @@ function DetalheOperador({
     decorridos: linha.dias.decorridos,
     quartis,
     pagamentos: linha.pagamentos,
-    ho:         linha.ho,
     recebidosDoGrupo,
   });
 
@@ -340,7 +359,7 @@ function DetalheOperador({
       </Bloco>
 
       {/* ── O que há dentro do recebimento ─────────────────────────────── */}
-      <Bloco Icone={BarChart3} titulo="Números do mês">
+      <Bloco Icone={BarChart3} titulo={`Números do mês · ${rotuloUnidadeAtiva}`}>
         <div className="space-y-1.5">
           <LinhaValor
             label="% da meta do mês"
@@ -362,9 +381,6 @@ function DetalheOperador({
             valor={d.ticketMedio !== null ? formatBRL(d.ticketMedio) : '—'}
             hint="Recebimento ÷ pagamentos"
           />
-          {mostrarHO && (
-            <LinhaValor label="H.O." valor={formatBRL(d.ho ?? 0)} />
-          )}
           <LinhaValor
             label={`Posição em ${nomeDoGrupo}`}
             valor={d.posicao !== null ? `${d.posicao}º de ${d.tamanhoGrupo}` : '—'}
@@ -398,6 +414,26 @@ export function QuartisOperadores({
   const filtroEquipe = equipeId;
   const [anoNum, mesNum] = mes.split('-').map(Number);
   const isPP = useTenant().isPaguePlay;
+
+  /**
+   * H.O. ou bruto — o alternador no topo da aba.
+   *
+   * Substitui as duas colunas de recebimento que conviviam na mesma linha. Duas
+   * colunas obrigam a ler a tabela inteira duas vezes; o alternador troca a
+   * unidade de TUDO de uma vez, e a linha volta a ter uma leitura só.
+   *
+   * ## Sempre abre em H.O.
+   *
+   * De propósito, e por isso NÃO lê `lerUnidade()` como o Dashboard faz: quem
+   * abre os Quartis está comparando pessoas contra meta, e a meta da PaguePlay é
+   * pensada em H.O. Herdar a escolha feita em outra tela faria a aba abrir num
+   * número que não é o de referência aqui.
+   *
+   * Na BookPlay o alternador não aparece: `total_ho` é zero em toda linha do
+   * analítico, e escolher entre um número e zero não é uma escolha.
+   */
+  const [unidade, setUnidade] = useState<UnidadeValor>(UNIDADE_PADRAO);
+  const emHO = isPP && unidade === 'ho';
 
   /** Operador com a linha aberta. Um por vez: duas abertas viram rolagem. */
   const [abertoId, setAbertoId] = useState<string | null>(null);
@@ -559,9 +595,29 @@ export function QuartisOperadores({
     for (const op of visiveis) {
       // Agrupa pelo setor em exibição quando há um; senão, pelo setor de origem
       const sid = setorEfetivo ?? op.setor_id ?? 'sem_setor';
-      const meta = metasOp[op.id] ?? null;
-      const recebido = recebidoMap[op.id] ?? 0;
       const dias = diasDoOperador(op);
+
+      /*
+       * A conversão para H.O. NÃO é simétrica, e isso é correto.
+       *
+       * A META é convertida (`metaNaUnidade`): ela só existe gravada em bruto.
+       * O RECEBIDO não — `analitico_recebimentos.total_ho` vem gravado linha a
+       * linha pelo relatório do ERP, e na prática dá 25,00% do bruto contra os
+       * 24,96% da constante. Aplicar a constante para "achar" o H.O. jogaria
+       * fora o número real em troca de uma estimativa.
+       *
+       * O efeito visível é a % em H.O. ficar ~0,16 ponto acima da % em bruto.
+       * É diferença verdadeira, não arredondamento. Ver `lib/unidadeValor.ts`.
+       *
+       * A frente INDIRETA é a exceção: acordos não têm coluna de H.O., então
+       * ali o percentual é derivado — não há número do relatório para preservar.
+       */
+      const metaBruta = metasOp[op.id] ?? null;
+      const meta = emHO ? metaNaUnidade(metaBruta, 'ho') : metaBruta;
+      const recebido = emHO ? (hoMap[op.id] ?? 0) : (recebidoMap[op.id] ?? 0);
+
+      const metaIndBruta = metasIndiretas[op.id] ?? null;
+      const indiretoBruto = indiretoMap[op.id]?.bruto ?? 0;
 
       /**
        * As duas frentes viram UM par (meta, recebido) antes da projeção.
@@ -575,9 +631,9 @@ export function QuartisOperadores({
        */
       const dupla = combinarMetaDupla({
         metaDireta: meta,
-        metaIndireta: metasIndiretas[op.id] ?? null,
+        metaIndireta: emHO ? metaNaUnidade(metaIndBruta, 'ho') : metaIndBruta,
         recebidoDireto: recebido,
-        recebidoIndireto: indiretoMap[op.id]?.bruto ?? 0,
+        recebidoIndireto: emHO ? indiretoBruto * PP_HO_PERCENTUAL : indiretoBruto,
       });
 
       // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
@@ -606,9 +662,6 @@ export function QuartisOperadores({
         meta: dupla.metaTotal, recebido: dupla.recebidoTotal,
         diaria, hoje, diferenca, projecao, quartil: q,
         pagamentos: pagamentosMap[op.id] ?? 0,
-        // H.O. do analítico + H.O. da frente indireta. O extra pago também é
-        // dinheiro da PaguePlay e rende os mesmos 24,96%.
-        ho: (hoMap[op.id] ?? 0) + dupla.recebidoIndireto * PP_HO_PERCENTUAL,
         dupla,
         qtdIndireta: dupla.ativa ? (indiretoMap[op.id]?.qtd ?? 0) : 0,
         dias,
@@ -620,8 +673,11 @@ export function QuartisOperadores({
       lista.sort((a, b) => (b.projecao ?? -1) - (a.projecao ?? -1));
     }
     return porSetor;
+  // `emHO` é dependência de verdade: sem ele, trocar a unidade no alternador
+  // não recalcularia linha nenhuma — a tabela ficaria na unidade anterior e só
+  // o rótulo mudaria.
   }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp,
-      metasIndiretas, indiretoMap,
+      metasIndiretas, indiretoMap, emHO,
       setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);
 
@@ -653,6 +709,18 @@ export function QuartisOperadores({
 
   return (
     <div className="space-y-4">
+      {/* ── Alternador de unidade [PP] ──────────────────────────────────────
+          No topo, e não numa coluna: a unidade vale para a tabela inteira,
+          inclusive para o que aparece ao expandir uma linha. */}
+      {isPP && (
+        <div className="flex items-center justify-end gap-2">
+          <span className="text-[11px] text-muted-foreground">
+            Valores em <strong>{rotuloUnidade(unidade)}</strong>
+          </span>
+          <SeletorUnidade valor={unidade} onChange={setUnidade} />
+        </div>
+      )}
+
       {grupos.size === 0 && (
         <p className="text-sm text-muted-foreground text-center py-10">
           Nenhum operador encontrado com os filtros atuais.
@@ -681,16 +749,11 @@ export function QuartisOperadores({
                         <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">OPERADOR</th>
                         <th className="text-left  px-2 py-1.5 font-semibold text-muted-foreground">EQUIPE</th>
                         <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">META</th>
-                        {/* PaguePlay lê H.O., não bruto. A coluna de destaque é a
-                            dele; o bruto desce para onde ficava DIÁRIO, que saiu
-                            porque a diária já é a meta ÷ dias úteis e a leitura
-                            que interessa no dia a dia é o H.O. recebido. */}
-                        {isPP && (
-                          <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
-                            title="H.O. do recebimento — 24,96% do bruto">RECEBIMENTO H.O.</th>
-                        )}
+                        {/* Uma coluna só: a unidade é escolhida no alternador do
+                            topo, e vale para a tabela inteira. Duas colunas de
+                            recebimento obrigavam a ler a mesma linha duas vezes. */}
                         <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground">
-                          {isPP ? 'RECEBIMENTO BRUTO' : 'RECEBIMENTO'}
+                          RECEBIMENTO
                         </th>
                         {!isPP && (
                           <th className="text-right px-2 py-1.5 font-semibold text-muted-foreground"
@@ -766,15 +829,7 @@ export function QuartisOperadores({
                             <td className="px-2 py-1 text-right tabular-nums font-mono">
                               {l.meta !== null ? formatBRL(l.meta) : '—'}
                             </td>
-                            {isPP && (
-                              <td className="px-2 py-1 text-right tabular-nums font-mono font-bold text-foreground">
-                                {formatBRL(l.ho)}
-                              </td>
-                            )}
-                            {/* Na PaguePlay o bruto é contexto do H.O., não o
-                                número principal — daí um tom abaixo dele. */}
-                            <td className={cn('px-2 py-1 text-right tabular-nums font-mono',
-                              isPP ? 'font-medium text-muted-foreground' : 'font-semibold')}>
+                            <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold">
                               {formatBRL(l.recebido)}
                             </td>
                             {!isPP && (
@@ -811,12 +866,12 @@ export function QuartisOperadores({
                             <tr id={`${painelId}-${l.op.id}`} className="border-t border-border/50">
                               {/* `colSpan` fixo em 9: é o número de colunas do
                                   cabeçalho acima. Mexeu numa, mexa aqui. */}
-                              <td colSpan={9} className="p-0">
+                              <td colSpan={isPP ? 8 : 9} className="p-0">
                                 <DetalheOperador
                                   linha={l}
                                   quartis={quartis}
                                   recebidosDoGrupo={recebidosDoGrupo}
-                                  mostrarHO={isPP}
+                                  rotuloUnidadeAtiva={rotuloUnidade(unidade)}
                                   nomeDoGrupo={nomeDoGrupo}
                                 />
                               </td>
@@ -879,13 +934,18 @@ export function QuartisOperadores({
       <p className="text-[11px] text-muted-foreground">
         <strong>Clique na linha</strong> para ver a estimativa de fechamento do mês,
         quanto falta para cada quartil e os números do operador. ·
-        {isPP
-          ? ' H.O. = 24,96% do bruto recebido · '
-          : ' Diário = meta ÷ dias úteis do mês · '}
+        {!isPP && ' Diário = meta ÷ dias úteis do mês · '}
         Hoje = meta diária × dias úteis trabalhados ·
         Falta/sobra = recebimento − hoje · % = recebimento ÷ hoje ·
         faixas de quartil configuradas na aba Metas.
         {isPP && ' A meta diária ficou dentro da linha expandida.'}
+        {emHO && (
+          <>
+            {' '}A meta em H.O. é 24,96% da gravada; o recebimento em H.O. vem
+            do relatório, linha a linha, e não da conversão — por isso a % em
+            H.O. fica pouco acima da % em bruto.
+          </>
+        )}
       </p>
     </div>
   );

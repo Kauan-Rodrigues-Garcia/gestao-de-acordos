@@ -1135,6 +1135,42 @@ Na tela: card **"Suas duas metas"** no dashboard, selo **D+I** na linha da aba
 Quartis (onde META e RECEBIMENTO passam a ser o total, igual à % ao lado) e a
 quebra das duas frentes dentro da linha expandida.
 
+### 12.2.2-a Aba Quartis: H.O. ou bruto, num alternador `[PP]`
+
+A aba abre **sempre em H.O.** e tem no topo o mesmo alternador do Dashboard.
+Trocar a unidade converte a tabela **inteira** — META, RECEBIMENTO, HOJE,
+FALTA/SOBRA, a % e tudo o que aparece ao expandir a linha.
+
+Substituiu as duas colunas de recebimento (H.O. e bruto lado a lado). Duas
+colunas do mesmo dinheiro obrigavam a ler a linha duas vezes e não resolviam o
+resto: as outras colunas continuavam numa unidade só.
+
+> **Abre sempre em H.O., e não lê a preferência salva** — ao contrário do
+> Dashboard. Quem abre os Quartis está comparando pessoas contra meta, e a meta
+> da PaguePlay é pensada em H.O.; herdar uma escolha feita em outra tela faria
+> a aba abrir no número que não é o de referência aqui.
+
+**A conversão é assimétrica, e está certa:**
+
+| | Como vira H.O. |
+|---|---|
+| **Meta** | convertida — `meta × 24,96%`. Só existe gravada em bruto |
+| **Recebido direto** | **não** convertido — vem de `analitico_recebimentos.total_ho`, gravado linha a linha pelo relatório |
+| **Recebido indireto** | convertido — acordos não têm coluna de H.O., então aqui não há número do relatório a preservar |
+
+Conferido em agosto/2026: `total_ho` é **25,00%** do bruto no relatório, contra
+os 24,96% da constante. Por isso a **% em H.O. fica ~0,1 ponto acima** da % em
+bruto — diferença verdadeira, não arredondamento. E a meta convertida dá valores
+redondos (R$ 144.230,77 → R$ 36.000,00), o que confirma que ela é pensada em
+H.O. e gravada em bruto.
+
+Consequência prática: o **quartil pode mudar** ao trocar a unidade, para quem
+está na fronteira de uma faixa. É o mesmo número que o Dashboard mostra na
+unidade correspondente.
+
+Na BookPlay o alternador não aparece: `total_ho` é zero em toda linha do
+analítico, e escolher entre um número e zero não é escolha.
+
 ### 12.2.2-b Linha expansível do operador (aba Quartis)
 
 Mesmo gesto do card de equipe, um nível abaixo: **clicar na linha de um operador
