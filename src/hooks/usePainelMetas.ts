@@ -25,7 +25,13 @@ import {
   buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
   type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
 } from '@/services/analitico/diretoExtra.service';
-import { getTodayISO, isPerfilAdminOuLider, isPerfilDiretoria } from '@/lib/index';
+import {
+  getTodayISO, isPerfilAdminOuLider, isPerfilDiretoria, PP_HO_PERCENTUAL,
+} from '@/lib/index';
+import {
+  combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
+} from '@/services/metas/metaIndireta';
+import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
@@ -105,6 +111,15 @@ export interface DadosPainelMetas {
   meta: number | null;
   /** A mesma meta na unidade oposta, para a linha secundária. */
   metaOposta: number | null;
+  /**
+   * As duas frentes de meta `[PP]`, na unidade ativa.
+   *
+   * `ativa = false` para todo mundo que não tem meta indireta ligada — e nesse
+   * caso `metaTotal`/`recebidoTotal` são exatamente `meta` e `totalRecebido`.
+   * A `projecao` abaixo já é calculada sobre o TOTAL: o quartil de quem tem as
+   * duas frentes vem da soma, igual à aba Quartis.
+   */
+  metaDupla: MetaDupla;
   quartis: QuartilConfig[];
   projecao: ResultadoProjecao | null;
 
@@ -299,6 +314,10 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // "equipe" → meta do tipo `equipe` quando existir; senão a soma das metas
   //            individuais dos membros. Mesma precedência de `useAnalytics`.
   const [meta, setMeta] = useState<number | null>(null);
+  /** Meta INDIRETA `[PP]`, em BRUTO. `null` = a opção está desligada. */
+  const [metaIndireta, setMetaIndireta] = useState<number | null>(null);
+  /** Recebimento indireto do mês, em BRUTO — acordos extra pagos. */
+  const [recebidoIndiretoBruto, setRecebidoIndiretoBruto] = useState(0);
   const [metaCarregada, setMetaCarregada] = useState(false);
   const membrosChave = operadoresDoEscopo ? operadoresDoEscopo.join(',') : '';
 
@@ -309,15 +328,32 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setMetaCarregada(false);
       try {
         if (modo === 'eu') {
+          // `select('*')` e não a lista de colunas: as duas da meta indireta só
+          // existem depois da migration 20260818160000, e a Vercel publica no
+          // push, antes de ela ser aplicada. Nomear coluna ausente derruba a
+          // consulta inteira — o painel ficaria sem meta nenhuma no intervalo.
           const { data } = await supabase.from('metas')
-            .select('meta_valor')
+            .select('*')
             .eq('empresa_id', empresa.id).eq('tipo', 'operador')
             .eq('referencia_id', operadorEfetivo ?? perfil.id)
             .eq('mes', mesNum).eq('ano', ano)
             .maybeSingle();
-          if (!cancelado) setMeta(Number((data as { meta_valor: number } | null)?.meta_valor) || null);
+          const linha = data as {
+            meta_valor: number;
+            meta_indireta_ativa?: boolean | null;
+            meta_indireta_valor?: number | null;
+          } | null;
+          if (!cancelado) {
+            setMeta(Number(linha?.meta_valor) || null);
+            // Meta indireta é INDIVIDUAL: só existe no escopo "eu". Nos escopos
+            // de equipe e setor ela é zerada de propósito — somar ali contaria o
+            // mesmo dinheiro duas vezes, porque o extra já entra no recebimento
+            // do titular direto, que está na mesma equipe.
+            setMetaIndireta(lerMetaIndiretaDaLinha(linha));
+          }
           return;
         }
+        if (!cancelado) setMetaIndireta(null);
 
         // Escopo agregado: a meta própria do grupo manda, quando existir.
         // 'setor' procura meta de setor; equipe procura meta de equipe.
@@ -457,6 +493,23 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
   const quartis = config?.quartis?.length ? config.quartis : QUARTIS_PADRAO;
 
+  /**
+   * Recebimento indireto — só quando existe meta indireta para cobrar.
+   *
+   * Sem a opção ligada não há consulta: o número não teria onde aparecer, e a
+   * pergunta "quanto entrou de extra" não é do dashboard de quem nunca foi
+   * cobrado por isso.
+   */
+  const alvoIndireto = metaIndireta !== null ? (operadorEfetivo ?? perfil?.id ?? null) : null;
+  useEffect(() => {
+    if (!empresa?.id || !alvoIndireto) { setRecebidoIndiretoBruto(0); return; }
+    let cancelado = false;
+    void buscarRecebimentoIndireto({
+      empresaId: empresa.id, mes, operadores: [alvoIndireto],
+    }).then(m => { if (!cancelado) setRecebidoIndiretoBruto(m[alvoIndireto]?.bruto ?? 0); });
+    return () => { cancelado = true; };
+  }, [empresa?.id, mes, alvoIndireto]);
+
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.
   // Meta: convertida, porque só existe gravada em bruto.
@@ -465,12 +518,39 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const metaNaUnidadeAtiva = metaNaUnidade(meta, unidade);
   const metaOposta         = metaNaUnidade(meta, unidade === 'ho' ? 'bruto' : 'ho');
 
+  /**
+   * As duas frentes, já na unidade ativa.
+   *
+   * `combinarMetaDupla` é agnóstico de unidade: entra o par convertido, sai o
+   * par convertido. Converter aqui, e não lá dentro, mantém a regra de negócio
+   * separada da apresentação — e é o que permite a mesma função servir a aba
+   * Quartis, que trabalha só em bruto.
+   *
+   * Com a opção desligada o resultado é idêntico ao de antes: `metaTotal` é a
+   * meta e `recebidoTotal` é o recebido. Quem não usa não sente.
+   */
+  const metaDupla = useMemo(
+    () => combinarMetaDupla({
+      metaDireta: metaNaUnidadeAtiva,
+      metaIndireta: metaNaUnidade(metaIndireta, unidade),
+      recebidoDireto: recebidoNaUnidade,
+      // O extra pago rende os mesmos 24,96% de qualquer recebimento da
+      // PaguePlay — o H.O. dele é derivado, não vem de coluna própria.
+      recebidoIndireto: unidade === 'ho'
+        ? recebidoIndiretoBruto * PP_HO_PERCENTUAL
+        : recebidoIndiretoBruto,
+    }),
+    [metaNaUnidadeAtiva, metaIndireta, unidade, recebidoNaUnidade, recebidoIndiretoBruto],
+  );
+
+  // A projeção e o quartil passam pelo TOTAL — a mesma decisão da aba Quartis.
+  // Cobrar só a metade direta puniria justamente quem foi bem no extra.
   const projecao = useMemo(
     () => calcularProjecao({
-      meta: metaNaUnidadeAtiva, recebido: recebidoNaUnidade,
+      meta: metaDupla.metaTotal, recebido: metaDupla.recebidoTotal,
       totalUteis: diasUteisTotal, decorridos: diasUteisPassados, quartis,
     }),
-    [metaNaUnidadeAtiva, recebidoNaUnidade, diasUteisTotal, diasUteisPassados, quartis],
+    [metaDupla, diasUteisTotal, diasUteisPassados, quartis],
   );
 
   /** Formas na unidade ativa — o donut usa uma unidade só. */
@@ -550,6 +630,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
 
     meta: metaNaUnidadeAtiva,
     metaOposta,
+    metaDupla,
     quartis,
     projecao,
 

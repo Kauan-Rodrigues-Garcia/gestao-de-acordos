@@ -26,6 +26,9 @@ import {
 } from "@/services/metas/metasValidacao.service";
 import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
 import {
+  fetchDiretoExtraConfigs, resolverDiretoExtraAtivo, type DiretoExtraConfig,
+} from "@/services/direto_extra.service";
+import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -54,6 +57,9 @@ interface Meta {
   meta_acordos: number;
   metas_extras?: number[];
   meta_proporcional: boolean;
+  /** Meta direta e indireta `[PP]` — migration 20260818160000. */
+  meta_indireta_ativa?: boolean;
+  meta_indireta_valor?: number;
   mes: number;
   ano: number;
 }
@@ -64,11 +70,30 @@ interface Equipe {
 }
 interface Operador {
   id: string; nome: string; equipe_id: string | null;
+  /**
+   * Setor de ORIGEM da pessoa, não o setor em exibição.
+   *
+   * Importa porque a cascata de Direto/Extra é usuário → equipe → setor: um
+   * clone aparece nesta tela sob o setor que o tomou emprestado, e resolver a
+   * lógica dele pelo setor da tela daria a resposta do setor errado.
+   */
+  setor_id: string | null;
   /** Nome do setor de origem quando o operador entra aqui como CLONE. A meta é
    *  a mesma nos dois setores — a linha em `metas` é por operador, sem setor. */
   clonadoDe?: string | null;
 }
-interface MetaInput { meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean; }
+interface MetaInput {
+  meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean;
+  /**
+   * Meta direta e indireta `[PP]` — só para operador com Direto/Extra ativo.
+   *
+   * Desligada, `meta_valor` é a meta cheia e nada muda. Ligada, `meta_valor`
+   * passa a ser a meta DIRETA e `meta_indireta` cobra os acordos extra pagos.
+   */
+  indiretaAtiva: boolean;
+  meta_indireta: string;
+  meta_indireta_ho: string;
+}
 
 function parseBRL(value: string): number {
   const cleaned = value.replace(/[^\d,]/g, "").replace(",", ".");
@@ -89,7 +114,12 @@ function fmtNum(num: number): string {
     : "";
 }
 
-function emptyInput(): MetaInput { return { meta_valor: "", meta_ho: "", extras: [], proporcional: false }; }
+function emptyInput(): MetaInput {
+  return {
+    meta_valor: "", meta_ho: "", extras: [], proporcional: false,
+    indiretaAtiva: false, meta_indireta: "", meta_indireta_ho: "",
+  };
+}
 
 // ── MonthNavigator ────────────────────────────────────────────────────────────
 function MonthNavigator({ mes, ano, onChange }: { mes: number; ano: number; onChange: (m: number, a: number) => void }) {
@@ -126,14 +156,27 @@ interface MetaRowProps {
    *  que a cheia. Sinaliza pro jogo (pet) não tratar igual quem tem meta cheia. */
   proporcional: boolean;
   onChangeProporcional: (v: boolean) => void;
+  /**
+   * Oferece a opção "Meta direta e indireta" `[PP]`.
+   *
+   * Só é `true` para operador com a lógica Direto/Extra ativa: sem ela não há
+   * acordo extra para cobrar, e um campo de meta que ninguém consegue alimentar
+   * é pior que campo nenhum.
+   */
+  permiteIndireta?: boolean;
+  onChangeIndiretaAtiva?: (v: boolean) => void;
+  onChangeIndireta?: (v: string) => void;
+  onChangeIndiretaHO?: (v: string) => void;
 }
 
 function MetaRow({
   label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, disabled, proporcional, onChangeProporcional,
+  permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
 }: MetaRowProps) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5 border-b border-border last:border-0">
+    <div className="py-2.5 border-b border-border last:border-0">
+    <div className="flex flex-col sm:flex-row sm:items-center gap-3">
       <div className="flex items-center gap-2 sm:w-52 shrink-0">
         {icon && <span className="text-muted-foreground shrink-0">{icon}</span>}
         <div className="min-w-0">
@@ -143,7 +186,9 @@ function MetaRow({
       </div>
       <div className="flex flex-1 flex-wrap items-center gap-2">
         <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
-          <Label className="text-xs text-muted-foreground">Meta R$</Label>
+          <Label className="text-xs text-muted-foreground">
+            {input.indiretaAtiva ? "Meta DIRETA R$" : "Meta R$"}
+          </Label>
           <div className="relative">
             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
             <Input
@@ -157,7 +202,9 @@ function MetaRow({
         </div>
         {mostrarHO && (
           <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
-            <Label className="text-xs text-muted-foreground">Meta H.O. (24,96%)</Label>
+            <Label className="text-xs text-muted-foreground">
+              {input.indiretaAtiva ? "Meta DIRETA H.O." : "Meta H.O."} (24,96%)
+            </Label>
             <div className="relative">
               <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
               <Input
@@ -198,7 +245,67 @@ function MetaRow({
             <span className="text-xs text-muted-foreground whitespace-nowrap">Meta proporcional</span>
           </label>
         </div>
+        {/* Só aparece para quem tem Direto/Extra ativo — ver `permiteIndireta`. */}
+        {permiteIndireta && (
+          <div className="flex flex-col gap-1 shrink-0">
+            <Label className="text-xs text-muted-foreground">&nbsp;</Label>
+            <label className="h-8 flex items-center gap-1.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={input.indiretaAtiva}
+                disabled={disabled}
+                onChange={(e) => onChangeIndiretaAtiva?.(e.target.checked)}
+                className="h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
+              />
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Meta direta e indireta
+              </span>
+            </label>
+          </div>
+        )}
       </div>
+    </div>
+
+    {/* ── Segunda linha: a meta indireta ─────────────────────────────────── */}
+    {permiteIndireta && input.indiretaAtiva && (
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-2 ml-0 sm:ml-52 pl-3 border-l-2 border-primary/40">
+        <div className="flex flex-1 flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
+            <Label className="text-xs text-primary font-medium">Meta INDIRETA R$</Label>
+            <div className="relative">
+              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+              <Input
+                className="pl-8 h-8 text-sm"
+                placeholder="0,00"
+                value={input.meta_indireta}
+                disabled={disabled}
+                onChange={(e) => onChangeIndireta?.(formatBRL(e.target.value))}
+              />
+            </div>
+          </div>
+          {mostrarHO && (
+            <div className="flex flex-col gap-1 min-w-[150px] max-w-[200px]">
+              <Label className="text-xs text-primary font-medium">Meta INDIRETA H.O. (24,96%)</Label>
+              <div className="relative">
+                <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">R$</span>
+                <Input
+                  className="pl-8 h-8 text-sm"
+                  placeholder="0,00"
+                  value={input.meta_indireta_ho}
+                  disabled={disabled}
+                  onChange={(e) => onChangeIndiretaHO?.(formatBRL(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground max-w-[420px] leading-snug">
+            Cobrada sobre os acordos <strong>EXTRA pagos</strong> do operador no mês.
+            Não soma na equipe nem no setor. O quartil dele passa a ser calculado
+            pela soma das duas metas contra a soma dos dois recebimentos.
+          </p>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
@@ -271,6 +378,9 @@ export default function MetasConfig() {
   const [configDbAtiva, setConfigDbAtiva] = useState(true);
   const [configCarregada, setConfigCarregada] = useState(false);
 
+  // Configs de Direto/Extra da empresa — a base do "quem pode ter meta indireta"
+  const [diretoExtraConfigs, setDiretoExtraConfigs] = useState<DiretoExtraConfig[]>([]);
+
   // inputs controlados por referencia_id
   const [inputMetas, setInputMetas] = useState<Record<string, MetaInput>>({});
   // Campos extras visíveis por seção (BP): padrão 0, "+" adiciona p/ todos
@@ -299,6 +409,46 @@ export default function MetasConfig() {
   function onChangeProporcional(id: string, v: boolean) {
     setInput(id, { proporcional: v });
   }
+
+  // ── Meta direta e indireta [PP] ──────────────────────────────────────────
+  // Desligar limpa os dois campos: o banco recusa `ativa = true` com valor zero
+  // (constraint `metas_indireta_coerente`), e deixar um valor órfão na tela faria
+  // religar a opção ressuscitar um número que o líder já tinha descartado.
+  function onChangeIndiretaAtiva(id: string, v: boolean) {
+    setInput(id, v ? { indiretaAtiva: true }
+                   : { indiretaAtiva: false, meta_indireta: "", meta_indireta_ho: "" });
+  }
+  function onChangeIndireta(id: string, v: string) {
+    const total = parseBRL(v);
+    setInput(id, { meta_indireta: v, meta_indireta_ho: fmtNum(total * PP_HO_PERCENTUAL) });
+  }
+  function onChangeIndiretaHO(id: string, v: string) {
+    const ho = parseBRL(v);
+    setInput(id, { meta_indireta_ho: v, meta_indireta: fmtNum(ho / PP_HO_PERCENTUAL) });
+  }
+
+  /**
+   * Quem tem Direto/Extra ativo — a cascata usuário → equipe → setor.
+   *
+   * Uma consulta só de `direto_extra_config` e a resolução em memória pela
+   * função que já existe (`resolverDiretoExtraAtivo`). A alternativa seria uma
+   * chamada de `fn_direto_extra_ativo` por operador: com 40 pessoas no setor,
+   * 40 idas ao servidor para desenhar uma caixa de seleção.
+   */
+  const comDiretoExtra = useMemo(() => {
+    if (!isPP || !diretoExtraConfigs.length) return new Set<string>();
+    const ativos = new Set<string>();
+    for (const op of operadores) {
+      const ativo = resolverDiretoExtraAtivo({
+        userId: op.id,
+        userSetorId: op.setor_id ?? setorSelecionado,
+        userEquipeId: op.equipe_id,
+        configs: diretoExtraConfigs,
+      });
+      if (ativo) ativos.add(op.id);
+    }
+    return ativos;
+  }, [isPP, diretoExtraConfigs, operadores, setorSelecionado]);
 
   // Dias úteis derivados (seg–sex − feriados)
   const hojeISO = getTodayISO();
@@ -345,7 +495,7 @@ export default function MetasConfig() {
     if (!setorSelecionado) return;
     setLoadingOperadores(true);
     try {
-      const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id")
+      const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id, setor_id")
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
       const proprios = (data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0);
@@ -393,6 +543,7 @@ export default function MetasConfig() {
       id: l.id,
       nome: l.nome,
       equipe_id: equipeAqui.get(l.id) ?? null,
+      setor_id: l.setor_id,
       clonadoDe: (l.setor_id && nomeOrigem.get(l.setor_id)) || "outro setor",
     }));
   }
@@ -412,11 +563,18 @@ export default function MetasConfig() {
         const v = Number(m.meta_valor) || 0;
         const extras = (Array.isArray(m.metas_extras) ? m.metas_extras : [])
           .map(e => Number(e) || 0).filter(e => e > 0);
+        const ind = Number(m.meta_indireta_valor) || 0;
         newInputs[m.referencia_id] = {
           meta_valor: fmtNum(v),
           meta_ho:    fmtNum(v * PP_HO_PERCENTUAL),
           extras:     extras.map(fmtNum),
           proporcional: m.meta_proporcional === true,
+          // `ativa && valor > 0` e não só a flag: a constraint do banco garante
+          // o par, mas uma linha gravada antes da migration vem com a coluna no
+          // default e a leitura tem de sobreviver a isso.
+          indiretaAtiva:    m.meta_indireta_ativa === true && ind > 0,
+          meta_indireta:    fmtNum(ind),
+          meta_indireta_ho: fmtNum(ind * PP_HO_PERCENTUAL),
         };
         if (m.tipo && extras.length > maxExtras[m.tipo]) maxExtras[m.tipo] = extras.length;
       }
@@ -487,6 +645,16 @@ export default function MetasConfig() {
   useEffect(() => { fetchSetores(); }, [fetchSetores]);
   useEffect(() => { fetchEquipes(); }, [fetchEquipes]);
   useEffect(() => { fetchOperadores(); }, [fetchOperadores]);
+  // Configs de Direto/Extra: uma vez por empresa, não por setor. A cascata
+  // resolve setor, equipe e usuário a partir da mesma lista.
+  useEffect(() => {
+    if (!isPP || !empresa?.id) { setDiretoExtraConfigs([]); return; }
+    let cancelado = false;
+    void fetchDiretoExtraConfigs(empresa.id).then(cfgs => {
+      if (!cancelado) setDiretoExtraConfigs(cfgs);
+    });
+    return () => { cancelado = true; };
+  }, [isPP, empresa?.id]);
   useEffect(() => { fetchMetas(); }, [fetchMetas]);
   useEffect(() => { void fetchConfig(); }, [fetchConfig]);
   useEffect(() => { void fetchValidacao(); }, [fetchValidacao]);
@@ -553,10 +721,21 @@ export default function MetasConfig() {
         ...(isBP ? {
           metas_extras: getInput(referenciaId).extras.map(parseBRL).filter(v => v > 0),
         } : {}),
+        // Meta indireta [PP]: só para OPERADOR com Direto/Extra ativo. As duas
+        // chaves só viajam quando a opção é oferecida — `fn_metas_upsert` só
+        // sobrescreve as colunas quando elas vêm no payload, então a tela da
+        // BookPlay (que nunca as manda) não zera ninguém.
+        ...(isPP && tipo === "operador" && comDiretoExtra.has(referenciaId) ? {
+          meta_indireta_ativa: getInput(referenciaId).indiretaAtiva,
+          meta_indireta_valor: parseBRL(getInput(referenciaId).meta_indireta),
+        } : {}),
         mes,
         ano,
       }))
-      .filter(p => p.meta_valor > 0); // só salva quem tem valor
+      // Só salva quem tem valor — em qualquer uma das duas frentes. Operador só
+      // de extra tem meta indireta e meta direta zero, e não pode ser descartado
+      // aqui: seria o único caso em que salvar não salva e a tela não avisa.
+      .filter(p => p.meta_valor > 0 || Number(p.meta_indireta_valor) > 0)
 
     const salvaConfig = temConfigMes && configDbAtiva;
     if (payloads.length === 0 && !salvaConfig) {
@@ -970,7 +1149,11 @@ export default function MetasConfig() {
                     onChangeValor={v => onChangeValor(op.id, v)}
                     onChangeHO={v => onChangeHO(op.id, v)}
                     proporcional={getInput(op.id).proporcional}
-                    onChangeProporcional={v => onChangeProporcional(op.id, v)} />
+                    onChangeProporcional={v => onChangeProporcional(op.id, v)}
+                    permiteIndireta={comDiretoExtra.has(op.id)}
+                    onChangeIndiretaAtiva={v => onChangeIndiretaAtiva(op.id, v)}
+                    onChangeIndireta={v => onChangeIndireta(op.id, v)}
+                    onChangeIndiretaHO={v => onChangeIndiretaHO(op.id, v)} />
                 ))}
                 {isBP && podeGerenciarMetas && (
                   <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-muted-foreground mt-1"

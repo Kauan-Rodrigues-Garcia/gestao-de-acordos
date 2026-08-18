@@ -22,6 +22,7 @@ import { usePainelMetas } from '@/hooks/usePainelMetas';
 import type { UnidadeValor } from '@/lib/unidadeValor';
 import { FaixaDiasUteis } from './FaixaDiasUteis';
 import { CardsMetas } from './CardsMetas';
+import { CardMetaDupla } from './CardMetaDupla';
 import { EvolucaoDiaria } from './EvolucaoDiaria';
 
 interface PainelMetasProps {
@@ -116,6 +117,13 @@ export function PainelMetas({
           />
 
           <CardsMetas dados={dados} mes={mes} />
+
+          {/* Só para quem tem meta indireta ligada. O card grande acima já
+              mostra a SOMA das duas frentes — este diz de onde ela vem. */}
+          <CardMetaDupla
+            dupla={dados.metaDupla}
+            rotuloUnidade={dados.unidade === 'ho' ? 'H.O.' : 'valor bruto'}
+          />
 
           <EvolucaoDiaria
             porDia={dados.porDia}

@@ -50,7 +50,9 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
-import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import {
+  getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
+} from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
@@ -63,6 +65,12 @@ import {
 } from '@/services/analitico/analitico.service';
 import { PizzaQuartis3D } from './PizzaQuartis3D';
 import { detalharOperador } from './detalheOperador';
+import {
+  combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
+} from '@/services/metas/metaIndireta';
+import {
+  buscarRecebimentoIndireto, type MapaRecebimentoIndireto,
+} from '@/services/metas/recebimentoIndireto.service';
 
 interface QuartisOperadoresProps {
   empresaId: string;
@@ -82,7 +90,12 @@ interface QuartisOperadoresProps {
 }
 
 interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null; situacao?: string | null }
-interface MetaOpRow { referencia_id: string; meta_valor: number }
+interface MetaOpRow {
+  referencia_id: string;
+  meta_valor: number;
+  meta_indireta_ativa?: boolean | null;
+  meta_indireta_valor?: number | null;
+}
 
 interface LinhaQuartil {
   op: PerfilOp;
@@ -96,7 +109,16 @@ interface LinhaQuartil {
   quartil: QuartilConfig | null;
   /** Pagamentos e H.O. do analítico — alimentam a linha expandida. */
   pagamentos: number;
+  /** H.O. exibido: o do analítico mais o da frente indireta, quando ela vale. */
   ho: number;
+  /**
+   * As duas frentes de meta `[PP]`. `dupla.ativa = false` para todo o resto —
+   * e nesse caso `metaTotal`/`recebidoTotal` são a meta e o recebimento de
+   * sempre, então a tabela inteira roda pelo mesmo caminho.
+   */
+  dupla: MetaDupla;
+  /** Quantos acordos extra pagos compõem o recebimento indireto. */
+  qtdIndireta: number;
   /**
    * Dias úteis DESTE operador, já reduzidos por equipe em treinamento.
    *
@@ -196,8 +218,54 @@ function DetalheOperador({
   const corRitmo = d.ritmoNecessario !== null && d.ritmoNecessario > d.mediaDiaria
     ? COR_QUARTIL[4] : COR_QUARTIL[1];
 
+  const dupla = linha.dupla;
+
   return (
-    <div className="grid gap-5 md:grid-cols-3 px-3 py-3 bg-muted/20">
+    <div className="px-3 py-3 bg-muted/20 space-y-4">
+    {/* ── As duas frentes, quando existem ──────────────────────────────────
+        Faixa própria acima dos três blocos, e não uma linha dentro de um
+        deles: os números da tabela ao lado são a SOMA, e quem abre a linha
+        precisa ver a quebra antes de qualquer outra coisa. */}
+    {dupla.ativa && (
+      <div className="grid gap-2 sm:grid-cols-2">
+        {[
+          {
+            titulo: 'DIRETA', sub: 'recebimento do analítico',
+            meta: dupla.metaDireta, recebido: dupla.recebidoDireto,
+            pct: dupla.pctDireta, falta: dupla.faltaDireta, cor: COR_QUARTIL[2],
+            detalhe: null as string | null,
+          },
+          {
+            titulo: 'INDIRETA', sub: 'acordos extra pagos',
+            meta: dupla.metaIndireta, recebido: dupla.recebidoIndireto,
+            pct: dupla.pctIndireta, falta: dupla.faltaIndireta, cor: COR_QUARTIL[3],
+            detalhe: `${linha.qtdIndireta} acordo(s) extra pago(s)`,
+          },
+        ].map(f => (
+          <div key={f.titulo} className="rounded-lg border border-border bg-card px-3 py-2">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: f.cor }}>
+                Meta {f.titulo}
+              </span>
+              <span className="text-sm font-mono tabular-nums font-bold" style={{ color: f.cor }}>
+                {f.pct !== null ? `${f.pct}%` : '—'}
+              </span>
+            </div>
+            <p className="text-[10px] text-muted-foreground mb-1">{f.sub}</p>
+            <LinhaValor label="Meta" valor={f.meta !== null ? formatBRL(f.meta) : '—'} />
+            <LinhaValor label="Recebido" valor={formatBRL(f.recebido)} />
+            <LinhaValor
+              label="Falta"
+              valor={f.falta === null ? '—' : f.falta === 0 ? 'Batida! 🎉' : formatBRL(f.falta)}
+              cor={f.falta === 0 ? COR_QUARTIL[1] : undefined}
+            />
+            {f.detalhe && <p className="text-[10px] text-muted-foreground mt-1">{f.detalhe}</p>}
+          </div>
+        ))}
+      </div>
+    )}
+
+    <div className="grid gap-5 md:grid-cols-3">
       {/* ── Degraus de quartil ─────────────────────────────────────────── */}
       <Bloco Icone={Target} titulo="Quanto falta por faixa">
         {d.degraus.length === 0 ? (
@@ -307,8 +375,15 @@ function DetalheOperador({
             valor={d.participacaoPct !== null ? `${d.participacaoPct}%` : '—'}
             hint="Fatia do recebimento do grupo exibido"
           />
+          {dupla.ativa && (
+            <p className="text-[10px] text-muted-foreground leading-snug pt-1">
+              Posição e participação usam o recebimento <strong>total</strong>.
+              A frente indireta é individual: não soma na equipe nem no setor.
+            </p>
+          )}
         </div>
       </Bloco>
+    </div>
     </div>
   );
 }
@@ -330,6 +405,10 @@ export function QuartisOperadores({
 
   const [operadores, setOperadores] = useState<PerfilOp[]>([]);
   const [metasOp, setMetasOp]       = useState<Record<string, number>>({});
+  // Meta INDIRETA por operador [PP] — só quem tem a opção ligada aparece aqui.
+  const [metasIndiretas, setMetasIndiretas] = useState<Record<string, number>>({});
+  // Recebimento indireto do mês (acordos extra pagos), por operador.
+  const [indiretoMap, setIndiretoMap] = useState<MapaRecebimentoIndireto>({});
   const [feriados, setFeriados]     = useState<string[]>([]);
   const [quartis, setQuartis]       = useState<QuartilConfig[]>(QUARTIS_PADRAO);
   const [setores, setSetores]       = useState<Record<string, string>>({});
@@ -357,7 +436,12 @@ export function QuartisOperadores({
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
             .eq('ativo', true)
             .order('nome'),
-          supabase.from('metas').select('referencia_id, meta_valor')
+          // `select('*')` de propósito, e não a lista de colunas: as duas da
+          // meta indireta só existem depois da migration 20260818160000, e o
+          // site sobe pela Vercel antes de ela ser aplicada à mão. Nomear uma
+          // coluna ausente derruba a consulta INTEIRA no PostgREST — o setor
+          // todo apareceria "sem meta" até alguém rodar o SQL.
+          supabase.from('metas').select('*')
             .eq('empresa_id', empresaId).eq('tipo', 'operador')
             .eq('mes', mesNum).eq('ano', anoNum),
           getMetasConfig(empresaId, mesNum, anoNum),
@@ -371,11 +455,15 @@ export function QuartisOperadores({
         if (cancelado) return;
         setOperadores((ops as PerfilOp[]) ?? []);
         const mMap: Record<string, number> = {};
+        const iMap: Record<string, number> = {};
         for (const m of (metasData as MetaOpRow[]) ?? []) {
           const v = Number(m.meta_valor) || 0;
           if (v > 0) mMap[m.referencia_id] = v;
+          const ind = lerMetaIndiretaDaLinha(m);
+          if (ind !== null) iMap[m.referencia_id] = ind;
         }
         setMetasOp(mMap);
+        setMetasIndiretas(iMap);
         setFeriados(cfg.data?.feriados ?? []);
         setContarHoje(cfg.data?.contar_dia_atual === true);
         setQuartis(cfg.data?.quartis ?? QUARTIS_PADRAO);
@@ -393,6 +481,24 @@ export function QuartisOperadores({
     void carregar();
     return () => { cancelado = true; };
   }, [empresaId, mesNum, anoNum]);
+
+  /**
+   * Recebimento indireto do mês — só a PaguePlay, e só quando alguém tem meta
+   * indireta ligada.
+   *
+   * A consulta depende de `metasIndiretas`, que sai do efeito acima: sem
+   * ninguém com a opção ligada não há nada a somar, e a ida ao servidor seria
+   * gasto puro. É por isso que este efeito é separado, e não uma sexta promessa
+   * do `Promise.all` lá de cima.
+   */
+  useEffect(() => {
+    const alvos = Object.keys(metasIndiretas);
+    if (!isPP || !empresaId || alvos.length === 0) { setIndiretoMap({}); return; }
+    let cancelado = false;
+    void buscarRecebimentoIndireto({ empresaId, mes, operadores: alvos })
+      .then(m => { if (!cancelado) setIndiretoMap(m); });
+    return () => { cancelado = true; };
+  }, [isPP, empresaId, mes, metasIndiretas]);
 
   const setorDaEquipe = useMemo(() => mapaSetorDaEquipe(equipes), [equipes]);
   const nomeDaEquipe  = useMemo(() => {
@@ -457,10 +563,28 @@ export function QuartisOperadores({
       const recebido = recebidoMap[op.id] ?? 0;
       const dias = diasDoOperador(op);
 
+      /**
+       * As duas frentes viram UM par (meta, recebido) antes da projeção.
+       *
+       * Quem não tem meta indireta sai daqui com exatamente o que entrou — é o
+       * que permite a tabela inteira usar um caminho só, em vez de um ramo
+       * "com indireta" que divergiria do outro no primeiro ajuste.
+       *
+       * O quartil de quem tem as duas é do TOTAL, por decisão de produto:
+       * cobrá-lo só pela metade direta puniria quem foi bem no extra.
+       */
+      const dupla = combinarMetaDupla({
+        metaDireta: meta,
+        metaIndireta: metasIndiretas[op.id] ?? null,
+        recebidoDireto: recebido,
+        recebidoIndireto: indiretoMap[op.id]?.bruto ?? 0,
+      });
+
       // Sem `limitePct`: esta tabela nunca saturou a %, ao contrário do header
       // pessoal. Ver `EntradaProjecao` em lib/projecaoMetas.
       const proj = calcularProjecao({
-        meta, recebido, totalUteis: dias.totalUteis, decorridos: dias.decorridos, quartis,
+        meta: dupla.metaTotal, recebido: dupla.recebidoTotal,
+        totalUteis: dias.totalUteis, decorridos: dias.decorridos, quartis,
       });
       const diaria: number | null    = proj?.metaDiaria ?? null;
       const hoje: number | null      = proj?.esperado ?? null;
@@ -474,9 +598,19 @@ export function QuartisOperadores({
 
       if (!porSetor.has(sid)) porSetor.set(sid, []);
       porSetor.get(sid)!.push({
-        op, equipeNome, meta, recebido, diaria, hoje, diferenca, projecao, quartil: q,
+        op, equipeNome,
+        // As colunas META e RECEBIMENTO passam a mostrar o TOTAL quando a
+        // pessoa tem as duas frentes. É o que a % e o quartil ao lado usam —
+        // exibir só a metade direta ao lado de uma % do total seria a tela
+        // discordando de si mesma. A quebra fica na linha expandida.
+        meta: dupla.metaTotal, recebido: dupla.recebidoTotal,
+        diaria, hoje, diferenca, projecao, quartil: q,
         pagamentos: pagamentosMap[op.id] ?? 0,
-        ho:         hoMap[op.id] ?? 0,
+        // H.O. do analítico + H.O. da frente indireta. O extra pago também é
+        // dinheiro da PaguePlay e rende os mesmos 24,96%.
+        ho: (hoMap[op.id] ?? 0) + dupla.recebidoIndireto * PP_HO_PERCENTUAL,
+        dupla,
+        qtdIndireta: dupla.ativa ? (indiretoMap[op.id]?.qtd ?? 0) : 0,
         dias,
       });
     }
@@ -487,6 +621,7 @@ export function QuartisOperadores({
     }
     return porSetor;
   }, [anoNum, mesNum, feriados, contarHoje, quartis, resumos, operadores, metasOp,
+      metasIndiretas, indiretoMap,
       setorEfetivo, filtroEquipe, operadorEquipeMap, equipesExtrasPorOperador,
       setorDaEquipe, nomeDaEquipe, treinoMap]);
 
@@ -612,6 +747,17 @@ export function QuartisOperadores({
                                 <span className="font-medium truncate max-w-[150px]" title={l.op.nome}>
                                   {l.op.nome}
                                 </span>
+                                {/* Sem este selo, a META e o RECEBIMENTO desta
+                                    linha pareceriam errados para quem sabe a
+                                    meta direta de cabeça. */}
+                                {l.dupla.ativa && (
+                                  <span
+                                    className="shrink-0 rounded px-1 py-0 text-[9px] font-bold bg-primary/15 text-primary"
+                                    title="Meta direta + indireta — os valores desta linha são a soma das duas frentes"
+                                  >
+                                    D+I
+                                  </span>
+                                )}
                               </div>
                             </td>
                             <td className="px-2 py-1 text-muted-foreground truncate max-w-[110px]" title={l.equipeNome}>

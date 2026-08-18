@@ -1868,6 +1868,8 @@ export type Database = {
           id: string
           mes: number
           meta_acordos: number
+          meta_indireta_ativa: boolean
+          meta_indireta_valor: number
           meta_proporcional: boolean
           meta_valor: number
           metas_extras: Json
@@ -1883,6 +1885,8 @@ export type Database = {
           id?: string
           mes: number
           meta_acordos?: number
+          meta_indireta_ativa?: boolean
+          meta_indireta_valor?: number
           meta_proporcional?: boolean
           meta_valor?: number
           metas_extras?: Json
@@ -1898,6 +1902,8 @@ export type Database = {
           id?: string
           mes?: number
           meta_acordos?: number
+          meta_indireta_ativa?: boolean
+          meta_indireta_valor?: number
           meta_proporcional?: boolean
           meta_valor?: number
           metas_extras?: Json
@@ -4087,6 +4093,14 @@ export type Database = {
           dia: string
           aberturas: number
           segundos: number
+        }[]
+      }
+      fn_recebimento_indireto_mes: {
+        Args: { p_empresa_id: string; p_mes: string; p_operadores?: string[] | null }
+        Returns: {
+          operador_id: string
+          total_bruto: number
+          qtd: number
         }[]
       }
       fn_uso_por_tela: {
