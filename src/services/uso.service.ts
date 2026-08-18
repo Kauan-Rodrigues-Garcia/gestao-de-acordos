@@ -57,12 +57,15 @@ export interface UsoPorDia {
 }
 
 export interface AdocaoTela {
-  usuario_id: string;
-  nome:       string;
-  cargo:      string | null;
-  aberturas:  number;
-  segundos:   number;
-  ultimo_em:  string | null;
+  usuario_id:   string;
+  nome:         string;
+  cargo:        string | null;
+  /** De qual operação é a pessoa. Vem desde 20260818140000. */
+  empresa_id:   string;
+  empresa_nome: string;
+  aberturas:    number;
+  segundos:     number;
+  ultimo_em:    string | null;
 }
 
 export interface JanelaUso {
@@ -72,6 +75,12 @@ export interface JanelaUso {
    * O parâmetro amplia o pedido, nunca o direito: a policy de `uso_telas` deixa
    * super_admin ver as duas operações e prende o administrador na própria. Passar
    * `null` sendo administrador devolve só a empresa dele.
+   *
+   * As QUATRO leituras aceitam `null` desde a migration `20260818140000`. Até
+   * ela, só `fn_uso_por_pessoa` aceitava, e as outras três respondiam
+   * `where empresa_id = null` — que em SQL não é falso, é NULL, e devolve zero
+   * linha sem erro. Com "Todas as empresas" no padrão da tela, três blocos do
+   * painel abriam vazios.
    */
   empresaId: string | null;
   /** 'yyyy-MM-dd' */

@@ -97,6 +97,78 @@ export function calcularProjecao(entrada: EntradaProjecao): ResultadoProjecao | 
   return { metaDiaria, esperado, diferenca, projecaoPct, quartil, proximo, paraSubir };
 }
 
+export interface RitmoPeriodo {
+  /** Acumulado ÷ dias trabalhados. 0 dias trabalhados = 0, não Infinity. */
+  mediaDiaria: number;
+  /** Dias úteis que ainda faltam no período. Nunca negativo. */
+  diasRestantes: number;
+  /**
+   * Onde o período fecha mantendo a média atual.
+   *
+   * Sem dia trabalhado não há ritmo a projetar, e a estimativa é o próprio
+   * acumulado — não zero, e não uma extrapolação de um dia inventado.
+   */
+  projecaoFechamento: number;
+  /** Quanto falta para a meta. `null` sem meta. 0 = meta batida. */
+  faltaMeta: number | null;
+  /** `projecaoFechamento − meta`. Positivo = fecha acima. `null` sem meta. */
+  sobraProjetada: number | null;
+  /**
+   * Quanto precisa entrar por dia útil RESTANTE para bater a meta.
+   *
+   * Diferente da "diária p/ meta" (`metaDiaria` de `calcularProjecao`), que
+   * divide a meta pelo período inteiro e não muda com o tempo. Esta responde o
+   * que dá para fazer a partir de amanhã, e é a que sobe quando se atrasa.
+   *
+   * `null` quando não há meta, quando a meta já foi batida, ou quando não sobrou
+   * dia útil — nesse último caso não existe ritmo capaz de resolver, e um número
+   * aqui mentiria.
+   */
+  ritmoNecessario: number | null;
+}
+
+/**
+ * Ritmo e fechamento de um período — a conta de "onde isto termina o mês".
+ *
+ * Serve equipe, setor e operador com o mesmo código. Nasceu dentro de
+ * `detalharEquipe`, no card de Desempenho Equipes; quando a aba Quartis passou a
+ * abrir a linha do operador com os mesmos números, copiá-la seria repetir o
+ * defeito que este arquivo inteiro existe para não repetir — duas telas do mesmo
+ * painel respondendo diferente para a mesma pergunta.
+ *
+ * Diferente de `calcularProjecao`, não devolve `null` sem meta: média diária e
+ * projeção de fechamento existem sem meta nenhuma. O que depende de meta vem
+ * `null` campo a campo.
+ */
+export function ritmoDoPeriodo(entrada: {
+  acumulado: number;
+  meta: number | null | undefined;
+  /** Dias úteis do período (`diasUteisDoMes`). */
+  totalUteis: number;
+  /** Dias úteis já trabalhados (`diasUteisDecorridos`). */
+  decorridos: number;
+}): RitmoPeriodo {
+  const { acumulado, totalUteis, decorridos } = entrada;
+  const meta = Number(entrada.meta) || 0;
+
+  const mediaDiaria   = decorridos > 0 ? acumulado / decorridos : 0;
+  const diasRestantes = Math.max(0, totalUteis - decorridos);
+  const projecaoFechamento = decorridos > 0
+    ? acumulado + mediaDiaria * diasRestantes
+    : acumulado;
+
+  const faltaMeta      = meta > 0 ? Math.max(0, meta - acumulado) : null;
+  const sobraProjetada = meta > 0 ? projecaoFechamento - meta : null;
+  const ritmoNecessario = faltaMeta !== null && faltaMeta > 0 && diasRestantes > 0
+    ? faltaMeta / diasRestantes
+    : null;
+
+  return {
+    mediaDiaria, diasRestantes, projecaoFechamento,
+    faltaMeta, sobraProjetada, ritmoNecessario,
+  };
+}
+
 export interface DegrauQuartil {
   /** Número da faixa (1 = melhor). */
   quartil: number;

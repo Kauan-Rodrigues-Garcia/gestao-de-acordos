@@ -976,6 +976,32 @@ Cada card de Desempenho Equipes abre no clique. As contas vivem em
 Sem dia útil trabalhado, a estimativa de fechamento é o próprio acumulado — nem
 zero, nem extrapolação de um dia que não aconteceu.
 
+### 12.2.2-b Linha expansível do operador (aba Quartis)
+
+Mesmo gesto do card de equipe, um nível abaixo: **clicar na linha de um operador
+abre o detalhe dele**. As contas vivem em `detalheOperador.ts`, testadas à parte;
+o ritmo vem de `ritmoDoPeriodo` (`lib/projecaoMetas.ts`), a **mesma** função que
+o card de equipe usa — foi extraída no mesmo commit justamente para as duas abas
+não voltarem a divergir.
+
+| Bloco | O que responde |
+|---|---|
+| **Quanto falta por faixa** | quanto falta para **cada** quartil, não só para o atual (`degrausQuartis`), medido contra o esperado até hoje — igual à % da linha fechada |
+| **Ritmo e fechamento** | onde o mês fecha mantendo a média atual, quanto isso sobra/falta contra a meta, a diária necessária no que **resta**, e os dias úteis do recorte |
+| **Números do mês** | % da meta cheia, esperado até hoje, pagamentos, ticket médio, H.O. `[PP]`, posição e participação no grupo exibido |
+
+Duas armadilhas que o bloco evita de propósito:
+
+- **% da meta ≠ % de projeção.** Metade do mês com metade da meta é **100 %** de
+  projeção e **50 %** da meta. Os dois números aparecem juntos porque respondem
+  perguntas diferentes, e trocá-los já foi motivo de discussão em reunião;
+- **posição e participação usam o grupo EM EXIBIÇÃO**, não o setor inteiro do
+  banco. Quem filtrou por equipe compara com a equipe — é o que está lendo. Sem
+  grupo, os dois vêm vazios em vez de "1º de 1".
+
+Os dias úteis são os da própria linha, já reduzidos por equipe em treinamento:
+aberta e fechada, a linha tem de dizer a mesma coisa.
+
 ### 12.2.3 Duas divergências corrigidas entre as abas
 
 | Caso | Antes | Agora |
@@ -1263,6 +1289,33 @@ em memória, ignorando acento, porque a agregação já chega inteira e uma cons
 por tecla digitada seria desperdício. Clicar numa pessoa abre o detalhe: tempo,
 aberturas, dias, série diária e a tabela de telas
 (`fn_uso_detalhe_pessoa`, `fn_uso_detalhe_pessoa_dias`).
+
+**Empresa nula vale para as QUATRO leituras** (migration `20260818140000`). A
+`20260817200000` ensinou isso só a `fn_uso_por_pessoa`; as outras três seguiram
+com `where empresa_id = p_empresa_id`, e em SQL `x = NULL` não é falso — é NULL,
+que o `WHERE` descarta. Como o painel abre com **"Todas as empresas"**, a lista
+de pessoas vinha cheia e três blocos vinham **vazios**: "Telas mais usadas",
+"Atividade por dia" e "Adoção de uma tela". Escolher uma empresa na mão fazia os
+três voltarem, o que disfarçou o defeito de "card quebrado".
+
+> Regra que fica: leitura nova de `uso_telas` nasce com
+> `(p_empresa_id is null or … = p_empresa_id)`. `SECURITY INVOKER` continua
+> sendo o gate — o parâmetro amplia o pedido, nunca o direito.
+
+**Telas sem uso.** O card "Telas mais usadas" diz onde o tempo vai; o vizinho diz
+o oposto, e é a metade acionável — tela que ninguém abre em 30 dias ou não serve,
+ou ninguém sabe que existe. Sai do **catálogo** (`TELA_LABEL`), não do banco,
+pelo mesmo motivo da adoção: tela sem uso não tem linha em `uso_telas`. Módulos
+exclusivos de uma operação (Ouvidoria `[PP]`, Campanha Fácil `[BP]`) ficam fora —
+na outra empresa não é abandono, é módulo que o tenant não tem.
+
+**Adoção.** O seletor oferece as telas de gestão fixas **mais** as que tiveram
+uso no período: sem isso, perguntar pela adoção de uma tela fora da lista era
+impossível e a lista envelhecia a cada módulo novo. O resumo (adoção %, média de
+aberturas e de tempo) conta só **quem abriu** — diluir pelos que nunca entraram
+responde outra pergunta e sempre dá um número menor e inútil. Com as duas
+operações juntas, a tabela mostra a empresa de cada pessoa: "líder que não abriu"
+não dá para cobrar sem saber de quem cobrar.
 
 ### 13.9 Agrupamento de eventos na trilha
 

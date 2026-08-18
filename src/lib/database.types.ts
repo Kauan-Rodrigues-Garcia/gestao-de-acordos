@@ -4090,7 +4090,7 @@ export type Database = {
         }[]
       }
       fn_uso_por_tela: {
-        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Args: { p_empresa_id: string | null; p_desde: string; p_ate: string; p_cargo?: string | null }
         Returns: {
           tela: string
           aberturas: number
@@ -4099,7 +4099,7 @@ export type Database = {
         }[]
       }
       fn_uso_por_dia: {
-        Args: { p_empresa_id: string; p_desde: string; p_ate: string; p_cargo?: string | null }
+        Args: { p_empresa_id: string | null; p_desde: string; p_ate: string; p_cargo?: string | null }
         Returns: {
           dia: string
           aberturas: number
@@ -4109,7 +4109,7 @@ export type Database = {
       }
       fn_uso_adocao_tela: {
         Args: {
-          p_empresa_id: string
+          p_empresa_id: string | null
           p_desde: string
           p_ate: string
           p_tela: string
@@ -4119,6 +4119,8 @@ export type Database = {
           usuario_id: string
           nome: string
           cargo: string | null
+          empresa_id: string
+          empresa_nome: string
           aberturas: number
           segundos: number
           ultimo_em: string | null

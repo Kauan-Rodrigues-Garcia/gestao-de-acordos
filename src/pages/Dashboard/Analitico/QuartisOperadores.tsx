@@ -25,13 +25,33 @@
  * dela, não contra o mês cheio. Sem isso, esta tabela punha em faixa pior quem a
  * aba Desempenho Equipes — que já reduzia — punha em faixa melhor: o mesmo
  * operador, duas faixas, duas abas do mesmo painel.
+ *
+ * ## A linha abre
+ *
+ * Clicar num operador expande o detalhe dele, no mesmo espírito do card de
+ * Desempenho Equipes. A linha fechada diz ONDE a pessoa está; a aberta diz o que
+ * fazer com isso:
+ *
+ *   • **estimativa de fechamento** — onde o mês termina mantendo a média atual,
+ *     e quanto isso sobra ou falta contra a meta;
+ *   • **degraus de quartil** — quanto falta para CADA faixa, não só para a
+ *     atual. Quem está no 4º precisa ver o 3º, o 2º e o 1º;
+ *   • **os números por trás do valor** — pagamentos, ticket médio, H.O. `[PP]`,
+ *     posição e participação no grupo exibido.
+ *
+ * As contas ficam em `detalheOperador.ts`, testado à parte, e o ritmo vem de
+ * `lib/projecaoMetas` — o mesmo que o card de equipe usa. Aqui não se calcula
+ * nada além de cor e largura.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo, useId } from 'react';
+import { ChevronDown, Target, CalendarClock, BarChart3 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
+import { cn } from '@/lib/utils';
 import { getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { useTenant } from '@/lib/tenant-config';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO, COR_QUARTIL,
@@ -42,6 +62,7 @@ import {
   type ResumoOperadorAnalitico, type EquipeAnalitico, type OperadorEquipeInfo,
 } from '@/services/analitico/analitico.service';
 import { PizzaQuartis3D } from './PizzaQuartis3D';
+import { detalharOperador } from './detalheOperador';
 
 interface QuartisOperadoresProps {
   empresaId: string;
@@ -73,6 +94,215 @@ interface LinhaQuartil {
   diferenca: number | null;
   projecao: number | null;
   quartil: QuartilConfig | null;
+  /** Pagamentos e H.O. do analítico — alimentam a linha expandida. */
+  pagamentos: number;
+  ho: number;
+  /**
+   * Dias úteis DESTE operador, já reduzidos por equipe em treinamento.
+   *
+   * Guardados na linha, e não recalculados ao abrir: a área expandida tem de
+   * usar exatamente a mesma contagem que produziu a % da linha fechada, senão a
+   * mesma pessoa mostra duas leituras com a linha aberta e fechada.
+   */
+  dias: { totalUteis: number; decorridos: number };
+}
+
+// ── A linha expandida ────────────────────────────────────────────────────────
+
+/** Bloco de leitura da área expandida. Mesmo desenho do card de Desempenho. */
+function Bloco({
+  Icone, titulo, children,
+}: { Icone: typeof Target; titulo: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2 min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        <Icone className="w-3.5 h-3.5 shrink-0" /> {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function LinhaValor({
+  label, valor, cor, hint, forte,
+}: { label: string; valor: string; cor?: string; hint?: string; forte?: boolean }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2" title={hint}>
+      <span className="text-[11px] text-muted-foreground min-w-0 truncate">{label}</span>
+      <span
+        className={cn('text-[11px] tabular-nums font-mono font-semibold shrink-0',
+          forte && 'text-xs font-bold')}
+        style={cor ? { color: cor } : undefined}
+      >
+        {valor}
+      </span>
+    </div>
+  );
+}
+
+/** Uma faixa na lista de degraus: quanto falta, ou o carimbo de alcançada. */
+function Degrau({
+  quartil, falta, alcancado, ehAtual,
+}: { quartil: number; falta: number; alcancado: boolean; ehAtual: boolean }) {
+  const cor = COR_QUARTIL[quartil] ?? '#6366f1';
+  return (
+    <div className={cn(
+      'flex items-center gap-2 rounded-md px-1.5 py-1',
+      ehAtual && 'ring-1',
+    )}
+      style={ehAtual ? { background: cor + '14', boxShadow: `inset 0 0 0 1px ${cor}55` } : undefined}
+    >
+      <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: cor }} />
+      <span className="text-[11px] flex-1 min-w-0 truncate">
+        {quartil}º quartil
+        {ehAtual && <span className="text-[10px] text-muted-foreground"> · atual</span>}
+      </span>
+      <span className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
+        style={{ color: alcancado ? COR_QUARTIL[1] : cor }}>
+        {alcancado ? 'alcançado' : `faltam ${formatBRL(falta)}`}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * O detalhe de um operador — abre no clique da linha.
+ *
+ * Responde o que a linha fechada não responde, e nada além: onde o mês fecha no
+ * ritmo de hoje, quanto falta para CADA faixa (a linha só mostra a faixa atual)
+ * e o que o recebimento tem dentro — pagamentos, ticket e o peso da pessoa no
+ * setor. As contas vêm todas de `detalheOperador.ts`, testado à parte.
+ */
+function DetalheOperador({
+  linha, quartis, recebidosDoGrupo, mostrarHO, nomeDoGrupo,
+}: {
+  linha: LinhaQuartil;
+  quartis: QuartilConfig[];
+  recebidosDoGrupo: readonly number[];
+  mostrarHO: boolean;
+  nomeDoGrupo: string;
+}) {
+  const d = detalharOperador({
+    recebido:   linha.recebido,
+    meta:       linha.meta,
+    totalUteis: linha.dias.totalUteis,
+    decorridos: linha.dias.decorridos,
+    quartis,
+    pagamentos: linha.pagamentos,
+    ho:         linha.ho,
+    recebidosDoGrupo,
+  });
+
+  const corRitmo = d.ritmoNecessario !== null && d.ritmoNecessario > d.mediaDiaria
+    ? COR_QUARTIL[4] : COR_QUARTIL[1];
+
+  return (
+    <div className="grid gap-5 md:grid-cols-3 px-3 py-3 bg-muted/20">
+      {/* ── Degraus de quartil ─────────────────────────────────────────── */}
+      <Bloco Icone={Target} titulo="Quanto falta por faixa">
+        {d.degraus.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground">
+            Sem meta configurada — não há faixa a alcançar.
+          </p>
+        ) : (
+          <div className="space-y-1">
+            {d.degraus.map(g => (
+              <Degrau key={g.quartil} quartil={g.quartil} falta={g.falta}
+                alcancado={g.alcancado} ehAtual={d.faixaAtual?.quartil === g.quartil} />
+            ))}
+            <p className="text-[10px] text-muted-foreground pt-0.5">
+              Medido contra o esperado até hoje, igual à % da linha.
+            </p>
+          </div>
+        )}
+      </Bloco>
+
+      {/* ── Ritmo e fechamento ─────────────────────────────────────────── */}
+      <Bloco Icone={CalendarClock} titulo="Ritmo e fechamento">
+        <div className="space-y-1.5">
+          <LinhaValor
+            label="Fecha o mês em"
+            valor={formatBRL(d.projecaoFechamento)}
+            cor={d.fechaBatendo === null ? undefined
+              : d.fechaBatendo ? COR_QUARTIL[1] : COR_QUARTIL[4]}
+            hint="Estimativa mantendo a média diária atual até o fim do mês"
+            forte
+          />
+          {d.sobraProjetada !== null && (
+            <LinhaValor
+              label={d.sobraProjetada >= 0 ? 'Sobra projetada' : 'Falta projetada'}
+              valor={`${d.sobraProjetada >= 0 ? '+' : '−'}${formatBRL(Math.abs(d.sobraProjetada))}`}
+              cor={d.sobraProjetada >= 0 ? COR_QUARTIL[1] : COR_QUARTIL[4]}
+              hint="Estimativa de fechamento menos a meta do mês"
+            />
+          )}
+          <LinhaValor
+            label="Média diária atual" valor={formatBRL(d.mediaDiaria)}
+            hint="Recebimento ÷ dias úteis trabalhados"
+          />
+          <LinhaValor
+            label="Precisa por dia restante"
+            valor={d.ritmoNecessario !== null ? formatBRL(d.ritmoNecessario) : '—'}
+            cor={d.ritmoNecessario !== null ? corRitmo : undefined}
+            hint={d.ritmoNecessario === null
+              ? 'Sem meta, meta já batida, ou sem dia útil sobrando'
+              : 'O que falta para a meta ÷ dias úteis que restam'}
+          />
+          <LinhaValor
+            label="Falta para a meta"
+            valor={d.faltaMeta === null ? '—'
+              : d.faltaMeta === 0 ? 'Batida! 🎉' : formatBRL(d.faltaMeta)}
+            cor={d.faltaMeta === 0 ? COR_QUARTIL[1] : undefined}
+          />
+          <LinhaValor
+            label="Dias úteis"
+            valor={`${d.diasTrabalhados} de ${linha.dias.totalUteis}`}
+            hint="Reduzidos quando a equipe é de treinamento"
+          />
+          <LinhaValor label="Dias úteis restantes" valor={String(d.diasRestantes)} />
+        </div>
+      </Bloco>
+
+      {/* ── O que há dentro do recebimento ─────────────────────────────── */}
+      <Bloco Icone={BarChart3} titulo="Números do mês">
+        <div className="space-y-1.5">
+          <LinhaValor
+            label="% da meta do mês"
+            valor={d.pctMeta !== null ? `${d.pctMeta}%` : '—'}
+            hint="Recebimento ÷ meta cheia. Diferente da % da linha, que mede contra o esperado até hoje"
+          />
+          <LinhaValor
+            label="Esperado até hoje"
+            valor={d.esperadoHoje !== null ? formatBRL(d.esperadoHoje) : '—'}
+            hint="Meta diária × dias úteis trabalhados"
+          />
+          <LinhaValor
+            label="Pagamentos"
+            valor={d.pagamentos !== null ? String(d.pagamentos) : '—'}
+            hint="Linhas do analítico que compõem o recebimento"
+          />
+          <LinhaValor
+            label="Ticket médio"
+            valor={d.ticketMedio !== null ? formatBRL(d.ticketMedio) : '—'}
+            hint="Recebimento ÷ pagamentos"
+          />
+          {mostrarHO && (
+            <LinhaValor label="H.O." valor={formatBRL(d.ho ?? 0)} />
+          )}
+          <LinhaValor
+            label={`Posição em ${nomeDoGrupo}`}
+            valor={d.posicao !== null ? `${d.posicao}º de ${d.tamanhoGrupo}` : '—'}
+            hint="Por recebimento, entre os operadores exibidos"
+          />
+          <LinhaValor
+            label="Participação"
+            valor={d.participacaoPct !== null ? `${d.participacaoPct}%` : '—'}
+            hint="Fatia do recebimento do grupo exibido"
+          />
+        </div>
+      </Bloco>
+    </div>
+  );
 }
 
 export function QuartisOperadores({
@@ -84,6 +314,11 @@ export function QuartisOperadores({
   const setorEfetivo = setorId;
   const filtroEquipe = equipeId;
   const [anoNum, mesNum] = mes.split('-').map(Number);
+  const isPP = useTenant().isPaguePlay;
+
+  /** Operador com a linha aberta. Um por vez: duas abertas viram rolagem. */
+  const [abertoId, setAbertoId] = useState<string | null>(null);
+  const painelId = useId();
 
   const [operadores, setOperadores] = useState<PerfilOp[]>([]);
   const [metasOp, setMetasOp]       = useState<Record<string, number>>({});
@@ -164,7 +399,15 @@ export function QuartisOperadores({
       diasUteisDecorridos(anoNum, mesNum, feriados, getTodayISO(), undefined, contarHoje), 1,
     );
     const recebidoMap: Record<string, number> = {};
-    for (const r of resumos) recebidoMap[r.operador_id] = r.total_recebido;
+    // Pagamentos e H.O. vêm do mesmo resumo do analítico que já traz o recebido
+    // — a linha expandida mostra ticket médio e H.O. sem uma segunda consulta.
+    const pagamentosMap: Record<string, number> = {};
+    const hoMap: Record<string, number> = {};
+    for (const r of resumos) {
+      recebidoMap[r.operador_id]   = r.total_recebido;
+      pagamentosMap[r.operador_id] = Number(r.total_pagamentos) || 0;
+      hoMap[r.operador_id]         = Number(r.total_ho) || 0;
+    }
 
     /**
      * Dias úteis de UM operador, reduzidos quando a equipe dele é de treinamento.
@@ -222,7 +465,12 @@ export function QuartisOperadores({
         ?? 'Sem equipe';
 
       if (!porSetor.has(sid)) porSetor.set(sid, []);
-      porSetor.get(sid)!.push({ op, equipeNome, meta, recebido, diaria, hoje, diferenca, projecao, quartil: q });
+      porSetor.get(sid)!.push({
+        op, equipeNome, meta, recebido, diaria, hoje, diferenca, projecao, quartil: q,
+        pagamentos: pagamentosMap[op.id] ?? 0,
+        ho:         hoMap[op.id] ?? 0,
+        dias,
+      });
     }
 
     // Melhor projeção primeiro; sem meta vai para o fim
@@ -272,10 +520,16 @@ export function QuartisOperadores({
         <div className="flex flex-col xl:flex-row gap-4 items-start">
           {/* Tabela */}
           <div className="flex-1 min-w-0 space-y-4">
-            {[...grupos.entries()].map(([sid, lista]) => (
+            {[...grupos.entries()].map(([sid, lista]) => {
+              // Base da posição e da participação da linha expandida: o grupo é
+              // o que está NA TELA, não o setor inteiro do banco. Quem filtrou
+              // por equipe compara com a equipe, que é o que ele está lendo.
+              const recebidosDoGrupo = lista.map(l => l.recebido);
+              const nomeDoGrupo = setores[sid] ?? 'Sem setor';
+              return (
               <div key={sid} className="space-y-1">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide px-1">
-                  {setores[sid] ?? 'Sem setor'}
+                  {nomeDoGrupo}
                 </p>
                 <div className="rounded-xl border border-border bg-card overflow-x-auto">
                   <table className="w-full text-[11px]">
@@ -298,17 +552,35 @@ export function QuartisOperadores({
                     <tbody>
                       {lista.map(l => {
                         const cor = l.quartil ? COR_QUARTIL[l.quartil.quartil] ?? '#6366f1' : undefined;
+                        const aberto = abertoId === l.op.id;
+                        const alterna = () => setAbertoId(v => (v === l.op.id ? null : l.op.id));
                         return (
+                          <Fragment key={l.op.id}>
+                          {/* A linha inteira é o alvo do clique. `<tr>` com
+                              role/tabIndex em vez de um <button> dentro de uma
+                              célula: o botão só cobriria a coluna dele, e o
+                              clique nas outras oito não faria nada. */}
                           <tr
-                            key={l.op.id}
-                            className="border-t border-border/50"
+                            role="button"
+                            tabIndex={0}
+                            aria-expanded={aberto}
+                            aria-controls={`${painelId}-${l.op.id}`}
+                            onClick={alterna}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); alterna(); }
+                            }}
+                            className="group border-t border-border/50 cursor-pointer transition-shadow focus:outline-none focus-visible:ring-1 focus-visible:ring-primary"
                             style={cor ? {
-                              background: cor + '14',
-                              boxShadow: `inset 3px 0 0 0 ${cor}`,
-                            } : undefined}
+                              background: cor + (aberto ? '26' : '14'),
+                              boxShadow: `inset ${aberto ? 5 : 3}px 0 0 0 ${cor}`,
+                            } : aberto ? { background: 'hsl(var(--muted))' } : undefined}
                           >
                             <td className="px-2 py-1">
                               <div className="flex items-center gap-1.5 min-w-0">
+                                <ChevronDown className={cn(
+                                  'w-3 h-3 shrink-0 text-muted-foreground transition-transform group-hover:text-primary',
+                                  aberto && 'rotate-180 text-primary',
+                                )} />
                                 {l.op.foto_url ? (
                                   <img src={l.op.foto_url} alt={l.op.nome}
                                     className="w-5 h-5 rounded-full object-cover border border-border/60 shrink-0" />
@@ -358,13 +630,31 @@ export function QuartisOperadores({
                               )}
                             </td>
                           </tr>
+
+                          {aberto && (
+                            <tr id={`${painelId}-${l.op.id}`} className="border-t border-border/50">
+                              {/* `colSpan` fixo em 9: é o número de colunas do
+                                  cabeçalho acima. Mexeu numa, mexa aqui. */}
+                              <td colSpan={9} className="p-0">
+                                <DetalheOperador
+                                  linha={l}
+                                  quartis={quartis}
+                                  recebidosDoGrupo={recebidosDoGrupo}
+                                  mostrarHO={isPP}
+                                  nomeDoGrupo={nomeDoGrupo}
+                                />
+                              </td>
+                            </tr>
+                          )}
+                          </Fragment>
                         );
                       })}
                     </tbody>
                   </table>
                 </div>
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Distribuição por quartil. O título fica FORA do card, irmão do
@@ -411,6 +701,8 @@ export function QuartisOperadores({
       )}
 
       <p className="text-[11px] text-muted-foreground">
+        <strong>Clique na linha</strong> para ver a estimativa de fechamento do mês,
+        quanto falta para cada quartil e os números do operador. ·
         Diário = meta ÷ dias úteis do mês · Hoje = diário × dias úteis trabalhados ·
         Falta/sobra = recebimento − hoje · % = recebimento ÷ hoje ·
         faixas de quartil configuradas na aba Metas.

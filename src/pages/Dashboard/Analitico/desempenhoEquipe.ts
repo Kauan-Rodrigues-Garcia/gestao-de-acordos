@@ -25,7 +25,9 @@
  * reduzido, e as duas telas passam a concordar por construção.
  */
 
-import { calcularProjecao, degrausQuartis, type DegrauQuartil } from '@/lib/projecaoMetas';
+import {
+  calcularProjecao, degrausQuartis, ritmoDoPeriodo, type DegrauQuartil,
+} from '@/lib/projecaoMetas';
 import { quartilAtual } from '@/lib/diasUteis';
 
 import type { QuartilConfig } from '@/lib/supabase';
@@ -128,17 +130,13 @@ export interface DetalheEquipe {
 export function detalharEquipe(entrada: EntradaDetalheEquipe): DetalheEquipe {
   const { acumulado, meta, totalUteis, decorridos, quartis, operadores } = entrada;
 
-  const mediaDiaria   = decorridos > 0 ? acumulado / decorridos : 0;
-  const diasRestantes = Math.max(0, totalUteis - decorridos);
-  const projecaoFechamento = decorridos > 0
-    ? acumulado + mediaDiaria * diasRestantes
-    : acumulado;
-
-  const faltaMeta      = meta !== null && meta > 0 ? Math.max(0, meta - acumulado) : null;
-  const sobraProjetada = meta !== null && meta > 0 ? projecaoFechamento - meta : null;
-  const ritmoNecessario = faltaMeta !== null && faltaMeta > 0 && diasRestantes > 0
-    ? faltaMeta / diasRestantes
-    : null;
+  // As seis contas de ritmo vivem em `lib/projecaoMetas` desde que a aba Quartis
+  // passou a abrir a linha do operador com os mesmos números. Uma cópia local
+  // aqui faria as duas abas do mesmo painel divergirem no primeiro ajuste.
+  const {
+    mediaDiaria, diasRestantes, projecaoFechamento,
+    faltaMeta, sobraProjetada, ritmoNecessario,
+  } = ritmoDoPeriodo({ acumulado, meta, totalUteis, decorridos });
 
   // A projeção da equipe passa pela MESMA função dos operadores e do header
   // pessoal (`lib/projecaoMetas`), e não por uma conta local: o card fechado já
