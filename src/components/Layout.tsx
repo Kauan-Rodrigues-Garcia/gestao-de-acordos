@@ -86,7 +86,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
+  // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
   { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },

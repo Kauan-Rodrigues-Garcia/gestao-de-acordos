@@ -157,10 +157,24 @@ curta. `diretoria`, liberada por cargo na maioria das telas, atravessa inteira.
 > Ao escrever policy nova, a pergunta é sempre sobre a **linha**. Sobre o
 > usuário, só cargo, setor e permissão.
 
-O ramo PaguePlay de `acordos` segue com `lider` e `administrador`, sem
-`diretoria` — herança de antes do multiempresa. Nunca incomodou porque Acordos é
-módulo só da BookPlay (`hiddenForPaguePay`). Abrir esse ramo é decisão de
-negócio, não conserto.
+> **Cargo de empresa não mora dentro do ramo da operação.** `administrador` e
+> `diretoria` enxergam a operação inteira; `lider`/`elite`/`gerencia` é que
+> dependem de setor e de qual operação é. A condição de cargo de empresa estava
+> repetida DENTRO dos dois ramos de `acordos_select`, com lista diferente em cada
+> um — `['administrador','diretoria']` na BookPlay e `['lider','administrador']`
+> na PaguePlay. Foi assim que a diretoria ficou sem ver acordo nenhum na
+> PaguePlay, inclusive no Dashboard. Desde `20260818380000` a condição está no
+> topo, uma vez só, e os ramos guardam apenas o que de fato varia por operação.
+
+`acordos_insert`, `acordos_update` e `acordos_delete_admin` **não** foram
+mexidas: ali a diretoria tem escrita na BookPlay e não tem na PaguePlay. Abrir
+escrita é outra decisão.
+
+**A tela de Acordos não existe na PaguePlay.** Além de `hiddenForPaguePay` no
+menu, `src/pages/Acordos/index.tsx` faz `if (isPP) return <Navigate to="/" />` e
+a chave `ver_acordos` nem existe em `cargos_permissoes` da PaguePlay. São três
+travas independentes, de propósito: lá os acordos são vistos pelo Dashboard e
+pelo Analítico. Reviver a tela é decisão de produto, não ajuste de permissão.
 
 Três funções seguem presas à empresa de origem por não receberem empresa por
 parâmetro: `fn_wpp_diretorio`, `fn_creators_lab_ranking` e
