@@ -27,7 +27,7 @@ import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { registrarLog }        from '@/services/logs.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
-import { autenticarLider } from '@/services/autorizacao_lider.service';
+import { solicitarAutorizacao } from '@/services/autorizacaoPedidos.service';
 import { useNrRegistros }           from '@/hooks/useNrRegistros';
 import { verificarNrRegistro, mensagemErroNr } from '@/services/nr_registros.service';
 import {
@@ -48,10 +48,12 @@ import type { ConflitNR, AcordoNovoInlineProps, SharedFormState } from './types'
 
 // Re-export public API so callers using `@/components/AcordoNovoInline` keep working
 export { ModalAutorizacaoNR } from './ModalAutorizacaoNR';
+export { ModalAutorizacaoNRSenha } from './ModalAutorizacaoNRSenha';
 export { ModalAvisoDiretoExtra } from './ModalAvisoDiretoExtra';
 export type {
   ConflitNR,
   ModalAutorizacaoNRProps,
+  ModalAutorizacaoNRSenhaProps,
   ModalAvisoDiretoExtraProps,
   AcordoNovoInlineProps,
 } from './types';
@@ -202,8 +204,6 @@ export function AcordoNovoInline({
   }
 
   const [conflito,    setConflito]    = useState<ConflitNR | null>(null);
-  const [liderEmail,  setLiderEmail]  = useState('');
-  const [liderSenha,  setLiderSenha]  = useState('');
   const [autorizando, setAutorizando] = useState(false);
   const [avisoDiretoExtra, setAvisoDiretoExtra] = useState<PendingAvisoDiretoExtra | null>(null);
   const [confirmandoDiretoExtra, setConfirmandoDiretoExtra] = useState(false);
@@ -574,141 +574,79 @@ export function AcordoNovoInline({
     }
   }
 
-  async function autorizarTransferencia() {
+  /**
+   * Solicita autorização em vez de pedir a senha do líder.
+   *
+   * ## O que sai daqui
+   *
+   * Um pedido em `autorizacoes_pedidos`, carregando o PAYLOAD do acordo. Quem
+   * grava é o servidor, na aprovação — o operador não fica esperando de janela
+   * aberta, e por isso a janela fecha assim que o pedido sai.
+   *
+   * ## Por que o payload viaja inteiro
+   *
+   * O líder pode aprovar minutos depois, com o operador em outra tela ou com o
+   * navegador fechado. Se a criação dependesse desta tela estar viva, aprovar
+   * não faria nada — e o operador receberia "autorizado" sem acordo nenhum.
+   *
+   * `operador_id` e `empresa_id` do payload são reescritos no servidor com os do
+   * pedido: payload sai do navegador, e navegador não decide de quem é o acordo.
+   */
+  async function solicitarAutorizacaoConflito() {
     if (!conflito || !perfil?.id || !empresa?.id) return;
-    if (!liderEmail.trim() || !liderSenha.trim()) { toast.error('Informe o e-mail e a senha do líder'); return; }
 
     setAutorizando(true);
     try {
-      // Um caminho só de autenticação (autorizacao_lider.service). A cópia
-      // inline que morava aqui divergiu da do AcordoForm e da do serviço: o
-      // mesmo líder era aceito numa tela e recusado na outra.
-      const auth = await autenticarLider({ email: liderEmail, senha: liderSenha });
-      // `'erro' in auth` e não `!auth.ok`: com `strict: false` o TS não estreita
-      // união por discriminante booleano. É o mesmo idioma de parcelas.service.
-      if ('erro' in auth) { toast.error(auth.erro); return; }
-
-      const liderUid    = auth.autorizador.uid;
-      const liderToken  = auth.autorizador.token;
-      const liderPerfil = { perfil: auth.autorizador.perfil, nome: auth.autorizador.nome };
-
       const labelNR    = isPaguePlay ? 'Código' : 'NR';
       const nrLogLabel = ((isPaguePlay ? conflito.payload.instituicao : conflito.payload.nr_cliente) as string | undefined)?.trim() || '—';
-      const nomeNovoOp = perfil.nome ?? 'Operador';
 
-      // MODO: troca_extra
-      if (conflito.modo === 'troca_extra') {
-        const { extraAtualId, extraAtualOpId, extraAtualOpNome } = conflito;
-
-        const { data: acordoExtraAnt } = await supabase
-          .from('acordos').select('id, nome_cliente, valor, vencimento, status, operador_id, empresa_id, nr_cliente, instituicao')
-          .eq('id', extraAtualId!).maybeSingle();
-
-        const valorExtFmt = acordoExtraAnt?.valor != null ? `R$ ${Number(acordoExtraAnt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-        const vencExtFmt  = acordoExtraAnt?.vencimento ? format(parseISO(acordoExtraAnt.vencimento), 'dd/MM/yyyy', { locale: ptBR }) : '—';
-
-        if (acordoExtraAnt) {
-          await enviarParaLixeira({
-            acordo: acordoExtraAnt as Acordo, motivo: 'troca_extra',
-            operadorNome: extraAtualOpNome ?? '—',
-            autorizadoPorId: liderUid, autorizadoPorNome: liderPerfil.nome,
-            transferidoParaId: perfil.id, transferidoParaNome: nomeNovoOp,
-          });
-        }
-
-        const { error: errDelExt } = await supabase.from('acordos').delete().eq('id', extraAtualId!);
-        if (errDelExt) { toast.error(`Erro ao remover vínculo extra anterior: ${errDelExt.message}`); return; }
-        onAcordoRemovido?.(extraAtualId!);
-
-        const payloadExtra = { ...conflito.payload, tipo_vinculo: 'extra', vinculo_operador_id: conflito.operadorId, vinculo_operador_nome: conflito.operadorNome };
-        const inserido = await executarSalvar(payloadExtra);
-        if (!inserido) return;
-
-        await supabase.from('acordos').update({ ...buildSyncPayload(conflito.payload), vinculo_operador_id: perfil.id, vinculo_operador_nome: nomeNovoOp }).eq('id', conflito.acordoId);
-
-        // Mesma razão do registro em AcordoEditInline: as triggers veem o delete
-        // e o insert, não a decisão nem o líder que a autorizou.
-        await registrarLog({
-          acao: 'acordo_extra_trocado',
-          categoria: 'acordo',
-          severidade: 'aviso',
-          descricao:
-            `Assumiu o vínculo EXTRA do ${labelNR} ${nrLogLabel} de `
-            + `${extraAtualOpNome ?? 'outro operador'}, autorizado por ${liderPerfil.nome}`,
-          empresaId: empresa.id,
-          tabela: 'acordos',
-          registroId: extraAtualId,
-          alvoTipo: 'acordo',
-          alvoRotulo: `${labelNR} ${nrLogLabel}`,
-          detalhes: {
-            origem: 'criacao',
-            aprovado_por: liderPerfil.nome,
-            aprovado_por_id: liderUid,
-            operador_extra_anterior: extraAtualOpId,
-            operador_extra_ant_nome: extraAtualOpNome,
-            operador_extra_novo: perfil.id,
-            operador_extra_novo_nome: nomeNovoOp,
-          },
-        });
-
-        if (extraAtualOpId) {
-          await criarNotificacao({
-            usuario_id: extraAtualOpId,
-            titulo: `Seu vínculo EXTRA foi transferido`,
-            mensagem: `O ${labelNR} "${nrLogLabel}" (EXTRA): Valor ${valorExtFmt} | Vencimento ${vencExtFmt} foi transferido para ${nomeNovoOp}. Autorizado por ${liderPerfil.nome}.`,
-            empresa_id: empresa.id,
-          });
-        }
-
-        limparDraft();
-        onSaved(inserido);
-        toast.success('Troca de vínculo EXTRA autorizada! Acordo registrado.');
-        setConflito(null); setLiderEmail(''); setLiderSenha('');
-        return;
-      }
-
-      // MODO: transferencia_completa
-      //
-      // Vai pela RPC com o TOKEN DO LÍDER. Antes o select e o delete saíam com
-      // a sessão do operador, que a RLS fail-closed (20260723f) barra — o
-      // acordo alheio voltava nulo e a tela dizia "Acordo anterior não
-      // encontrado", mesmo com a senha do líder correta. A RPC roda como
-      // definer e confere o cargo do portador do token no servidor.
-      const rt = await transferirAcordoNoServidor({
-        acordoId:       conflito.acordoId,
-        novoOperadorId: perfil.id,
-        token:          liderToken,
-      });
-      if (!rt.ok) { toast.error(mensagemErroTransferencia(rt.erro)); return; }
-
-      const valorFmt      = rt.valor != null ? `R$ ${Number(rt.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—';
-      const vencimentoFmt = rt.vencimento ? format(parseISO(rt.vencimento), 'dd/MM/yyyy', { locale: ptBR }) : '—';
-      const statusAnt     = rt.status ?? '—';
-
-      onAcordoRemovido?.(conflito.acordoId);
-
-      const inserido = await executarSalvar(conflito.payload);
-      if (!inserido) return;
-
-      await criarNotificacao({
-        usuario_id: conflito.operadorId,
-        titulo: `Seu ${labelNR} "${nrLogLabel}" foi transferido`,
-        mensagem: `O ${labelNR} "${nrLogLabel}" foi transferido para ${nomeNovoOp} com autorização de ${liderPerfil.nome}. Seu acordo foi movido para a lixeira. Detalhes: Valor ${valorFmt} | Vencimento ${vencimentoFmt} | Status: ${statusAnt}.`,
-        empresa_id: empresa.id,
+      const res = await solicitarAutorizacao({
+        modo:     conflito.modo,
+        nrLabel:  labelNR,
+        nrValor:  nrLogLabel,
+        payload:  conflito.payload,
+        // O resumo é o que a gaveta do líder mostra sem abrir o acordo. Sai do
+        // mesmo payload: uma segunda montagem divergiria do que será gravado.
+        resumo: {
+          cliente:    (conflito.payload.nome_cliente as string | undefined) ?? null,
+          valor:      Number(conflito.payload.valor) || null,
+          vencimento: (conflito.payload.vencimento as string | undefined) ?? null,
+          parcelas:   Number(conflito.payload.parcelas) || null,
+          tipo:       (conflito.payload.tipo as string | undefined) ?? null,
+        },
+        acordoAlvoId:     conflito.acordoId,
+        donoId:           conflito.operadorId,
+        donoNome:         conflito.operadorNome,
+        extraAtualId:     conflito.extraAtualId ?? null,
+        extraAtualOpId:   conflito.extraAtualOpId ?? null,
+        extraAtualOpNome: conflito.extraAtualOpNome ?? null,
       });
 
-      limparDraft();
-      onSaved(inserido);
-      toast.success('Transferência autorizada! Acordo registrado com sucesso.');
-      setConflito(null); setLiderEmail(''); setLiderSenha('');
+      // `'erro' in res` e não `!res.ok`: com `strict: false` o TS não estreita
+      // união por discriminante booleano. Mesmo idioma de parcelas.service.
+      if ('erro' in res) { toast.error(res.erro); return; }
+
+      // A janela fecha e o rascunho fica: se for recusado, o operador reabre o
+      // formulário com o que digitou em vez de refazer tudo.
+      setConflito(null);
+      toast.info(
+        res.repetido
+          ? 'Você já tem um pedido em análise para este ' + labelNR + '.'
+          : 'Pedido enviado. Está sendo avaliado.',
+        {
+          description: 'Os líderes do seu setor foram avisados. Você recebe a '
+            + 'resposta por notificação — pode continuar trabalhando.',
+          duration: 8000,
+        },
+      );
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Erro inesperado na autorização');
+      toast.error(e instanceof Error ? e.message : 'Erro inesperado ao solicitar autorização');
     } finally {
       setAutorizando(false);
     }
   }
 
-  function cancelarConflito() { setConflito(null); setLiderEmail(''); setLiderSenha(''); }
+  function cancelarConflito() { setConflito(null); }
 
   async function confirmarDiretoExtra() {
     if (!avisoDiretoExtra || !perfil?.id || !empresa?.id) return;
@@ -819,8 +757,8 @@ export function AcordoNovoInline({
     tagIds, setTagIds,
     quarentaPct, setQuarentaPct: (fn) => setQuarentaPct(fn),
     empresaTags,
-    conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
-    autorizando, autorizarTransferencia, cancelarConflito,
+    conflito,
+    autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra: avisoDiretoExtra
       ? { operadorAntNome: avisoDiretoExtra.operadorAntNome, operadorAntSetor: avisoDiretoExtra.operadorAntSetor, nrLabel: avisoDiretoExtra.nrLabel, labelCampo: avisoDiretoExtra.labelCampo }
       : null,

@@ -51,6 +51,7 @@ import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
+import { AutorizacaoDock } from './AutorizacaoDock';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
@@ -755,6 +756,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Aviso rápido de notificação nova — um card por vez, canto superior */}
       <NotificacaoToast />
+
+      {/* Gaveta de autorizações — canto inferior direito, em QUALQUER tela.
+          Fica aqui, e não numa rota, porque autorizar é uma interrupção: do
+          outro lado há um operador parado esperando, e obrigar o líder a sair
+          do que está fazendo devolveria a espera que este fluxo eliminou.
+          Some sozinha quando não há nada a mostrar. */}
+      <AutorizacaoDock />
 
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}

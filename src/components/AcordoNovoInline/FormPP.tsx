@@ -35,8 +35,8 @@ export function FormPP({ state }: { state: SharedFormState }) {
     link, setLink,
     tagIds, setTagIds,
     empresaTags,
-    conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
-    autorizando, autorizarTransferencia, cancelarConflito,
+    conflito,
+    autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
     profissionalLoading, profissionalEncontrado,
   } = state;
@@ -240,9 +240,9 @@ export function FormPP({ state }: { state: SharedFormState }) {
       </tr>
 
       <ModalAutorizacaoNR
-        conflito={conflito} liderEmail={liderEmail} liderSenha={liderSenha} autorizando={autorizando}
-        onEmailChange={setLiderEmail} onSenhaChange={setLiderSenha}
-        onAutorizar={autorizarTransferencia} onCancel={cancelarConflito}
+        conflito={conflito} autorizando={autorizando}
+
+        onSolicitar={solicitarAutorizacaoConflito} onCancel={cancelarConflito}
       />
       <ModalAvisoDiretoExtra
         aberto={!!avisoDiretoExtra}

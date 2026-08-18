@@ -773,6 +773,14 @@ describe('AcordoNovoInline — fluxo salvar() (CASO C — ninguém tem a lógica
     await waitFor(() => {
       expect(screen.getByText(/NR já agendado por outro operador/i)).toBeInTheDocument();
     });
+
+    // O caminho é SOLICITAR, não digitar a senha do líder. Desde 18/08/2026 o
+    // operador pede, os autorizadores decidem pela gaveta e o servidor grava.
+    expect(screen.getByRole('button', { name: /solicitar autorização/i })).toBeInTheDocument();
+    // E o login do líder saiu de vez desta tela — a asserção existe para o
+    // campo não voltar por acidente num merge.
+    expect(screen.queryByText(/senha/i)).toBeNull();
+    expect(document.querySelector('input[type="password"]')).toBeNull();
   });
 });
 

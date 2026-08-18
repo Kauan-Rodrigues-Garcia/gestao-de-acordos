@@ -30,7 +30,7 @@ import { autenticarLider } from '@/services/autorizacao_lider.service';
 import {
   transferirAcordoDeDesligado, transferirAcordoNoServidor, mensagemErroTransferencia,
 } from '@/services/desligamento.service';
-import { ModalAutorizacaoNR, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
+import { ModalAutorizacaoNRSenha, ModalAvisoDiretoExtra } from '@/components/AcordoNovoInline';
 import type { ConflitNR } from '@/components/AcordoNovoInline';
 import {
   parseCurrencyInput,
@@ -1103,7 +1103,7 @@ export function AcordoEditInline({
             onCancel={cancelarPendencia}
           />
 
-          <ModalAutorizacaoNR
+          <ModalAutorizacaoNRSenha
             conflito={conflitoParaModal}
             liderEmail={liderEmail}
             liderSenha={liderSenha}

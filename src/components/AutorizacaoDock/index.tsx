@@ -1,0 +1,365 @@
+/**
+ * AutorizacaoDock — a etiqueta no canto inferior direito, em qualquer tela.
+ *
+ * ## Por que não é uma página
+ *
+ * Autorizar é uma interrupção: o operador está parado esperando. Uma rota
+ * própria obrigaria o líder a sair do que estava fazendo, decidir e voltar —
+ * e é exatamente esse ir-e-voltar que o fluxo antigo (levantar e ir até a
+ * máquina do operador) já custava. A gaveta abre por cima, decide e fecha.
+ *
+ * ## Quem vê
+ *
+ * Ninguém decide isso aqui: a gaveta mostra o que `autorizacoes_pedidos`
+ * devolver, e a policy da tabela já recorta — líder, elite e gerência veem o
+ * próprio setor; diretoria, administrador e super_admin veem a empresa.
+ * O solicitante vê o próprio pedido, e para ele a gaveta é o acompanhamento.
+ *
+ * Sem nada para mostrar, o componente não renderiza: uma etiqueta permanente
+ * com "0" ocuparia o canto da tela de todo operador para nunca dizer nada.
+ *
+ * ## Aprovar não tem desfazer
+ *
+ * Aprovar apaga o acordo de alguém e cria outro no lugar. Por isso o botão de
+ * aprovar exige uma segunda confirmação NA PRÓPRIA LINHA, com o nome de quem
+ * perde o acordo escrito nela — e não um `confirm()`, que a pessoa fecha no
+ * automático sem ler.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import {
+  ShieldQuestion, X, Check, Ban, Loader2, Clock, AlertTriangle,
+  ArrowRightLeft, UserCheck, ChevronDown,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { formatBRL } from '@/lib/money';
+import { useAuth } from '@/hooks/useAuth';
+import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
+import { podeAutorizarTabulacao } from '@/lib/index';
+import {
+  decidirAutorizacao, cancelarAutorizacao, type PedidoAutorizacao,
+} from '@/services/autorizacaoPedidos.service';
+
+/** "há 3 min", "há 2 h" — a idade do pedido importa mais que a hora exata. */
+function idade(iso: string): string {
+  const seg = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000));
+  if (seg < 60) return 'agora';
+  if (seg < 3600) return `há ${Math.round(seg / 60)} min`;
+  if (seg < 86400) return `há ${Math.round(seg / 3600)} h`;
+  return `há ${Math.round(seg / 86400)} d`;
+}
+
+/** Quanto falta para o pedido expirar. Vazio quando ainda sobra muito tempo. */
+function restante(iso: string): string | null {
+  const min = Math.round((new Date(iso).getTime() - Date.now()) / 60000);
+  if (min <= 0) return 'expirado';
+  if (min <= 60) return `expira em ${min} min`;
+  if (min <= 240) return `expira em ${Math.round(min / 60)} h`;
+  return null;
+}
+
+function Campo({ rotulo, valor }: { rotulo: string; valor: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] uppercase tracking-wide text-muted-foreground">{rotulo}</p>
+      <p className="text-[11px] font-medium truncate" title={valor}>{valor}</p>
+    </div>
+  );
+}
+
+interface CartaoProps {
+  pedido: PedidoAutorizacao;
+  /** Quem olha pode decidir, ou é o solicitante acompanhando? */
+  souAutorizador: boolean;
+  meuId: string | null;
+  onDecidido: () => void;
+}
+
+function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
+  // 'confirmar' é o estado entre clicar em Aprovar e aprovar de verdade.
+  const [fase, setFase] = useState<'normal' | 'confirmar' | 'recusar'>('normal');
+  const [motivo, setMotivo] = useState('');
+  const [ocupado, setOcupado] = useState(false);
+
+  const r = pedido.resumo ?? {};
+  const ehTrocaExtra = pedido.modo === 'troca_extra';
+  const perde = ehTrocaExtra ? pedido.extra_atual_op_nome : pedido.dono_nome;
+  const souSolicitante = meuId !== null && pedido.solicitante_id === meuId;
+  const expira = restante(pedido.expira_em);
+
+  async function decidir(aprovar: boolean) {
+    setOcupado(true);
+    const res = await decidirAutorizacao({ id: pedido.id, aprovar, motivo });
+    setOcupado(false);
+    if ('erro' in res) { toast.error(res.erro); onDecidido(); return; }
+    toast.success(
+      res.status === 'aprovado'
+        ? `Autorizado. O acordo foi tabulado para ${pedido.solicitante_nome}.`
+        : 'Pedido recusado. O operador foi avisado.',
+    );
+    setFase('normal'); setMotivo('');
+    onDecidido();
+  }
+
+  async function cancelar() {
+    setOcupado(true);
+    const ok = await cancelarAutorizacao(pedido.id);
+    setOcupado(false);
+    toast[ok ? 'success' : 'error'](
+      ok ? 'Pedido cancelado.' : 'Não foi possível cancelar — talvez já tenha sido decidido.',
+    );
+    onDecidido();
+  }
+
+  return (
+    <div className={cn(
+      'rounded-xl border p-3 space-y-2',
+      pedido.status === 'pendente' ? 'border-border bg-card' : 'border-border/60 bg-muted/30',
+    )}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold truncate">
+            {pedido.solicitante_nome}
+            <span className="font-normal text-muted-foreground"> quer registrar</span>
+          </p>
+          <p className="text-sm font-mono font-bold truncate" title={pedido.nr_valor}>
+            {pedido.nr_label} {pedido.nr_valor}
+          </p>
+        </div>
+        <span className={cn(
+          'shrink-0 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide',
+          ehTrocaExtra ? 'bg-amber-500/15 text-amber-600' : 'bg-destructive/15 text-destructive',
+        )}>
+          {ehTrocaExtra ? <ArrowRightLeft className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
+          {ehTrocaExtra ? 'troca extra' : 'transferência'}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <Campo rotulo="Cliente" valor={r.cliente || '—'} />
+        <Campo rotulo="Valor" valor={r.valor != null ? formatBRL(Number(r.valor)) : '—'} />
+        <Campo rotulo="Vencimento"
+          valor={r.vencimento ? new Date(`${r.vencimento}T12:00:00`).toLocaleDateString('pt-BR') : '—'} />
+        <Campo rotulo={ehTrocaExtra ? 'EXTRA hoje de' : 'Hoje é de'} valor={perde || '—'} />
+      </div>
+
+      <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        <Clock className="w-3 h-3 shrink-0" />
+        {idade(pedido.criado_em)}
+        {r.setorNome && <> · {r.setorNome}</>}
+        {pedido.status === 'pendente' && expira && (
+          <span className="text-warning font-medium">· {expira}</span>
+        )}
+      </div>
+
+      {/* ── Já decidido: só o registro, para todo mundo ver quem decidiu ── */}
+      {pedido.status !== 'pendente' && (
+        <div className="rounded-lg bg-muted/50 px-2 py-1.5">
+          <p className="text-[11px]">
+            {pedido.status === 'aprovado' && <strong className="text-success">Autorizado</strong>}
+            {pedido.status === 'recusado' && <strong className="text-destructive">Recusado</strong>}
+            {pedido.status === 'cancelado' && <strong className="text-muted-foreground">Cancelado</strong>}
+            {pedido.status === 'falhou' && <strong className="text-destructive">Falhou</strong>}
+            {pedido.decidido_por_nome && <> por <strong>{pedido.decidido_por_nome}</strong></>}
+            {pedido.decidido_em && <> · {idade(pedido.decidido_em)}</>}
+          </p>
+          {pedido.motivo_recusa && (
+            <p className="text-[10px] text-muted-foreground mt-0.5">{pedido.motivo_recusa}</p>
+          )}
+          {pedido.erro && (
+            <p className="text-[10px] text-destructive mt-0.5">Erro técnico: {pedido.erro}</p>
+          )}
+        </div>
+      )}
+
+      {/* ── Pendente, e quem olha decide ──────────────────────────────────── */}
+      {pedido.status === 'pendente' && souAutorizador && !souSolicitante && (
+        <>
+          {fase === 'normal' && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFase('recusar')} disabled={ocupado}
+                className="flex-1 h-8 rounded-lg border border-border text-[11px] font-medium hover:bg-muted transition-colors disabled:opacity-50"
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => setFase('confirmar')} disabled={ocupado}
+                className="flex-1 h-8 rounded-lg bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+              >
+                Aprovar
+              </button>
+            </div>
+          )}
+
+          {/* Segunda confirmação: o nome de quem perde o acordo fica escrito no
+              próprio aviso. Um `confirm()` genérico seria fechado no automático. */}
+          {fase === 'confirmar' && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-2 space-y-2">
+              <p className="text-[11px] flex items-start gap-1.5">
+                <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0 mt-0.5" />
+                <span>
+                  <strong className="text-destructive">Não tem como desfazer.</strong>{' '}
+                  O acordo de <strong>{perde || 'outro operador'}</strong> vai para a
+                  lixeira e o {pedido.nr_label} passa para{' '}
+                  <strong>{pedido.solicitante_nome}</strong>. Os dois são notificados.
+                </span>
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setFase('normal')} disabled={ocupado}
+                  className="flex-1 h-8 rounded-lg border border-border bg-background text-[11px] font-medium disabled:opacity-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={() => decidir(true)} disabled={ocupado}
+                  className="flex-1 h-8 rounded-lg bg-destructive text-destructive-foreground text-[11px] font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Confirmar autorização
+                </button>
+              </div>
+            </div>
+          )}
+
+          {fase === 'recusar' && (
+            <div className="rounded-lg border border-border bg-muted/40 p-2 space-y-2">
+              <input
+                value={motivo} onChange={e => setMotivo(e.target.value)} maxLength={160}
+                placeholder="Motivo (opcional) — o operador vai ler"
+                className="w-full h-8 rounded-md border border-border bg-background px-2 text-[11px]"
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setFase('normal'); setMotivo(''); }} disabled={ocupado}
+                  className="flex-1 h-8 rounded-lg border border-border bg-background text-[11px] font-medium disabled:opacity-50"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={() => decidir(false)} disabled={ocupado}
+                  className="flex-1 h-8 rounded-lg bg-foreground text-background text-[11px] font-bold inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {ocupado ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+                  Recusar
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ── Pendente, e quem olha é quem pediu ────────────────────────────── */}
+      {pedido.status === 'pendente' && souSolicitante && (
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[11px] text-muted-foreground">
+            Aguardando um líder. Você recebe a resposta por notificação.
+          </p>
+          <button
+            onClick={cancelar} disabled={ocupado}
+            className="shrink-0 h-7 px-2 rounded-lg border border-border text-[10px] font-medium hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AutorizacaoDock() {
+  const { perfil } = useAuth();
+  const souAutorizador = podeAutorizarTabulacao(perfil?.perfil);
+  // Operador comum também precisa da gaveta: é onde ele acompanha o próprio
+  // pedido. O hook é ligado para todo mundo com sessão; a RLS faz o recorte.
+  const { pedidos, pendentes, recarregar } = useAutorizacaoPedidos(!!perfil?.id);
+  const [aberta, setAberta] = useState(false);
+
+  /** Pendentes primeiro; dentro de cada grupo, o mais novo no topo. */
+  const ordenados = useMemo(() => {
+    const peso = (p: PedidoAutorizacao) => (p.status === 'pendente' ? 0 : 1);
+    return [...pedidos].sort((a, b) =>
+      peso(a) - peso(b)
+      || new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime());
+  }, [pedidos]);
+
+  const qtd = pendentes.length;
+
+  // Chegou pedido novo com a gaveta fechada: abre sozinha. É uma interrupção
+  // que o operador do outro lado está esperando — deixá-la só piscando no canto
+  // seria devolver a espera que este fluxo existe para eliminar.
+  useEffect(() => {
+    if (souAutorizador && qtd > 0) setAberta(true);
+  }, [souAutorizador, qtd]);
+
+  // Nada para mostrar, nada na tela. Ver o cabeçalho.
+  if (ordenados.length === 0) return null;
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 print:hidden">
+      <AnimatePresence>
+        {aberta && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 12, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="w-[min(92vw,380px)] max-h-[min(70vh,560px)] rounded-2xl border border-border bg-background shadow-2xl overflow-hidden flex flex-col"
+          >
+            <div className="flex items-center justify-between gap-2 px-3 py-2.5 border-b border-border bg-muted/40">
+              <p className="text-xs font-bold flex items-center gap-1.5">
+                <ShieldQuestion className="w-4 h-4 text-primary shrink-0" />
+                Autorizações
+                {qtd > 0 && (
+                  <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
+                    {qtd}
+                  </span>
+                )}
+              </p>
+              <button
+                onClick={() => setAberta(false)} aria-label="Fechar autorizações"
+                className="p-1 rounded-md hover:bg-muted transition-colors"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-2.5 space-y-2.5">
+              {ordenados.map(p => (
+                <Cartao
+                  key={p.id} pedido={p}
+                  souAutorizador={souAutorizador}
+                  meuId={perfil?.id ?? null}
+                  onDecidido={recarregar}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* A etiqueta. Fica sempre — é por ela que a gaveta volta depois de fechada. */}
+      <button
+        onClick={() => setAberta(v => !v)}
+        aria-expanded={aberta}
+        className={cn(
+          'inline-flex items-center gap-2 rounded-full pl-3 pr-3.5 py-2 shadow-lg border transition-colors',
+          qtd > 0
+            ? 'bg-primary text-primary-foreground border-primary hover:opacity-90'
+            : 'bg-background text-muted-foreground border-border hover:bg-muted',
+        )}
+      >
+        {aberta ? <X className="w-4 h-4" /> : <ShieldQuestion className="w-4 h-4" />}
+        <span className="text-xs font-semibold">
+          {qtd > 0 ? `${qtd} autorização${qtd > 1 ? 'ões' : ''}` : 'Autorizações'}
+        </span>
+        {qtd > 0 && !aberta && (
+          <span className="w-2 h-2 rounded-full bg-primary-foreground animate-pulse" />
+        )}
+      </button>
+    </div>
+  );
+}

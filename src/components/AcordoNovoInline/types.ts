@@ -12,14 +12,12 @@ export interface ConflitNR {
 }
 
 export interface ModalAutorizacaoNRProps {
-  conflito:       ConflitNR | null;
-  liderEmail:     string;
-  liderSenha:     string;
-  autorizando:    boolean;
-  onEmailChange:  (v: string) => void;
-  onSenhaChange:  (v: string) => void;
-  onAutorizar:    () => void;
-  onCancel:       () => void;
+  conflito:    ConflitNR | null;
+  /** true enquanto o pedido está sendo enviado. */
+  autorizando: boolean;
+  /** Cria o pedido e fecha a janela — ver o cabeçalho do modal. */
+  onSolicitar: () => void;
+  onCancel:    () => void;
 }
 
 export interface ModalAvisoDiretoExtraProps {
@@ -89,10 +87,10 @@ export interface SharedFormState {
   empresaTags: Tag[];
   // Conflict modal
   conflito: ConflitNR | null;
-  liderEmail: string; setLiderEmail: (v: string) => void;
-  liderSenha: string; setLiderSenha: (v: string) => void;
+
+
   autorizando: boolean;
-  autorizarTransferencia: () => Promise<void>;
+  solicitarAutorizacaoConflito: () => Promise<void>;
   cancelarConflito: () => void;
   // Aviso Direto/Extra modal
   avisoDiretoExtra: PendingAvisoDiretoExtra | null;
@@ -102,4 +100,22 @@ export interface SharedFormState {
   // Autocomplete profissional (PP only)
   profissionalLoading: boolean;
   profissionalEncontrado: boolean;
+}
+
+/**
+ * Props do modal com senha — só a tela de EDIÇÃO ainda usa.
+ *
+ * A tela de novo acordo migrou para `ModalAutorizacaoNRProps`, sem senha. Ver o
+ * cabeçalho de `ModalAutorizacaoNRSenha.tsx` para o motivo de a edição ter
+ * ficado para trás.
+ */
+export interface ModalAutorizacaoNRSenhaProps {
+  conflito:       ConflitNR | null;
+  liderEmail:     string;
+  liderSenha:     string;
+  autorizando:    boolean;
+  onEmailChange:  (v: string) => void;
+  onSenhaChange:  (v: string) => void;
+  onAutorizar:    () => void;
+  onCancel:       () => void;
 }

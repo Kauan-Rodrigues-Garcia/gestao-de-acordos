@@ -699,6 +699,50 @@ Sem nenhuma das duas → recusa.
 Quando existe token de líder, o cliente chama a RPC por `fetch` com o
 `Authorization: Bearer <token do líder>`, **sem** trocar a sessão do operador.
 
+### 7.5 Autorização por solicitação (migration `20260818180000`)
+
+**O líder não vai mais até a máquina do operador.** Ao tentar registrar um
+NR/Código já vinculado, a janela de bloqueio traz um botão — **Solicitar
+autorização** — no lugar dos campos de usuário e senha.
+
+```
+operador clica em Solicitar
+  → linha em `autorizacoes_pedidos` com o PAYLOAD do acordo
+  → notificação para quem pode decidir
+  → a janela FECHA e o operador volta ao trabalho
+  → líder decide pela gaveta (canto inferior direito, em qualquer tela)
+  → aprovado: o SERVIDOR move o acordo antigo para a lixeira, transfere o NR,
+    cria o acordo do solicitante e notifica os dois lados
+```
+
+| Decisão | Por quê |
+|---|---|
+| A execução é do **servidor**, não da tela | o operador já fechou a janela. Se a criação dependesse da tela estar viva, aprovar não faria nada e ele receberia "autorizado" sem acordo |
+| O pedido carrega o **payload inteiro** | é o mesmo objeto que o navegador inseriria. `operador_id` e `empresa_id` são reescritos no servidor: payload vem do cliente, e cliente não decide de quem é o acordo |
+| `fn_transferir_acordo_nr` é **reusada** | ela lê `auth.uid()`, que na aprovação é o líder — o autorizador certo vai para a lixeira e para o log sem esforço. Copiá-la criaria um segundo caminho de transferência |
+| `SELECT … FOR UPDATE` na decisão | a notificação chega para todos juntos; dois líderes clicando ao mesmo tempo é o caso **normal**. O segundo recebe `ja_decidido` com o nome de quem chegou antes |
+| Expira em **24 h** | pedido de ontem não pode virar acordo hoje. Verificado na decisão, não por trabalho agendado — sem janela entre expirar e alguém reparar |
+| Pedido repetido **não vira fila** | o mesmo operador pedindo o mesmo NR recebe o pedido que já existe. Sem isso, cada clique nervoso criaria um órfão que executaria sobre um acordo já apagado |
+
+**Quem decide** são os mesmos seis cargos de `PERFIS_AUTORIZADORES` — nenhum
+poder novo, nenhum perdido. O **recorte** é que muda: líder, elite e gerência
+só veem pedidos do **próprio setor**; diretoria, administrador e super_admin
+veem a empresa. A regra vive em `fn_pode_autorizar_pedido`, usada pela policy
+**e** pelas duas RPCs — uma cópia só.
+
+**Aprovar não tem desfazer**, e a gaveta diz isso: o botão exige uma segunda
+confirmação na própria linha, com o nome de quem perde o acordo escrito nela.
+A decisão fica visível para todos os outros autorizadores ("Autorizado por
+Fulano"), que é o que impede duas pessoas de decidirem a mesma coisa.
+
+> **A tela de EDIÇÃO continua pedindo senha.** Lá o que se grava é um `update`
+> com o recálculo de parcelamento que `gravar()` faz (regra dos 40 %, entrada,
+> `valor_total`). Reproduzir isso no servidor criaria um segundo caminho de
+> gravação de acordo, para divergir do primeiro no primeiro ajuste. Enquanto
+> aquele recálculo não sair de dentro do componente, editar um acordo para um
+> NR já vinculado exige o líder na máquina — é o único caminho que ainda pede.
+> Ver `ModalAutorizacaoNRSenha.tsx`.
+
 ---
 
 ## 8. Direto e Extra
@@ -975,6 +1019,37 @@ Cada card de Desempenho Equipes abre no clique. As contas vivem em
 
 Sem dia útil trabalhado, a estimativa de fechamento é o próprio acumulado — nem
 zero, nem extrapolação de um dia que não aconteceu.
+
+### 12.2.1-b Meta direta e indireta `[PP]` (migration `20260818160000`)
+
+Operador com a lógica **Direto/Extra** ativa pode ter duas metas no mês. A opção
+fica na linha dele, na aba Metas, e **só aparece para quem tem a lógica** — sem
+ela não existe acordo extra para cobrar.
+
+| Frente | Cobrada contra |
+|---|---|
+| **direta** (a de sempre) | recebimento do analítico |
+| **indireta** | acordos `tipo_vinculo = 'extra'` com `status = 'pago'`, no mês de `coalesce(data_pagamento, vencimento)` — com ou sem titular direto vinculado |
+
+O extra existia e não somava em canto nenhum: o operador fecha o acordo em nome
+de outra pessoa, o dinheiro entra pelo titular, e o trabalho dele não aparecia
+em meta alguma. A meta indireta é o único lugar onde esse valor conta.
+
+**Individual, e só.** Meta e recebimento indiretos **não** entram no acumulado da
+equipe nem do setor — somar ali contaria o mesmo dinheiro duas vezes, porque o
+extra já entra no recebimento do titular direto, que está na mesma equipe. No
+código: a meta indireta só é lida no escopo "eu" de `usePainelMetas`.
+
+**O quartil é do TOTAL:** `(direta + indireta)` contra `(recebido direto +
+indireto)`. Cobrar só a metade direta puniria justamente quem foi bem no extra.
+Vale na aba Quartis e no dashboard, pela mesma função `combinarMetaDupla` — que
+é agnóstica de unidade (o dashboard passa H.O., a aba Quartis passa bruto) e,
+com a opção desligada, devolve exatamente o que entrou. É isso que faz as duas
+telas rodarem por um caminho só.
+
+Na tela: card **"Suas duas metas"** no dashboard, selo **D+I** na linha da aba
+Quartis (onde META e RECEBIMENTO passam a ser o total, igual à % ao lado) e a
+quebra das duas frentes dentro da linha expandida.
 
 ### 12.2.2-b Linha expansível do operador (aba Quartis)
 

@@ -1,15 +1,36 @@
-import { AlertTriangle, Shield } from 'lucide-react';
+/**
+ * ModalAutorizacaoNR — a janela que aparece quando o NR/Código já tem vínculo.
+ *
+ * ## O login do líder saiu
+ *
+ * Até 18/08/2026, esta janela pedia usuário e senha de um líder. Na prática, o
+ * líder atravessava a operação para digitar a senha dele na máquina de outra
+ * pessoa — um deslocamento por acordo, e a equipe inteira treinada a ver isso
+ * como normal.
+ *
+ * Agora há um botão só: **Solicitar autorização**. O pedido vai para
+ * `autorizacoes_pedidos`, quem pode decidir recebe notificação e resolve pela
+ * gaveta no canto da tela, de onde estiver.
+ *
+ * ## A janela fecha ao solicitar
+ *
+ * Decisão de produto: o operador não espera de janela aberta. Ele solicita, a
+ * janela fecha, um aviso diz que está em avaliação, e a resposta chega por
+ * notificação — aprovada, o acordo já vem tabulado no nome dele.
+ *
+ * Por isso o pedido carrega o payload inteiro do acordo: quem grava é o
+ * servidor, na hora da aprovação, e não esta tela.
+ */
+
+import { AlertTriangle, Send, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import type { ModalAutorizacaoNRProps } from './types';
 
 export function ModalAutorizacaoNR({
-  conflito, liderEmail, liderSenha, autorizando,
-  onEmailChange, onSenhaChange, onAutorizar, onCancel,
+  conflito, autorizando, onSolicitar, onCancel,
 }: ModalAutorizacaoNRProps) {
   const nrLabel: string = conflito
     ? (
@@ -30,7 +51,7 @@ export function ModalAutorizacaoNR({
           <DialogTitle className="flex items-center gap-2 text-warning">
             <AlertTriangle className="w-5 h-5 shrink-0" />
             {isTrocaExtra
-              ? 'Vínculo EXTRA em uso — transferência necessária'
+              ? 'Vínculo EXTRA em uso — precisa de autorização'
               : 'NR já agendado por outro operador'}
           </DialogTitle>
           <DialogDescription id="dlg-conflito-nr-desc" asChild>
@@ -48,11 +69,11 @@ export function ModalAutorizacaoNR({
                   <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 space-y-1">
                     <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Ao autorizar, o vínculo EXTRA será transferido
+                      Se for autorizado, o vínculo EXTRA será transferido
                     </p>
                     <p className="text-xs text-foreground/80">
-                      O acordo EXTRA atual de <strong>{operadorExtraNome}</strong> será removido e
-                      você assumirá o vínculo EXTRA. O acordo DIRETO de{' '}
+                      O acordo EXTRA atual de <strong>{operadorExtraNome}</strong> será
+                      removido e você assumirá o vínculo EXTRA. O acordo DIRETO de{' '}
                       <strong>{operadorDiretoNome}</strong> <strong>não é afetado</strong>.
                     </p>
                   </div>
@@ -64,12 +85,12 @@ export function ModalAutorizacaoNR({
                     <strong className="font-mono text-foreground">{nrLabel}</strong>{' '}
                     já possui um agendamento com o operador{' '}
                     <strong className="text-foreground">{operadorDiretoNome}</strong>.{' '}
-                    Será possível registrar após autorização.
+                    Peça autorização para registrar.
                   </p>
                   <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3 space-y-1">
                     <p className="text-xs font-semibold text-destructive flex items-center gap-1">
                       <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                      Atenção — ação irreversível
+                      Se for autorizado, a ação é irreversível
                     </p>
                     <p className="text-xs text-destructive/80">
                       O acordo atual de{' '}
@@ -81,46 +102,29 @@ export function ModalAutorizacaoNR({
                   </div>
                 </>
               )}
-              <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/30 p-3">
-                <p className="text-xs text-yellow-700 dark:text-yellow-400">
-                  Esta operação ficará registrada nos logs do sistema com o nome do líder autorizador.
+              <div className="rounded-lg bg-primary/10 border border-primary/30 p-3">
+                <p className="text-xs text-foreground/80">
+                  Ao solicitar, <strong>os líderes e a gerência do seu setor</strong> —
+                  além de diretoria e administradores — recebem uma notificação e
+                  decidem de onde estiverem. Você recebe a resposta por notificação;
+                  <strong> não precisa ficar nesta tela</strong>.
                 </p>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                A decisão fica registrada nos logs com o nome de quem autorizou.
+              </p>
             </div>
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3 pt-1">
-          <div className="flex items-center gap-2 border-t border-border pt-3">
-            <Shield className="w-4 h-4 text-primary shrink-0" />
-            <p className="text-sm font-semibold">Autorização do Líder</p>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Usuário ou e-mail do Líder / Admin</Label>
-            <Input
-              type="text" placeholder="usuário ou lider@empresa.com" value={liderEmail}
-              onChange={(e) => onEmailChange(e.target.value)}
-              className="h-9 text-sm" disabled={autorizando} autoComplete="off"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-medium">Senha</Label>
-            <Input
-              type="password" placeholder="••••••••" value={liderSenha}
-              onChange={(e) => onSenhaChange(e.target.value)}
-              className="h-9 text-sm" disabled={autorizando} autoComplete="current-password"
-              onKeyDown={(e) => { if (e.key === 'Enter' && liderEmail && liderSenha) onAutorizar(); }}
-            />
-          </div>
-          <div className="flex gap-2 pt-1">
-            <Button variant="outline" className="flex-1" onClick={onCancel} disabled={autorizando}>Cancelar</Button>
-            <Button
-              className="flex-1 gap-2" onClick={onAutorizar}
-              disabled={autorizando || !liderEmail.trim() || !liderSenha.trim()}
-            >
-              <Shield className="w-4 h-4" />
-              {autorizando ? 'Verificando...' : isTrocaExtra ? 'Autorizar Troca de EXTRA' : 'Autorizar Transferência'}
-            </Button>
-          </div>
+
+        <div className="flex gap-2 pt-1">
+          <Button variant="outline" className="flex-1" onClick={onCancel} disabled={autorizando}>
+            Cancelar
+          </Button>
+          <Button className="flex-1 gap-2" onClick={onSolicitar} disabled={autorizando}>
+            {autorizando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {autorizando ? 'Enviando...' : 'Solicitar autorização'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

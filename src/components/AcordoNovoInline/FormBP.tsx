@@ -35,8 +35,8 @@ export function FormBP({ state }: { state: SharedFormState }) {
     status, setStatus,
     tagIds, setTagIds, empresaTags,
     observacoes, setObservacoes,
-    conflito, liderEmail, setLiderEmail, liderSenha, setLiderSenha,
-    autorizando, autorizarTransferencia, cancelarConflito,
+    conflito,
+    autorizando, solicitarAutorizacaoConflito, cancelarConflito,
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
   } = state;
 
@@ -274,9 +274,9 @@ export function FormBP({ state }: { state: SharedFormState }) {
       </tr>
 
       <ModalAutorizacaoNR
-        conflito={conflito} liderEmail={liderEmail} liderSenha={liderSenha} autorizando={autorizando}
-        onEmailChange={setLiderEmail} onSenhaChange={setLiderSenha}
-        onAutorizar={autorizarTransferencia} onCancel={cancelarConflito}
+        conflito={conflito} autorizando={autorizando}
+
+        onSolicitar={solicitarAutorizacaoConflito} onCancel={cancelarConflito}
       />
       <ModalAvisoDiretoExtra
         aberto={!!avisoDiretoExtra}

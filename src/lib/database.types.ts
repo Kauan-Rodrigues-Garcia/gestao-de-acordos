@@ -3710,6 +3710,41 @@ export type Database = {
           },
         ]
       }
+      autorizacoes_pedidos: {
+        Row: {
+          id: string
+          empresa_id: string
+          solicitante_id: string
+          solicitante_nome: string
+          setor_id: string | null
+          modo: string
+          nr_label: string
+          nr_valor: string
+          acordo_alvo_id: string | null
+          dono_id: string | null
+          dono_nome: string | null
+          extra_atual_id: string | null
+          extra_atual_op_id: string | null
+          extra_atual_op_nome: string | null
+          payload: Json
+          resumo: Json
+          status: string
+          decidido_por_id: string | null
+          decidido_por_nome: string | null
+          decidido_em: string | null
+          motivo_recusa: string | null
+          erro: string | null
+          acordo_criado_id: string | null
+          criado_em: string
+          expira_em: string
+        }
+        // Sem Insert/Update utilizáveis de propósito: a tabela não tem policy de
+        // escrita. Só `fn_autorizacao_solicitar` e `fn_autorizacao_decidir`
+        // gravam, e as duas são SECURITY DEFINER.
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       uso_telas: {
         Row: {
           aberturas: number
@@ -4055,6 +4090,30 @@ export type Database = {
       fn_uso_registrar: {
         Args: { p_tela: string; p_segundos?: number; p_abertura?: boolean }
         Returns: undefined
+      }
+      fn_autorizacao_solicitar: {
+        Args: {
+          p_modo: string
+          p_nr_label: string
+          p_nr_valor: string
+          p_payload: Json
+          p_resumo?: Json
+          p_acordo_alvo_id?: string | null
+          p_dono_id?: string | null
+          p_dono_nome?: string | null
+          p_extra_atual_id?: string | null
+          p_extra_atual_op_id?: string | null
+          p_extra_atual_op_nome?: string | null
+        }
+        Returns: Json
+      }
+      fn_autorizacao_decidir: {
+        Args: { p_id: string; p_aprovar: boolean; p_motivo?: string | null }
+        Returns: Json
+      }
+      fn_autorizacao_cancelar: {
+        Args: { p_id: string }
+        Returns: Json
       }
       fn_uso_por_pessoa: {
         Args: {
