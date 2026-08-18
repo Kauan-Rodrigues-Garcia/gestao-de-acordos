@@ -1,14 +1,18 @@
 /**
  * empresaAtiva.service.test.ts
  *
- * A troca de empresa do super_admin. O que estes testes protegem não é a
- * SEGURANÇA — essa é da RLS, e ela continua de pé sozinha: `fn_can_access_empresa`
- * só deixa super_admin cruzar empresa, e nenhuma tela muda isso.
+ * A troca de empresa. O que estes testes protegem não é a SEGURANÇA — essa é da
+ * RLS, e ela continua de pé sozinha: `fn_can_access_empresa` decide quem cruza
+ * empresa, e nenhuma tela muda isso.
  *
  * O que se protege aqui é a tela não MENTIR. `empresas_select` é `(ativo = true)`:
  * qualquer usuário autenticado lê a linha de qualquer empresa. Se a escolha
- * valesse sem conferir cargo, um líder com a chave no localStorage veria o nome,
+ * valesse sem conferir quem é, um líder com a chave no localStorage veria o nome,
  * o logo e as cores da outra empresa com todas as telas vazias.
+ *
+ * Desde a migration `20260818300000` são DOIS os que cruzam: super_admin, por
+ * cargo, e gerência/diretoria liberadas nominalmente. A dupla condição importa —
+ * a flag sozinha não vale, e é isso que o bloco "rebaixado" cobre.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
@@ -39,10 +43,19 @@ function tabela(resposta: { data: unknown; error: unknown }) {
   return chain;
 }
 
-function comSessao(perfil: string | null, empresa: typeof EMPRESA_B | null = EMPRESA_B) {
+function comSessao(
+  perfil: string | null,
+  empresa: typeof EMPRESA_B | null = EMPRESA_B,
+  acessoMultiempresa = false,
+) {
   mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
   mockFrom.mockImplementation((t: string) => {
-    if (t === 'perfis')   return tabela({ data: perfil ? { perfil } : null, error: null });
+    if (t === 'perfis') {
+      return tabela({
+        data: perfil ? { perfil, acesso_multiempresa: acessoMultiempresa } : null,
+        error: null,
+      });
+    }
     if (t === 'empresas') return tabela({ data: empresa, error: null });
     throw new Error(`tabela inesperada: ${t}`);
   });
@@ -89,17 +102,50 @@ describe('resolver a escolha', () => {
     expect(await resolverEmpresaEscolhida()).toEqual(EMPRESA_B);
   });
 
-  /** O ponto do arquivo: cargo é o gate, não conseguir ler a linha da empresa. */
-  it('quem NÃO é super_admin não troca — e a escolha é apagada', async () => {
+  /** O ponto do arquivo: quem é a pessoa é o gate, não conseguir ler a empresa. */
+  it('quem não atende as duas empresas não troca — e a escolha é apagada', async () => {
     definirEmpresaEscolhida('emp-b');
     comSessao('lider');
     expect(await resolverEmpresaEscolhida()).toBeNull();
     expect(getEmpresaEscolhida()).toBeNull();
   });
 
-  it('diretoria também não troca', async () => {
+  it('diretoria SEM liberação não troca', async () => {
     definirEmpresaEscolhida('emp-b');
     comSessao('diretoria');
+    expect(await resolverEmpresaEscolhida()).toBeNull();
+    expect(getEmpresaEscolhida()).toBeNull();
+  });
+
+  it('diretoria liberada troca', async () => {
+    definirEmpresaEscolhida('emp-b');
+    comSessao('diretoria', EMPRESA_B, true);
+    expect(await resolverEmpresaEscolhida()).toEqual(EMPRESA_B);
+    expect(getEmpresaEscolhida()).toBe('emp-b');
+  });
+
+  it('gerência liberada troca', async () => {
+    definirEmpresaEscolhida('emp-b');
+    comSessao('gerencia', EMPRESA_B, true);
+    expect(await resolverEmpresaEscolhida()).toEqual(EMPRESA_B);
+  });
+
+  /**
+   * O caso que a dupla condição existe para cobrir: a flag sobrevive ao
+   * rebaixamento, e sozinha ela não pode valer. Se valesse, um ex-gerente
+   * continuaria com a outra empresa pintada na tela e nenhum dado dentro —
+   * porque `fn_user_acesso_multiempresa` confere o cargo do lado do banco.
+   */
+  it('rebaixado com a flag ligada NÃO troca — e a escolha é apagada', async () => {
+    definirEmpresaEscolhida('emp-b');
+    comSessao('lider', EMPRESA_B, true);
+    expect(await resolverEmpresaEscolhida()).toBeNull();
+    expect(getEmpresaEscolhida()).toBeNull();
+  });
+
+  it('operador com a flag ligada também não troca', async () => {
+    definirEmpresaEscolhida('emp-b');
+    comSessao('operador', EMPRESA_B, true);
     expect(await resolverEmpresaEscolhida()).toBeNull();
     expect(getEmpresaEscolhida()).toBeNull();
   });

@@ -21,6 +21,7 @@ import AdminPermissoes from '@/pages/AdminPermissoes';
 import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
+import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
@@ -45,6 +46,9 @@ export default function AdminConfiguracoes() {
   // Gate defensivo: card "Banco de Dados / Migrations" só para Admin/Super Admin
   // (defesa em profundidade — além do ProtectedRoute da rota)
   const podeVerBancoDados = isPerfilAdmin(perfil?.perfil ?? '');
+  // Aba "Multiempresa": só super_admin. Esconder aqui é conveniência — quem
+  // decide são as RPCs e o trigger em `perfis` (migration 20260818300000).
+  const ehSuperAdmin = perfil?.perfil === 'super_admin';
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -205,6 +209,14 @@ export default function AdminConfiguracoes() {
             >
               <FileText className="w-4 h-4" /> Documentações
             </TabsTrigger>
+            {ehSuperAdmin && (
+            <TabsTrigger
+              value="multiempresa"
+              className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
+            >
+              <Building2 className="w-4 h-4" /> Multiempresa
+            </TabsTrigger>
+            )}
             {/* Aba Pet fora do ar: o mascote saiu de cena (migration 20260809c)
                 e isto administrava uma economia congelada. O componente segue
                 no repositório — ver a lista de remoção futura na spec
@@ -367,6 +379,13 @@ export default function AdminConfiguracoes() {
         <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
           <AdminDocumentacoes />
         </TabsContent>
+
+        {/* ─── Aba: Multiempresa (só super_admin) ──────────────────────── */}
+        {ehSuperAdmin && (
+        <TabsContent value="multiempresa" className="flex-1 overflow-y-auto p-6 mt-0">
+          <AcessoMultiempresa />
+        </TabsContent>
+        )}
 
       </Tabs>
 

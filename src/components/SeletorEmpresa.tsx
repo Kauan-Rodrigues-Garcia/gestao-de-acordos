@@ -1,10 +1,18 @@
 /**
- * SeletorEmpresa — troca de empresa no cabeçalho, só para super_admin.
+ * SeletorEmpresa — troca de empresa no cabeçalho, para quem atende as duas.
  *
  * `bookplay` e `pagueplay` são deploys separados, cada um com `VITE_TENANT_SLUG`
  * fixo no build. Um super_admin atende as duas, e até aqui trocar significava
  * trocar de domínio — embora a RLS já permitisse: `fn_can_access_empresa` deixa
  * super_admin passar por qualquer `empresa_id`.
+ *
+ * ## Quem vê o botão
+ *
+ * Super_admin, por cargo, e quem o super_admin liberou nominalmente em
+ * Configurações → Multiempresa (gerência e diretoria). A decisão está em
+ * `perfilVeDuasEmpresas`, que espelha `fn_user_acesso_multiempresa` no banco: a
+ * flag sozinha não basta, o cargo atual conta junto. Quem é rebaixado perde o
+ * botão no mesmo carregamento em que perde os dados.
  *
  * A escolha muda a empresa E o tenant (nome, cores, `isPaguePlay`), porque
  * `getTenantRuntimeConfig` passa a preferir o slug da empresa escolhida — a
@@ -30,6 +38,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { definirEmpresaEscolhida } from '@/services/empresaAtiva.service';
+import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { cn } from '@/lib/utils';
 
@@ -45,7 +54,7 @@ export function SeletorEmpresa() {
   // Durante impersonação a empresa é a do usuário impersonado, e trocá-la
   // deixaria a sessão apontando para uma empresa que a pessoa impersonada não
   // tem — dois "de quem é esta tela?" ao mesmo tempo.
-  if (perfil?.perfil !== 'super_admin' || getImpersonacaoAtiva()) return null;
+  if (!perfilVeDuasEmpresas(perfil) || getImpersonacaoAtiva()) return null;
 
   async function abrir(aberto: boolean) {
     if (!aberto || empresas || carregando) return;

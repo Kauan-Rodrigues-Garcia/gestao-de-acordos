@@ -68,24 +68,62 @@ Resolução do slug, em ordem de prioridade (`src/lib/tenant.ts`):
 admin logado no site da Pague Play veria um usuário Book Play com regras de
 Pague Play.
 
-**Troca de empresa pelo super_admin** (`empresaAtiva.service.ts`). Um seletor no
-cabeçalho permite ao `super_admin` alternar entre as empresas sem trocar de
-domínio. No banco isso já era permitido — `fn_can_access_empresa` deixa
-super_admin passar por qualquer `empresa_id`, e as tabelas grandes ainda têm uma
-policy `*_super_admin_total` por cima. Faltava a tela deixar escolher.
+**Troca de empresa** (`empresaAtiva.service.ts`). Um seletor no cabeçalho permite
+alternar entre as empresas sem trocar de domínio. Quem vê o botão está em
+§1.1-b. No banco quem decide é `fn_can_access_empresa`.
 
-> **O gate é o CARGO, não a leitura da tabela.** `empresas_select` é
+> **O gate é QUEM É A PESSOA, não a leitura da tabela.** `empresas_select` é
 > `(ativo = true)`: qualquer usuário autenticado lê a linha de qualquer empresa.
-> Conseguir ler não prova nada. Quem não é super_admin com a chave forçada no
-> `localStorage` veria o nome e as cores da outra empresa com todas as telas
-> vazias — os dados seguem bloqueados pela RLS. Por isso a escolha confere o
-> cargo e é **apagada** quando a conferência falha. A barreira de segurança
-> continua sendo a RLS; a conferência existe para a tela não mentir.
+> Conseguir ler não prova nada. Quem não atende as duas empresas, com a chave
+> forçada no `localStorage`, veria o nome e as cores da outra com todas as telas
+> vazias — os dados seguem bloqueados pela RLS. Por isso a escolha é conferida e
+> **apagada** quando a conferência falha. A barreira de segurança continua sendo
+> a RLS; a conferência existe para a tela não mentir.
 
 A troca **recarrega a página** em vez de chamar `refresh()`: resumos, listas,
 metas, permissões de cargo e assinaturas de realtime filtradas por `empresa_id`
 ficariam apontando para a empresa anterior. Um estado misto é pior que meio
 segundo de recarga — impersonação faz igual.
+
+### 1.1-b Quem enxerga as duas empresas
+
+Dois caminhos, e só dois:
+
+| Quem | Como |
+|---|---|
+| `super_admin` | pelo cargo. Não se concede nem se remove |
+| `gerencia`, `diretoria` | liberado nominalmente pelo super_admin em **Configurações → Multiempresa** |
+
+A liberação vive em `perfis.acesso_multiempresa` (+ `_por_id` e `_em`, que
+guardam de quem foi a decisão). Quem escreve são as RPCs
+`fn_multiempresa_definir` / `_listar` / `_elegiveis`, todas `SECURITY DEFINER`
+exigindo super_admin. A coluna tem trigger (`trg_perfis_guardar_multiempresa`)
+que recusa escrita de qualquer outro — inclusive de `administrador`, que tem
+UPDATE em `perfis` por outra policy.
+
+> **A flag sozinha não vale.** `fn_user_acesso_multiempresa()` exige a flag **E**
+> o cargo atual em (`gerencia`, `diretoria`). Quem for rebaixado perde o acesso
+> no mesmo instante, sem depender de alguém lembrar de revogar. O cliente aplica
+> a mesma regra em `perfilVeDuasEmpresas` — os dois lados TÊM que concordar, ou
+> a tela oferece a troca e o banco recusa os dados.
+
+**O gate de empresa mora em dois lugares no schema.** 68 policies chamam
+`fn_can_access_empresa(empresa_id)`; outras 51 escreviam a mesma regra inline
+(`fn_user_is_super_admin() OR empresa_id = fn_user_empresa_id()`). A migration
+`20260818300000` ensinou os dois caminhos sobre a liberação — o segundo
+acrescentando `fn_user_acesso_multiempresa()` **ao lado** da comparação, não
+trocando por uma chamada com argumento: a forma `( SELECT fn_user_empresa_id())`
+vira InitPlan e roda uma vez por consulta; uma função que recebe `empresa_id`
+rodaria uma vez por linha, e `analitico_recebimentos` tem 24 mil.
+
+**O que o liberado vê:** a outra empresa **com o próprio cargo**, não como super
+admin. Onde a policy exige setor (`acordos_select` para gerência na BookPlay), o
+setor da empresa de origem não corresponde a nenhum setor da outra e a lista vem
+curta. `diretoria`, liberada por cargo na maioria das telas, atravessa inteira.
+
+Três funções seguem presas à empresa de origem por não receberem empresa por
+parâmetro: `fn_wpp_diretorio`, `fn_creators_lab_ranking` e
+`fn_creators_lab_descobridores`. São diretório de nomes e ranking de easter egg.
 
 ### 1.2 Isolamento no login
 
@@ -96,6 +134,11 @@ Pague Play, e vice-versa.
 
 Duas exceções: `super_admin` nunca é bloqueado, e a impersonação ativa atravessa
 tenant de propósito.
+
+> **Acesso multiempresa não é exceção aqui.** Quem foi liberado continua entrando
+> pelo domínio da empresa de origem e trocando **dentro** do app (§1.1-b). Não é
+> descuido: o login é o ponto onde o isolamento entre as duas operações é mais
+> barato de garantir, e o seletor já resolve a necessidade.
 
 ### 1.3 Diferenças de comportamento entre as operações
 

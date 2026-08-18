@@ -34,12 +34,19 @@ export function tabelaSemTipo<T>(nome: string): ConsultaSemTipo<T> {
   return (supabase.from as unknown as (n: string) => ConsultaSemTipo<T>)(nome);
 }
 
-/** RPC que os tipos gerados ainda não conhecem. */
-export function rpcSemTipo(
+/**
+ * RPC que os tipos gerados ainda não conhecem.
+ *
+ * `T` descreve o que a função devolve — o tipo é uma AFIRMAÇÃO de quem chama,
+ * não uma verificação. Quem usar deve tratar `data` como veio do banco: campo
+ * ausente é `undefined`, não erro de compilação. Sem `T` o retorno é `never` e
+ * só o `error` interessa, que é o caso das RPCs que não devolvem nada.
+ */
+export function rpcSemTipo<T = never>(
   nome: string,
   args: Record<string, unknown>,
-): Promise<{ error: { message: string } | null }> {
+): Promise<{ data: T | null; error: { message: string } | null }> {
   return (supabase.rpc as unknown as
-    (n: string, a: Record<string, unknown>) => Promise<{ error: { message: string } | null }>
+    (n: string, a: Record<string, unknown>) => Promise<{ data: T | null; error: { message: string } | null }>
   )(nome, args);
 }

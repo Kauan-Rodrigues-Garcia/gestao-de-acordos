@@ -1,15 +1,16 @@
 /**
- * empresaAtiva.service.ts — o super_admin escolhe em qual empresa está.
+ * empresaAtiva.service.ts — quem atende as duas empresas escolhe em qual está.
  *
  * ## Por que existe
  *
  * `bookplay` e `pagueplay` são deploys separados, cada um com `VITE_TENANT_SLUG`
  * fixo no build, e `useEmpresa` amarra a empresa nesse slug. Um super_admin
- * atende as duas, e trocar significava trocar de domínio.
+ * atende as duas, e trocar significava trocar de domínio. Desde a migration
+ * `20260818300000` o super_admin também pode liberar gerência e diretoria
+ * nominalmente — ver `acessoMultiempresa.service.ts`.
  *
- * No banco isso já era permitido: `fn_can_access_empresa` deixa super_admin
- * passar por qualquer `empresa_id`, e as tabelas grandes ainda têm uma policy
- * `*_super_admin_total` por cima. Faltava só a tela deixar escolher.
+ * No banco quem decide é `fn_can_access_empresa`: passam super_admin, quem tem
+ * acesso multiempresa liberado, e todo mundo na própria empresa.
  *
  * ## O gate é o CARGO, não a leitura da tabela
  *
@@ -25,6 +26,7 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Empresa } from '@/lib/supabase';
+import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 
 const CHAVE = 'empresa-ativa-super-admin';
 
@@ -50,10 +52,11 @@ export function esquecerEmpresaEscolhida(): void {
 /**
  * A empresa escolhida, se a escolha valer.
  *
- * Devolve `null` — e APAGA a escolha — quando quem está logado não é
- * super_admin, quando a empresa sumiu ou foi desativada, ou quando não há
- * sessão. Apagar importa: uma chave que sobrevive a um rebaixamento de cargo
- * continuaria pintando a tela com a outra empresa a cada carregamento.
+ * Devolve `null` — e APAGA a escolha — quando quem está logado não atende as
+ * duas empresas, quando a empresa sumiu ou foi desativada, ou quando não há
+ * sessão. Apagar importa: uma chave que sobrevive a um rebaixamento de cargo, ou
+ * à revogação do acesso multiempresa, continuaria pintando a tela com a outra
+ * empresa a cada carregamento.
  */
 export async function resolverEmpresaEscolhida(): Promise<Empresa | null> {
   const escolhida = getEmpresaEscolhida();
@@ -62,14 +65,23 @@ export async function resolverEmpresaEscolhida(): Promise<Empresa | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;   // sem sessão não se decide nada; a chave fica.
 
+  // `select('*')` e não a lista de colunas: `acesso_multiempresa` nasce numa
+  // migration, e front e banco não sobem no mesmo instante. Pedir a coluna pelo
+  // nome faria o PostgREST recusar a consulta inteira na janela entre o deploy e
+  // a migration — e o super_admin perderia a troca de empresa que já tinha.
   const { data: meuPerfil, error: erroPerfil } = await supabase
-    .from('perfis').select('perfil').eq('id', user.id).maybeSingle();
+    .from('perfis').select('*').eq('id', user.id).maybeSingle();
 
   // Erro de rede não é resposta: apagar aqui derrubaria a escolha de um
   // super_admin legítimo por causa de uma consulta que falhou.
   if (erroPerfil) return null;
 
-  if ((meuPerfil as { perfil?: string } | null)?.perfil !== 'super_admin') {
+  // Não é mais só o cargo `super_admin`: gerência e diretoria liberados pelo
+  // super_admin também trocam de empresa (migration 20260818300000). A regra é
+  // a mesma que `fn_user_acesso_multiempresa` aplica no banco — flag E cargo —
+  // porque uma tela que aceita a troca e um banco que recusa os dados é pior
+  // que não ter o botão.
+  if (!perfilVeDuasEmpresas(meuPerfil as { perfil?: string; acesso_multiempresa?: boolean } | null)) {
     esquecerEmpresaEscolhida();
     return null;
   }

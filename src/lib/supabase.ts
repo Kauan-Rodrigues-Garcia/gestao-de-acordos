@@ -88,6 +88,15 @@ export interface Perfil {
   /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
   senha_alterada?: boolean | null;
   /**
+   * Liberado pelo super_admin para enxergar as duas empresas (migration
+   * 20260818300000). Só vale junto com cargo `gerencia`/`diretoria` — use
+   * `perfilVeDuasEmpresas` em vez de ler a flag crua.
+   */
+  acesso_multiempresa?: boolean | null;
+  /** Quem liberou o acesso às duas empresas, e quando. */
+  acesso_multiempresa_por_id?: string | null;
+  acesso_multiempresa_em?: string | null;
+  /**
    * Despedida do pet (migration 20260809c): `'pendente'` = deve ver o card,
    * `'concluida'` = já se despediu, `null` = nunca conviveu com o pet.
    *
