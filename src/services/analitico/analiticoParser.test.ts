@@ -259,3 +259,40 @@ describe('regra do Colchão', () => {
     expect(resultado.linhasColchao.map(l => l.parcela)).toEqual(['15', '16']);
   });
 });
+
+// ── H.O. calculado, não lido ─────────────────────────────────────────────────
+
+describe('total_ho', () => {
+  const headers = [
+    'Cobradora', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido', 'Total HO',
+  ];
+  const linha = (recebido: number, hoDaPlanilha: number) =>
+    ['OPERADOR_A', '123 - CLIENTE TESTE', 'PIX', '13/08/2026', recebido, hoDaPlanilha];
+
+  it('ignora o valor da coluna e usa 24,96% do recebido', () => {
+    // 269,02 é o caso real da planilha de 18/08/2026: o ERP mandou 67,2550
+    // (divisão por 4 = 25,00%); o certo é 67,15 (24,96%).
+    const r = parseRelatorioRows([headers, linha(269.02, 67.2550)]);
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0].total_ho).toBe(67.15);
+  });
+
+  it('não se importa com o que vem na coluna — nem zero, nem lixo', () => {
+    const r = parseRelatorioRows([
+      headers,
+      ['OPERADOR_A', '111 - CLIENTE UM',  'PIX', '13/08/2026', 1000, 0],
+      ['OPERADOR_A', '222 - CLIENTE DOIS', 'PIX', '13/08/2026', 1000, 999999],
+    ]);
+    expect(r.linhas.map(l => l.total_ho)).toEqual([249.6, 249.6]);
+  });
+
+  it('sem coluna de H.O. o valor é zero — é o relatório da BookPlay', () => {
+    const semHO = ['Cobradora', 'Cliente', 'TpDoc', 'DtPgto', 'Recebido'];
+    const r = parseRelatorioRows([
+      semHO,
+      ['OPERADOR_A', '123 - CLIENTE TESTE', 'PIX', '13/08/2026', 1000],
+    ]);
+    expect(r.linhas).toHaveLength(1);
+    expect(r.linhas[0].total_ho).toBe(0);
+  });
+});

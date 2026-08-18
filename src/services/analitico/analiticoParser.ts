@@ -19,6 +19,7 @@
  */
 
 import { read as xlsxRead, utils as xlsxUtils } from '@e965/xlsx';
+import { calcHO } from '@/lib/index';
 import {
   consolidar,
   colchaoContaNaMeta,
@@ -36,6 +37,9 @@ import {
 
 // Compatibilidade: quem já importava tipos/helpers deste módulo continua funcionando.
 export * from './analiticoComum';
+
+/** Centavos, como o banco grava (`numeric(12,2)`). */
+const round2 = (n: number) => Math.round(n * 100) / 100;
 
 // ── Parse principal ──────────────────────────────────────────────────────────
 
@@ -118,7 +122,14 @@ export function parseRelatorioRows(rows: unknown[][]): ResultadoParseRelatorio {
     const tp = tpInformado || 'NÃO INFORMADO';
     const dt  = toDate(row[cols.dt]);
     const rec = parsearValor(row[cols.rec]);
-    const ho  = cols.ho != null ? parsearValor(row[cols.ho]) : 0;
+    // O H.O. é CALCULADO, não lido. O relatório traz uma coluna "Total HO", mas
+    // o número dela é 25,00% do recebido — o ERP divide por 4, e a PaguePlay
+    // retém 24,96%. Ver a migration `20260818280000_ho_calculado_2496.sql`.
+    //
+    // A coluna continua sendo procurada porque a PRESENÇA dela é o que separa o
+    // relatório da PaguePlay (tem H.O.) do da BookPlay (não tem). O que se
+    // descarta é o valor, não a coluna.
+    const ho  = cols.ho != null ? round2(calcHO(rec)) : 0;
     const eq  = cols.eq != null ? String(row[cols.eq] ?? '').trim() : '';
 
     // Retenção não é Receptivo: a linha sai antes de virar recebimento.

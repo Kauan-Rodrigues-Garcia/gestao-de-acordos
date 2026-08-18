@@ -51,14 +51,13 @@
  * só. Agora há um alternador no topo — o mesmo componente do Dashboard — e ele
  * converte **tudo**, inclusive o detalhe que abre no clique.
  *
- * A conversão é assimétrica de propósito: a META é convertida (só existe
- * gravada em bruto) e o RECEBIDO não (vem do relatório na coluna `total_ho`).
- * Ver `lib/unidadeValor.ts` — é por isso que a % em H.O. fica ~0,16 ponto acima
- * da % em bruto, e isso é diferença verdadeira.
+ * A META é convertida aqui (só existe gravada em bruto). O RECEBIDO já vem em
+ * H.O. na coluna `total_ho`, que o banco deriva do bruto pelos mesmos 24,96%
+ * desde a migration `20260818280000_ho_calculado_2496.sql`. Os dois lados saem
+ * da mesma constante, então a % em H.O. e a % em bruto batem.
  *
- * O QUARTIL muda pouco e pode mudar: meta e recebido não escalam pelo mesmo
- * fator, então a faixa de quem está na fronteira pode virar. É o mesmo número
- * que o Dashboard mostra na unidade correspondente.
+ * O QUARTIL, portanto, não muda com o alternador — é o mesmo número nas duas
+ * unidades, e o mesmo que o Dashboard mostra.
  */
 
 import { Fragment, useState, useEffect, useMemo, useId } from 'react';
@@ -598,19 +597,15 @@ export function QuartisOperadores({
       const dias = diasDoOperador(op);
 
       /*
-       * A conversão para H.O. NÃO é simétrica, e isso é correto.
+       * Cada lado é convertido uma vez só, e nunca duas.
        *
-       * A META é convertida (`metaNaUnidade`): ela só existe gravada em bruto.
-       * O RECEBIDO não — `analitico_recebimentos.total_ho` vem gravado linha a
-       * linha pelo relatório do ERP, e na prática dá 25,00% do bruto contra os
-       * 24,96% da constante. Aplicar a constante para "achar" o H.O. jogaria
-       * fora o número real em troca de uma estimativa.
+       * A META passa por `metaNaUnidade`: ela só existe gravada em bruto.
+       * O RECEBIDO não passa — `analitico_recebimentos.total_ho` já É o H.O.,
+       * derivado do bruto pelo trigger do banco com a mesma constante de
+       * 24,96%. Multiplicar de novo aqui daria 6,23% do bruto.
        *
-       * O efeito visível é a % em H.O. ficar ~0,16 ponto acima da % em bruto.
-       * É diferença verdadeira, não arredondamento. Ver `lib/unidadeValor.ts`.
-       *
-       * A frente INDIRETA é a exceção: acordos não têm coluna de H.O., então
-       * ali o percentual é derivado — não há número do relatório para preservar.
+       * A frente INDIRETA vem de acordos, que não têm coluna de H.O.: ali o
+       * percentual é aplicado na hora, em `combinarMetaDupla`.
        */
       const metaBruta = metasOp[op.id] ?? null;
       const meta = emHO ? metaNaUnidade(metaBruta, 'ho') : metaBruta;

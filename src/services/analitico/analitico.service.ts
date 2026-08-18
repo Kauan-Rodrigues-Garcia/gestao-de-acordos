@@ -25,6 +25,7 @@ import {
   aplicarFantasmas,
   type FantasmaTransferencia, type MarcaTransferido,
 } from './fantasmaTransferencia';
+import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -599,8 +600,12 @@ export async function importarLoteAnalitico(
       );
       continue;
     }
-    const somaHoDb = doBanco.reduce((s, x) => s + (Number(x.total_ho) || 0), 0);
-    const novoHo   = round2(Math.max((Number(linha.total_ho) || 0) + (agg.ho - somaHoDb), 0));
+    // O H.O. deriva do valor, não do relatório: reconciliar os dois em paralelo
+    // deixaria de bater a cada centavo de arredondamento. Quem grava de verdade
+    // é o trigger `trg_analitico_recebimentos_ho`; mandar o mesmo número daqui
+    // evita que uma leitura otimista mostre o valor velho por um instante.
+    // `agg.ho > 0` distingue a PaguePlay da BookPlay, que não tem H.O.
+    const novoHo = agg.ho > 0 ? round2(novoValor * PP_HO_PERCENTUAL) : 0;
 
     const { error: errUp } = await supabase
       .from('analitico_recebimentos')

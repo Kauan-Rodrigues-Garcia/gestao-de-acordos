@@ -513,9 +513,10 @@ describe('usePainelMetas — unidade H.O. × bruto', () => {
     // Estar acima ou abaixo do esperado é um fato do mês.
     expect(Math.sign(pHO.diferenca)).toBe(Math.sign(pBR.diferenca));
     expect(pHO.quartil?.quartil).toBe(pBR.quartil?.quartil);
-    // Com o H.O. exatamente proporcional, a projeção é a MESMA. Em produção a
-    // coluna real dá 25,00% contra os 24,96% da constante, e a diferença fica
-    // na casa decimal — por isso a comparação tolera 1 ponto.
+    // Com o H.O. exatamente proporcional, a projeção é a MESMA — e desde a
+    // migration `20260818280000_ho_calculado_2496.sql` produção é assim também:
+    // `total_ho` é derivado do bruto pela mesma constante. A tolerância de 1
+    // ponto cobre arredondamento de centavo, não divergência de percentual.
     expect(Math.abs(pHO.projecaoPct - pBR.projecaoPct)).toBeLessThanOrEqual(1);
     // Dias úteis não são dinheiro: idênticos nas duas unidades.
     expect(ho.result.current.diasUteisTotal).toBe(bruto.result.current.diasUteisTotal);

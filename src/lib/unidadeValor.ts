@@ -18,17 +18,17 @@
  * exibir a meta em H.O., converte-se aqui — nunca no banco, que continua sendo
  * a fonte em bruto para a aba Metas.
  *
- * ## O recebido NÃO é convertido
+ * ## O recebido não é convertido AQUI — ele já chega em 24,96%
  *
- * `analitico_recebimentos.total_ho` vem gravado linha a linha pelo relatório, e
- * na prática dá 25,00% do bruto contra os 24,96% da constante. Aplicar a
- * constante sobre o bruto para "achar" o H.O. jogaria fora o número real do
- * relatório em troca de uma estimativa. Por isso a conversão vale só para a
- * meta e para o que deriva dela (esperado, meta diária, quanto falta) — números
- * que existem só do lado bruto.
+ * `analitico_recebimentos.total_ho` tem coluna própria, e por isso não passa
+ * por `metaNaUnidade`. Mas o número dessa coluna também é 24,96% do bruto: o
+ * trigger `trg_analitico_recebimentos_ho` o deriva do `valor_recebido` na
+ * gravação (migration `20260818280000_ho_calculado_2496.sql`).
  *
- * O efeito visível é o percentual em H.O. ficar ~0,16 ponto acima do percentual
- * em bruto. É diferença verdadeira, não erro de arredondamento.
+ * Isso mudou em 18/08/2026. Antes a coluna vinha copiada do relatório do ERP,
+ * que manda 25,00% (divide por 4), e o percentual em H.O. aparecia ~0,16 ponto
+ * acima do percentual em bruto — duas abas de recebimento discordando. Agora os
+ * dois lados saem da mesma constante e fecham.
  */
 
 import { PP_HO_PERCENTUAL } from '@/lib/index';

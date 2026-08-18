@@ -145,12 +145,15 @@ bruto equivalente. Portanto:
   (`metaNaUnidade`, em `src/lib/unidadeValor.ts`). É o que o alternador
   H.O./Bruto do dashboard da Pague Play faz.
 
-> **`total_ho` não é derivado da constante.** Ele vem gravado linha a linha
-> pelo relatório do ERP, e na prática soma 25,00% do bruto contra os 24,96% da
-> constante. Por isso o percentual da meta em H.O. fica ~0,16 ponto acima do
-> percentual em bruto — diferença verdadeira, não arredondamento. Use a coluna
-> para o recebido; use a constante só para converter meta e agendado, que não
-> têm coluna de H.O.
+> **`total_ho` é derivado da constante — no banco, não na tela.** O trigger
+> `trg_analitico_recebimentos_ho` calcula a coluna a partir de `valor_recebido`
+> a cada gravação (migration `20260818280000_ho_calculado_2496.sql`). O valor
+> que o relatório do ERP manda nessa coluna é **descartado**: ele traz 25,00%
+> (o ERP divide por 4), não os 24,96% que a PaguePlay retém de fato.
+>
+> Consequência para quem lê o código: **use a coluna** para o recebido e a
+> constante só para meta e agendado, que não têm coluna de H.O. Nunca aplique a
+> constante em cima de `total_ho` — daria 6,23% do bruto.
 
 ### 1.5 Módulos exclusivos de cada operação
 
@@ -1150,23 +1153,25 @@ resto: as outras colunas continuavam numa unidade só.
 > da PaguePlay é pensada em H.O.; herdar uma escolha feita em outra tela faria
 > a aba abrir no número que não é o de referência aqui.
 
-**A conversão é assimétrica, e está certa:**
+**Cada lado é convertido uma vez só — em lugares diferentes:**
 
-| | Como vira H.O. |
+| | Onde vira H.O. |
 |---|---|
-| **Meta** | convertida — `meta × 24,96%`. Só existe gravada em bruto |
-| **Recebido direto** | **não** convertido — vem de `analitico_recebimentos.total_ho`, gravado linha a linha pelo relatório |
-| **Recebido indireto** | convertido — acordos não têm coluna de H.O., então aqui não há número do relatório a preservar |
+| **Meta** | na tela — `meta × 24,96%`. Só existe gravada em bruto |
+| **Recebido direto** | no banco — o trigger deriva `analitico_recebimentos.total_ho` de `valor_recebido`. A tela lê pronto |
+| **Recebido indireto** | na tela — acordos não têm coluna de H.O. |
 
-Conferido em agosto/2026: `total_ho` é **25,00%** do bruto no relatório, contra
-os 24,96% da constante. Por isso a **% em H.O. fica ~0,1 ponto acima** da % em
-bruto — diferença verdadeira, não arredondamento. E a meta convertida dá valores
-redondos (R$ 144.230,77 → R$ 36.000,00), o que confirma que ela é pensada em
-H.O. e gravada em bruto.
+Como os três saem da mesma constante, a **% em H.O. e a % em bruto batem**, e o
+**quartil não muda** ao trocar a unidade. A meta convertida dá valores redondos
+(R$ 144.230,77 → R$ 36.000,00), o que confirma que ela é pensada em H.O. e
+gravada em bruto.
 
-Consequência prática: o **quartil pode mudar** ao trocar a unidade, para quem
-está na fronteira de uma faixa. É o mesmo número que o Dashboard mostra na
-unidade correspondente.
+> **Até 18/08/2026 não era assim.** `total_ho` vinha copiado do relatório do
+> ERP, que manda 25,00%, e a % em H.O. aparecia ~0,16 ponto acima da % em bruto
+> — as duas abas de recebimento discordavam, e o quartil de quem estava na
+> fronteira podia virar ao trocar a unidade. A migration
+> `20260818280000_ho_calculado_2496.sql` passou a calcular a coluna e corrigiu
+> as 11.112 linhas já gravadas.
 
 Na BookPlay o alternador não aparece: `total_ho` é zero em toda linha do
 analítico, e escolher entre um número e zero não é escolha.
