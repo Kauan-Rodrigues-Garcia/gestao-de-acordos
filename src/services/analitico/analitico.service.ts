@@ -25,6 +25,7 @@ import {
   aplicarFantasmas,
   type FantasmaTransferencia, type MarcaTransferido,
 } from './fantasmaTransferencia';
+import { equipeUnicaPorLider } from '@/services/equipes/equipeDoLider';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
@@ -1628,6 +1629,17 @@ async function buscarComposicaoAoVivo(
       .eq('empresa_id', empresaId)).data as { equipe_id: string; operador_id: string }[] | null)
       ?.map(c => ({ ...c, conta_recebimento: true })) ?? null;
   }
+  // Líder por equipe (migration 20260725b). É a fonte EXPLÍCITA de quem lidera
+  // o quê — e a única que a maioria dos líderes tem: quem foi vinculado pela
+  // tela de Equipes continua com `perfis.equipe_id` NULO, e o recebimento dele
+  // não entrava em card de equipe nenhum. Ver `equipeDoLider.ts`.
+  // Tabela ausente (migration pendente) → mapa vazio, comportamento de antes.
+  const lideresExplicitos = (await supabase
+    .from('equipe_lideres')
+    .select('equipe_id, lider_id')
+    .eq('empresa_id', empresaId)).data as { equipe_id: string; lider_id: string }[] | null;
+  const equipeDoLider = equipeUnicaPorLider(lideresExplicitos ?? []);
+
   const equipesExtrasPorOperador: Record<string, string[]> = {};
   // Equipes que têm gente: membro de verdade OU clone. Sem isso, equipe vazia
   // de propósito passaria a aparecer zerada no painel.
@@ -1643,6 +1655,13 @@ async function buscarComposicaoAoVivo(
   const operadorEquipeMap: Record<string, OperadorEquipeInfo> = {};
   const situacaoPorOperador: Record<string, string> = {};
 
+  const todasAsEquipes = ((equipesData ?? []) as {
+    id: string; nome: string; setor_id: string | null;
+  }[]);
+  // Nome/setor da equipe resolvida por `equipe_lideres`: o embed `p.equipes` só
+  // responde pela equipe do CADASTRO, e o líder explícito não tem uma.
+  const equipePorId = new Map(todasAsEquipes.map(e => [e.id, e]));
+
   for (const p of (data ?? []) as {
     id: string;
     equipe_id: string | null;
@@ -1650,20 +1669,20 @@ async function buscarComposicaoAoVivo(
     situacao: string | null;
     equipes: { id: string; nome: string; setor_id: string | null } | null;
   }[]) {
-    const eq = p.equipes;
+    // O cadastro manda; na falta dele, o vínculo explícito de líder. Sem esta
+    // linha, o recebimento de quem lidera pela tela de Equipes ficava só no
+    // total do setor, e o setor deixava de fechar com a soma das equipes.
+    const equipeId = p.equipe_id ?? equipeDoLider[p.id] ?? null;
+    const eq = p.equipes ?? (equipeId ? equipePorId.get(equipeId) ?? null : null);
     operadorEquipeMap[p.id] = {
-      equipe_id:   p.equipe_id ?? null,
+      equipe_id:   equipeId,
       equipe_nome: eq?.nome ?? 'Sem equipe',
       // Setor da equipe; quem não tem equipe usa o setor do próprio perfil
       setor_id:    eq?.setor_id ?? p.setor_id ?? null,
     };
     situacaoPorOperador[p.id] = p.situacao ?? 'ativo';
-    if (p.equipe_id) comGente.add(p.equipe_id);
+    if (equipeId) comGente.add(equipeId);
   }
-
-  const todasAsEquipes = ((equipesData ?? []) as {
-    id: string; nome: string; setor_id: string | null;
-  }[]);
 
   const equipes: EquipeAnalitico[] = todasAsEquipes
     .filter(e => comGente.has(e.id))
