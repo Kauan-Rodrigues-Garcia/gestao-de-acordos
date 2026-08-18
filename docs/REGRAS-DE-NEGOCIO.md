@@ -107,14 +107,36 @@ UPDATE em `perfis` por outra policy.
 > a mesma regra em `perfilVeDuasEmpresas` — os dois lados TÊM que concordar, ou
 > a tela oferece a troca e o banco recusa os dados.
 
-**O gate de empresa mora em dois lugares no schema.** 68 policies chamam
-`fn_can_access_empresa(empresa_id)`; outras 51 escreviam a mesma regra inline
-(`fn_user_is_super_admin() OR empresa_id = fn_user_empresa_id()`). A migration
-`20260818300000` ensinou os dois caminhos sobre a liberação — o segundo
-acrescentando `fn_user_acesso_multiempresa()` **ao lado** da comparação, não
-trocando por uma chamada com argumento: a forma `( SELECT fn_user_empresa_id())`
-vira InitPlan e roda uma vez por consulta; uma função que recebe `empresa_id`
-rodaria uma vez por linha, e `analitico_recebimentos` tem 24 mil.
+**O gate de empresa tem TRÊS dialetos no schema**, e os três precisam saber da
+liberação:
+
+| Dialeto | Onde | Quantas |
+|---|---|---|
+| A | `fn_can_access_empresa(empresa_id)` | 68 policies |
+| B | `fn_user_is_super_admin() OR empresa_id = fn_user_empresa_id()` | 51 policies |
+| C | `empresa_id IN (select empresa_id from perfis where id = auth.uid())` | 11 policies |
+
+A migration `20260818300000` fechou A e B; a `20260818320000` fechou C — que só
+apareceu quando o primeiro liberado trocou de empresa e o menu ficou só com
+Dashboard (a policy de `cargos_permissoes` é do dialeto C, e sem as permissões do
+cargo todo item do menu com `permissaoKey` some).
+
+Nos dialetos B e C a exceção é acrescentada **ao lado** da comparação, não
+trocada por `fn_can_access_empresa(empresa_id)`: a forma `( SELECT
+fn_user_empresa_id())` vira InitPlan e roda uma vez por consulta; uma função que
+recebe `empresa_id` rodaria uma vez por linha, e `analitico_recebimentos` tem 24
+mil.
+
+Quatro policies do dialeto C ficam **de fora de propósito** — `cargos_admin_write`
+e as três de `tags` têm a checagem de cargo (`administrador`/`super_admin`)
+dentro da subconsulta. Quem recebe multiempresa é gerência ou diretoria, então
+elas já negam por cargo nas duas empresas. Converter ali daria poder de
+administrador a quem não tem.
+
+**As permissões são as da empresa em que a pessoa está.** `cargos_permissoes` é
+por empresa, e o menu muda ao trocar: em agosto/2026, `gerencia` tem
+`ver_painel_lider` = true na BookPlay e false na PaguePlay. É o comportamento
+certo — cada operação define o que seus cargos veem.
 
 **O que o liberado vê:** a outra empresa **com o próprio cargo**, não como super
 admin. Onde a policy exige setor (`acordos_select` para gerência na BookPlay), o
@@ -124,6 +146,15 @@ curta. `diretoria`, liberada por cargo na maioria das telas, atravessa inteira.
 Três funções seguem presas à empresa de origem por não receberem empresa por
 parâmetro: `fn_wpp_diretorio`, `fn_creators_lab_ranking` e
 `fn_creators_lab_descobridores`. São diretório de nomes e ranking de easter egg.
+
+`fn_log_registrar` e `fn_uso_registrar` carimbam log e telemetria com a empresa
+do **perfil**, não com a que a pessoa está olhando. É de propósito: log é
+registro de quem fez, e quem fez pertence a uma empresa só.
+
+`fn_direto_extra_definir` ainda compara a empresa na mão e só abre para
+super_admin. Não foi convertida porque a única tela que a chama vive em
+Configurações, cuja rota exige cargo `administrador` — ninguém que recebe
+multiempresa alcança. Se Configurações abrir para gerência, converter.
 
 ### 1.2 Isolamento no login
 
