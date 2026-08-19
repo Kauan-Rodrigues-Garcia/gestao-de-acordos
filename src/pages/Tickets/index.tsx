@@ -16,9 +16,14 @@ import { Input } from '@/components/ui/input';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
-import { listarTickets, type Ticket } from '@/services/tickets.service';
+import { assinarTabela } from '@/lib/realtime';
+import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
+import { fetchEmpresas } from '@/services/empresas.service';
+import { listarTickets, buscarFotosDosPerfis, type Ticket } from '@/services/tickets.service';
 import {
   STATUS_TICKET, STATUS_FECHADOS, PRIORIDADES, CATEGORIAS, rotuloCategoria,
   type StatusTicket,
@@ -31,11 +36,20 @@ type FiltroStatus = 'abertos' | 'todos' | StatusTicket;
 
 export default function Tickets() {
   const { empresa } = useEmpresa();
+  const { perfil } = useAuth();
   const acesso = useTicketsAcesso();
   const [params, setParams] = useSearchParams();
   const empresaId = empresa?.id ?? null;
 
+  // Quem responde pelas duas empresas vê as duas listas de uma vez. Trocar a
+  // empresa ativa para conferir a fila da outra é um caminho ruim: muda o
+  // contexto do sistema inteiro para responder uma pergunta de uma aba só.
+  const veDuasEmpresas = perfilVeDuasEmpresas(perfil as Parameters<typeof perfilVeDuasEmpresas>[0]);
+
   const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [fotos, setFotos] = useState<Map<string, string | null>>(new Map());
+  const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
+  const [filtroEmpresa, setFiltroEmpresa] = useState('todas');
   const [carregando, setCarregando] = useState(true);
   const [selecionado, setSelecionado] = useState<string | null>(params.get('ticket'));
   const [filtro, setFiltro] = useState<FiltroStatus>('abertos');
@@ -45,18 +59,54 @@ export default function Tickets() {
   const [painelAberto, setPainelAberto] = useState(false);
   const [versao, setVersao] = useState(0);
 
+  // `null` = sem filtro de empresa na consulta; a RLS resolve o resto.
+  const escopo = veDuasEmpresas ? null : empresaId;
+
+  useEffect(() => {
+    if (!veDuasEmpresas) return;
+    let vivo = true;
+    (async () => {
+      const lista = await fetchEmpresas();
+      if (vivo) setEmpresas((lista ?? []).map(e => ({ id: e.id, nome: e.nome })));
+    })();
+    return () => { vivo = false; };
+  }, [veDuasEmpresas]);
+
   useEffect(() => {
     if (!empresaId) return;
     let vivo = true;
     setCarregando(true);
     (async () => {
-      const lista = await listarTickets(empresaId);
+      const [lista, mapaFotos] = await Promise.all([
+        listarTickets(escopo), buscarFotosDosPerfis(),
+      ]);
       if (!vivo) return;
       setTickets(lista);
+      setFotos(mapaFotos);
       setCarregando(false);
     })();
     return () => { vivo = false; };
-  }, [empresaId, versao]);
+  }, [empresaId, escopo, versao]);
+
+  /*
+   * Tempo real na lista.
+   *
+   * Sem isto o card só mudava quando quem estava olhando fazia alguma coisa —
+   * um ticket assumido do outro lado continuava aparecendo como "sem
+   * responsável" até alguém apertar algo. Não há filtro no canal: a RLS já
+   * decide que linha chega, e um filtro por empresa aqui esconderia justamente
+   * a outra fila de quem enxerga as duas.
+   */
+  useEffect(() => {
+    if (!empresaId) return;
+    return assinarTabela(
+      { topico: `rt-tickets-${escopo ?? 'todas'}`, escutas: [{ tabela: 'tickets' }] },
+      {
+        onEvento:      () => setVersao(v => v + 1),
+        onReconectado: () => setVersao(v => v + 1),
+      },
+    );
+  }, [empresaId, escopo]);
 
   // A notificação leva `?ticket=<id>`: quem clica cai no ticket aberto, e não
   // numa lista onde ainda teria que procurar do que se tratava.
@@ -71,6 +121,7 @@ export default function Tickets() {
       if (filtro === 'abertos' && STATUS_FECHADOS.includes(k.status)) return false;
       if (filtro !== 'abertos' && filtro !== 'todos' && k.status !== filtro) return false;
       if (categoria !== 'todas' && k.categoria !== categoria) return false;
+      if (filtroEmpresa !== 'todas' && k.empresaId !== filtroEmpresa) return false;
       if (t && !(
         k.assunto.toLowerCase().includes(t)
         || String(k.numero).includes(t)
@@ -78,17 +129,24 @@ export default function Tickets() {
       )) return false;
       return true;
     });
-  }, [tickets, filtro, categoria, busca]);
+  }, [tickets, filtro, categoria, busca, filtroEmpresa]);
+
+  const nomeDaEmpresa = useMemo(
+    () => new Map(empresas.map(e => [e.id, e.nome])),
+    [empresas],
+  );
 
   const aberto = useMemo(
     () => tickets.find(t => t.id === selecionado) ?? null,
     [tickets, selecionado],
   );
 
-  function escolher(id: string) {
-    setSelecionado(id);
+  /** Clicar no card abre; clicar no mesmo card de novo fecha e volta à lista larga. */
+  function alternar(id: string) {
+    const fechando = selecionado === id;
+    setSelecionado(fechando ? null : id);
     const p = new URLSearchParams(params);
-    p.set('ticket', id);
+    if (fechando) p.delete('ticket'); else p.set('ticket', id);
     setParams(p, { replace: true });
   }
 
@@ -176,6 +234,17 @@ export default function Tickets() {
                 ))}
               </SelectContent>
             </Select>
+            {veDuasEmpresas && empresas.length > 1 && (
+              <Select value={filtroEmpresa} onValueChange={setFiltroEmpresa}>
+                <SelectTrigger className="h-8 w-36 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">As duas empresas</SelectItem>
+                  {empresas.map(e => (
+                    <SelectItem key={e.id} value={e.id}>{e.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2 pr-2">
@@ -189,28 +258,65 @@ export default function Tickets() {
               </div>
             )}
             {visiveis.map(t => (
-              <button key={t.id} onClick={() => escolher(t.id)}
+              <button key={t.id} onClick={() => alternar(t.id)}
                 className={`w-full text-left rounded-lg border p-3 transition-colors ${
                   t.id === selecionado
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:bg-muted/50'
                 }`}>
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground">#{t.numero}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_TICKET[t.status].cor}`}>
-                    {STATUS_TICKET[t.status].label}
-                  </span>
-                  {t.prioridade !== 'normal' && (
-                    <span className={`text-[10px] ${PRIORIDADES[t.prioridade].cor}`}>
-                      {PRIORIDADES[t.prioridade].label}
-                    </span>
-                  )}
+                <div className="flex gap-2.5">
+                  <Avatar className="w-8 h-8 shrink-0">
+                    <AvatarImage src={fotos.get(t.abertoPor) ?? undefined} />
+                    <AvatarFallback className="text-[10px]">
+                      {iniciais(t.abertoPorNome)}
+                    </AvatarFallback>
+                  </Avatar>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[11px] text-muted-foreground">#{t.numero}</span>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${STATUS_TICKET[t.status].cor}`}>
+                        {STATUS_TICKET[t.status].label}
+                      </span>
+                      {t.prioridade !== 'normal' && (
+                        <span className={`text-[10px] ${PRIORIDADES[t.prioridade].cor}`}>
+                          {PRIORIDADES[t.prioridade].label}
+                        </span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        {quando(t.criadoEm)}
+                      </span>
+                    </div>
+
+                    <p className="text-sm font-medium leading-tight mt-1 truncate">{t.assunto}</p>
+
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {t.abertoPorNome ?? 'alguém'} · {rotuloCategoria(t.categoria)}
+                      {veDuasEmpresas && nomeDaEmpresa.get(t.empresaId)
+                        ? ` · ${nomeDaEmpresa.get(t.empresaId)}` : ''}
+                    </p>
+
+                    {/* Quem está com o ticket é a pergunta que mais se repete
+                        na fila — vale a linha própria, com a cara da pessoa. */}
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      {t.responsavelId ? (
+                        <>
+                          <Avatar className="w-4 h-4">
+                            <AvatarImage src={fotos.get(t.responsavelId) ?? undefined} />
+                            <AvatarFallback className="text-[8px]">
+                              {iniciais(t.responsavelNome)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="text-[11px] text-muted-foreground truncate">
+                            com {t.responsavelNome}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-[11px] text-amber-600">Sem responsável</span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-                <p className="text-sm font-medium leading-tight mt-1 truncate">{t.assunto}</p>
-                <p className="text-[11px] text-muted-foreground truncate">
-                  {rotuloCategoria(t.categoria)} · {t.abertoPorNome ?? 'alguém'}
-                  {t.responsavelNome ? ` · com ${t.responsavelNome}` : ''}
-                </p>
               </button>
             ))}
           </div>
@@ -240,4 +346,17 @@ export default function Tickets() {
         onMudou={() => { acesso.recarregar(); setVersao(v => v + 1); }} />
     </div>
   );
+}
+
+function iniciais(nome: string | null): string {
+  return (nome ?? '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
+}
+
+/** Hoje mostra a hora; antes disso, o dia — o que a pessoa procura no card. */
+function quando(iso: string): string {
+  const d = new Date(iso);
+  const hoje = new Date().toDateString() === d.toDateString();
+  return hoje
+    ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }

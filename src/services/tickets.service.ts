@@ -89,10 +89,21 @@ export interface EventoTicket {
 
 // ── Leitura ──────────────────────────────────────────────────────────────────
 
-export async function listarTickets(empresaId: string, limite = 300): Promise<Ticket[]> {
-  const { data, error } = await db('tickets')
-    .select('*')
-    .eq('empresa_id', empresaId)
+/**
+ * Os tickets que a pessoa pode ver.
+ *
+ * `empresaId: null` NÃO afrouxa nada — é para quem tem acesso às duas empresas
+ * e quer as duas listas juntas. O filtro que importa continua sendo a RLS, que
+ * chama `fn_can_access_empresa` linha a linha; tirar o `.eq` daqui só deixa de
+ * esconder o que o banco já ia deixar passar.
+ */
+export async function listarTickets(
+  empresaId: string | null, limite = 300,
+): Promise<Ticket[]> {
+  let q = db('tickets').select('*');
+  if (empresaId) q = q.eq('empresa_id', empresaId);
+
+  const { data, error } = await q
     .order('criado_em', { ascending: false })
     .limit(limite);
 
@@ -103,6 +114,21 @@ export async function listarTickets(empresaId: string, limite = 300): Promise<Ti
     return [];
   }
   return (data as Record<string, unknown>[]).map(paraTicket);
+}
+
+/**
+ * Foto e nome de quem aparece nos cards.
+ *
+ * O ticket guarda o NOME de quem abriu, não a foto — e guardar a foto na linha
+ * a deixaria velha no dia em que a pessoa trocasse a dela. Uma consulta só,
+ * sem filtro de empresa: quem enxerga as duas precisa das duas, e a RLS de
+ * `perfis` já recorta o que cada um pode ler.
+ */
+export async function buscarFotosDosPerfis(): Promise<Map<string, string | null>> {
+  const { data, error } = await db('perfis').select('id, foto_url');
+  if (error || !data) return new Map();
+  return new Map((data as { id: string; foto_url: string | null }[])
+    .map(p => [p.id, p.foto_url]));
 }
 
 export async function listarMensagens(ticketId: string): Promise<MensagemTicket[]> {

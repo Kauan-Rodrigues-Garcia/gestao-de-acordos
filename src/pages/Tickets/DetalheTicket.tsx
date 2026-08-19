@@ -10,10 +10,11 @@
  * estado e prioridade. Quem abriu cancela, e só enquanto o ticket não fechou. A
  * RLS repete essas duas regras — esconder botão não é proteção.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send, Paperclip, Loader2, X, FileText, UserCheck, Ban, History,
 } from 'lucide-react';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -21,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { assinarTabela } from '@/lib/realtime';
 import {
   listarMensagens, listarEventos, enviarMensagem, mudarStatus, assumirTicket,
   mudarPrioridade, subirAnexo,
@@ -37,7 +39,8 @@ interface Props {
   onMudou: () => void;
 }
 
-const TAMANHO_MAXIMO = 15 * 1024 * 1024;
+/** 10 MB — o mesmo teto do bucket (migration 20260819120000). */
+const TAMANHO_MAXIMO = 10 * 1024 * 1024;
 
 export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
   const { perfil } = useAuth();
@@ -67,12 +70,58 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [mensagens.length]);
 
+  /*
+   * A conversa chega sozinha.
+   *
+   * O filtro por `ticket_id` vale para INSERT, que é o único evento que este
+   * chat produz — mensagem não é editada nem apagada. A RLS continua de pé no
+   * canal: quem não pode ler o ticket não recebe a linha.
+   */
+  useEffect(() => {
+    return assinarTabela(
+      {
+        topico: `rt-ticket-${ticket.id}`,
+        escutas: [
+          { tabela: 'tickets_mensagens', evento: 'INSERT', filtro: `ticket_id=eq.${ticket.id}` },
+          { tabela: 'tickets_eventos',   evento: 'INSERT', filtro: `ticket_id=eq.${ticket.id}` },
+        ],
+      },
+      {
+        onEvento: () => {
+          void listarMensagens(ticket.id).then(setMensagens);
+          void listarEventos(ticket.id).then(setEventos);
+        },
+        onReconectado: () => {
+          void listarMensagens(ticket.id).then(setMensagens);
+          void listarEventos(ticket.id).then(setEventos);
+        },
+      },
+    );
+  }, [ticket.id]);
+
+  /*
+   * Prévia do que está para ser enviado.
+   *
+   * `URL.createObjectURL` reserva memória até alguém revogar — sem a limpeza,
+   * cada print anexado e removido ficaria pendurado pelo resto da sessão.
+   */
+  const previas = useMemo(
+    () => pendentes.map(f => (
+      f.type.startsWith('image/') ? { arquivo: f, url: URL.createObjectURL(f) } : { arquivo: f, url: null }
+    )),
+    [pendentes],
+  );
+
+  useEffect(() => {
+    return () => { for (const p of previas) if (p.url) URL.revokeObjectURL(p.url); };
+  }, [previas]);
+
   function anexar(lista: FileList | null) {
     if (!lista) return;
     const bons: File[] = [];
     for (const f of Array.from(lista)) {
       if (f.size > TAMANHO_MAXIMO) {
-        toast.error(`"${f.name}" passa de 15 MB e não pode ser enviado.`);
+        toast.error(`"${f.name}" passa de 10 MB e não pode ser enviado.`);
         continue;
       }
       bons.push(f);
@@ -255,8 +304,14 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
         {mensagens.map(m => {
           const meu = m.autorId === perfil?.id;
           return (
-            <div key={m.id} className={`flex ${meu ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[80%] rounded-lg px-3 py-2 ${
+            <div key={m.id} className={`flex gap-2 ${meu ? 'flex-row-reverse' : 'flex-row'}`}>
+              {/* A foto vem da mensagem, não de um JOIN: ela é o retrato de quem
+                  falou naquele dia, e sobrevive à exclusão do perfil. */}
+              <Avatar className="w-7 h-7 shrink-0 mt-0.5">
+                <AvatarImage src={m.autorFoto ?? undefined} />
+                <AvatarFallback className="text-[10px]">{iniciais(m.autorNome)}</AvatarFallback>
+              </Avatar>
+              <div className={`max-w-[78%] rounded-lg px-3 py-2 ${
                 meu ? 'bg-primary/10 border border-primary/20' : 'bg-muted'
               }`}>
                 <p className="text-[11px] text-muted-foreground mb-0.5">
@@ -283,16 +338,30 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
           </p>
         ) : (
           <>
-            {!!pendentes.length && (
-              <div className="flex flex-wrap gap-1.5">
-                {pendentes.map((f, i) => (
-                  <span key={`${f.name}-${i}`}
-                    className="flex items-center gap-1 text-[11px] bg-muted px-2 py-1 rounded">
-                    {f.name}
-                    <button onClick={() => setPendentes(p => p.filter((_, j) => j !== i))}>
+            {/* Imagem anexada aparece ANTES de ir: mandar o print errado num
+                ticket é fácil, e desfazer depois não dá — mensagem não se apaga. */}
+            {!!previas.length && (
+              <div className="flex flex-wrap gap-2">
+                {previas.map((p, i) => (
+                  <div key={`${p.arquivo.name}-${i}`}
+                    className="relative rounded border border-border bg-muted overflow-hidden">
+                    {p.url ? (
+                      <img src={p.url} alt={p.arquivo.name}
+                        className="h-20 w-20 object-cover" />
+                    ) : (
+                      <div className="h-20 w-32 flex items-center justify-center px-2">
+                        <span className="text-[10px] text-center break-all line-clamp-3">
+                          {p.arquivo.name}
+                        </span>
+                      </div>
+                    )}
+                    <button
+                      className="absolute top-0.5 right-0.5 rounded-full bg-background/90 p-0.5"
+                      title={`Remover ${p.arquivo.name}`}
+                      onClick={() => setPendentes(atual => atual.filter((_, j) => j !== i))}>
                       <X className="w-3 h-3" />
                     </button>
-                  </span>
+                  </div>
                 ))}
               </div>
             )}
@@ -345,6 +414,10 @@ function Anexo({ anexo }: { anexo: AnexoTicket }) {
       <FileText className="w-3.5 h-3.5" /> {anexo.nome}
     </a>
   );
+}
+
+function iniciais(nome: string | null): string {
+  return (nome ?? '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
 }
 
 function quando(iso: string): string {
