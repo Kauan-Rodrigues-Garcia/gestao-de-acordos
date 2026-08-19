@@ -6,11 +6,12 @@
  * lista de abas. Os campos extras são TODOS opcionais — a definição vive em
  * `categorias.ts`, e a razão de existirem está lá.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Plus } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Plus, Search, X } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -35,7 +36,7 @@ interface Props {
   onCriado: () => void;
 }
 
-interface Opcao { id: string; nome: string }
+interface Opcao { id: string; nome: string; foto?: string | null }
 
 export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) {
   const { perfil } = useAuth();
@@ -65,10 +66,10 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
     let vivo = true;
     (async () => {
       if (precisaPessoas && !pessoas.length) {
-        const { data } = await supabase.from('perfis').select('id, nome')
+        const { data } = await supabase.from('perfis').select('id, nome, foto_url')
           .eq('empresa_id', empresaId).order('nome');
-        if (vivo) setPessoas(((data ?? []) as { id: string; nome: string | null }[])
-          .map(p => ({ id: p.id, nome: p.nome ?? '(sem nome)' })));
+        if (vivo) setPessoas(((data ?? []) as { id: string; nome: string | null; foto_url: string | null }[])
+          .map(p => ({ id: p.id, nome: p.nome ?? '(sem nome)', foto: p.foto_url })));
       }
       if (precisaSetores && !setores.length) {
         const { data } = await supabase.from('setores').select('id, nome')
@@ -118,13 +119,18 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
     const valor = campos[c.key] ?? '';
     const definir = (v: string) => setCampos(p => ({ ...p, [c.key]: v }));
 
-    if (c.tipo === 'usuario' || c.tipo === 'setor') {
-      const opcoes = c.tipo === 'usuario' ? pessoas : setores;
+    // Usuário é busca por digitação, não lista rolável: a empresa tem quase
+    // duzentas pessoas, e achar uma num `Select` é rolar até enxergar. Mesmo
+    // gesto de "Adicionar responsável" em Solicitar Atendimento.
+    if (c.tipo === 'usuario') {
+      return <SeletorPessoa pessoas={pessoas} valor={valor} onEscolher={definir} />;
+    }
+    if (c.tipo === 'setor') {
       return (
         <Select value={valor} onValueChange={definir}>
           <SelectTrigger className="h-9"><SelectValue placeholder="Opcional" /></SelectTrigger>
           <SelectContent className="max-h-64">
-            {opcoes.map(o => <SelectItem key={o.id} value={o.nome}>{o.nome}</SelectItem>)}
+            {setores.map(o => <SelectItem key={o.id} value={o.nome}>{o.nome}</SelectItem>)}
           </SelectContent>
         </Select>
       );
@@ -219,4 +225,106 @@ export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) 
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * Escolher uma pessoa digitando o nome.
+ *
+ * Escolhido, o campo vira um "chip" com foto e nome, e o X devolve a busca —
+ * assim o valor gravado é sempre um nome que existe, em vez de o que a pessoa
+ * conseguiu lembrar na hora.
+ *
+ * A comparação passa por `normalizar`: "Jose" precisa achar "José", senão quem
+ * digita sem acento (a maioria) conclui que a pessoa não está cadastrada.
+ */
+function SeletorPessoa({ pessoas, valor, onEscolher }: {
+  pessoas: Opcao[];
+  valor: string;
+  onEscolher: (nome: string) => void;
+}) {
+  const [termo, setTermo] = useState('');
+  const [aberto, setAberto] = useState(false);
+  const caixaRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!aberto) return;
+    function aoClicar(e: MouseEvent) {
+      if (caixaRef.current && !caixaRef.current.contains(e.target as Node)) setAberto(false);
+    }
+    document.addEventListener('mousedown', aoClicar);
+    return () => document.removeEventListener('mousedown', aoClicar);
+  }, [aberto]);
+
+  const escolhida = useMemo(
+    () => pessoas.find(p => p.nome === valor) ?? null,
+    [pessoas, valor],
+  );
+
+  const sugestoes = useMemo(() => {
+    const t = normalizar(termo.trim());
+    // Sem termo, as primeiras oito: a caixa aberta e vazia não diz o que fazer.
+    if (!t) return pessoas.slice(0, 8);
+    return pessoas.filter(p => normalizar(p.nome).includes(t)).slice(0, 8);
+  }, [pessoas, termo]);
+
+  if (valor) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5">
+        <Avatar className="w-6 h-6 shrink-0">
+          {escolhida?.foto && <AvatarImage src={escolhida.foto} className="object-cover" />}
+          <AvatarFallback className="text-[9px] font-bold">
+            {valor.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        </Avatar>
+        <span className="text-sm flex-1 truncate">{valor}</span>
+        <Button variant="ghost" size="icon" className="w-6 h-6"
+          onClick={() => { onEscolher(''); setTermo(''); }}>
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative" ref={caixaRef}>
+      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+      <Input
+        value={termo}
+        onChange={e => { setTermo(e.target.value); setAberto(true); }}
+        onFocus={() => setAberto(true)}
+        placeholder="Digite o nome… (opcional)"
+        className="h-9 pl-8"
+      />
+      {aberto && (
+        <div className="absolute z-30 mt-1 w-full rounded-xl border border-border bg-popover shadow-xl p-1.5 max-h-56 overflow-y-auto">
+          {!pessoas.length && (
+            <p className="text-[11px] text-muted-foreground text-center py-3">Carregando…</p>
+          )}
+          {!!pessoas.length && !sugestoes.length && (
+            <p className="text-[11px] text-muted-foreground text-center py-3">
+              Nenhum usuário com esse nome.
+            </p>
+          )}
+          {sugestoes.map(p => (
+            <button key={p.id} type="button"
+              onClick={() => { onEscolher(p.nome); setTermo(''); setAberto(false); }}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent text-left transition-colors">
+              <Avatar className="w-6 h-6 shrink-0">
+                {p.foto && <AvatarImage src={p.foto} alt={p.nome} className="object-cover" />}
+                <AvatarFallback className="bg-muted text-[9px] font-bold">
+                  {p.nome.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-xs truncate">{p.nome}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** \u0300-\u036f: as marcas de acento que o NFD separa da letra. */
+function normalizar(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
