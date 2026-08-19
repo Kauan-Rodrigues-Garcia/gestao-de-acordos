@@ -122,7 +122,7 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* ── Cabeçalho ────────────────────────────────────────────────────── */}
-      <div className="border-b border-border p-4 space-y-3">
+      <div className="border-b border-border p-5 space-y-3">
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-muted-foreground">
@@ -246,7 +246,7 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
       </div>
 
       {/* ── Conversa ─────────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+      <div className="flex-1 overflow-y-auto p-5 space-y-3 min-h-0">
         {!mensagens.length && (
           <p className="text-sm text-muted-foreground text-center py-6">
             Nenhuma mensagem ainda. Print, áudio e arquivo entram por aqui.
@@ -276,7 +276,7 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
       </div>
 
       {/* ── Caixa de envio ───────────────────────────────────────────────── */}
-      <div className="border-t border-border p-3 space-y-2">
+      <div className="border-t border-border p-4 space-y-2">
         {fechado ? (
           <p className="text-xs text-muted-foreground text-center py-1">
             Ticket {STATUS_TICKET[ticket.status].label.toLowerCase()}. A conversa fica registrada.

@@ -94,7 +94,7 @@ export default function Tickets() {
 
   if (acesso.carregando) {
     return (
-      <div className="flex items-center justify-center h-64">
+      <div className="flex items-center justify-center h-64 p-6">
         <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
       </div>
     );
@@ -105,7 +105,7 @@ export default function Tickets() {
   // O gate de verdade é a RLS; isto só evita uma tela vazia sem explicação.
   if (!acesso.podeVerAba) {
     return (
-      <div className="max-w-md mx-auto text-center py-16 space-y-2">
+      <div className="max-w-md mx-auto text-center py-16 px-6 space-y-2">
         <Inbox className="w-8 h-8 mx-auto opacity-40" />
         <p className="text-sm font-medium">Os tickets ainda não estão liberados.</p>
         <p className="text-xs text-muted-foreground">
@@ -117,9 +117,12 @@ export default function Tickets() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] min-h-0">
+    // `p-4 md:p-6`: o `<main>` do Layout não tem respiro próprio — cada tela
+    // põe o dela, como em Solicitar Atendimento. A altura desconta esse padding
+    // além do cabeçalho, senão a lista rola por baixo da borda inferior.
+    <div className="flex flex-col h-[calc(100vh-7rem)] md:h-[calc(100vh-8rem)] min-h-0 p-4 md:p-6">
       {/* ── Barra superior ───────────────────────────────────────────────── */}
-      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-border">
+      <div className="flex flex-wrap items-center gap-3 pb-4 border-b border-border">
         <div>
           <h1 className="text-lg font-semibold leading-tight">Tickets</h1>
           <p className="text-xs text-muted-foreground">
@@ -145,10 +148,10 @@ export default function Tickets() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 gap-3 pt-3">
+      <div className="flex flex-1 min-h-0 gap-4 pt-4">
         {/* ── Lista ──────────────────────────────────────────────────────── */}
         <div className={`flex flex-col min-h-0 ${aberto ? 'hidden md:flex md:w-80' : 'flex-1'}`}>
-          <div className="flex items-center gap-2 pb-2">
+          <div className="flex items-center gap-2 pb-3">
             <div className="relative flex-1">
               <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input value={busca} onChange={e => setBusca(e.target.value)}
@@ -175,7 +178,7 @@ export default function Tickets() {
             </Select>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+          <div className="flex-1 overflow-y-auto space-y-2 pr-2">
             {carregando && (
               <p className="text-xs text-muted-foreground text-center py-6">Carregando…</p>
             )}
@@ -187,7 +190,7 @@ export default function Tickets() {
             )}
             {visiveis.map(t => (
               <button key={t.id} onClick={() => escolher(t.id)}
-                className={`w-full text-left rounded-lg border p-2.5 transition-colors ${
+                className={`w-full text-left rounded-lg border p-3 transition-colors ${
                   t.id === selecionado
                     ? 'border-primary bg-primary/5'
                     : 'border-border hover:bg-muted/50'
