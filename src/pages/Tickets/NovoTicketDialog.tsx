@@ -1,0 +1,222 @@
+/**
+ * NovoTicketDialog — abrir um pedido.
+ *
+ * O formulário muda de forma conforme a categoria: escolher "Trocar senha de
+ * usuário" faz aparecer o campo de usuário, "Erro no sistema" faz aparecer a
+ * lista de abas. Os campos extras são TODOS opcionais — a definição vive em
+ * `categorias.ts`, e a razão de existirem está lá.
+ */
+import { useEffect, useMemo, useState } from 'react';
+import { Loader2, Plus } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/hooks/useAuth';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { abrirTicket } from '@/services/tickets.service';
+import {
+  CATEGORIAS, ABAS_DO_SISTEMA, PRIORIDADES,
+  type CampoCategoria, type PrioridadeTicket,
+} from './categorias';
+
+interface Props {
+  aberto: boolean;
+  onFechar: () => void;
+  onCriado: () => void;
+}
+
+interface Opcao { id: string; nome: string }
+
+export default function NovoTicketDialog({ aberto, onFechar, onCriado }: Props) {
+  const { perfil } = useAuth();
+  const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
+  const empresaId = empresa?.id ?? null;
+
+  const [categoria, setCategoria] = useState('senha');
+  const [assunto, setAssunto] = useState('');
+  const [descricao, setDescricao] = useState('');
+  const [prioridade, setPrioridade] = useState<PrioridadeTicket>('normal');
+  const [campos, setCampos] = useState<Record<string, string>>({});
+  const [salvando, setSalvando] = useState(false);
+
+  const [pessoas, setPessoas] = useState<Opcao[]>([]);
+  const [setores, setSetores] = useState<Opcao[]>([]);
+
+  const definicao = useMemo(() => CATEGORIAS.find(c => c.key === categoria), [categoria]);
+
+  // Só busca pessoas/setores quando a categoria escolhida pede algum deles —
+  // a maioria dos tickets não precisa de nenhuma das duas listas.
+  const precisaPessoas = definicao?.campos.some(c => c.tipo === 'usuario') ?? false;
+  const precisaSetores = definicao?.campos.some(c => c.tipo === 'setor') ?? false;
+
+  useEffect(() => {
+    if (!aberto || !empresaId) return;
+    let vivo = true;
+    (async () => {
+      if (precisaPessoas && !pessoas.length) {
+        const { data } = await supabase.from('perfis').select('id, nome')
+          .eq('empresa_id', empresaId).order('nome');
+        if (vivo) setPessoas(((data ?? []) as { id: string; nome: string | null }[])
+          .map(p => ({ id: p.id, nome: p.nome ?? '(sem nome)' })));
+      }
+      if (precisaSetores && !setores.length) {
+        const { data } = await supabase.from('setores').select('id, nome')
+          .eq('empresa_id', empresaId).eq('ativo', true).order('nome');
+        if (vivo) setSetores(((data ?? []) as { id: string; nome: string }[])
+          .map(s => ({ id: s.id, nome: s.nome })));
+      }
+    })();
+    return () => { vivo = false; };
+  }, [aberto, empresaId, precisaPessoas, precisaSetores, pessoas.length, setores.length]);
+
+  const abasVisiveis = useMemo(
+    () => ABAS_DO_SISTEMA.filter(a => !a.permissao || temPermissao(a.permissao)),
+    [temPermissao],
+  );
+
+  function limpar() {
+    setCategoria('senha'); setAssunto(''); setDescricao('');
+    setPrioridade('normal'); setCampos({});
+  }
+
+  async function salvar() {
+    if (!empresaId || !perfil?.id) return;
+    if (!assunto.trim()) { toast.error('Escreva o assunto do ticket.'); return; }
+
+    setSalvando(true);
+    try {
+      const r = await abrirTicket({
+        empresaId,
+        // Setor congelado na abertura: o pedido continua sendo do setor de onde
+        // saiu, mesmo que a pessoa mude de setor depois.
+        setorId: (perfil as { setor_id?: string | null }).setor_id ?? null,
+        abertoPor: perfil.id,
+        abertoPorNome: perfil.nome ?? 'Sem nome',
+        categoria, assunto, descricao, prioridade,
+        // Campo vazio não vira chave: o detalhe do ticket lista o que existe, e
+        // um punhado de strings vazias só polui a leitura.
+        campos: Object.fromEntries(Object.entries(campos).filter(([, v]) => v?.trim())),
+      });
+      if (r.erro) { toast.error(r.erro); return; }
+      toast.success('Ticket aberto. Quem atende já foi notificado.');
+      limpar(); onCriado(); onFechar();
+    } finally { setSalvando(false); }
+  }
+
+  function campoExtra(c: CampoCategoria) {
+    const valor = campos[c.key] ?? '';
+    const definir = (v: string) => setCampos(p => ({ ...p, [c.key]: v }));
+
+    if (c.tipo === 'usuario' || c.tipo === 'setor') {
+      const opcoes = c.tipo === 'usuario' ? pessoas : setores;
+      return (
+        <Select value={valor} onValueChange={definir}>
+          <SelectTrigger className="h-9"><SelectValue placeholder="Opcional" /></SelectTrigger>
+          <SelectContent className="max-h-64">
+            {opcoes.map(o => <SelectItem key={o.id} value={o.nome}>{o.nome}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      );
+    }
+    if (c.tipo === 'aba') {
+      return (
+        <Select value={valor} onValueChange={definir}>
+          <SelectTrigger className="h-9"><SelectValue placeholder="Opcional" /></SelectTrigger>
+          <SelectContent className="max-h-64">
+            {abasVisiveis.map(a => <SelectItem key={a.valor} value={a.valor}>{a.valor}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      );
+    }
+    return (
+      <Input value={valor} onChange={e => definir(e.target.value)}
+        placeholder={c.dica ?? 'Opcional'} className="h-9" />
+    );
+  }
+
+  return (
+    <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Novo ticket</DialogTitle>
+          <DialogDescription>
+            A liderança do seu setor acompanha este ticket. Os campos extras são opcionais —
+            o que faltar dá para conversar no chat, com print e áudio.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Categoria</Label>
+            <Select value={categoria} onValueChange={v => { setCategoria(v); setCampos({}); }}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent className="max-h-64">
+                {CATEGORIAS.map(c => <SelectItem key={c.key} value={c.key}>{c.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            {definicao && (
+              <p className="text-[11px] text-muted-foreground">{definicao.descricao}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Assunto</Label>
+            <Input value={assunto} onChange={e => setAssunto(e.target.value)}
+              placeholder="Uma frase que diga o pedido" className="h-9" maxLength={140} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Detalhes</Label>
+            <Textarea value={descricao} onChange={e => setDescricao(e.target.value)}
+              placeholder="O que aconteceu, o que já tentou, o que precisa" rows={4} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Prioridade</Label>
+            <Select value={prioridade} onValueChange={v => setPrioridade(v as PrioridadeTicket)}>
+              <SelectTrigger className="h-9 w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Object.entries(PRIORIDADES).map(([k, v]) => (
+                  <SelectItem key={k} value={k}>{v.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {!!definicao?.campos.length && (
+            <div className="rounded-md border border-border p-3 space-y-3">
+              <p className="text-[11px] text-muted-foreground">
+                Informações adicionais — opcionais, mas encurtam a conversa.
+              </p>
+              {definicao.campos.map(c => (
+                <div key={c.key} className="space-y-1.5">
+                  <Label className="text-xs">{c.label}</Label>
+                  {campoExtra(c)}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar} disabled={salvando}>Cancelar</Button>
+          <Button onClick={salvar} disabled={salvando} className="gap-2">
+            {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+            Abrir ticket
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}

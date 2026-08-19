@@ -22,6 +22,7 @@ export const ROUTE_PATHS = {
   OUVIDORIA: '/ouvidoria',
   CAMPANHA_FACIL: '/campanha-facil',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
+  TICKETS: '/tickets',
   COMEMORACOES: '/comemoracoes',
   /**
    * Área dos criadores. NÃO entra em menu nenhum de propósito — chega-se aqui

@@ -23,6 +23,7 @@ import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
+import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 
 const MIGRATION_SQL = `ALTER TABLE public.acordos
   ADD COLUMN IF NOT EXISTS instituicao TEXT;
@@ -290,6 +291,10 @@ export default function AdminConfiguracoes() {
             </CardContent>
           </Card>
           )}
+
+          {/* Importar acordos de volta a um operador. Mesmo gate do card acima:
+              só Admin/Super Admin, porque grava tabulação no nome de terceiros. */}
+          {podeVerBancoDados && <ImportarAcordosCard />}
 
           {/* Modelos de mensagem */}
           <Card className="border-border">

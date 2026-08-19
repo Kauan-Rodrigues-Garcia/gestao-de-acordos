@@ -29,12 +29,13 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
-  LifeBuoy, Megaphone, MessageSquarePlus,
+  LifeBuoy, Megaphone, MessageSquarePlus, Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
+import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -84,6 +85,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
+  // Visibilidade especial (chave em `tickets_config` + cargo) — ver filtro abaixo.
+  // Sem `permissaoKey`: quem decide é `useTicketsAcesso`, e uma permissão a mais
+  // no painel de cargos só criaria uma segunda chave para a mesma porta.
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
@@ -241,6 +246,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const ouvidoriaAcesso = useOuvidoriaAcesso();
+  const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -300,6 +306,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
       return isPP && podeAcessarAbaWpp(userRole);
+    }
+
+    // Tickets: nasce só para administrador. A liderança entra quando a chave
+    // `tickets_config.liberado_para_lideranca` for virada na própria aba.
+    if (item.to === ROUTE_PATHS.TICKETS) {
+      return acessoTickets.podeVerAba;
     }
 
     if (item.permissaoKey) return true;

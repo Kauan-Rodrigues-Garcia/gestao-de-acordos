@@ -157,10 +157,18 @@ export function DialogoTransferencia({
                           se tira.
                         </p>
                         {(previa?.clones ?? 0) > 0 && (
-                          <p className="text-muted-foreground">
-                            Ele sai das {previa?.clones} equipe(s) em que era clone — senão
-                            continuaria contando no setor emprestado.
-                          </p>
+                          trocaDeEmpresa ? (
+                            <p className="text-muted-foreground">
+                              Ele sai das {previa?.clones} equipe(s) em que era clone: elas
+                              pertencem ao CNPJ que ele está deixando.
+                            </p>
+                          ) : (
+                            <p className="text-muted-foreground">
+                              Ele CONTINUA nas {previa?.clones} equipe(s) em que é clone, com o
+                              recebimento contando lá. Quem tira é a liderança de cada uma,
+                              na tela de Equipes.
+                            </p>
+                          )
                         )}
                         <p className="text-muted-foreground">
                           Dá para desfazer depois: volta empresa, setor, equipe e clones.

@@ -163,18 +163,33 @@ export async function resolverOperadores(
   empresaId: string,
   usuarios: string[],
 ): Promise<ResultadoResolucao> {
+  /*
+   * Desligado ENTRA na resolução — 19/08/2026, mesma decisão de
+   * `buscarComposicaoAoVivo`.
+   *
+   * `definirSituacao` zera `perfis.ativo` ao desligar. Com o filtro antigo, o
+   * login de quem foi desligado no meio do mês deixava de casar com a linha do
+   * relatório do ERP: o valor caía em "operador não encontrado" e só entrava na
+   * equipe se alguém reparasse e vinculasse à mão. A regra combinada é que o
+   * recebimento do desligado continua contando na equipe e no setor, inclusive
+   * o que entra depois do desligamento.
+   *
+   * `arquivado` fica de fora: é o desligado de mês anterior, que já não aparece
+   * em lista nenhuma.
+   */
   const { data } = await supabase
     .from('perfis')
-    .select('id, usuario, nome')
+    .select('id, usuario, nome, arquivado')
     .eq('empresa_id', empresaId)
-    .eq('ativo', true)
     .order('nome');
 
-  const todosPerfis: PerfilResumido[] = (data ?? []).map(p => ({
-    id:      p.id,
-    usuario: p.usuario ?? '',
-    nome:    p.nome ?? '',
-  }));
+  const todosPerfis: PerfilResumido[] = (data ?? [])
+    .filter(p => (p as { arquivado?: boolean | null }).arquivado !== true)
+    .map(p => ({
+      id:      p.id,
+      usuario: p.usuario ?? '',
+      nome:    p.nome ?? '',
+    }));
 
   // Índice lowercase → perfil completo para comparação case-insensitive
   const dbIndex: Record<string, PerfilResumido> = {};
@@ -1601,11 +1616,31 @@ async function buscarComposicaoDoRetrato(
 async function buscarComposicaoAoVivo(
   empresaId: string, mes: string | null,
 ): Promise<ComposicaoEquipes> {
+  /*
+   * Desligado CONTINUA na composição — 19/08/2026.
+   *
+   * `definirSituacao` grava `ativo = false` para tirar o login de quem foi
+   * desligado. Este `.eq('ativo', true)` lia esse campo como se fosse sobre
+   * dinheiro: no instante em que a liderança marcava alguém como desligado, o
+   * recebimento do mês inteiro dele saía do card da equipe e da soma por
+   * equipe do setor — e a projeção mudava sozinha, sem ninguém ter apagado
+   * nada. O retrato do mês (`fn_composicao_mes_snapshot`) NUNCA filtrou por
+   * `ativo`, então o mês fechado e o mês corrente também discordavam.
+   *
+   * A regra é a mesma do `situacaoUsuario.service`: férias/desligado somem de
+   * ranking e quartil (filtro na aplicação, por `situacaoPorOperador`), mas o
+   * recebimento segue inteiro na equipe e no setor. Valor que entrar DEPOIS do
+   * desligamento também entra — ver `resolverOperadores`.
+   *
+   * O que continua fora: `arquivado` (desligado de mês anterior, que já saiu
+   * de todas as listas) e o perfil desativado à mão sem ser desligamento
+   * (`ativo = false` com `situacao <> 'desligado'`), que é o antigo "desativar
+   * usuário" e nunca representou alguém em operação.
+   */
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, setor_id, situacao, equipes(id, nome, setor_id)')
-    .eq('empresa_id', empresaId)
-    .eq('ativo', true);
+    .select('id, equipe_id, setor_id, situacao, ativo, arquivado, equipes(id, nome, setor_id)')
+    .eq('empresa_id', empresaId);
 
   // Equipes vêm da tabela, não dos perfis: uma equipe formada SÓ por clones
   // (ex.: "Digital Amauri" dentro do Play 5) não tem nenhum perfil apontando
@@ -1667,8 +1702,13 @@ async function buscarComposicaoAoVivo(
     equipe_id: string | null;
     setor_id: string | null;
     situacao: string | null;
+    ativo: boolean | null;
+    arquivado: boolean | null;
     equipes: { id: string; nome: string; setor_id: string | null } | null;
   }[]) {
+    // Ver o comentário no SELECT: só o arquivado e o desativado-à-mão saem.
+    if (p.arquivado === true) continue;
+    if (p.ativo === false && (p.situacao ?? 'ativo') !== 'desligado') continue;
     // O cadastro manda; na falta dele, o vínculo explícito de líder. Sem esta
     // linha, o recebimento de quem lidera pela tela de Equipes ficava só no
     // total do setor, e o setor deixava de fechar com a soma das equipes.

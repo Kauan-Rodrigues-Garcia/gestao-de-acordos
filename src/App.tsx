@@ -52,6 +52,7 @@ const PaginaAnalitico   = lazy(() => import('@/pages/Analitico'));
 const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
+const Tickets           = lazy(() => import('@/pages/Tickets'));
 // Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
@@ -286,6 +287,17 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute requiredPermissao="ver_solicitacoes_whatsapp">
                     <SolicitacoesWpp />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* Tickets — a fila de pedidos da liderança. O cargo aqui é só a
+                  porta larga: quem enxerga de fato depende da chave em
+                  `tickets_config`, e a própria página resolve isso. */}
+              <Route path={ROUTE_PATHS.TICKETS} element={
+                <LayoutWrapper>
+                  <ProtectedRoute allowedProfiles={['lider','elite','gerencia','diretoria','administrador','ouvidoria']}>
+                    <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />

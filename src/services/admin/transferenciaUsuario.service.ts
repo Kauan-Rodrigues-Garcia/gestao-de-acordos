@@ -10,9 +10,7 @@
  *
  *   • SETOR   → zerava `equipe_id` e mais nada. Os acordos ficavam carimbados no
  *               setor antigo (`acordos.setor_id` alimenta o Dashboard, o Painel
- *               Líder e o `useAnalytics`) e contavam lá para sempre. Os clones
- *               em `equipe_operadores_clones` também ficavam, então a pessoa
- *               seguia somando no setor emprestado.
+ *               Líder e o `useAnalytics`) e contavam lá para sempre.
  *   • EMPRESA → apagava SEMPRE os acordos da anterior, sem perguntar.
  *
  * Nenhum dos dois deixava registro, então não havia como desfazer.
@@ -235,7 +233,10 @@ export async function executarTransferencia(params: {
   if (moveu.erro) return { status: 'falha', mensagem: moveu.erro };
 
   // ── 3. Clones ─────────────────────────────────────────────────────────────
-  const clonesRemovidos = await limparClones(alvo.perfilId);
+  // Troca de SETOR não mexe em clone — 19/08/2026. Ver `limparClones`.
+  const clonesRemovidos = tipo === 'empresa'
+    ? await limparClones(alvo.perfilId)
+    : [];
 
   // ── 4. Acordos ────────────────────────────────────────────────────────────
   let acordosApagados = moveu.acordosApagados;
@@ -344,7 +345,25 @@ async function moverPerfil(
   return { erro: null, acordosApagados: 0 };
 }
 
-/** Tira a pessoa de toda equipe em que era clone, devolvendo o que tirou. */
+/**
+ * Tira a pessoa de toda equipe em que era clone, devolvendo o que tirou.
+ *
+ * ## Só troca de EMPRESA chama isto — 19/08/2026
+ *
+ * Antes, toda transferência limpava os clones. Numa troca de setor isso apagava
+ * silenciosamente o vínculo da pessoa com equipes de OUTROS setores — o caso
+ * real: mover alguém do Play 5 para o Play 4 removeu o clone dela na equipe
+ * "Play 5" do setor alternativo "Amauri Digital", e o recebimento sumiu do card
+ * do Amauri sem que ninguém do Amauri tivesse participado da decisão.
+ *
+ * Clone é um vínculo do setor que EMPRESTOU a pessoa, não do setor de onde ela
+ * saiu. Quem decide tirá-lo é a liderança daquela equipe, na tela de Equipes —
+ * o mesmo princípio do fantasma, que fica de pé até a origem tirar.
+ *
+ * Na troca de EMPRESA a limpeza continua: `equipe_operadores_clones` tem
+ * `empresa_id`, e o clone apontaria para uma equipe do CNPJ que a pessoa
+ * deixou.
+ */
 async function limparClones(perfilId: string): Promise<CloneSalvo[]> {
   const { data, error } = await supabase
     .from('equipe_operadores_clones')

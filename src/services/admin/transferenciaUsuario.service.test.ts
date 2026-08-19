@@ -19,8 +19,10 @@
  * operador que não foi transferido. "Chegar limpo" apaga pela RPC, que libera os
  * NRs.
  *
- * **Clone não pode sobrar.** Um clone pendurado faz a pessoa continuar contando
- * no setor emprestado — o defeito silencioso do comportamento antigo.
+ * **Clone só sai na troca de EMPRESA.** Clone é vínculo do setor que emprestou a
+ * pessoa, não do setor de onde ela saiu: numa troca de setor ele fica de pé, e
+ * quem tira é a liderança daquela equipe. Na troca de empresa ele vai embora
+ * porque a equipe pertence ao CNPJ que ficou para trás.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -390,17 +392,19 @@ describe('executarTransferencia — chegar limpo sem acordos próprios', () => {
 // ── Clones ───────────────────────────────────────────────────────────────────
 
 describe('executarTransferencia — clones', () => {
-  it('remove os clones e os guarda para o desfazer', async () => {
-    respostas.set('equipe_operadores_clones::select', {
-      data: [
-        { equipe_id: 'eq-digital', conta_recebimento: true },
-        { equipe_id: 'eq-retencao', conta_recebimento: false },
-      ],
-      error: null,
-    });
+  const DOIS_CLONES = {
+    data: [
+      { equipe_id: 'eq-digital', conta_recebimento: true },
+      { equipe_id: 'eq-retencao', conta_recebimento: false },
+    ],
+    error: null,
+  };
+
+  it('troca de EMPRESA remove os clones e os guarda para o desfazer', async () => {
+    respostas.set('equipe_operadores_clones::select', DOIS_CLONES);
 
     const r = await executarTransferencia({
-      alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1',
+      alvo: ALVO_EMPRESA, levarAcordos: false, executadoPorId: 'admin-1',
     });
 
     expect(ops.some(o => o.tabela === 'equipe_operadores_clones' && o.verbo === 'delete')).toBe(true);
@@ -415,9 +419,29 @@ describe('executarTransferencia — clones', () => {
     ]);
   });
 
-  it('sem clone nenhum, não chama delete', async () => {
+  /*
+   * O caso real de 19/08/2026: mover alguém do Play 5 para o Play 4 apagava o
+   * clone dela na equipe do setor alternativo "Amauri Digital", e o recebimento
+   * sumia de um card que nem participou da decisão.
+   */
+  it('troca de SETOR não encosta nos clones', async () => {
+    respostas.set('equipe_operadores_clones::select', DOIS_CLONES);
+
     const r = await executarTransferencia({
       alvo: ALVO_SETOR, levarAcordos: true, executadoPorId: 'admin-1',
+    });
+
+    expect(ops.some(o => o.tabela === 'equipe_operadores_clones' && o.verbo === 'delete')).toBe(false);
+    if (r.status === 'ok') expect(r.clonesRemovidos).toBe(0);
+
+    // Sem clone removido, o desfazer não recoloca o que nunca saiu.
+    const ins = ops.find(o => o.tabela === 'perfis_transferencias' && o.verbo === 'insert');
+    expect(ins?.payload?.clones_removidos).toEqual([]);
+  });
+
+  it('sem clone nenhum, não chama delete', async () => {
+    const r = await executarTransferencia({
+      alvo: ALVO_EMPRESA, levarAcordos: false, executadoPorId: 'admin-1',
     });
 
     expect(ops.some(o => o.tabela === 'equipe_operadores_clones' && o.verbo === 'delete')).toBe(false);
