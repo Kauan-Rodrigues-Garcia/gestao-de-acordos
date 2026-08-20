@@ -1,5 +1,4 @@
-import { Fragment } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   CalendarClock, CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
@@ -33,7 +32,6 @@ interface PPTableBodyProps {
   isPP: boolean;
   visaoAmpla: boolean;
   podeEditar: boolean;
-  podeAlterarStatus: boolean;
   podeExcluir: boolean;
   addAcordo: (a: Acordo) => void;
   patchAcordo: (id: string, data: Partial<Acordo>) => void;
@@ -61,7 +59,7 @@ export function PPTableBody({
   acordos, acordosOrdenados,
   novoInlineAbertoTabela, setNovoInlineAbertoTabela,
   isPP, visaoAmpla,
-  podeEditar, podeAlterarStatus, podeExcluir,
+  podeEditar, podeExcluir,
   addAcordo, patchAcordo,
   editandoInlineIdTabela, setEditandoInlineIdTabela,
   detalheInlineIdTabela, setDetalheInlineIdTabela,
@@ -113,7 +111,7 @@ export function PPTableBody({
             </div>
           </td>
         </tr>
-      ) : <AnimatePresence initial={false}>{acordosOrdenados.map((a, i) => {
+      ) : acordosOrdenados.map((a, i) => {
         const atrasado = isAtrasado(a.vencimento, a.status);
         const venceHoje = a.vencimento === hoje;
         const sel = selecionados.includes(a.id);
@@ -122,13 +120,12 @@ export function PPTableBody({
         /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
         const temCpf = acordoTemCpf(a);
         return (
-          <Fragment key={a.id}>
+          <>
             <motion.tr
-              layout="position"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.2 }}
+              key={a.id}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: Math.min(i * 0.015, 0.3) }}
               className={cn(
                 'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                 i % 2 === 0 && 'bg-muted/10',
@@ -220,7 +217,7 @@ export function PPTableBody({
               )}
               <td className="px-3 py-2.5">
                 <div className="flex items-center justify-end gap-0.5">
-                  {podeAlterarStatus && a.status !== 'pago' && (
+                  {a.status !== 'pago' && (
                     <Button
                       variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                       title="Marcar como Pago"
@@ -293,9 +290,9 @@ export function PPTableBody({
                 onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
               />
             )}
-          </Fragment>
+          </>
         );
-      })}</AnimatePresence>}
+      })}
     </tbody>
   );
 }

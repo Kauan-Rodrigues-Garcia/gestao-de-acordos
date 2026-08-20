@@ -18,26 +18,32 @@
  * apresentação, não estado da aplicação — nada mais na árvore precisa saber dele,
  * e envolver o React nisso é pagar reconciliação por pixel.
  *
- * Em 900ms: tempo suficiente para perceber a aceleração e a desaceleração sem
- * transformar a atualização do painel em espera.
+ * Curta de propósito (380ms): passar disso vira espera, e o painel existe para
+ * responder num relance.
  *
- * Esta contagem curta é executada mesmo quando o Windows ativa as opções de
- * desempenho/redução de movimento. Ela não desloca o layout nem move grandes
- * áreas: só interpola o conteúdo numérico para a atualização continuar legível.
+ * Com `prefers-reduced-motion` o valor aparece direto. Movimento de números é um
+ * gatilho conhecido de desconforto vestibular, e a informação não depende dele.
  */
 
-import { useEffect, useRef, type CSSProperties } from 'react';
-import { DURACAO_VALOR_ANIMADO, suavizarValorAnimado } from './valorAnimadoCurva';
+import { useEffect, useRef } from 'react';
+import { useReducedMotion } from 'framer-motion';
+
+const DURACAO = 380;
+
+/** easeOutCubic: rápido no começo, assentando no fim. */
+function suavizar(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
 
 interface ValorAnimadoProps {
   valor: number;
   /** Como desenhar o número — `formatCurrency`, `String`, o que for. */
   formatar: (v: number) => string;
   className?: string;
-  style?: CSSProperties;
 }
 
-export function ValorAnimado({ valor, formatar, className, style }: ValorAnimadoProps) {
+export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) {
+  const semMovimento = useReducedMotion();
   const no = useRef<HTMLSpanElement>(null);
   const anterior = useRef(valor);
   const quadro = useRef<number | null>(null);
@@ -53,15 +59,15 @@ export function ValorAnimado({ valor, formatar, className, style }: ValorAnimado
     const de = anterior.current;
     anterior.current = valor;
 
-    if (de === valor) {
+    if (semMovimento || de === valor) {
       alvo.textContent = formatarRef.current(valor);
       return;
     }
 
     const inicio = performance.now();
     const passo = (agora: number) => {
-      const t = Math.min(1, (agora - inicio) / DURACAO_VALOR_ANIMADO);
-      alvo.textContent = formatarRef.current(de + (valor - de) * suavizarValorAnimado(t));
+      const t = Math.min(1, (agora - inicio) / DURACAO);
+      alvo.textContent = formatarRef.current(de + (valor - de) * suavizar(t));
       if (t < 1) quadro.current = requestAnimationFrame(passo);
     };
     quadro.current = requestAnimationFrame(passo);
@@ -72,8 +78,8 @@ export function ValorAnimado({ valor, formatar, className, style }: ValorAnimado
       // um número intermediário que a tela nunca chegou a mostrar por inteiro.
       alvo.textContent = formatarRef.current(valor);
     };
-  }, [valor]);
+  }, [valor, semMovimento]);
 
   // O texto inicial vem do render; daqui em diante quem escreve é o efeito.
-  return <span ref={no} className={className} style={style}>{formatar(valor)}</span>;
+  return <span ref={no} className={className}>{formatar(valor)}</span>;
 }

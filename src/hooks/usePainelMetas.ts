@@ -11,17 +11,15 @@
  * `MetaProgressoHeader` e a tabela `QuartisOperadores` usam.
  */
 
-import { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase, type Acordo } from '@/lib/supabase';
+import { useState, useEffect, useMemo } from 'react';
+import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
-import {
-  ESCOPO_EMPRESA, linhaNoEscopo, type EscopoAnalitico,
-} from '@/services/analitico/escopoAnalitico';
+import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
@@ -34,9 +32,6 @@ import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
-import {
-  useRealtimeAcordos, type AcordoRealtimeEvent,
-} from '@/providers/RealtimeAcordosProvider';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
@@ -140,77 +135,6 @@ export interface DadosPainelMetas {
   noMesAtual: boolean;
 }
 
-type RegistroAcordo = Partial<Acordo> & { id: string };
-
-function acordoNoEscopo(
-  acordo: Partial<Acordo>,
-  empresaId: string,
-  mes: string,
-  escopo: EscopoAnalitico,
-  data: string | null | undefined = acordo.vencimento,
-): boolean {
-  return acordo.empresa_id === empresaId
-    && !!data?.startsWith(`${mes}-`)
-    && linhaNoEscopo({
-      operador_id: acordo.operador_id ?? null,
-      setor_id: acordo.setor_id ?? null,
-    }, escopo);
-}
-
-function atualizarAgendadoPorDelta(
-  atual: PontoAgendadoDia[],
-  evento: AcordoRealtimeEvent,
-  empresaId: string,
-  mes: string,
-  escopo: EscopoAnalitico,
-): PontoAgendadoDia[] {
-  const deltas = new Map<number, number>();
-  const aplicar = (acordo: Partial<Acordo> | undefined, sinal: 1 | -1) => {
-    if (!acordo || !acordoNoEscopo(acordo, empresaId, mes, escopo)) return;
-    const dia = Number(acordo.vencimento?.slice(8, 10));
-    if (!dia) return;
-    deltas.set(dia, (deltas.get(dia) ?? 0) + sinal * (Number(acordo.valor) || 0));
-  };
-  aplicar(evento.oldRecord, -1);
-  aplicar(evento.newRecord, 1);
-  if (!deltas.size) return atual;
-
-  const porDia = new Map(atual.map(p => [p.dia, p.agendado]));
-  for (const [dia, delta] of deltas) {
-    const valor = (porDia.get(dia) ?? 0) + delta;
-    if (Math.abs(valor) < 0.005) porDia.delete(dia);
-    else porDia.set(dia, valor);
-  }
-  return [...porDia.entries()]
-    .map(([dia, agendado]) => ({ dia, agendado }))
-    .sort((a, b) => a.dia - b.dia);
-}
-
-function contribuicaoExtraTabulado(
-  acordo: Partial<Acordo> | undefined,
-  empresaId: string,
-  mes: string,
-  escopo: EscopoAnalitico,
-): number {
-  if (!acordo || acordo.status !== 'pago' || acordo.tipo_vinculo !== 'extra') return 0;
-  return acordoNoEscopo(acordo, empresaId, mes, escopo) ? (Number(acordo.valor) || 0) : 0;
-}
-
-function contribuicaoIndireta(
-  acordo: Partial<Acordo> | undefined,
-  empresaId: string,
-  mes: string,
-  operadorId: string,
-): number {
-  if (!acordo || acordo.operador_id !== operadorId
-      || acordo.status !== 'pago' || acordo.tipo_vinculo !== 'extra') return 0;
-  const data = (acordo as Partial<Acordo> & { data_pagamento?: string | null }).data_pagamento
-    ?? acordo.vencimento;
-  return acordo.empresa_id === empresaId && !!data?.startsWith(`${mes}-`)
-    ? (Number(acordo.valor) || 0)
-    : 0;
-}
-
 export interface EquipeInfo {
   id: string;
   nome: string;
@@ -290,8 +214,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { empresa } = useEmpresa();
   const tenant = useTenant();
   const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
-  const { subscribe, unsubscribe } = useRealtimeAcordos();
-  const realtimeInstanceId = useRef(`usePainelMetas-${Math.random().toString(36).slice(2, 10)}`).current;
 
   /**
    * H.O. só existe na PaguePlay: na BookPlay `total_ho` é 0,00 em toda linha.
@@ -340,7 +262,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const minhaEquipe = equipesConhecidas.find(e => e.id === perfilEquipeId) ?? null;
 
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
-  const analitico = useAnaliticoDashboard(ativo, mes, 'dashboard');
+  const analitico = useAnaliticoDashboard(ativo, mes);
 
   const { escopo, pendente: escopoPendente } = useEscopoAnalitico({
     ativo,
@@ -478,18 +400,14 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // query seria trabalho jogado fora a cada troca de mês.
   const [diretoExtra, setDiretoExtra] = useState<TotaisDiretoExtra | null>(null);
   const [dxCarregado, setDxCarregado] = useState(false);
-  const dxContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
-    const contexto = `${temLogicaDiretoExtra}|${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
-    const contextoMudou = dxContextoRef.current !== contexto;
-    dxContextoRef.current = contexto;
     if (!temLogicaDiretoExtra || !empresa?.id || escopoPendente) {
       setDiretoExtra(null);
       setDxCarregado(!temLogicaDiretoExtra);
       return;
     }
-    if (contextoMudou) setDxCarregado(false);
+    setDxCarregado(false);
     void buscarDiretoExtraDoMes({
       empresaId: empresa.id,
       mes,
@@ -514,18 +432,14 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const extraPorTabulacao = tenant.isPaguePlay && !!temLogicaDiretoExtra;
   const [extraTabulado, setExtraTabulado] = useState<ExtraTabulado | null>(null);
   const [extraCarregado, setExtraCarregado] = useState(false);
-  const extraContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
-    const contexto = `${extraPorTabulacao}|${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
-    const contextoMudou = extraContextoRef.current !== contexto;
-    extraContextoRef.current = contexto;
     if (!extraPorTabulacao || !empresa?.id || escopoPendente) {
       setExtraTabulado(null);
       setExtraCarregado(!extraPorTabulacao);
       return;
     }
-    if (contextoMudou) setExtraCarregado(false);
+    setExtraCarregado(false);
     void buscarExtraTabuladoDoMes({ empresaId: empresa.id, mes, escopo }).then(t => {
       if (cancelado) return;
       setExtraTabulado(t);
@@ -537,18 +451,14 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // ── Agendado por dia (mesmo escopo do recebimento) ─────────────────────────
   const [agendadoPorDia, setAgendadoPorDia] = useState<PontoAgendadoDia[]>([]);
   const [agendadoCarregado, setAgendadoCarregado] = useState(false);
-  const agendadoContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
-    const contexto = `${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
-    const contextoMudou = agendadoContextoRef.current !== contexto;
-    agendadoContextoRef.current = contexto;
     if (!empresa?.id || escopoPendente || !escopo) {
       setAgendadoPorDia([]);
       setAgendadoCarregado(false);
       return;
     }
-    if (contextoMudou) setAgendadoCarregado(false);
+    setAgendadoCarregado(false);
     void buscarAgendadoPorDia({ empresaId: empresa.id, mes, escopo }).then(p => {
       if (cancelado) return;
       setAgendadoPorDia(p);
@@ -599,42 +509,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
     }).then(m => { if (!cancelado) setRecebidoIndiretoBruto(m[alvoIndireto]?.bruto ?? 0); });
     return () => { cancelado = true; };
   }, [empresa?.id, mes, alvoIndireto]);
-
-  // Acordos chegam com imagem anterior/nova. Cada fonte recebe somente a
-  // diferença do registro alterado; nenhuma delas pagina novamente o mês.
-  useEffect(() => {
-    const empresaId = empresa?.id;
-    if (!empresaId || !escopo) return;
-
-    subscribe(realtimeInstanceId, (evento: AcordoRealtimeEvent) => {
-      setAgendadoPorDia(atual =>
-        atualizarAgendadoPorDelta(atual, evento, empresaId, mes, escopo));
-
-      if (extraPorTabulacao) {
-        const antigo = contribuicaoExtraTabulado(evento.oldRecord, empresaId, mes, escopo);
-        const novo = contribuicaoExtraTabulado(evento.newRecord, empresaId, mes, escopo);
-        const delta = novo - antigo;
-        const deltaQtd = (novo ? 1 : 0) - (antigo ? 1 : 0);
-        if (delta || deltaQtd) {
-          setExtraTabulado(atual => {
-            const base = atual ?? { bruto: 0, ho: 0, qtd: 0 };
-            const bruto = Math.max(0, base.bruto + delta);
-            return { bruto, ho: bruto * PP_HO_PERCENTUAL, qtd: Math.max(0, base.qtd + deltaQtd) };
-          });
-        }
-      }
-
-      if (alvoIndireto) {
-        const antigo = contribuicaoIndireta(evento.oldRecord, empresaId, mes, alvoIndireto);
-        const novo = contribuicaoIndireta(evento.newRecord, empresaId, mes, alvoIndireto);
-        if (novo !== antigo) {
-          setRecebidoIndiretoBruto(atual => Math.max(0, atual + novo - antigo));
-        }
-      }
-    });
-    return () => unsubscribe(realtimeInstanceId);
-  }, [empresa?.id, mes, escopo, extraPorTabulacao, alvoIndireto,
-      subscribe, unsubscribe, realtimeInstanceId]);
 
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.

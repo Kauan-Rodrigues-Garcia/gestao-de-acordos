@@ -25,7 +25,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
 import {
   listarMensagens, listarEventos, enviarMensagem, mudarStatus, assumirTicket,
-  mudarPrioridade, subirAnexo, paraMensagemTicket, paraEventoTicket,
+  mudarPrioridade, subirAnexo,
   type Ticket, type MensagemTicket, type EventoTicket, type AnexoTicket,
 } from '@/services/tickets.service';
 import {
@@ -87,16 +87,9 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
         ],
       },
       {
-        onEvento: (payload) => {
-          if (payload.eventType !== 'INSERT') return;
-          const linha = payload.new as Record<string, unknown>;
-          if (payload.table === 'tickets_mensagens') {
-            const nova = paraMensagemTicket(linha);
-            setMensagens(atual => atual.some(m => m.id === nova.id) ? atual : [...atual, nova]);
-          } else if (payload.table === 'tickets_eventos') {
-            const novo = paraEventoTicket(linha);
-            setEventos(atual => atual.some(e => e.id === novo.id) ? atual : [...atual, novo]);
-          }
+        onEvento: () => {
+          void listarMensagens(ticket.id).then(setMensagens);
+          void listarEventos(ticket.id).then(setEventos);
         },
         onReconectado: () => {
           void listarMensagens(ticket.id).then(setMensagens);

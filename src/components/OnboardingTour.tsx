@@ -20,7 +20,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useTenant } from '@/lib/tenant-config';
 import { cn } from '@/lib/utils';
-import { marcarOnboardingApresentado, onboardingJaApresentado } from '@/components/onboardingStorage';
+
+export const ONBOARDING_STORAGE_KEY = (uid: string) => `onboarding_v3_${uid}`;
 const PAD    = 12;   // padding ao redor do elemento destacado
 const TW     = 308;  // largura do tooltip em px
 const GAP    = 18;   // espaço entre spotlight e tooltip
@@ -249,13 +250,8 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
   useEffect(() => {
     if (!user?.id) return;
     if (termoLoading || precisaAceitar) return;
-    if (!onboardingJaApresentado(user.id)) {
-      const t = setTimeout(() => {
-        // A regra é "apareceu uma vez", não "foi concluído". Registrar aqui
-        // impede que sair da conta no meio do tour o faça voltar no login seguinte.
-        marcarOnboardingApresentado(user.id);
-        setActive(true);
-      }, 1000);
+    if (!localStorage.getItem(ONBOARDING_STORAGE_KEY(user.id))) {
+      const t = setTimeout(() => setActive(true), 1000);
       return () => clearTimeout(t);
     }
   }, [user?.id, precisaAceitar, termoLoading]);
@@ -264,7 +260,7 @@ export function OnboardingTour({ precisaAceitar, termoLoading, onFinished }: Onb
   const finish = useCallback(() => {
     setActive(false);
     setConfirmSkip(false);
-    if (user?.id) marcarOnboardingApresentado(user.id);
+    if (user?.id) localStorage.setItem(ONBOARDING_STORAGE_KEY(user.id), '1');
     onFinished?.();
   }, [user?.id, onFinished]);
 

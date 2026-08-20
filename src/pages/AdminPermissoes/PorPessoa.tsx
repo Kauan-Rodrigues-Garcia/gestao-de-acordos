@@ -30,7 +30,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes, type EstadoExcecao } from '@/hooks/useCargoPermissoes';
 import {
-  catalogoDoTenant, gruposDoTenant, normalizarDependencias,
+  CARGOS_ACESSO_TOTAL, catalogoDoTenant, gruposDoTenant,
 } from '@/lib/permissoes-catalogo';
 import { cn } from '@/lib/utils';
 import { GrupoPermissoes } from './GrupoPermissoes';
@@ -43,7 +43,7 @@ const ESTADOS: { valor: EstadoExcecao; label: string; classe: string }[] = [
   { valor: 'nao',   label: 'Não',   classe: 'data-[on=true]:bg-red-500 data-[on=true]:text-white' },
 ];
 
-export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
+export function PorPessoa() {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
   const {
@@ -72,6 +72,9 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
   const listaFiltrada = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return pessoas
+      // Cargo com acesso total não aceita exceção: o app responde «pode» antes
+      // de consultar qualquer tabela. Oferecer o controle seria mentir.
+      .filter(p => !(CARGOS_ACESSO_TOTAL as readonly string[]).includes(p.perfil))
       .filter(p => !soComExcecao || (excecoesPorPessoa[p.id] ?? 0) > 0)
       .filter(p => !termo
         || p.nome?.toLowerCase().includes(termo)
@@ -95,25 +98,7 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
   }
 
   function definirEstado(key: string, estado: EstadoExcecao) {
-    if (!podeEditar || !pessoa) return;
-
-    const antes = Object.fromEntries(catalogo.map(p => {
-      const e = estadoDe(p.key);
-      return [p.key, e === 'herda' ? valorDoCargo(pessoa.perfil, p.key) : e === 'sim'];
-    }));
-    const alvo = estado === 'herda' ? valorDoCargo(pessoa.perfil, key) : estado === 'sim';
-    const depois = normalizarDependencias(antes, key, alvo);
-
-    const mudancas: Record<string, ValorRascunho> = {};
-    for (const p of catalogo) {
-      if (p.key === key && estado === 'herda' && depois[p.key] === alvo) {
-        mudancas[p.key] = 'herda';
-      } else if (depois[p.key] !== antes[p.key] || p.key === key) {
-        const herdado = valorDoCargo(pessoa.perfil, p.key);
-        mudancas[p.key] = depois[p.key] === herdado ? 'herda' : depois[p.key];
-      }
-    }
-    rascunho.definirVarios(mudancas);
+    rascunho.definir(key, estado === 'herda' ? 'herda' : estado === 'sim');
     rascunho.podar(k => {
       if (!pessoa) return 'herda';
       const atual = estadoExcecao(pessoa.id, k);
@@ -122,7 +107,7 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
   }
 
   async function salvar() {
-    if (!podeEditar || !empresa?.id || !pessoa || !rascunho.sujo) return;
+    if (!empresa?.id || !pessoa || !rascunho.sujo) return;
     setSalvando(true);
     try {
       // Monta o JSON final: só entra chave que NÃO é «herda».
@@ -275,9 +260,6 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
                 renderControle={p => {
                   const estado = estadoDe(p.key);
                   const doCargo = valorDoCargo(pessoa.perfil, p.key);
-                  const dependenciasAtivas = (p.requer ?? []).every(pai =>
-                    resolverParaUsuario(pessoa.id, pessoa.perfil, pai),
-                  );
                   return (
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -291,11 +273,10 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
                             key={op.valor}
                             data-on={estado === op.valor}
                             onClick={() => definirEstado(p.key, op.valor)}
-                            disabled={!podeEditar || !dependenciasAtivas}
                             className={cn(
                               'px-2 py-1 text-[11px] font-medium transition-colors',
                               'text-muted-foreground hover:text-foreground',
-                              op.classe, !podeEditar && 'cursor-not-allowed opacity-60',
+                              op.classe,
                             )}
                           >
                             {op.label}

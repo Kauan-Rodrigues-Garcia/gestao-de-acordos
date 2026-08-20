@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import {
+  isPerfilAdminOuLider, isPerfilAdmin, isPerfilDiretoria,
   getEstadoFromAcordo, ROUTE_PATHS,
 } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
@@ -34,18 +35,16 @@ export default function PaginaAnalitico() {
   const tenant           = useTenant();
   const navigate         = useNavigate();
 
-  const podeVisaoPropria = temPermissao('analitico_visao_propria');
-  const podeVisaoGeral = temPermissao('analitico_visao_geral');
-  const isLiderMais = podeVisaoGeral;
-  const isElite = podeVisaoPropria && podeVisaoGeral;
-  const isOperador = podeVisaoPropria && !podeVisaoGeral;
+  const isElite     = perfil?.perfil === 'elite';
+  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  const isOperador  = !isLiderMais;
 
   // Isolamento por setor: líder/elite/gerência enxergam APENAS o próprio setor.
   // Só diretoria e admin/super_admin veem todos os setores (e podem filtrar).
-  const veTodosSetores = temPermissao('analitico_visao_todos_setores');
+  const veTodosSetores = isPerfilAdmin(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
   const setorProprio   = perfil?.setor_id ?? null;
   // Validação de relatório (Fase 1): só administrador/super_admin, nunca diretoria.
-  const podeValidarRelatorios = temPermissao('validar_relatorios');
+  const isAdminReal     = isPerfilAdmin(perfil?.perfil ?? '');
 
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
@@ -60,11 +59,6 @@ export default function PaginaAnalitico() {
       return 'analitico';
     },
   );
-  const abasPrincipais = useMemo(() => ([
-    { key: 'analitico', label: 'Analítico', Icon: BarChart2, permissao: 'ver_analitico_principal' },
-    { key: 'diario', label: 'Recebimento diário', Icon: HandCoins, permissao: 'ver_analitico_recebimento_diario' },
-    { key: 'colchao', label: 'Colchão', Icon: Layers3, permissao: 'ver_analitico_colchao' },
-  ] as const).filter(aba => temPermissao(aba.permissao)), [temPermissao]);
 
   // Clicar em outra notificação de diário já estando na página só troca a query;
   // o estado inicial não roda de novo, então a aba precisa acompanhar.
@@ -74,11 +68,6 @@ export default function PaginaAnalitico() {
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
     if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
   }, [abaDaUrl]);
-  useEffect(() => {
-    if (abasPrincipais.some(aba => aba.key === abaPrincipal)) return;
-    const primeira = abasPrincipais[0]?.key;
-    if (primeira) setAbaPrincipal(primeira);
-  }, [abaPrincipal, abasPrincipais]);
 
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
@@ -329,7 +318,11 @@ export default function PaginaAnalitico() {
 
       {/* Abas internas: Analítico × Recebimento diário */}
       <div className="flex items-center gap-1 border-b border-border">
-        {abasPrincipais.map(({ key, label, Icon }) => (
+        {([
+          { key: 'analitico', label: 'Analítico',          Icon: BarChart2 },
+          { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins },
+          { key: 'colchao', label: 'Colchão', Icon: Layers3 },
+        ] as const).map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setAbaPrincipal(key)}
             className={cn(
               'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
@@ -400,7 +393,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaPrincipal === 'analitico' && podeValidarRelatorios && (
+      {abaPrincipal === 'analitico' && isAdminReal && (
         <ValidacaoRelatorioSetor
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}

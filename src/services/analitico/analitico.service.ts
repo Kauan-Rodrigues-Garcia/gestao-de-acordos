@@ -737,28 +737,15 @@ export interface ResumoOperadorAnalitico {
   total_pagamentos: number;
 }
 
-/**
- * Identifica a aba que pediu dados analíticos. O banco usa este valor para
- * resolver o escopo daquela aba, sem reaproveitar uma permissão de outra.
- */
-export type ContextoDadosAnaliticos =
-  | 'analitico'
-  | 'dashboard'
-  | 'diretoria'
-  | 'painel_lider'
-  | 'pix_automatico';
-
 /** Retorna totais por operador via RPC (sem varrer linhas individuais). */
 export async function buscarResumoOperadoresAnalitico(
   empresaId: string,
   mes: string,
-  contexto: ContextoDadosAnaliticos = 'analitico',
 ): Promise<{ data: ResumoOperadorAnalitico[]; error: string | null }> {
   const { data, error } = await supabase
     .rpc('fn_analitico_resumo_por_operador', {
       p_empresa_id: empresaId,
       p_mes:        mes,
-      p_contexto:   contexto,
     })
     .order('total_recebido', { ascending: false });
   return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error?.message ?? null };
@@ -771,7 +758,6 @@ export async function buscarResumoOperadoresAnalitico(
 export async function buscarAnaliticoDashboardMes(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
-  contexto: ContextoDadosAnaliticos = 'analitico',
 ): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
   try {
     // Caminho novo (migration 20260729b): a RPC devolve TODOS os grupos num
@@ -780,7 +766,6 @@ export async function buscarAnaliticoDashboardMes(
     const viaJson = await supabase.rpc('fn_analitico_dashboard_mes_json', {
       p_empresa_id: empresaId,
       p_mes:        mes,
-      p_contexto:   contexto,
     });
 
     if (!viaJson.error) {
@@ -795,7 +780,7 @@ export async function buscarAnaliticoDashboardMes(
       return { data: [], dbAtiva: true, error: viaJson.error.message };
     }
 
-    return await buscarAnaliticoDashboardMesPaginado(empresaId, mes, contexto);
+    return await buscarAnaliticoDashboardMesPaginado(empresaId, mes);
   } catch (err) {
     return { data: [], dbAtiva: false, error: err instanceof Error ? err.message : String(err) };
   }
@@ -814,17 +799,12 @@ export async function buscarAnaliticoDashboardMes(
 async function buscarAnaliticoDashboardMesPaginado(
   empresaId: string,
   mes: string,
-  contexto: ContextoDadosAnaliticos,
 ): Promise<{ data: AnaliticoDashboardLinha[]; dbAtiva: boolean; error: string | null }> {
   let offset = 0;
   const todas: AnaliticoDashboardLinha[] = [];
   while (true) {
     const { data, error } = await supabase
-      .rpc('fn_analitico_dashboard_mes', {
-        p_empresa_id: empresaId,
-        p_mes: mes,
-        p_contexto: contexto,
-      })
+      .rpc('fn_analitico_dashboard_mes', { p_empresa_id: empresaId, p_mes: mes })
       // Ordem total explícita no wrapper do PostgREST — casa com o ORDER BY da
       // RPC e torna o range determinístico entre as páginas.
       .order('dia', { ascending: true })

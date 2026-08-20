@@ -11,8 +11,8 @@ import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { buscarAnalitico, marcarVistoAnalitico } from '@/services/analitico/analitico.service';
+import { isPerfilAdminOuLider } from '@/lib/index';
 
 export interface UseAnaliticoOptions {
   mes: string;                  // 'yyyy-MM'
@@ -25,7 +25,6 @@ export interface UseAnaliticoOptions {
 export function useAnalitico(options: UseAnaliticoOptions) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
 
   const [dados,       setDados]       = useState<AnaliticoRecebimento[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -34,11 +33,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   const marcouRef     = useRef(false);
   const hasLoadedOnce = useRef(false);
 
-  const isLiderMais = temPermissao('analitico_visao_geral');
+  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
 
-  const fetchDados = useCallback(async (silencioso = false) => {
+  const fetchDados = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
-    if (!silencioso) setLoading(true);
+    setLoading(true);
     setError(null);
 
     let operadorId: string | null | undefined = undefined;
@@ -120,11 +119,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
                 duration: 4000,
               });
             }
-            void fetchRef.current(true);
+            void fetchRef.current();
           }, 1500);
         },
         // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(true); },
+        onReconectado: () => { void fetchRef.current(); },
       },
     );
   }, [empresa?.id, options.mes]);

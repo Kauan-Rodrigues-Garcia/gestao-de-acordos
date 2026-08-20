@@ -1,0 +1,382 @@
+/* pet.css — animações do mascote (CSS puro, GPU, pausa em aba oculta) */
+
+/* Flutuar (Aura — ela levita, com balancinho sutil) */
+@keyframes pet-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  30%      { transform: translateY(-4px) rotate(-1deg); }
+  50%      { transform: translateY(-6px) rotate(0deg); }
+  70%      { transform: translateY(-4px) rotate(1deg); }
+}
+/* Orelhas ondulando suavemente (cada uma no seu tempo) */
+@keyframes pet-orelha {
+  0%, 100% { transform: rotate(0deg) scaleY(1); }
+  50%      { transform: rotate(-4deg) scaleY(1.04); }
+}
+/* Halo pulsando devagar */
+@keyframes pet-halo {
+  0%, 100% { opacity: .55; transform: scale(1); }
+  50%      { opacity: .95; transform: scale(1.07); }
+}
+/* Brilhinhos piscando ao redor */
+@keyframes pet-brilho {
+  0%, 100% { opacity: .08; transform: scale(.55) rotate(0deg); }
+  50%      { opacity: 1;   transform: scale(1.1) rotate(25deg); }
+}
+/* Respirar (Rolo — sentadinho) */
+@keyframes pet-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50%      { transform: scale(1.01, 1.04); }
+}
+/* Piscar (grupo dos olhos) */
+@keyframes pet-blink {
+  0%, 93%, 100% { transform: scaleY(1); }
+  95%, 97%      { transform: scaleY(0.08); }
+}
+/* Pulinho ocasional — com squash & stretch (antecipa, estica, amortece) */
+@keyframes pet-pulinho {
+  0%       { transform: translateY(0) scale(1, 1); }
+  12%      { transform: translateY(2px) scale(1.06, 0.9); }   /* agacha */
+  34%      { transform: translateY(-10px) scale(0.96, 1.07); } /* estica no ar */
+  52%      { transform: translateY(0) scale(1.05, 0.93); }     /* amortece */
+  66%      { transform: translateY(-4px) scale(0.98, 1.03); }
+  80%      { transform: translateY(0) scale(1.02, 0.97); }
+  100%     { transform: translateY(0) scale(1, 1); }
+}
+/* Espreguiçada gostosa (ao acordar / evento aleatório) */
+@keyframes pet-espreguica {
+  0%, 100% { transform: scale(1, 1); }
+  35%      { transform: scale(0.95, 1.1) rotate(-2deg); }
+  60%      { transform: scale(0.95, 1.1) rotate(2deg); }
+  80%      { transform: scale(1.04, 0.96); }
+}
+/* Comemoração: pulos empolgados com squash & stretch */
+@keyframes pet-comemora {
+  0%       { transform: translateY(0) scale(1, 1) rotate(0deg); }
+  10%      { transform: translateY(2px) scale(1.08, 0.88); }
+  32%      { transform: translateY(-14px) scale(0.94, 1.1) rotate(-4deg); }
+  50%      { transform: translateY(0) scale(1.07, 0.9); }
+  68%      { transform: translateY(-9px) scale(0.96, 1.06) rotate(4deg); }
+  84%      { transform: translateY(0) scale(1.04, 0.95); }
+  100%     { transform: translateY(0) scale(1, 1) rotate(0deg); }
+}
+/* Confete caindo (comemoração) */
+@keyframes pet-confete {
+  0%   { opacity: 0; transform: translateY(0) rotate(0deg); }
+  8%   { opacity: 1; }
+  85%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(185px) rotate(320deg); }
+}
+/* Borboleta passeando perto da Aura */
+@keyframes pet-borboleta {
+  0%   { transform: translate(210px, 70px) rotate(-8deg); }
+  22%  { transform: translate(150px, 34px) rotate(6deg); }
+  45%  { transform: translate(96px, 20px) rotate(-6deg); }
+  62%  { transform: translate(52px, 44px) rotate(8deg); }
+  80%  { transform: translate(96px, 64px) rotate(-4deg); }
+  100% { transform: translate(158px, 46px) rotate(6deg); }
+}
+/* Batida de asas */
+@keyframes pet-asas {
+  0%, 100% { transform: scaleX(1); }
+  50%      { transform: scaleX(0.35); }
+}
+/* Patinha acenando (oizinho no topo da escada) */
+@keyframes pet-acena {
+  0%, 100% { transform: rotate(-18deg); }
+  50%      { transform: rotate(18deg); }
+}
+/* Escada surgindo/sumindo suave */
+@keyframes pet-escada-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+/* Moedinha caindo e quicando */
+@keyframes pet-moeda {
+  0%   { opacity: 0; transform: translateY(-90px); }
+  10%  { opacity: 1; }
+  45%  { transform: translateY(0); }
+  62%  { transform: translateY(-18px); }
+  78%  { transform: translateY(0); }
+  88%  { transform: translateY(-7px); }
+  100% { transform: translateY(0); }
+}
+/* Feliz (após alimentar) */
+@keyframes pet-feliz {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  20%      { transform: translateY(-10px) rotate(-4deg); }
+  40%      { transform: translateY(0) rotate(0deg); }
+  60%      { transform: translateY(-7px) rotate(4deg); }
+  80%      { transform: translateY(0) rotate(0deg); }
+}
+/* Zzz subindo (dormindo) */
+@keyframes pet-zzz {
+  0%   { opacity: 0; transform: translate(0, 0) scale(0.7); }
+  25%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(10px, -16px) scale(1.15); }
+}
+/* Orelha/rabinho balançando de vez em quando */
+@keyframes pet-wiggle {
+  0%, 86%, 100% { transform: rotate(0deg); }
+  90%           { transform: rotate(-8deg); }
+  95%           { transform: rotate(5deg); }
+}
+/* Sombra acompanhando o flutuar */
+@keyframes pet-sombra {
+  0%, 100% { transform: scale(1);   opacity: 0.16; }
+  50%      { transform: scale(0.9); opacity: 0.10; }
+}
+
+/* Pílula de recompensa chamando atenção (pulinho + brilho suave) */
+@keyframes pet-recompensa {
+  0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 6px 14px rgba(217,119,6,.35); }
+  50%      { transform: translateY(-3px) scale(1.04); box-shadow: 0 10px 20px rgba(217,119,6,.5); }
+}
+.pet-anim-recompensa { animation: pet-recompensa 1.6s ease-in-out infinite; }
+
+/* Apertando botões do controle (videogame) */
+@keyframes pet-controle {
+  0%, 100% { transform: rotate(0deg); }
+  25%      { transform: rotate(-2.5deg) translateY(-1px); }
+  75%      { transform: rotate(2.5deg) translateY(-1px); }
+}
+.pet-anim-controle { animation: pet-controle 0.35s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Passinhos durante o passeio pelo rodapé (só o corpo — a sombra fica no chão) */
+@keyframes pet-anda {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-5px); }
+}
+
+/* Ondinhas da barra fantasminha balançando (anima o próprio desenho do
+ * caminho via `d: path()` — Chromium/Firefox; sem suporte, fica estática).
+ * Paradinha: bem lenta; andando: rapidinha, parecendo propulsão. */
+@keyframes pet-ondinha {
+  0%, 100% {
+    d: path("M100 42 C 138 42 158 72 156 106 C 155 128 148 142 140 150 C 135 155 130 147 124 152 C 118 157 113 149 107 154 C 101 159 95 151 89 155 C 83 159 77 151 71 147 C 56 137 45 122 44 102 C 42 70 64 42 100 42 Z");
+  }
+  50% {
+    d: path("M100 42 C 138 42 158 72 156 106 C 155 128 148 142 140 150 C 135 147 130 155 124 150 C 118 149 113 157 107 151 C 101 151 95 159 89 152 C 83 151 77 157 71 148 C 56 138 45 122 44 102 C 42 70 64 42 100 42 Z");
+  }
+}
+.pet-anim-ondinha        { animation: pet-ondinha 2.6s ease-in-out infinite; }
+.pet-anim-ondinha-rapida { animation-duration: 0.6s; }
+
+.pet-anim-anda       { animation: pet-anda 0.45s ease-in-out infinite; }
+.pet-anim-float      { animation: pet-float 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-orelha-a   { animation: pet-orelha 3.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-orelha-b   { animation: pet-orelha 3.6s ease-in-out 1.8s infinite reverse; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-halo       { animation: pet-halo 3.4s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho     { animation: pet-brilho 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho-2   { animation: pet-brilho 3.4s ease-in-out 0.9s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-brilho-3   { animation: pet-brilho 2.2s ease-in-out 1.6s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-espreguica { animation: pet-espreguica 2.6s ease-in-out; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-comemora   { animation: pet-comemora 0.95s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-confete    { animation: pet-confete 1.8s linear infinite; }
+.pet-anim-borboleta  { animation: pet-borboleta 7s ease-in-out infinite alternate; }
+.pet-anim-asas       { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: right center; }
+.pet-anim-asas-2     { animation: pet-asas 0.24s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
+.pet-anim-moeda      { animation: pet-moeda 1.6s ease-out forwards; }
+.pet-anim-acena      { animation: pet-acena 0.55s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-escada-in  { animation: pet-escada-in 0.4s ease-out; }
+.pet-anim-breathe  { animation: pet-breathe 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-blink    { animation: pet-blink 4.6s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-pulinho  { animation: pet-pulinho 0.9s ease-in-out; }
+.pet-anim-feliz    { animation: pet-feliz 0.8s ease-in-out 2; }
+.pet-anim-zzz      { animation: pet-zzz 2.4s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-zzz-2    { animation: pet-zzz 2.4s ease-out 1.2s infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-wiggle   { animation: pet-wiggle 5.5s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-sombra   { animation: pet-sombra 3.2s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
+/* Dormindo: respiração mais lenta e profunda */
+.pet-anim-dormindo { animation: pet-breathe 4.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Dança: pulinhos ritmados pra lá e pra cá com squash & stretch */
+@keyframes pet-danca {
+  0%, 100% { transform: translateY(0) rotate(0deg) scale(1, 1); }
+  12%      { transform: translateY(1px) scale(1.05, 0.92); }
+  30%      { transform: translateY(-9px) rotate(-7deg) scale(0.97, 1.05); }
+  48%      { transform: translateY(0) rotate(0deg) scale(1.05, 0.93); }
+  66%      { transform: translateY(-9px) rotate(7deg) scale(0.97, 1.05); }
+  84%      { transform: translateY(0) rotate(0deg) scale(1.03, 0.96); }
+}
+.pet-anim-danca { animation: pet-danca 1.15s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Boia da pescaria balançando na água */
+@keyframes pet-boia {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(3px); }
+}
+.pet-anim-boia { animation: pet-boia 1.4s ease-in-out infinite; }
+
+/* Peixinho pulando fora d'água de vez em quando */
+@keyframes pet-peixe {
+  0%, 74%, 100% { opacity: 0; transform: translate(0, 0) rotate(0deg); }
+  78%  { opacity: 1; transform: translate(-8px, -22px) rotate(-40deg); }
+  84%  { opacity: 1; transform: translate(-20px, -30px) rotate(-100deg); }
+  90%  { opacity: 1; transform: translate(-32px, -18px) rotate(-160deg); }
+  95%  { opacity: 0; transform: translate(-38px, 0) rotate(-180deg); }
+}
+.pet-anim-peixe { animation: pet-peixe 5.5s ease-in-out infinite; }
+
+/* Chamas da fogueira tremulando */
+@keyframes pet-chama {
+  0%, 100% { transform: scale(1, 1) rotate(0deg); }
+  30%      { transform: scale(1.08, 0.9) rotate(-2deg); }
+  60%      { transform: scale(0.92, 1.12) rotate(2deg); }
+}
+.pet-anim-chama   { animation: pet-chama 0.5s  ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-chama-2 { animation: pet-chama 0.62s ease-in-out 0.2s infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Espetinho do marshmallow virando devagar sobre o fogo */
+@keyframes pet-espeto {
+  0%, 100% { transform: rotate(0deg); }
+  50%      { transform: rotate(-6deg); }
+}
+.pet-anim-espeto { animation: pet-espeto 2.2s ease-in-out infinite; transform-box: fill-box; transform-origin: left center; }
+
+/* Carrinho de controle remoto indo e voltando na frente do pet */
+@keyframes pet-carrinho {
+  0%, 100% { transform: translateX(0); }
+  50%      { transform: translateX(-112px); }
+}
+.pet-anim-carrinho { animation: pet-carrinho 3.6s ease-in-out infinite; }
+
+/* Rodinhas girando */
+@keyframes pet-roda {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(-360deg); }
+}
+.pet-anim-roda { animation: pet-roda 0.7s linear infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Pet desativado: imagem 100% parada (nenhuma animação roda) */
+.pet-estatico, .pet-estatico * { animation: none !important; }
+
+/* Surpresa: sobressalto rápido (hover / acordar do cochilo) */
+@keyframes pet-surpresa {
+  0%   { transform: translateY(0) scale(1, 1); }
+  25%  { transform: translateY(-13px) scale(0.95, 1.08); }
+  55%  { transform: translateY(0) scale(1.06, 0.92); }
+  75%  { transform: translateY(-4px) scale(0.99, 1.02); }
+  100% { transform: translateY(0) scale(1, 1); }
+}
+.pet-anim-surpresa { animation: pet-surpresa 0.7s ease-out; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Tontinha: balançando de um lado pro outro (hover repetido demais) */
+@keyframes pet-tonta {
+  0%, 100% { transform: rotate(0deg) translateX(0); }
+  25%      { transform: rotate(-5deg) translateX(-2px); }
+  75%      { transform: rotate(5deg) translateX(2px); }
+}
+.pet-anim-tonta { animation: pet-tonta 0.9s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Bocejo gostoso (fim de tarde…) */
+@keyframes pet-bocejo {
+  0%, 100% { transform: scale(1, 1); }
+  35%      { transform: scale(1.04, 1.07); }
+  70%      { transform: scale(0.99, 0.97); }
+}
+.pet-anim-bocejo { animation: pet-bocejo 2.2s ease-in-out; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Espirro: inspira… inspira… ATCHIM */
+@keyframes pet-espirro {
+  0%   { transform: scale(1, 1) rotate(0deg); }
+  30%  { transform: scale(1.03, 1.08) rotate(2deg) translateY(-3px); }
+  48%  { transform: scale(1.02, 1.1) rotate(3deg) translateY(-4px); }
+  58%  { transform: scale(1.12, 0.84) rotate(-6deg) translateY(3px); }
+  78%  { transform: scale(0.97, 1.03) rotate(0deg); }
+  100% { transform: scale(1, 1) rotate(0deg); }
+}
+.pet-anim-espirro { animation: pet-espirro 1.3s ease-in-out; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Ondas expandindo na água (fisgada / peixe escapando) */
+@keyframes pet-ondas {
+  0%   { opacity: .9; transform: scale(.35); }
+  100% { opacity: 0;  transform: scale(1.6); }
+}
+.pet-anim-ondas   { animation: pet-ondas 1.1s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-ondas-2 { animation: pet-ondas 1.1s ease-out 0.45s infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Exclamação (!) pipocando */
+@keyframes pet-pop {
+  0%   { opacity: 0; transform: scale(.3); }
+  30%  { opacity: 1; transform: scale(1.3); }
+  50%  { transform: scale(1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.pet-anim-pop { animation: pet-pop 0.5s ease-out; transform-box: fill-box; transform-origin: center; }
+
+/* ── Clima ─────────────────────────────────────────────────────────────── */
+
+/* Gotas de chuva caindo (cada uma com delay/duração próprios via style) */
+@keyframes pet-gota {
+  0%   { opacity: 0; transform: translateY(-15px); }
+  8%   { opacity: .8; }
+  90%  { opacity: .8; }
+  100% { opacity: 0; transform: translateY(190px); }
+}
+.pet-anim-gota { animation: pet-gota 1.1s linear infinite; }
+
+/* Relâmpago: escuro quase sempre, dois flashes rápidos */
+@keyframes pet-relampago {
+  0%, 88%, 94%, 100% { opacity: 0; }
+  90%, 96%           { opacity: 1; }
+}
+.pet-anim-relampago { animation: pet-relampago 6s linear infinite; }
+
+/* Raios do sol girando devagarinho */
+@keyframes pet-sol {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.pet-anim-sol { animation: pet-sol 24s linear infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Gotinha de suor escorrendo (calor) */
+@keyframes pet-suor {
+  0%   { opacity: 0; transform: translateY(0) scale(.7); }
+  20%  { opacity: 1; }
+  80%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(14px) scale(1); }
+}
+.pet-anim-suor { animation: pet-suor 2.8s ease-in infinite; }
+
+/* Bafinho de frio subindo perto da boca */
+@keyframes pet-bafinho {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.5); }
+  25%  { opacity: .8; }
+  100% { opacity: 0; transform: translate(16px, -14px) scale(1.3); }
+}
+.pet-anim-bafinho   { animation: pet-bafinho 3s ease-out infinite; transform-box: fill-box; transform-origin: center; }
+.pet-anim-bafinho-2 { animation: pet-bafinho 3s ease-out 1.5s infinite; transform-box: fill-box; transform-origin: center; }
+
+/* Vapor subindo da caneca de chocolate quente (frio) */
+@keyframes pet-vapor {
+  0%   { opacity: 0; transform: translate(0, 0) scale(.45); }
+  25%  { opacity: .85; }
+  100% { opacity: 0; transform: translate(-4px, -15px) scale(1.25); }
+}
+.pet-anim-vapor   { animation: pet-vapor 2.6s ease-out infinite;      transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-vapor-2 { animation: pet-vapor 2.6s ease-out 0.9s infinite; transform-box: fill-box; transform-origin: center bottom; }
+.pet-anim-vapor-3 { animation: pet-vapor 2.6s ease-out 1.8s infinite; transform-box: fill-box; transform-origin: center bottom; }
+
+/* Folhinhas voando com o vento */
+@keyframes pet-folha {
+  0%   { opacity: 0; transform: translate(210px, 40px) rotate(0deg); }
+  10%  { opacity: 1; }
+  50%  { transform: translate(90px, 70px) rotate(200deg); }
+  90%  { opacity: 1; }
+  100% { opacity: 0; transform: translate(-30px, 50px) rotate(380deg); }
+}
+.pet-anim-folha   { animation: pet-folha 3.2s linear infinite; }
+.pet-anim-folha-2 { animation: pet-folha 4.1s linear 1.6s infinite; }
+
+/* Linhas de vento passando */
+@keyframes pet-vento-linha {
+  0%   { opacity: 0; transform: translateX(60px); }
+  20%  { opacity: .6; }
+  100% { opacity: 0; transform: translateX(-120px); }
+}
+.pet-anim-vento-linha   { animation: pet-vento-linha 2.2s ease-in-out infinite; }
+.pet-anim-vento-linha-2 { animation: pet-vento-linha 2.2s ease-in-out 1.1s infinite; }
+
+/* Nota: NÃO honramos prefers-reduced-motion aqui de propósito — máquinas
+ * Windows do time costumam ter "Efeitos de animação" desativado no sistema,
+ * o que congelava o pet inteiro. As animações são suaves e localizadas. */

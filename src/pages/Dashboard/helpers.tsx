@@ -2,7 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { Acordo } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 
-export type VisaoFiltro = 'todos_setores' | 'setor' | `equipe:${string}` | 'individual';
+export type VisaoFiltro = 'setor' | `equipe:${string}` | 'individual';
 
 export const PER_PAGE = 60;
 export const TIPOS_PARCELADOS_PP = ['boleto', 'pix'];

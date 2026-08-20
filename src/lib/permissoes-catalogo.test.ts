@@ -230,14 +230,7 @@ describe('padrões de semeadura', () => {
     expect(ouv.editar_equipes).toBe(false);
     expect(ouv.gerenciar_metas).toBe(false);
     expect(ouv.ver_logs).toBe(false);
-    expect(ouv.dashboard_escopo_setor).toBe(false);
-    expect(ouv.dashboard_escopo_equipe).toBe(false);
-  });
-
-  it('não mantém escopos globais capazes de contaminar outras abas', () => {
-    for (const chave of [
-      'ver_acordos_gerais', 'ver_todos_setores', 'filtrar_por_setor',
-      'filtrar_por_equipe', 'filtrar_por_usuario', 'ver_analiticos_global',
-    ]) expect(CHAVES_PERMISSAO).not.toContain(chave);
+    expect(ouv.filtrar_por_setor).toBe(false);
+    expect(ouv.filtrar_por_equipe).toBe(false);
   });
 });

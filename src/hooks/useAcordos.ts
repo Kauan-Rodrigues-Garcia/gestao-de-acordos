@@ -41,8 +41,6 @@ export type { FiltrosAcordo };
 export type { RealtimeStatus };
 
 interface UseAcordosOptions extends FiltrosAcordo {
-  /** Desabilita também a consulta inicial desta instância. */
-  enabled?: boolean;
   /**
    * Desabilita o Realtime nesta instância.
    * Útil para listas secundárias/somente-leitura que não precisam de updates ao vivo.
@@ -83,7 +81,6 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
 
   if (filtros.operador_id && acordo.operador_id !== filtros.operador_id) return false;
   if (filtros.setor_id    && acordo.setor_id    !== filtros.setor_id)    return false;
-  if (filtros.tag_id      && !(acordo.tag_ids ?? []).includes(filtros.tag_id)) return false;
   if (filtros.empresa_id  && acordo.empresa_id  !== filtros.empresa_id)  return false;
   if (filtros._operadoresEquipeIds) {
     if (!filtros._operadoresEquipeIds.includes(acordo.operador_id)) return false;
@@ -118,20 +115,20 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   const filtrosEstavel = useMemo(() => {
     if (!filtros) return '';
     const {
-      status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
-      apenas_hoje, page, perPage, enabled, enableRealtime, prioritize_today,
+      apenas_hoje, page, perPage, enableRealtime, prioritize_today,
     } = filtros;
     return JSON.stringify({
-      status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
-      apenas_hoje, page, perPage, enabled, enableRealtime, prioritize_today,
+      apenas_hoje, page, perPage, enableRealtime, prioritize_today,
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
-    filtros?.equipe_id, filtros?.tag_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
+    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
     filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
-    filtros?.perPage, filtros?.enabled, filtros?.enableRealtime, filtros?.prioritize_today,
+    filtros?.perPage, filtros?.enableRealtime, filtros?.prioritize_today,
   ]);
 
   const queryKey = useMemo(
@@ -147,7 +144,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
         ...filtros,
         empresa_id: filtros?.empresa_id ?? empresaId,
       }),
-    enabled: filtros?.enabled !== false && !!perfil && !!empresaId,
+    enabled: !!perfil && !!empresaId,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -155,7 +152,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // ── Resolver operadores da equipe (para filtro de realtime) ───────────────
   const equipeIdsRef = useRef<string[] | null>(null);
   useEffect(() => {
-    if (filtros?.enabled === false || !filtros?.equipe_id) { equipeIdsRef.current = null; return; }
+    if (!filtros?.equipe_id) { equipeIdsRef.current = null; return; }
     const eId        = filtros.equipe_id;
     const eEmpresaId = filtros.empresa_id ?? empresa?.id ?? perfil?.empresa_id;
     let q = supabase.from('perfis').select('id').eq('equipe_id', eId);
@@ -163,7 +160,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     q.then(({ data: rows }) => {
       equipeIdsRef.current = ((rows as { id: string }[]) ?? []).map(m => m.id);
     });
-  }, [filtros?.enabled, filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);
+  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);
 
   // filtrosRef estável para o handler do realtime (evita re-subscribe)
   const filtrosRef = useRef<UseAcordosOptions | undefined>(filtros);
@@ -201,7 +198,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // ── Subscribe no canal central ────────────────────────────────────────────
   const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
   const instanceId    = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
-  const enableRealtime = filtros?.enabled !== false && filtros?.enableRealtime !== false;
+  const enableRealtime = filtros?.enableRealtime !== false;
 
   useEffect(() => {
     if (!enableRealtime) return;
@@ -212,31 +209,19 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
         const updated = event.newRecord;
         queryClient.setQueryData<QueryData>(queryKey, old => {
           if (!old) return old;
-          const indice = old.data.findIndex(a => a.id === updated.id);
-          const existente = indice >= 0 ? old.data[indice] : null;
-          const completo: Acordo = existente
-            ? {
-                ...existente,
-                ...updated,
-                perfis:  existente.perfis  ?? (updated as Acordo & { perfis?: Acordo['perfis'] }).perfis,
-                setores: existente.setores ?? (updated as Acordo & { setores?: Acordo['setores'] }).setores,
-              }
-            : updated;
-          const atende = matchesFiltros(completo, filtrosRef.current);
-
-          // Saiu do status/tag/equipe filtrado: remove imediatamente. Entrou no
-          // recorte por um UPDATE: adiciona sem esperar um refetch completo.
-          if (existente && !atende) {
-            return { data: old.data.filter(a => a.id !== updated.id), count: Math.max(0, old.count - 1) };
-          }
-          if (!existente && atende) {
-            return { data: [completo, ...old.data], count: old.count + 1 };
-          }
-          if (!existente) return old;
-
-          const proxima = [...old.data];
-          proxima[indice] = completo;
-          return { ...old, data: proxima };
+          return {
+            ...old,
+            data: old.data.map(a =>
+              a.id === updated.id
+                ? {
+                    ...a,
+                    ...updated,
+                    perfis:  a.perfis  ?? (updated as Acordo & { perfis?: Acordo['perfis'] }).perfis,
+                    setores: a.setores ?? (updated as Acordo & { setores?: Acordo['setores'] }).setores,
+                  }
+                : a
+            ),
+          };
         });
         return;
       }
@@ -270,7 +255,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // vazia — e a tela de Acordos renderiza `{loading ? <TableSkeleton/> : tabela}`,
   // ou seja, piscava "nenhum acordo" antes de buscar. Do ponto de vista de quem
   // olha, ainda está carregando.
-  const aguardandoSessao = filtros?.enabled !== false && (!perfil || !empresaId) && !data;
+  const aguardandoSessao = (!perfil || !empresaId) && !data;
 
   return {
     acordos:    data?.data   ?? [],

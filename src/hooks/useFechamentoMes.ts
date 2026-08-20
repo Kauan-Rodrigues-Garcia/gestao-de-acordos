@@ -20,7 +20,6 @@
 import { useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   estadoFechamento, estadoFechamentoDaData,
@@ -48,15 +47,12 @@ export interface FechamentoDoMes extends EstadoFechamento {
 
 export function useFechamentoMes(mes: string | null | undefined): FechamentoDoMes {
   const { perfil } = useAuth();
-  const { empresa } = useEmpresa();
   const { temPermissaoExplicita } = useCargoPermissoes();
   const cargo = perfil?.perfil ?? null;
 
   // `temPermissaoExplicita`, e não `temPermissao`: este é o poder que não se
   // herda de "administrador pode tudo". Ver `PERMISSOES_EXPLICITAS`.
-  const liberadoPorPermissao = empresa?.slug === 'pagueplay'
-    ? temPermissaoExplicita('dashboard_ignorar_fechamento_mes')
-    : temPermissaoExplicita('ignorar_fechamento_mes');
+  const liberadoPorPermissao = temPermissaoExplicita('ignorar_fechamento_mes');
 
   const estado = useMemo(
     () => estadoFechamento({ mes, cargo, liberadoPorPermissao }),

@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
+import { podeCriarComemoracao } from '@/pages/Comemoracoes/permissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
@@ -83,32 +84,18 @@ export default function AdminUsuarios() {
   // Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
   // criação — quem só assiste não precisa da aba, a comemoração chega pelo
   // overlay em qualquer página.
-  const podeVerComemoracoes = temPermissao('ver_comemoracoes');
-  const podeVerListaUsuarios = temPermissao('ver_usuarios_lista');
-  const podeVerUsuariosTodosSetores = temPermissao('usuarios_todos_setores');
-  const podeCriarUsuarios = temPermissao('criar_usuarios');
-  const podeEditarUsuarios = temPermissao('editar_usuarios');
-  const podeExcluirUsuarios = temPermissao('excluir_usuarios');
-  const podeRedefinirSenhas = temPermissao('redefinir_senha_usuarios');
-  const podeImpersonar = temPermissao('impersonar_usuarios');
-  const podeVerMultiempresa = temPermissao('ver_multiempresa');
-  const podeGerenciarMultiempresa = temPermissao('gerenciar_multiempresa');
+  const podeVerComemoracoes = podeCriarComemoracao(perfilAtual?.perfil);
+  const isAdmin = perfilAtual?.perfil === 'administrador';
+  const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; admin/super atingem qualquer usuário.
-  const podeGerenciarSituacao = temPermissao('gerenciar_situacao_usuarios');
+  const podeGerenciarSituacao = isAdmin || isSuperAdmin
+    || ['lider', 'elite', 'gerencia', 'diretoria'].includes(perfilAtual?.perfil ?? '');
   // Gate para a aba Setores: visível apenas para Gerência ou superior
   // (gerencia, diretoria, administrador, super_admin).
-  const podeVerSetores = temPermissao('ver_setores');
-  const tabInicial = useMemo(() => {
-    const permitidas = [
-      podeVerListaUsuarios && 'usuarios',
-      podeVerSetores && 'setores',
-      temPermissao('ver_equipes') && 'equipes',
-      metasComoAba && temPermissao('ver_metas') && 'metas',
-      podeVerComemoracoes && 'comemoracoes',
-    ].filter((tab): tab is string => !!tab);
-    return permitidas.includes(tabFromUrl) ? tabFromUrl : (permitidas[0] ?? 'usuarios');
-  }, [metasComoAba, podeVerComemoracoes, podeVerListaUsuarios, podeVerSetores, tabFromUrl, temPermissao]);
+  const podeVerSetores =
+    !!perfilAtual?.perfil &&
+    ['gerencia', 'diretoria', 'administrador', 'super_admin'].includes(perfilAtual.perfil);
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -116,7 +103,6 @@ export default function AdminUsuarios() {
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [editando,    setEditando]    = useState<Perfil | null>(null);
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
-  const [filtroSetor,   setFiltroSetor]   = useState<string>('todos');
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
@@ -140,7 +126,7 @@ export default function AdminUsuarios() {
 
   // Entrar como (impersonação) — só super_admin. Recarrega ao assumir a sessão.
   async function entrarComo(u: Perfil) {
-    if (!podeImpersonar || !perfilAtual?.id || u.id === perfilAtual.id) return;
+    if (!perfilAtual?.id || u.id === perfilAtual.id) return;
     setImpersonando(u.id);
     try {
       await iniciarImpersonacao(u.id, perfilAtual.id, perfilAtual.nome ?? 'super_admin');
@@ -164,7 +150,7 @@ export default function AdminUsuarios() {
   async function fetchDados() {
     setLoading(true);
     // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
-    const empAlvo = (!podeVerMultiempresa ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
+    const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
     if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo); } catch { /* best-effort */ } }
     let usuariosData: Perfil[] = [];
     try {
@@ -175,13 +161,10 @@ export default function AdminUsuarios() {
         // consulta (PGRST201). Ver `EMBED_EMPRESA` em `empresas.service.ts`.
         .select('*, setores(id,nome), empresas!perfis_empresa_id_fkey(id,nome), foto_url')
         .order('nome');
-      if (!podeVerMultiempresa && empresaAtual?.id) {
+      if (!isSuperAdmin && empresaAtual?.id) {
         usersQuery = usersQuery.eq('empresa_id', empresaAtual.id);
       } else if (filtroEmpresa) {
         usersQuery = usersQuery.eq('empresa_id', filtroEmpresa);
-      }
-      if (!podeVerUsuariosTodosSetores && perfilAtual?.setor_id) {
-        usersQuery = usersQuery.eq('setor_id', perfilAtual.setor_id);
       }
       const { data: uJoin, error: eJoin } = await usersQuery;
       if (eJoin) {
@@ -190,13 +173,10 @@ export default function AdminUsuarios() {
           .from('perfis')
           .select('*, setores(id,nome), foto_url')
           .order('nome');
-        if (!podeVerMultiempresa && empresaAtual?.id) {
+        if (!isSuperAdmin && empresaAtual?.id) {
           fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);
         } else if (filtroEmpresa) {
           fallbackQuery = fallbackQuery.eq('empresa_id', filtroEmpresa);
-        }
-        if (!podeVerUsuariosTodosSetores && perfilAtual?.setor_id) {
-          fallbackQuery = fallbackQuery.eq('setor_id', perfilAtual.setor_id);
         }
         const { data: uSimple, error: eSimple } = await fallbackQuery;
         if (eSimple) {
@@ -214,7 +194,7 @@ export default function AdminUsuarios() {
     try {
       const setoresPromise = (() => {
         let query = supabase.from('setores').select('*').eq('ativo', true).order('nome');
-        if (!podeVerMultiempresa && empresaAtual?.id) {
+        if (!isSuperAdmin && empresaAtual?.id) {
           query = query.eq('empresa_id', empresaAtual.id);
         } else if (filtroEmpresa) {
           query = query.eq('empresa_id', filtroEmpresa);
@@ -222,7 +202,7 @@ export default function AdminUsuarios() {
         return query;
       })();
 
-      const empresasPromise = podeVerMultiempresa
+      const empresasPromise = isSuperAdmin
         ? fetchEmpresas()
         : Promise.resolve(empresaAtual ? [empresaAtual] : []);
 
@@ -250,10 +230,9 @@ export default function AdminUsuarios() {
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchDados é recriada a cada render; incluí-la causaria refetch em loop.
-  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, podeVerMultiempresa]);
+  useEffect(() => { fetchDados(); }, [empresaAtual?.id, filtroEmpresa, isSuperAdmin]);
 
   function abrirCriar() {
-    if (!podeCriarUsuarios) return;
     setEditando(null);
     setForm({
       nome: '',
@@ -268,7 +247,6 @@ export default function AdminUsuarios() {
   }
 
   function abrirEditar(u: Perfil) {
-    if (!podeEditarUsuarios) return;
     setEditando(u);
     setForm({ nome: u.nome, email: u.email, usuario: u.usuario ?? '', senha: '', perfil: u.perfil, setor_id: u.setor_id ?? '', empresa_id: u.empresa_id ?? '' });
     setNovaSenha('');
@@ -306,8 +284,7 @@ export default function AdminUsuarios() {
   }
 
   async function salvar() {
-    if ((editando && !podeEditarUsuarios) || (!editando && !podeCriarUsuarios)) return;
-    const empresaId = podeGerenciarMultiempresa ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
+    const empresaId = isSuperAdmin ? form.empresa_id : (empresaAtual?.id ?? form.empresa_id);
     if (!form.nome || (!form.email && !form.usuario)) { toast.error('Preencha nome e e-mail ou nome de usuário'); return; }
     if (!empresaId) { toast.error('Não foi possível identificar a empresa. Recarregue a página.'); return; }
 
@@ -403,7 +380,6 @@ export default function AdminUsuarios() {
   }
 
   async function alterarSenhaOperador() {
-    if (!podeRedefinirSenhas) return;
     const alvo = senhaTarget ?? editando;
     if (!alvo || !novaSenha.trim()) { toast.error('Preencha a nova senha'); return; }
     if (novaSenha.length < MIN_SENHA) { toast.error(`A senha deve ter pelo menos ${MIN_SENHA} caracteres`); return; }
@@ -448,14 +424,14 @@ export default function AdminUsuarios() {
   const [resumoDaExclusao, setResumoDaExclusao] = useState<ResumoExclusao | null>(null);
 
   async function abrirConfirmacaoExclusao() {
-    if (!podeExcluirUsuarios || !editando) return;
+    if (!editando) return;
     setConfirmExclusaoUser(true);
     setResumoDaExclusao(null);
     setResumoDaExclusao(await resumoExclusao(editando.id));
   }
 
   async function excluirUsuarioEditado() {
-    if (!podeExcluirUsuarios || !editando) return;
+    if (!editando) return;
     if (editando.id === perfilAtual?.id) {
       toast.error('Você não pode excluir a si mesmo.');
       return;
@@ -544,10 +520,30 @@ export default function AdminUsuarios() {
     return () => { cancel = true; };
   }, [empresaAtual?.id, tenant.slug]);
 
-  // A RLS e a matriz são a fonte de verdade. O frontend só aplica o tenant
-  // selecionado, sem esconder cargos por listas fixas.
-  const usuariosFiltrados = (
-    podeVerMultiempresa && filtroEmpresa
+  // ── Filtro de acesso por cargo ──────────────────────────────────────────────
+  // Regras:
+  //   • Admin / Super Admin → vê todos sem restrição
+  //   • Qualquer cargo abaixo de Admin → NUNCA vê administradores ou super_admins
+  //   • Operador / Líder / Elite → vê apenas usuários do próprio setor
+  //   • Gerência / Diretoria → vê todos da empresa, exceto admins
+  const PERFIS_ADMIN = ['administrador', 'super_admin'];
+
+  const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
+    if (isSuperAdmin || isAdmin) return lista;
+    // Para qualquer cargo não-admin: ocultar administradores e super_admins
+    const semAdmins = lista.filter(u => !PERFIS_ADMIN.includes(u.perfil));
+    const p = perfilAtual?.perfil ?? '';
+    if (['operador', 'lider', 'elite'].includes(p)) {
+      return semAdmins.filter(u => u.setor_id === perfilAtual?.setor_id);
+    }
+    if (['gerencia', 'diretoria'].includes(p)) {
+      return semAdmins;
+    }
+    return semAdmins;
+  };
+
+  const usuariosFiltrados = aplicarFiltroAcesso(
+    isSuperAdmin && filtroEmpresa
       ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
       : usuarios
   );
@@ -565,11 +561,14 @@ export default function AdminUsuarios() {
   // Respeita o acesso: cargo escopado (operador/líder/elite) só vê o próprio setor
   // — o grupo do setor dele é criado mesmo se for formado só por clones.
   if (tenant.slug === 'bookplay' && clonesCross.length) {
+    const escopadoAoSetor = ['operador', 'lider', 'elite'].includes(perfilAtual?.perfil ?? '');
     const perfilPorId = new Map(usuarios.map(p => [p.id, p]));
     const nomeSetorPorId = (id: string) => setores.find(s => s.id === id)?.nome ?? 'Setor';
     for (const c of clonesCross) {
+      if (escopadoAoSetor && c.destinoSetorId !== perfilAtual?.setor_id) continue;
       const p = perfilPorId.get(c.operadorId);
       if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
+      if (PERFIS_ADMIN.includes(p.perfil) && !(isAdmin || isSuperAdmin)) continue;
       const grupo = (usuariosPorSetor[c.destinoSetorId] ??= { nomeSetor: nomeSetorPorId(c.destinoSetorId), lista: [] });
       if (grupo.lista.some(x => x.id === p.id)) continue;
       grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
@@ -588,14 +587,8 @@ export default function AdminUsuarios() {
     const byId = new Map(entries);
     return ordenados
       .map(({ id }) => [id, byId.get(id)!] as [string, typeof entries[number][1]])
-      .filter(([, g]) => !!g)
-      .filter(([sid]) => filtroSetor === 'todos' || sid === filtroSetor);
+      .filter(([, g]) => !!g);
   })();
-
-  const setoresDisponiveisNoFiltro = aplicarOrdemSetores(
-    Object.entries(usuariosPorSetor).map(([id, grupo]) => ({ id, nome: grupo.nomeSetor })),
-    empresaAtual?.id,
-  );
 
   return (
     <div className="h-full flex flex-col">
@@ -611,15 +604,15 @@ export default function AdminUsuarios() {
         </div>
       </div>
 
-      <Tabs defaultValue={tabInicial} className="flex-1 flex flex-col">
+      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            {podeVerListaUsuarios && <TabsTrigger
+            <TabsTrigger
               value="usuarios"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Users className="w-4 h-4" /> Usuários
-            </TabsTrigger>}
+            </TabsTrigger>
             {podeVerSetores && (
               <TabsTrigger
                 value="setores"
@@ -656,32 +649,13 @@ export default function AdminUsuarios() {
         </div>
 
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
-        {podeVerListaUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
+        <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
         <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-end mb-4 gap-2">
-          {setoresDisponiveisNoFiltro.length > 1 && (
-            <Select value={filtroSetor} onValueChange={setFiltroSetor}>
-              <SelectTrigger className="w-44 h-8 text-sm" aria-label="Filtrar usuários por setor">
-                <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
-                <SelectValue placeholder="Setor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="todos">Todos os setores</SelectItem>
-                {setoresDisponiveisNoFiltro.map(setor => (
-                  <SelectItem key={setor.id} value={setor.id}>
-                    {setor.nome === '—' ? 'Sem Setor' : setor.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {podeVerMultiempresa && empresas.length > 1 && (
+          {isSuperAdmin && empresas.length > 1 && (
             <Select
               value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
-              onValueChange={(value) => {
-                setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value);
-                setFiltroSetor('todos');
-              }}
+              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
             >
               <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
@@ -690,12 +664,12 @@ export default function AdminUsuarios() {
               </SelectContent>
             </Select>
           )}
-          {!podeVerMultiempresa && empresaAtual && (
+          {!isSuperAdmin && empresaAtual && (
             <Badge variant="outline" className="h-8 px-3 text-xs">{empresaAtual.nome}</Badge>
           )}
-          {podeVerMultiempresa && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => { setFiltroEmpresa(''); setFiltroSetor('todos'); }}>Limpar</Button>}
+          {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          {podeCriarUsuarios && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
+          {(isAdmin || isSuperAdmin) && temPermissao('editar_usuarios') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
 
       {/* ── Tabela agrupada por setor ── */}
@@ -822,7 +796,7 @@ export default function AdminUsuarios() {
                                 {u._cloneDe && (
                                   <span className="text-[10px] text-muted-foreground italic">gerido no setor de origem</span>
                                 )}
-                                {!u._cloneDe && podeImpersonar && u.id !== perfilAtual?.id && (
+                                {!u._cloneDe && isSuperAdmin && u.id !== perfilAtual?.id && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -837,7 +811,7 @@ export default function AdminUsuarios() {
                                     <span className="text-xs">Entrar como</span>
                                   </Button>
                                 )}
-                                {!u._cloneDe && podeEditarUsuarios && u.id !== perfilAtual?.id ? (
+                                {!u._cloneDe && temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -863,7 +837,7 @@ export default function AdminUsuarios() {
         </div>
       )}
         </div>
-        </TabsContent>}
+        </TabsContent>
 
         {/* ─── Aba: Setores ──────────────────────────────────────────── */}
         {podeVerSetores && (
@@ -981,7 +955,7 @@ export default function AdminUsuarios() {
                 também bloqueia via RLS; isto remove a opção enganosa da tela.) */}
             <div className="space-y-1.5">
               <Label className="text-xs">Perfil *</Label>
-              {podeEditarUsuarios ? (
+              {(isAdmin || isSuperAdmin) ? (
                 <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -992,7 +966,7 @@ export default function AdminUsuarios() {
                     <SelectItem value="diretoria">Diretoria</SelectItem>
                     <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
                     <SelectItem value="administrador">Administrador</SelectItem>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                   </SelectContent>
                 </Select>
               ) : (
@@ -1052,7 +1026,7 @@ export default function AdminUsuarios() {
             </div>
              <div className="space-y-1.5">
                <Label className="text-xs">Empresa</Label>
-               {podeGerenciarMultiempresa && !editando ? (
+               {isSuperAdmin && !editando ? (
                  <Select value={form.empresa_id} onValueChange={v => setForm(f => ({ ...f, empresa_id: v, setor_id: setores.find(s => s.empresa_id === v)?.id ?? '' }))}>
                    <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Selecione uma empresa" /></SelectTrigger>
                    <SelectContent>
@@ -1075,7 +1049,7 @@ export default function AdminUsuarios() {
               A senha atual não é exibida porque não existe para ser exibida: o
               Supabase guarda o hash bcrypt dela, que não volta a texto. O que
               o admin pode fazer é definir uma nova. */}
-          {editando && podeRedefinirSenhas && (
+          {editando && (isAdmin || isSuperAdmin) && (
             <div className="space-y-2 py-2 border-t border-border pt-4">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Redefinir senha
@@ -1115,7 +1089,7 @@ export default function AdminUsuarios() {
 
           <DialogFooter className="sm:justify-between">
             {/* #6: excluir usuário — só no modo Editar e não permite auto-exclusão */}
-            {editando && podeExcluirUsuarios && editando.id !== perfilAtual?.id ? (
+            {editando && editando.id !== perfilAtual?.id ? (
               <Button
                 variant="outline"
                 size="sm"

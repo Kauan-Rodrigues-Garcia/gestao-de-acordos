@@ -13,7 +13,6 @@
  *
  * Salvaguardas: super_admin não pode impersonar outro super_admin.
  */
-import { temPermissaoApi } from './_permissoes.js';
 
 interface ReqLike {
   method?: string;
@@ -88,18 +87,15 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       return;
     }
 
-    // 2) A matriz, e não o nome do cargo, decide a ação.
+    // 2) Confirma super_admin
     const perfilResp = await fetch(
       `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id`,
       { headers: admin },
     );
     const perfilArr = (await perfilResp.json()) as Array<{ perfil?: string; nome?: string; empresa_id?: string }>;
     const callerPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
-    if (!callerPerfil || !await temPermissaoApi({
-      url, headers: admin, usuarioId: caller.id, empresaId: callerPerfil.empresa_id,
-      cargo: callerPerfil.perfil, chave: 'impersonar_usuarios',
-    })) {
-      res.status(403).json({ error: 'A permissão de entrar como usuário não está habilitada.' });
+    if (!callerPerfil || callerPerfil.perfil !== 'super_admin') {
+      res.status(403).json({ error: 'Apenas super_admin pode impersonar usuários.' });
       return;
     }
 
@@ -116,21 +112,17 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     }
 
     const alvoResp = await fetch(
-      `${url}/rest/v1/perfis?id=eq.${alvoId}&select=id,nome,email,perfil,empresa_id`,
+      `${url}/rest/v1/perfis?id=eq.${alvoId}&select=id,nome,email,perfil`,
       { headers: admin },
     );
-    const alvoArr = (await alvoResp.json()) as Array<{ id: string; nome?: string; email?: string; perfil?: string; empresa_id?: string }>;
+    const alvoArr = (await alvoResp.json()) as Array<{ id: string; nome?: string; email?: string; perfil?: string }>;
     const alvo = Array.isArray(alvoArr) ? alvoArr[0] : null;
     if (!alvo?.email) {
       res.status(404).json({ error: 'Usuário-alvo não encontrado ou sem e-mail.' });
       return;
     }
-    const podeCruzarEmpresa = await temPermissaoApi({
-      url, headers: admin, usuarioId: caller.id, empresaId: callerPerfil.empresa_id,
-      cargo: callerPerfil.perfil, chave: 'gerenciar_multiempresa',
-    });
-    if (!podeCruzarEmpresa && alvo.empresa_id !== callerPerfil.empresa_id) {
-      res.status(403).json({ error: 'Você só pode entrar como usuários da sua empresa.' });
+    if (alvo.perfil === 'super_admin') {
+      res.status(403).json({ error: 'Não é permitido impersonar outro super_admin.' });
       return;
     }
 

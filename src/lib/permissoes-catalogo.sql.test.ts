@@ -34,10 +34,6 @@ function sqlDoCatalogo(): string {
   return fs.readFileSync(path.join(MIGRATIONS, arquivo), 'utf8');
 }
 
-function sqlDaMigration(nome: string): string {
-  return fs.readFileSync(path.join(MIGRATIONS, nome), 'utf8');
-}
-
 /** Os atalhos declarados no CTE `atalhos` da função. */
 const ATALHOS: Record<string, string[]> = {
   lideranca: ['lider', 'elite', 'gerencia', 'diretoria'],
@@ -55,29 +51,22 @@ function listaDeArray(texto: string): string[] {
 interface LinhaSql { chave: string; tenants: string[] | null; padrao: string[]; explicita: boolean }
 
 function catalogoSql(): LinhaSql[] {
-  const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\](?:::TEXT\[\])?),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\](?:::TEXT\[\])?),\s*(true|false)\s*\)/g;
-  const ler = (corpo: string): LinhaSql[] => [...corpo.matchAll(linha)].map(m => ({
+  const sql = sqlDoCatalogo();
+  // Só o corpo do VALUES: o resto da migration cita as mesmas chaves em
+  // comentários e no bloco de verificação.
+  const corpo = sql.slice(sql.indexOf('LATERAL (VALUES'), sql.indexOf('AS t(chave'));
+
+  const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\]),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\]),\s*(true|false)\s*\)/g;
+
+  return [...corpo.matchAll(linha)].map(m => ({
     chave: m[1],
     tenants: /^NULL/i.test(m[2]) ? null : listaDeArray(m[2]),
     padrao: listaDeArray(m[3]),
     explicita: m[4] === 'true',
   }));
-
-  const baseSql = sqlDaMigration('20260820145356_permissoes_totais.sql');
-  const inicioBase = baseSql.indexOf('LATERAL (VALUES');
-  const fimBase = baseSql.indexOf('AS t(chave');
-  const base = ler(baseSql.slice(inicioBase, fimBase));
-  const atual = sqlDoCatalogo();
-  const removidasCorpo = atual.match(/WHERE c\.chave <> ALL\(ARRAY\[([\s\S]*?)\]::TEXT\[\]\)/i)?.[1] ?? '';
-  const removidas = new Set([...removidasCorpo.matchAll(/'([a-z_]+)'/g)].map(m => m[1]));
-  const inicioDelta = atual.indexOf('SELECT * FROM (VALUES');
-  const fimDelta = atual.indexOf(') n(chave,tenants,padrao,explicita)', inicioDelta);
-  const delta = ler(atual.slice(inicioDelta, fimDelta));
-  return [...base.filter(item => !removidas.has(item.chave)), ...delta];
 }
 
 const SQL = catalogoSql();
-const MIGRATION_SQL = sqlDoCatalogo();
 
 describe('contrato: catálogo TypeScript ↔ catálogo SQL', () => {
   it('a migration foi lida — o parser não devolveu lista vazia', () => {
@@ -139,19 +128,5 @@ describe('contrato: catálogo TypeScript ↔ catálogo SQL', () => {
           .toContain(cargo);
       }
     }
-  });
-});
-
-describe('compatibilidade da migration com funções existentes', () => {
-  it('reconecta os leitores ao catálogo novo e não reseta empresas existentes', () => {
-    expect(MIGRATION_SQL).toMatch(/FUNCTION\s+public\.fn_tem_permissao/i);
-    expect(MIGRATION_SQL).toMatch(/FUNCTION\s+public\.fn_permissoes_semear_empresa/i);
-    expect(MIGRATION_SQL).toMatch(/ON CONFLICT\(empresa_id,cargo\) DO NOTHING/i);
-    expect(MIGRATION_SQL).not.toMatch(/ON CONFLICT\(empresa_id,cargo\) DO UPDATE/i);
-  });
-
-  it('é atômica para não deixar políticas parcialmente atualizadas', () => {
-    expect(MIGRATION_SQL.trimStart()).toMatch(/^--[\s\S]*?\bBEGIN\s*;/i);
-    expect(MIGRATION_SQL.trimEnd()).toMatch(/COMMIT\s*;$/i);
   });
 });

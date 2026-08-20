@@ -19,7 +19,6 @@ import { logger } from '@/lib/logger';
 import {
   buscarSolicitacoes, buscarMensagens, enviarMensagem, marcarConversaLida,
   buscarLeituras, buscarResponsaveis, buscarEventos, DIAS_HISTORICO_PADRAO,
-  enriquecerSolicitacao, inicioDoHistorico,
   type SolicitacaoWhatsapp, type MensagemSolicitacao, type EventoSolicitacao,
   type PessoaResumo, type Leitura,
 } from '@/services/solicitacoesWhatsapp.service';
@@ -148,41 +147,11 @@ export function useSolicitacoesWhatsapp(
         escutas: [{ tabela: 'solicitacoes_whatsapp', filtro: `empresa_id=eq.${empresaId}` }],
       },
       {
-        onEvento: (payload) => {
-          const bruto = (payload.eventType === 'DELETE' ? payload.old : payload.new) as unknown as
-            (SolicitacaoWhatsapp & { id?: string }) | null;
-          const id = bruto?.id;
-          if (!id) return;
-          if (payload.eventType === 'DELETE') {
-            setSolicitacoes(atual => atual.filter(s => s.id !== id));
-            return;
-          }
-
-          const dentroDoFiltro = bruto.empresa_id === empresaId
-            && (!setorId || bruto.setor_id === setorId)
-            && (!equipeId || bruto.equipe_id === equipeId)
-            && (dias == null || bruto.status !== 'feito'
-              || bruto.atualizado_em.slice(0,10) >= inicioDoHistorico(dias));
-          if (!dentroDoFiltro) {
-            setSolicitacoes(atual => atual.filter(s => s.id !== id));
-            return;
-          }
-
-          void enriquecerSolicitacao(empresaId, bruto).then(proxima => {
-            if (!montadoRef.current) return;
-            setSolicitacoes(atual => {
-              const indice = atual.findIndex(s => s.id === id);
-              if (indice < 0) return [proxima, ...atual];
-              const lista = [...atual];
-              lista[indice] = proxima;
-              return lista;
-            });
-          });
-        },
+        onEvento:      () => { void recarregarRef.current(); },
         onReconectado: () => { void recarregarRef.current(); },
       },
     );
-  }, [empresaId, habilitado, dbAtiva, setorId, equipeId, dias]);
+  }, [empresaId, habilitado, dbAtiva]);
 
   // ── Contagens: total da thread e não lidas ─────────────────────────────────
   // O total mostra que existe histórico anexado sem precisar abrir a conversa;

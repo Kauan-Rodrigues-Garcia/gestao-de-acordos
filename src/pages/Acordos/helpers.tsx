@@ -2,16 +2,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, formatDate } from '@/lib/index';
 import type { Acordo } from '@/lib/supabase';
 
-export type VisaoFiltroAcordos = 'todos_setores' | 'setor' | `equipe:${string}` | 'individual';
-export type AbaAcordos = 'analitico' | 'todos' | 'pagos' | 'nao_pagos';
-
-export function statusParaAbaAcordos(aba: AbaAcordos, statusManual?: string): string | undefined {
-  if (statusManual && statusManual !== 'all') return statusManual;
-  if (aba === 'analitico') return 'verificar_pendente';
-  if (aba === 'pagos') return 'pago';
-  if (aba === 'nao_pagos') return 'nao_pago';
-  return undefined;
-}
+export type VisaoFiltroAcordos = 'setor' | `equipe:${string}` | 'individual';
 
 export const PER_PAGE = 60;
 

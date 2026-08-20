@@ -4,14 +4,11 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, Acordo } from '@/lib/supabase';
-import {
-  useRealtimeAcordos, type AcordoRealtimeEvent,
-} from '@/providers/RealtimeAcordosProvider';
+import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
-import { temEscopo } from '@/lib/permissoes-escopo';
-import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
+import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
@@ -99,99 +96,19 @@ function calcPerc(realizado: number, meta: number): number {
   return Math.min(Math.round((realizado / meta) * 100), 999);
 }
 
-interface EscopoAcordosRealtime {
-  empresaId: string;
-  inicio: string;
-  fim: string;
-  isAdmin: boolean;
-  isLider: boolean;
-  verTodosSetores: boolean;
-  perfilId: string;
-  perfilSetorId: string | null;
-  setorFiltro: string | null;
-  operadorFiltro: string | null;
-  operadoresDaEquipe: ReadonlySet<string> | null;
-  cloneIdsSetor: ReadonlySet<string>;
-}
-
-/** A mesma hierarquia aplicada na query inicial, agora para um único evento. */
-function pertenceAoEscopoRealtime(
-  acordo: Partial<Acordo>,
-  escopo: EscopoAcordosRealtime,
-): boolean {
-  if (acordo.empresa_id !== escopo.empresaId) return false;
-  const vencimento = acordo.vencimento ?? '';
-  if (vencimento < escopo.inicio || vencimento > escopo.fim) return false;
-
-  if (escopo.operadorFiltro) return acordo.operador_id === escopo.operadorFiltro;
-  if (escopo.operadoresDaEquipe) {
-    return !!acordo.operador_id && escopo.operadoresDaEquipe.has(acordo.operador_id);
-  }
-  if (escopo.isAdmin) {
-    return !escopo.setorFiltro || acordo.setor_id === escopo.setorFiltro;
-  }
-  if (!escopo.isLider) return acordo.operador_id === escopo.perfilId;
-  if (escopo.verTodosSetores) {
-    return !escopo.setorFiltro || acordo.setor_id === escopo.setorFiltro;
-  }
-  return acordo.setor_id === escopo.perfilSetorId
-    || (!!acordo.operador_id && escopo.cloneIdsSetor.has(acordo.operador_id));
-}
-
-/** Preserva todos os objetos/linhas que não mudaram. */
-function aplicarDeltaRealtime(
-  atual: Acordo[],
-  evento: AcordoRealtimeEvent,
-  escopo: EscopoAcordosRealtime,
-): Acordo[] {
-  const id = evento.newRecord?.id ?? evento.oldRecord?.id;
-  if (!id) return atual;
-  const indice = atual.findIndex(a => a.id === id);
-
-  if (evento.eventType === 'DELETE') {
-    return indice < 0 ? atual : atual.filter(a => a.id !== id);
-  }
-  if (!evento.newRecord) return atual;
-
-  const existente = indice >= 0 ? atual[indice] : null;
-  const proximo = (existente
-    ? { ...existente, ...evento.newRecord }
-    : evento.newRecord) as Acordo;
-  const pertence = pertenceAoEscopoRealtime(proximo, escopo);
-
-  if (!pertence) return indice < 0 ? atual : atual.filter(a => a.id !== id);
-  if (indice < 0) return [proximo, ...atual];
-
-  const lista = [...atual];
-  lista[indice] = proximo;
-  return lista;
-}
-
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
  * @param mesRef mês a analisar (`yyyy-MM`). Omitido = mês corrente, que é como
  *   todos os consumidores antigos continuam se comportando.
  */
-export function useAnalytics(
-  mesRef?: string | null,
-  contexto: 'dashboard' | 'diretoria' = 'dashboard',
-): AnalyticsData {
+export function useAnalytics(mesRef?: string | null): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const verTodosSetores = contexto === 'diretoria'
-    ? temPermissao('ver_painel_diretoria')
-    : temEscopo('dashboard', 'todos_setores', temPermissao);
-  const podeFiltrarSetor = contexto === 'diretoria'
-    ? temPermissao('ver_painel_diretoria')
-    : temEscopo('dashboard', 'setor', temPermissao) || verTodosSetores;
-  const podeFiltrarEquipe = contexto === 'diretoria'
-    ? temPermissao('ver_painel_diretoria')
-    : temEscopo('dashboard', 'equipe', temPermissao);
-  const visaoAmpla = contexto === 'diretoria'
-    ? temPermissao('ver_painel_diretoria')
-    : podeFiltrarEquipe || podeFiltrarSetor || verTodosSetores;
+  // Permissão configurável (Admin → Cargos): líder/elite/gerência com
+  // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
+  const verTodosSetores = temPermissao('ver_todos_setores');
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const isBookplay = tenant.slug === 'bookplay';
@@ -214,7 +131,6 @@ export function useAnalytics(
   // perfil (operador). Para agrupar corretamente por equipe, precisamos do mapa
   // operador_id → equipe_id. Sem isto, todos os acordos caíam em "Sem equipe".
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, string | null>>({});
-  const escopoRealtimeRef = useRef<EscopoAcordosRealtime | null>(null);
   const [loading, setLoading] = useState(true);
   const mesAnalise  = normalizarMes(mesRef);
   const { mes, ano } = partesDoMes(mesAnalise);
@@ -222,20 +138,17 @@ export function useAnalytics(
   const fim = ultimoDiaDoMes(mesAnalise);
   const hoje = getTodayISO();
 
-  const fetchAll = useCallback(async (silencioso = false) => {
+  const fetchAll = useCallback(async () => {
     if (!perfil || !empresa?.id) return;
-    // Realtime atualiza os dados por baixo do painel já montado. O esqueleto é
-    // reservado à primeira carga/troca de escopo; reexibi-lo a cada INSERT ou
-    // UPDATE fazia todo o dashboard piscar e perder a posição visual.
-    if (!silencioso) setLoading(true);
-    const isAdmin = visaoAmpla && verTodosSetores;
-    const isLider = visaoAmpla;
-    const isDiretoria = false;
+    setLoading(true);
+    const isAdmin = isPerfilAdmin(perfil.perfil);
+    const isLider = isPerfilLider(perfil.perfil);
+    const isDiretoria = isPerfilDiretoria(perfil.perfil);
 
     try {
       // ── Carregar setores para o filtro do admin/diretoria ────────────────────
       // Líder/Elite/Gerência com 'ver_todos_setores' também ganha o filtro
-      if (podeFiltrarSetor && verTodosSetores) {
+      if (isAdmin || isDiretoria || (isLider && verTodosSetores)) {
         const { data: setoresData } = await supabase
           .from('setores')
           .select('id, nome')
@@ -246,7 +159,7 @@ export function useAnalytics(
 
       // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
       let equipesDoSetorAtual: { id: string; nome: string }[] = [];
-      if (podeFiltrarEquipe && (perfil.setor_id || verTodosSetores)) {
+      if (isLider && (perfil.setor_id || verTodosSetores)) {
         let eqQuery = supabase
           .from('equipes')
           .select('id, nome')
@@ -264,7 +177,7 @@ export function useAnalytics(
       // O campo equipe_id existe em perfis (não em acordos), então precisamos
       // buscar os operador_id dos membros da equipe e filtrar acordos por IN.
       let operadoresDaEquipe: string[] | null = null;
-      if (podeFiltrarEquipe && equipeFiltro && !operadorFiltro) {
+      if (isLider && equipeFiltro && !operadorFiltro) {
         const { data: membros } = await supabase
           .from('perfis')
           .select('id')
@@ -289,21 +202,6 @@ export function useAnalytics(
         }
       }
 
-      escopoRealtimeRef.current = {
-        empresaId: empresa.id,
-        inicio,
-        fim,
-        isAdmin,
-        isLider,
-        verTodosSetores,
-        perfilId: perfil.id,
-        perfilSetorId: perfil.setor_id ?? null,
-        setorFiltro,
-        operadorFiltro,
-        operadoresDaEquipe: operadoresDaEquipe === null ? null : new Set(operadoresDaEquipe),
-        cloneIdsSetor: new Set(cloneIdsSetor),
-      };
-
       // ── Acordos conforme perfil ──────────────────────────────────────────────
       // Reconstruída a cada página: o PostgREST corta em 1000 linhas por query,
       // então uma busca única truncava a visão do admin (empresa toda passa de
@@ -312,31 +210,29 @@ export function useAnalytics(
       const montarQuery = () => {
         let q = supabase
           .from('acordos')
-          .select('id, empresa_id, operador_id, setor_id, vencimento, valor, status, tipo, tipo_vinculo')
+          .select('*')
           .eq('empresa_id', empresa.id)
-          .gte('vencimento', inicio)
-          .lte('vencimento', fim)
           .order('id', { ascending: true });
 
-        // Filtros explícitos vencem o nível de visão. Isso é importante para
-        // gerência/superadmin: ter acesso à empresa inteira não pode inutilizar
-        // o clique numa equipe ou na visão individual.
-        if (operadorFiltro) {
-          q = q.eq('operador_id', operadorFiltro);
-        } else if (operadoresDaEquipe !== null) {
-          if (operadoresDaEquipe.length === 0) {
-            q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
-          } else {
-            q = q.in('operador_id', operadoresDaEquipe);
-          }
-        } else if (!isAdmin && !isDiretoria) {
+        if (!isAdmin && !isDiretoria) {
           if (isLider && (perfil.setor_id || verTodosSetores)) {
             // Líder/Elite: hierarquia de filtros
             // 1. visão individual → filtra pelo próprio operador_id
             // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
             // 3. visão geral      → filtra pelo setor_id
             //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
-            if (verTodosSetores) {
+            if (operadorFiltro) {
+              q = q.eq('operador_id', operadorFiltro);
+            } else if (operadoresDaEquipe !== null) {
+              if (operadoresDaEquipe.length === 0) {
+                // Equipe sem membros — força retorno vazio.
+                // operador_id é UUID: precisa de um UUID válido que nunca casa
+                // (o UUID nulo), senão o Postgres rejeita com 22P02.
+                q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
+              } else {
+                q = q.in('operador_id', operadoresDaEquipe);
+              }
+            } else if (verTodosSetores) {
               if (setorFiltro) q = q.eq('setor_id', setorFiltro);
             } else if (cloneIdsSetor.length) {
               // BookPlay: setor do líder + operadores clonados nele (setor de
@@ -464,28 +360,26 @@ export function useAnalytics(
     } catch (err) {
       console.error('[useAnalytics] erro:', err);
     } finally {
-      if (!silencioso) setLoading(false);
+      setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, inicio, fim, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay, podeFiltrarSetor, podeFiltrarEquipe, visaoAmpla]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
-  // Um evento altera apenas o registro afetado. Os `useMemo` abaixo recalculam
-  // os agregados sobre o snapshot local sem nova leitura no banco e sem trocar
-  // o painel por skeleton.
+  // Qualquer evento de acordos dispara um refetch completo das métricas analíticas
   useEffect(() => {
-    subscribe(instanceId, evento => {
-      const escopo = escopoRealtimeRef.current;
-      if (!escopo) return;
-      setAcordos(atual => aplicarDeltaRealtime(atual, evento, escopo));
-    });
+    subscribe(instanceId, () => { fetchAll(); });
     return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId]);
+  }, [subscribe, unsubscribe, instanceId, fetchAll]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
-    const isWideView = visaoAmpla && !operadorFiltro;
+    const isAdminRole    = isPerfilAdmin(perfil?.perfil ?? '');
+    const isLiderRole    = isPerfilLider(perfil?.perfil ?? '');
+    const isDiretoriaRole = isPerfilDiretoria(perfil?.perfil ?? '');
+    // Visão ampla: admin/diretoria ou líder sem filtro individual — exclui acordos Extra para não inflar totais
+    const isWideView = isAdminRole || isDiretoriaRole || (isLiderRole && !operadorFiltro);
 
     const acordosMes = acordos.filter(
       a => a.vencimento >= inicio && a.vencimento <= fim,
@@ -626,7 +520,7 @@ export function useAnalytics(
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro, visaoAmpla]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
 
   return {
     ...derived,

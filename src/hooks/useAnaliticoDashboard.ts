@@ -36,7 +36,6 @@ import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
 import { buscarAnaliticoDashboardMes } from '@/services/analitico/analitico.service';
-import type { ContextoDadosAnaliticos } from '@/services/analitico/analitico.service';
 
 export interface AgregadoAnalitico {
   bruto: number;
@@ -144,36 +143,6 @@ interface ResultadoDashboard {
   dbAtiva: boolean;
 }
 
-function chaveLinha(l: AnaliticoDashboardLinha): string {
-  return [
-    l.dia, l.operador_id ?? '', l.setor_id ?? '', l.forma_pagamento ?? '',
-    l.forma_detalhe ?? '', l.status_tabulacao ?? '',
-  ].join('|');
-}
-
-/** Mantém a referência das séries que não mudaram após uma importação. */
-function compartilharLinhas(
-  anterior: ResultadoDashboard | undefined,
-  proximo: ResultadoDashboard,
-): ResultadoDashboard {
-  if (!anterior) return proximo;
-  const antigas = new Map(anterior.linhas.map(l => [chaveLinha(l), l]));
-  let mudou = anterior.dbAtiva !== proximo.dbAtiva
-    || anterior.linhas.length !== proximo.linhas.length;
-  const linhas = proximo.linhas.map(l => {
-    const antiga = antigas.get(chaveLinha(l));
-    if (antiga
-        && Number(antiga.total) === Number(l.total)
-        && Number(antiga.total_ho) === Number(l.total_ho)
-        && Number(antiga.qtd) === Number(l.qtd)) {
-      return antiga;
-    }
-    mudou = true;
-    return l;
-  });
-  return mudou ? { ...proximo, linhas } : anterior;
-}
-
 /** Referência estável para o caso "sem dados" — evita novo array a cada render
  *  (o que invalidaria o useMemo de `total` sem que nada tenha mudado). */
 const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
@@ -183,11 +152,7 @@ const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
  *   chave do cache, então trocar de mês é uma entrada nova — voltar para o mês
  *   anterior já visto é instantâneo, sem ida ao banco.
  */
-export function useAnaliticoDashboard(
-  ativo: boolean,
-  mesRef?: string | null,
-  contexto: ContextoDadosAnaliticos = 'analitico',
-) {
+export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   const { empresa }  = useEmpresa();
   const queryClient  = useQueryClient();
   const mes          = normalizarMes(mesRef);
@@ -197,22 +162,17 @@ export function useAnaliticoDashboard(
   // Chave compartilhada: os dois consumidores caem na MESMA entrada de cache,
   // então a busca paginada do mês acontece uma vez só.
   const chave = useMemo(
-    () => ['analitico-dashboard', contexto, empresaId, mes] as const,
-    [contexto, empresaId, mes],
+    () => ['analitico-dashboard', empresaId, mes] as const,
+    [empresaId, mes],
   );
 
   const query = useQuery<ResultadoDashboard>({
     queryKey: chave,
     enabled:  habilitado,
     queryFn:  async () => {
-      const { data, dbAtiva } = await buscarAnaliticoDashboardMes(
-        empresaId as string,
-        mes,
-        contexto,
-      );
+      const { data, dbAtiva } = await buscarAnaliticoDashboardMes(empresaId as string, mes);
       return { linhas: data, dbAtiva };
     },
-    structuralSharing: compartilharLinhas,
   });
 
   const dbAtiva = query.data?.dbAtiva ?? true;

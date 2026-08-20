@@ -8,7 +8,7 @@
  * bastaria um erro na RLS para o ensaio do líder explodir na tela da empresa
  * inteira. Do jeito que está, é impossível — o dado nem sai da aba.
  *
- * Evento local sem acoplamento: quem dispara não precisa
+ * Mesmo mecanismo do `petEvents.ts`: zero acoplamento, quem dispara não precisa
  * saber se o overlay está montado.
  */
 import type { PessoaComemoracao } from '@/services/comemoracoes.service';

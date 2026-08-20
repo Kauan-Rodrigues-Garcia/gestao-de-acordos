@@ -1928,42 +1928,6 @@ export type Database = {
           },
         ]
       }
-      menu_lateral_config: {
-        Row: {
-          atualizado_em: string
-          atualizado_por: string | null
-          empresa_id: string
-          ordem: string[]
-        }
-        Insert: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          empresa_id: string
-          ordem?: string[]
-        }
-        Update: {
-          atualizado_em?: string
-          atualizado_por?: string | null
-          empresa_id?: string
-          ordem?: string[]
-        }
-        Relationships: [
-          {
-            foreignKeyName: "menu_lateral_config_atualizado_por_fkey"
-            columns: ["atualizado_por"]
-            isOneToOne: false
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "menu_lateral_config_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: true
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       metas_config_mes: {
         Row: {
           ano: number
@@ -2385,6 +2349,7 @@ export type Database = {
           lider_id: string | null
           nome: string
           perfil: string
+          pet_despedida: string | null
           senha_alterada: boolean
           setor_id: string | null
           situacao: string
@@ -2406,6 +2371,7 @@ export type Database = {
           lider_id?: string | null
           nome: string
           perfil: string
+          pet_despedida?: string | null
           senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
@@ -2427,6 +2393,7 @@ export type Database = {
           lider_id?: string | null
           nome?: string
           perfil?: string
+          pet_despedida?: string | null
           senha_alterada?: boolean
           setor_id?: string | null
           situacao?: string
@@ -3923,7 +3890,7 @@ export type Database = {
         Returns: undefined
       }
       fn_analitico_dashboard_mes: {
-        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
+        Args: { p_empresa_id: string; p_mes: string }
         Returns: {
           dia: string
           forma_detalhe: string
@@ -3936,7 +3903,7 @@ export type Database = {
         }[]
       }
       fn_analitico_dashboard_mes_json: {
-        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
+        Args: { p_empresa_id: string; p_mes: string }
         Returns: Json
       }
       fn_analitico_destaques_dia: {
@@ -3956,7 +3923,7 @@ export type Database = {
         }[]
       }
       fn_analitico_resumo_por_operador: {
-        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
+        Args: { p_empresa_id: string; p_mes: string }
         Returns: {
           operador_id: string
           operador_nome: string
@@ -4052,7 +4019,7 @@ export type Database = {
         Returns: undefined
       }
       fn_diario_resumo_mensal: {
-        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
+        Args: { p_empresa_id: string; p_mes: string }
         Returns: {
           dia_referencia: string
           fora_vinculo: boolean

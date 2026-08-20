@@ -10,13 +10,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
-const { listasDashboardRef, permissoesDashboardRef } = vi.hoisted(() => ({
-  listasDashboardRef: {
-    current: { setores: [] as { id: string; nome: string }[], equipes: [] as { id: string; nome: string }[] },
-  },
-  permissoesDashboardRef: { current: new Set(['ver_acordos']) },
-}));
-
 // ── Subject under test ──────────────────────────────────────────────────────
 import Dashboard from '../Dashboard';
 
@@ -63,7 +56,7 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     permissoes: {},
     todasPermissoes: [],
     loading: false,
-    temPermissao: vi.fn((chave: string) => permissoesDashboardRef.current.has(chave)),
+    temPermissao: vi.fn(() => false),
     isAdmin: false,
     refresh: vi.fn(),
   }),
@@ -101,14 +94,11 @@ vi.mock('@/hooks/useEmpresaTags', () => ({
 // O Dashboard não usa mais `useAnalytics` — as listas de setor/equipe saíram
 // para `useSetoresEquipes`, que não lê acordo nenhum. O painel de métricas, que
 // continua usando `useAnalytics`, já é mockado inteiro logo abaixo.
+const LISTAS_VAZIAS: { id: string; nome: string }[] = [];
 vi.mock('@/hooks/useSetoresEquipes', () => ({
   useSetoresEquipes: () => ({
-    setores: listasDashboardRef.current.setores,
-    setorFiltro: null,
-    setSetorFiltro: vi.fn(),
-    equipes: listasDashboardRef.current.equipes.map(e => ({ ...e, setor_id: 's1' })),
-    equipesDoSetor: listasDashboardRef.current.equipes,
-    loading: false,
+    setores: LISTAS_VAZIAS, setorFiltro: null, setSetorFiltro: vi.fn(),
+    equipesDoSetor: LISTAS_VAZIAS, loading: false,
   }),
 }));
 
@@ -222,8 +212,6 @@ function renderDashboard() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  listasDashboardRef.current = { setores: [], equipes: [] };
-  permissoesDashboardRef.current = new Set(['ver_acordos']);
 });
 
 describe('Dashboard (smoke)', () => {
@@ -251,24 +239,5 @@ describe('Dashboard (smoke)', () => {
       // For non-PaguePLAY tenants Dashboard renders a "Ver todos os acordos" link
       expect(screen.getByText(/ver todos os acordos/i)).toBeInTheDocument();
     });
-  });
-
-  it('combina setor e nível de visão em um único filtro', async () => {
-    permissoesDashboardRef.current = new Set([
-      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
-      'dashboard_escopo_setor', 'dashboard_escopo_todos_setores',
-    ]);
-    listasDashboardRef.current = {
-      setores: [{ id: 's1', nome: 'Play 1' }],
-      equipes: [{ id: 'e1', nome: 'Equipe Ana' }],
-    };
-
-    renderDashboard();
-
-    expect(await screen.findByText('Visualizar:')).toBeInTheDocument();
-    expect(screen.queryByText('Filtrar setor:')).not.toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: 'Setor do Dashboard' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Play 1' })).toBeInTheDocument();
-    expect(screen.getAllByText('Visualizar:')).toHaveLength(1);
   });
 });

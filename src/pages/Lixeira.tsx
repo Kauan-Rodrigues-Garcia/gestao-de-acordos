@@ -26,7 +26,6 @@ import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { maiorEscopoPermitido } from '@/lib/permissoes-escopo';
 
 function tempoRestante(expiraEm?: string): string {
   if (!expiraEm) return '—';
@@ -79,8 +78,7 @@ export default function Lixeira() {
   const [fotoMap, setFotoMap]           = useState<Record<string, string | null>>({});
 
   const podeAcessar = temPermissao('ver_lixeira');
-  const podeEsvaziar = temPermissao('esvaziar_lixeira');
-  const podeRestaurar = temPermissao('restaurar_lixeira');
+  const podeEsvaziar = podeAcessar;
 
   async function carregar() {
     if (!empresa?.id) return;
@@ -92,11 +90,11 @@ export default function Lixeira() {
       // Idealmente deveria existir um job pg_cron no Supabase; aqui fica
       // como garantia de funcionalidade client-side.
       await purgarExpirados(empresa.id);
-      const escopo = maiorEscopoPermitido('lixeira', temPermissao);
-      const ehIndividual = escopo === 'individual';
+      // #8: operador só vê os próprios acordos excluídos. Elite/Líder/Gerência/Diretoria/Admin veem tudo.
+      const ehOperador = !temPermissao('ver_acordos_gerais');
       const data = await fetchLixeira(
         empresa.id,
-        ehIndividual && perfil?.id ? { operadorId: perfil.id } : undefined,
+        ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,
       );
       setItens(data);
 
@@ -124,7 +122,7 @@ export default function Lixeira() {
   }
 
   async function handleEsvaziar() {
-    if (!podeEsvaziar || !empresa?.id) return;
+    if (!empresa?.id) return;
     setEsvaziando(true);
     const { ok, error } = await esvaziarLixeira(empresa.id);
     setEsvaziando(false);
@@ -138,7 +136,7 @@ export default function Lixeira() {
   }
 
   async function handleRestaurar(item: LixeiraAcordo) {
-    if (!podeRestaurar || restaurandoId) return;
+    if (restaurandoId) return;
     setRestaurandoId(item.id);
     const { ok, error } = await restaurarItemLixeira(item);
     setRestaurandoId(null);
@@ -464,7 +462,7 @@ export default function Lixeira() {
                         {/* Ações */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
-                            {podeRestaurar && <button
+                            <button
                               title="Restaurar acordo"
                               disabled={restaurandoId === item.id}
                               onClick={() => handleRestaurar(item)}
@@ -473,7 +471,7 @@ export default function Lixeira() {
                               {restaurandoId === item.id
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <RotateCcw className="w-3.5 h-3.5" />}
-                            </button>}
+                            </button>
                             <button
                               title="Ver detalhes"
                               onClick={() => setDetalhe(item)}
@@ -636,7 +634,7 @@ export default function Lixeira() {
 
               {/* Footer: restaurar acordo */}
               <div className="px-5 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-end gap-2">
-                {podeRestaurar && <Button
+                <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setDetalhe(null)}
@@ -644,7 +642,7 @@ export default function Lixeira() {
                   className="h-8 text-xs rounded-lg"
                 >
                   Fechar
-                </Button>}
+                </Button>
                 <Button
                   size="sm"
                   onClick={() => handleRestaurar(detalhe)}

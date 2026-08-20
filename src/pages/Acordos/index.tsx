@@ -8,6 +8,7 @@ import { CadeadoMes } from '@/components/CadeadoMes';
 import { useFechamentoMes } from '@/hooks/useFechamentoMes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -21,6 +22,7 @@ import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
+  isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -31,15 +33,14 @@ import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
-import { deduplicarVinculados, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
-import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, statusParaAbaAcordos, type VisaoFiltroAcordos } from './helpers';
+import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
 import { AcordosFilters } from './AcordosFilters';
 import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
 import { AcordosModals } from './AcordosModals';
-import { maiorEscopoPermitido, temEscopo } from '@/lib/permissoes-escopo';
 
 export default function Acordos() {
   const { perfil } = useAuth();
@@ -56,22 +57,18 @@ export default function Acordos() {
   const [filtroTipo, setFiltroTipo]     = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData]     = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
-  const [filtroTag, setFiltroTag]           = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
-  const verTodosSetores = temEscopo('acordos', 'todos_setores', temPermissao);
-  const podeFiltrarEquipe = temEscopo('acordos', 'equipe', temPermissao) || verTodosSetores;
-  const podeVerSetor = temEscopo('acordos', 'setor', temPermissao) || verTodosSetores;
-  const podeFiltrarUsuario = podeVerSetor || verTodosSetores;
-  const podeFiltrarTag = temPermissao('filtrar_por_tag');
-  const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>(() => {
-    const maior = maiorEscopoPermitido('acordos', temPermissao);
-    return maior === 'todos_setores' ? 'todos_setores' : maior === 'setor' ? 'setor' : 'individual';
-  });
+  const isLider = isPerfilLider(perfil?.perfil ?? '');
+  const isElite = perfil?.perfil === 'elite';
+  const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
 
+  // Com 'ver_todos_setores' o líder vê equipes de toda a empresa no filtro
+  const verTodosSetores = temPermissao('ver_todos_setores');
+
   useEffect(() => {
-    if (!podeFiltrarEquipe || !empresa?.id) return;
+    if (!(isLider || isElite) || !empresa?.id) return;
     if (!perfil?.setor_id && !verTodosSetores) return;
     let q = supabase
       .from('equipes')
@@ -84,16 +81,7 @@ export default function Acordos() {
       .then(({ data }) => {
         setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
       });
-  }, [podeFiltrarEquipe, perfil?.setor_id, empresa?.id, verTodosSetores]);
-
-  useEffect(() => {
-    const maior = maiorEscopoPermitido('acordos', temPermissao);
-    if (maior === 'todos_setores') setVisaoFiltroAcordos('todos_setores');
-    else if (maior === 'setor') setVisaoFiltroAcordos('setor');
-    else if (maior === 'equipe' && equipesDoSetor.length > 0) {
-      setVisaoFiltroAcordos(`equipe:${equipesDoSetor[0].id}`);
-    } else setVisaoFiltroAcordos('individual');
-  }, [equipesDoSetor, temPermissao]);
+  }, [isLider, isElite, perfil?.setor_id, empresa?.id, verTodosSetores]);
 
   const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
     ? visaoFiltroAcordos.replace('equipe:', '')
@@ -103,8 +91,7 @@ export default function Acordos() {
     (searchParams.get('tab') as 'analitico' | 'todos' | 'pagos' | 'nao_pagos') || 'todos',
   );
   // Aba destacada Pix Automático (BookPlay): substitui o conteúdo da lista
-  const podeVerAcordos = temPermissao('ver_acordos');
-  const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix' || !podeVerAcordos);
+  const [pixAba, setPixAba] = useState(searchParams.get('tab') === 'pix');
 
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
   const usuarioTemLogicaDiretoExtra = isAtivoParaUsuario(
@@ -186,34 +173,38 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
-      if (podeFiltrarTag && filtroTag) params.set('tag', filtroTag); else params.delete('tag');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, filtroTag, podeFiltrarTag, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
-  const statusFiltro = statusParaAbaAcordos(activeTab, filtroStatus);
+  const statusFiltro = filtroStatus && filtroStatus !== 'all'
+    ? filtroStatus
+    : activeTab === 'analitico'
+    ? undefined
+    : activeTab === 'pagos'
+    ? 'pago'
+    : activeTab === 'nao_pagos'
+    ? 'nao_pago'
+    : filtroStatus || undefined;
 
   const bpMesInicio = (!isPP && mesFiltro) ? primeiroDiaDoMes(mesFiltro) : undefined;
   const bpMesFim    = (!isPP && mesFiltro) ? ultimoDiaDoMes(mesFiltro)   : undefined;
 
   const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos({
-    enabled:       podeVerAcordos,
     busca:        busca || undefined,
     status:       statusFiltro,
     tipo:         filtroTipo && filtroTipo !== 'all' ? filtroTipo : undefined,
     vencimento:   filtroData || undefined,
     data_inicio:  filtroData ? undefined : bpMesInicio,
     data_fim:     filtroData ? undefined : bpMesFim,
-    operador_id:  isVisaoIndividual
+    operador_id:  (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
-    setor_id:     visaoFiltroAcordos === 'setor' ? (perfil?.setor_id ?? undefined) : undefined,
     equipe_id:    equipeFiltroAtivo ?? undefined,
-    tag_id:       podeFiltrarTag && filtroTag && filtroTag !== 'all' ? filtroTag : undefined,
     // Garante que os acordos que vencem HOJE venham sempre na página 1 (mesmo
     // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
     // ordenação por vencimento). Ignorado quando há filtro de data exata.
@@ -285,7 +276,7 @@ export default function Acordos() {
   // PÁGINA carregada — como dropdown de filtro isso é inútil: o operador que
   // você procura está justamente na página que você ainda não abriu. Aqui vem a
   // lista do escopo inteiro, pelo mesmo recorte de setor do filtro de equipes.
-  const podeFiltrarPorUsuario = podeFiltrarUsuario;
+  const podeFiltrarPorUsuario = temPermissao('filtrar_por_usuario');
   useEffect(() => {
     if (!podeFiltrarPorUsuario || !empresa?.id) return;
     if (!verTodosSetores && !perfil?.setor_id) return;
@@ -305,20 +296,19 @@ export default function Acordos() {
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje       = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador || (podeFiltrarTag && filtroTag));
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
   const filtrosAtivosCount = [
     busca,
     filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
     filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
     filtroVinculo !== 'todos' ? filtroVinculo : '',
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
-    podeFiltrarTag && filtroTag && filtroTag !== 'all' ? filtroTag : '',
   ].filter(Boolean).length;
 
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo('');
-    setFiltroData(''); setFiltroOperador(''); setFiltroTag(''); setCurrentPage(1);
+    setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -331,7 +321,6 @@ export default function Acordos() {
   }
 
   function marcarComoPago(a: Acordo) {
-    if (!temPermissao('alterar_status_acordos')) return;
     if (fechamento.impedirData(a.vencimento, 'mudar o status')) return;
     if (a.status === 'nao_pago') {
       setConfirmarPgtoAcordo(a);
@@ -342,7 +331,6 @@ export default function Acordos() {
   }
 
   async function executarMarcarPago(a: Acordo, dataPagamento: string) {
-    if (!temPermissao('alterar_status_acordos')) return;
     const id = a.id;
     const statusAnterior = a.status;
     const vencimentoAnterior = a.vencimento;
@@ -360,6 +348,7 @@ export default function Acordos() {
       patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
+      celebrarPetAcordoPago();
       toast.success('Acordo marcado como Pago!', {
         duration: 5000,
         action: {
@@ -583,7 +572,8 @@ export default function Acordos() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
-  const visaoAmpla = visaoFiltroAcordos !== 'individual';
+  const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
+  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
     let base: AcordoComVinculo[] = acordos;
@@ -593,9 +583,12 @@ export default function Acordos() {
     if (visaoAmpla && filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
+    const filtrada = activeTab === 'analitico'
+      ? base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status))
+      : base;
     // Prioriza SEMPRE (todas as abas) os acordos que vencem hoje no topo; entre
     // os de hoje, os já pagos vão por último — pendentes de hoje ficam primeiro.
-    return [...base].sort((a, b) => {
+    return [...filtrada].sort((a, b) => {
       // Acordo com CPF vem SEMPRE primeiro, acima até dos que vencem hoje: é
       // dado pessoal que precisa sair do sistema, e enterrado na página 7
       // ninguém corrige (migrations 20260803a/b).
@@ -620,14 +613,13 @@ export default function Acordos() {
 
   // Coluna "Operador" só para cargos que veem todos os acordos (líder/elite+);
   // para operador (só vê os próprios) a coluna é removida.
-  const mostrarColunaOperador = visaoFiltroAcordos !== 'individual';
+  const mostrarColunaOperador = temPermissao('ver_acordos_gerais');
   const colSpanFull = (isPP ? 11 : 10) - (mostrarColunaOperador ? 0 : 1);
   // O cadeado do mês entra AQUI, no mesmo lugar da permissão, e não numa
   // checagem separada dentro da tabela: para a linha, "não posso editar por
   // cargo" e "não posso editar porque o mês fechou" levam ao mesmo botão
   // desabilitado. O que muda é a explicação, e essa vem do toast do handler.
   const podeEditarAcordos  = temPermissao('editar_acordos')  && !fechamento.bloqueado;
-  const podeAlterarStatusAcordos = temPermissao('alterar_status_acordos') && !fechamento.bloqueado;
   const podeExcluirAcordos = temPermissao('excluir_acordos') && !fechamento.bloqueado;
 
   return (
@@ -701,7 +693,7 @@ export default function Acordos() {
                 Lembretes do dia ({acordosHoje.length})
               </Button>
             )}
-            {temPermissao('ver_novo_acordo') && <Button
+            <Button
               variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
               title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
             >
@@ -713,7 +705,7 @@ export default function Acordos() {
                 realtimeStatus === 'error'      && 'bg-red-500',
                 realtimeStatus === 'off'        && 'bg-muted-foreground/40',
               )} />
-            </Button>}
+            </Button>
             <Button
               size="sm"
               data-tour="novo-acordo"
@@ -748,8 +740,7 @@ export default function Acordos() {
 
         <AcordosFilters
           activeTab={activeTab} setActiveTab={setActiveTab}
-          isLider={podeFiltrarEquipe} isElite={temEscopo('acordos', 'individual', temPermissao)}
-          podeVerSetor={podeVerSetor} podeVerTodosSetores={verTodosSetores}
+          isLider={isLider} isElite={isElite}
           equipesDoSetor={equipesDoSetor}
           visaoFiltroAcordos={visaoFiltroAcordos} setVisaoFiltroAcordos={setVisaoFiltroAcordos}
           busca={busca} setBusca={setBusca}
@@ -757,8 +748,6 @@ export default function Acordos() {
           filtroTipo={filtroTipo} setFiltroTipo={setFiltroTipo}
           filtroData={filtroData} setFiltroData={setFiltroData}
           filtroOperador={filtroOperador} setFiltroOperador={setFiltroOperador}
-          filtroTag={filtroTag} setFiltroTag={setFiltroTag}
-          empresaTags={empresaTags} podeFiltrarTag={podeFiltrarTag}
           filtroVinculo={filtroVinculo} setFiltroVinculo={setFiltroVinculo}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}
@@ -766,7 +755,6 @@ export default function Acordos() {
           temPermissao={temPermissao}
           setCurrentPage={setCurrentPage} limparFiltros={limparFiltros}
           pixAbaAtiva={pixAba} setPixAbaAtiva={setPixAba}
-          podeVerAcordos={podeVerAcordos}
         />
 
         {/* Aba Pix Automático substitui a lista inteira. A permissão vale para
@@ -791,7 +779,6 @@ export default function Acordos() {
                     colSpanFull={colSpanFull}
                     mostrarColunaOperador={mostrarColunaOperador}
                     podeEditar={podeEditarAcordos}
-                    podeAlterarStatus={podeAlterarStatusAcordos}
                     podeExcluir={podeExcluirAcordos}
                     novoInlineAberto={novoInlineAberto}
                     hoje={hoje}

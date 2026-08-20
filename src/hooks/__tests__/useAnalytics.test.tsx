@@ -64,24 +64,6 @@ vi.mock('@/hooks/useEmpresa', () => ({
   }),
 }));
 
-// O hook passou a decidir escopo exclusivamente pela matriz. Estes testes
-// exercitam os padrões equivalentes aos cargos das fixtures, sem reintroduzir
-// bypass por cargo no código de produção.
-vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({
-    temPermissao: (chave: string) => {
-      const cargo = (mockPerfilValue.current as { perfil?: string } | null)?.perfil;
-      if (cargo === 'administrador' || cargo === 'diretoria' || cargo === 'super_admin') {
-        return ['dashboard_escopo_todos_setores', 'dashboard_escopo_setor', 'dashboard_escopo_equipe'].includes(chave);
-      }
-      if (cargo === 'lider' || cargo === 'elite' || cargo === 'gerencia') {
-        return ['dashboard_escopo_setor', 'dashboard_escopo_equipe'].includes(chave);
-      }
-      return false;
-    },
-  }),
-}));
-
 vi.mock('@/providers/RealtimeAcordosProvider', () => ({
   useRealtimeAcordos: () => ({
     subscribe:   mockRealtimeSubscribe,
@@ -219,13 +201,12 @@ function setupOperadorResults(acordos: unknown[], meta: unknown = null) {
 /**
  * Monta fila para perfil ADMIN:
  *  1. setores     (thenable)
- *  2. equipes para o filtro (thenable)
- *  3. acordos     (thenable)
+ *  2. acordos     (thenable)
  *  —  admin não busca meta principal (setMeta(null))
- *  4. metas equipe  (Promise.all[0])
- *  5. metas operador (Promise.all[1])
- *  6. perfis        (Promise.all[2])
- *  7. equipes       (Promise.all[3])
+ *  3. metas equipe  (Promise.all[0])
+ *  4. metas operador (Promise.all[1])
+ *  5. perfis        (Promise.all[2])
+ *  6. equipes       (Promise.all[3])
  */
 function setupAdminResults(opts: {
   setores?:       unknown[];
@@ -236,7 +217,6 @@ function setupAdminResults(opts: {
   equipes?:       unknown[];
 } = {}) {
   pushResult('setores',  { data: opts.setores       ?? [], error: null });
-  pushResult('equipes',  { data: opts.equipes       ?? [], error: null });
   pushResult('acordos',  { data: opts.acordos        ?? [], error: null });
   pushResult('metas',    { data: opts.metasEquipe    ?? [], error: null });
   pushResult('metas',    { data: opts.metasOperador  ?? [], error: null });
@@ -573,34 +553,6 @@ describe('useAnalytics', () => {
       await waitFor(() => expect(mockRealtimeSubscribe).toHaveBeenCalledTimes(1));
       unmount();
       expect(mockRealtimeUnsubscribe).toHaveBeenCalledTimes(1);
-    });
-
-    it('realtime aplica somente o delta em memória, sem nova consulta completa', async () => {
-      const acordo = makeAcordo({
-        id: 'ac-realtime', status: 'verificar_pendente', valor: 100,
-        vencimento: '2026-04-22',
-      });
-      setupOperadorResults([acordo], null);
-
-      const { result } = renderHook(() => useAnalytics());
-      await waitFor(() => expect(result.current.loading).toBe(false));
-      expect(result.current.valorRecebidoMes).toBe(0);
-
-      const handler = mockRealtimeSubscribe.mock.calls[0]?.[1] as
-        | ((evento: Record<string, unknown>) => void)
-        | undefined;
-      expect(handler).toBeTypeOf('function');
-      const consultasAntes = mockSupabaseFromSpy.mock.calls.length;
-
-      act(() => handler?.({
-        eventType: 'UPDATE',
-        oldRecord: acordo,
-        newRecord: { ...acordo, status: 'pago', valor: 250 },
-      }));
-
-      await waitFor(() => expect(result.current.valorRecebidoMes).toBe(250));
-      expect(result.current.valorAgendadoMes).toBe(250);
-      expect(mockSupabaseFromSpy.mock.calls.length).toBe(consultasAntes);
     });
   });
 

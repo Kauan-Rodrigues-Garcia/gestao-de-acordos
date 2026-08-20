@@ -14,7 +14,6 @@ import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { createTag, updateTag, deleteTag } from '@/services/tags.service';
 import { AcordoTag } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
 // Paleta de cores harmonizada com a estética do projeto
 const COR_PALETTE = [
@@ -78,17 +77,15 @@ interface TagFormProps {
   inicial?: AcordoTag;
   onSalvo: () => void;
   onCancel?: () => void;
-  podeEditar: boolean;
 }
 
-function TagForm({ inicial, onSalvo, onCancel, podeEditar }: TagFormProps) {
+function TagForm({ inicial, onSalvo, onCancel }: TagFormProps) {
   const { empresa } = useEmpresa();
   const [nome, setNome] = useState(inicial?.nome ?? '');
   const [cor, setCor]   = useState(inicial?.cor ?? '#6366f1');
   const [saving, setSaving] = useState(false);
 
   async function salvar() {
-    if (!podeEditar) return;
     if (!nome.trim()) { toast.error('Nome da tag é obrigatório'); return; }
     if (!empresa?.id) return;
     setSaving(true);
@@ -145,15 +142,12 @@ function TagForm({ inicial, onSalvo, onCancel, podeEditar }: TagFormProps) {
 }
 
 export default function AdminTags() {
-  const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('gerenciar_tags');
   const { tags, loading, refetch } = useEmpresaTags();
   const [criando, setCriando] = useState(false);
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [excluindoId, setExcluindoId] = useState<string | null>(null);
 
   async function excluir(id: string) {
-    if (!podeEditar) return;
     setExcluindoId(id);
     try {
       const { ok, error } = await deleteTag(id);
@@ -177,7 +171,7 @@ export default function AdminTags() {
             Tags são rótulos visuais para diferenciar tipos de acordos. Visíveis para todos os usuários.
           </p>
         </div>
-        {podeEditar && !criando && (
+        {!criando && (
           <Button size="sm" className="h-7 text-xs gap-1.5" onClick={() => setCriando(true)}>
             <Plus className="w-3 h-3" /> Nova Tag
           </Button>
@@ -187,7 +181,6 @@ export default function AdminTags() {
       {/* Formulário de criação */}
       {criando && (
         <TagForm
-          podeEditar={podeEditar}
           onSalvo={() => { setCriando(false); refetch(); }}
           onCancel={() => setCriando(false)}
         />
@@ -216,7 +209,6 @@ export default function AdminTags() {
                 <div key={tag.id}>
                   {editandoId === tag.id ? (
                     <TagForm
-                      podeEditar={podeEditar}
                       inicial={tag}
                       onSalvo={() => { setEditandoId(null); refetch(); }}
                       onCancel={() => setEditandoId(null)}
@@ -234,7 +226,7 @@ export default function AdminTags() {
                         <Tag className="w-3 h-3" /> {tag.nome}
                       </span>
                       <div className="flex items-center gap-1">
-                        {podeEditar && <Button
+                        <Button
                           size="icon"
                           variant="ghost"
                           className="h-6 w-6"
@@ -242,8 +234,8 @@ export default function AdminTags() {
                           title="Editar tag"
                         >
                           <Pencil className="w-3 h-3" />
-                        </Button>}
-                        {podeEditar && <Button
+                        </Button>
+                        <Button
                           size="icon"
                           variant="ghost"
                           className="h-6 w-6 hover:text-destructive"
@@ -252,7 +244,7 @@ export default function AdminTags() {
                           title="Excluir tag"
                         >
                           <Trash2 className="w-3 h-3" />
-                        </Button>}
+                        </Button>
                       </div>
                     </div>
                   )}

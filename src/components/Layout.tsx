@@ -30,11 +30,12 @@ import {
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
   LifeBuoy, Megaphone, MessageSquarePlus, Ticket,
-  ArrowUp, ArrowDown, Check, GripVertical, ListRestart,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
+import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -47,12 +48,14 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
-import { OnboardingTour } from './OnboardingTour';
+import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
+import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
+import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
@@ -62,8 +65,6 @@ import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 import { ModalRecortarFoto } from './ModalRecortarFoto';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
-import { carregarOrdemMenu, salvarOrdemMenu } from '@/services/menuLateral.service';
-import { mesclarOrdemVisivel, normalizarOrdemMenu, ordenarMenu } from '@/lib/menu-lateral';
 
 interface NavItem {
   label: string;
@@ -76,11 +77,10 @@ interface NavItem {
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
-  permissoesAny?: string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           permissaoKey: 'ver_dashboard' },
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
@@ -88,20 +88,20 @@ const NAV_ITEMS: NavItem[] = [
   // Visibilidade especial (chave em `tickets_config` + cargo) — ver filtro abaixo.
   // Sem `permissaoKey`: quem decide é `useTicketsAcesso`, e uma permissão a mais
   // no painel de cargos só criaria uma segunda chave para a mesma porta.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             hiddenForPaguePay: true, permissoesAny: ['ver_acordos', 'ver_pix_automatico'] },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         hiddenForPaguePay: true, permissaoKey: 'ver_novo_acordo' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    permissaoKey: 'ver_painel_diretoria' },
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      permissaoKey: 'ver_usuarios' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                permissaoKey: 'ver_lixeira' },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
   // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
   // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
@@ -110,8 +110,6 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
   { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             permissaoKey: 'importar_excel' },
 ];
-
-const ORDEM_PADRAO_MENU = NAV_ITEMS.map(item => item.to);
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
@@ -129,27 +127,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [fotoParaRecorte, setFotoParaRecorte] = useState<File | null>(null);
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
-  const [ordemMenu, setOrdemMenu] = useState<string[]>(ORDEM_PADRAO_MENU);
-  const [ordemMenuRascunho, setOrdemMenuRascunho] = useState<string[]>([]);
-  const [editandoMenu, setEditandoMenu] = useState(false);
-  const [salvandoMenu, setSalvandoMenu] = useState(false);
-
-  // A ordem é global por empresa e deliberadamente não usa Realtime: quem já
-  // está conectado mantém o menu estável; a nova ordem entra no próximo reload.
-  useEffect(() => {
-    if (!empresa?.id) return;
-    let cancelado = false;
-    setEditandoMenu(false);
-    void carregarOrdemMenu(empresa.id)
-      .then(ordem => {
-        if (!cancelado) setOrdemMenu(normalizarOrdemMenu(ordem, ORDEM_PADRAO_MENU));
-      })
-      .catch(error => {
-        console.warn('[Layout] não foi possível carregar a ordem do menu:', error);
-        if (!cancelado) setOrdemMenu(ORDEM_PADRAO_MENU);
-      });
-    return () => { cancelado = true; };
-  }, [empresa?.id]);
 
   // ── Auto-hide / auto-show do sidebar ────────────────────────────────────────
   // Comportamento automático é opcional: checkbox discreta no rodapé do
@@ -268,11 +245,24 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const ouvidoriaAcesso = useOuvidoriaAcesso();
+  const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
+
+  // ── Lembrete de votação do nome do mascote — só depois de termos + tour ─────
+  // (tourPronto começa true se o tour já foi concluído em sessão anterior;
+  //  senão vira true quando o OnboardingTour chamar onFinished agora)
+  const [tourPronto, setTourPronto] = useState(false);
+  useEffect(() => {
+    if (perfil?.id && localStorage.getItem(ONBOARDING_STORAGE_KEY(perfil.id))) {
+      setTourPronto(true);
+    }
+  }, [perfil?.id]);
+  const avisoPetPronto = !termoLoading && !precisaAceitar && tourPronto;
 
   // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
   //  todas as páginas, inclusive a de login.)
@@ -293,7 +283,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   //   Isso mantém a nav consistente com o ProtectedRoute da rota correspondente.
   //
   // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
-  const navItemsFiltrados = NAV_ITEMS.filter(item => {
+  const navItems = NAV_ITEMS.filter(item => {
     if (item.hiddenForPaguePay && isPP) return false;
     if (item.hiddenForBookplay && tenant.slug === 'bookplay') return false;
 
@@ -304,67 +294,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (item.permissaoKey && (permLoading || !temPermissao(item.permissaoKey))) {
       return false;
     }
-    if (item.permissoesAny && (permLoading || !item.permissoesAny.some(temPermissao))) {
-      return false;
-    }
 
-    // Módulos exclusivos continuam respeitando o tenant; dentro dele, a matriz
-    // é a única decisão de acesso.
+    // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
+    // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
+    // continua valendo POR CIMA da permissão já verificada acima.
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
-      return isPP;
+      return isPP && ouvidoriaAcesso.podeVer;
     }
 
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
     // e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
-      return isPP;
+      return isPP && podeAcessarAbaWpp(userRole);
     }
 
-    if (item.permissaoKey || item.permissoesAny) return true;
+    // Tickets: nasce só para administrador. A liderança entra quando a chave
+    // `tickets_config.liberado_para_lideranca` for virada na própria aba.
+    if (item.to === ROUTE_PATHS.TICKETS) {
+      return acessoTickets.podeVerAba;
+    }
+
+    if (item.permissaoKey) return true;
 
     return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });
-  const navItems = ordenarMenu(navItemsFiltrados, ordemMenu);
-
-  const navItemsEmEdicao = ordemMenuRascunho
-    .map(id => navItems.find(item => item.to === id))
-    .filter((item): item is NavItem => !!item);
-
-  function iniciarEdicaoMenu() {
-    clearAutoTimers();
-    setSidebarOpen(true);
-    setOrdemMenuRascunho(navItems.map(item => item.to));
-    setEditandoMenu(true);
-  }
-
-  function moverItemMenu(indice: number, direcao: -1 | 1) {
-    setOrdemMenuRascunho(atual => {
-      const destino = indice + direcao;
-      if (destino < 0 || destino >= atual.length) return atual;
-      const proxima = [...atual];
-      [proxima[indice], proxima[destino]] = [proxima[destino], proxima[indice]];
-      return proxima;
-    });
-  }
-
-  async function concluirEdicaoMenu() {
-    if (!empresa?.id || !perfil?.id) return;
-    const novaOrdem = normalizarOrdemMenu(
-      mesclarOrdemVisivel(ordemMenu, ordemMenuRascunho),
-      ORDEM_PADRAO_MENU,
-    );
-    setSalvandoMenu(true);
-    try {
-      await salvarOrdemMenu(empresa.id, novaOrdem, perfil.id);
-      setOrdemMenu(novaOrdem);
-      setEditandoMenu(false);
-      toast.success('Ordem do menu salva para todos os usuários.');
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a ordem do menu.');
-    } finally {
-      setSalvandoMenu(false);
-    }
-  }
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
@@ -461,34 +414,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {editandoMenu ? navItemsEmEdicao.map((item, indice) => (
-          <div
-            key={item.to}
-            className="flex items-center gap-2 px-2 py-2 rounded-lg border border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground"
-          >
-            <GripVertical className="w-3.5 h-3.5 shrink-0 text-sidebar-foreground/45" />
-            <item.icon className="w-4 h-4 shrink-0" />
-            <span className="flex-1 truncate text-xs font-medium">{item.label}</span>
-            <button
-              type="button"
-              onClick={() => moverItemMenu(indice, -1)}
-              disabled={indice === 0}
-              className="p-1 rounded hover:bg-sidebar-accent disabled:opacity-25"
-              aria-label={`Mover ${item.label} para cima`}
-            >
-              <ArrowUp className="w-3.5 h-3.5" />
-            </button>
-            <button
-              type="button"
-              onClick={() => moverItemMenu(indice, 1)}
-              disabled={indice === navItemsEmEdicao.length - 1}
-              className="p-1 rounded hover:bg-sidebar-accent disabled:opacity-25"
-              aria-label={`Mover ${item.label} para baixo`}
-            >
-              <ArrowDown className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )) : navItems.map(item => (
+        {navItems.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -511,46 +437,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </NavLink>
         ))}
-
-          {temPermissao('editar_menu_lateral') && (
-          <div className="pt-2 mt-2 border-t border-sidebar-border">
-            {editandoMenu ? (
-              <div className="flex gap-1.5">
-                <Button
-                  type="button"
-                  size="sm"
-                  className="flex-1 h-8 text-xs gap-1.5"
-                  disabled={salvandoMenu}
-                  onClick={() => void concluirEdicaoMenu()}
-                >
-                  {salvandoMenu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  Salvar
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-sidebar-foreground/70"
-                  disabled={salvandoMenu}
-                  onClick={() => setEditandoMenu(false)}
-                  aria-label="Cancelar edição do menu"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={iniciarEdicaoMenu}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
-                title="Editar ordem do menu"
-              >
-                <ListRestart className="w-4 h-4 shrink-0" />
-                {(sidebarOpen || mobileOpen) && <span>Editar ordem do menu</span>}
-              </button>
-            )}
-          </div>
-        )}
 
       </nav>
 
@@ -726,7 +612,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 está olhando para o meio da tela. `animarBadge` vem do provider
                 e dura 900 ms. */}
             <Button
-              data-notif-bell
               variant="ghost"
               size="icon"
               className="w-8 h-8 text-muted-foreground hover:text-foreground relative"
@@ -865,6 +750,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
+          onFinished={() => setTourPronto(true)}
         />
       </div>
 
@@ -895,6 +781,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
+
+      {/* Despedida do mascote — só abre pós termos + tour, e só para quem já
+          convivia com ele (perfis.pet_despedida = 'pendente'). */}
+      <PetDespedida pronto={avisoPetPronto} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (

@@ -153,7 +153,7 @@ interface MetaRowProps {
   onChangeExtra?: (idx: number, v: string) => void;
   disabled?: boolean;
   /** Meta proporcional: operador recém-chegado/retorno de férias, meta menor
-   *  que a cheia. Mantém essa diferença explícita para os consumidores. */
+   *  que a cheia. Sinaliza pro jogo (pet) não tratar igual quem tem meta cheia. */
   proporcional: boolean;
   onChangeProporcional: (v: boolean) => void;
   /**
@@ -339,12 +339,10 @@ export default function MetasConfig() {
   const liderSetorId = perfil?.setor_id ?? null;
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const isAdmin = temPermissao("metas_todos_setores");
+  const isAdmin = perfil?.perfil === "administrador" || perfil?.perfil === "super_admin";
   // Editar/salvar metas exige a permissão gerenciar_metas (admin sempre tem;
   // padrão = true, espelhando o acesso atual). Sem ela, a tela fica só leitura.
   const podeGerenciarMetas = temPermissao("gerenciar_metas");
-  const podeEditarDiasUteis = temPermissao("editar_dias_uteis");
-  const podeEditarQuartis = temPermissao("editar_quartis");
 
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -683,7 +681,6 @@ export default function MetasConfig() {
   // Equipes de treinamento: data de início salva na hora (equipes.treinamento_inicio)
   const [salvandoTreino, setSalvandoTreino] = useState<string | null>(null);
   async function setTreinamentoInicio(equipeId: string, dataISO: string) {
-    if (!podeEditarDiasUteis) return;
     const valor = dataISO || null;
     setEquipes(prev => prev.map(e => e.id === equipeId ? { ...e, treinamento_inicio: valor } : e));
     setSalvandoTreino(equipeId);
@@ -701,9 +698,7 @@ export default function MetasConfig() {
   // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
   async function handleSalvarTudo() {
     if (!empresa?.id || !setorSelecionado) return;
-    if (!podeGerenciarMetas && !podeEditarDiasUteis && !podeEditarQuartis) {
-      toast.error("Sem permissão para editar metas ou configurações do mês."); return;
-    }
+    if (!podeGerenciarMetas) { toast.error("Sem permissão para editar metas."); return; }
     if (metaTravada) { toast.error("Meta deste setor está validada — peça a um admin para reabrir."); return; }
     setSalvandoTudo(true);
 
@@ -714,7 +709,7 @@ export default function MetasConfig() {
       ...operadores.map(op => ({ tipo: "operador" as TipoMeta, referenciaId: op.id })),
     ];
 
-    const payloads: Omit<Meta, "id">[] = (podeGerenciarMetas ? itens : [])
+    const payloads: Omit<Meta, "id">[] = itens
       .map(({ tipo, referenciaId }) => ({
         tipo,
         referencia_id: referenciaId,
@@ -742,7 +737,7 @@ export default function MetasConfig() {
       // aqui: seria o único caso em que salvar não salva e a tela não avisa.
       .filter(p => p.meta_valor > 0 || Number(p.meta_indireta_valor) > 0)
 
-    const salvaConfig = temConfigMes && configDbAtiva && (podeEditarDiasUteis || podeEditarQuartis);
+    const salvaConfig = temConfigMes && configDbAtiva;
     if (payloads.length === 0 && !salvaConfig) {
       toast.warning("Preencha ao menos uma meta antes de salvar.");
       setSalvandoTudo(false);
@@ -783,8 +778,7 @@ export default function MetasConfig() {
 
   const setorNome = setores.find(s => s.id === setorSelecionado)?.nome ?? "";
   const temMetas = Object.values(inputMetas).some(v => v.meta_valor.trim() !== "");
-  const podeSalvar = (podeGerenciarMetas && temMetas)
-    || (temConfigMes && configDbAtiva && (podeEditarDiasUteis || podeEditarQuartis));
+  const podeSalvar = temMetas || (temConfigMes && configDbAtiva);
   const operadoresVisiveis = operadores
     .filter(op => typeof op?.id === "string" && op.id.length > 0)
     .filter(op => !equipeFiltroOp || op.equipe_id === equipeFiltroOp);
@@ -841,7 +835,7 @@ export default function MetasConfig() {
                 <input
                   type="checkbox"
                   checked={contarDiaAtual}
-                  disabled={!podeEditarDiasUteis}
+                  disabled={!podeGerenciarMetas}
                   onChange={e => setContarDiaAtual(e.target.checked)}
                   className="mt-0.5 h-3.5 w-3.5 accent-primary cursor-pointer disabled:cursor-not-allowed"
                 />
@@ -861,11 +855,11 @@ export default function MetasConfig() {
                     type="date"
                     className="h-8 text-sm max-w-[170px]"
                     value={feriadoNovo}
-                    disabled={!podeEditarDiasUteis}
+                    disabled={!podeGerenciarMetas}
                     onChange={(e) => setFeriadoNovo(e.target.value)}
                   />
                   <Button size="sm" variant="outline" className="h-8 gap-1 text-xs"
-                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeEditarDiasUteis}>
+                    onClick={adicionarFeriado} disabled={!feriadoNovo || !podeGerenciarMetas}>
                     <Plus className="h-3.5 w-3.5" /> Adicionar
                   </Button>
                 </div>
@@ -874,7 +868,7 @@ export default function MetasConfig() {
                     {feriados.map(f => (
                       <Badge key={f} variant="secondary" className="gap-1 text-xs font-normal">
                         {f.split("-").reverse().join("/")}
-                        {podeEditarDiasUteis && (
+                        {podeGerenciarMetas && (
                           <button type="button" className="hover:text-destructive"
                             onClick={() => setFeriados(prev => prev.filter(x => x !== f))}>
                             <X className="h-3 w-3" />
@@ -906,7 +900,7 @@ export default function MetasConfig() {
                       <Input
                         className="h-8 w-20 text-sm text-center"
                         value={String(q.min_pct)}
-                        disabled={!podeEditarQuartis}
+                        disabled={!podeGerenciarMetas}
                         onChange={(e) => setQuartilPct(q.quartil, e.target.value)}
                       />
                       <span className="text-xs text-muted-foreground">%</span>
@@ -980,7 +974,7 @@ export default function MetasConfig() {
                             type="date"
                             className="h-8 text-sm max-w-[170px]"
                             value={inicio}
-                            disabled={!podeEditarDiasUteis || salvandoTreino === eq.id}
+                            disabled={!podeGerenciarMetas || salvandoTreino === eq.id}
                             onChange={e => setTreinamentoInicio(eq.id, e.target.value)}
                           />
                         </div>
@@ -1186,7 +1180,7 @@ export default function MetasConfig() {
               size="default"
               className="gap-2 min-w-[140px]"
               onClick={handleSalvarTudo}
-              disabled={salvandoTudo || !podeSalvar || metaTravada}
+              disabled={salvandoTudo || !podeSalvar || !podeGerenciarMetas || metaTravada}
             >
               {salvandoTudo ? (
                 <><Loader2 className="h-4 w-4 animate-spin" /> Salvando…</>

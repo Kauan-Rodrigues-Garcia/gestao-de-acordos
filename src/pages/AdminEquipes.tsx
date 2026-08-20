@@ -248,7 +248,7 @@ export default function AdminEquipes() {
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
 
-  const isAdmin = temPermissao('equipes_todos_setores');
+  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
   // Permissão configurável para criar/editar/excluir equipes e membros.
   // Admin/super_admin sempre têm (temPermissao retorna true). Padrão = true
   // (espelha o acesso atual); desligar na tela de Cargos passa a restringir.

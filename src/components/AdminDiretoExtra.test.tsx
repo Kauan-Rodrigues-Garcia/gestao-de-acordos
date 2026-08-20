@@ -63,10 +63,6 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: { id: 'emp-1', nome: 'Teste' } }),
 }));
 
-vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({ temPermissao: () => true }),
-}));
-
 // ── 3) useDiretoExtraConfig ───────────────────────────────────────────────
 // `mockConfigs` é mutável: cada teste atribui o valor desejado antes de render.
 

@@ -17,7 +17,8 @@ import {
   AlertTriangle, Eye, Users, Save, Sparkles, Lock, Send,
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useAuth } from '@/hooks/useAuth';
+import { PERFIL_NIVEL } from '@/lib/index';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -90,8 +91,7 @@ function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
 
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('ver_campanha_facil');
+  const { perfil } = useAuth();
   const cf = useCampanhaFacil();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,8 +131,22 @@ export default function CampanhaFacil() {
     );
   }
 
+  // ── Gate de cargo: operador não usa o Campanha Fácil ──
+  // Mesma defesa em profundidade do gate acima: o item já some do menu, mas a
+  // rota continua acessível por URL colada. Cargo desconhecido cai no piso de
+  // operador de propósito — o padrão aqui é negar, não liberar.
+  if (perfil && (PERFIL_NIVEL[perfil.perfil] ?? PERFIL_NIVEL.operador) <= PERFIL_NIVEL.operador) {
+    return (
+      <div className="p-6">
+        <Card><CardContent className="p-8 text-center text-muted-foreground">
+          <Lock className="mx-auto mb-3 h-8 w-8 opacity-50" />
+          O Campanha Fácil está disponível apenas para líderes e cargos superiores.
+        </CardContent></Card>
+      </div>
+    );
+  }
+
   function openEdit() {
-    if (!podeEditar) return;
     setEditValue(cf.selectedTemplateBody);
     setEditOpen(true);
   }
@@ -300,16 +314,16 @@ export default function CampanhaFacil() {
                 <p className="text-xs text-muted-foreground">{cf.selectedTemplate.description}</p>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={openEdit} disabled={!podeEditar}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={openEdit}>
                   <Pencil className="h-3.5 w-3.5" /> Editar
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" disabled={!podeEditar} onClick={() => { setAddTitulo(''); setAddCategoria('Personalizadas'); setAddCorpo(''); setAddOpen(true); }}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { setAddTitulo(''); setAddCategoria('Personalizadas'); setAddCorpo(''); setAddOpen(true); }}>
                   <Plus className="h-3.5 w-3.5" /> Adicionar
                 </Button>
                 <Button
                   variant="outline" size="sm"
                   className="gap-1.5 border-destructive/30 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  disabled={cf.templates.length <= 1 || !podeEditar}
+                  disabled={cf.templates.length <= 1}
                   onClick={() => setDeleteMsgOpen(true)}
                 >
                   <Trash2 className="h-3.5 w-3.5" /> Excluir
@@ -368,7 +382,7 @@ export default function CampanhaFacil() {
                     </SelectContent>
                   </Select>
                   {presetReal && (
-                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" title="Excluir configuração" disabled={!podeEditar} onClick={() => setDeleteDiscountOpen(true)}>
+                    <Button variant="ghost" size="icon" className="h-9 w-9 text-destructive" title="Excluir configuração" onClick={() => setDeleteDiscountOpen(true)}>
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   )}
@@ -389,7 +403,7 @@ export default function CampanhaFacil() {
                     </label>
                   ))}
                 </div>
-                <Button variant="outline" size="sm" className="w-full gap-1.5" disabled={!podeEditar} onClick={() => { setDiscountName(presetSelecionado?.nome ?? ''); setSaveDiscountOpen(true); }}>
+                <Button variant="outline" size="sm" className="w-full gap-1.5" onClick={() => { setDiscountName(presetSelecionado?.nome ?? ''); setSaveDiscountOpen(true); }}>
                   <Save className="h-3.5 w-3.5" /> Salvar configuração
                 </Button>
               </CardContent>

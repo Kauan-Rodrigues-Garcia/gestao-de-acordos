@@ -21,7 +21,6 @@
  *   - ninguém redefine a própria senha por aqui (o usuário tem o modal da
  *     topbar, que exige a sessão dele e não passa pelo service_role).
  */
-import { temPermissaoApi } from './_permissoes.js';
 
 interface ReqLike {
   method?: string;
@@ -94,7 +93,7 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       return;
     }
 
-    // 2) A matriz, e não o nome do cargo, decide a ação.
+    // 2) Confirma administrador ou super_admin
     const perfilResp = await fetch(
       `${url}/rest/v1/perfis?id=eq.${caller.id}&select=perfil,nome,empresa_id`,
       { headers: admin },
@@ -102,11 +101,8 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
     const perfilArr = (await perfilResp.json()) as Array<{ perfil?: string; nome?: string; empresa_id?: string }>;
     const callerPerfil = Array.isArray(perfilArr) ? perfilArr[0] : null;
     const callerRole = callerPerfil?.perfil;
-    if (!callerPerfil || !await temPermissaoApi({
-      url, headers: admin, usuarioId: caller.id, empresaId: callerPerfil.empresa_id,
-      cargo: callerRole, chave: 'redefinir_senha_usuarios',
-    })) {
-      res.status(403).json({ error: 'A permissão de redefinir senhas não está habilitada.' });
+    if (!callerPerfil || (callerRole !== 'administrador' && callerRole !== 'super_admin')) {
+      res.status(403).json({ error: 'Apenas administradores podem redefinir senhas.' });
       return;
     }
 
@@ -143,12 +139,14 @@ export default async function handler(req: ReqLike, res: ResLike): Promise<void>
       return;
     }
 
-    // A permissão vale na empresa da sessão; cruzar empresa é outra concessão.
-    const podeCruzarEmpresa = await temPermissaoApi({
-      url, headers: admin, usuarioId: caller.id, empresaId: callerPerfil.empresa_id,
-      cargo: callerRole, chave: 'gerenciar_multiempresa',
-    });
-    if (!podeCruzarEmpresa && alvo.empresa_id !== callerPerfil.empresa_id) {
+    // Escalada de privilégio: um administrador que redefinisse a senha de um
+    // super_admin poderia logar como ele. Só super_admin mexe em super_admin.
+    if (alvo.perfil === 'super_admin' && callerRole !== 'super_admin') {
+      res.status(403).json({ error: 'Apenas um super_admin pode redefinir a senha de outro super_admin.' });
+      return;
+    }
+    // Isolamento entre empresas — super_admin é global, administrador não.
+    if (callerRole === 'administrador' && alvo.empresa_id !== callerPerfil.empresa_id) {
       res.status(403).json({ error: 'Você só pode redefinir a senha de usuários da sua empresa.' });
       return;
     }

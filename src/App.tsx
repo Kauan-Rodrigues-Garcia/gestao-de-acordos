@@ -11,6 +11,7 @@ import { TermoUsoGate } from '@/components/TermoUsoGate';
 import { TermoUsoProvider } from '@/hooks/useTermoUso';
 import Layout from '@/components/Layout';
 import { ChatNotificacoes } from '@/components/ChatNotificacoes';
+import { PetWidget } from '@/components/pet/PetWidget';
 import { ImpersonacaoBanner } from '@/components/ImpersonacaoBanner';
 import { Toaster } from '@/components/ui/sonner';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -83,6 +84,7 @@ function LayoutWrapper({ children }: { children: React.ReactNode }) {
             </ErrorBoundary>
           </Layout>
           <ChatNotificacoes />
+          <PetWidget />
         </TermoUsoGate>
       </TermoUsoProvider>
     </ProtectedRoute>
@@ -153,28 +155,26 @@ export default function App() {
               } />
 
               <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_dashboard"><Dashboard /></ProtectedRoute>
-                </LayoutWrapper>
+                <LayoutWrapper><Dashboard /></LayoutWrapper>
               } />
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredAnyPermissoes={['ver_acordos', 'ver_pix_automatico']}>
+                  <ProtectedRoute requiredPermissao="ver_acordos">
                     <Acordos />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_novo_acordo">
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="editar_acordos">
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -186,7 +186,7 @@ export default function App() {
               {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="importar_excel">
+                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
                     <ImportarExcel />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -194,21 +194,21 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_usuarios">
+                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_usuarios">
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -219,7 +219,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_configuracoes">
+                  <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">
                     <AdminConfiguracoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -228,14 +228,14 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_metas">
+                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_lixeira">
+                  <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -244,7 +244,8 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_painel_diretoria">
+                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}
+                                  requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -295,7 +296,7 @@ export default function App() {
                   `tickets_config`, e a própria página resolve isso. */}
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_tickets">
+                  <ProtectedRoute allowedProfiles={['lider','elite','gerencia','diretoria','administrador','ouvidoria']}>
                     <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -321,7 +322,7 @@ export default function App() {
                 pessoa curiosa poder encontrar.
               */}
               <Route path={ROUTE_PATHS.CREATORS_LAB} element={
-                <ProtectedRoute requiredPermissao="ver_creators_lab">
+                <ProtectedRoute>
                   <CreatorsLab />
                 </ProtectedRoute>
               } />

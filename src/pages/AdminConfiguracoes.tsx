@@ -13,7 +13,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { isPerfilAdmin } from '@/lib/index';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminPermissoes from '@/pages/AdminPermissoes';
 import AdminLogs from '@/pages/AdminLogs';
@@ -39,25 +41,15 @@ export default function AdminConfiguracoes() {
   const [editando, setEditando] = useState<ModeloMensagem | null>(null);
   const [form, setForm] = useState({ nome: '', conteudo: '' });
   const [saving, setSaving] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState(tabFromUrl);
   const { empresa } = useEmpresa();
-  const { temPermissao, loading: loadingPermissoes } = useCargoPermissoes();
-  const podeVerBancoDados = temPermissao('ver_configuracoes_geral');
-  const podeEditarModelos = temPermissao('editar_modelos_mensagem');
-  const abasPermitidas = [
-    ['geral', 'ver_configuracoes_geral'],
-    ['permissoes', 'ver_permissoes'],
-    ['direto_extra', 'ver_direto_extra'],
-    ['tags', 'ver_tags'],
-    ['logs', 'ver_logs'],
-    ['documentacoes', 'ver_documentacoes'],
-    ['multiempresa', 'ver_multiempresa'],
-  ].filter(([, permissao]) => temPermissao(permissao)).map(([aba]) => aba);
-
-  useEffect(() => {
-    if (loadingPermissoes || abasPermitidas.includes(abaAtiva)) return;
-    setAbaAtiva(abasPermitidas[0] ?? '');
-  }, [abaAtiva, abasPermitidas, loadingPermissoes]);
+  const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
+  // Gate defensivo: card "Banco de Dados / Migrations" só para Admin/Super Admin
+  // (defesa em profundidade — além do ProtectedRoute da rota)
+  const podeVerBancoDados = isPerfilAdmin(perfil?.perfil ?? '');
+  // Aba "Multiempresa": só super_admin. Esconder aqui é conveniência — quem
+  // decide são as RPCs e o trigger em `perfis` (migration 20260818300000).
+  const ehSuperAdmin = perfil?.perfil === 'super_admin';
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -112,21 +104,18 @@ export default function AdminConfiguracoes() {
   useEffect(() => { fetchModelos(empresa?.id); }, [empresa?.id]);
 
   function abrirCriar() {
-    if (!podeEditarModelos) return;
     setEditando(null);
     setForm({ nome: '', conteudo: '' });
     setDialogOpen(true);
   }
 
   function abrirEditar(m: ModeloMensagem) {
-    if (!podeEditarModelos) return;
     setEditando(m);
     setForm({ nome: m.nome, conteudo: m.conteudo });
     setDialogOpen(true);
   }
 
   async function salvar() {
-    if (!podeEditarModelos) return;
     if (!form.nome || !form.conteudo) { toast.error('Preencha todos os campos'); return; }
     setSaving(true);
     if (editando) {
@@ -146,13 +135,11 @@ export default function AdminConfiguracoes() {
   }
 
   async function toggleAtivo(m: ModeloMensagem) {
-    if (!podeEditarModelos) return;
     await supabase.from('modelos_mensagem').update({ ativo: !m.ativo }).eq('id', m.id);
     fetchModelos(empresa?.id);
   }
 
   async function excluir(id: string) {
-    if (!podeEditarModelos) return;
     if (!confirm('Excluir este modelo?')) return;
     await supabase.from('modelos_mensagem').delete().eq('id', id);
     toast.success('Modelo excluído');
@@ -182,33 +169,33 @@ export default function AdminConfiguracoes() {
       </div>
 
       {/* Abas internas */}
-      <Tabs value={abaAtiva} onValueChange={setAbaAtiva} className="flex-1 flex flex-col">
+      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            {temPermissao('ver_configuracoes_geral') && <TabsTrigger
+            <TabsTrigger
               value="geral"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Settings className="w-4 h-4" /> Geral
-            </TabsTrigger>}
-            {temPermissao('ver_permissoes') && <TabsTrigger
+            </TabsTrigger>
+            <TabsTrigger
               value="permissoes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ShieldCheck className="w-4 h-4" /> Permissões
-            </TabsTrigger>}
-            {temPermissao('ver_direto_extra') && <TabsTrigger
+            </TabsTrigger>
+            <TabsTrigger
               value="direto_extra"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
-            </TabsTrigger>}
-            {temPermissao('ver_tags') && <TabsTrigger
+            </TabsTrigger>
+            <TabsTrigger
               value="tags"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Tag className="w-4 h-4" /> Tags
-            </TabsTrigger>}
+            </TabsTrigger>
             {temPermissao('ver_logs') && (
             <TabsTrigger
               value="logs"
@@ -217,13 +204,13 @@ export default function AdminConfiguracoes() {
               <ClipboardList className="w-4 h-4" /> Logs
             </TabsTrigger>
             )}
-            {temPermissao('ver_documentacoes') && <TabsTrigger
+            <TabsTrigger
               value="documentacoes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <FileText className="w-4 h-4" /> Documentações
-            </TabsTrigger>}
-            {temPermissao('ver_multiempresa') && (
+            </TabsTrigger>
+            {ehSuperAdmin && (
             <TabsTrigger
               value="multiempresa"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -231,11 +218,15 @@ export default function AdminConfiguracoes() {
               <Building2 className="w-4 h-4" /> Multiempresa
             </TabsTrigger>
             )}
+            {/* Aba Pet fora do ar: o mascote saiu de cena (migration 20260809c)
+                e isto administrava uma economia congelada. O componente segue
+                no repositório — ver a lista de remoção futura na spec
+                docs/superpowers/specs/2026-08-09-despedida-do-pet-design.md */}
           </TabsList>
         </div>
 
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
-        {temPermissao('ver_configuracoes_geral') && <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
+        <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
           <div className="max-w-4xl mx-auto space-y-6">
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}
@@ -312,9 +303,9 @@ export default function AdminConfiguracoes() {
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
                   <MessageSquare className="w-4 h-4 text-primary" /> Modelos de Mensagem WhatsApp
                 </CardTitle>
-                {podeEditarModelos && <Button size="sm" onClick={abrirCriar}>
+                <Button size="sm" onClick={abrirCriar}>
                   <Plus className="w-4 h-4 mr-2" /> Novo Modelo
-                </Button>}
+                </Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -347,7 +338,7 @@ export default function AdminConfiguracoes() {
                           </div>
                           <p className="text-xs text-muted-foreground leading-relaxed">{m.conteudo}</p>
                         </div>
-                        {podeEditarModelos && <div className="flex items-center gap-2 flex-shrink-0">
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <Switch checked={m.ativo} onCheckedChange={() => toggleAtivo(m)} />
                           <Button variant="ghost" size="icon" className="w-7 h-7" onClick={() => abrirEditar(m)}>
                             <Edit className="w-3.5 h-3.5" />
@@ -355,7 +346,7 @@ export default function AdminConfiguracoes() {
                           <Button variant="ghost" size="icon" className="w-7 h-7 text-destructive hover:bg-destructive/10" onClick={() => excluir(m.id)}>
                             <Trash2 className="w-3.5 h-3.5" />
                           </Button>
-                        </div>}
+                        </div>
                       </div>
                     </motion.div>
                   ))}
@@ -365,22 +356,22 @@ export default function AdminConfiguracoes() {
           </Card>
 
           </div>
-        </TabsContent>}
+        </TabsContent>
 
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
-        {temPermissao('ver_permissoes') && <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
-          <AdminPermissoes podeEditarExterno={temPermissao('gerenciar_permissoes')} />
-        </TabsContent>}
+        <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
+          <AdminPermissoes />
+        </TabsContent>
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
-        {temPermissao('ver_direto_extra') && <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
+        <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
           <AdminDiretoExtra />
-        </TabsContent>}
+        </TabsContent>
 
         {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
-        {temPermissao('ver_tags') && <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
+        <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
           <AdminTags />
-        </TabsContent>}
+        </TabsContent>
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
         {temPermissao('ver_logs') && (
@@ -390,12 +381,12 @@ export default function AdminConfiguracoes() {
         )}
 
         {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
-        {temPermissao('ver_documentacoes') && <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
+        <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
           <AdminDocumentacoes />
-        </TabsContent>}
+        </TabsContent>
 
         {/* ─── Aba: Multiempresa (só super_admin) ──────────────────────── */}
-        {temPermissao('ver_multiempresa') && (
+        {ehSuperAdmin && (
         <TabsContent value="multiempresa" className="flex-1 overflow-y-auto p-6 mt-0">
           <AcessoMultiempresa />
         </TabsContent>

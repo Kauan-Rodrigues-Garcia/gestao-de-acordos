@@ -23,6 +23,7 @@ import {
   estadoFechamentoDaData, mensagemFechamento, mesDaData,
 } from '@/lib/fechamentoMes';
 import { ultimoDiaProxMes } from '@/components/ModalReagendar';
+import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { criarNotificacao }    from '@/services/notificacoes.service';
 import { registrarLog }        from '@/services/logs.service';
 import { enviarParaLixeira }   from '@/services/lixeira.service';
@@ -546,6 +547,7 @@ export function AcordoNovoInline({
 
       const inserido = await executarSalvar(payload);
       if (inserido) {
+        if (payload.status === 'pago') celebrarPetAcordoPago();
         if (agendarProxima) await criarProximaParcela(inserido);
         limparDraft();
         onSaved(inserido);
@@ -713,6 +715,7 @@ export function AcordoNovoInline({
       // A tela de acordos recebe a PRIMEIRA: é a que o operador acabou de
       // tabular; as demais aparecem ao abrir o detalhe do grupo.
       if (novas[0]) onSaved(novas[0]);
+      if (novas.some(p => p.status === 'pago')) celebrarPetAcordoPago();
       toast.success(
         novas.length === 1
           ? `Parcela ${novas[0]?.numero_parcela ?? r.novoTotal}/${r.novoTotal} adicionada ao acordo existente!`

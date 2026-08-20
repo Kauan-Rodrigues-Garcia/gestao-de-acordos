@@ -1,12 +1,13 @@
 /**
  * useCargoPermissoes — resolve o que a pessoa logada pode fazer.
  *
- * ## A regra, em três linhas
+ * ## A regra, em quatro linhas
  *
  * ```
- * 1. exceção da pessoa tem a chave ...... vale o valor dela
- * 2. permissão do cargo tem a chave ..... vale o valor dela
- * 3. nenhuma das duas ................... NÃO
+ * 1. admin ou super_admin ............... sim, sempre
+ * 2. exceção da pessoa tem a chave ...... vale o valor dela
+ * 3. permissão do cargo tem a chave ..... vale o valor dela
+ * 4. nenhuma das duas ................... NÃO
  * ```
  *
  * ## Por que o passo 4 mudou
@@ -22,15 +23,17 @@
  * `20260815154058` acabou com a ausência: todo cargo tem o catálogo inteiro.
  * Sem ausência, o fallback não tem função — e a divergência não tem como voltar.
  *
- * A mesma resolução é usada por `fn_tem_permissao` no banco. Assim, rota,
- * botão, consulta e política RLS respondem à mesma matriz.
+ * ## O que estas permissões NÃO fazem
+ *
+ * Elas governam navegação e interface. Quem manda no dado é a RLS. Forçar
+ * `ver_acordos_gerais` num operador não faz ele enxergar acordo alheio — a
+ * política do banco continua negando, e isso é o comportamento correto.
  */
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { chavePermissaoDoTenant, normalizarDependencias } from '@/lib/permissoes-catalogo';
-import { assinarTabela } from '@/lib/realtime';
+import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -76,7 +79,7 @@ interface UseCargoPermissoesReturn {
    * Ver o comentário da lista em `permissoes-catalogo.ts`.
    */
   temPermissaoExplicita: (key: string) => boolean;
-  /** O cargo da sessão é administrativo? Não concede bypass de permissão. */
+  /** admin e super_admin: acesso total por construção (migration 20260812b). */
   isAdmin: boolean;
   /** Resolve para OUTRA pessoa — a tela de administração usa para prever. */
   resolverParaUsuario: (usuarioId: string, cargo: string, key: string) => boolean;
@@ -103,7 +106,7 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   const [loading, setLoading] = useState(true);
 
   const cargo = perfil?.perfil ?? '';
-  const isAdmin = cargo === 'administrador' || cargo === 'super_admin';
+  const isAdmin = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
 
   const fetch = useCallback(async () => {
     if (!empresa?.id || !cargo) {
@@ -152,46 +155,23 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    */
   useEffect(() => {
     if (!empresa?.id) return;
-    const reconciliar = <T extends { id: string }>(
-      atual: T[], payload: { eventType: string; new: unknown; old: unknown },
-    ): T[] => {
-      const bruto = (payload.eventType === 'DELETE' ? payload.old : payload.new) as
-        (T & { id?: string }) | null;
-      const id = bruto?.id;
-      if (!id) return atual;
-      if (payload.eventType === 'DELETE') return atual.filter(l => l.id !== id);
-      const indice = atual.findIndex(l => l.id === id);
-      if (indice < 0) return [...atual, bruto as T];
-      const lista = [...atual];
-      lista[indice] = { ...atual[indice], ...bruto };
-      return lista;
-    };
+    const canal = supabase
+      .channel(`rt-permissoes-${empresa.id}`)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'cargos_permissoes',
+          filter: `empresa_id=eq.${empresa.id}` },
+        () => { void fetch(); })
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'perfis_permissoes',
+          filter: `empresa_id=eq.${empresa.id}` },
+        () => { void fetch(); })
+      .subscribe();
 
-    return assinarTabela(
-      {
-        topico: `rt-permissoes-${empresa.id}`,
-        escutas: [
-          { tabela: 'cargos_permissoes', filtro: `empresa_id=eq.${empresa.id}` },
-          { tabela: 'perfis_permissoes', filtro: `empresa_id=eq.${empresa.id}` },
-        ],
-      },
-      {
-        onEvento: payload => {
-          if (payload.table === 'cargos_permissoes') {
-            setTodasPermissoes(atual => reconciliar(atual,payload));
-          } else if (payload.table === 'perfis_permissoes') {
-            setTodasExcecoes(atual => reconciliar(atual,payload));
-          }
-        },
-        onReconectado: () => { void fetch(); },
-      },
-    );
+    return () => { void supabase.removeChannel(canal); };
   }, [empresa?.id, fetch]);
 
   const permissoes = useMemo(
-    () => normalizarDependencias(
-      todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},
-    ),
+    () => todasPermissoes.find(r => r.cargo === cargo)?.permissoes ?? {},
     [todasPermissoes, cargo],
   );
 
@@ -200,34 +180,43 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
     [todasExcecoes, perfil?.id],
   );
 
-  const efetivas = useMemo(
-    () => normalizarDependencias({ ...permissoes, ...excecoes }),
-    [permissoes, excecoes],
-  );
-
   const temPermissao = useCallback(
-    (key: string): boolean => !!efetivas[chavePermissaoDoTenant(key, empresa?.slug)],
-    [efetivas, empresa?.slug],
+    (key: string): boolean => {
+      if (isAdmin) return true;
+      if (key in excecoes)   return !!excecoes[key];
+      if (key in permissoes) return !!permissoes[key];
+      // Ausente = negado. Ver o cabeçalho: o fallback legado morreu com a
+      // migration que preencheu todas as chaves de todos os cargos.
+      return false;
+    },
+    [isAdmin, excecoes, permissoes],
   );
 
   const temPermissaoExplicita = useCallback(
-    (key: string): boolean => !!efetivas[chavePermissaoDoTenant(key, empresa?.slug)],
-    [efetivas, empresa?.slug],
+    (key: string): boolean => {
+      if (key in excecoes)   return !!excecoes[key];
+      if (key in permissoes) return !!permissoes[key];
+      return false;
+    },
+    [excecoes, permissoes],
   );
 
   const resolverParaUsuario = useCallback(
     (usuarioId: string, cargoAlvo: string, key: string): boolean => {
+      if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
       const exc = todasExcecoes.find(r => r.usuario_id === usuarioId)?.permissoes ?? {};
+      if (key in exc) return !!exc[key];
       const doCargo = todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes ?? {};
-      return !!normalizarDependencias({ ...doCargo, ...exc })[key];
+      if (key in doCargo) return !!doCargo[key];
+      return false;
     },
     [todasExcecoes, todasPermissoes],
   );
 
   const valorDoCargo = useCallback(
     (cargoAlvo: string, key: string): boolean => {
-      const mapa = todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes ?? {};
-      return !!normalizarDependencias(mapa)[key];
+      if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargoAlvo)) return true;
+      return !!todasPermissoes.find(r => r.cargo === cargoAlvo)?.permissoes?.[key];
     },
     [todasPermissoes],
   );

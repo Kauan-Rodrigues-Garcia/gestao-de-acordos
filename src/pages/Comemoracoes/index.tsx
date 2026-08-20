@@ -29,7 +29,6 @@ import {
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useComemoracoes } from '@/hooks/useComemoracoes';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
@@ -43,6 +42,7 @@ import { listarMidias, type MidiaComemoracao } from '@/services/comemoracaoMidia
 import { EFEITOS, SONS, type EfeitoId, type SomId } from './catalogo';
 import { ANIMACOES_TEXTO, type AnimTextoId } from './animacoesTexto';
 import { MODELOS, layoutDoModelo, modeloDoLayout, type ModeloId } from './modelos';
+import { podeCriarComemoracao } from './permissoes';
 import {
   estadoDe, validarAgendamento, MAX_DIAS_AGENDAMENTO,
 } from './janela';
@@ -82,11 +82,10 @@ function paraInputLocal(d: Date): string {
 export default function Comemoracoes() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
   const usuarioId = perfil?.id ?? null;
-  const podeCriar = temPermissao('ver_comemoracoes');
+  const podeCriar = podeCriarComemoracao(perfil?.perfil);
   const habilitado = podeCriar && !!empresaId;
 
   const { comemoracoes, loading, dbAtiva, erro, recarregar, agoraCorrigido } =

@@ -27,7 +27,6 @@ import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { setDiretoExtraConfig } from '@/services/direto_extra.service';
 
 // ─── Tipos locais ───────────────────────────────────────────────────────────
@@ -44,8 +43,6 @@ interface UsuarioItem {
 
 export default function AdminDiretoExtra() {
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('gerenciar_direto_extra');
   const empresaId   = empresa?.id ?? '';
 
   const { configs, loading: loadingConfigs, refetch } = useDiretoExtraConfig();
@@ -167,7 +164,7 @@ export default function AdminDiretoExtra() {
 
   // ── Toggle genérico ───────────────────────────────────────────────────────
   async function toggle(escopo: 'setor' | 'equipe' | 'usuario', id: string, novoValor: boolean) {
-    if (!podeEditar || !empresaId) return;
+    if (!empresaId) return;
     const key = `${escopo}:${id}`;
     setSalvando(key);
     const res = await setDiretoExtraConfig({
@@ -320,7 +317,7 @@ export default function AdminDiretoExtra() {
                     salvando: salvando === `setor:${s.id}`,
                   };
                 })}
-                onToggle={(id, novo) => podeEditar && toggle('setor', id, novo)}
+                onToggle={(id, novo) => toggle('setor', id, novo)}
               />
             </TabsContent>
 
@@ -355,7 +352,7 @@ export default function AdminDiretoExtra() {
                     salvando: salvando === `equipe:${e.id}`,
                   };
                 })}
-                onToggle={(id, novo) => podeEditar && toggle('equipe', id, novo)}
+                onToggle={(id, novo) => toggle('equipe', id, novo)}
               />
             </TabsContent>
 
@@ -393,7 +390,7 @@ export default function AdminDiretoExtra() {
                     salvando: salvando === `usuario:${u.id}`,
                   };
                 })}
-                onToggle={(id, novo) => podeEditar && toggle('usuario', id, novo)}
+                onToggle={(id, novo) => toggle('usuario', id, novo)}
               />
             </TabsContent>
           </Tabs>

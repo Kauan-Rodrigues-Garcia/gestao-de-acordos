@@ -686,48 +686,6 @@ describe('useAcordos', () => {
       });
     });
 
-    it('evento UPDATE remove imediatamente acordo que saiu do status/tag filtrado', async () => {
-      const a1 = fakeAcordo({
-        id: 'a1', status: 'verificar_pendente', tag_ids: ['tag-1'],
-      });
-      mockFetchAcordos.mockResolvedValue({ data: [a1], count: 1 });
-      mockPerfilValue.current  = fakePerfil();
-      mockEmpresaValue.current = fakeEmpresa();
-
-      const { result } = renderHook(() => useAcordos({
-        status: 'verificar_pendente', tag_id: 'tag-1',
-      }));
-      await esperarFetchInicial(result);
-      const [, handler] = mockRealtimeSubscribe.mock.calls[0];
-
-      act(() => {
-        handler({ eventType: 'UPDATE', newRecord: { ...a1, status: 'pago' } });
-      });
-
-      await waitFor(() => {
-        expect(result.current.acordos).toEqual([]);
-        expect(result.current.totalCount).toBe(0);
-      });
-    });
-
-    it('evento UPDATE adiciona acordo que entrou no recorte de tag', async () => {
-      mockFetchAcordos.mockResolvedValue({ data: [], count: 0 });
-      mockPerfilValue.current  = fakePerfil();
-      mockEmpresaValue.current = fakeEmpresa();
-
-      const { result } = renderHook(() => useAcordos({ tag_id: 'tag-1' }));
-      await esperarFetchInicial(result);
-      const [, handler] = mockRealtimeSubscribe.mock.calls[0];
-      const entrando = fakeAcordo({ id: 'a2', tag_ids: ['tag-1'] });
-
-      act(() => { handler({ eventType: 'UPDATE', newRecord: entrando }); });
-
-      await waitFor(() => {
-        expect(result.current.acordos.map(a => a.id)).toEqual(['a2']);
-        expect(result.current.totalCount).toBe(1);
-      });
-    });
-
     it('evento DELETE: remove o acordo da lista e decrementa totalCount', async () => {
       const a1 = fakeAcordo({ id: 'a1' });
       const a2 = fakeAcordo({ id: 'a2' });

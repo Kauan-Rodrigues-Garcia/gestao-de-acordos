@@ -4,8 +4,6 @@ import { ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import { itemVariants } from './constants';
-import { ValorAnimado } from '@/components/DesempenhoDia/ValorAnimado';
-import { isValidElement, type CSSProperties, type ReactNode } from 'react';
 
 // ── CustomTooltip ─────────────────────────────────────────────────────────────
 
@@ -76,7 +74,7 @@ export type TrendDirection = 'up' | 'down' | 'neutral';
 
 export interface MetricCardProps {
   label: string;
-  value: ReactNode;
+  value: React.ReactNode;
   icon: React.ReactNode;
   sub?: string;
   accentColor?: string;
@@ -84,67 +82,11 @@ export interface MetricCardProps {
   gradientFrom?: string;
 }
 
-function textoPlano(node: ReactNode): string {
-  if (typeof node === 'string' || typeof node === 'number') return String(node);
-  if (Array.isArray(node)) return node.map(textoPlano).join('');
-  if (isValidElement<{ children?: ReactNode }>(node)) return textoPlano(node.props.children);
-  return '';
-}
-
-/** Converte os formatos usados nos cards (R$, inteiro, %, quartil) em um valor
- * numérico e um formatador equivalente, sem obrigar cada caller a duplicar a
- * configuração da animação. */
-function decomporValor(node: ReactNode): {
-  numero: number;
-  formatar: (valor: number) => string;
-  className?: string;
-  style?: CSSProperties;
-} | null {
-  const texto = textoPlano(node);
-  const match = texto.match(/^(.*?)(-?\d[\d.,]*)(.*)$/u);
-  if (!match) return null;
-
-  let prefixo = match[1];
-  const token = match[2];
-  const sufixo = match[3];
-  const casas = token.includes(',') ? token.slice(token.lastIndexOf(',') + 1).length : 0;
-  let numero = Number(token.replace(/\./g, '').replace(',', '.'));
-  if (!Number.isFinite(numero)) return null;
-
-  // Diferença para projeção usa o sinal tipográfico fora do token numérico.
-  // Trazê-lo para o número permite contar corretamente ao atravessar o zero.
-  let modoSinal: 'completo' | 'somente-negativo' | null = token.startsWith('-')
-    ? 'somente-negativo'
-    : null;
-  if (/[+−-]\s*$/u.test(prefixo)) {
-    const sinal = prefixo.match(/([+−-])\s*$/u)?.[1];
-    prefixo = prefixo.replace(/[+−-]\s*$/u, '');
-    numero = sinal === '+' ? Math.abs(numero) : -Math.abs(numero);
-    modoSinal = 'completo';
-  }
-
-  const props = isValidElement<{ className?: string; style?: CSSProperties }>(node)
-    ? node.props
-    : undefined;
-  const formatarNumero = (valor: number) => Math.abs(valor).toLocaleString('pt-BR', {
-    minimumFractionDigits: casas,
-    maximumFractionDigits: casas,
-  });
-
-  return {
-    numero,
-    formatar: valor => `${prefixo}${modoSinal === 'completo' ? (valor >= 0 ? '+ ' : '− ') : modoSinal === 'somente-negativo' && valor < 0 ? '−' : ''}${formatarNumero(valor)}${sufixo}`,
-    className: props?.className,
-    style: props?.style,
-  };
-}
-
 export function MetricCard({
   label, value, icon, sub,
   accentColor = '#6366f1',
   trend, gradientFrom,
 }: MetricCardProps) {
-  const valorDecomposto = decomporValor(value);
   const TrendIcon =
     trend === 'up' ? ArrowUpRight : trend === 'down' ? ArrowDownRight : Minus;
   const trendColor =
@@ -189,14 +131,7 @@ export function MetricCard({
         </div>
       </div>
       <div className="text-xl font-bold leading-tight tracking-tight pl-1 font-mono tabular-nums">
-        {valorDecomposto ? (
-          <ValorAnimado
-            valor={valorDecomposto.numero}
-            formatar={valorDecomposto.formatar}
-            className={valorDecomposto.className}
-            style={valorDecomposto.style}
-          />
-        ) : value}
+        {value}
       </div>
       {sub && (
         <span className="text-[11px] text-muted-foreground pl-1 leading-snug">{sub}</span>

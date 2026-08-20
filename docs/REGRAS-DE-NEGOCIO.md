@@ -1441,7 +1441,19 @@ Excel) em campanhas de cobrança: aplica descontos, substitui variáveis da
 mensagem, distribui responsáveis em **rodízio** e exporta um Excel pronto.
 Mensagens e descontos são compartilhados por empresa.
 
-### 13.4 Comemoração de meta
+### 13.4 Pet
+
+Economia baseada no recebimento diário.
+
+> 🔒 **Regra de ouro:** o cliente **nunca** credita moedas. O crédito é
+> calculado no servidor, a partir de `diario_recebimentos`, por funções
+> `SECURITY DEFINER`. O frontend só chama as RPCs. Qualquer atalho aqui vira
+> moeda infinita.
+
+Todas as funções toleram a ausência das tabelas/RPCs, caindo no modo
+`localStorage`.
+
+### 13.4-b Comemoração de meta
 
 Líder+ monta e dispara (agora ou agendada); o card explode na tela de quem está
 no escopo. **Quem monta escolhe o alvo, e o alvo decide a plateia:**

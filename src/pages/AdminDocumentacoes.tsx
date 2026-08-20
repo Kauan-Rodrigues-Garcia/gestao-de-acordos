@@ -13,7 +13,6 @@ import { supabase } from '@/lib/supabase';
 import type { DocumentoLgpd, TipoDocumentoLgpd } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
 // ── Metadados dos 6 tipos de documento ──────────────────────
 const TIPO_META: Record<TipoDocumentoLgpd, {
@@ -113,8 +112,6 @@ function exportarPDF(doc: DocumentoLgpd) {
 // ── Componente principal ─────────────────────────────────────
 export default function AdminDocumentacoes() {
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('gerenciar_documentacoes');
 
   const [docs, setDocs] = useState<Record<TipoDocumentoLgpd, DocumentoLgpd | null>>({
     politica_privacidade: null,
@@ -170,13 +167,13 @@ export default function AdminDocumentacoes() {
   }
 
   function entrarEdicao() {
-    if (!podeEditar || !modalDoc) return;
+    if (!modalDoc) return;
     setRascunho(modalDoc.conteudo);
     setModoEdicao(true);
   }
 
   async function salvarEdicao() {
-    if (!podeEditar || !modalDoc || !empresa?.id) return;
+    if (!modalDoc || !empresa?.id) return;
     setSaving(true);
 
     const novaVersao = incrementarVersao(modalDoc.versao);
@@ -352,7 +349,7 @@ export default function AdminDocumentacoes() {
           {/* Ações do modal */}
           <div className="flex-shrink-0 flex items-center justify-between gap-2 pt-2 border-t border-border">
             <div className="flex gap-2">
-              {!modoEdicao && modalDoc && podeEditar && (
+              {!modoEdicao && modalDoc && (
                 <>
                   <Button size="sm" variant="outline" className="gap-1.5 h-8 text-xs" onClick={entrarEdicao}>
                     <Pencil className="w-3 h-3" /> Editar

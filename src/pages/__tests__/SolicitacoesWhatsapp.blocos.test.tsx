@@ -37,13 +37,7 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: { id: 'emp', nome: 'PaguePlay' }, tenantSlug: 'pagueplay' }),
 }));
 vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({
-    temPermissao: (chave: string) => {
-      if (['ver_solicitacoes_whatsapp', 'criar_solicitacao_whatsapp'].includes(chave)) return true;
-      return sessao.perfil !== 'operador';
-    },
-    temPermissaoExplicita: () => false,
-  }),
+  useCargoPermissoes: () => ({ temPermissao: () => true, temPermissaoExplicita: () => false }),
 }));
 vi.mock('@/lib/tenant-config', () => ({
   useTenant: () => ({ isPaguePlay: true, slug: 'pagueplay' }),
@@ -65,7 +59,6 @@ vi.mock('@/hooks/useSolicitacoesWhatsapp', () => ({
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
-    rpc: () => Promise.resolve({ data: null, error: null }),
     from: () => ({
       select: () => ({ eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) }) }),
     }),

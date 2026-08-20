@@ -173,22 +173,23 @@ describe('veTodosOsSetores', () => {
   const nega = () => false;
   const libera = () => true;
 
-  it('nenhum cargo abre por si', () => {
+  it('cargo abre por si', () => {
     for (const cargo of ['administrador', 'super_admin', 'diretoria']) {
-      expect(veTodosOsSetores(cargo, nega)).toBe(false);
+      expect(veTodosOsSetores(cargo, nega)).toBe(true);
     }
   });
 
-  it('diretoria usa a mesma permissão configurável das demais telas', () => {
-    expect(veTodosOsSetores('diretoria', nega)).toBe(false);
-    expect(veTodosOsSetores('diretoria', c => c === 'analitico_visao_todos_setores')).toBe(true);
+  it('diretoria enxerga a empresa toda no dashboard, como já enxergava na aba', () => {
+    // O defeito: a aba decidia por cargo e o dashboard por permissão, então a
+    // diretoria via a empresa numa tela e só o próprio setor na outra.
+    expect(veTodosOsSetores('diretoria', nega)).toBe(true);
   });
 
   it('permissão configurável abre para os demais', () => {
     expect(veTodosOsSetores('lider', nega)).toBe(false);
     expect(veTodosOsSetores('lider', libera)).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'analitico_visao_todos_setores')).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'ver_analiticos_global')).toBe(false);
+    expect(veTodosOsSetores('lider', c => c === 'ver_todos_setores')).toBe(true);
+    expect(veTodosOsSetores('lider', c => c === 'ver_analiticos_global')).toBe(true);
   });
 
   it('cargo ausente não abre nada', () => {

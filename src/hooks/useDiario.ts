@@ -37,13 +37,13 @@ export function useDiario(options: UseDiarioOptions) {
   const [novosIds, setNovosIds] = useState<Set<string>>(new Set());
   const hasLoadedOnce = useRef(false);
 
-  const fetchDados = useCallback(async (silencioso = false) => {
+  const fetchDados = useCallback(async () => {
     if (!empresa?.id || !perfil?.id || !options.dia) {
       setDados([]);
       setLoading(false);
       return;
     }
-    if (!silencioso) setLoading(true);
+    setLoading(true);
     setError(null);
 
     const { data, error: err } = await buscarDiario({
@@ -102,7 +102,7 @@ export function useDiario(options: UseDiarioOptions) {
             duration: 4000,
           });
         }
-        void fetchRef.current(true);
+        void fetchRef.current();
       }, 1500);
     };
 
@@ -136,7 +136,7 @@ export function useDiario(options: UseDiarioOptions) {
           agendarRefetch();
         },
         // Sem toast: reconexão não é "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(true); },
+        onReconectado: () => { void fetchRef.current(); },
       },
     );
   }, [empresa?.id, options.dia]);

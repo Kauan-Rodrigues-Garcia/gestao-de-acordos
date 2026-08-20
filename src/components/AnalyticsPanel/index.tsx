@@ -18,13 +18,13 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
-import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
-import { temEscopo } from '@/lib/permissoes-escopo';
+import { veTodosOsSetores, ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
   formatCurrency, PP_HO_PERCENTUAL,
+  isPerfilAdminOuLider, isPerfilDiretoria,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
@@ -44,7 +44,6 @@ import {
 // segue no repositório enquanto houver quem o importe.
 import { PPMetrics } from './PPMetrics';
 import { CHART_RECEBIDO } from './constants';
-import { ValorAnimado } from '@/components/DesempenhoDia/ValorAnimado';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -152,13 +151,13 @@ export function AnalyticsPanel({
   // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a
   // vir do analitico_recebimentos. Se a migration ainda não foi aplicada
   // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
-  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise, 'dashboard');
+  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
 
   // ── Escopo do analítico ────────────────────────────────────────────────────
   // Quem enxerga a empresa toda. Mesma função da aba Analítico: as duas telas
   // discordavam (aba decidia por cargo, dashboard por permissão), e a diretoria
   // via a empresa numa e só o próprio setor na outra.
-  const veTodosSetores = temEscopo('dashboard', 'todos_setores', temPermissao);
+  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
   // Sem visão global o painel fica travado no setor do usuário — os números de
   // um setor nunca somam nos do outro.
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
@@ -211,9 +210,8 @@ export function AnalyticsPanel({
    * significa "estou vendo o setor". Sem esta distinção, o valor do card do
    * Receptivo era creditado no total pessoal de cada operador.
    */
-  const veDadosDeOutros = temEscopo('dashboard', 'equipe', temPermissao)
-    || temEscopo('dashboard', 'setor', temPermissao)
-    || temEscopo('dashboard', 'todos_setores', temPermissao);
+  const veDadosDeOutros =
+    isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
 
   /** Quanto do Receptivo entra no que está na tela — ver `receptivoDoEscopo`. */
   const receptivoNoEscopo = useMemo(
@@ -252,15 +250,15 @@ export function AnalyticsPanel({
 
   useEffect(() => {
     if (setorExterno !== undefined) setSetorFiltro(setorExterno ?? null);
-  }, [setorExterno, setSetorFiltro]);
+  }, [setorExterno]);
 
   useEffect(() => {
     if (equipeFiltroExterno !== undefined) setEquipeFiltro(equipeFiltroExterno ?? null);
-  }, [equipeFiltroExterno, setEquipeFiltro]);
+  }, [equipeFiltroExterno]);
 
   useEffect(() => {
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
-  }, [operadorFiltroExterno, setOperadorFiltro]);
+  }, [operadorFiltroExterno]);
 
   // `porTipo` (distribuicao por forma de pagamento) saiu com o ChartsSection.
   // A leitura por forma agora e o breakdown do donut do PainelMetas, que sai do
@@ -479,17 +477,14 @@ export function AnalyticsPanel({
                 {isPP ? 'H.O.' : 'Recebido'}
               </span>
               <span className="font-bold text-emerald-500 tabular-nums font-mono">
-                <ValorAnimado valor={valorPrincipal} formatar={formatCurrency} />
+                {formatCurrency(valorPrincipal)}
               </span>
             </div>
             {isPP && !temLogicaDiretoExtra && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
                 <span className="font-semibold tabular-nums font-mono">
-                  <ValorAnimado
-                    valor={usarAnalitico ? anal.bruto : valorRecebidoMes}
-                    formatar={formatCurrency}
-                  />
+                  {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
                 </span>
               </div>
             )}
@@ -497,31 +492,25 @@ export function AnalyticsPanel({
               <>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Direto</span>
-                  <span className="font-semibold tabular-nums font-mono text-emerald-500">
-                    <ValorAnimado valor={valorHODireto} formatar={formatCurrency} />
-                  </span>
+                  <span className="font-semibold tabular-nums font-mono text-emerald-500">{formatCurrency(valorHODireto)}</span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Extra</span>
-                  <span className="font-semibold tabular-nums font-mono text-violet-500">
-                    <ValorAnimado valor={valorHOExtra} formatar={formatCurrency} />
-                  </span>
+                  <span className="font-semibold tabular-nums font-mono text-violet-500">{formatCurrency(valorHOExtra)}</span>
                 </div>
               </>
             )}
             {!isPP && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Agendado</span>
-                <span className="font-semibold tabular-nums font-mono">
-                  <ValorAnimado valor={valorAgendadoMes} formatar={formatCurrency} />
-                </span>
+                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorAgendadoMes)}</span>
               </div>
             )}
             {meta && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
                 <span className="font-bold tabular-nums font-mono" style={{ color: donutColor }}>
-                  <ValorAnimado valor={percMetaFinal} formatar={v => `${Math.round(v)}%`} />
+                  {percMetaFinal}%
                 </span>
               </div>
             )}

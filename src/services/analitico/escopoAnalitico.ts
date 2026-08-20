@@ -188,12 +188,14 @@ export function temCarimboDeSetor(linhas: readonly LinhaEscopavel[]): boolean {
  * exemplo, via a empresa toda na aba e só o próprio setor no dashboard — dois
  * totais diferentes para a mesma pessoa, na mesma hora.
  *
- * Agora é uma função só e inteiramente configurável: nenhuma função/cargo
- * recebe atalho. A matriz decide tanto a visão global quanto o filtro.
+ * Agora é uma função só: o cargo abre por si, e a permissão configurável em
+ * Admin → Cargos pode abrir para os demais.
  */
 export function veTodosOsSetores(
-  _cargo: string | null | undefined,
+  cargo: string | null | undefined,
   temPermissao: (chave: string) => boolean,
 ): boolean {
-  return temPermissao('analitico_visao_todos_setores');
+  const c = String(cargo ?? '');
+  if (c === 'administrador' || c === 'super_admin' || c === 'diretoria') return true;
+  return temPermissao('ver_analiticos_global') || temPermissao('ver_todos_setores');
 }

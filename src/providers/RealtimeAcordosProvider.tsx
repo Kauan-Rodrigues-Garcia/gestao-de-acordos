@@ -46,12 +46,8 @@ export interface AcordoRealtimeEvent {
    * UPDATE: campos escalares alterados (joins preservados no subscriber via merge).
    */
   newRecord?: Acordo;
-  /**
-   * UPDATE/DELETE: imagem anterior completa quando a tabela usa
-   * `REPLICA IDENTITY FULL`. Os deltas do dashboard precisam dela para retirar
-   * a contribuição antiga sem refazer a consulta do mês inteiro.
-   */
-  oldRecord?: Partial<Acordo> & { id: string };
+  /** DELETE: apenas o id é garantido */
+  oldRecord?: { id: string };
 }
 
 type Subscriber = (event: AcordoRealtimeEvent) => void;
@@ -170,25 +166,22 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           // Envia o payload diretamente; cada subscriber faz o merge preservando
           // os joins (perfis, setores) que já tem em memória local.
           if (eventType === 'UPDATE') {
-            const oldRecord = payload.old as (Partial<Acordo> & { id?: string }) | null;
             const event: AcordoRealtimeEvent = {
               eventType: 'UPDATE',
               newRecord: payload.new as Acordo,
-              ...(oldRecord?.id ? { oldRecord: oldRecord as Partial<Acordo> & { id: string } } : {}),
             };
             subscribersRef.current.forEach(cb => cb(event));
             return;
           }
 
           // ── DELETE ──────────────────────────────────────────────────────────
-          // A imagem anterior completa permite atualizar agregados por delta.
+          // Apenas o id é necessário para remover da lista local.
           if (eventType === 'DELETE') {
-            const oldRecord = payload.old as (Partial<Acordo> & { id?: string }) | null;
-            const deletedId = oldRecord?.id;
+            const deletedId = (payload.old as { id?: string } | null)?.id;
             if (!deletedId) return;
             const event: AcordoRealtimeEvent = {
               eventType: 'DELETE',
-              oldRecord: oldRecord as Partial<Acordo> & { id: string },
+              oldRecord: { id: deletedId },
             };
             subscribersRef.current.forEach(cb => cb(event));
             return;

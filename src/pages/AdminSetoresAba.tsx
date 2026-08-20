@@ -62,7 +62,6 @@ import { HistoricoTransferencias } from '@/components/admin/HistoricoTransferenc
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
-import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cn } from '@/lib/utils';
 import {
   aplicarOrdemSetores,
@@ -80,18 +79,24 @@ type PerfilComClone = Perfil & { _cloneDe?: string | null };
 // Quantos usuários mostrar por setor antes do "ver todos"
 const LIMITE_USUARIOS = 20;
 
+// ─── Gate helper (usado localmente) ─────────────────────────────────────────
+const PERFIS_GERENCIA_OU_ACIMA = [
+  'gerencia',
+  'diretoria',
+  'administrador',
+  'super_admin',
+];
+
+function temAcessoSetores(perfil: string | undefined): boolean {
+  return !!perfil && PERFIS_GERENCIA_OU_ACIMA.includes(perfil);
+}
+
 // ─── Componente ─────────────────────────────────────────────────────────────
 
 export default function AdminSetoresAba() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const tenant = useTenant();
-  const { temPermissao } = useCargoPermissoes();
-  const acessoOk = temPermissao('ver_setores');
-  const podeVerTodosSetores = temPermissao('setores_todos_setores');
-  const podeCriarSetores = temPermissao('criar_setores');
-  const podeEditarSetores = temPermissao('editar_setores');
-  const podeTransferir = temPermissao('transferir_usuarios_setor');
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +137,8 @@ export default function AdminSetoresAba() {
   // Seleção múltipla via checkbox nas listas de usuários
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
 
+  const acessoOk = temAcessoSetores(perfilAtual?.perfil);
+
   /** O destino é outra empresa? Muda o título, some a escolha e o aviso troca. */
   const trocaDeEmpresa = !!transferEmpresa && transferEmpresa !== empresaAtual?.id;
 
@@ -156,18 +163,12 @@ export default function AdminSetoresAba() {
       return;
     }
     setLoading(true);
-    if (!podeVerTodosSetores && !perfilAtual?.setor_id) {
-      setSetores([]);
-      setLoading(false);
-      return;
-    }
     try {
-      let query = supabase
+      const { data, error } = await supabase
         .from('setores')
         .select('*')
-        .eq('empresa_id', empresaAtual.id);
-      if (!podeVerTodosSetores && perfilAtual?.setor_id) query = query.eq('id', perfilAtual.setor_id);
-      const { data, error } = await query.order('nome');
+        .eq('empresa_id', empresaAtual.id)
+        .order('nome');
       if (error) {
         console.warn('[AdminSetoresAba] fetchSetores error:', error.message);
         setSetores([]);
@@ -178,32 +179,27 @@ export default function AdminSetoresAba() {
     } finally {
       setLoading(false);
     }
-  }, [empresaAtual?.id, perfilAtual?.setor_id, podeVerTodosSetores]);
+  }, [empresaAtual?.id]);
 
   const fetchPerfis = useCallback(async () => {
     if (!empresaAtual?.id) {
       setPerfis([]);
       return;
     }
-    if (!podeVerTodosSetores && !perfilAtual?.setor_id) {
-      setPerfis([]);
-      return;
-    }
-    let query = supabase
+    const { data, error } = await supabase
       .from('perfis')
       // `equipe_id` entra por causa da transferência: é a equipe de ORIGEM, e
       // sem ela o fantasma não teria para onde devolver o recebimento do mês.
       .select('id, nome, perfil, setor_id, equipe_id, foto_url, usuario')
-      .eq('empresa_id', empresaAtual.id);
-    if (!podeVerTodosSetores && perfilAtual?.setor_id) query = query.eq('setor_id', perfilAtual.setor_id);
-    const { data, error } = await query.order('nome');
+      .eq('empresa_id', empresaAtual.id)
+      .order('nome');
     if (error) {
       console.warn('[AdminSetoresAba] fetchPerfis error:', error.message);
       setPerfis([]);
     } else {
       setPerfis((data as Perfil[]) || []);
     }
-  }, [empresaAtual?.id, perfilAtual?.setor_id, podeVerTodosSetores]);
+  }, [empresaAtual?.id]);
 
   useEffect(() => {
     fetchSetores();
@@ -215,7 +211,7 @@ export default function AdminSetoresAba() {
   // administrador comum veria a lista de setores vazia e o UPDATE seria barrado
   // pela RLS de `perfis`. Oferecer o campo a quem não pode usar é pior que não
   // oferecer.
-  const podeTrocarEmpresa = temPermissao('gerenciar_multiempresa');
+  const podeTrocarEmpresa = perfilAtual?.perfil === 'super_admin';
 
   useEffect(() => {
     if (!podeTrocarEmpresa) { setEmpresas([]); return; }
@@ -310,7 +306,6 @@ export default function AdminSetoresAba() {
 
   /** Estado inicial do diálogo: empresa atual, sem setor, sem levar nada. */
   function prepararTransferencia(lista: Perfil[]) {
-    if (!podeTransferir) return;
     setTransferindo(lista);
     setTransferAlvo('');
     setTransferEmpresa(empresaAtual?.id ?? '');
@@ -360,7 +355,7 @@ export default function AdminSetoresAba() {
    * Sequencial também garante que a falha de uma não leve as outras junto.
    */
   async function transferir() {
-    if (!podeTransferir || !transferindo?.length || !transferAlvo || !empresaAtual?.id) return;
+    if (!transferindo?.length || !transferAlvo || !empresaAtual?.id) return;
     setTransfSalvando(true);
 
     const destinoEmpresa = transferEmpresa || empresaAtual.id;
@@ -415,12 +410,10 @@ export default function AdminSetoresAba() {
   // ─── Drag & Drop ──────────────────────────────────────────────────────────
 
   function handleDragStart(setorId: string) {
-    if (!podeEditarSetores) return;
     draggedSetorId = setorId;
   }
 
   function handleDropOver(alvoId: string) {
-    if (!podeEditarSetores) return;
     const srcId = draggedSetorId;
     draggedSetorId = null;
     if (!srcId || srcId === alvoId || !empresaAtual?.id) return;
@@ -440,21 +433,18 @@ export default function AdminSetoresAba() {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   function abrirCriar() {
-    if (!podeCriarSetores) return;
     setEditando(null);
     setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
     setDialogOpen(true);
   }
 
   function abrirEditar(s: Setor) {
-    if (!podeEditarSetores) return;
     setEditando(s);
     setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo, alternativo: s.alternativo === true });
     setDialogOpen(true);
   }
 
   async function salvar() {
-    if (editando ? !podeEditarSetores : !podeCriarSetores) return;
     if (!form.nome.trim()) {
       toast.error('Informe o nome do setor');
       return;
@@ -547,13 +537,13 @@ export default function AdminSetoresAba() {
             Arraste um setor sobre outro para reordenar. A ordem é salva automaticamente.
           </p>
         </div>
-        {podeCriarSetores && <Button size="sm" onClick={abrirCriar} className="gap-1.5">
+        <Button size="sm" onClick={abrirCriar} className="gap-1.5">
           <Plus className="w-4 h-4" /> Novo Setor
-        </Button>}
+        </Button>
       </div>
 
       {/* Barra de seleção múltipla (marque usuários nas listas dos setores) */}
-      {podeTransferir && selecionados.size > 0 && (
+      {selecionados.size > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
           <p className="text-xs text-foreground flex-1">
             <strong>{selecionados.size}</strong> usuário{selecionados.size !== 1 && 's'} selecionado{selecionados.size !== 1 && 's'}
@@ -576,9 +566,9 @@ export default function AdminSetoresAba() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-sm text-muted-foreground gap-2">
             <Building2 className="w-6 h-6 opacity-60" />
             <p>Nenhum setor cadastrado ainda.</p>
-            {podeCriarSetores && <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
+            <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Criar primeiro setor
-            </Button>}
+            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -604,7 +594,7 @@ export default function AdminSetoresAba() {
               >
                 {/* Cabeçalho do setor (área de arraste) */}
                 <div
-                  draggable={podeEditarSetores}
+                  draggable
                   onDragStart={() => handleDragStart(s.id)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => {
@@ -679,13 +669,13 @@ export default function AdminSetoresAba() {
                             {ehClone ? (
                               <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
                             ) : (
-                              podeTransferir ? <input
+                              <input
                                 type="checkbox"
                                 checked={selecionados.has(u.id)}
                                 onChange={() => toggleSelecionado(u.id)}
                                 className="h-3.5 w-3.5 accent-primary cursor-pointer flex-shrink-0"
                                 title="Selecionar para transferência"
-                              /> : <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+                              />
                             )}
                             {u.foto_url ? (
                               <img src={u.foto_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
@@ -705,7 +695,7 @@ export default function AdminSetoresAba() {
                               </p>
                               <p className="text-[10px] text-muted-foreground capitalize truncate">{u.perfil}</p>
                             </div>
-                            {!ehClone && podeTransferir && (
+                            {!ehClone && (
                               <Button
                                 variant="outline"
                                 size="sm"
@@ -814,7 +804,9 @@ export default function AdminSetoresAba() {
       <div className="mt-6">
         <HistoricoTransferencias
           empresaId={empresaAtual?.id}
-          podeDesfazer={podeTransferir}
+          podeDesfazer={
+            perfilAtual?.perfil === 'administrador' || perfilAtual?.perfil === 'super_admin'
+          }
           nomeDoSetor={nomeDoSetorPorId}
           nomeDaEmpresa={nomeDaEmpresaPorId}
           nomeDoPerfil={id => perfis.find(p => p.id === id)?.nome}

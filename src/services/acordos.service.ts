@@ -15,7 +15,6 @@ export interface FiltrosAcordo {
   operador_id?: string;
   setor_id?: string;
   equipe_id?: string;
-  tag_id?: string;
   empresa_id?: string;
   data_inicio?: string;
   data_fim?: string;
@@ -64,9 +63,7 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
-  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim)
-    || !!filtros?.vencimento
-    || !!filtros?.apenas_hoje;
+  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento;
   // 'acordos' | 'acordos_deduplicados' como union em .from() faz o supabase-js
   // tentar resolver o tipo contra as duas tabelas ao mesmo tempo (instanciação
   // excessivamente profunda). Ambas têm as mesmas colunas/relacionamentos —
@@ -94,7 +91,6 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     if (filtros?.tipo)        q = q.eq('tipo', filtros.tipo);
     if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
     if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
-    if (filtros?.tag_id)      q = q.contains('tag_ids', [filtros.tag_id]);
     if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
     if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
     // Intervalo de mês: aplicado aqui para que ambas as queries (hoje + resto) respeitem o filtro
