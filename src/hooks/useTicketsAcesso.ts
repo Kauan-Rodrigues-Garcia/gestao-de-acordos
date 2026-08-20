@@ -15,16 +15,16 @@
  * repete cada uma dessas regras por conta própria.
  */
 import { useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { isPerfilAdmin, isPerfilDiretoria, isPerfilLider } from '@/lib/index';
-import { lerLiberacaoDaAba, listarAtendentes } from '@/services/tickets.service';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { lerLiberacaoDaAba } from '@/services/tickets.service';
 
 export interface AcessoTickets {
   carregando: boolean;
   podeVerAba: boolean;
   podeAtender: boolean;
   podeAbrir: boolean;
+  podeGerenciar: boolean;
   /** Estado da chave — o botão de liberar precisa saber para se desenhar. */
   liberadoParaLideranca: boolean;
   /** Recarrega depois de virar a chave ou mexer na lista de atendentes. */
@@ -32,48 +32,33 @@ export interface AcessoTickets {
 }
 
 export function useTicketsAcesso(): AcessoTickets {
-  const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const empresaId = empresa?.id ?? null;
-  const cargo = perfil?.perfil ?? '';
-  const meuId = perfil?.id ?? null;
+  const { temPermissao, loading: permissoesLoading } = useCargoPermissoes();
 
   const [liberado, setLiberado] = useState(false);
-  const [ehAtendente, setEhAtendente] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [versao, setVersao] = useState(0);
-
-  const ehAdmin = isPerfilAdmin(cargo);
 
   useEffect(() => {
     if (!empresaId) { setCarregando(false); return; }
     let vivo = true;
     setCarregando(true);
     (async () => {
-      const [flag, atendentes] = await Promise.all([
-        lerLiberacaoDaAba(empresaId),
-        // Admin já atende por cargo; poupar a consulta é o caso mais comum.
-        ehAdmin ? Promise.resolve([]) : listarAtendentes(empresaId),
-      ]);
+      const flag = await lerLiberacaoDaAba(empresaId);
       if (!vivo) return;
       setLiberado(flag);
-      setEhAtendente(ehAdmin || atendentes.some(a => a.perfilId === meuId));
       setCarregando(false);
     })();
     return () => { vivo = false; };
-  }, [empresaId, meuId, ehAdmin, versao]);
-
-  const ehLideranca = isPerfilLider(cargo) || isPerfilDiretoria(cargo);
-  const podeAbrir   = ehAdmin || ehLideranca;
-  // Atendente autorizado enxerga a aba mesmo com a chave fechada: sem isso,
-  // autorizar alguém no dia do teste não teria efeito nenhum até a liberação.
-  const podeVerAba  = ehAdmin || ehAtendente || (liberado && ehLideranca);
+  }, [empresaId, versao]);
 
   return {
-    carregando,
-    podeVerAba,
-    podeAtender: ehAtendente,
-    podeAbrir,
+    carregando: carregando || permissoesLoading,
+    podeVerAba: temPermissao('ver_tickets'),
+    podeAtender: temPermissao('atender_tickets'),
+    podeAbrir: temPermissao('abrir_tickets'),
+    podeGerenciar: temPermissao('gerenciar_tickets'),
     liberadoParaLideranca: liberado,
     recarregar: () => setVersao(v => v + 1),
   };

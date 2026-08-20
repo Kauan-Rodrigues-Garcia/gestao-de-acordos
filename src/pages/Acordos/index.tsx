@@ -22,7 +22,6 @@ import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
-  isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -33,7 +32,7 @@ import { liberarNrPorAcordoId }  from '@/services/nr_registros.service';
 import { enviarParaLixeira }     from '@/services/lixeira.service';
 import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog }          from '@/services/logs.service';
-import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { deduplicarVinculados, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
 import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, statusParaAbaAcordos, type VisaoFiltroAcordos } from './helpers';
@@ -60,9 +59,9 @@ export default function Acordos() {
   const [filtroTag, setFiltroTag]           = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
-  const isLider = isPerfilLider(perfil?.perfil ?? '');
-  const isElite = perfil?.perfil === 'elite';
-  const isSuperAdmin = perfil?.perfil === 'super_admin';
+  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
+  const podeFiltrarUsuario = temPermissao('filtrar_por_usuario');
+  const podeFiltrarTag = temPermissao('filtrar_por_tag');
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
 
@@ -70,7 +69,7 @@ export default function Acordos() {
   const verTodosSetores = temPermissao('ver_todos_setores');
 
   useEffect(() => {
-    if (!(isLider || isElite) || !empresa?.id) return;
+    if (!podeFiltrarEquipe || !empresa?.id) return;
     if (!perfil?.setor_id && !verTodosSetores) return;
     let q = supabase
       .from('equipes')
@@ -83,7 +82,7 @@ export default function Acordos() {
       .then(({ data }) => {
         setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
       });
-  }, [isLider, isElite, perfil?.setor_id, empresa?.id, verTodosSetores]);
+  }, [podeFiltrarEquipe, perfil?.setor_id, empresa?.id, verTodosSetores]);
 
   const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
     ? visaoFiltroAcordos.replace('equipe:', '')
@@ -175,14 +174,14 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
-      if (isSuperAdmin && filtroTag) params.set('tag', filtroTag); else params.delete('tag');
+      if (podeFiltrarTag && filtroTag) params.set('tag', filtroTag); else params.delete('tag');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, filtroTag, isSuperAdmin, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, filtroTag, podeFiltrarTag, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
   const statusFiltro = statusParaAbaAcordos(activeTab, filtroStatus);
 
@@ -200,7 +199,7 @@ export default function Acordos() {
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:    equipeFiltroAtivo ?? undefined,
-    tag_id:       isSuperAdmin && filtroTag && filtroTag !== 'all' ? filtroTag : undefined,
+    tag_id:       podeFiltrarTag && filtroTag && filtroTag !== 'all' ? filtroTag : undefined,
     // Garante que os acordos que vencem HOJE venham sempre na página 1 (mesmo
     // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
     // ordenação por vencimento). Ignorado quando há filtro de data exata.
@@ -272,7 +271,7 @@ export default function Acordos() {
   // PÁGINA carregada — como dropdown de filtro isso é inútil: o operador que
   // você procura está justamente na página que você ainda não abriu. Aqui vem a
   // lista do escopo inteiro, pelo mesmo recorte de setor do filtro de equipes.
-  const podeFiltrarPorUsuario = temPermissao('filtrar_por_usuario');
+  const podeFiltrarPorUsuario = podeFiltrarUsuario;
   useEffect(() => {
     if (!podeFiltrarPorUsuario || !empresa?.id) return;
     if (!verTodosSetores && !perfil?.setor_id) return;
@@ -292,14 +291,14 @@ export default function Acordos() {
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje       = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador || (isSuperAdmin && filtroTag));
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador || (podeFiltrarTag && filtroTag));
   const filtrosAtivosCount = [
     busca,
     filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
     filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
     filtroVinculo !== 'todos' ? filtroVinculo : '',
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
-    isSuperAdmin && filtroTag && filtroTag !== 'all' ? filtroTag : '',
+    podeFiltrarTag && filtroTag && filtroTag !== 'all' ? filtroTag : '',
   ].filter(Boolean).length;
 
 
@@ -569,7 +568,7 @@ export default function Acordos() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
-  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
+  const visaoAmpla = temPermissao('ver_acordos_gerais');
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
     let base: AcordoComVinculo[] = acordos;
@@ -686,7 +685,7 @@ export default function Acordos() {
                 Lembretes do dia ({acordosHoje.length})
               </Button>
             )}
-            <Button
+            {temPermissao('criar_acordos') && <Button
               variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
               title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
             >
@@ -698,7 +697,7 @@ export default function Acordos() {
                 realtimeStatus === 'error'      && 'bg-red-500',
                 realtimeStatus === 'off'        && 'bg-muted-foreground/40',
               )} />
-            </Button>
+            </Button>}
             <Button
               size="sm"
               data-tour="novo-acordo"
@@ -733,7 +732,7 @@ export default function Acordos() {
 
         <AcordosFilters
           activeTab={activeTab} setActiveTab={setActiveTab}
-          isLider={isLider} isElite={isElite}
+          isLider={podeFiltrarEquipe} isElite={podeFiltrarUsuario}
           equipesDoSetor={equipesDoSetor}
           visaoFiltroAcordos={visaoFiltroAcordos} setVisaoFiltroAcordos={setVisaoFiltroAcordos}
           busca={busca} setBusca={setBusca}
@@ -742,7 +741,7 @@ export default function Acordos() {
           filtroData={filtroData} setFiltroData={setFiltroData}
           filtroOperador={filtroOperador} setFiltroOperador={setFiltroOperador}
           filtroTag={filtroTag} setFiltroTag={setFiltroTag}
-          empresaTags={empresaTags} podeFiltrarTag={isSuperAdmin}
+          empresaTags={empresaTags} podeFiltrarTag={podeFiltrarTag}
           filtroVinculo={filtroVinculo} setFiltroVinculo={setFiltroVinculo}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}

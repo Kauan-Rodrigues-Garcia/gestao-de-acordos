@@ -30,7 +30,15 @@ vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: empresaRef.current ? { ...empresaRef.current } : null }),
 }));
 vi.mock('@/hooks/useCargoPermissoes', () => ({
-  useCargoPermissoes: () => ({ temPermissao: () => permissaoRef.current }),
+  useCargoPermissoes: () => ({
+    temPermissao: (chave: string) => {
+      const cargo = perfilRef.current?.perfil;
+      if (chave === 'ver_todos_setores') return permissaoRef.current || cargo === 'administrador';
+      if (chave === 'filtrar_por_setor') return permissaoRef.current || cargo === 'administrador';
+      if (chave === 'filtrar_por_equipe') return cargo === 'lider';
+      return false;
+    },
+  }),
 }));
 vi.mock('@/lib/supabase', () => ({
   supabase: { from: (tabela: string) => fromSpy(tabela) },

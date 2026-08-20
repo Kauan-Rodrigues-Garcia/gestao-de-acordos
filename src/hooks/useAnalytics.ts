@@ -8,7 +8,7 @@ import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
-import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
+import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
@@ -109,6 +109,9 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
   // Permissão configurável (Admin → Cargos): líder/elite/gerência com
   // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
   const verTodosSetores = temPermissao('ver_todos_setores');
+  const podeFiltrarSetor = temPermissao('filtrar_por_setor');
+  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
+  const visaoAmpla = temPermissao('ver_acordos_gerais');
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const isBookplay = tenant.slug === 'bookplay';
@@ -144,14 +147,14 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
     // reservado à primeira carga/troca de escopo; reexibi-lo a cada INSERT ou
     // UPDATE fazia todo o dashboard piscar e perder a posição visual.
     if (!silencioso) setLoading(true);
-    const isAdmin = isPerfilAdmin(perfil.perfil);
-    const isLider = isPerfilLider(perfil.perfil);
-    const isDiretoria = isPerfilDiretoria(perfil.perfil);
+    const isAdmin = visaoAmpla && verTodosSetores;
+    const isLider = visaoAmpla;
+    const isDiretoria = false;
 
     try {
       // ── Carregar setores para o filtro do admin/diretoria ────────────────────
       // Líder/Elite/Gerência com 'ver_todos_setores' também ganha o filtro
-      if (isAdmin || isDiretoria || (isLider && verTodosSetores)) {
+      if (podeFiltrarSetor && verTodosSetores) {
         const { data: setoresData } = await supabase
           .from('setores')
           .select('id, nome')
@@ -162,7 +165,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
 
       // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
       let equipesDoSetorAtual: { id: string; nome: string }[] = [];
-      if (isLider && (perfil.setor_id || verTodosSetores)) {
+      if (podeFiltrarEquipe && (perfil.setor_id || verTodosSetores)) {
         let eqQuery = supabase
           .from('equipes')
           .select('id, nome')
@@ -180,7 +183,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
       // O campo equipe_id existe em perfis (não em acordos), então precisamos
       // buscar os operador_id dos membros da equipe e filtrar acordos por IN.
       let operadoresDaEquipe: string[] | null = null;
-      if (isLider && equipeFiltro && !operadorFiltro) {
+      if (podeFiltrarEquipe && equipeFiltro && !operadorFiltro) {
         const { data: membros } = await supabase
           .from('perfis')
           .select('id')
@@ -365,7 +368,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
     } finally {
       if (!silencioso) setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay, podeFiltrarSetor, podeFiltrarEquipe, visaoAmpla]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -378,11 +381,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
-    const isAdminRole    = isPerfilAdmin(perfil?.perfil ?? '');
-    const isLiderRole    = isPerfilLider(perfil?.perfil ?? '');
-    const isDiretoriaRole = isPerfilDiretoria(perfil?.perfil ?? '');
-    // Visão ampla: admin/diretoria ou líder sem filtro individual — exclui acordos Extra para não inflar totais
-    const isWideView = isAdminRole || isDiretoriaRole || (isLiderRole && !operadorFiltro);
+    const isWideView = visaoAmpla && !operadorFiltro;
 
     const acordosMes = acordos.filter(
       a => a.vencimento >= inicio && a.vencimento <= fim,

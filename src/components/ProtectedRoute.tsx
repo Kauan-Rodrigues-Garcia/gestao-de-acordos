@@ -42,6 +42,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LockKeyhole } from 'lucide-react';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
 interface ProtectedRouteProps {
@@ -93,7 +94,17 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
      * Ausência agora nega, como em todo o resto do sistema.
      */
     if (!temPermissao(requiredPermissao)) {
-      return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+      return (
+        <div className="min-h-[55vh] flex items-center justify-center p-6">
+          <div className="max-w-sm text-center rounded-xl border border-border bg-card px-6 py-8">
+            <LockKeyhole className="w-8 h-8 mx-auto text-muted-foreground/50" />
+            <h1 className="mt-3 text-base font-semibold text-foreground">Acesso não habilitado</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Esta aba está desativada para seu cargo ou para a sua conta.
+            </p>
+          </div>
+        </div>
+      );
     }
     return <>{children}</> as React.ReactElement;
   }

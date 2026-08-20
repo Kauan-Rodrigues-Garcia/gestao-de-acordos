@@ -317,12 +317,12 @@ describe('useCargoPermissoes', () => {
 
   // ─── isAdmin e temPermissao para administrador ─────────────────────────
 
-  it('cargo administrador: isAdmin=true, temPermissao sempre true', async () => {
+  it('cargo administrador: isAdmin=true, mas a matriz continua mandando', async () => {
     mockPerfilRef.current  = { perfil: 'administrador' };
     mockEmpresaRef.current = { id: EMPRESA_ID };
 
     queueResultFor('cargos_permissoes', {
-      data: [makeCargoRow({ cargo: 'administrador', permissoes: {} })],
+      data: [makeCargoRow({ cargo: 'administrador', permissoes: { ver_lixeira: false, ver_dashboard: true } })],
       error: null,
     });
 
@@ -331,12 +331,12 @@ describe('useCargoPermissoes', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.isAdmin).toBe(true);
-    expect(result.current.temPermissao('qualquer_permissao')).toBe(true);
-    expect(result.current.temPermissao('ver_lixeira')).toBe(true);
-    expect(result.current.temPermissao('editar_acordo')).toBe(true);
+    expect(result.current.temPermissao('qualquer_permissao')).toBe(false);
+    expect(result.current.temPermissao('ver_lixeira')).toBe(false);
+    expect(result.current.temPermissao('ver_dashboard')).toBe(true);
   });
 
-  it('cargo super_admin: isAdmin=true, temPermissao sempre true', async () => {
+  it('cargo super_admin: isAdmin=true, sem bypass da matriz', async () => {
     mockPerfilRef.current  = { perfil: 'super_admin' };
     mockEmpresaRef.current = { id: EMPRESA_ID };
 
@@ -350,7 +350,7 @@ describe('useCargoPermissoes', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.isAdmin).toBe(true);
-    expect(result.current.temPermissao('nenhuma_permissao_configurada')).toBe(true);
+    expect(result.current.temPermissao('nenhuma_permissao_configurada')).toBe(false);
   });
 
   // ─── isAdmin=false para cargos não-admin ──────────────────────────────
@@ -477,11 +477,11 @@ describe('useCargoPermissoes — exceção por pessoa', () => {
   });
 
   it('a exceção CONCEDE o que o cargo nega', async () => {
-    cenario({ importar_analitico: false }, { importar_analitico: true });
+    cenario({ ver_dashboard: false }, { ver_dashboard: true });
     const { result } = renderHook(() => useCargoPermissoes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.temPermissao('importar_analitico')).toBe(true);
+    expect(result.current.temPermissao('ver_dashboard')).toBe(true);
   });
 
   it('a exceção NEGA o que o cargo concede', async () => {
@@ -501,12 +501,12 @@ describe('useCargoPermissoes — exceção por pessoa', () => {
     expect(result.current.temPermissao('ver_lixeira')).toBe(true); // herdado
   });
 
-  it('admin ignora a exceção: acesso é por construção', async () => {
-    cenario({ ver_logs: false }, { ver_logs: false }, 'administrador');
+  it('admin também respeita a exceção da pessoa', async () => {
+    cenario({ ver_dashboard: true }, { ver_dashboard: false }, 'administrador');
     const { result } = renderHook(() => useCargoPermissoes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.temPermissao('ver_logs')).toBe(true);
+    expect(result.current.temPermissao('ver_dashboard')).toBe(false);
   });
 
   it('AUSENTE NOS DOIS = NEGADO — o fallback legado morreu', async () => {
@@ -545,13 +545,13 @@ describe('useCargoPermissoes — exceção por pessoa', () => {
     mockPerfilRef.current  = { perfil: 'administrador', id: 'admin-1' };
     mockEmpresaRef.current = { id: EMPRESA_ID };
     queueResultFor('cargos_permissoes', {
-      data: [makeCargoRow({ cargo: 'operador', permissoes: { ver_logs: false, ver_lixeira: true } })],
+      data: [makeCargoRow({ cargo: 'operador', permissoes: { ver_dashboard: false, ver_lixeira: true } })],
       error: null,
     });
     queueResultFor('perfis_permissoes', {
       data: [{
         id: 'exc-2', empresa_id: EMPRESA_ID, usuario_id: 'outro-1',
-        permissoes: { ver_logs: true },
+        permissoes: { ver_dashboard: true },
         atualizado_em: '2026-08-15T00:00:00Z', atualizado_por: null,
       }],
       error: null,
@@ -561,14 +561,14 @@ describe('useCargoPermissoes — exceção por pessoa', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     // A exceção da outra pessoa vence o cargo dela...
-    expect(result.current.resolverParaUsuario('outro-1', 'operador', 'ver_logs')).toBe(true);
+    expect(result.current.resolverParaUsuario('outro-1', 'operador', 'ver_dashboard')).toBe(true);
     // ...e o que ela não sobrescreveu continua vindo do cargo.
     expect(result.current.resolverParaUsuario('outro-1', 'operador', 'ver_lixeira')).toBe(true);
     // Quem não tem exceção nenhuma segue o cargo puro.
-    expect(result.current.resolverParaUsuario('sem-exc', 'operador', 'ver_logs')).toBe(false);
+    expect(result.current.resolverParaUsuario('sem-exc', 'operador', 'ver_dashboard')).toBe(false);
 
-    expect(result.current.estadoExcecao('outro-1', 'ver_logs')).toBe('sim');
+    expect(result.current.estadoExcecao('outro-1', 'ver_dashboard')).toBe('sim');
     expect(result.current.estadoExcecao('outro-1', 'ver_lixeira')).toBe('herda');
-    expect(result.current.estadoExcecao('sem-exc', 'ver_logs')).toBe('herda');
+    expect(result.current.estadoExcecao('sem-exc', 'ver_dashboard')).toBe('herda');
   });
 });

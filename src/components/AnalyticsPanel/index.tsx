@@ -24,7 +24,6 @@ import {
 } from '@/services/analitico/contribuicaoReceptivo.service';
 import {
   formatCurrency, PP_HO_PERCENTUAL,
-  isPerfilAdminOuLider, isPerfilDiretoria,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
@@ -210,8 +209,7 @@ export function AnalyticsPanel({
    * significa "estou vendo o setor". Sem esta distinção, o valor do card do
    * Receptivo era creditado no total pessoal de cada operador.
    */
-  const veDadosDeOutros =
-    isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  const veDadosDeOutros = temPermissao('ver_acordos_gerais');
 
   /** Quanto do Receptivo entra no que está na tela — ver `receptivoDoEscopo`. */
   const receptivoNoEscopo = useMemo(

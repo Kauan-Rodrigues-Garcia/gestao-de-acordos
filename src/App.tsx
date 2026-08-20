@@ -155,7 +155,9 @@ export default function App() {
               } />
 
               <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper><Dashboard /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_dashboard"><Dashboard /></ProtectedRoute>
+                </LayoutWrapper>
               } />
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
@@ -167,14 +169,14 @@ export default function App() {
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
+                  <ProtectedRoute requiredPermissao="criar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
+                  <ProtectedRoute requiredPermissao="editar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -186,7 +188,7 @@ export default function App() {
               {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
+                  <ProtectedRoute requiredPermissao="importar_excel">
                     <ImportarExcel />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -194,21 +196,21 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_USUARIOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_usuarios">
+                  <ProtectedRoute requiredPermissao="ver_usuarios">
                     <AdminUsuarios />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -219,7 +221,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_EQUIPES} element={<Navigate to={ROUTE_PATHS.ADMIN_USUARIOS + '?tab=equipes'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_CONFIGURACOES} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador']} requiredPermissao="ver_configuracoes">
+                  <ProtectedRoute requiredPermissao="ver_configuracoes">
                     <AdminConfiguracoes />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -228,14 +230,14 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
+                  <ProtectedRoute requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ADMIN_LIXEIRA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','operador','elite','gerencia','diretoria']} requiredPermissao="ver_lixeira">
+                  <ProtectedRoute requiredPermissao="ver_lixeira">
                     <Lixeira />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -244,8 +246,7 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}
-                                  requiredPermissao="ver_painel_diretoria">
+                  <ProtectedRoute requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -296,7 +297,7 @@ export default function App() {
                   `tickets_config`, e a própria página resolve isso. */}
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','elite','gerencia','diretoria','administrador','ouvidoria']}>
+                  <ProtectedRoute requiredPermissao="ver_tickets">
                     <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -322,7 +323,7 @@ export default function App() {
                 pessoa curiosa poder encontrar.
               */}
               <Route path={ROUTE_PATHS.CREATORS_LAB} element={
-                <ProtectedRoute>
+                <ProtectedRoute requiredPermissao="ver_creators_lab">
                   <CreatorsLab />
                 </ProtectedRoute>
               } />

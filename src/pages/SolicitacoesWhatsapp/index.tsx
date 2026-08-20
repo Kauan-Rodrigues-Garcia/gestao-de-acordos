@@ -59,7 +59,6 @@ import {
   type SolicitacaoWhatsapp, type StatusSolicitacao, type EventoSolicitacao,
   type PessoaResumo,
 } from '@/services/solicitacoesWhatsapp.service';
-import { podeAcessarAbaWpp, temVisaoGeralPorCargo, podeDefinirResponsavel } from './permissoes';
 import { combinaBusca, naoConcluido } from './formatacao';
 import {
   separarEmBaldes, agruparPor, valeAgrupar, SEM_PESSOA,
@@ -113,13 +112,10 @@ export default function SolicitacoesWhatsapp() {
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
   const usuarioId = perfil?.id ?? null;
-  const cargo     = perfil?.perfil ?? null;
-
   // ── Gates ──────────────────────────────────────────────────────────────────
   const ehPaguePlay  = tenant.isPaguePlay;
-  const temAcessoAba = podeAcessarAbaWpp(cargo);
-  /** Visão geral por CARGO. Depende só do perfil, então já vale antes do hook. */
-  const ehLiderOuAcima = temVisaoGeralPorCargo(cargo);
+  const temAcessoAba = temPermissao('ver_solicitacoes_whatsapp');
+  const ehLiderOuAcima = temPermissao('ver_solicitacoes_whatsapp_geral');
 
   // Quem enxerga mais de um setor precisa escolher um — pedido explícito: nunca
   // misturar setores na mesma lista.
@@ -222,8 +218,9 @@ export default function SolicitacoesWhatsapp() {
     })();
   }, [habilitado, empresaId, recarregar]);
 
-  // Editar (assumir, mudar status) — responsável e líder+.
-  const podeEditarPedidos = temVisaoGeral;
+  // A matriz decide quem pode atender; a visibilidade continua respeitando o
+  // recorte próprio/geral configurado separadamente.
+  const podeEditarPedidos = temPermissao('atender_solicitacoes_whatsapp');
   /**
    * Excluir: o DONO do pedido, em qualquer status, e líder+.
    *
@@ -237,8 +234,9 @@ export default function SolicitacoesWhatsapp() {
    * (migration 20260731c). Espelha a policy `sol_wpp_delete`.
    */
   const podeExcluirSolicitacao = useCallback(
-    (s: SolicitacaoWhatsapp) => ehLiderOuAcima || s.solicitante_id === usuarioId,
-    [ehLiderOuAcima, usuarioId],
+    (s: SolicitacaoWhatsapp) =>
+      temPermissao('atender_solicitacoes_whatsapp') || s.solicitante_id === usuarioId,
+    [temPermissao, usuarioId],
   );
 
   // Puxar para mim: o atendimento já tem dono, o dono não sou eu, e ainda não
@@ -591,7 +589,7 @@ export default function SolicitacoesWhatsapp() {
       <PainelResponsaveis
         empresaId={empresaId as string}
         responsaveis={responsaveis}
-        podeEditar={podeDefinirResponsavel(cargo)}
+        podeEditar={temPermissao('gerenciar_responsaveis_whatsapp')}
         salvando={salvandoResp}
         onAdicionar={uid => void aoAdicionarResponsavel(uid)}
         onRemover={uid => void aoRemoverResponsavel(uid)}

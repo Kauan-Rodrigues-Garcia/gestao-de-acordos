@@ -38,10 +38,10 @@ function chavesDasRotas(): string[] {
 describe('menu × rotas', () => {
   it('toda rota com permissão tem item de menu com a MESMA chave', () => {
     const menu = new Set(chavesDoMenu());
-    // `editar_acordos` fica de fora: a rota de edição é aberta a partir de um
-    // acordo da lista, não por um item de menu próprio.
+    // `editar_acordos` é aberta a partir da lista. `ver_creators_lab` pertence
+    // ao Easter Egg do logo e deliberadamente não aparece no menu lateral.
     const semItem = [...new Set(chavesDasRotas())]
-      .filter(k => k !== 'editar_acordos')
+      .filter(k => !['editar_acordos', 'ver_creators_lab'].includes(k))
       .filter(k => !menu.has(k));
 
     expect(

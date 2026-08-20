@@ -78,7 +78,8 @@ export default function Lixeira() {
   const [fotoMap, setFotoMap]           = useState<Record<string, string | null>>({});
 
   const podeAcessar = temPermissao('ver_lixeira');
-  const podeEsvaziar = podeAcessar;
+  const podeEsvaziar = temPermissao('esvaziar_lixeira');
+  const podeRestaurar = temPermissao('restaurar_lixeira');
 
   async function carregar() {
     if (!empresa?.id) return;
@@ -122,7 +123,7 @@ export default function Lixeira() {
   }
 
   async function handleEsvaziar() {
-    if (!empresa?.id) return;
+    if (!podeEsvaziar || !empresa?.id) return;
     setEsvaziando(true);
     const { ok, error } = await esvaziarLixeira(empresa.id);
     setEsvaziando(false);
@@ -136,7 +137,7 @@ export default function Lixeira() {
   }
 
   async function handleRestaurar(item: LixeiraAcordo) {
-    if (restaurandoId) return;
+    if (!podeRestaurar || restaurandoId) return;
     setRestaurandoId(item.id);
     const { ok, error } = await restaurarItemLixeira(item);
     setRestaurandoId(null);
@@ -462,7 +463,7 @@ export default function Lixeira() {
                         {/* Ações */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
-                            <button
+                            {podeRestaurar && <button
                               title="Restaurar acordo"
                               disabled={restaurandoId === item.id}
                               onClick={() => handleRestaurar(item)}
@@ -471,7 +472,7 @@ export default function Lixeira() {
                               {restaurandoId === item.id
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <RotateCcw className="w-3.5 h-3.5" />}
-                            </button>
+                            </button>}
                             <button
                               title="Ver detalhes"
                               onClick={() => setDetalhe(item)}
@@ -634,7 +635,7 @@ export default function Lixeira() {
 
               {/* Footer: restaurar acordo */}
               <div className="px-5 py-3 border-t border-border/50 bg-muted/20 flex items-center justify-end gap-2">
-                <Button
+                {podeRestaurar && <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setDetalhe(null)}
@@ -642,7 +643,7 @@ export default function Lixeira() {
                   className="h-8 text-xs rounded-lg"
                 >
                   Fechar
-                </Button>
+                </Button>}
                 <Button
                   size="sm"
                   onClick={() => handleRestaurar(detalhe)}

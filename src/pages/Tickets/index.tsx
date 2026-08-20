@@ -191,7 +191,7 @@ export default function Tickets() {
         </div>
 
         <div className="ml-auto flex items-center gap-2">
-          {acesso.podeAtender && (
+          {acesso.podeGerenciar && (
             <Button variant="outline" size="sm" className="gap-1.5"
               onClick={() => setPainelAberto(true)}>
               <ShieldCheck className="w-4 h-4" />

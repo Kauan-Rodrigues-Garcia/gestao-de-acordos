@@ -30,7 +30,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes, type EstadoExcecao } from '@/hooks/useCargoPermissoes';
 import {
-  CARGOS_ACESSO_TOTAL, catalogoDoTenant, gruposDoTenant,
+  catalogoDoTenant, gruposDoTenant, normalizarDependencias,
 } from '@/lib/permissoes-catalogo';
 import { cn } from '@/lib/utils';
 import { GrupoPermissoes } from './GrupoPermissoes';
@@ -43,7 +43,7 @@ const ESTADOS: { valor: EstadoExcecao; label: string; classe: string }[] = [
   { valor: 'nao',   label: 'Não',   classe: 'data-[on=true]:bg-red-500 data-[on=true]:text-white' },
 ];
 
-export function PorPessoa() {
+export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
   const { perfil } = useAuth();
   const { empresa, tenantSlug } = useEmpresa();
   const {
@@ -72,9 +72,6 @@ export function PorPessoa() {
   const listaFiltrada = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return pessoas
-      // Cargo com acesso total não aceita exceção: o app responde «pode» antes
-      // de consultar qualquer tabela. Oferecer o controle seria mentir.
-      .filter(p => !(CARGOS_ACESSO_TOTAL as readonly string[]).includes(p.perfil))
       .filter(p => !soComExcecao || (excecoesPorPessoa[p.id] ?? 0) > 0)
       .filter(p => !termo
         || p.nome?.toLowerCase().includes(termo)
@@ -98,7 +95,25 @@ export function PorPessoa() {
   }
 
   function definirEstado(key: string, estado: EstadoExcecao) {
-    rascunho.definir(key, estado === 'herda' ? 'herda' : estado === 'sim');
+    if (!podeEditar || !pessoa) return;
+
+    const antes = Object.fromEntries(catalogo.map(p => {
+      const e = estadoDe(p.key);
+      return [p.key, e === 'herda' ? valorDoCargo(pessoa.perfil, p.key) : e === 'sim'];
+    }));
+    const alvo = estado === 'herda' ? valorDoCargo(pessoa.perfil, key) : estado === 'sim';
+    const depois = normalizarDependencias(antes, key, alvo);
+
+    const mudancas: Record<string, ValorRascunho> = {};
+    for (const p of catalogo) {
+      if (p.key === key && estado === 'herda' && depois[p.key] === alvo) {
+        mudancas[p.key] = 'herda';
+      } else if (depois[p.key] !== antes[p.key] || p.key === key) {
+        const herdado = valorDoCargo(pessoa.perfil, p.key);
+        mudancas[p.key] = depois[p.key] === herdado ? 'herda' : depois[p.key];
+      }
+    }
+    rascunho.definirVarios(mudancas);
     rascunho.podar(k => {
       if (!pessoa) return 'herda';
       const atual = estadoExcecao(pessoa.id, k);
@@ -107,7 +122,7 @@ export function PorPessoa() {
   }
 
   async function salvar() {
-    if (!empresa?.id || !pessoa || !rascunho.sujo) return;
+    if (!podeEditar || !empresa?.id || !pessoa || !rascunho.sujo) return;
     setSalvando(true);
     try {
       // Monta o JSON final: só entra chave que NÃO é «herda».
@@ -273,10 +288,11 @@ export function PorPessoa() {
                             key={op.valor}
                             data-on={estado === op.valor}
                             onClick={() => definirEstado(p.key, op.valor)}
+                            disabled={!podeEditar}
                             className={cn(
                               'px-2 py-1 text-[11px] font-medium transition-colors',
                               'text-muted-foreground hover:text-foreground',
-                              op.classe,
+                              op.classe, !podeEditar && 'cursor-not-allowed opacity-60',
                             )}
                           >
                             {op.label}

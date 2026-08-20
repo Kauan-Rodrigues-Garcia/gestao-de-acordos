@@ -35,8 +35,6 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { useOuvidoriaAcesso } from '@/hooks/useOuvidoriaAcesso';
-import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -56,7 +54,6 @@ import { NotificacaoToast } from './NotificacaoToast';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
-import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
@@ -83,7 +80,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           permissaoKey: 'ver_dashboard' },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
@@ -91,20 +88,20 @@ const NAV_ITEMS: NavItem[] = [
   // Visibilidade especial (chave em `tickets_config` + cargo) — ver filtro abaixo.
   // Sem `permissaoKey`: quem decide é `useTicketsAcesso`, e uma permissão a mais
   // no painel de cargos só criaria uma segunda chave para a mesma porta.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS },
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    permissaoKey: 'ver_painel_diretoria' },
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      permissaoKey: 'ver_usuarios' },
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, permissaoKey: 'ver_configuracoes' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
   // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
   // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
@@ -271,8 +268,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
-  const ouvidoriaAcesso = useOuvidoriaAcesso();
-  const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
   // canal e um SELECT count próprios, que podiam divergir da lista por instantes.
   const { naoLidas, animarBadge } = useNotificacoes();
@@ -321,23 +316,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return false;
     }
 
-    // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
-    // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
-    // continua valendo POR CIMA da permissão já verificada acima.
+    // Módulos exclusivos continuam respeitando o tenant; dentro dele, a matriz
+    // é a única decisão de acesso.
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
-      return isPP && ouvidoriaAcesso.podeVer;
+      return isPP;
     }
 
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
     // e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
-      return isPP && podeAcessarAbaWpp(userRole);
-    }
-
-    // Tickets: nasce só para administrador. A liderança entra quando a chave
-    // `tickets_config.liberado_para_lideranca` for virada na própria aba.
-    if (item.to === ROUTE_PATHS.TICKETS) {
-      return acessoTickets.podeVerAba;
+      return isPP;
     }
 
     if (item.permissaoKey) return true;
@@ -532,7 +520,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </NavLink>
         ))}
 
-        {userRole === 'super_admin' && (
+          {temPermissao('editar_menu_lateral') && (
           <div className="pt-2 mt-2 border-t border-sidebar-border">
             {editandoMenu ? (
               <div className="flex gap-1.5">

@@ -19,18 +19,18 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { PorCargo } from './PorCargo';
 import { PorPessoa } from './PorPessoa';
 
-export default function AdminPermissoes() {
-  const { isAdmin, loading } = useCargoPermissoes();
+export default function AdminPermissoes({ podeEditarExterno }: { podeEditarExterno?: boolean } = {}) {
+  const { temPermissao, loading } = useCargoPermissoes();
   const [aba, setAba] = useState('cargo');
 
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Carregando permissões...</div>;
   }
 
-  if (!isAdmin) {
+  if (!temPermissao('ver_permissoes')) {
     return (
       <div className="p-6 text-center text-muted-foreground text-sm">
-        Só administradores gerenciam permissões.
+        Você não tem permissão para abrir esta matriz.
       </div>
     );
   }
@@ -44,18 +44,12 @@ export default function AdminPermissoes() {
         </p>
       </div>
 
-      {/* O aviso de camada existe porque a confusão é fácil e cara: forçar
-          `ver_acordos_gerais` num operador NÃO faz ele enxergar acordo alheio.
-          A RLS continua negando — e é isso que protege o dado. */}
       <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/20 px-4 py-3">
         <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Estas permissões controlam <strong className="text-foreground">navegação e
-          interface</strong>: qual menu aparece, qual tela abre, qual botão fica
-          visível. O acesso ao <strong className="text-foreground">dado</strong> é
-          governado pelas políticas do banco (RLS) e não muda aqui — um operador
-          com &laquo;ver acordos de outras pessoas&raquo; ligado continua sem
-          enxergar acordo alheio, e isso é o correto.
+          Esta matriz é a fonte de verdade para <strong className="text-foreground">
+          navegação, ações e dados</strong>. Permissões dependentes são ajustadas
+          juntas: por exemplo, Logs só funciona quando Configurações também está ativa.
         </p>
       </div>
 
@@ -70,10 +64,10 @@ export default function AdminPermissoes() {
         </TabsList>
 
         <TabsContent value="cargo" className="mt-4">
-          <PorCargo />
+          <PorCargo podeEditar={podeEditarExterno ?? temPermissao('gerenciar_permissoes')} />
         </TabsContent>
         <TabsContent value="pessoa" className="mt-4">
-          <PorPessoa />
+          <PorPessoa podeEditar={podeEditarExterno ?? temPermissao('gerenciar_permissoes')} />
         </TabsContent>
       </Tabs>
     </div>

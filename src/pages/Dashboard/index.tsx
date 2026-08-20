@@ -10,7 +10,6 @@ import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
-  isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -20,7 +19,7 @@ import {
 import { cn } from '@/lib/utils';
 import { supabase, type Acordo } from '@/lib/supabase';
 import type { Perfil } from '@/lib/supabase';
-import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
+import { deduplicarVinculados, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
 import { toast } from 'sonner';
@@ -54,9 +53,9 @@ export default function Dashboard() {
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
   // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
   const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useSetoresEquipes();
-  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
-  const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
-  const isElite = perfil?.perfil === 'elite';
+  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
+  const podeFiltrarSetor = temPermissao('filtrar_por_setor') && temPermissao('ver_todos_setores');
+  const podeFiltrarUsuario = temPermissao('filtrar_por_usuario');
 
   const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
@@ -90,7 +89,7 @@ export default function Dashboard() {
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'
   );
-  const visaoAmpla = temVisaoAmpla(perfil?.perfil);
+  const visaoAmpla = temPermissao('ver_acordos_gerais');
   const { tags: empresaTags } = useEmpresaTags();
 
   const [activeTab, setActiveTab] = useState<'todos' | 'pendentes' | 'pagos' | 'nao_pagos'>(
@@ -326,7 +325,9 @@ export default function Dashboard() {
     function onKey(e: KeyboardEvent) {
       const tag = (e.target as HTMLElement).tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (e.key === 'n' || e.key === 'N') { e.preventDefault(); setNovoInlineAbertoTabela(v => !v); }
+      if ((e.key === 'n' || e.key === 'N') && temPermissao('criar_acordos')) {
+        e.preventDefault(); setNovoInlineAbertoTabela(v => !v);
+      }
       if (e.key === 'Escape') {
         setEditandoInlineIdTabela(null);
         setDetalheInlineIdTabela(null);
@@ -335,7 +336,7 @@ export default function Dashboard() {
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [isPP]);
+  }, [isPP, temPermissao]);
 
   async function findAcordoPage(acordoId: string) {
     if (!empresa?.id) return;
@@ -649,7 +650,7 @@ export default function Dashboard() {
            */}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {isLiderOuElite && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
+          {podeFiltrarEquipe && equipesDoSetor.length > 0 && (
             <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
               <div className="flex flex-wrap gap-1">
@@ -667,7 +668,7 @@ export default function Dashboard() {
                     title={`Ver dados e acordos da equipe ${eq.nome}`}
                   ><Layers className="w-3 h-3" /> {eq.nome}</button>
                 ))}
-                {isElite && (
+                {podeFiltrarUsuario && (
                   <button onClick={() => setVisaoFiltro('individual')}
                     className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
                       visaoFiltro === 'individual' ? 'bg-role-elite text-white border-role-elite' : 'bg-background text-muted-foreground border-border hover:border-role-elite/40 hover:text-foreground')}
@@ -677,7 +678,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {isLiderOuElite && equipesDoSetor.length === 0 && (
+          {podeFiltrarEquipe && equipesDoSetor.length === 0 && (
             <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" /> Setor geral
             </span>
@@ -692,7 +693,7 @@ export default function Dashboard() {
 
       {/* Analytics + setor filter */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {(isAdmin || (isLiderOuElite && temPermissao('ver_todos_setores'))) && temPermissao('filtrar_por_setor') && setoresList.length > 0 && (
+        {podeFiltrarSetor && setoresList.length > 0 && (
           <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
             <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
             <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
@@ -742,9 +743,9 @@ export default function Dashboard() {
                     )}
                   </>
                 )}
-                <Button size="sm" className="gap-1.5" data-tour="novo-acordo" onClick={() => setNovoInlineAbertoTabela(v => !v)}>
+                {temPermissao('criar_acordos') && <Button size="sm" className="gap-1.5" data-tour="novo-acordo" onClick={() => setNovoInlineAbertoTabela(v => !v)}>
                   <Plus className="w-4 h-4" /> Novo Acordo
-                </Button>
+                </Button>}
                 <Button variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
                   title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
                 >
@@ -890,7 +891,7 @@ export default function Dashboard() {
       )}
 
       {/* Bookplay — link para acordos */}
-      {!isPP && (
+      {!isPP && temPermissao('ver_acordos') && (
         <div className="flex items-center justify-end text-xs">
           <Button asChild variant="link" size="sm" className="text-xs h-auto p-0">
             <Link to={ROUTE_PATHS.ACORDOS}>Ver todos os acordos ↗</Link>

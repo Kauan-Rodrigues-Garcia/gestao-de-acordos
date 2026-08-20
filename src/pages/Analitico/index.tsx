@@ -8,7 +8,6 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
 import {
-  isPerfilAdminOuLider, isPerfilAdmin, isPerfilDiretoria,
   getEstadoFromAcordo, ROUTE_PATHS,
 } from '@/lib/index';
 import { supabase } from '@/lib/supabase';
@@ -35,16 +34,16 @@ export default function PaginaAnalitico() {
   const tenant           = useTenant();
   const navigate         = useNavigate();
 
-  const isElite     = perfil?.perfil === 'elite';
-  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  const isLiderMais = temPermissao('ver_operadores') || temPermissao('ver_acordos_gerais');
+  const isElite     = isLiderMais && temPermissao('filtrar_por_usuario');
   const isOperador  = !isLiderMais;
 
   // Isolamento por setor: líder/elite/gerência enxergam APENAS o próprio setor.
   // Só diretoria e admin/super_admin veem todos os setores (e podem filtrar).
-  const veTodosSetores = isPerfilAdmin(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  const veTodosSetores = temPermissao('ver_analiticos_global');
   const setorProprio   = perfil?.setor_id ?? null;
   // Validação de relatório (Fase 1): só administrador/super_admin, nunca diretoria.
-  const isAdminReal     = isPerfilAdmin(perfil?.perfil ?? '');
+  const podeValidarRelatorios = temPermissao('validar_relatorios');
 
   const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
@@ -393,7 +392,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaPrincipal === 'analitico' && isAdminReal && (
+      {abaPrincipal === 'analitico' && podeValidarRelatorios && (
         <ValidacaoRelatorioSetor
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}

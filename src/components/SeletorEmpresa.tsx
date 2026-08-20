@@ -34,19 +34,18 @@ import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { definirEmpresaEscolhida } from '@/services/empresaAtiva.service';
-import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { cn } from '@/lib/utils';
 
 import type { Empresa } from '@/lib/supabase';
 
 export function SeletorEmpresa() {
-  const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const [empresas, setEmpresas] = useState<Empresa[] | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [trocando, setTrocando]     = useState<string | null>(null);
@@ -54,7 +53,7 @@ export function SeletorEmpresa() {
   // Durante impersonação a empresa é a do usuário impersonado, e trocá-la
   // deixaria a sessão apontando para uma empresa que a pessoa impersonada não
   // tem — dois "de quem é esta tela?" ao mesmo tempo.
-  if (!perfilVeDuasEmpresas(perfil) || getImpersonacaoAtiva()) return null;
+  if (!temPermissao('ver_multiempresa') || getImpersonacaoAtiva()) return null;
 
   async function abrir(aberto: boolean) {
     if (!aberto || empresas || carregando) return;

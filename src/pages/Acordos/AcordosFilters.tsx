@@ -87,7 +87,7 @@ export function AcordosFilters({
         ))}
 
         {/* Aba Pix Automático (BookPlay) — mesmo padrão underline das demais abas */}
-        {!isPP && (
+        {!isPP && temPermissao('ver_pix_automatico') && (
           <button
             onClick={() => setPixAbaAtiva(!pixAbaAtiva)}
             className={cn(

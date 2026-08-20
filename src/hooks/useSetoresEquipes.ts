@@ -23,7 +23,6 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
-import { isPerfilAdmin, isPerfilLider, isPerfilDiretoria } from '@/lib/index';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 
 export interface SetorResumo { id: string; nome: string }
@@ -47,6 +46,8 @@ export function useSetoresEquipes(): SetoresEquipes {
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const verTodosSetores = temPermissao('ver_todos_setores');
+  const podeFiltrarSetor = temPermissao('filtrar_por_setor');
+  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
 
   const [setores, setSetores]               = useState<SetorResumo[]>(VAZIO);
   const [equipesDoSetor, setEquipesDoSetor] = useState<SetorResumo[]>(VAZIO);
@@ -66,13 +67,8 @@ export function useSetoresEquipes(): SetoresEquipes {
 
   const carregar = useCallback(async () => {
     if (!cargo || !empresaId) { setLoading(false); return; }
-    const isAdmin     = isPerfilAdmin(cargo);
-    const isLider     = isPerfilLider(cargo);
-    const isDiretoria = isPerfilDiretoria(cargo);
-
     try {
-      // Filtro de setor: admin/diretoria sempre; líder+ só com 'ver_todos_setores'.
-      if (isAdmin || isDiretoria || (isLider && verTodosSetores)) {
+      if (podeFiltrarSetor && verTodosSetores) {
         const { data } = await supabase
           .from('setores').select('id, nome')
           .eq('empresa_id', empresaId).order('nome');
@@ -84,7 +80,7 @@ export function useSetoresEquipes(): SetoresEquipes {
       }
 
       // Equipes: do próprio setor, ou da empresa toda com 'ver_todos_setores'.
-      if (isLider && (setorId || verTodosSetores)) {
+      if (podeFiltrarEquipe && (setorId || verTodosSetores)) {
         let q = supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId);
         if (!verTodosSetores && setorId) q = q.eq('setor_id', setorId);
         const { data } = await q.order('nome');
@@ -97,7 +93,7 @@ export function useSetoresEquipes(): SetoresEquipes {
     } finally {
       setLoading(false);
     }
-  }, [cargo, setorId, empresaId, verTodosSetores]);
+  }, [cargo, setorId, empresaId, verTodosSetores, podeFiltrarSetor, podeFiltrarEquipe]);
 
   useEffect(() => { void carregar(); }, [carregar]);
 

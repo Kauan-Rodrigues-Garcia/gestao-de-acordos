@@ -11,8 +11,8 @@ import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { buscarAnalitico, marcarVistoAnalitico } from '@/services/analitico/analitico.service';
-import { isPerfilAdminOuLider } from '@/lib/index';
 
 export interface UseAnaliticoOptions {
   mes: string;                  // 'yyyy-MM'
@@ -25,6 +25,7 @@ export interface UseAnaliticoOptions {
 export function useAnalitico(options: UseAnaliticoOptions) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
 
   const [dados,       setDados]       = useState<AnaliticoRecebimento[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -33,7 +34,7 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   const marcouRef     = useRef(false);
   const hasLoadedOnce = useRef(false);
 
-  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
+  const isLiderMais = temPermissao('ver_operadores') || temPermissao('ver_acordos_gerais');
 
   const fetchDados = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;

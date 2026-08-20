@@ -3,19 +3,14 @@
  * ─────────────────────────────────────────────────────────────────────────
  * Regressão do item #8:
  *   O card "Banco de Dados / Migrations" dentro de /admin/configuracoes
- *   (aba Geral) deve ser visível APENAS para perfis `administrador` e
- *   `super_admin`. Qualquer perfil abaixo (lider, elite, gerencia,
- *   diretoria, operador) NÃO deve ver o card, mesmo que consiga acessar
- *   a rota por algum motivo — defesa em profundidade além do
- *   ProtectedRoute do App.
+ *   (aba Geral) deve seguir a mesma matriz configurável da aba e da rota.
  *
  * O teste usa inspeção estática do fonte (AST-like via regex) porque
  * renderizar AdminConfiguracoes completo exige supabase/auth/motion +
  * sub-páginas AdminCargos/AdminLogs/AdminDiretoExtra lazy-loaded.
  * A checagem estática garante que:
- *   1. `useAuth` é importado e usado.
- *   2. `isPerfilAdmin` é importado de `@/lib/index`.
- *   3. Existe a variável `podeVerBancoDados` derivada de isPerfilAdmin(perfil.perfil).
+ *   1. `useCargoPermissoes` é importado e usado.
+ *   2. Existe a variável `podeVerBancoDados` derivada da permissão da aba Geral.
  *   4. O Card que contém o título "Banco de Dados / Migrations" está
  *      renderizado dentro de `{podeVerBancoDados && (...)}`.
  *   5. O useEffect que probe `acordos.instituicao` também respeita o gate.
@@ -28,18 +23,13 @@ const FILE = resolve(__dirname, '../AdminConfiguracoes.tsx');
 const src = readFileSync(FILE, 'utf-8');
 
 describe('AdminConfiguracoes — gate do card "Banco de Dados / Migrations" (#8)', () => {
-  it('importa useAuth do hook local', () => {
-    expect(src).toMatch(/import\s*\{\s*useAuth\s*\}\s*from\s*['"]@\/hooks\/useAuth['"]/);
+  it('importa useCargoPermissoes do hook local', () => {
+    expect(src).toMatch(/import\s*\{\s*useCargoPermissoes\s*\}\s*from\s*['"]@\/hooks\/useCargoPermissoes['"]/);
   });
 
-  it('importa isPerfilAdmin de @/lib/index', () => {
-    expect(src).toMatch(/import\s*\{\s*isPerfilAdmin\s*\}\s*from\s*['"]@\/lib\/index['"]/);
-  });
-
-  it('declara podeVerBancoDados derivado de isPerfilAdmin(perfil.perfil)', () => {
-    // Aceita `perfil?.perfil ?? ''` ou `perfil?.perfil || ''`
+  it('declara podeVerBancoDados pela permissão da aba Geral', () => {
     expect(src).toMatch(
-      /const\s+podeVerBancoDados\s*=\s*isPerfilAdmin\(\s*perfil\?\.perfil\s*(\?\?|\|\|)\s*['"]{2}\s*\)/,
+      /const\s+podeVerBancoDados\s*=\s*temPermissao\(\s*['"]ver_configuracoes_geral['"]\s*\)/,
     );
   });
 
@@ -81,16 +71,13 @@ describe('AdminConfiguracoes — gate do card "Banco de Dados / Migrations" (#8)
     expect(deps.trim()).toBe('podeVerBancoDados');
   });
 
-  it('a proteção no Layout aponta para apenas administrador no menu', () => {
-    // Regressão cruzada: confirma que o item de menu segue com roles=['administrador']
-    // (super_admin passa pelo bypass). Se alguém relaxar isso no Layout no futuro,
-    // o card no AdminConfiguracoes continua protegido pelo gate local.
+  it('a proteção no Layout usa a permissão da aba Configurações', () => {
     const layoutSrc = readFileSync(
       resolve(__dirname, '../../components/Layout.tsx'),
       'utf-8',
     );
     expect(layoutSrc).toMatch(
-      /label:\s*['"]Configurações['"][\s\S]{0,120}roles:\s*\[\s*['"]administrador['"]\s*\]/,
+      /label:\s*['"]Configurações['"][\s\S]{0,160}permissaoKey:\s*['"]ver_configuracoes['"]/,
     );
   });
 });

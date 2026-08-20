@@ -56,7 +56,7 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     permissoes: {},
     todasPermissoes: [],
     loading: false,
-    temPermissao: vi.fn(() => false),
+    temPermissao: vi.fn((chave: string) => chave === 'ver_acordos'),
     isAdmin: false,
     refresh: vi.fn(),
   }),

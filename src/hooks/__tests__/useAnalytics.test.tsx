@@ -64,6 +64,24 @@ vi.mock('@/hooks/useEmpresa', () => ({
   }),
 }));
 
+// O hook passou a decidir escopo exclusivamente pela matriz. Estes testes
+// exercitam os padrões equivalentes aos cargos das fixtures, sem reintroduzir
+// bypass por cargo no código de produção.
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({
+    temPermissao: (chave: string) => {
+      const cargo = (mockPerfilValue.current as { perfil?: string } | null)?.perfil;
+      if (cargo === 'administrador' || cargo === 'diretoria' || cargo === 'super_admin') {
+        return ['ver_todos_setores', 'filtrar_por_setor', 'filtrar_por_equipe', 'ver_acordos_gerais'].includes(chave);
+      }
+      if (cargo === 'lider' || cargo === 'elite' || cargo === 'gerencia') {
+        return ['filtrar_por_equipe', 'ver_acordos_gerais'].includes(chave);
+      }
+      return false;
+    },
+  }),
+}));
+
 vi.mock('@/providers/RealtimeAcordosProvider', () => ({
   useRealtimeAcordos: () => ({
     subscribe:   mockRealtimeSubscribe,
@@ -201,12 +219,13 @@ function setupOperadorResults(acordos: unknown[], meta: unknown = null) {
 /**
  * Monta fila para perfil ADMIN:
  *  1. setores     (thenable)
- *  2. acordos     (thenable)
+ *  2. equipes para o filtro (thenable)
+ *  3. acordos     (thenable)
  *  —  admin não busca meta principal (setMeta(null))
- *  3. metas equipe  (Promise.all[0])
- *  4. metas operador (Promise.all[1])
- *  5. perfis        (Promise.all[2])
- *  6. equipes       (Promise.all[3])
+ *  4. metas equipe  (Promise.all[0])
+ *  5. metas operador (Promise.all[1])
+ *  6. perfis        (Promise.all[2])
+ *  7. equipes       (Promise.all[3])
  */
 function setupAdminResults(opts: {
   setores?:       unknown[];
@@ -217,6 +236,7 @@ function setupAdminResults(opts: {
   equipes?:       unknown[];
 } = {}) {
   pushResult('setores',  { data: opts.setores       ?? [], error: null });
+  pushResult('equipes',  { data: opts.equipes       ?? [], error: null });
   pushResult('acordos',  { data: opts.acordos        ?? [], error: null });
   pushResult('metas',    { data: opts.metasEquipe    ?? [], error: null });
   pushResult('metas',    { data: opts.metasOperador  ?? [], error: null });

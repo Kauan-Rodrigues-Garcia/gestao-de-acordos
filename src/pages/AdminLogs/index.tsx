@@ -48,6 +48,7 @@ import type { Empresa, LogSistema } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useLogs } from '@/hooks/useLogs';
 import {
   exportarLogsCsv, baixarCsv, expurgarLogs, registrarLog,
@@ -69,7 +70,10 @@ type AbaInterna = 'trilha' | 'uso';
 export default function AdminLogs() {
   const { perfil } = useAuth();
   const { empresa: tenantEmpresa } = useEmpresa();
-  const isSuperAdmin = perfil?.perfil === 'super_admin';
+  const { temPermissao } = useCargoPermissoes();
+  const podeVerMultiempresa = temPermissao('ver_multiempresa');
+  const podeVerUso = temPermissao('ver_monitoramento_uso');
+  const podeExpurgar = temPermissao('expurgar_logs');
 
   const {
     logs, resumo, opcoes, total, temMais,
@@ -94,14 +98,14 @@ export default function AdminLogs() {
   // Lista de empresas só para super_admin — os demais nem veem o seletor, e
   // buscar a lista para eles seria uma chamada que o RLS recusa.
   useEffect(() => {
-    if (!isSuperAdmin) {
+    if (!podeVerMultiempresa) {
       setEmpresas(tenantEmpresa ? [tenantEmpresa] : []);
       return;
     }
     fetchEmpresas().then(setEmpresas).catch(() => setEmpresas([]));
-  }, [isSuperAdmin, tenantEmpresa]);
+  }, [podeVerMultiempresa, tenantEmpresa]);
 
-  const mostrarEmpresa = isSuperAdmin && !filtros.empresaId;
+  const mostrarEmpresa = podeVerMultiempresa && !filtros.empresaId;
 
   // ── Exportação ────────────────────────────────────────────────────────────
   /**
@@ -250,7 +254,7 @@ export default function AdminLogs() {
             <RefreshCw className={cn('w-3.5 h-3.5', carregando && 'animate-spin')} />
           </Button>
 
-          {isSuperAdmin && (
+          {podeExpurgar && (
             <Button
               variant="outline"
               size="sm"
@@ -270,9 +274,9 @@ export default function AdminLogs() {
           escrita, `uso_telas` registra abertura de tela. Ficam juntas porque a
           trava de acesso é a mesma. */}
       <div className="flex items-center gap-1 border-b border-border">
-        {([
+            {([
           { key: 'trilha', label: 'Trilha de auditoria', Icon: ClipboardList },
-          { key: 'uso',    label: 'Monitoramento de uso', Icon: Activity },
+          ...(podeVerUso ? [{ key: 'uso' as const, label: 'Monitoramento de uso', Icon: Activity }] : []),
         ] as const).map(({ key, label, Icon }) => (
           <button
             key={key}
@@ -293,7 +297,7 @@ export default function AdminLogs() {
       {/* O monitoramento não exige empresa: mostra todas as que a RLS permitir e
           traz seletor próprio. Passar o filtro da trilha para cá acoplaria duas
           perguntas diferentes ao mesmo controle. */}
-      {abaInterna === 'uso' && (
+      {podeVerUso && abaInterna === 'uso' && (
         <MonitoramentoUso empresas={empresas.map(e => ({ id: e.id, nome: e.nome }))} />
       )}
 
@@ -316,7 +320,7 @@ export default function AdminLogs() {
         filtros={filtros}
         opcoes={opcoes}
         filtrosAtivos={filtrosAtivos}
-        isSuperAdmin={isSuperAdmin}
+        isSuperAdmin={podeVerMultiempresa}
         empresas={empresas}
         setFiltro={setFiltro}
         limparFiltros={limparFiltros}

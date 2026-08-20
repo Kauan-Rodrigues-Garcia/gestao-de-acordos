@@ -116,6 +116,17 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => authPorCargo[cargo],
 }));
 
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({
+    temPermissao: (chave: string) => {
+      if (chave === 'expurgar_logs' || chave === 'ver_multiempresa') {
+        return cargo === 'super_admin';
+      }
+      return chave === 'ver_monitoramento_uso';
+    },
+  }),
+}));
+
 vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => EMPRESA_CTX,
 }));
