@@ -3923,7 +3923,7 @@ export type Database = {
         Returns: undefined
       }
       fn_analitico_dashboard_mes: {
-        Args: { p_empresa_id: string; p_mes: string }
+        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
         Returns: {
           dia: string
           forma_detalhe: string
@@ -3936,7 +3936,7 @@ export type Database = {
         }[]
       }
       fn_analitico_dashboard_mes_json: {
-        Args: { p_empresa_id: string; p_mes: string }
+        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
         Returns: Json
       }
       fn_analitico_destaques_dia: {
@@ -3956,7 +3956,7 @@ export type Database = {
         }[]
       }
       fn_analitico_resumo_por_operador: {
-        Args: { p_empresa_id: string; p_mes: string }
+        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
         Returns: {
           operador_id: string
           operador_nome: string
@@ -4052,7 +4052,7 @@ export type Database = {
         Returns: undefined
       }
       fn_diario_resumo_mensal: {
-        Args: { p_empresa_id: string; p_mes: string }
+        Args: { p_contexto?: string; p_empresa_id: string; p_mes: string }
         Returns: {
           dia_referencia: string
           fora_vinculo: boolean

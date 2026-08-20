@@ -27,7 +27,11 @@ function chavesDoMenu(): string[] {
     LAYOUT.indexOf('const NAV_ITEMS'),
     LAYOUT.indexOf('export default function Layout'),
   );
-  return [...bloco.matchAll(/permissaoKey:\s*'([a-z_]+)'/g)].map(m => m[1]);
+  return [
+    ...[...bloco.matchAll(/permissaoKey:\s*'([a-z_]+)'/g)].map(m => m[1]),
+    ...[...bloco.matchAll(/permissoesAny:\s*\[([^\]]+)\]/g)]
+      .flatMap(m => [...m[1].matchAll(/'([a-z_]+)'/g)].map(k => k[1])),
+  ];
 }
 
 /** As permissões exigidas pelas rotas em App.tsx. */

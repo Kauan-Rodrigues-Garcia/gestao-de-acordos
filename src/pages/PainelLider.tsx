@@ -33,7 +33,7 @@ import {
   useRealtimeAcordos, type AcordoRealtimeEvent,
 } from '@/providers/RealtimeAcordosProvider';
 import { formatBRL, sumSafe } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
@@ -180,7 +180,9 @@ export default function PainelLider() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const verTodosSetores = temPermissao('ver_todos_setores');
+  const verSetorProprio = temPermissao('painel_lider_setor_proprio');
+  const verTodosSetores = temPermissao('painel_lider_todos_setores');
+  const temEscopoPainel = verSetorProprio || verTodosSetores;
   // Drill-down com dados detalhados de cada operador (padrão true; desligar
   // a permissão ver_operadores esconde a expansão da linha do operador).
   const podeVerOperadores = temPermissao('ver_operadores');
@@ -193,11 +195,14 @@ export default function PainelLider() {
   const isBookplay = tenant.slug === 'bookplay';
   // As abas Desempenho Equipes / Quartis / Gráfico moram no Painel Líder nos dois
   // tenants. Fonte: PaguePlay = analítico (Gráfico = diário); BookPlay = analítico.
-  const mostrarAbasAnaliticas = isPP || isBookplay;
+  const abasDisponiveis = useMemo(() => ([
+    { key: 'time',       label: 'Acompanhamento',      Icon: Users,      permissao: 'ver_painel_lider_acompanhamento' },
+    { key: 'desempenho', label: 'Desempenho Equipes', Icon: BarChart3,  permissao: 'ver_painel_lider_desempenho_equipes' },
+    { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp, permissao: 'ver_painel_lider_quartis' },
+    { key: 'grafico',    label: 'Gráfico recebimento',Icon: LineChart,  permissao: 'ver_painel_lider_grafico_recebimento' },
+  ] as const).filter(aba => temPermissao(aba.permissao)), [temPermissao]);
+  const mostrarAbasAnaliticas = (isPP || isBookplay) && temEscopoPainel && abasDisponiveis.length > 0;
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
-
-  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
-  const isLiderOuSimilar = isPerfilLider(perfil?.perfil ?? '') && !isAdmin;
 
   const [mesRef, setMesRef] = useState<MesRef>(() => {
     const d = new Date();
@@ -229,6 +234,11 @@ export default function PainelLider() {
     setAbaAtiva(k);
     setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
   }, []);
+  useEffect(() => {
+    if (abasDisponiveis.some(aba => aba.key === abaAtiva)) return;
+    const primeira = abasDisponiveis[0]?.key;
+    if (primeira) mudarAba(primeira);
+  }, [abaAtiva, abasDisponiveis, mudarAba]);
   // Monitoramento de uso: a URL não muda ao trocar de aba aqui, então sem isto
   // "quais líderes abrem o Desempenho Equipes" ficaria sem resposta — as quatro
   // abas apareceriam somadas como um único `/lider`.
@@ -340,7 +350,7 @@ export default function PainelLider() {
     if (!isPP || !empresa?.id) return;
     let cancel = false;
     setLoadingDiario(true);
-    void buscarResumoMensalDiario(empresa.id, mesStr).then(res => {
+    void buscarResumoMensalDiario(empresa.id, mesStr, 'painel_lider').then(res => {
       if (cancel) return;
       setResumoDiario(res);
       setLoadingDiario(false);
@@ -364,7 +374,7 @@ export default function PainelLider() {
     void buscarExclusoesSetor(empresa.id, mesStr).then(({ porSetor: exclusoes }) => {
       if (!cancel) setAnaliticoExclusoes(exclusoes);
       return Promise.all([
-        buscarResumoOperadoresAnalitico(empresa.id, mesStr),
+        buscarResumoOperadoresAnalitico(empresa.id, mesStr, 'painel_lider'),
         buscarTotalOrfaosPorSetor(empresa.id, mesStr),
         buscarTotalPorSetor(empresa.id, mesStr, exclusoes),
         // `nome` entrou junto: o seletor de setor do cabeçalho precisa dele, e
@@ -445,8 +455,11 @@ export default function PainelLider() {
 
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
-    if (!perfil || !empresa?.id) return [];
-    const escopoSetor = !isAdmin && isLiderOuSimilar && !!perfil.setor_id && !verTodosSetores;
+    const perfilId = perfil?.id;
+    const perfilSetorId = perfil?.setor_id;
+    const empresaId = empresa?.id;
+    if (!perfilId || !empresaId || !temEscopoPainel) return [];
+    const escopoSetor = verSetorProprio && !!perfilSetorId && !verTodosSetores;
 
     // BookPlay: um setor pode ser formado SÓ por operadores CLONADOS (setor de
     // origem diferente). O filtro por setor_id os deixaria de fora e o painel
@@ -454,12 +467,12 @@ export default function PainelLider() {
     let cloneIds: string[] = [];
     if (escopoSetor && isBookplay) {
       const { data: eqs } = await supabase
-        .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
+        .from('equipes').select('id').eq('empresa_id', empresaId).eq('setor_id', perfilSetorId);
       const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
       if (eqIds.length) {
         const { data: cl } = await supabase
           .from('equipe_operadores_clones').select('operador_id')
-          .eq('empresa_id', empresa.id).in('equipe_id', eqIds);
+          .eq('empresa_id', empresaId).in('equipe_id', eqIds);
         cloneIds = [...new Set(((cl as { operador_id: string }[]) ?? []).map(c => c.operador_id))];
       }
     }
@@ -467,20 +480,20 @@ export default function PainelLider() {
     let q = supabase
       .from('perfis')
       .select('*, setores(id, nome)')
-      .eq('empresa_id', empresa.id)
+      .eq('empresa_id', empresaId)
       // Mesma lista do Pix, dos quartis e do ranking — ver
       // `PERFIS_QUE_CONTAM_NO_RECEBIMENTO`.
       .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
       .eq('ativo', true);
     if (escopoSetor) {
       q = cloneIds.length
-        ? q.or(`setor_id.eq.${perfil.setor_id},id.in.(${cloneIds.join(',')})`)
-        : q.eq('setor_id', perfil.setor_id);
+        ? q.or(`setor_id.eq.${perfilSetorId},id.in.(${cloneIds.join(',')})`)
+        : q.eq('setor_id', perfilSetorId);
     }
     const { data, error } = await q.order('nome');
     if (error) throw new Error(`Operadores: ${error.message}`);
     return (data as Perfil[]) ?? [];
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin, isBookplay, isLiderOuSimilar, verTodosSetores]);
+  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isBookplay, temEscopoPainel, verSetorProprio, verTodosSetores]);
 
   // ── Carregar acordos do mês para os operadores ────────────────────────────
   const carregarAcordosMes = useCallback(async (ids: string[]): Promise<Acordo[]> => {
@@ -500,7 +513,9 @@ export default function PainelLider() {
   // ── Orquestra a carga (operadores + acordos do mês) ───────────────────────
   const idsRef = useRef<string[]>([]);
   const carregarTudo = useCallback(async () => {
-    if (!perfil || !empresa?.id) return;
+    if (!perfil?.id || !empresa?.id || !temEscopoPainel) {
+      setOperadores([]); setAcordosMes([]); setLoading(false); return;
+    }
     setLoading(true);
     setErro(null);
     try {
@@ -514,7 +529,7 @@ export default function PainelLider() {
     } finally {
       setLoading(false);
     }
-  }, [perfil?.id, empresa?.id, carregarOperadores, carregarAcordosMes]);
+  }, [perfil?.id, empresa?.id, temEscopoPainel, carregarOperadores, carregarAcordosMes]);
 
   useEffect(() => { void carregarTudo(); }, [carregarTudo]);
 
@@ -651,12 +666,7 @@ export default function PainelLider() {
       {/* ── Abas: acompanhamento × desempenho × quartis × gráfico ───────── */}
       {mostrarAbasAnaliticas && (
         <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
-          {([
-            { key: 'time',       label: 'Acompanhamento',      Icon: Users },
-            { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
-            { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
-            { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
-          ] as const).map(({ key, label, Icon }) => (
+          {abasDisponiveis.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => mudarAba(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
@@ -699,7 +709,7 @@ export default function PainelLider() {
       {/* ── Aba: Desempenho Equipes (relatório analítico, os dois tenants) ── */}
       {/* PaguePlay: card do setor = soma dos operadores (setorSomaMembros).    */}
       {/* BookPlay: card do setor = total do relatório carimbado por setor_id.  */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('desempenho') && (
+      {temPermissao('ver_painel_lider_desempenho_equipes') && abasVisitadas.has('desempenho') && (
         <div className={cn(abaAtiva !== 'desempenho' && 'hidden')}>
           <DesempenhoEquipes
             empresaId={empresa.id}
@@ -721,7 +731,7 @@ export default function PainelLider() {
       )}
 
       {/* ── Aba: Quartis (relatório analítico, os dois tenants) ───────────── */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('quartis') && (
+      {temPermissao('ver_painel_lider_quartis') && abasVisitadas.has('quartis') && (
         <div className={cn(abaAtiva !== 'quartis' && 'hidden')}>
           <QuartisOperadores
             empresaId={empresa.id}
@@ -740,7 +750,7 @@ export default function PainelLider() {
       {/* ── Aba: Gráfico recebimento ──────────────────────────────────────── */}
       {/* PaguePlay: recebimento diário (linhasExternas). BookPlay: analítico    */}
       {/* (o componente busca por dia internamente, sem linhasExternas).         */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('grafico') && (
+      {temPermissao('ver_painel_lider_grafico_recebimento') && abasVisitadas.has('grafico') && (
         <div className={cn(abaAtiva !== 'grafico' && 'hidden')}>
           {isPP && loadingDiario ? (
             <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
@@ -764,7 +774,7 @@ export default function PainelLider() {
       )}
 
       {/* ── KPIs do time ─────────────────────────────────────────────────── */}
-      {abaAtiva === 'time' && (loading ? (
+      {temPermissao('ver_painel_lider_acompanhamento') && abaAtiva === 'time' && (loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-[76px] bg-muted rounded-xl animate-pulse" />)}
         </div>
@@ -791,7 +801,7 @@ export default function PainelLider() {
       ))}
 
       {/* ── Lista de operadores ──────────────────────────────────────────── */}
-      {abaAtiva === 'time' && (
+      {temPermissao('ver_painel_lider_acompanhamento') && abaAtiva === 'time' && (
       <Card className="border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">

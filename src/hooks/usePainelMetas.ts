@@ -340,7 +340,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const minhaEquipe = equipesConhecidas.find(e => e.id === perfilEquipeId) ?? null;
 
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
-  const analitico = useAnaliticoDashboard(ativo, mes);
+  const analitico = useAnaliticoDashboard(ativo, mes, 'dashboard');
 
   const { escopo, pendente: escopoPendente } = useEscopoAnalitico({
     ativo,

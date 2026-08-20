@@ -18,7 +18,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
-import { veTodosOsSetores, ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
+import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
+import { temEscopo } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
@@ -151,13 +152,13 @@ export function AnalyticsPanel({
   // O recebido no mês, o gráfico por dia, Pix/Cartão e a % da meta passam a
   // vir do analitico_recebimentos. Se a migration ainda não foi aplicada
   // (dbAtiva=false), tudo cai no comportamento antigo (tabulação).
-  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
+  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise, 'dashboard');
 
   // ── Escopo do analítico ────────────────────────────────────────────────────
   // Quem enxerga a empresa toda. Mesma função da aba Analítico: as duas telas
   // discordavam (aba decidia por cargo, dashboard por permissão), e a diretoria
   // via a empresa numa e só o próprio setor na outra.
-  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
+  const veTodosSetores = temEscopo('dashboard', 'todos_setores', temPermissao);
   // Sem visão global o painel fica travado no setor do usuário — os números de
   // um setor nunca somam nos do outro.
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
@@ -210,7 +211,9 @@ export function AnalyticsPanel({
    * significa "estou vendo o setor". Sem esta distinção, o valor do card do
    * Receptivo era creditado no total pessoal de cada operador.
    */
-  const veDadosDeOutros = temPermissao('ver_acordos_gerais');
+  const veDadosDeOutros = temEscopo('dashboard', 'equipe', temPermissao)
+    || temEscopo('dashboard', 'setor', temPermissao)
+    || temEscopo('dashboard', 'todos_setores', temPermissao);
 
   /** Quanto do Receptivo entra no que está na tela — ver `receptivoDoEscopo`. */
   const receptivoNoEscopo = useMemo(
@@ -249,15 +252,15 @@ export function AnalyticsPanel({
 
   useEffect(() => {
     if (setorExterno !== undefined) setSetorFiltro(setorExterno ?? null);
-  }, [setorExterno]);
+  }, [setorExterno, setSetorFiltro]);
 
   useEffect(() => {
     if (equipeFiltroExterno !== undefined) setEquipeFiltro(equipeFiltroExterno ?? null);
-  }, [equipeFiltroExterno]);
+  }, [equipeFiltroExterno, setEquipeFiltro]);
 
   useEffect(() => {
     if (operadorFiltroExterno !== undefined) setOperadorFiltro(operadorFiltroExterno ?? null);
-  }, [operadorFiltroExterno]);
+  }, [operadorFiltroExterno, setOperadorFiltro]);
 
   // `porTipo` (distribuicao por forma de pagamento) saiu com o ChartsSection.
   // A leitura por forma agora e o breakdown do donut do PainelMetas, que sai do

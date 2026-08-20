@@ -24,9 +24,10 @@ import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
+import { temEscopo } from '@/lib/permissoes-escopo';
 
 export interface SetorResumo { id: string; nome: string }
-interface EquipeResumo extends SetorResumo { setor_id: string | null }
+export interface EquipeResumo extends SetorResumo { setor_id: string | null }
 
 /** Referência estável para "lista vazia" — `[]` novo a cada chamada faria o
  *  consumidor re-renderizar à toa em todo `useMemo` que dependa da lista. */
@@ -39,6 +40,7 @@ export interface SetoresEquipes {
   setorFiltro: string | null;
   setSetorFiltro: (id: string | null) => void;
   /** Equipes visíveis ao líder/elite (do próprio setor, ou todas com permissão). */
+  equipes: EquipeResumo[];
   equipesDoSetor: SetorResumo[];
   loading: boolean;
 }
@@ -47,9 +49,9 @@ export function useSetoresEquipes(): SetoresEquipes {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const verTodosSetores = temPermissao('ver_todos_setores');
-  const podeFiltrarSetor = temPermissao('filtrar_por_setor');
-  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
+  const verTodosSetores = temEscopo('dashboard', 'todos_setores', temPermissao);
+  const podeFiltrarSetor = temEscopo('dashboard', 'setor', temPermissao) || verTodosSetores;
+  const podeFiltrarEquipe = temEscopo('dashboard', 'equipe', temPermissao) || verTodosSetores;
 
   const [setores, setSetores]               = useState<SetorResumo[]>(VAZIO);
   const [equipes, setEquipes]               = useState<EquipeResumo[]>(EQUIPES_VAZIAS);
@@ -70,10 +72,10 @@ export function useSetoresEquipes(): SetoresEquipes {
   const carregar = useCallback(async () => {
     if (!cargo || !empresaId) { setLoading(false); return; }
     try {
-      if (podeFiltrarSetor && verTodosSetores) {
-        const { data } = await supabase
-          .from('setores').select('id, nome')
-          .eq('empresa_id', empresaId).order('nome');
+      if (podeFiltrarSetor) {
+        let q = supabase.from('setores').select('id, nome').eq('empresa_id', empresaId);
+        if (!verTodosSetores && setorId) q = q.eq('id', setorId);
+        const { data } = await q.order('nome');
         // Ordem escolhida na aba Setores; o `order('nome')` acima vira só o
         // desempate de quem ainda não está na ordem salva.
         setSetores(aplicarOrdemSetores((data as SetorResumo[]) ?? [], empresaId));
@@ -81,7 +83,8 @@ export function useSetoresEquipes(): SetoresEquipes {
         setSetores(VAZIO);
       }
 
-      // Equipes: do próprio setor, ou da empresa toda com 'ver_todos_setores'.
+      // Equipes pertencem ao escopo do Dashboard; nenhuma chave de outra aba
+      // participa desta consulta.
       if (podeFiltrarEquipe && (setorId || verTodosSetores)) {
         let q = supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId);
         if (!verTodosSetores && setorId) q = q.eq('setor_id', setorId);
@@ -99,6 +102,10 @@ export function useSetoresEquipes(): SetoresEquipes {
 
   useEffect(() => { void carregar(); }, [carregar]);
 
+  useEffect(() => {
+    if (!verTodosSetores && setorId) setSetorFiltro(setorId);
+  }, [setorId, verTodosSetores]);
+
   const equipesDoSetor = useMemo<SetorResumo[]>(
     () => setorFiltro
       ? equipes.filter(e => e.setor_id === setorFiltro)
@@ -106,5 +113,5 @@ export function useSetoresEquipes(): SetoresEquipes {
     [equipes, setorFiltro],
   );
 
-  return { setores, setorFiltro, setSetorFiltro, equipesDoSetor, loading };
+  return { setores, setorFiltro, setSetorFiltro, equipes, equipesDoSetor, loading };
 }

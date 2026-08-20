@@ -125,7 +125,7 @@ export function rotuloCategoria(key: string): string {
 export const ABAS_DO_SISTEMA: { valor: string; permissao?: string }[] = [
   { valor: 'Dashboard' },
   { valor: 'Acordos',            permissao: 'ver_acordos' },
-  { valor: 'Novo Acordo',        permissao: 'criar_acordos' },
+  { valor: 'Novo Acordo',        permissao: 'ver_novo_acordo' },
   { valor: 'Importar Excel',     permissao: 'importar_excel' },
   { valor: 'Analítico',          permissao: 'ver_analitico' },
   { valor: 'Painel Líder',       permissao: 'ver_painel_lider' },

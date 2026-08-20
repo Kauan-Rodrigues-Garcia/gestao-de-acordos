@@ -33,9 +33,9 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
   useCargoPermissoes: () => ({
     temPermissao: (chave: string) => {
       const cargo = perfilRef.current?.perfil;
-      if (chave === 'ver_todos_setores') return permissaoRef.current || cargo === 'administrador';
-      if (chave === 'filtrar_por_setor') return permissaoRef.current || cargo === 'administrador';
-      if (chave === 'filtrar_por_equipe') return cargo === 'lider';
+      if (chave === 'dashboard_escopo_todos_setores') return permissaoRef.current || cargo === 'administrador';
+      if (chave === 'dashboard_escopo_setor') return cargo === 'lider' || cargo === 'administrador';
+      if (chave === 'dashboard_escopo_equipe') return cargo === 'lider' || cargo === 'administrador';
       return false;
     },
   }),
@@ -96,16 +96,16 @@ describe('useSetoresEquipes — não entra em laço', () => {
 });
 
 describe('useSetoresEquipes — o que cada cargo enxerga', () => {
-  it('líder sem "ver_todos_setores" não recebe lista de setores, só as equipes', async () => {
+  it('líder sem escopo total recebe apenas o próprio setor e suas equipes', async () => {
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.setores).toEqual([]);
+    expect(result.current.setores).toHaveLength(1);
     expect(result.current.equipesDoSetor).toHaveLength(1);
-    expect(fromSpy).not.toHaveBeenCalledWith('setores');
+    expect(fromSpy).toHaveBeenCalledWith('setores');
   });
 
-  it('líder com "ver_todos_setores" recebe as duas listas', async () => {
+  it('líder com escopo total recebe as duas listas', async () => {
     permissaoRef.current = true;
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -136,13 +136,13 @@ describe('useSetoresEquipes — o que cada cargo enxerga', () => {
     expect(result.current.equipesDoSetor).toEqual([{ id: 'eq-2', nome: 'Equipe B', setor_id: 's-2' }]);
   });
 
-  it('administrador recebe os setores e nenhuma equipe', async () => {
+  it('administrador recebe setores e equipes para o filtro combinado', async () => {
     perfilRef.current = { perfil: 'administrador', setor_id: null };
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.setores).toHaveLength(1);
-    expect(result.current.equipesDoSetor).toEqual([]);
+    expect(result.current.equipesDoSetor).toHaveLength(1);
   });
 
   it('operador não consulta nada', async () => {

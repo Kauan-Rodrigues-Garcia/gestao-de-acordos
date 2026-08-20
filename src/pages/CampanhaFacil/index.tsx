@@ -91,7 +91,7 @@ function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const podeEditar = temPermissao('gerenciar_campanha_facil');
+  const podeEditar = temPermissao('ver_campanha_facil');
   const cf = useCampanhaFacil();
 
   const fileInputRef = useRef<HTMLInputElement>(null);

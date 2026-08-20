@@ -78,6 +78,7 @@ import { FormasPagamento } from './FormasPagamento';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import type { SituacaoUsuario } from '@/lib/supabase';
 import { useAnaliticoImport } from '@/hooks/useAnaliticoImport';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
 const ORFAOS_PAGE = 100;
 const DIAS_PT     = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
@@ -110,6 +111,7 @@ export function AnaliticoLider({
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
   const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const perfilId = perfil?.id ?? null;
   // Quem edita a composição do acumulado é o mesmo público que importa o
   // relatório e responde pelo número do setor — igual à RLS da 20260812e.
@@ -120,6 +122,18 @@ export function AnaliticoLider({
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'formas' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
+  const abasDisponiveis = useMemo(() => ([
+    { key: 'operadores', label: 'Por operador', Icon: Users, permissao: 'ver_analitico_por_operador' },
+    { key: 'formas', label: 'Formas de pagamento', Icon: Wallet, permissao: 'ver_analitico_formas_pagamento' },
+    { key: 'ranking', label: 'Ranking', Icon: Trophy, permissao: 'ver_analitico_ranking' },
+    { key: 'destaques', label: 'Destaques do dia', Icon: Star, permissao: 'ver_analitico_destaques_dia' },
+    { key: 'orfaos', label: 'Sem operador', Icon: AlertCircle, permissao: 'ver_analitico_sem_operador' },
+  ] as const).filter(aba => temPermissao(aba.permissao)), [temPermissao]);
+  useEffect(() => {
+    if (abasDisponiveis.some(aba => aba.key === abaAtiva)) return;
+    const primeira = abasDisponiveis[0]?.key;
+    if (primeira) setAbaAtiva(primeira);
+  }, [abaAtiva, abasDisponiveis]);
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -669,18 +683,7 @@ export function AnaliticoLider({
         {/* Com cinco abas a régua não cabe em tela estreita: rola na horizontal
             em vez de quebrar linha — a borda inferior do strip é uma só. */}
         <div className="flex items-center gap-1 border-b border-border max-w-full overflow-x-auto">
-          {([
-            { key: 'operadores', label: 'Por operador',     Icon: Users },
-            // Por onde o dinheiro entrou (Pix, Boleto, Cartão…), com período,
-            // equipe e operador — a leitura que antes só existia no ERP.
-            { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet },
-            { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
-            { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // Desempenho Equipes / Quartis / Gráfico moraram para o Painel Líder
-            // nos dois tenants (mudança de caminho — BookPlay 2026-07). Aqui
-            // ficam só as abas de conferência do relatório.
-            { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
-          ] as const).map(({ key, label, Icon }) => (
+          {abasDisponiveis.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',

@@ -34,7 +34,7 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   const marcouRef     = useRef(false);
   const hasLoadedOnce = useRef(false);
 
-  const isLiderMais = temPermissao('ver_operadores') || temPermissao('ver_acordos_gerais');
+  const isLiderMais = temPermissao('analitico_visao_geral');
 
   const fetchDados = useCallback(async (silencioso = false) => {
     if (!empresa?.id || !perfil?.id) return;

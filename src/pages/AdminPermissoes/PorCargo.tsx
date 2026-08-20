@@ -178,7 +178,7 @@ export function PorCargo({ podeEditar }: { podeEditar: boolean }) {
                     <Switch
                       checked={valorDe(p.key)}
                       onCheckedChange={() => alternar(p.key)}
-                      disabled={!podeEditar}
+                      disabled={!podeEditar || (p.requer ?? []).some(pai => !valorDe(pai))}
                       aria-label={p.label}
                     />
                   )}

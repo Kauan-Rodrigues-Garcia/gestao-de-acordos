@@ -36,6 +36,7 @@ import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
 import { buscarAnaliticoDashboardMes } from '@/services/analitico/analitico.service';
+import type { ContextoDadosAnaliticos } from '@/services/analitico/analitico.service';
 
 export interface AgregadoAnalitico {
   bruto: number;
@@ -182,7 +183,11 @@ const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
  *   chave do cache, então trocar de mês é uma entrada nova — voltar para o mês
  *   anterior já visto é instantâneo, sem ida ao banco.
  */
-export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
+export function useAnaliticoDashboard(
+  ativo: boolean,
+  mesRef?: string | null,
+  contexto: ContextoDadosAnaliticos = 'analitico',
+) {
   const { empresa }  = useEmpresa();
   const queryClient  = useQueryClient();
   const mes          = normalizarMes(mesRef);
@@ -192,15 +197,19 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
   // Chave compartilhada: os dois consumidores caem na MESMA entrada de cache,
   // então a busca paginada do mês acontece uma vez só.
   const chave = useMemo(
-    () => ['analitico-dashboard', empresaId, mes] as const,
-    [empresaId, mes],
+    () => ['analitico-dashboard', contexto, empresaId, mes] as const,
+    [contexto, empresaId, mes],
   );
 
   const query = useQuery<ResultadoDashboard>({
     queryKey: chave,
     enabled:  habilitado,
     queryFn:  async () => {
-      const { data, dbAtiva } = await buscarAnaliticoDashboardMes(empresaId as string, mes);
+      const { data, dbAtiva } = await buscarAnaliticoDashboardMes(
+        empresaId as string,
+        mes,
+        contexto,
+      );
       return { linhas: data, dbAtiva };
     },
     structuralSharing: compartilharLinhas,

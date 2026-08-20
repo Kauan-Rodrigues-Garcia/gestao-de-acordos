@@ -15,6 +15,8 @@ export interface AcordosFiltersProps {
   setActiveTab: (tab: 'analitico' | 'todos' | 'pagos' | 'nao_pagos') => void;
   isLider: boolean;
   isElite: boolean;
+  podeVerSetor: boolean;
+  podeVerTodosSetores: boolean;
   equipesDoSetor: { id: string; nome: string }[];
   visaoFiltroAcordos: VisaoFiltroAcordos;
   setVisaoFiltroAcordos: (v: VisaoFiltroAcordos) => void;
@@ -48,11 +50,13 @@ export interface AcordosFiltersProps {
    *  página troca para o painel Pix e os filtros da lista somem. */
   pixAbaAtiva: boolean;
   setPixAbaAtiva: (v: boolean) => void;
+  podeVerAcordos: boolean;
 }
 
 export function AcordosFilters({
   activeTab, setActiveTab,
-  isLider, isElite, equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
+  isLider, isElite, podeVerSetor, podeVerTodosSetores,
+  equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
   busca, setBusca, filtroStatus, setFiltroStatus, filtroTipo, setFiltroTipo,
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
   filtroTag, setFiltroTag, empresaTags, podeFiltrarTag,
@@ -60,13 +64,13 @@ export function AcordosFilters({
   statusLabels, tipoLabels, operadoresMap,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
-  pixAbaAtiva, setPixAbaAtiva,
+  pixAbaAtiva, setPixAbaAtiva, podeVerAcordos,
 }: AcordosFiltersProps) {
   return (
     <>
       {/* Tabs */}
       <div className="flex items-center gap-1 mb-4 border-b border-border">
-        {([
+        {podeVerAcordos && ([
           { key: 'todos',     label: 'Todos' },
           { key: 'analitico', label: 'Verificar' },
           { key: 'pagos',     label: 'Pagos / Quitados' },
@@ -107,11 +111,22 @@ export function AcordosFilters({
       <>
 
       {/* Seletor de visão Líder/Elite */}
-      {(isLider || isElite) && equipesDoSetor.length > 0 && (
+      {(podeVerTodosSetores || podeVerSetor || isLider || isElite) && (
         <div className="flex items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Visualizar acordos de:</span>
           <div className="flex flex-wrap gap-1.5">
-            <button
+            {podeVerTodosSetores && <button
+              onClick={() => setVisaoFiltroAcordos('todos_setores')}
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                visaoFiltroAcordos === 'todos_setores'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-muted-foreground border-border hover:border-primary/40',
+              )}
+            >
+              <Building2 className="w-3 h-3" /> Todos os setores
+            </button>}
+            {podeVerSetor && <button
               onClick={() => setVisaoFiltroAcordos('setor')}
               className={cn(
                 'flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
@@ -121,8 +136,8 @@ export function AcordosFilters({
               )}
             >
               <Building2 className="w-3 h-3" /> Setor geral
-            </button>
-            {equipesDoSetor.map(eq => (
+            </button>}
+            {isLider && equipesDoSetor.map(eq => (
               <button
                 key={eq.id}
                 onClick={() => setVisaoFiltroAcordos(`equipe:${eq.id}` as VisaoFiltroAcordos)}
@@ -224,10 +239,10 @@ export function AcordosFilters({
                 </SelectContent>
               </Select>
             )}
-            {/* Filtro de operador — cargos superiores (permissão `filtrar_por_usuario`).
+            {/* Filtro de operador — disponível dentro do escopo desta aba.
                 Antes vinha com `isPP &&` na frente e nunca aparecia: esta página
                 redireciona a PaguePlay na entrada, então `isPP` é sempre false aqui. */}
-            {temPermissao('filtrar_por_usuario') && (
+            {(podeVerSetor || podeVerTodosSetores) && (
               <Select value={filtroOperador} onValueChange={v => { setFiltroOperador(v); setCurrentPage(1); }}>
                 <SelectTrigger className="w-36 h-8 text-sm"><SelectValue placeholder="Operador" /></SelectTrigger>
                 <SelectContent>

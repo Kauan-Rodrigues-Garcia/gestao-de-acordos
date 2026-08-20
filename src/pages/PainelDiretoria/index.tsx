@@ -81,7 +81,7 @@ export default function PainelDiretoria() {
     meta, percMeta, setores, setorFiltro, setSetorFiltro,
     valorRecebidoMes: recebidoTabulado,
     loading, refetch,
-  } = useAnalytics(mesAnalise);
+  } = useAnalytics(mesAnalise, 'diretoria');
 
   const { empresa } = useEmpresa();
   const {
@@ -91,8 +91,12 @@ export default function PainelDiretoria() {
   } = useSetoresExtras(empresa?.id, isPP, mesAnalise);
 
   // ── Relatório analítico: o mês e o anterior (para o comparativo) ───────────
-  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise);
-  const analiticoPrev = useAnaliticoDashboard(temAnalitico, deslocarMes(mesAnalise, -1));
+  const analiticoDash = useAnaliticoDashboard(temAnalitico, mesAnalise, 'diretoria');
+  const analiticoPrev = useAnaliticoDashboard(
+    temAnalitico,
+    deslocarMes(mesAnalise, -1),
+    'diretoria',
+  );
 
   const {
     escopo, fontes, carimboDisponivel, exclusoes, setorDoOperador,

@@ -195,5 +195,5 @@ export function veTodosOsSetores(
   _cargo: string | null | undefined,
   temPermissao: (chave: string) => boolean,
 ): boolean {
-  return temPermissao('ver_analiticos_global') || temPermissao('ver_todos_setores');
+  return temPermissao('analitico_visao_todos_setores');
 }

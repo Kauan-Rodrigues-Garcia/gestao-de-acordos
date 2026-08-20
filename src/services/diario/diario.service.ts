@@ -23,6 +23,7 @@ import type {
   OperadorResolvidoMap,
   ResumoOperadorAnalitico,
   LinhaRecebidaDia,
+  ContextoDadosAnaliticos,
 } from '@/services/analitico/analitico.service';
 import type { LinhaDiario } from './diarioComum';
 import { dayKeyDiario } from './diarioComum';
@@ -592,12 +593,13 @@ export interface ResumoMensalDiario {
 export async function buscarResumoMensalDiario(
   empresaId: string,
   mes: string,   // 'yyyy-MM'
+  contexto: ContextoDadosAnaliticos = 'analitico',
 ): Promise<ResumoMensalDiario> {
   // 1) RPC agregada no banco (migration 20260721g): uma requisição pequena —
   //    uma linha por (operador|órfão, dia) — em vez de todas as linhas do mês
   //    paginadas + tabela de perfis. Se a migration ainda não foi aplicada,
   //    cai no caminho antigo (varredura das linhas).
-  const rpc = await buscarResumoMensalDiarioRpc(empresaId, mes);
+  const rpc = await buscarResumoMensalDiarioRpc(empresaId, mes, contexto);
   if (rpc) return rpc;
 
   return buscarResumoMensalDiarioLinhas(empresaId, mes);
@@ -621,10 +623,12 @@ interface RowResumoRpc {
 async function buscarResumoMensalDiarioRpc(
   empresaId: string,
   mes: string,
+  contexto: ContextoDadosAnaliticos,
 ): Promise<ResumoMensalDiario | null> {
   const { data, error } = await supabase.rpc('fn_diario_resumo_mensal', {
     p_empresa_id: empresaId,
     p_mes:        mes,
+    p_contexto:   contexto,
   });
   if (error) {
     // Migration não aplicada → fallback silencioso; outros erros são reais

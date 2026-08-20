@@ -275,6 +275,9 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
                 renderControle={p => {
                   const estado = estadoDe(p.key);
                   const doCargo = valorDoCargo(pessoa.perfil, p.key);
+                  const dependenciasAtivas = (p.requer ?? []).every(pai =>
+                    resolverParaUsuario(pessoa.id, pessoa.perfil, pai),
+                  );
                   return (
                     <div className="flex items-center gap-2">
                       <span className="text-[10px] text-muted-foreground whitespace-nowrap">
@@ -288,7 +291,7 @@ export function PorPessoa({ podeEditar }: { podeEditar: boolean }) {
                             key={op.valor}
                             data-on={estado === op.valor}
                             onClick={() => definirEstado(p.key, op.valor)}
-                            disabled={!podeEditar}
+                            disabled={!podeEditar || !dependenciasAtivas}
                             className={cn(
                               'px-2 py-1 text-[11px] font-medium transition-colors',
                               'text-muted-foreground hover:text-foreground',

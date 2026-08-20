@@ -32,8 +32,6 @@
  * lista aqui recriaria o problema.
  */
 
-import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
-
 import type { EquipeAnalitico } from '@/services/analitico/analitico.service';
 
 export interface EntradaEscopoPainel {
@@ -86,7 +84,7 @@ export interface EscopoPainel {
 export function resolverEscopoPainel(e: EntradaEscopoPainel): EscopoPainel {
   const { equipes, setorDoPerfil } = e;
 
-  const podeFiltrarSetor = veTodosOsSetores(e.cargo, e.temPermissao);
+  const podeFiltrarSetor = e.temPermissao('painel_lider_todos_setores');
 
   const setorId = podeFiltrarSetor ? e.setorEscolhido : setorDoPerfil;
 

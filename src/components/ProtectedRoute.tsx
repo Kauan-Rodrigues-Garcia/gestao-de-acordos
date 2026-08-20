@@ -52,13 +52,15 @@ interface ProtectedRouteProps {
   /** Chave de permissão configurável: se o usuário tiver essa permissão,
    *  ganha acesso independente do perfil (allowedProfiles fica como fallback). */
   requiredPermissao?: string;
+  /** A rota abre quando ao menos uma destas permissões estiver ativa. */
+  requiredAnyPermissoes?: string[];
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, requiredAnyPermissoes }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
 
-  if (loading || (requiredPermissao && permLoading)) {
+  if (loading || ((requiredPermissao || requiredAnyPermissoes?.length) && permLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-3 w-64">
@@ -71,6 +73,18 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
   }
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
+
+  if (requiredAnyPermissoes?.length && !requiredAnyPermissoes.some(temPermissao)) {
+    return (
+      <div className="min-h-[55vh] flex items-center justify-center p-6">
+        <div className="max-w-sm text-center rounded-xl border border-border bg-card px-6 py-8">
+          <LockKeyhole className="w-8 h-8 mx-auto text-muted-foreground/50" />
+          <h1 className="mt-3 text-base font-semibold text-foreground">Acesso não habilitado</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Esta aba está desativada para seu cargo ou para a sua conta.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (requiredPermissao) {
     /**

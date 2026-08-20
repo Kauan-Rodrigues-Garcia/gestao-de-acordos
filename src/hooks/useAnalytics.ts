@@ -10,6 +10,7 @@ import {
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
+import { temEscopo } from '@/lib/permissoes-escopo';
 import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
@@ -172,16 +173,25 @@ function aplicarDeltaRealtime(
  * @param mesRef mês a analisar (`yyyy-MM`). Omitido = mês corrente, que é como
  *   todos os consumidores antigos continuam se comportando.
  */
-export function useAnalytics(mesRef?: string | null): AnalyticsData {
+export function useAnalytics(
+  mesRef?: string | null,
+  contexto: 'dashboard' | 'diretoria' = 'dashboard',
+): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  // Permissão configurável (Admin → Cargos): líder/elite/gerência com
-  // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
-  const verTodosSetores = temPermissao('ver_todos_setores');
-  const podeFiltrarSetor = temPermissao('filtrar_por_setor');
-  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
-  const visaoAmpla = temPermissao('ver_acordos_gerais');
+  const verTodosSetores = contexto === 'diretoria'
+    ? temPermissao('ver_painel_diretoria')
+    : temEscopo('dashboard', 'todos_setores', temPermissao);
+  const podeFiltrarSetor = contexto === 'diretoria'
+    ? temPermissao('ver_painel_diretoria')
+    : temEscopo('dashboard', 'setor', temPermissao) || verTodosSetores;
+  const podeFiltrarEquipe = contexto === 'diretoria'
+    ? temPermissao('ver_painel_diretoria')
+    : temEscopo('dashboard', 'equipe', temPermissao);
+  const visaoAmpla = contexto === 'diretoria'
+    ? temPermissao('ver_painel_diretoria')
+    : podeFiltrarEquipe || podeFiltrarSetor || verTodosSetores;
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const isBookplay = tenant.slug === 'bookplay';
@@ -616,7 +626,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro, visaoAmpla]);
 
   return {
     ...derived,

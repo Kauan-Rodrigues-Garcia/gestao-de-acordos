@@ -29,7 +29,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { normalizarDependencias } from '@/lib/permissoes-catalogo';
+import { chavePermissaoDoTenant, normalizarDependencias } from '@/lib/permissoes-catalogo';
 import { assinarTabela } from '@/lib/realtime';
 
 export type PermissoesMap = Record<string, boolean>;
@@ -206,13 +206,13 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   );
 
   const temPermissao = useCallback(
-    (key: string): boolean => !!efetivas[key],
-    [efetivas],
+    (key: string): boolean => !!efetivas[chavePermissaoDoTenant(key, empresa?.slug)],
+    [efetivas, empresa?.slug],
   );
 
   const temPermissaoExplicita = useCallback(
-    (key: string): boolean => !!efetivas[key],
-    [efetivas],
+    (key: string): boolean => !!efetivas[chavePermissaoDoTenant(key, empresa?.slug)],
+    [efetivas, empresa?.slug],
   );
 
   const resolverParaUsuario = useCallback(

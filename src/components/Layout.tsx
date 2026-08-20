@@ -76,6 +76,7 @@ interface NavItem {
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
+  permissoesAny?: string[];
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -92,8 +93,8 @@ const NAV_ITEMS: NavItem[] = [
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             hiddenForPaguePay: true, permissoesAny: ['ver_acordos', 'ver_pix_automatico'] },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         hiddenForPaguePay: true, permissaoKey: 'ver_novo_acordo' },
   { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        permissaoKey: 'ver_painel_lider' },
   { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    permissaoKey: 'ver_painel_diretoria' },
   { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      permissaoKey: 'ver_usuarios' },
@@ -303,6 +304,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (item.permissaoKey && (permLoading || !temPermissao(item.permissaoKey))) {
       return false;
     }
+    if (item.permissoesAny && (permLoading || !item.permissoesAny.some(temPermissao))) {
+      return false;
+    }
 
     // Módulos exclusivos continuam respeitando o tenant; dentro dele, a matriz
     // é a única decisão de acesso.
@@ -316,7 +320,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return isPP;
     }
 
-    if (item.permissaoKey) return true;
+    if (item.permissaoKey || item.permissoesAny) return true;
 
     return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });

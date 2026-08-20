@@ -26,6 +26,7 @@ import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { maiorEscopoPermitido } from '@/lib/permissoes-escopo';
 
 function tempoRestante(expiraEm?: string): string {
   if (!expiraEm) return '—';
@@ -91,11 +92,11 @@ export default function Lixeira() {
       // Idealmente deveria existir um job pg_cron no Supabase; aqui fica
       // como garantia de funcionalidade client-side.
       await purgarExpirados(empresa.id);
-      // #8: operador só vê os próprios acordos excluídos. Elite/Líder/Gerência/Diretoria/Admin veem tudo.
-      const ehOperador = !temPermissao('ver_acordos_gerais');
+      const escopo = maiorEscopoPermitido('lixeira', temPermissao);
+      const ehIndividual = escopo === 'individual';
       const data = await fetchLixeira(
         empresa.id,
-        ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,
+        ehIndividual && perfil?.id ? { operadorId: perfil.id } : undefined,
       );
       setItens(data);
 

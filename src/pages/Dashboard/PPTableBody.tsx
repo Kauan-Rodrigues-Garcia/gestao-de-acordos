@@ -33,6 +33,7 @@ interface PPTableBodyProps {
   isPP: boolean;
   visaoAmpla: boolean;
   podeEditar: boolean;
+  podeAlterarStatus: boolean;
   podeExcluir: boolean;
   addAcordo: (a: Acordo) => void;
   patchAcordo: (id: string, data: Partial<Acordo>) => void;
@@ -60,7 +61,7 @@ export function PPTableBody({
   acordos, acordosOrdenados,
   novoInlineAbertoTabela, setNovoInlineAbertoTabela,
   isPP, visaoAmpla,
-  podeEditar, podeExcluir,
+  podeEditar, podeAlterarStatus, podeExcluir,
   addAcordo, patchAcordo,
   editandoInlineIdTabela, setEditandoInlineIdTabela,
   detalheInlineIdTabela, setDetalheInlineIdTabela,
@@ -219,7 +220,7 @@ export function PPTableBody({
               )}
               <td className="px-3 py-2.5">
                 <div className="flex items-center justify-end gap-0.5">
-                  {a.status !== 'pago' && (
+                  {podeAlterarStatus && a.status !== 'pago' && (
                     <Button
                       variant="ghost" size="icon" className="w-8 h-8 text-success hover:bg-success/10"
                       title="Marcar como Pago"

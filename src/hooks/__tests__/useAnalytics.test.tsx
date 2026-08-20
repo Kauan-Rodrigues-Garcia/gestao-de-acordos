@@ -72,10 +72,10 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     temPermissao: (chave: string) => {
       const cargo = (mockPerfilValue.current as { perfil?: string } | null)?.perfil;
       if (cargo === 'administrador' || cargo === 'diretoria' || cargo === 'super_admin') {
-        return ['ver_todos_setores', 'filtrar_por_setor', 'filtrar_por_equipe', 'ver_acordos_gerais'].includes(chave);
+        return ['dashboard_escopo_todos_setores', 'dashboard_escopo_setor', 'dashboard_escopo_equipe'].includes(chave);
       }
       if (cargo === 'lider' || cargo === 'elite' || cargo === 'gerencia') {
-        return ['filtrar_por_equipe', 'ver_acordos_gerais'].includes(chave);
+        return ['dashboard_escopo_setor', 'dashboard_escopo_equipe'].includes(chave);
       }
       return false;
     },

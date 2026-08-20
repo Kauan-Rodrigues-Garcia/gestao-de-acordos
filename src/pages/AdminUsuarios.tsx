@@ -84,6 +84,8 @@ export default function AdminUsuarios() {
   // criação — quem só assiste não precisa da aba, a comemoração chega pelo
   // overlay em qualquer página.
   const podeVerComemoracoes = temPermissao('ver_comemoracoes');
+  const podeVerListaUsuarios = temPermissao('ver_usuarios_lista');
+  const podeVerUsuariosTodosSetores = temPermissao('usuarios_todos_setores');
   const podeCriarUsuarios = temPermissao('criar_usuarios');
   const podeEditarUsuarios = temPermissao('editar_usuarios');
   const podeExcluirUsuarios = temPermissao('excluir_usuarios');
@@ -97,6 +99,16 @@ export default function AdminUsuarios() {
   // Gate para a aba Setores: visível apenas para Gerência ou superior
   // (gerencia, diretoria, administrador, super_admin).
   const podeVerSetores = temPermissao('ver_setores');
+  const tabInicial = useMemo(() => {
+    const permitidas = [
+      podeVerListaUsuarios && 'usuarios',
+      podeVerSetores && 'setores',
+      temPermissao('ver_equipes') && 'equipes',
+      metasComoAba && temPermissao('ver_metas') && 'metas',
+      podeVerComemoracoes && 'comemoracoes',
+    ].filter((tab): tab is string => !!tab);
+    return permitidas.includes(tabFromUrl) ? tabFromUrl : (permitidas[0] ?? 'usuarios');
+  }, [metasComoAba, podeVerComemoracoes, podeVerListaUsuarios, podeVerSetores, tabFromUrl, temPermissao]);
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -168,6 +180,9 @@ export default function AdminUsuarios() {
       } else if (filtroEmpresa) {
         usersQuery = usersQuery.eq('empresa_id', filtroEmpresa);
       }
+      if (!podeVerUsuariosTodosSetores && perfilAtual?.setor_id) {
+        usersQuery = usersQuery.eq('setor_id', perfilAtual.setor_id);
+      }
       const { data: uJoin, error: eJoin } = await usersQuery;
       if (eJoin) {
         console.warn('[AdminUsuarios] fetchDados join error, tentando sem join de empresas:', eJoin.message);
@@ -179,6 +194,9 @@ export default function AdminUsuarios() {
           fallbackQuery = fallbackQuery.eq('empresa_id', empresaAtual.id);
         } else if (filtroEmpresa) {
           fallbackQuery = fallbackQuery.eq('empresa_id', filtroEmpresa);
+        }
+        if (!podeVerUsuariosTodosSetores && perfilAtual?.setor_id) {
+          fallbackQuery = fallbackQuery.eq('setor_id', perfilAtual.setor_id);
         }
         const { data: uSimple, error: eSimple } = await fallbackQuery;
         if (eSimple) {
@@ -593,15 +611,15 @@ export default function AdminUsuarios() {
         </div>
       </div>
 
-      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
+      <Tabs defaultValue={tabInicial} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            <TabsTrigger
+            {podeVerListaUsuarios && <TabsTrigger
               value="usuarios"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Users className="w-4 h-4" /> Usuários
-            </TabsTrigger>
+            </TabsTrigger>}
             {podeVerSetores && (
               <TabsTrigger
                 value="setores"
@@ -638,7 +656,7 @@ export default function AdminUsuarios() {
         </div>
 
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
-        <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerListaUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
         <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-end mb-4 gap-2">
           {setoresDisponiveisNoFiltro.length > 1 && (
@@ -845,7 +863,7 @@ export default function AdminUsuarios() {
         </div>
       )}
         </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── Aba: Setores ──────────────────────────────────────────── */}
         {podeVerSetores && (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Building2, Layers, MessageSquare, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +29,7 @@ import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
+import { maiorEscopoPermitido, temEscopo } from '@/lib/permissoes-escopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
   PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro,
@@ -51,15 +52,38 @@ export default function Dashboard() {
   // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
   // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
-  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useSetoresEquipes();
-  const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
-  const podeFiltrarSetor = temPermissao('filtrar_por_setor') && temPermissao('ver_todos_setores');
-  const podeFiltrarUsuario = temPermissao('filtrar_por_usuario');
+  const { setores: setoresList, setorFiltro, setSetorFiltro, equipes, equipesDoSetor } = useSetoresEquipes();
+  const podeVerTodosSetores = temEscopo('dashboard', 'todos_setores', temPermissao);
+  const podeFiltrarEquipe = temEscopo('dashboard', 'equipe', temPermissao) || podeVerTodosSetores;
+  const podeFiltrarSetor = temEscopo('dashboard', 'setor', temPermissao) || podeVerTodosSetores;
+  const podeFiltrarUsuario = temEscopo('dashboard', 'individual', temPermissao);
 
-  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
+  const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>(() => {
+    const maior = maiorEscopoPermitido('dashboard', temPermissao);
+    return maior === 'todos_setores' ? 'todos_setores' : maior === 'setor' ? 'setor' : 'individual';
+  });
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
   const operadorFiltroAtivo = visaoFiltro === 'individual' ? (perfil?.id ?? null) : null;
   const eliteVisaoGeral = visaoFiltro !== 'individual';
+
+  useEffect(() => {
+    const maior = maiorEscopoPermitido('dashboard', temPermissao);
+    if (!maior) return;
+    if (maior === 'todos_setores') {
+      setSetorFiltro(null);
+      setVisaoFiltro('todos_setores');
+    } else if (maior === 'setor') {
+      setSetorFiltro(perfil?.setor_id ?? null);
+      setVisaoFiltro('setor');
+    } else if (maior === 'equipe' && equipes.length > 0) {
+      const equipe = equipes.find(e => e.setor_id === perfil?.setor_id) ?? equipes[0];
+      setSetorFiltro(equipe.setor_id);
+      setVisaoFiltro(`equipe:${equipe.id}`);
+    } else {
+      setVisaoFiltro('individual');
+    }
+  // O efeito reage à carga das equipes; `temPermissao` é estável por mapa efetivo.
+  }, [equipes, perfil?.setor_id, setSetorFiltro, temPermissao]);
 
   const { acordos: acordosHoje, loading: loadingHoje } = useAcordos({ apenas_hoje: true });
   const hoje = getTodayISO();
@@ -88,7 +112,7 @@ export default function Dashboard() {
   const [filtroVinculo, setFiltroVinculo] = useState<'todos' | 'direto' | 'extra'>(
     (searchParams.get('vinculo') as 'todos' | 'direto' | 'extra') || 'todos'
   );
-  const visaoAmpla = temPermissao('ver_acordos_gerais');
+  const visaoAmpla = visaoFiltro !== 'individual';
   const { tags: empresaTags } = useEmpresaTags();
 
   const [activeTab, setActiveTab] = useState<'todos' | 'pendentes' | 'pagos' | 'nao_pagos'>(
@@ -173,8 +197,8 @@ export default function Dashboard() {
       data_inicio:  filtroData ? undefined : mesFiltroInicio,
       data_fim:     filtroData ? undefined : mesFiltroFim,
       estado_uf:    colFiltroEstado || undefined,
-      operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual') ? perfil?.id : undefined,
-      setor_id:     visaoFiltro === 'setor' ? (setorFiltro ?? undefined) : undefined,
+      operador_id:  visaoFiltro === 'individual' ? perfil?.id : undefined,
+      setor_id:     visaoFiltro === 'setor' ? (setorFiltro ?? perfil?.setor_id ?? undefined) : undefined,
       equipe_id:    equipeFiltroAtivo ?? undefined,
       page:         currentPage,
       perPage:      PER_PAGE,
@@ -235,7 +259,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isPP) return;
-    if (!temPermissao('ver_acordos_gerais')) return;
+    if (visaoFiltro === 'individual') return;
     const ids = [...new Set([...acordosDeHoje, ...acordos].map(a => a.operador_id).filter(Boolean))];
     if (ids.length === 0) return;
     supabase.from('perfis').select('id, nome').in('id', ids as string[]).then(({ data }) => {
@@ -245,7 +269,7 @@ export default function Dashboard() {
         setOperadoresMap(prev => ({ ...prev, ...map }));
       }
     });
-  }, [acordosDeHoje, acordos, isPP, temPermissao]);
+  }, [acordosDeHoje, acordos, isPP, visaoFiltro]);
 
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {
@@ -372,6 +396,7 @@ export default function Dashboard() {
   }
 
   function marcarComoPago(acordo: AcordoComVinculo) {
+    if (!temPermissao('dashboard_alterar_status_acordos')) return;
     if (acordo.status === 'nao_pago') {
       setConfirmarPgtoAcordo(acordo);
     } else {
@@ -381,6 +406,7 @@ export default function Dashboard() {
   }
 
   async function executarMarcarPago(acordo: AcordoComVinculo, dataPagamento: string) {
+    if (!temPermissao('dashboard_alterar_status_acordos')) return;
     const id = acordo.id;
     const statusAnterior = acordo.status;
     const vencimentoAnterior = acordo.vencimento;
@@ -623,8 +649,8 @@ export default function Dashboard() {
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
   const nome = perfil?.nome?.split(' ')[0] || 'Usuário';
-  const mostraFiltroVisual = (podeFiltrarEquipe && equipesDoSetor.length > 0)
-    || podeFiltrarUsuario;
+  const mostraFiltroVisual = podeVerTodosSetores || podeFiltrarSetor
+    || (podeFiltrarEquipe && equipesDoSetor.length > 0) || podeFiltrarUsuario;
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -651,37 +677,47 @@ export default function Dashboard() {
         </div>
         <div className="flex gap-2 flex-wrap items-center">
           {mostraFiltroVisual && (
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
+            <div className="flex flex-wrap items-center gap-2 bg-card border border-border rounded-xl px-3 py-2">
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
-              <div className="flex flex-wrap gap-1">
-                <button
-                  onClick={() => setVisaoFiltro('setor')}
-                  className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                    visaoFiltro === 'setor' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                  title="Ver dados e acordos de todo o setor"
-                ><Building2 className="w-3 h-3" /> Setor geral</button>
-                {podeFiltrarEquipe && equipesDoSetor.map(eq => (
-                  <button key={eq.id}
-                    onClick={() => setVisaoFiltro(`equipe:${eq.id}` as VisaoFiltro)}
-                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                      visaoFiltro === `equipe:${eq.id}` ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                    title={`Ver dados e acordos da equipe ${eq.nome}`}
-                  ><Layers className="w-3 h-3" /> {eq.nome}</button>
-                ))}
-                {podeFiltrarUsuario && (
-                  <button onClick={() => setVisaoFiltro('individual')}
-                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                      visaoFiltro === 'individual' ? 'bg-role-elite text-white border-role-elite' : 'bg-background text-muted-foreground border-border hover:border-role-elite/40 hover:text-foreground')}
-                    title="Ver apenas seus próprios acordos"
-                  ><Users className="w-3 h-3" /> Individual</button>
-                )}
-              </div>
+              {(podeVerTodosSetores || setoresList.length > 0) && (
+                <select
+                  aria-label="Setor do Dashboard"
+                  value={visaoFiltro === 'todos_setores' ? 'todos_setores' : (setorFiltro ?? perfil?.setor_id ?? '')}
+                  onChange={event => {
+                    const setor = event.target.value;
+                    if (setor === 'todos_setores') {
+                      setSetorFiltro(null);
+                      setVisaoFiltro('todos_setores');
+                      return;
+                    }
+                    setSetorFiltro(setor);
+                    if (podeFiltrarSetor) setVisaoFiltro('setor');
+                    else {
+                      const primeira = equipes.find(e => e.setor_id === setor);
+                      setVisaoFiltro(primeira && podeFiltrarEquipe ? `equipe:${primeira.id}` : 'individual');
+                    }
+                  }}
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+                >
+                  {podeVerTodosSetores && <option value="todos_setores">Todos os setores</option>}
+                  {setoresList.map(setor => <option key={setor.id} value={setor.id}>{setor.nome}</option>)}
+                </select>
+              )}
+              {visaoFiltro !== 'todos_setores' && (
+                <select
+                  aria-label="Nível de visão do Dashboard"
+                  value={visaoFiltro}
+                  onChange={event => setVisaoFiltro(event.target.value as VisaoFiltro)}
+                  className="h-8 rounded-lg border border-border bg-background px-2 text-xs text-foreground"
+                >
+                  {podeFiltrarSetor && <option value="setor">Setor geral</option>}
+                  {podeFiltrarEquipe && equipesDoSetor.map(equipe => (
+                    <option key={equipe.id} value={`equipe:${equipe.id}`}>Equipe: {equipe.nome}</option>
+                  ))}
+                  {podeFiltrarUsuario && <option value="individual">Individual</option>}
+                </select>
+              )}
             </div>
-          )}
-          {!mostraFiltroVisual && podeFiltrarEquipe && (
-            <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5" /> Setor geral
-            </span>
           )}
           {isPP && acordosDeHoje.length > 0 && (
             <Button variant="outline" size="sm" className="hidden text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10" onClick={enviarLembretesHoje}>
@@ -691,24 +727,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Analytics + filtro de setor */}
+      {/* Analytics — o escopo é controlado pelo único filtro integrado acima. */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {podeFiltrarSetor && setoresList.length > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
-            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setSetorFiltro(null)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                Todos
-              </button>
-              {setoresList.map(s => (
-                <button key={s.id} onClick={() => setSetorFiltro(setorFiltro === s.id ? null : s.id)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', setorFiltro === s.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                  {s.nome}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         <AnalyticsPanel
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}
@@ -736,7 +756,7 @@ export default function Dashboard() {
                     <Button variant="outline" size="sm" className="hidden gap-1.5 border-success/40 text-success hover:bg-success/10 text-xs h-8" onClick={() => prepararFila(acordos.filter(a => selecionados.includes(a.id)))}>
                       <MessageSquare className="w-3.5 h-3.5" /> WhatsApp ({selecionados.length})
                     </Button>
-                    {temPermissao('excluir_em_lote') && (
+                    {temPermissao('dashboard_excluir_em_lote') && (
                       <Button variant="outline" size="sm" className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/10 text-xs h-8" onClick={() => setConfirmandoExclusaoLote(true)}>
                         <Trash2 className="w-3.5 h-3.5" /> Excluir ({selecionados.length})
                       </Button>
@@ -809,8 +829,9 @@ export default function Dashboard() {
                         setNovoInlineAbertoTabela={setNovoInlineAbertoTabela}
                         isPP={isPP}
                         visaoAmpla={visaoAmpla}
-                        podeEditar={temPermissao('editar_acordos')}
-                        podeExcluir={temPermissao('excluir_acordos')}
+                        podeEditar={temPermissao('dashboard_editar_acordos')}
+                        podeAlterarStatus={temPermissao('dashboard_alterar_status_acordos')}
+                        podeExcluir={temPermissao('dashboard_excluir_acordos')}
                         addAcordo={addAcordo}
                         patchAcordo={patchAcordo}
                         editandoInlineIdTabela={editandoInlineIdTabela}
@@ -882,7 +903,7 @@ export default function Dashboard() {
               setConfirmarPgtoAcordo(null);
             }}
             onCancelarConfirmarPgto={() => setConfirmarPgtoAcordo(null)}
-            temPermissaoExcluirLote={temPermissao('excluir_em_lote')}
+            temPermissaoExcluirLote={temPermissao('dashboard_excluir_em_lote')}
             onAbrirExclusaoLote={() => setConfirmandoExclusaoLote(true)}
             onLimparSelecao={() => setSelecionados([])}
             isPP={isPP}

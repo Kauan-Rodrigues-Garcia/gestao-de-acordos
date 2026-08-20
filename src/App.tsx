@@ -160,14 +160,14 @@ export default function App() {
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_acordos">
+                  <ProtectedRoute requiredAnyPermissoes={['ver_acordos', 'ver_pix_automatico']}>
                     <Acordos />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="criar_acordos">
+                  <ProtectedRoute requiredPermissao="ver_novo_acordo">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>

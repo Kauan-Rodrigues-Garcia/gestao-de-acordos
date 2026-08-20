@@ -50,7 +50,8 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
-import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
+import { formatCurrency, parseCurrencyInput, getTodayISO } from '@/lib/index';
+import { temEscopo } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import { mesAtual } from '@/lib/mesReferencia';
@@ -94,9 +95,6 @@ function fmtPct(pct: number): string {
   return `${pct.toLocaleString('pt-BR', { maximumFractionDigits: 4 })}%`;
 }
 
-/** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
-const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
-
 /** Rótulo curto de cada ação do log. */
 const PIX_LOG_LABEL: Record<PixLogItem['acao'], string> = {
   registrado:         'Registro',
@@ -132,10 +130,11 @@ export function PixAutomatico() {
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
   const podeAprovar = temPermissao('aprovar_pix_automatico');
-
-  const cargo   = String(perfil?.perfil ?? '').toLowerCase();
-  const ehLider = isPerfilAdminOuLider(cargo);
-  const ehMultiSetor = CARGOS_MULTI_SETOR.includes(cargo);
+  const podeEditarConfig = temPermissao('editar_configuracoes_pix_automatico');
+  const podeVerEquipe = temEscopo('pix_automatico', 'equipe', temPermissao);
+  const podeVerSetor = temEscopo('pix_automatico', 'setor', temPermissao);
+  const ehMultiSetor = temEscopo('pix_automatico', 'todos_setores', temPermissao);
+  const ehLider = podeVerEquipe || podeVerSetor || ehMultiSetor;
 
   const [itens, setItens]           = useState<PixAutoAcordo[]>([]);
   const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>({});
@@ -336,7 +335,7 @@ export function PixAutomatico() {
             .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano)
             .maybeSingle(),
           getMetasConfig(empresa.id, mes, ano),
-          buscarResumoOperadoresAnalitico(empresa.id, mesStr),
+          buscarResumoOperadoresAnalitico(empresa.id, mesStr, 'pix_automatico'),
         ]);
         if (cancelado) return;
         setMetaValor(metaRow ? Number((metaRow as { meta_valor: number }).meta_valor) || null : null);
@@ -670,6 +669,7 @@ export function PixAutomatico() {
   // Parâmetros não se chamam `metaValor`: esse nome já é o estado da meta de
   // RECEBIMENTO do operador (card de bônus), e sombreá-lo aqui é convite a erro.
   async function salvarMetaPix(equipeId: string, valorAlvo: number, acordosAlvo: number) {
+    if (!podeEditarConfig) return;
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
     const hoje = new Date();
     setSalvandoMetaPix(true);
@@ -799,6 +799,7 @@ export function PixAutomatico() {
 
   /** Passo 1: valida o % digitado e abre a confirmação. */
   function pedirConfirmacaoPct() {
+    if (!podeEditarConfig) return;
     if (!setorConfig) return;
     const pct = parseFloat(pctInput.replace(',', '.'));
     if (isNaN(pct) || pct < 0 || pct > 100) { toast.error('Percentual inválido (0 a 100)'); return; }
@@ -808,6 +809,7 @@ export function PixAutomatico() {
 
   /** Passo 2: usuário confirmou no diálogo — grava o % do setor. */
   async function salvarPctConfirmado() {
+    if (!podeEditarConfig) return;
     const pct = confirmandoPct;
     setConfirmandoPct(null);
     if (!empresa?.id || !perfil?.id || !setorConfig || pct == null) return;
@@ -837,6 +839,7 @@ export function PixAutomatico() {
    * frente — não mexe em comissão já aprovada.
    */
   async function salvarMetaDobra() {
+    if (!podeEditarConfig) return;
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
     const meta = parseInt(metaDobraInput.replace(/\D/g, ''), 10);
     if (!Number.isFinite(meta) || meta <= 0) {
@@ -868,6 +871,7 @@ export function PixAutomatico() {
 
   /** Liga/desliga o registro manual de operadores no setor em edição. */
   async function alternarRegistroSetor(ligar: boolean) {
+    if (!podeEditarConfig) return;
     if (!empresa?.id || !perfil?.id || !setorConfig) return;
     setSalvandoToggle(true);
     try {
@@ -1264,7 +1268,7 @@ export function PixAutomatico() {
       {/* ── Meta de Pix do setor (líder+): quanto falta e projeção ──
           Não se mistura com a meta de recebimento: o valor do Pix já entra no
           recebimento pelo analítico, e somar de novo contaria duas vezes. */}
-      {!loading && ehLider && setorConfig && (
+      {!loading && podeEditarConfig && setorConfig && (
         <PixMetaPainel
           consolidado={consolidadoMetaPix}
           nomeSetor={setores.find(s => s.id === setorConfig)?.nome}
@@ -1275,7 +1279,7 @@ export function PixAutomatico() {
               { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
             ]),
           )}
-          podeEditar
+          podeEditar={podeEditarConfig}
           salvando={salvandoMetaPix}
           onSalvar={salvarMetaPix}
           parseValor={parseCurrencyInput}
@@ -1427,7 +1431,7 @@ export function PixAutomatico() {
       </div>
 
       {/* ── Configuração do setor (líder+): % de comissão + registro manual ── */}
-      {ehLider && setorConfig && (
+      {podeEditarConfig && setorConfig && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-violet-400" />

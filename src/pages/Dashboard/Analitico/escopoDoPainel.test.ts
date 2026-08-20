@@ -17,7 +17,7 @@ const EQUIPES = [
 
 const SEM_PERMISSAO = () => false;
 const COM_VISAO_GLOBAL = (chave: string) =>
-  chave === 'ver_todos_setores' || chave === 'ver_analiticos_global';
+  chave === 'painel_lider_todos_setores';
 
 function escopo(over: Partial<Parameters<typeof resolverEscopoPainel>[0]> = {}) {
   return resolverEscopoPainel({
@@ -64,20 +64,20 @@ describe('quem enxerga a empresa toda', () => {
    * `ver_todos_setores` recebia `null` do pai — vendo tudo — e não ganhava
    * filtro: via a empresa inteira sem poder estreitar.
    */
-  it('gerência COM ver_todos_setores ganha o filtro', () => {
+  it('gerência COM escopo total do Painel Líder ganha o filtro', () => {
     const r = escopo({
       cargo: 'gerencia',
-      temPermissao: (c) => c === 'ver_todos_setores',
+      temPermissao: (c) => c === 'painel_lider_todos_setores',
     });
     expect(r.podeFiltrarSetor).toBe(true);
   });
 
-  it('a permissão de analítico global também abre', () => {
+  it('uma permissão global legada não abre o Painel Líder', () => {
     const r = escopo({
       cargo: 'gerencia',
       temPermissao: (c) => c === 'ver_analiticos_global',
     });
-    expect(r.podeFiltrarSetor).toBe(true);
+    expect(r.podeFiltrarSetor).toBe(false);
   });
 });
 

@@ -15,13 +15,14 @@ export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
 export const CARGOS_ACESSO_TOTAL = [] as const;
 /** Toda permissão, inclusive mês fechado, obedece à matriz. */
 export const PERMISSOES_EXPLICITAS = [] as const;
-export function exigeConcessaoExplicita(_key: string): boolean { return false; }
+export function exigeConcessaoExplicita(key: string): boolean { void key; return false; }
 
 export type TenantSlug = 'bookplay' | 'pagueplay';
 export const GRUPOS_PERMISSAO = [
-  'Abas e telas', 'Dashboard', 'Acordos', 'Analítico', 'Gestão de pessoas',
-  'Configurações', 'Ouvidoria', 'Campanha Fácil', 'WhatsApp e Tickets',
-  'Ações específicas',
+  'Dashboard', 'Ouvidoria', 'Solicitar Atendimento', 'Painel Líder',
+  'Painel Diretoria', 'Usuários', 'Configurações', 'Lixeira', 'Analítico',
+  'Tickets', 'Importar Excel', 'Acordos BP', 'Novo Acordo',
+  'Campanha Fácil', 'Pix Automático', 'Creators Lab',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -60,63 +61,112 @@ const OUVIDORIA_ADMIN: Partial<Record<CargoConfiguravel, boolean>> = {
 const NINGUEM: Partial<Record<CargoConfiguravel, boolean>> = {};
 
 export const PERMISSOES: PermissaoMeta[] = [
-  // ── Abas principais ────────────────────────────────────────────────────
-  { key: 'ver_dashboard', label: 'Dashboard', descricao: 'Abrir o painel inicial da operação', grupo: 'Abas e telas', padrao: TODOS },
-  { key: 'ver_acordos', label: 'Aba Acordos', descricao: 'Abrir a lista completa de acordos', grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS },
-  { key: 'ver_analitico', label: 'Aba Analítico', descricao: 'Abrir recebimentos, diário e colchão', grupo: 'Abas e telas', padrao: TODOS },
-  { key: 'ver_painel_lider', label: 'Painel do Líder', descricao: 'Abrir o painel operacional das equipes', grupo: 'Abas e telas', padrao: LIDERANCA },
-  { key: 'ver_painel_diretoria', label: 'Painel da Diretoria', descricao: 'Abrir o painel estratégico', grupo: 'Abas e telas', padrao: { diretoria: true, administrador: true, super_admin: true } },
-  { key: 'ver_usuarios', label: 'Usuários', descricao: 'Abrir a gestão de pessoas e suas abas internas', grupo: 'Abas e telas', padrao: LIDERANCA },
-  { key: 'ver_configuracoes', label: 'Configurações', descricao: 'Abrir as configurações da operação', grupo: 'Abas e telas', padrao: ADMIN },
-  { key: 'ver_ouvidoria', label: 'Ouvidoria', descricao: 'Abrir os atendimentos da Ouvidoria', grupo: 'Abas e telas', tenants: ['pagueplay'], padrao: OUVIDORIA_ADMIN },
-  { key: 'ver_campanha_facil', label: 'Campanha Fácil', descricao: 'Abrir o módulo de campanhas', grupo: 'Abas e telas', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA },
-  { key: 'ver_solicitacoes_whatsapp', label: 'Solicitações de WhatsApp', descricao: 'Abrir o atendimento interno de WhatsApp', grupo: 'Abas e telas', tenants: ['pagueplay'], padrao: TODOS },
-  { key: 'ver_tickets', label: 'Tickets', descricao: 'Abrir a fila de tickets', grupo: 'Abas e telas', padrao: ADMIN },
-  { key: 'ver_lixeira', label: 'Lixeira', descricao: 'Abrir os acordos excluídos', grupo: 'Abas e telas', padrao: { operador: true, lider: true, elite: true, gerencia: true, diretoria: true, administrador: true, super_admin: true } },
-  { key: 'ver_creators_lab', label: 'Creators Lab', descricao: 'Abrir a área Creators Lab', grupo: 'Abas e telas', padrao: TODOS },
+  // ── Dashboard ──────────────────────────────────────────────────────────
+  { key: 'ver_dashboard', label: 'Ativar Dashboard', descricao: 'Abrir o painel inicial da operação', grupo: 'Dashboard', padrao: TODOS },
+  { key: 'dashboard_escopo_individual', label: 'Visão individual', descricao: 'Consultar somente os próprios dados', grupo: 'Dashboard', padrao: TODOS, requer: ['ver_dashboard'] },
+  { key: 'dashboard_escopo_equipe', label: 'Visão por equipe', descricao: 'Consultar as equipes permitidas no filtro integrado', grupo: 'Dashboard', padrao: LIDERANCA, requer: ['ver_dashboard'] },
+  { key: 'dashboard_escopo_setor', label: 'Visão por setor', descricao: 'Consultar todos os dados de um setor permitido', grupo: 'Dashboard', padrao: LIDERANCA_COMPLETA, requer: ['ver_dashboard'] },
+  { key: 'dashboard_escopo_todos_setores', label: 'Todos os setores', descricao: 'Consultar a empresa inteira no Dashboard', grupo: 'Dashboard', padrao: CUPULA, requer: ['ver_dashboard'] },
+  { key: 'criar_acordos', label: 'Criar acordos no Dashboard', descricao: 'Cadastrar um novo acordo na operação PaguePlay', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_dashboard'] },
+  { key: 'dashboard_editar_acordos', label: 'Editar acordos', descricao: 'Alterar acordos permitidos pelo escopo do Dashboard', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_dashboard'] },
+  { key: 'dashboard_alterar_status_acordos', label: 'Alterar status', descricao: 'Marcar acordos do Dashboard como pagos ou desfazer a alteração', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_dashboard'] },
+  { key: 'dashboard_excluir_acordos', label: 'Excluir acordos', descricao: 'Mover um acordo do Dashboard para a lixeira', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_dashboard'] },
+  { key: 'dashboard_excluir_em_lote', label: 'Excluir em lote', descricao: 'Excluir vários acordos do Dashboard de uma vez', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_dashboard'] },
+  { key: 'dashboard_ignorar_fechamento_mes', label: 'Escrever em mês fechado', descricao: 'Criar, editar e excluir dados do Dashboard em mês encerrado', grupo: 'Dashboard', tenants: ['pagueplay'], padrao: NINGUEM, requer: ['ver_dashboard'] },
 
-  // ── Dashboard e visão ──────────────────────────────────────────────────
-  { key: 'ver_acordos_gerais', label: 'Ver dados de outras pessoas', descricao: 'Ampliar cards, gráficos e acordos além dos próprios', grupo: 'Dashboard', padrao: LIDERANCA_COMPLETA },
-  { key: 'ver_todos_setores', label: 'Ver todos os setores', descricao: 'Consultar dados além do próprio setor', grupo: 'Dashboard', padrao: CUPULA },
-  { key: 'filtrar_por_setor', label: 'Filtrar por setor', descricao: 'Usar o seletor de setor nos painéis e listagens', grupo: 'Dashboard', padrao: LIDERANCA_COMPLETA },
-  { key: 'filtrar_por_equipe', label: 'Filtrar por equipe', descricao: 'Usar o seletor de equipe nos painéis e listagens', grupo: 'Dashboard', padrao: LIDERANCA },
-  { key: 'filtrar_por_usuario', label: 'Filtrar por pessoa', descricao: 'Usar o seletor de usuário nos painéis e listagens', grupo: 'Dashboard', padrao: LIDERANCA_COMPLETA },
-  { key: 'filtrar_por_tag', label: 'Filtrar acordos por tag', descricao: 'Usar o seletor de tags na tabela de acordos', grupo: 'Dashboard', tenants: ['bookplay'], padrao: SUPER, requer: ['ver_acordos'] },
+  // ── Abas principais independentes ──────────────────────────────────────
+  { key: 'ver_ouvidoria', label: 'Ativar Ouvidoria', descricao: 'Abrir os atendimentos da Ouvidoria', grupo: 'Ouvidoria', tenants: ['pagueplay'], padrao: OUVIDORIA_ADMIN },
+  { key: 'ver_solicitacoes_whatsapp', label: 'Ativar Solicitar Atendimento', descricao: 'Abrir o atendimento interno de WhatsApp', grupo: 'Solicitar Atendimento', tenants: ['pagueplay'], padrao: TODOS },
+  { key: 'ver_painel_lider', label: 'Ativar Painel do Líder', descricao: 'Abrir o painel operacional das equipes', grupo: 'Painel Líder', padrao: LIDERANCA },
+  { key: 'ver_painel_diretoria', label: 'Ativar Painel da Diretoria', descricao: 'Abrir o painel estratégico', grupo: 'Painel Diretoria', padrao: { diretoria: true, administrador: true, super_admin: true } },
+  { key: 'ver_usuarios', label: 'Ativar Usuários', descricao: 'Abrir a gestão de pessoas e suas abas internas', grupo: 'Usuários', padrao: LIDERANCA },
+  { key: 'ver_configuracoes', label: 'Ativar Configurações', descricao: 'Abrir as configurações da operação', grupo: 'Configurações', padrao: ADMIN },
+  { key: 'ver_lixeira', label: 'Ativar Lixeira', descricao: 'Abrir os acordos excluídos', grupo: 'Lixeira', padrao: { operador: true, lider: true, elite: true, gerencia: true, diretoria: true, administrador: true, super_admin: true } },
+  { key: 'ver_analitico', label: 'Ativar Analítico', descricao: 'Abrir recebimentos, diário e colchão', grupo: 'Analítico', padrao: TODOS },
+  { key: 'ver_tickets', label: 'Ativar Tickets', descricao: 'Abrir a fila de tickets', grupo: 'Tickets', padrao: ADMIN },
+  { key: 'importar_excel', label: 'Ativar Importar Excel', descricao: 'Cadastrar acordos em lote por Excel', grupo: 'Importar Excel', padrao: TODOS },
+  { key: 'ver_acordos', label: 'Ativar Acordos BP', descricao: 'Abrir a lista completa de acordos', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: TODOS },
+  { key: 'ver_novo_acordo', label: 'Ativar Novo Acordo', descricao: 'Cadastrar um novo acordo sem depender das demais ações', grupo: 'Novo Acordo', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
+  { key: 'ver_campanha_facil', label: 'Ativar Campanha Fácil', descricao: 'Abrir e gerenciar o módulo de campanhas', grupo: 'Campanha Fácil', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA },
+  { key: 'ver_pix_automatico', label: 'Ativar Pix Automático', descricao: 'Abrir a área de Pix automático de forma independente', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: TODOS },
+  { key: 'ver_creators_lab', label: 'Ativar Creators Lab', descricao: 'Abrir a área Creators Lab', grupo: 'Creators Lab', padrao: TODOS },
 
-  // ── Acordos ────────────────────────────────────────────────────────────
-  { key: 'criar_acordos', label: 'Criar acordos', descricao: 'Cadastrar um novo acordo', grupo: 'Acordos', padrao: TODOS },
-  { key: 'editar_acordos', label: 'Editar acordos', descricao: 'Alterar acordos permitidos pela visão configurada', grupo: 'Acordos', padrao: TODOS },
-  { key: 'excluir_acordos', label: 'Excluir acordos', descricao: 'Mover um acordo para a lixeira', grupo: 'Acordos', padrao: TODOS },
-  { key: 'excluir_em_lote', label: 'Excluir em lote', descricao: 'Excluir vários acordos de uma vez', grupo: 'Acordos', padrao: LIDERANCA_COMPLETA },
-  { key: 'importar_excel', label: 'Importar acordos por planilha', descricao: 'Cadastrar acordos em lote por Excel', grupo: 'Acordos', padrao: TODOS },
-  { key: 'ver_pix_automatico', label: 'Pix Automático', descricao: 'Abrir a área de Pix automático', grupo: 'Acordos', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
-  { key: 'aprovar_pix_automatico', label: 'Aprovar Pix Automático', descricao: 'Aprovar ou desaprovar registros de Pix', grupo: 'Acordos', tenants: ['bookplay'], padrao: LIDERANCA, requer: ['ver_pix_automatico'] },
-  { key: 'restaurar_lixeira', label: 'Restaurar acordos', descricao: 'Restaurar itens da lixeira', grupo: 'Acordos', padrao: TODOS, requer: ['ver_lixeira'] },
-  { key: 'esvaziar_lixeira', label: 'Esvaziar lixeira', descricao: 'Excluir definitivamente os itens visíveis', grupo: 'Acordos', padrao: LIDERANCA_COMPLETA, requer: ['ver_lixeira'] },
+  // ── Acordos BP ─────────────────────────────────────────────────────────
+  { key: 'acordos_escopo_individual', label: 'Visão individual', descricao: 'Consultar somente os próprios acordos', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
+  { key: 'acordos_escopo_equipe', label: 'Visão por equipe', descricao: 'Consultar acordos das equipes permitidas', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: LIDERANCA, requer: ['ver_acordos'] },
+  { key: 'acordos_escopo_setor', label: 'Visão por setor', descricao: 'Consultar acordos do próprio setor', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_acordos'] },
+  { key: 'acordos_escopo_todos_setores', label: 'Todos os setores', descricao: 'Consultar acordos de toda a empresa', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: CUPULA, requer: ['ver_acordos'] },
+  { key: 'filtrar_por_tag', label: 'Filtrar por tag', descricao: 'Usar o seletor de tags na lista de acordos', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: SUPER, requer: ['ver_acordos'] },
+  { key: 'editar_acordos', label: 'Editar acordos', descricao: 'Alterar acordos permitidos pela visão configurada', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
+  { key: 'alterar_status_acordos', label: 'Alterar status', descricao: 'Marcar acordos como pagos ou desfazer a alteração', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
+  { key: 'excluir_acordos', label: 'Excluir acordos', descricao: 'Mover um acordo para a lixeira', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_acordos'] },
+  { key: 'excluir_em_lote', label: 'Excluir em lote', descricao: 'Excluir vários acordos de uma vez', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_acordos'] },
+  { key: 'ignorar_fechamento_mes', label: 'Escrever em mês fechado', descricao: 'Criar, editar e excluir dados em mês encerrado', grupo: 'Acordos BP', tenants: ['bookplay'], padrao: NINGUEM, requer: ['ver_acordos'] },
+
+  // ── Lixeira ────────────────────────────────────────────────────────────
+  { key: 'lixeira_escopo_individual', label: 'Visão individual', descricao: 'Ver somente os próprios itens excluídos', grupo: 'Lixeira', padrao: TODOS, requer: ['ver_lixeira'] },
+  { key: 'lixeira_escopo_equipe', label: 'Visão por equipe', descricao: 'Ver itens excluídos das equipes permitidas', grupo: 'Lixeira', padrao: LIDERANCA, requer: ['ver_lixeira'] },
+  { key: 'lixeira_escopo_setor', label: 'Visão por setor', descricao: 'Ver itens excluídos do próprio setor', grupo: 'Lixeira', padrao: LIDERANCA_COMPLETA, requer: ['ver_lixeira'] },
+  { key: 'lixeira_escopo_todos_setores', label: 'Todos os setores', descricao: 'Ver itens excluídos de toda a empresa', grupo: 'Lixeira', padrao: CUPULA, requer: ['ver_lixeira'] },
+  { key: 'restaurar_lixeira', label: 'Restaurar acordos', descricao: 'Restaurar itens da lixeira', grupo: 'Lixeira', padrao: TODOS, requer: ['ver_lixeira'] },
+  { key: 'esvaziar_lixeira', label: 'Esvaziar lixeira', descricao: 'Excluir definitivamente os itens visíveis', grupo: 'Lixeira', padrao: LIDERANCA_COMPLETA, requer: ['ver_lixeira'] },
+
+  // ── Pix Automático ─────────────────────────────────────────────────────
+  { key: 'pix_escopo_individual', label: 'Visão individual', descricao: 'Consultar somente os próprios registros Pix', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: TODOS, requer: ['ver_pix_automatico'] },
+  { key: 'pix_escopo_equipe', label: 'Visão por equipe', descricao: 'Consultar registros Pix das equipes permitidas', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: LIDERANCA, requer: ['ver_pix_automatico'] },
+  { key: 'pix_escopo_setor', label: 'Visão por setor', descricao: 'Consultar registros Pix do próprio setor', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_pix_automatico'] },
+  { key: 'pix_escopo_empresa', label: 'Visão da empresa', descricao: 'Consultar registros Pix de toda a empresa', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: CUPULA, requer: ['ver_pix_automatico'] },
+  { key: 'editar_configuracoes_pix_automatico', label: 'Editar configurações', descricao: 'Alterar metas e parâmetros do Pix Automático', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: LIDERANCA, requer: ['ver_pix_automatico'] },
+  { key: 'aprovar_pix_automatico', label: 'Aprovar registros', descricao: 'Aprovar ou desaprovar registros de Pix', grupo: 'Pix Automático', tenants: ['bookplay'], padrao: LIDERANCA, requer: ['ver_pix_automatico'] },
 
   // ── Analítico ──────────────────────────────────────────────────────────
-  { key: 'ver_analiticos_global', label: 'Métricas da empresa inteira', descricao: 'Consolidar todos os setores no Analítico', grupo: 'Analítico', padrao: CUPULA, requer: ['ver_analitico'] },
+  { key: 'analitico_visao_propria', label: 'Visão própria', descricao: 'Consultar somente os próprios resultados', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico'] },
+  { key: 'analitico_visao_geral', label: 'Visão geral', descricao: 'Consultar o resultado geral permitido pela empresa', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico'] },
+  { key: 'analitico_visao_todos_setores', label: 'Geral de todos os setores', descricao: 'Ampliar a visão geral para toda a empresa', grupo: 'Analítico', padrao: CUPULA, requer: ['analitico_visao_geral'] },
+  { key: 'ver_analitico_principal', label: 'Subaba Analítico', descricao: 'Abrir o relatório analítico principal', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico'] },
+  { key: 'ver_analitico_recebimento_diario', label: 'Subaba Recebimento diário', descricao: 'Abrir o recebimento diário', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico'] },
+  { key: 'ver_analitico_colchao', label: 'Subaba Colchão', descricao: 'Abrir o relatório de colchão', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico'] },
+  { key: 'ver_analitico_por_operador', label: 'Visão Por operador', descricao: 'Abrir a análise por operador', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico_principal'] },
+  { key: 'ver_analitico_formas_pagamento', label: 'Visão Formas de pagamento', descricao: 'Abrir a análise por forma de pagamento', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico_principal'] },
+  { key: 'ver_analitico_ranking', label: 'Visão Ranking', descricao: 'Abrir o ranking do Analítico', grupo: 'Analítico', padrao: TODOS, requer: ['ver_analitico_principal'] },
+  { key: 'ver_analitico_destaques_dia', label: 'Visão Destaques do dia', descricao: 'Abrir os destaques do dia', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico_principal'] },
+  { key: 'ver_analitico_sem_operador', label: 'Visão Sem operador', descricao: 'Abrir registros ainda sem operador', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico_principal'] },
   { key: 'importar_analitico', label: 'Importar relatório Analítico', descricao: 'Enviar o relatório mensal do ERP', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico'] },
   { key: 'importar_diario', label: 'Importar recebimento diário', descricao: 'Enviar o relatório diário do ERP', grupo: 'Analítico', padrao: LIDERANCA_COMPLETA, requer: ['ver_analitico'] },
   { key: 'validar_relatorios', label: 'Validar relatórios', descricao: 'Validar ou reabrir relatórios de um setor', grupo: 'Analítico', padrao: ADMIN, requer: ['ver_analitico'] },
 
-  // ── Gestão de pessoas ──────────────────────────────────────────────────
-  { key: 'criar_usuarios', label: 'Criar usuários', descricao: 'Cadastrar uma nova pessoa', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_usuarios'] },
-  { key: 'editar_usuarios', label: 'Editar usuários', descricao: 'Alterar dados, cargo, setor e foto de outra pessoa', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_usuarios'] },
-  { key: 'excluir_usuarios', label: 'Excluir usuários', descricao: 'Remover uma pessoa e tratar os acordos dela', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_usuarios'] },
-  { key: 'redefinir_senha_usuarios', label: 'Redefinir senhas', descricao: 'Definir uma senha temporária para outra pessoa', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_usuarios'] },
-  { key: 'gerenciar_situacao_usuarios', label: 'Alterar situação', descricao: 'Marcar usuário como ativo, férias ou desligado', grupo: 'Gestão de pessoas', padrao: LIDERANCA_COMPLETA, requer: ['ver_usuarios'] },
-  { key: 'transferir_usuarios', label: 'Transferir usuários', descricao: 'Mover pessoas entre setores, equipes ou empresas', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_usuarios'] },
-  { key: 'impersonar_usuarios', label: 'Entrar como usuário', descricao: 'Assumir temporariamente a sessão de outra pessoa', grupo: 'Gestão de pessoas', padrao: SUPER, requer: ['ver_usuarios'] },
-  { key: 'ver_setores', label: 'Aba Setores', descricao: 'Abrir a gestão de setores dentro de Usuários', grupo: 'Gestão de pessoas', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_usuarios'] },
-  { key: 'editar_setores', label: 'Editar setores', descricao: 'Criar, alterar e excluir setores', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_setores'] },
-  { key: 'ver_equipes', label: 'Aba Equipes', descricao: 'Abrir a gestão de equipes', grupo: 'Gestão de pessoas', padrao: LIDERANCA, requer: ['ver_usuarios'] },
-  { key: 'editar_equipes', label: 'Editar equipes', descricao: 'Criar, alterar e excluir equipes e membros', grupo: 'Gestão de pessoas', padrao: ADMIN, requer: ['ver_equipes'] },
-  { key: 'ver_operadores', label: 'Ver operadores', descricao: 'Ver detalhes e resultados de outras pessoas', grupo: 'Gestão de pessoas', padrao: LIDERANCA_COMPLETA },
-  { key: 'ver_metas', label: 'Aba Metas', descricao: 'Abrir metas, feriados e quartis', grupo: 'Gestão de pessoas', padrao: LIDERANCA, requer: ['ver_usuarios'] },
-  { key: 'gerenciar_metas', label: 'Editar metas', descricao: 'Definir metas de setor, equipe e operador', grupo: 'Gestão de pessoas', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_metas'] },
-  { key: 'ver_comemoracoes', label: 'Aba Comemorações', descricao: 'Abrir a criação de comemorações', grupo: 'Gestão de pessoas', padrao: LIDERANCA, requer: ['ver_usuarios'] },
-  { key: 'gerenciar_comemoracoes', label: 'Gerenciar comemorações', descricao: 'Criar, finalizar e moderar comemorações', grupo: 'Gestão de pessoas', padrao: LIDERANCA, requer: ['ver_comemoracoes'] },
+  // ── Usuários e subabas ─────────────────────────────────────────────────
+  { key: 'ver_usuarios_lista', label: 'Subaba Usuários', descricao: 'Abrir a lista de usuários', grupo: 'Usuários', padrao: LIDERANCA, requer: ['ver_usuarios'] },
+  { key: 'usuarios_todos_setores', label: 'Usuários de todos os setores', descricao: 'Ampliar a lista para toda a empresa', grupo: 'Usuários', padrao: CUPULA, requer: ['ver_usuarios_lista'] },
+  { key: 'criar_usuarios', label: 'Criar usuários', descricao: 'Cadastrar uma nova pessoa', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_usuarios_lista'] },
+  { key: 'editar_usuarios', label: 'Editar usuários', descricao: 'Alterar dados, cargo, setor e foto de outra pessoa', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_usuarios_lista'] },
+  { key: 'excluir_usuarios', label: 'Excluir usuários', descricao: 'Remover uma pessoa e tratar os acordos dela', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_usuarios_lista'] },
+  { key: 'redefinir_senha_usuarios', label: 'Redefinir senhas', descricao: 'Definir uma senha temporária para outra pessoa', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_usuarios_lista'] },
+  { key: 'gerenciar_situacao_usuarios', label: 'Alterar situação', descricao: 'Marcar usuário como ativo, férias ou desligado', grupo: 'Usuários', padrao: LIDERANCA_COMPLETA, requer: ['ver_usuarios_lista'] },
+  { key: 'impersonar_usuarios', label: 'Entrar como usuário', descricao: 'Assumir temporariamente a sessão de outra pessoa', grupo: 'Usuários', padrao: SUPER, requer: ['ver_usuarios_lista'] },
+  { key: 'ver_setores', label: 'Subaba Setores', descricao: 'Abrir a gestão de setores dentro de Usuários', grupo: 'Usuários', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_usuarios'] },
+  { key: 'setores_todos_setores', label: 'Setores de toda a empresa', descricao: 'Consultar e administrar setores além do próprio', grupo: 'Usuários', padrao: CUPULA, requer: ['ver_setores'] },
+  { key: 'criar_setores', label: 'Criar setores', descricao: 'Cadastrar novos setores', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_setores'] },
+  { key: 'editar_setores', label: 'Editar setores', descricao: 'Alterar e excluir setores', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_setores'] },
+  { key: 'transferir_usuarios_setor', label: 'Transferir usuário de setor', descricao: 'Mover pessoas entre setores', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_setores', 'setores_todos_setores'] },
+  { key: 'ver_equipes', label: 'Subaba Equipes', descricao: 'Abrir a gestão de equipes', grupo: 'Usuários', padrao: LIDERANCA, requer: ['ver_usuarios'] },
+  { key: 'equipes_todos_setores', label: 'Equipes de todos os setores', descricao: 'Consultar e administrar equipes fora do próprio setor', grupo: 'Usuários', padrao: CUPULA, requer: ['ver_equipes'] },
+  { key: 'editar_equipes', label: 'Criar e editar equipes', descricao: 'Criar, alterar e excluir equipes e membros', grupo: 'Usuários', padrao: ADMIN, requer: ['ver_equipes'] },
+  { key: 'ver_operadores', label: 'Ver operadores', descricao: 'Ver detalhes e resultados de outras pessoas no Painel do Líder', grupo: 'Painel Líder', padrao: LIDERANCA_COMPLETA, requer: ['ver_painel_lider'] },
+  { key: 'ver_metas', label: 'Subaba Metas', descricao: 'Abrir metas, feriados e quartis', grupo: 'Usuários', padrao: LIDERANCA, requer: ['ver_usuarios'] },
+  { key: 'metas_todos_setores', label: 'Metas de todos os setores', descricao: 'Consultar metas da empresa inteira', grupo: 'Usuários', padrao: CUPULA, requer: ['ver_metas'] },
+  { key: 'gerenciar_metas', label: 'Editar metas', descricao: 'Definir metas de setor, equipe e operador', grupo: 'Usuários', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_metas'] },
+  { key: 'editar_dias_uteis', label: 'Editar dias úteis', descricao: 'Alterar feriados e dias úteis do mês', grupo: 'Usuários', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_metas'] },
+  { key: 'editar_quartis', label: 'Editar quartis', descricao: 'Alterar faixas e referências dos quartis', grupo: 'Usuários', padrao: { gerencia: true, administrador: true, super_admin: true }, requer: ['ver_metas'] },
+  { key: 'ver_comemoracoes', label: 'Subaba Comemorações', descricao: 'Abrir e gerenciar comemorações', grupo: 'Usuários', padrao: LIDERANCA, requer: ['ver_usuarios'] },
+
+  // ── Painel do Líder ────────────────────────────────────────────────────
+  { key: 'painel_lider_setor_proprio', label: 'Próprio setor', descricao: 'Consultar somente o setor vinculado ao perfil', grupo: 'Painel Líder', padrao: LIDERANCA, requer: ['ver_painel_lider'] },
+  { key: 'painel_lider_todos_setores', label: 'Todos os setores', descricao: 'Permitir selecionar qualquer setor no Painel do Líder', grupo: 'Painel Líder', padrao: CUPULA, requer: ['ver_painel_lider'] },
+  { key: 'ver_painel_lider_acompanhamento', label: 'Subaba Acompanhamento', descricao: 'Abrir o acompanhamento do time', grupo: 'Painel Líder', padrao: LIDERANCA, requer: ['ver_painel_lider'] },
+  { key: 'ver_painel_lider_desempenho_equipes', label: 'Subaba Desempenho de Equipes', descricao: 'Abrir o desempenho comparativo das equipes', grupo: 'Painel Líder', padrao: LIDERANCA, requer: ['ver_painel_lider'] },
+  { key: 'ver_painel_lider_quartis', label: 'Subaba Quartis', descricao: 'Abrir a análise de quartis', grupo: 'Painel Líder', padrao: LIDERANCA, requer: ['ver_painel_lider'] },
+  { key: 'ver_painel_lider_grafico_recebimento', label: 'Subaba Gráfico de Recebimento', descricao: 'Abrir o gráfico diário de recebimento', grupo: 'Painel Líder', padrao: LIDERANCA, requer: ['ver_painel_lider'] },
 
   // ── Configurações ──────────────────────────────────────────────────────
   { key: 'ver_configuracoes_geral', label: 'Aba Geral', descricao: 'Ver modelos de mensagem e status do sistema', grupo: 'Configurações', padrao: ADMIN, requer: ['ver_configuracoes'] },
@@ -139,21 +189,37 @@ export const PERMISSOES: PermissaoMeta[] = [
   // ── Módulos específicos ────────────────────────────────────────────────
   { key: 'editar_ouvidoria', label: 'Registrar e editar atendimentos', descricao: 'Criar, editar, resolver e reabrir atendimentos', grupo: 'Ouvidoria', tenants: ['pagueplay'], padrao: OUVIDORIA_ADMIN, requer: ['ver_ouvidoria'] },
   { key: 'gerenciar_acessos_ouvidoria', label: 'Gerenciar acessos da Ouvidoria', descricao: 'Definir exceções individuais de acesso', grupo: 'Ouvidoria', tenants: ['pagueplay'], padrao: OUVIDORIA_ADMIN, requer: ['ver_ouvidoria'] },
-  { key: 'gerenciar_campanha_facil', label: 'Editar Campanha Fácil', descricao: 'Criar, alterar e excluir mensagens e descontos', grupo: 'Campanha Fácil', tenants: ['bookplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_campanha_facil'] },
-  { key: 'criar_solicitacao_whatsapp', label: 'Abrir solicitação de WhatsApp', descricao: 'Criar pedidos de atendimento', grupo: 'WhatsApp e Tickets', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_solicitacoes_whatsapp'] },
-  { key: 'ver_solicitacoes_whatsapp_geral', label: 'Ver solicitações gerais', descricao: 'Ver pedidos de outras pessoas e setores', grupo: 'WhatsApp e Tickets', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
-  { key: 'atender_solicitacoes_whatsapp', label: 'Atender solicitações', descricao: 'Enviar mensagens e alterar o andamento dos pedidos', grupo: 'WhatsApp e Tickets', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
-  { key: 'gerenciar_responsaveis_whatsapp', label: 'Gerenciar responsáveis', descricao: 'Definir quem atende solicitações de WhatsApp', grupo: 'WhatsApp e Tickets', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
-  { key: 'abrir_tickets', label: 'Abrir tickets', descricao: 'Criar novos tickets', grupo: 'WhatsApp e Tickets', padrao: LIDERANCA_COMPLETA, requer: ['ver_tickets'] },
-  { key: 'atender_tickets', label: 'Atender tickets', descricao: 'Assumir tickets, responder e mudar o status', grupo: 'WhatsApp e Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
-  { key: 'gerenciar_tickets', label: 'Gerenciar fila de tickets', descricao: 'Configurar atendentes e a disponibilidade da aba', grupo: 'WhatsApp e Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
-
-  { key: 'ignorar_fechamento_mes', label: 'Escrever em mês fechado', descricao: 'Criar, editar e excluir dados em mês encerrado', grupo: 'Ações específicas', padrao: NINGUEM },
+  { key: 'criar_solicitacao_whatsapp', label: 'Criar solicitações', descricao: 'Criar pedidos de atendimento', grupo: 'Solicitar Atendimento', tenants: ['pagueplay'], padrao: TODOS, requer: ['ver_solicitacoes_whatsapp'] },
+  { key: 'ver_solicitacoes_whatsapp_geral', label: 'Visualizar todas', descricao: 'Ver pedidos de outras pessoas e setores', grupo: 'Solicitar Atendimento', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
+  { key: 'atender_solicitacoes_whatsapp', label: 'Atender solicitações', descricao: 'Enviar mensagens e alterar o andamento dos pedidos', grupo: 'Solicitar Atendimento', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
+  { key: 'gerenciar_responsaveis_whatsapp', label: 'Editar responsáveis pelos envios', descricao: 'Definir quem atende solicitações de WhatsApp', grupo: 'Solicitar Atendimento', tenants: ['pagueplay'], padrao: LIDERANCA_COMPLETA, requer: ['ver_solicitacoes_whatsapp'] },
+  { key: 'tickets_escopo_individual', label: 'Visão individual', descricao: 'Consultar somente tickets solicitados pela pessoa', grupo: 'Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
+  { key: 'tickets_escopo_equipe', label: 'Visão por equipe', descricao: 'Consultar tickets das equipes permitidas', grupo: 'Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
+  { key: 'tickets_escopo_setor', label: 'Visão por setor', descricao: 'Consultar tickets do próprio setor', grupo: 'Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
+  { key: 'abrir_tickets', label: 'Abrir tickets', descricao: 'Criar novos tickets', grupo: 'Tickets', padrao: LIDERANCA_COMPLETA, requer: ['ver_tickets'] },
+  { key: 'atender_tickets', label: 'Iniciar atendimento', descricao: 'Assumir tickets, responder e mudar o status', grupo: 'Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
+  { key: 'gerenciar_tickets', label: 'Somente solicitar atendimento', descricao: 'Configurar atendentes e a disponibilidade da aba', grupo: 'Tickets', padrao: ADMIN, requer: ['ver_tickets'] },
 ];
 
 export const PERMISSOES_POR_CHAVE: Record<string, PermissaoMeta> =
   Object.fromEntries(PERMISSOES.map(p => [p.key, p]));
 export const CHAVES_PERMISSAO: string[] = PERMISSOES.map(p => p.key);
+
+const ACOES_ACORDO_DASHBOARD: Record<string, string> = {
+  editar_acordos: 'dashboard_editar_acordos',
+  alterar_status_acordos: 'dashboard_alterar_status_acordos',
+  excluir_acordos: 'dashboard_excluir_acordos',
+  excluir_em_lote: 'dashboard_excluir_em_lote',
+  ignorar_fechamento_mes: 'dashboard_ignorar_fechamento_mes',
+};
+
+/**
+ * Mantém componentes compartilhados entre as duas operações sem misturar as
+ * permissões que aparecem e são salvas em cada aba.
+ */
+export function chavePermissaoDoTenant(key: string, slug: string | null | undefined): string {
+  return slug === 'pagueplay' ? (ACOES_ACORDO_DASHBOARD[key] ?? key) : key;
+}
 
 export function permissaoNoTenant(p: PermissaoMeta, slug: string | null | undefined): boolean {
   if (!p.tenants || !slug) return true;

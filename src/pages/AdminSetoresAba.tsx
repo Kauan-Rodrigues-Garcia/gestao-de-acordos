@@ -88,8 +88,10 @@ export default function AdminSetoresAba() {
   const tenant = useTenant();
   const { temPermissao } = useCargoPermissoes();
   const acessoOk = temPermissao('ver_setores');
+  const podeVerTodosSetores = temPermissao('setores_todos_setores');
+  const podeCriarSetores = temPermissao('criar_setores');
   const podeEditarSetores = temPermissao('editar_setores');
-  const podeTransferir = temPermissao('transferir_usuarios');
+  const podeTransferir = temPermissao('transferir_usuarios_setor');
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -154,12 +156,18 @@ export default function AdminSetoresAba() {
       return;
     }
     setLoading(true);
+    if (!podeVerTodosSetores && !perfilAtual?.setor_id) {
+      setSetores([]);
+      setLoading(false);
+      return;
+    }
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('setores')
         .select('*')
-        .eq('empresa_id', empresaAtual.id)
-        .order('nome');
+        .eq('empresa_id', empresaAtual.id);
+      if (!podeVerTodosSetores && perfilAtual?.setor_id) query = query.eq('id', perfilAtual.setor_id);
+      const { data, error } = await query.order('nome');
       if (error) {
         console.warn('[AdminSetoresAba] fetchSetores error:', error.message);
         setSetores([]);
@@ -170,27 +178,32 @@ export default function AdminSetoresAba() {
     } finally {
       setLoading(false);
     }
-  }, [empresaAtual?.id]);
+  }, [empresaAtual?.id, perfilAtual?.setor_id, podeVerTodosSetores]);
 
   const fetchPerfis = useCallback(async () => {
     if (!empresaAtual?.id) {
       setPerfis([]);
       return;
     }
-    const { data, error } = await supabase
+    if (!podeVerTodosSetores && !perfilAtual?.setor_id) {
+      setPerfis([]);
+      return;
+    }
+    let query = supabase
       .from('perfis')
       // `equipe_id` entra por causa da transferência: é a equipe de ORIGEM, e
       // sem ela o fantasma não teria para onde devolver o recebimento do mês.
       .select('id, nome, perfil, setor_id, equipe_id, foto_url, usuario')
-      .eq('empresa_id', empresaAtual.id)
-      .order('nome');
+      .eq('empresa_id', empresaAtual.id);
+    if (!podeVerTodosSetores && perfilAtual?.setor_id) query = query.eq('setor_id', perfilAtual.setor_id);
+    const { data, error } = await query.order('nome');
     if (error) {
       console.warn('[AdminSetoresAba] fetchPerfis error:', error.message);
       setPerfis([]);
     } else {
       setPerfis((data as Perfil[]) || []);
     }
-  }, [empresaAtual?.id]);
+  }, [empresaAtual?.id, perfilAtual?.setor_id, podeVerTodosSetores]);
 
   useEffect(() => {
     fetchSetores();
@@ -427,7 +440,7 @@ export default function AdminSetoresAba() {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   function abrirCriar() {
-    if (!podeEditarSetores) return;
+    if (!podeCriarSetores) return;
     setEditando(null);
     setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
     setDialogOpen(true);
@@ -441,7 +454,7 @@ export default function AdminSetoresAba() {
   }
 
   async function salvar() {
-    if (!podeEditarSetores) return;
+    if (editando ? !podeEditarSetores : !podeCriarSetores) return;
     if (!form.nome.trim()) {
       toast.error('Informe o nome do setor');
       return;
@@ -534,7 +547,7 @@ export default function AdminSetoresAba() {
             Arraste um setor sobre outro para reordenar. A ordem é salva automaticamente.
           </p>
         </div>
-        {podeEditarSetores && <Button size="sm" onClick={abrirCriar} className="gap-1.5">
+        {podeCriarSetores && <Button size="sm" onClick={abrirCriar} className="gap-1.5">
           <Plus className="w-4 h-4" /> Novo Setor
         </Button>}
       </div>
@@ -563,7 +576,7 @@ export default function AdminSetoresAba() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-sm text-muted-foreground gap-2">
             <Building2 className="w-6 h-6 opacity-60" />
             <p>Nenhum setor cadastrado ainda.</p>
-            {podeEditarSetores && <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
+            {podeCriarSetores && <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Criar primeiro setor
             </Button>}
           </CardContent>

@@ -181,14 +181,14 @@ describe('veTodosOsSetores', () => {
 
   it('diretoria usa a mesma permissão configurável das demais telas', () => {
     expect(veTodosOsSetores('diretoria', nega)).toBe(false);
-    expect(veTodosOsSetores('diretoria', c => c === 'ver_todos_setores')).toBe(true);
+    expect(veTodosOsSetores('diretoria', c => c === 'analitico_visao_todos_setores')).toBe(true);
   });
 
   it('permissão configurável abre para os demais', () => {
     expect(veTodosOsSetores('lider', nega)).toBe(false);
     expect(veTodosOsSetores('lider', libera)).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'ver_todos_setores')).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'ver_analiticos_global')).toBe(true);
+    expect(veTodosOsSetores('lider', c => c === 'analitico_visao_todos_setores')).toBe(true);
+    expect(veTodosOsSetores('lider', c => c === 'ver_analiticos_global')).toBe(false);
   });
 
   it('cargo ausente não abre nada', () => {

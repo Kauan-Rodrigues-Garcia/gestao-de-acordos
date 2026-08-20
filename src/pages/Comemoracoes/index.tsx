@@ -86,7 +86,7 @@ export default function Comemoracoes() {
 
   const empresaId = empresa?.id ?? perfil?.empresa_id ?? null;
   const usuarioId = perfil?.id ?? null;
-  const podeCriar = temPermissao('gerenciar_comemoracoes');
+  const podeCriar = temPermissao('ver_comemoracoes');
   const habilitado = podeCriar && !!empresaId;
 
   const { comemoracoes, loading, dbAtiva, erro, recarregar, agoraCorrigido } =

@@ -2,44 +2,70 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const SQL = fs.readFileSync(
-  path.resolve(
-    __dirname,
-    '../../supabase/migrations/20260820184619_restringir_acordos_ao_setor_permitido.sql',
-  ),
-  'utf8',
-);
+const SQL = fs.readFileSync(path.resolve(
+  __dirname,
+  '../../supabase/migrations/20260820210000_permissoes_por_aba.sql',
+), 'utf8');
 
-describe('migration de escopo dos acordos por setor', () => {
-  it('é atômica e troca somente as policies de leitura', () => {
+describe('migration de escopos independentes por aba', () => {
+  it('é atômica e guarda snapshot antes de migrar', () => {
     expect(SQL.trimStart()).toMatch(/^--[\s\S]*?\bBEGIN\s*;/i);
     expect(SQL.trimEnd()).toMatch(/COMMIT\s*;$/i);
-    expect(SQL).toMatch(/DROP POLICY IF EXISTS permissoes3_acordos_select_allow/i);
-    expect(SQL).toMatch(/DROP POLICY IF EXISTS permissoes3_acordos_select_gate/i);
-    expect(SQL).not.toMatch(/permissoes3_acordos_(insert|update|delete)/i);
+    expect(SQL).toMatch(/permissoes_backup_20260820_abas_cargos/i);
+    expect(SQL).toMatch(/permissoes_backup_20260820_abas_pessoas/i);
   });
 
-  it('preserva os próprios acordos sem exigir visão geral', () => {
-    expect(SQL.match(/operador_id=\(SELECT auth\.uid\(\)\)/g)).toHaveLength(2);
+  it('não ultrapassa 100 argumentos em jsonb_build_object', () => {
+    const inicio = SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_permissoes_abas_novas');
+    const fim = SQL.indexOf('$function$;', inicio);
+    const corpo = SQL.slice(inicio, fim);
+    const blocos = corpo.split(') || jsonb_build_object(');
+
+    expect(blocos).toHaveLength(2);
+    for (const bloco of blocos) {
+      const pares = bloco.match(/^\s*'[a-z0-9_]+',/gm) ?? [];
+      expect(pares.length).toBeLessThanOrEqual(50);
+    }
   });
 
-  it('exige visão geral antes de liberar qualquer acordo de terceiro', () => {
-    expect(SQL.match(/ARRAY\['ver_dashboard','ver_acordos'\]::TEXT\[],true/g)).toHaveLength(2);
+  it('mapeia cada aba para chaves próprias', () => {
+    for (const aba of ['dashboard', 'acordos', 'lixeira', 'pix_automatico', 'tickets']) {
+      expect(SQL).toContain(`WHEN '${aba}'`);
+    }
+    expect(SQL).toMatch(/dashboard_escopo_todos_setores/);
+    expect(SQL).toMatch(/acordos_escopo_todos_setores/);
+    expect(SQL).toMatch(/pix_escopo_empresa/);
   });
 
-  it('só abre outros setores com a chave específica', () => {
-    expect(SQL.match(/ARRAY\['ver_todos_setores'\]::TEXT\[],false/g)).toHaveLength(2);
-    expect(SQL.match(/setor_id=\(SELECT public\.fn_user_setor_id\(\)\)/g)).toHaveLength(2);
+  it('decide Acordos pelo tenant sem compartilhar o escopo', () => {
+    expect(SQL).toMatch(/WHEN 'bookplay' THEN public\.fn_tem_permissao\('ver_acordos'/i);
+    expect(SQL).toMatch(/fn_usuario_no_escopo_aba\('acordos'/i);
+    expect(SQL).toMatch(/fn_usuario_no_escopo_aba\('dashboard'/i);
+    expect(SQL).toMatch(/CREATE POLICY permissoes4_acordos_select_gate[\s\S]*?AS RESTRICTIVE/i);
   });
 
-  it('mantém acordos antigos sem setor e operadores clonados no setor', () => {
-    expect(SQL.match(/fn_operador_setor_id\(operador_id\)/g)).toHaveLength(2);
-    expect(SQL.match(/fn_operador_clonado_no_setor/g)?.length).toBeGreaterThanOrEqual(4);
+  it('não usa categorias globais no resolvedor novo', () => {
+    const corpo = SQL.slice(
+      SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_tem_escopo_aba'),
+      SQL.indexOf('CREATE OR REPLACE FUNCTION public.fn_usuario_no_escopo_aba'),
+    );
+    expect(corpo).not.toMatch(/ver_acordos_gerais|ver_todos_setores|filtrar_por_/);
   });
 
-  it('instala uma barreira restritiva e valida a expressão criada', () => {
-    expect(SQL).toMatch(/CREATE POLICY permissoes3_acordos_select_gate[\s\S]*?AS RESTRICTIVE/i);
-    expect(SQL).toMatch(/DO \$verify\$/i);
-    expect(SQL).toMatch(/NOT p\.polpermissive/i);
+  it('obriga as RPCs analíticas compartilhadas a declarar a aba chamadora', () => {
+    expect(SQL).toMatch(/fn_contexto_dados_analiticos_permitido/);
+    for (const rpc of [
+      'fn_analitico_dashboard_mes_json',
+      'fn_analitico_dashboard_mes',
+      'fn_analitico_resumo_por_operador',
+      'fn_diario_resumo_mensal',
+    ]) {
+      const inicio = SQL.lastIndexOf(`CREATE FUNCTION public.${rpc}`);
+      expect(inicio).toBeGreaterThan(-1);
+      const corpo = SQL.slice(inicio, SQL.indexOf('$function$;', inicio) + 11);
+      expect(corpo).toMatch(/p_contexto TEXT DEFAULT 'analitico'/);
+      expect(corpo).toMatch(/fn_contexto_dados_analiticos_permitido/);
+      expect(corpo).not.toMatch(/ver_analiticos_global|ver_acordos_gerais|fn_user_has_any_role/);
+    }
   });
 });

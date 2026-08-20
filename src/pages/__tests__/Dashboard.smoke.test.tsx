@@ -106,6 +106,7 @@ vi.mock('@/hooks/useSetoresEquipes', () => ({
     setores: listasDashboardRef.current.setores,
     setorFiltro: null,
     setSetorFiltro: vi.fn(),
+    equipes: listasDashboardRef.current.equipes.map(e => ({ ...e, setor_id: 's1' })),
     equipesDoSetor: listasDashboardRef.current.equipes,
     loading: false,
   }),
@@ -252,10 +253,10 @@ describe('Dashboard (smoke)', () => {
     });
   });
 
-  it('mantém o filtro de setor separado do filtro Visualizar', async () => {
+  it('combina setor e nível de visão em um único filtro', async () => {
     permissoesDashboardRef.current = new Set([
-      'ver_acordos', 'ver_acordos_gerais', 'ver_todos_setores',
-      'filtrar_por_setor', 'filtrar_por_equipe', 'filtrar_por_usuario',
+      'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+      'dashboard_escopo_setor', 'dashboard_escopo_todos_setores',
     ]);
     listasDashboardRef.current = {
       setores: [{ id: 's1', nome: 'Play 1' }],
@@ -265,9 +266,9 @@ describe('Dashboard (smoke)', () => {
     renderDashboard();
 
     expect(await screen.findByText('Visualizar:')).toBeInTheDocument();
-    expect(screen.getByText('Filtrar setor:')).toBeInTheDocument();
-    expect(screen.getByText('Play 1')).toBeInTheDocument();
-    expect(screen.getByText('Equipe Ana')).toBeInTheDocument();
+    expect(screen.queryByText('Filtrar setor:')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Setor do Dashboard' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Play 1' })).toBeInTheDocument();
     expect(screen.getAllByText('Visualizar:')).toHaveLength(1);
   });
 });
