@@ -68,7 +68,7 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
     const { ok, erro } = await validarRelatorioSetor(empresaId, setorId, mesNum, ano);
     setEmCurso(false);
     if (!ok) { toast.error(erro === 'sem_permissao' ? 'Sem permissão para validar.' : 'Erro ao validar relatório.'); return; }
-    toast.success(`Relatório de ${setorNome} validado — libera o crédito do pet até aqui.`);
+    toast.success(`Relatório de ${setorNome} validado com sucesso.`);
     await fetchStatus();
   }
 
@@ -79,7 +79,7 @@ export function ValidacaoRelatorioSetor({ empresaId, setorId, setorNome, mes }: 
     const { ok, erro } = await reabrirRelatorioSetor(empresaId, setorId, mesNum, ano, motivo.trim());
     setEmCurso(false);
     if (!ok) { toast.error(erro === 'motivo_obrigatorio' ? 'Informe o motivo.' : 'Erro ao reabrir.'); return; }
-    toast.success('Validação do relatório removida — pet para de creditar até revalidar.');
+    toast.success('Validação do relatório removida.');
     setMostrarReabrir(false);
     setMotivo('');
     await fetchStatus();

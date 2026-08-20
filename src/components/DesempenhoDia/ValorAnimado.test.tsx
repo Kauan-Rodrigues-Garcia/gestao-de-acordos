@@ -1,6 +1,7 @@
 import { act, render } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ValorAnimado } from './ValorAnimado';
+import { DURACAO_VALOR_ANIMADO, suavizarValorAnimado } from './valorAnimadoCurva';
 
 describe('ValorAnimado', () => {
   afterEach(() => {
@@ -23,7 +24,19 @@ describe('ValorAnimado', () => {
     tela.rerender(<ValorAnimado valor={20} formatar={v => String(Math.round(v))} />);
 
     expect(raf).toHaveBeenCalledTimes(1);
-    act(() => { quadro?.(380); });
+    act(() => { quadro?.(DURACAO_VALOR_ANIMADO); });
     expect(tela.getByText('20')).toBeInTheDocument();
+  });
+
+  it('começa lento, acelera no meio e desacelera no final', () => {
+    const trechos = [0, 0.25, 0.5, 0.75, 1]
+      .map(suavizarValorAnimado)
+      .slice(1)
+      .map((valor, i, valores) => valor - (i === 0 ? 0 : valores[i - 1]));
+
+    expect(trechos[0]).toBeLessThan(trechos[1]);
+    expect(trechos[3]).toBeLessThan(trechos[2]);
+    expect(suavizarValorAnimado(0)).toBe(0);
+    expect(suavizarValorAnimado(1)).toBe(1);
   });
 });

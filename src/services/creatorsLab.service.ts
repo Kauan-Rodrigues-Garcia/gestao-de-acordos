@@ -10,7 +10,7 @@
  *
  * Toda função aqui devolve `null`/`false` quando a tabela não existe, quando
  * não há sessão ou quando a rede caiu — nunca lança. O Lab continua
- * funcionando em localStorage nesses casos, exatamente como o pet faz.
+ * funcionando em localStorage nesses casos.
  *
  * Isso não é excesso de zelo: a migration é aplicada à mão no SQL Editor, e
  * entre o deploy do front e a aplicação da migration existe uma janela em que

@@ -12,7 +12,7 @@
  *    ainda está usando. Esse bug já tinha sido diagnosticado duas vezes no
  *    projeto — foi o que motivou o `RealtimeAcordosProvider` e o
  *    `PresenceProvider` — mas os hooks de `nr_registros`, `direto_extra_config`,
- *    `pet_estado` e foto de perfil continuavam expostos a ele.
+ *    tabelas e fotos de perfil continuavam expostas a ele.
  *
  * 2. QUEDA SILENCIOSA. Só o canal de acordos tinha reconexão. Todos os outros
  *    ficavam mortos para sempre depois de suspender a máquina, perder a rede ou

@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
-import { celebrarPetAcordoPago } from '@/components/pet/petEvents';
 import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
@@ -399,7 +398,6 @@ export default function Dashboard() {
       patchAcordo(id, { status: statusAnterior, vencimento: vencimentoAnterior });
       toast.error('Erro ao atualizar status');
     } else {
-      celebrarPetAcordoPago();
       if (acordo.vinculo_operador_id || acordo.tipo_vinculo === 'extra') {
         supabase.rpc('fn_sync_par_vinculo', {
           p_acordo_id: id, p_valor: acordo.valor, p_vencimento: dataPagamento,
@@ -625,8 +623,7 @@ export default function Dashboard() {
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
   const nome = perfil?.nome?.split(' ')[0] || 'Usuário';
-  const mostraFiltroVisual = (podeFiltrarSetor && setoresList.length > 0)
-    || (podeFiltrarEquipe && equipesDoSetor.length > 0)
+  const mostraFiltroVisual = (podeFiltrarEquipe && equipesDoSetor.length > 0)
     || podeFiltrarUsuario;
 
   return (
@@ -658,19 +655,11 @@ export default function Dashboard() {
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
               <div className="flex flex-wrap gap-1">
                 <button
-                  onClick={() => { setSetorFiltro(null); setVisaoFiltro('setor'); }}
+                  onClick={() => setVisaoFiltro('setor')}
                   className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                    visaoFiltro === 'setor' && !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                  title={podeFiltrarSetor ? 'Ver todos os setores' : 'Ver dados e acordos de todo o setor'}
+                    visaoFiltro === 'setor' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
+                  title="Ver dados e acordos de todo o setor"
                 ><Building2 className="w-3 h-3" /> Setor geral</button>
-                {podeFiltrarSetor && setoresList.map(setor => (
-                  <button key={setor.id}
-                    onClick={() => { setSetorFiltro(setor.id); setVisaoFiltro('setor'); }}
-                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                      visaoFiltro === 'setor' && setorFiltro === setor.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                    title={`Ver dados e acordos do setor ${setor.nome}`}
-                  ><Building2 className="w-3 h-3" /> {setor.nome}</button>
-                ))}
                 {podeFiltrarEquipe && equipesDoSetor.map(eq => (
                   <button key={eq.id}
                     onClick={() => setVisaoFiltro(`equipe:${eq.id}` as VisaoFiltro)}
@@ -702,8 +691,24 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Analytics — setor/equipe ficam no único filtro "Visualizar" acima. */}
+      {/* Analytics + filtro de setor */}
       <div className="mb-6 space-y-2" data-tour="metricas">
+        {podeFiltrarSetor && setoresList.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
+            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
+            <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
+            <div className="flex flex-wrap gap-1.5">
+              <button onClick={() => setSetorFiltro(null)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
+                Todos
+              </button>
+              {setoresList.map(s => (
+                <button key={s.id} onClick={() => setSetorFiltro(setorFiltro === s.id ? null : s.id)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', setorFiltro === s.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
+                  {s.nome}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <AnalyticsPanel
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}

@@ -153,7 +153,7 @@ interface MetaRowProps {
   onChangeExtra?: (idx: number, v: string) => void;
   disabled?: boolean;
   /** Meta proporcional: operador recém-chegado/retorno de férias, meta menor
-   *  que a cheia. Sinaliza pro jogo (pet) não tratar igual quem tem meta cheia. */
+   *  que a cheia. Mantém essa diferença explícita para os consumidores. */
   proporcional: boolean;
   onChangeProporcional: (v: boolean) => void;
   /**

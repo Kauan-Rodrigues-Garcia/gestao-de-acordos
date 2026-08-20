@@ -252,7 +252,7 @@ describe('Dashboard (smoke)', () => {
     });
   });
 
-  it('consolida setor e equipe em um único filtro no modelo Visualizar', async () => {
+  it('mantém o filtro de setor separado do filtro Visualizar', async () => {
     permissoesDashboardRef.current = new Set([
       'ver_acordos', 'ver_acordos_gerais', 'ver_todos_setores',
       'filtrar_por_setor', 'filtrar_por_equipe', 'filtrar_por_usuario',
@@ -265,9 +265,9 @@ describe('Dashboard (smoke)', () => {
     renderDashboard();
 
     expect(await screen.findByText('Visualizar:')).toBeInTheDocument();
+    expect(screen.getByText('Filtrar setor:')).toBeInTheDocument();
     expect(screen.getByText('Play 1')).toBeInTheDocument();
     expect(screen.getByText('Equipe Ana')).toBeInTheDocument();
-    expect(screen.queryByText('Filtrar setor:')).not.toBeInTheDocument();
     expect(screen.getAllByText('Visualizar:')).toHaveLength(1);
   });
 });

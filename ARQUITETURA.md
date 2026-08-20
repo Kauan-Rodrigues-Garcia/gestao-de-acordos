@@ -37,7 +37,6 @@ src/
 │   ├── ChatNotificacoes.tsx     # Notificações em tempo real
 │   ├── ModalFilaWhatsApp.tsx    # Fila de mensagens WhatsApp
 │   ├── comemoracao/             # Overlay de meta batida
-│   ├── pet/                     # Pet Aura (gamificação)
 │   ├── ErrorBoundary.tsx        # Error boundary global/por página
 │   └── ThemeToggle.tsx          # Alternância de tema
 │
@@ -71,7 +70,7 @@ src/
 │   ├── solicitacoesWhatsapp.service.ts / ouvidoria.service.ts
 │   ├── analitico/        # Parser, importação, escopos, composição do mês
 │   ├── diario/           # Parser, importação, guard do relatório mensal
-│   ├── metas/ · equipes/ · admin/ · pet/ · bookplay/ · pagueplay/
+│   ├── metas/ · equipes/ · admin/ · bookplay/ · pagueplay/
 │   └── acordo-visao/     # Leitura de acordo por imagem (IA + OCR)
 │
 ├── lib/                  # Utilitários e configurações
@@ -142,7 +141,7 @@ src/
 | `public.equipe_lideres` / `equipe_operadores_clones` | Liderança e clones de equipe |
 | `public.metas_config_mes` / `metas_validacoes` | Feriados, quartis e trava de meta |
 | `public.pix_automatico_*` | Acordos, config, metas e registro de NR do Pix `[BP]` |
-| `public.ouvidoria_*` · `solicitacoes_whatsapp` · `comemoracoes` · `pet_*` | Módulos auxiliares |
+| `public.ouvidoria_*` · `solicitacoes_whatsapp` · `comemoracoes` | Módulos auxiliares |
 
 ### Migrations
 
@@ -214,8 +213,8 @@ pelo Analítico; início e fim de impersonação; redefinição de senha. Tudo v
 
 **Fora da auditoria por trigger, de propósito:** `analitico_recebimentos` e
 `diario_recebimentos` (importação em massa — o evento útil é o resumo),
-`notificacoes` (derivada de outras triggers), `logs_sistema` (não se audita o
-próprio livro) e `pet_*` (aba fora do ar).
+`notificacoes` (derivada de outras triggers) e `logs_sistema` (não se audita o
+próprio livro).
 
 **Retenção recomendada: 180 dias.** Uma linha de log por linha alterada é o preço
 de "tudo registrado"; os índices cobrem todos os filtros da tela e o expurgo por

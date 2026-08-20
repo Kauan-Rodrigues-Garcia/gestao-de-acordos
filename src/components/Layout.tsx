@@ -47,8 +47,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ThemeToggle } from './ThemeToggle';
 import { HelpDrawer } from './HelpDrawer';
-import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
-import { PetDespedida } from './pet/PetDespedida';
+import { OnboardingTour } from './OnboardingTour';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { AutorizacaoDock } from './AutorizacaoDock';
@@ -273,17 +272,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { naoLidas, animarBadge } = useNotificacoes();
   const { precisaAceitar, loading: termoLoading } = useTermoUso();
   useMarcarAtrasados();
-
-  // ── Lembrete de votação do nome do mascote — só depois de termos + tour ─────
-  // (tourPronto começa true se o tour já foi concluído em sessão anterior;
-  //  senão vira true quando o OnboardingTour chamar onFinished agora)
-  const [tourPronto, setTourPronto] = useState(false);
-  useEffect(() => {
-    if (perfil?.id && localStorage.getItem(ONBOARDING_STORAGE_KEY(perfil.id))) {
-      setTourPronto(true);
-    }
-  }, [perfil?.id]);
-  const avisoPetPronto = !termoLoading && !precisaAceitar && tourPronto;
 
   // (Favicon por empresa é aplicado no root em TenantThemeApplier — vale para
   //  todas as páginas, inclusive a de login.)
@@ -873,7 +861,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <OnboardingTour
           precisaAceitar={precisaAceitar}
           termoLoading={termoLoading}
-          onFinished={() => setTourPronto(true)}
         />
       </div>
 
@@ -904,10 +891,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}
       <ComemoracaoOverlay />
-
-      {/* Despedida do mascote — só abre pós termos + tour, e só para quem já
-          convivia com ele (perfis.pet_despedida = 'pendente'). */}
-      <PetDespedida pronto={avisoPetPronto} />
 
       {/* Troca de senha 1x */}
       {perfil?.id && (

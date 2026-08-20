@@ -18,8 +18,8 @@
  * apresentação, não estado da aplicação — nada mais na árvore precisa saber dele,
  * e envolver o React nisso é pagar reconciliação por pixel.
  *
- * Curta de propósito (380ms): passar disso vira espera, e o painel existe para
- * responder num relance.
+ * Em 900ms: tempo suficiente para perceber a aceleração e a desaceleração sem
+ * transformar a atualização do painel em espera.
  *
  * Esta contagem curta é executada mesmo quando o Windows ativa as opções de
  * desempenho/redução de movimento. Ela não desloca o layout nem move grandes
@@ -27,13 +27,7 @@
  */
 
 import { useEffect, useRef, type CSSProperties } from 'react';
-
-const DURACAO = 380;
-
-/** easeOutCubic: rápido no começo, assentando no fim. */
-function suavizar(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
-}
+import { DURACAO_VALOR_ANIMADO, suavizarValorAnimado } from './valorAnimadoCurva';
 
 interface ValorAnimadoProps {
   valor: number;
@@ -66,8 +60,8 @@ export function ValorAnimado({ valor, formatar, className, style }: ValorAnimado
 
     const inicio = performance.now();
     const passo = (agora: number) => {
-      const t = Math.min(1, (agora - inicio) / DURACAO);
-      alvo.textContent = formatarRef.current(de + (valor - de) * suavizar(t));
+      const t = Math.min(1, (agora - inicio) / DURACAO_VALOR_ANIMADO);
+      alvo.textContent = formatarRef.current(de + (valor - de) * suavizarValorAnimado(t));
       if (t < 1) quadro.current = requestAnimationFrame(passo);
     };
     quadro.current = requestAnimationFrame(passo);
