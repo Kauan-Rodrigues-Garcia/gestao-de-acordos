@@ -11,7 +11,7 @@
  * `MetaProgressoHeader` e a tabela `QuartisOperadores` usam.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,6 +32,7 @@ import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
+import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
@@ -214,6 +215,27 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { empresa } = useEmpresa();
   const tenant = useTenant();
   const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
+  const { subscribe, unsubscribe } = useRealtimeAcordos();
+  const realtimeInstanceId = useRef(`usePainelMetas-${Math.random().toString(36).slice(2, 10)}`).current;
+  const [revisaoAcordos, setRevisaoAcordos] = useState(0);
+
+  // Um acordo novo/alterado afeta o agendado e, em alguns escopos, Direto ×
+  // Extra. Incrementar uma revisão refaz apenas essas fontes, sem desmontar o
+  // painel nem recolocar os cards em skeleton.
+  useEffect(() => {
+    let debounce: ReturnType<typeof setTimeout> | null = null;
+    subscribe(realtimeInstanceId, () => {
+      if (debounce) clearTimeout(debounce);
+      debounce = setTimeout(() => {
+        debounce = null;
+        setRevisaoAcordos(v => v + 1);
+      }, 120);
+    });
+    return () => {
+      if (debounce) clearTimeout(debounce);
+      unsubscribe(realtimeInstanceId);
+    };
+  }, [subscribe, unsubscribe, realtimeInstanceId]);
 
   /**
    * H.O. só existe na PaguePlay: na BookPlay `total_ho` é 0,00 em toda linha.
@@ -400,14 +422,18 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   // query seria trabalho jogado fora a cada troca de mês.
   const [diretoExtra, setDiretoExtra] = useState<TotaisDiretoExtra | null>(null);
   const [dxCarregado, setDxCarregado] = useState(false);
+  const dxContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
+    const contexto = `${temLogicaDiretoExtra}|${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
+    const contextoMudou = dxContextoRef.current !== contexto;
+    dxContextoRef.current = contexto;
     if (!temLogicaDiretoExtra || !empresa?.id || escopoPendente) {
       setDiretoExtra(null);
       setDxCarregado(!temLogicaDiretoExtra);
       return;
     }
-    setDxCarregado(false);
+    if (contextoMudou) setDxCarregado(false);
     void buscarDiretoExtraDoMes({
       empresaId: empresa.id,
       mes,
@@ -418,7 +444,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setDxCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente]);
+  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
 
   // ── Extra por tabulação (só PaguePlay) ─────────────────────────────────────
   //
@@ -432,40 +458,48 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const extraPorTabulacao = tenant.isPaguePlay && !!temLogicaDiretoExtra;
   const [extraTabulado, setExtraTabulado] = useState<ExtraTabulado | null>(null);
   const [extraCarregado, setExtraCarregado] = useState(false);
+  const extraContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
+    const contexto = `${extraPorTabulacao}|${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
+    const contextoMudou = extraContextoRef.current !== contexto;
+    extraContextoRef.current = contexto;
     if (!extraPorTabulacao || !empresa?.id || escopoPendente) {
       setExtraTabulado(null);
       setExtraCarregado(!extraPorTabulacao);
       return;
     }
-    setExtraCarregado(false);
+    if (contextoMudou) setExtraCarregado(false);
     void buscarExtraTabuladoDoMes({ empresaId: empresa.id, mes, escopo }).then(t => {
       if (cancelado) return;
       setExtraTabulado(t);
       setExtraCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente]);
+  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
 
   // ── Agendado por dia (mesmo escopo do recebimento) ─────────────────────────
   const [agendadoPorDia, setAgendadoPorDia] = useState<PontoAgendadoDia[]>([]);
   const [agendadoCarregado, setAgendadoCarregado] = useState(false);
+  const agendadoContextoRef = useRef('');
   useEffect(() => {
     let cancelado = false;
+    const contexto = `${empresa?.id ?? ''}|${mes}|${JSON.stringify(escopo)}|${escopoPendente}`;
+    const contextoMudou = agendadoContextoRef.current !== contexto;
+    agendadoContextoRef.current = contexto;
     if (!empresa?.id || escopoPendente || !escopo) {
       setAgendadoPorDia([]);
       setAgendadoCarregado(false);
       return;
     }
-    setAgendadoCarregado(false);
+    if (contextoMudou) setAgendadoCarregado(false);
     void buscarAgendadoPorDia({ empresaId: empresa.id, mes, escopo }).then(p => {
       if (cancelado) return;
       setAgendadoPorDia(p);
       setAgendadoCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, escopo, escopoPendente]);
+  }, [empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
 
   // Ranking não mora aqui. Morava no `MetaProgressoHeader` (abaixo da saudação),
   // removido em 16/08/2026 — hoje o Dashboard não mostra ranking pessoal. Se
@@ -508,7 +542,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       empresaId: empresa.id, mes, operadores: [alvoIndireto],
     }).then(m => { if (!cancelado) setRecebidoIndiretoBruto(m[alvoIndireto]?.bruto ?? 0); });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, alvoIndireto]);
+  }, [empresa?.id, mes, alvoIndireto, revisaoAcordos]);
 
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.

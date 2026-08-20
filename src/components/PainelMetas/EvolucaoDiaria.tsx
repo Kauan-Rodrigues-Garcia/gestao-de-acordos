@@ -222,7 +222,15 @@ export function EvolucaoDiaria({
               />
             )}
 
-            <Bar dataKey="recebido" name="Recebido" radius={[3, 3, 0, 0]} maxBarSize={22}>
+            <Bar
+              dataKey="recebido"
+              name="Recebido"
+              radius={[3, 3, 0, 0]}
+              maxBarSize={22}
+              isAnimationActive
+              animationDuration={700}
+              animationEasing="ease-out"
+            >
               {dados.map(d => (
                 <Cell
                   key={d.dia}
@@ -246,6 +254,9 @@ export function EvolucaoDiaria({
                 strokeDasharray="3 3"
                 dot={false}
                 activeDot={{ r: 3, fill: CHART_AGENDADO, strokeWidth: 0 }}
+                isAnimationActive
+                animationDuration={700}
+                animationEasing="ease-out"
               />
             )}
           </ComposedChart>

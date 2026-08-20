@@ -7,6 +7,7 @@ import {
 } from '@/components/ui/select';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
+import type { AcordoTag } from '@/lib/supabase';
 import type { VisaoFiltroAcordos } from './helpers';
 
 export interface AcordosFiltersProps {
@@ -27,6 +28,10 @@ export interface AcordosFiltersProps {
   setFiltroData: (v: string) => void;
   filtroOperador: string;
   setFiltroOperador: (v: string) => void;
+  filtroTag: string;
+  setFiltroTag: (v: string) => void;
+  empresaTags: AcordoTag[];
+  podeFiltrarTag: boolean;
   filtroVinculo: 'todos' | 'direto' | 'extra';
   setFiltroVinculo: (v: 'todos' | 'direto' | 'extra') => void;
   statusLabels: Record<string, string>;
@@ -50,6 +55,7 @@ export function AcordosFilters({
   isLider, isElite, equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
   busca, setBusca, filtroStatus, setFiltroStatus, filtroTipo, setFiltroTipo,
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
+  filtroTag, setFiltroTag, empresaTags, podeFiltrarTag,
   filtroVinculo, setFiltroVinculo,
   statusLabels, tipoLabels, operadoresMap,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
@@ -180,6 +186,11 @@ export function AcordosFilters({
                   {operadoresMap[filtroOperador] || 'Operador'} <X className="w-2.5 h-2.5" />
                 </button>
               )}
+              {podeFiltrarTag && filtroTag && filtroTag !== 'all' && (
+                <button onClick={() => { setFiltroTag(''); setCurrentPage(1); }} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full px-2 py-0.5 hover:bg-primary/20 transition-colors">
+                  {empresaTags.find(tag => tag.id === filtroTag)?.nome ?? 'Tag'} <X className="w-2.5 h-2.5" />
+                </button>
+              )}
             </div>
           )}
           <div className="flex flex-wrap gap-2 items-center">
@@ -223,6 +234,24 @@ export function AcordosFilters({
                   <SelectItem value="all">Todos Operadores</SelectItem>
                   {Object.entries(operadoresMap).map(([id, nome]) => (
                     <SelectItem key={id} value={id}>{nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {podeFiltrarTag && (
+              <Select value={filtroTag || 'all'} onValueChange={v => { setFiltroTag(v === 'all' ? '' : v); setCurrentPage(1); }}>
+                <SelectTrigger className="w-36 h-8 text-sm" aria-label="Filtrar por tag">
+                  <SelectValue placeholder="Tag" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as tags</SelectItem>
+                  {empresaTags.map(tag => (
+                    <SelectItem key={tag.id} value={tag.id}>
+                      <span className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: tag.cor }} />
+                        {tag.nome}
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

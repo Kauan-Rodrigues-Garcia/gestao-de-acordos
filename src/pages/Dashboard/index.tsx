@@ -57,7 +57,6 @@ export default function Dashboard() {
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
   const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
   const isElite = perfil?.perfil === 'elite';
-  const isLider = perfil?.perfil === 'lider';
 
   const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
@@ -650,7 +649,7 @@ export default function Dashboard() {
            */}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
+          {isLiderOuElite && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
             <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
               <div className="flex flex-wrap gap-1">
@@ -678,7 +677,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {(isLider || isElite) && equipesDoSetor.length === 0 && (
+          {isLiderOuElite && equipesDoSetor.length === 0 && (
             <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" /> Setor geral
             </span>

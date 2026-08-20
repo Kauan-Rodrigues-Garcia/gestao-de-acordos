@@ -30,6 +30,7 @@ import {
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
   LifeBuoy, Megaphone, MessageSquarePlus, Ticket,
+  ArrowUp, ArrowDown, Check, GripVertical, ListRestart,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -65,6 +66,8 @@ import { ChatplayOnboardingModal } from './ChatplayOnboardingModal';
 import { ModalRecortarFoto } from './ModalRecortarFoto';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
+import { carregarOrdemMenu, salvarOrdemMenu } from '@/services/menuLateral.service';
+import { mesclarOrdemVisivel, normalizarOrdemMenu, ordenarMenu } from '@/lib/menu-lateral';
 
 interface NavItem {
   label: string;
@@ -111,6 +114,8 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             permissaoKey: 'importar_excel' },
 ];
 
+const ORDEM_PADRAO_MENU = NAV_ITEMS.map(item => item.to);
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
   const { empresa, branding } = useEmpresa();
@@ -127,6 +132,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [fotoParaRecorte, setFotoParaRecorte] = useState<File | null>(null);
   const [perfilPopoverOpen, setPerfilPopoverOpen] = useState(false);
   const inputFotoRef = useRef<HTMLInputElement>(null);
+  const [ordemMenu, setOrdemMenu] = useState<string[]>(ORDEM_PADRAO_MENU);
+  const [ordemMenuRascunho, setOrdemMenuRascunho] = useState<string[]>([]);
+  const [editandoMenu, setEditandoMenu] = useState(false);
+  const [salvandoMenu, setSalvandoMenu] = useState(false);
+
+  // A ordem é global por empresa e deliberadamente não usa Realtime: quem já
+  // está conectado mantém o menu estável; a nova ordem entra no próximo reload.
+  useEffect(() => {
+    if (!empresa?.id) return;
+    let cancelado = false;
+    setEditandoMenu(false);
+    void carregarOrdemMenu(empresa.id)
+      .then(ordem => {
+        if (!cancelado) setOrdemMenu(normalizarOrdemMenu(ordem, ORDEM_PADRAO_MENU));
+      })
+      .catch(error => {
+        console.warn('[Layout] não foi possível carregar a ordem do menu:', error);
+        if (!cancelado) setOrdemMenu(ORDEM_PADRAO_MENU);
+      });
+    return () => { cancelado = true; };
+  }, [empresa?.id]);
 
   // ── Auto-hide / auto-show do sidebar ────────────────────────────────────────
   // Comportamento automático é opcional: checkbox discreta no rodapé do
@@ -283,7 +309,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   //   Isso mantém a nav consistente com o ProtectedRoute da rota correspondente.
   //
   // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
-  const navItems = NAV_ITEMS.filter(item => {
+  const navItemsFiltrados = NAV_ITEMS.filter(item => {
     if (item.hiddenForPaguePay && isPP) return false;
     if (item.hiddenForBookplay && tenant.slug === 'bookplay') return false;
 
@@ -318,6 +344,47 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });
+  const navItems = ordenarMenu(navItemsFiltrados, ordemMenu);
+
+  const navItemsEmEdicao = ordemMenuRascunho
+    .map(id => navItems.find(item => item.to === id))
+    .filter((item): item is NavItem => !!item);
+
+  function iniciarEdicaoMenu() {
+    clearAutoTimers();
+    setSidebarOpen(true);
+    setOrdemMenuRascunho(navItems.map(item => item.to));
+    setEditandoMenu(true);
+  }
+
+  function moverItemMenu(indice: number, direcao: -1 | 1) {
+    setOrdemMenuRascunho(atual => {
+      const destino = indice + direcao;
+      if (destino < 0 || destino >= atual.length) return atual;
+      const proxima = [...atual];
+      [proxima[indice], proxima[destino]] = [proxima[destino], proxima[indice]];
+      return proxima;
+    });
+  }
+
+  async function concluirEdicaoMenu() {
+    if (!empresa?.id || !perfil?.id) return;
+    const novaOrdem = normalizarOrdemMenu(
+      mesclarOrdemVisivel(ordemMenu, ordemMenuRascunho),
+      ORDEM_PADRAO_MENU,
+    );
+    setSalvandoMenu(true);
+    try {
+      await salvarOrdemMenu(empresa.id, novaOrdem, perfil.id);
+      setOrdemMenu(novaOrdem);
+      setEditandoMenu(false);
+      toast.success('Ordem do menu salva para todos os usuários.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Não foi possível salvar a ordem do menu.');
+    } finally {
+      setSalvandoMenu(false);
+    }
+  }
 
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
@@ -414,7 +481,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map(item => (
+        {editandoMenu ? navItemsEmEdicao.map((item, indice) => (
+          <div
+            key={item.to}
+            className="flex items-center gap-2 px-2 py-2 rounded-lg border border-sidebar-border bg-sidebar-accent/70 text-sidebar-foreground"
+          >
+            <GripVertical className="w-3.5 h-3.5 shrink-0 text-sidebar-foreground/45" />
+            <item.icon className="w-4 h-4 shrink-0" />
+            <span className="flex-1 truncate text-xs font-medium">{item.label}</span>
+            <button
+              type="button"
+              onClick={() => moverItemMenu(indice, -1)}
+              disabled={indice === 0}
+              className="p-1 rounded hover:bg-sidebar-accent disabled:opacity-25"
+              aria-label={`Mover ${item.label} para cima`}
+            >
+              <ArrowUp className="w-3.5 h-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => moverItemMenu(indice, 1)}
+              disabled={indice === navItemsEmEdicao.length - 1}
+              className="p-1 rounded hover:bg-sidebar-accent disabled:opacity-25"
+              aria-label={`Mover ${item.label} para baixo`}
+            >
+              <ArrowDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )) : navItems.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -437,6 +531,46 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </NavLink>
         ))}
+
+        {userRole === 'super_admin' && (
+          <div className="pt-2 mt-2 border-t border-sidebar-border">
+            {editandoMenu ? (
+              <div className="flex gap-1.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  className="flex-1 h-8 text-xs gap-1.5"
+                  disabled={salvandoMenu}
+                  onClick={() => void concluirEdicaoMenu()}
+                >
+                  {salvandoMenu ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  Salvar
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-sidebar-foreground/70"
+                  disabled={salvandoMenu}
+                  onClick={() => setEditandoMenu(false)}
+                  aria-label="Cancelar edição do menu"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={iniciarEdicaoMenu}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground transition-colors"
+                title="Editar ordem do menu"
+              >
+                <ListRestart className="w-4 h-4 shrink-0" />
+                {(sidebarOpen || mobileOpen) && <span>Editar ordem do menu</span>}
+              </button>
+            )}
+          </div>
+        )}
 
       </nav>
 
@@ -612,6 +746,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 está olhando para o meio da tela. `animarBadge` vem do provider
                 e dura 900 ms. */}
             <Button
+              data-notif-bell
               variant="ghost"
               size="icon"
               className="w-8 h-8 text-muted-foreground hover:text-foreground relative"

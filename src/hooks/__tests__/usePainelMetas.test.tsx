@@ -9,13 +9,14 @@
  * `contar_dia_atual = false`, que é o cenário da print de referência.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 // ─"?─"? vi.hoisted ─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?
 
 const {
   perfilRef, empresaRef, tenantRef,
   analiticoRef, escopoRef, configRef, rankingRef, diretoExtraSpy, agendadoSpy, rpcSpy,
+  realtimeSubscribeSpy, realtimeUnsubscribeSpy,
 } = vi.hoisted(() => ({
   perfilRef:   { current: null as unknown },
   empresaRef:  { current: null as unknown },
@@ -27,6 +28,8 @@ const {
   diretoExtraSpy: vi.fn(),
   agendadoSpy:    vi.fn(),
   rpcSpy:         vi.fn(),
+  realtimeSubscribeSpy:   vi.fn(),
+  realtimeUnsubscribeSpy: vi.fn(),
 }));
 
 // ─"?─"? Mocks ─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?─"?
@@ -34,6 +37,12 @@ const {
 vi.mock('@/hooks/useAuth',    () => ({ useAuth:    () => ({ perfil:  perfilRef.current }) }));
 vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => ({ empresa: empresaRef.current }) }));
 vi.mock('@/lib/tenant-config', () => ({ useTenant: () => tenantRef.current }));
+vi.mock('@/providers/RealtimeAcordosProvider', () => ({
+  useRealtimeAcordos: () => ({
+    subscribe: realtimeSubscribeSpy,
+    unsubscribe: realtimeUnsubscribeSpy,
+  }),
+}));
 
 vi.mock('@/hooks/useAnaliticoDashboard', async () => {
   const real = await vi.importActual<typeof import('@/hooks/useAnaliticoDashboard')>(
@@ -145,6 +154,8 @@ beforeEach(() => {
   diretoExtraSpy.mockClear();
   agendadoSpy.mockClear();
   rpcSpy.mockClear();
+  realtimeSubscribeSpy.mockClear();
+  realtimeUnsubscribeSpy.mockClear();
 
   empresaRef.current = { id: EMPRESA, nome: 'Empresa' };
   perfilRef.current  = { id: EU, perfil: 'operador', setor_id: 'set-1', equipe_id: null };
@@ -168,6 +179,23 @@ describe('usePainelMetas — carregando', () => {
     escopoRef.current = { escopo: null, fontes: null, carimboDisponivel: false, pendente: true };
     const { result } = renderHook(() => usePainelMetas(paramsBase()));
     expect(result.current.carregando).toBe(true);
+  });
+
+  it('atualiza o agendado por realtime sem recolocar o painel em loading', async () => {
+    let aoMudarAcordo: (() => void) | null = null;
+    realtimeSubscribeSpy.mockImplementation((_id: string, handler: () => void) => {
+      aoMudarAcordo = handler;
+    });
+
+    const { result } = renderHook(() => usePainelMetas(paramsBase()));
+    await waitFor(() => expect(result.current.carregando).toBe(false));
+    const chamadasAntes = agendadoSpy.mock.calls.length;
+
+    act(() => { aoMudarAcordo?.(); });
+    expect(result.current.carregando).toBe(false);
+
+    await waitFor(() => expect(agendadoSpy.mock.calls.length).toBeGreaterThan(chamadasAntes));
+    expect(result.current.carregando).toBe(false);
   });
 
   it('segura a tela enquanto o analítico não chegou', async () => {

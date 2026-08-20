@@ -36,7 +36,7 @@ import { registrarLog }          from '@/services/logs.service';
 import { deduplicarVinculados, temVisaoAmpla, type AcordoComVinculo } from '@/lib/deduplicarVinculados';
 import { useDiretoExtraConfig } from '@/hooks/useDiretoExtraConfig';
 import type { Perfil } from '@/lib/supabase';
-import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, type VisaoFiltroAcordos } from './helpers';
+import { buildMensagem, TableSkeleton, PER_PAGE, getPageNumbers, statusParaAbaAcordos, type VisaoFiltroAcordos } from './helpers';
 import { AcordosFilters } from './AcordosFilters';
 import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
@@ -57,10 +57,12 @@ export default function Acordos() {
   const [filtroTipo, setFiltroTipo]     = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData]     = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
+  const [filtroTag, setFiltroTag]           = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
   const isLider = isPerfilLider(perfil?.perfil ?? '');
   const isElite = perfil?.perfil === 'elite';
+  const isSuperAdmin = perfil?.perfil === 'super_admin';
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
 
@@ -173,23 +175,16 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
+      if (isSuperAdmin && filtroTag) params.set('tag', filtroTag); else params.delete('tag');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, filtroTag, isSuperAdmin, activeTab, filtroVinculo, currentPage, setSearchParams]);
 
-  const statusFiltro = filtroStatus && filtroStatus !== 'all'
-    ? filtroStatus
-    : activeTab === 'analitico'
-    ? undefined
-    : activeTab === 'pagos'
-    ? 'pago'
-    : activeTab === 'nao_pagos'
-    ? 'nao_pago'
-    : filtroStatus || undefined;
+  const statusFiltro = statusParaAbaAcordos(activeTab, filtroStatus);
 
   const bpMesInicio = (!isPP && mesFiltro) ? primeiroDiaDoMes(mesFiltro) : undefined;
   const bpMesFim    = (!isPP && mesFiltro) ? ultimoDiaDoMes(mesFiltro)   : undefined;
@@ -205,6 +200,7 @@ export default function Acordos() {
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:    equipeFiltroAtivo ?? undefined,
+    tag_id:       isSuperAdmin && filtroTag && filtroTag !== 'all' ? filtroTag : undefined,
     // Garante que os acordos que vencem HOJE venham sempre na página 1 (mesmo
     // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
     // ordenação por vencimento). Ignorado quando há filtro de data exata.
@@ -296,19 +292,20 @@ export default function Acordos() {
 
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const hoje       = getTodayISO();
-  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador);
+  const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData || filtroOperador || (isSuperAdmin && filtroTag));
   const filtrosAtivosCount = [
     busca,
     filtroStatus && filtroStatus !== 'all' ? filtroStatus : '',
     filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
     filtroVinculo !== 'todos' ? filtroVinculo : '',
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
+    isSuperAdmin && filtroTag && filtroTag !== 'all' ? filtroTag : '',
   ].filter(Boolean).length;
 
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo('');
-    setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
+    setFiltroData(''); setFiltroOperador(''); setFiltroTag(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -572,7 +569,6 @@ export default function Acordos() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
-  const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
@@ -583,12 +579,9 @@ export default function Acordos() {
     if (visaoAmpla && filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
-    const filtrada = activeTab === 'analitico'
-      ? base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status))
-      : base;
     // Prioriza SEMPRE (todas as abas) os acordos que vencem hoje no topo; entre
     // os de hoje, os já pagos vão por último — pendentes de hoje ficam primeiro.
-    return [...filtrada].sort((a, b) => {
+    return [...base].sort((a, b) => {
       // Acordo com CPF vem SEMPRE primeiro, acima até dos que vencem hoje: é
       // dado pessoal que precisa sair do sistema, e enterrado na página 7
       // ninguém corrige (migrations 20260803a/b).
@@ -748,6 +741,8 @@ export default function Acordos() {
           filtroTipo={filtroTipo} setFiltroTipo={setFiltroTipo}
           filtroData={filtroData} setFiltroData={setFiltroData}
           filtroOperador={filtroOperador} setFiltroOperador={setFiltroOperador}
+          filtroTag={filtroTag} setFiltroTag={setFiltroTag}
+          empresaTags={empresaTags} podeFiltrarTag={isSuperAdmin}
           filtroVinculo={filtroVinculo} setFiltroVinculo={setFiltroVinculo}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}

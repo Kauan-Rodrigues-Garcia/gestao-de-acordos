@@ -81,6 +81,7 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
 
   if (filtros.operador_id && acordo.operador_id !== filtros.operador_id) return false;
   if (filtros.setor_id    && acordo.setor_id    !== filtros.setor_id)    return false;
+  if (filtros.tag_id      && !(acordo.tag_ids ?? []).includes(filtros.tag_id)) return false;
   if (filtros.empresa_id  && acordo.empresa_id  !== filtros.empresa_id)  return false;
   if (filtros._operadoresEquipeIds) {
     if (!filtros._operadoresEquipeIds.includes(acordo.operador_id)) return false;
@@ -115,18 +116,18 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   const filtrosEstavel = useMemo(() => {
     if (!filtros) return '';
     const {
-      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
     } = filtros;
     return JSON.stringify({
-      status, tipo, operador_id, setor_id, equipe_id, empresa_id,
+      status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
-    filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
+    filtros?.equipe_id, filtros?.tag_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
     filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
     filtros?.perPage, filtros?.enableRealtime, filtros?.prioritize_today,
   ]);
@@ -209,19 +210,31 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
         const updated = event.newRecord;
         queryClient.setQueryData<QueryData>(queryKey, old => {
           if (!old) return old;
-          return {
-            ...old,
-            data: old.data.map(a =>
-              a.id === updated.id
-                ? {
-                    ...a,
-                    ...updated,
-                    perfis:  a.perfis  ?? (updated as Acordo & { perfis?: Acordo['perfis'] }).perfis,
-                    setores: a.setores ?? (updated as Acordo & { setores?: Acordo['setores'] }).setores,
-                  }
-                : a
-            ),
-          };
+          const indice = old.data.findIndex(a => a.id === updated.id);
+          const existente = indice >= 0 ? old.data[indice] : null;
+          const completo: Acordo = existente
+            ? {
+                ...existente,
+                ...updated,
+                perfis:  existente.perfis  ?? (updated as Acordo & { perfis?: Acordo['perfis'] }).perfis,
+                setores: existente.setores ?? (updated as Acordo & { setores?: Acordo['setores'] }).setores,
+              }
+            : updated;
+          const atende = matchesFiltros(completo, filtrosRef.current);
+
+          // Saiu do status/tag/equipe filtrado: remove imediatamente. Entrou no
+          // recorte por um UPDATE: adiciona sem esperar um refetch completo.
+          if (existente && !atende) {
+            return { data: old.data.filter(a => a.id !== updated.id), count: Math.max(0, old.count - 1) };
+          }
+          if (!existente && atende) {
+            return { data: [completo, ...old.data], count: old.count + 1 };
+          }
+          if (!existente) return old;
+
+          const proxima = [...old.data];
+          proxima[indice] = completo;
+          return { ...old, data: proxima };
         });
         return;
       }

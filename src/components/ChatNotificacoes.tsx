@@ -327,6 +327,10 @@ export function ChatNotificacoes() {
   useEffect(() => {
     if (!aberto) return;
     function handleClick(e: MouseEvent) {
+      // O sino fica fora deste componente. Ignorá-lo no mousedown deixa o
+      // próprio click executar o toggle uma única vez; sem isso, o mousedown
+      // fechava o painel e o click seguinte o abria novamente.
+      if ((e.target as Element | null)?.closest?.('[data-notif-bell]')) return;
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setAberto(false);
         setDetalhe(null);

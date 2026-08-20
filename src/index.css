@@ -407,6 +407,16 @@
   --chart-1: oklch(0.65 0.20 155);
 }
 
+/* Opção independente do tema principal: mantém o conteúdo claro/rosa e aplica
+   contraste escuro somente aos componentes que usam os tokens do sidebar. */
+.sidebar-dark {
+  --sidebar: oklch(0.10 0.012 220);
+  --sidebar-foreground: oklch(0.85 0.015 220);
+  --sidebar-accent: oklch(0.22 0.025 220);
+  --sidebar-accent-foreground: oklch(0.88 0.012 220);
+  --sidebar-border: oklch(0.25 0.028 220);
+}
+
 @theme inline {
   /* Shadcn Core Mapping */
   --color-background: var(--background);

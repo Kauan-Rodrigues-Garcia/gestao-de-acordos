@@ -1928,6 +1928,42 @@ export type Database = {
           },
         ]
       }
+      menu_lateral_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          empresa_id: string
+          ordem: string[]
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id: string
+          ordem?: string[]
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id?: string
+          ordem?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_lateral_config_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_lateral_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       metas_config_mes: {
         Row: {
           ano: number

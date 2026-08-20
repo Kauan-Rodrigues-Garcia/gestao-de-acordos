@@ -79,6 +79,7 @@ function createBuilder(table: string) {
     neq:   vi.fn((col: string, val: unknown) => { call.filters.push(['neq', col, val]); return builder; }),
     gte:   vi.fn((col: string, val: unknown) => { call.filters.push(['gte', col, val]); return builder; }),
     lte:   vi.fn((col: string, val: unknown) => { call.filters.push(['lte', col, val]); return builder; }),
+    contains: vi.fn((col: string, val: unknown) => { call.filters.push(['contains', col, val]); return builder; }),
     in:    vi.fn((col: string, values: unknown[]) => { call.in = { col, values }; return builder; }),
     or:    vi.fn((expr: string) => { call.or = expr; return builder; }),
     order: vi.fn((col: string, opts?: unknown) => { call.order = { col, opts }; return builder; }),
@@ -143,7 +144,7 @@ describe('fetchAcordos', () => {
     expect(c.range).toBeUndefined();
   });
 
-  it('aplica todos os filtros (status, tipo, operador_id, setor_id, empresa_id, vencimento, data_inicio, data_fim)', async () => {
+  it('aplica todos os filtros (incluindo tag UUID no array tag_ids)', async () => {
     resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
 
     await fetchAcordos({
@@ -151,6 +152,7 @@ describe('fetchAcordos', () => {
       tipo:        'direto',
       operador_id: 'op-1',
       setor_id:    'set-1',
+      tag_id:      '11111111-1111-1111-1111-111111111111',
       empresa_id:  'emp-1',
       vencimento:  '2026-04-22',
       data_inicio: '2026-04-01',
@@ -167,6 +169,7 @@ describe('fetchAcordos', () => {
       ['eq',  'tipo',        'direto'],
       ['eq',  'operador_id', 'op-1'],
       ['eq',  'setor_id',    'set-1'],
+      ['contains', 'tag_ids', ['11111111-1111-1111-1111-111111111111']],
       ['eq',  'empresa_id',  'emp-1'],
       ['eq',  'vencimento',  '2026-04-22'],
       ['gte', 'vencimento',  '2026-04-01'],

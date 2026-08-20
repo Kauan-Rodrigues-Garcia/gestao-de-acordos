@@ -114,6 +114,9 @@ export function ChartsSection({
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4, fill: CHART_AGENDADO, strokeWidth: 0 }}
+                isAnimationActive
+                animationDuration={700}
+                animationEasing="ease-out"
               />
               <Area
                 type="monotone"
@@ -124,6 +127,9 @@ export function ChartsSection({
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 5, fill: CHART_RECEBIDO, strokeWidth: 0 }}
+                isAnimationActive
+                animationDuration={700}
+                animationEasing="ease-out"
               />
             </AreaChart>
           </ResponsiveContainer>

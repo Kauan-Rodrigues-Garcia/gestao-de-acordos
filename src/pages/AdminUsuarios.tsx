@@ -103,6 +103,7 @@ export default function AdminUsuarios() {
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [editando,    setEditando]    = useState<Perfil | null>(null);
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
+  const [filtroSetor,   setFiltroSetor]   = useState<string>('todos');
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
@@ -587,8 +588,14 @@ export default function AdminUsuarios() {
     const byId = new Map(entries);
     return ordenados
       .map(({ id }) => [id, byId.get(id)!] as [string, typeof entries[number][1]])
-      .filter(([, g]) => !!g);
+      .filter(([, g]) => !!g)
+      .filter(([sid]) => filtroSetor === 'todos' || sid === filtroSetor);
   })();
+
+  const setoresDisponiveisNoFiltro = aplicarOrdemSetores(
+    Object.entries(usuariosPorSetor).map(([id, grupo]) => ({ id, nome: grupo.nomeSetor })),
+    empresaAtual?.id,
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -652,10 +659,29 @@ export default function AdminUsuarios() {
         <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
         <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-end mb-4 gap-2">
+          {setoresDisponiveisNoFiltro.length > 1 && (
+            <Select value={filtroSetor} onValueChange={setFiltroSetor}>
+              <SelectTrigger className="w-44 h-8 text-sm" aria-label="Filtrar usuários por setor">
+                <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                <SelectValue placeholder="Setor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os setores</SelectItem>
+                {setoresDisponiveisNoFiltro.map(setor => (
+                  <SelectItem key={setor.id} value={setor.id}>
+                    {setor.nome === '—' ? 'Sem Setor' : setor.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           {isSuperAdmin && empresas.length > 1 && (
             <Select
               value={filtroEmpresa || TODAS_EMPRESAS_SELECT_VALUE}
-              onValueChange={(value) => setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value)}
+              onValueChange={(value) => {
+                setFiltroEmpresa(value === TODAS_EMPRESAS_SELECT_VALUE ? '' : value);
+                setFiltroSetor('todos');
+              }}
             >
               <SelectTrigger className="w-40 h-8 text-sm" aria-label="Filtrar por empresa"><SelectValue placeholder="Empresa" /></SelectTrigger>
               <SelectContent>
@@ -667,7 +693,7 @@ export default function AdminUsuarios() {
           {!isSuperAdmin && empresaAtual && (
             <Badge variant="outline" className="h-8 px-3 text-xs">{empresaAtual.nome}</Badge>
           )}
-          {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
+          {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => { setFiltroEmpresa(''); setFiltroSetor('todos'); }}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {(isAdmin || isSuperAdmin) && temPermissao('editar_usuarios') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>

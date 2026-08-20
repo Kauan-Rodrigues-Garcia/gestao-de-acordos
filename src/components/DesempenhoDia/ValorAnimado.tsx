@@ -21,12 +21,12 @@
  * Curta de propósito (380ms): passar disso vira espera, e o painel existe para
  * responder num relance.
  *
- * Com `prefers-reduced-motion` o valor aparece direto. Movimento de números é um
- * gatilho conhecido de desconforto vestibular, e a informação não depende dele.
+ * Esta contagem curta é executada mesmo quando o Windows ativa as opções de
+ * desempenho/redução de movimento. Ela não desloca o layout nem move grandes
+ * áreas: só interpola o conteúdo numérico para a atualização continuar legível.
  */
 
-import { useEffect, useRef } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { useEffect, useRef, type CSSProperties } from 'react';
 
 const DURACAO = 380;
 
@@ -40,10 +40,10 @@ interface ValorAnimadoProps {
   /** Como desenhar o número — `formatCurrency`, `String`, o que for. */
   formatar: (v: number) => string;
   className?: string;
+  style?: CSSProperties;
 }
 
-export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) {
-  const semMovimento = useReducedMotion();
+export function ValorAnimado({ valor, formatar, className, style }: ValorAnimadoProps) {
   const no = useRef<HTMLSpanElement>(null);
   const anterior = useRef(valor);
   const quadro = useRef<number | null>(null);
@@ -59,7 +59,7 @@ export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) 
     const de = anterior.current;
     anterior.current = valor;
 
-    if (semMovimento || de === valor) {
+    if (de === valor) {
       alvo.textContent = formatarRef.current(valor);
       return;
     }
@@ -78,8 +78,8 @@ export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) 
       // um número intermediário que a tela nunca chegou a mostrar por inteiro.
       alvo.textContent = formatarRef.current(valor);
     };
-  }, [valor, semMovimento]);
+  }, [valor]);
 
   // O texto inicial vem do render; daqui em diante quem escreve é o efeito.
-  return <span ref={no} className={className}>{formatar(valor)}</span>;
+  return <span ref={no} className={className} style={style}>{formatar(valor)}</span>;
 }

@@ -138,9 +138,12 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
   const fim = ultimoDiaDoMes(mesAnalise);
   const hoje = getTodayISO();
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (silencioso = false) => {
     if (!perfil || !empresa?.id) return;
-    setLoading(true);
+    // Realtime atualiza os dados por baixo do painel já montado. O esqueleto é
+    // reservado à primeira carga/troca de escopo; reexibi-lo a cada INSERT ou
+    // UPDATE fazia todo o dashboard piscar e perder a posição visual.
+    if (!silencioso) setLoading(true);
     const isAdmin = isPerfilAdmin(perfil.perfil);
     const isLider = isPerfilLider(perfil.perfil);
     const isDiretoria = isPerfilDiretoria(perfil.perfil);
@@ -360,7 +363,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
     } catch (err) {
       console.error('[useAnalytics] erro:', err);
     } finally {
-      setLoading(false);
+      if (!silencioso) setLoading(false);
     }
   }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay]);
 
@@ -369,7 +372,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
   // Qualquer evento de acordos dispara um refetch completo das métricas analíticas
   useEffect(() => {
-    subscribe(instanceId, () => { fetchAll(); });
+    subscribe(instanceId, () => { void fetchAll(true); });
     return () => unsubscribe(instanceId);
   }, [subscribe, unsubscribe, instanceId, fetchAll]);
 
