@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { Fragment } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   CheckCircle, MessageSquare, Edit, Trash2,
   MapPin, Link2, FileX, Plus, X,
@@ -141,7 +142,7 @@ export function AcordosTableBody({
               </div>
             </td>
           </tr>
-        ) : acordosParaExibir.map((a, i) => {
+        ) : <AnimatePresence initial={false}>{acordosParaExibir.map((a, i) => {
           const atrasado      = isAtrasado(a.vencimento, a.status);
           const venceHoje     = a.vencimento === hoje;
           const sel           = selecionados.includes(a.id);
@@ -150,12 +151,13 @@ export function AcordosTableBody({
           /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
           const temCpf        = acordoTemCpf(a);
           return (
-            <>
+            <Fragment key={a.id}>
               <motion.tr
-                key={a.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: Math.min(i * 0.015, 0.3) }}
+                layout="position"
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.2 }}
                 className={cn(
                   'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                   i % 2 === 0 && 'bg-muted/10',
@@ -364,9 +366,9 @@ export function AcordosTableBody({
                   onSaved={(atualizado) => { patchAcordo(atualizado.id, atualizado); }}
                 />
               )}
-            </>
+            </Fragment>
           );
-        })}
+        })}</AnimatePresence>}
       </tbody>
     </>
   );

@@ -143,6 +143,36 @@ interface ResultadoDashboard {
   dbAtiva: boolean;
 }
 
+function chaveLinha(l: AnaliticoDashboardLinha): string {
+  return [
+    l.dia, l.operador_id ?? '', l.setor_id ?? '', l.forma_pagamento ?? '',
+    l.forma_detalhe ?? '', l.status_tabulacao ?? '',
+  ].join('|');
+}
+
+/** Mantém a referência das séries que não mudaram após uma importação. */
+function compartilharLinhas(
+  anterior: ResultadoDashboard | undefined,
+  proximo: ResultadoDashboard,
+): ResultadoDashboard {
+  if (!anterior) return proximo;
+  const antigas = new Map(anterior.linhas.map(l => [chaveLinha(l), l]));
+  let mudou = anterior.dbAtiva !== proximo.dbAtiva
+    || anterior.linhas.length !== proximo.linhas.length;
+  const linhas = proximo.linhas.map(l => {
+    const antiga = antigas.get(chaveLinha(l));
+    if (antiga
+        && Number(antiga.total) === Number(l.total)
+        && Number(antiga.total_ho) === Number(l.total_ho)
+        && Number(antiga.qtd) === Number(l.qtd)) {
+      return antiga;
+    }
+    mudou = true;
+    return l;
+  });
+  return mudou ? { ...proximo, linhas } : anterior;
+}
+
 /** Referência estável para o caso "sem dados" — evita novo array a cada render
  *  (o que invalidaria o useMemo de `total` sem que nada tenha mudado). */
 const SEM_LINHAS: AnaliticoDashboardLinha[] = [];
@@ -173,6 +203,7 @@ export function useAnaliticoDashboard(ativo: boolean, mesRef?: string | null) {
       const { data, dbAtiva } = await buscarAnaliticoDashboardMes(empresaId as string, mes);
       return { linhas: data, dbAtiva };
     },
+    structuralSharing: compartilharLinhas,
   });
 
   const dbAtiva = query.data?.dbAtiva ?? true;

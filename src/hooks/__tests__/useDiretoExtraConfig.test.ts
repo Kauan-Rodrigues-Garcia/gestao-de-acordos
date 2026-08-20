@@ -7,7 +7,7 @@
  *   1. Sem empresa: configs=[], loading=false, fetchDiretoExtraConfigs não chamado
  *   2. Estado inicial: loading=true (antes do fetch resolver)
  *   3. Fetch bem-sucedido → configs populadas, loading=false
- *   4. Realtime change → refetch disparado
+ *   4. Realtime change → delta aplicado sem refetch
  *   5. Cleanup ao unmount → removeChannel chamado
  *   6. refetch força re-fetch e atualiza estado
  *   7. isAtivoParaUsuario: escopo 'usuario' com ativo=true → true
@@ -40,7 +40,9 @@ const {
   const mockEmpresaRef = { current: null as { id: string } | null };
   const mockRemoveChannel = vi.fn();
 
-  const capturedRealtimeCallbackRef: { current: (() => void) | null } = { current: null };
+  const capturedRealtimeCallbackRef: {
+    current: ((payload: Record<string, unknown>) => void) | null;
+  } = { current: null };
 
   const mockSubscribe = vi.fn().mockReturnValue({});
   const mockOn        = vi.fn();
@@ -51,7 +53,7 @@ const {
   };
 
   mockOn.mockImplementation(
-    (_type: string, _config: unknown, handler: () => void) => {
+    (_type: string, _config: unknown, handler: (payload: Record<string, unknown>) => void) => {
       capturedRealtimeCallbackRef.current = handler;
       return channelObj;
     },
@@ -162,17 +164,15 @@ describe('useDiretoExtraConfig', () => {
     expect(mockFetchDiretoExtraConfigs).toHaveBeenCalledWith(EMPRESA_ID);
   });
 
-  // ─── Realtime: change dispara refetch ─────────────────────────────────
+  // ─── Realtime: change aplica delta local ───────────────────────────────
 
-  it('realtime change dispara refetch e atualiza configs', async () => {
+  it('realtime change atualiza configs sem refetch', async () => {
     mockEmpresaRef.current = { id: EMPRESA_ID };
 
     const cfg1 = makeConfig({ id: 'c1', ativo: true });
     const cfg2 = makeConfig({ id: 'c2', ativo: false });
 
-    mockFetchDiretoExtraConfigs
-      .mockResolvedValueOnce([cfg1])
-      .mockResolvedValueOnce([cfg1, cfg2]);
+    mockFetchDiretoExtraConfigs.mockResolvedValueOnce([cfg1]);
 
     const { result } = renderHook(() => useDiretoExtraConfig());
 
@@ -181,16 +181,16 @@ describe('useDiretoExtraConfig', () => {
     });
 
     await act(async () => {
-      capturedRealtimeCallbackRef.current?.();
-      // aguarda o refetch assíncrono
-      await new Promise(r => setTimeout(r, 0));
+      capturedRealtimeCallbackRef.current?.({
+        eventType: 'INSERT', new: cfg2, old: {}, table: 'direto_extra_config',
+      });
     });
 
     await waitFor(() => {
       expect(result.current.configs).toHaveLength(2);
     });
 
-    expect(mockFetchDiretoExtraConfigs).toHaveBeenCalledTimes(2);
+    expect(mockFetchDiretoExtraConfigs).toHaveBeenCalledTimes(1);
   });
 
   // ─── Cleanup ──────────────────────────────────────────────────────────

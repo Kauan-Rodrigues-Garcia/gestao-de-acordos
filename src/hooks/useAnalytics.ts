@@ -4,7 +4,9 @@
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, Acordo } from '@/lib/supabase';
-import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
+import {
+  useRealtimeAcordos, type AcordoRealtimeEvent,
+} from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { useCargoPermissoes } from './useCargoPermissoes';
@@ -96,6 +98,74 @@ function calcPerc(realizado: number, meta: number): number {
   return Math.min(Math.round((realizado / meta) * 100), 999);
 }
 
+interface EscopoAcordosRealtime {
+  empresaId: string;
+  inicio: string;
+  fim: string;
+  isAdmin: boolean;
+  isLider: boolean;
+  verTodosSetores: boolean;
+  perfilId: string;
+  perfilSetorId: string | null;
+  setorFiltro: string | null;
+  operadorFiltro: string | null;
+  operadoresDaEquipe: ReadonlySet<string> | null;
+  cloneIdsSetor: ReadonlySet<string>;
+}
+
+/** A mesma hierarquia aplicada na query inicial, agora para um único evento. */
+function pertenceAoEscopoRealtime(
+  acordo: Partial<Acordo>,
+  escopo: EscopoAcordosRealtime,
+): boolean {
+  if (acordo.empresa_id !== escopo.empresaId) return false;
+  const vencimento = acordo.vencimento ?? '';
+  if (vencimento < escopo.inicio || vencimento > escopo.fim) return false;
+
+  if (escopo.operadorFiltro) return acordo.operador_id === escopo.operadorFiltro;
+  if (escopo.operadoresDaEquipe) {
+    return !!acordo.operador_id && escopo.operadoresDaEquipe.has(acordo.operador_id);
+  }
+  if (escopo.isAdmin) {
+    return !escopo.setorFiltro || acordo.setor_id === escopo.setorFiltro;
+  }
+  if (!escopo.isLider) return acordo.operador_id === escopo.perfilId;
+  if (escopo.verTodosSetores) {
+    return !escopo.setorFiltro || acordo.setor_id === escopo.setorFiltro;
+  }
+  return acordo.setor_id === escopo.perfilSetorId
+    || (!!acordo.operador_id && escopo.cloneIdsSetor.has(acordo.operador_id));
+}
+
+/** Preserva todos os objetos/linhas que não mudaram. */
+function aplicarDeltaRealtime(
+  atual: Acordo[],
+  evento: AcordoRealtimeEvent,
+  escopo: EscopoAcordosRealtime,
+): Acordo[] {
+  const id = evento.newRecord?.id ?? evento.oldRecord?.id;
+  if (!id) return atual;
+  const indice = atual.findIndex(a => a.id === id);
+
+  if (evento.eventType === 'DELETE') {
+    return indice < 0 ? atual : atual.filter(a => a.id !== id);
+  }
+  if (!evento.newRecord) return atual;
+
+  const existente = indice >= 0 ? atual[indice] : null;
+  const proximo = (existente
+    ? { ...existente, ...evento.newRecord }
+    : evento.newRecord) as Acordo;
+  const pertence = pertenceAoEscopoRealtime(proximo, escopo);
+
+  if (!pertence) return indice < 0 ? atual : atual.filter(a => a.id !== id);
+  if (indice < 0) return [proximo, ...atual];
+
+  const lista = [...atual];
+  lista[indice] = proximo;
+  return lista;
+}
+
 // ─── Hook ─────────────────────────────────────────────────────────────────────
 
 /**
@@ -134,6 +204,7 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
   // perfil (operador). Para agrupar corretamente por equipe, precisamos do mapa
   // operador_id → equipe_id. Sem isto, todos os acordos caíam em "Sem equipe".
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, string | null>>({});
+  const escopoRealtimeRef = useRef<EscopoAcordosRealtime | null>(null);
   const [loading, setLoading] = useState(true);
   const mesAnalise  = normalizarMes(mesRef);
   const { mes, ano } = partesDoMes(mesAnalise);
@@ -208,6 +279,21 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
         }
       }
 
+      escopoRealtimeRef.current = {
+        empresaId: empresa.id,
+        inicio,
+        fim,
+        isAdmin,
+        isLider,
+        verTodosSetores,
+        perfilId: perfil.id,
+        perfilSetorId: perfil.setor_id ?? null,
+        setorFiltro,
+        operadorFiltro,
+        operadoresDaEquipe: operadoresDaEquipe === null ? null : new Set(operadoresDaEquipe),
+        cloneIdsSetor: new Set(cloneIdsSetor),
+      };
+
       // ── Acordos conforme perfil ──────────────────────────────────────────────
       // Reconstruída a cada página: o PostgREST corta em 1000 linhas por query,
       // então uma busca única truncava a visão do admin (empresa toda passa de
@@ -216,29 +302,31 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
       const montarQuery = () => {
         let q = supabase
           .from('acordos')
-          .select('*')
+          .select('id, empresa_id, operador_id, setor_id, vencimento, valor, status, tipo, tipo_vinculo')
           .eq('empresa_id', empresa.id)
+          .gte('vencimento', inicio)
+          .lte('vencimento', fim)
           .order('id', { ascending: true });
 
-        if (!isAdmin && !isDiretoria) {
+        // Filtros explícitos vencem o nível de visão. Isso é importante para
+        // gerência/superadmin: ter acesso à empresa inteira não pode inutilizar
+        // o clique numa equipe ou na visão individual.
+        if (operadorFiltro) {
+          q = q.eq('operador_id', operadorFiltro);
+        } else if (operadoresDaEquipe !== null) {
+          if (operadoresDaEquipe.length === 0) {
+            q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
+          } else {
+            q = q.in('operador_id', operadoresDaEquipe);
+          }
+        } else if (!isAdmin && !isDiretoria) {
           if (isLider && (perfil.setor_id || verTodosSetores)) {
             // Líder/Elite: hierarquia de filtros
             // 1. visão individual → filtra pelo próprio operador_id
             // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
             // 3. visão geral      → filtra pelo setor_id
             //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
-            if (operadorFiltro) {
-              q = q.eq('operador_id', operadorFiltro);
-            } else if (operadoresDaEquipe !== null) {
-              if (operadoresDaEquipe.length === 0) {
-                // Equipe sem membros — força retorno vazio.
-                // operador_id é UUID: precisa de um UUID válido que nunca casa
-                // (o UUID nulo), senão o Postgres rejeita com 22P02.
-                q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
-              } else {
-                q = q.in('operador_id', operadoresDaEquipe);
-              }
-            } else if (verTodosSetores) {
+            if (verTodosSetores) {
               if (setorFiltro) q = q.eq('setor_id', setorFiltro);
             } else if (cloneIdsSetor.length) {
               // BookPlay: setor do líder + operadores clonados nele (setor de
@@ -368,16 +456,22 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
     } finally {
       if (!silencioso) setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay, podeFiltrarSetor, podeFiltrarEquipe, visaoAmpla]);
+  }, [perfil, empresa, mes, ano, inicio, fim, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay, podeFiltrarSetor, podeFiltrarEquipe, visaoAmpla]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
-  // Qualquer evento de acordos dispara um refetch completo das métricas analíticas
+  // Um evento altera apenas o registro afetado. Os `useMemo` abaixo recalculam
+  // os agregados sobre o snapshot local sem nova leitura no banco e sem trocar
+  // o painel por skeleton.
   useEffect(() => {
-    subscribe(instanceId, () => { void fetchAll(true); });
+    subscribe(instanceId, evento => {
+      const escopo = escopoRealtimeRef.current;
+      if (!escopo) return;
+      setAcordos(atual => aplicarDeltaRealtime(atual, evento, escopo));
+    });
     return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId, fetchAll]);
+  }, [subscribe, unsubscribe, instanceId]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {

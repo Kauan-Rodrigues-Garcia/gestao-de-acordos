@@ -23,7 +23,9 @@ import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
 import { assinarTabela } from '@/lib/realtime';
 import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { fetchEmpresas } from '@/services/empresas.service';
-import { listarTickets, buscarFotosDosPerfis, type Ticket } from '@/services/tickets.service';
+import {
+  listarTickets, buscarFotosDosPerfis, paraTicket, type Ticket,
+} from '@/services/tickets.service';
 import {
   STATUS_TICKET, STATUS_FECHADOS, PRIORIDADES, CATEGORIAS, rotuloCategoria,
   type StatusTicket,
@@ -102,7 +104,22 @@ export default function Tickets() {
     return assinarTabela(
       { topico: `rt-tickets-${escopo ?? 'todas'}`, escutas: [{ tabela: 'tickets' }] },
       {
-        onEvento:      () => setVersao(v => v + 1),
+        onEvento: (payload) => {
+          const bruto = (payload.eventType === 'DELETE' ? payload.old : payload.new) as
+            Record<string, unknown> | null;
+          const id = bruto?.id ? String(bruto.id) : '';
+          if (!id) return;
+          setTickets(atual => {
+            if (payload.eventType === 'DELETE') return atual.filter(t => t.id !== id);
+            const proximo = paraTicket(bruto);
+            if (escopo && proximo.empresaId !== escopo) return atual;
+            const indice = atual.findIndex(t => t.id === id);
+            if (indice < 0) return [proximo, ...atual];
+            const lista = [...atual];
+            lista[indice] = proximo;
+            return lista;
+          });
+        },
         onReconectado: () => setVersao(v => v + 1),
       },
     );

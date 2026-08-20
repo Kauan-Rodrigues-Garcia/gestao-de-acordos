@@ -30,6 +30,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { normalizarDependencias } from '@/lib/permissoes-catalogo';
+import { assinarTabela } from '@/lib/realtime';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -151,19 +152,40 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
    */
   useEffect(() => {
     if (!empresa?.id) return;
-    const canal = supabase
-      .channel(`rt-permissoes-${empresa.id}`)
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'cargos_permissoes',
-          filter: `empresa_id=eq.${empresa.id}` },
-        () => { void fetch(); })
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'perfis_permissoes',
-          filter: `empresa_id=eq.${empresa.id}` },
-        () => { void fetch(); })
-      .subscribe();
+    const reconciliar = <T extends { id: string }>(
+      atual: T[], payload: { eventType: string; new: unknown; old: unknown },
+    ): T[] => {
+      const bruto = (payload.eventType === 'DELETE' ? payload.old : payload.new) as
+        (T & { id?: string }) | null;
+      const id = bruto?.id;
+      if (!id) return atual;
+      if (payload.eventType === 'DELETE') return atual.filter(l => l.id !== id);
+      const indice = atual.findIndex(l => l.id === id);
+      if (indice < 0) return [...atual, bruto as T];
+      const lista = [...atual];
+      lista[indice] = { ...atual[indice], ...bruto };
+      return lista;
+    };
 
-    return () => { void supabase.removeChannel(canal); };
+    return assinarTabela(
+      {
+        topico: `rt-permissoes-${empresa.id}`,
+        escutas: [
+          { tabela: 'cargos_permissoes', filtro: `empresa_id=eq.${empresa.id}` },
+          { tabela: 'perfis_permissoes', filtro: `empresa_id=eq.${empresa.id}` },
+        ],
+      },
+      {
+        onEvento: payload => {
+          if (payload.table === 'cargos_permissoes') {
+            setTodasPermissoes(atual => reconciliar(atual,payload));
+          } else if (payload.table === 'perfis_permissoes') {
+            setTodasExcecoes(atual => reconciliar(atual,payload));
+          }
+        },
+        onReconectado: () => { void fetch(); },
+      },
+    );
   }, [empresa?.id, fetch]);
 
   const permissoes = useMemo(

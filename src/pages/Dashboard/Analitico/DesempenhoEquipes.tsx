@@ -345,11 +345,30 @@ export function DesempenhoEquipes({
         escutas: [{ tabela: 'contribuicao_receptivo', filtro: `empresa_id=eq.${empresaId}` }],
       },
       {
-        onEvento:      () => { void recarregarContribRef.current(); },
+        onEvento: (payload) => {
+          const linha = (payload.eventType === 'DELETE' ? payload.old : payload.new) as {
+            setor_id?: string; mes?: string; acumulado?: number | string; meta?: number | string;
+          } | null;
+          if (!linha?.setor_id || linha.mes !== mes) return;
+          setContrib(atual => {
+            if (payload.eventType === 'DELETE') {
+              const proximo = { ...atual };
+              delete proximo[linha.setor_id as string];
+              return proximo;
+            }
+            return {
+              ...atual,
+              [linha.setor_id]: {
+                acumulado: Number(linha.acumulado) || 0,
+                meta: Number(linha.meta) || 0,
+              },
+            };
+          });
+        },
         onReconectado: () => { void recarregarContribRef.current(); },
       },
     );
-  }, [isPP, contribDbAtiva, empresaId]);
+  }, [isPP, contribDbAtiva, empresaId, mes]);
 
   const salvarContrib = useCallback(async (sid: string, valores: ContribuicaoReceptivo) => {
     setSalvandoContrib(sid);

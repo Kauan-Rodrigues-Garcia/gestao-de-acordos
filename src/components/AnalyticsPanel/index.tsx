@@ -43,6 +43,7 @@ import {
 // segue no repositório enquanto houver quem o importe.
 import { PPMetrics } from './PPMetrics';
 import { CHART_RECEBIDO } from './constants';
+import { ValorAnimado } from '@/components/DesempenhoDia/ValorAnimado';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -475,14 +476,17 @@ export function AnalyticsPanel({
                 {isPP ? 'H.O.' : 'Recebido'}
               </span>
               <span className="font-bold text-emerald-500 tabular-nums font-mono">
-                {formatCurrency(valorPrincipal)}
+                <ValorAnimado valor={valorPrincipal} formatar={formatCurrency} />
               </span>
             </div>
             {isPP && !temLogicaDiretoExtra && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Bruto</span>
                 <span className="font-semibold tabular-nums font-mono">
-                  {formatCurrency(usarAnalitico ? anal.bruto : valorRecebidoMes)}
+                  <ValorAnimado
+                    valor={usarAnalitico ? anal.bruto : valorRecebidoMes}
+                    formatar={formatCurrency}
+                  />
                 </span>
               </div>
             )}
@@ -490,25 +494,31 @@ export function AnalyticsPanel({
               <>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Direto</span>
-                  <span className="font-semibold tabular-nums font-mono text-emerald-500">{formatCurrency(valorHODireto)}</span>
+                  <span className="font-semibold tabular-nums font-mono text-emerald-500">
+                    <ValorAnimado valor={valorHODireto} formatar={formatCurrency} />
+                  </span>
                 </div>
                 <div className="flex flex-col items-end">
                   <span className="text-[10px] text-muted-foreground uppercase tracking-wide">H.O Extra</span>
-                  <span className="font-semibold tabular-nums font-mono text-violet-500">{formatCurrency(valorHOExtra)}</span>
+                  <span className="font-semibold tabular-nums font-mono text-violet-500">
+                    <ValorAnimado valor={valorHOExtra} formatar={formatCurrency} />
+                  </span>
                 </div>
               </>
             )}
             {!isPP && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Agendado</span>
-                <span className="font-semibold tabular-nums font-mono">{formatCurrency(valorAgendadoMes)}</span>
+                <span className="font-semibold tabular-nums font-mono">
+                  <ValorAnimado valor={valorAgendadoMes} formatar={formatCurrency} />
+                </span>
               </div>
             )}
             {meta && (
               <div className="flex flex-col items-end">
                 <span className="text-[10px] text-muted-foreground uppercase tracking-wide">Meta</span>
                 <span className="font-bold tabular-nums font-mono" style={{ color: donutColor }}>
-                  {percMetaFinal}%
+                  <ValorAnimado valor={percMetaFinal} formatar={v => `${Math.round(v)}%`} />
                 </span>
               </div>
             )}

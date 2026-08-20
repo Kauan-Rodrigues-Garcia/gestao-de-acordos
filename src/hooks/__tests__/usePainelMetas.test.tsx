@@ -182,8 +182,8 @@ describe('usePainelMetas — carregando', () => {
   });
 
   it('atualiza o agendado por realtime sem recolocar o painel em loading', async () => {
-    let aoMudarAcordo: (() => void) | null = null;
-    realtimeSubscribeSpy.mockImplementation((_id: string, handler: () => void) => {
+    let aoMudarAcordo: ((evento: Record<string, unknown>) => void) | null = null;
+    realtimeSubscribeSpy.mockImplementation((_id: string, handler: (evento: Record<string, unknown>) => void) => {
       aoMudarAcordo = handler;
     });
 
@@ -191,10 +191,19 @@ describe('usePainelMetas — carregando', () => {
     await waitFor(() => expect(result.current.carregando).toBe(false));
     const chamadasAntes = agendadoSpy.mock.calls.length;
 
-    act(() => { aoMudarAcordo?.(); });
+    act(() => { aoMudarAcordo?.({
+      eventType: 'INSERT',
+      newRecord: {
+        id: 'ac-novo', empresa_id: EMPRESA, operador_id: EU, setor_id: 'set-1',
+        vencimento: '2026-08-12', valor: 250, status: 'verificar_pendente',
+      },
+    }); });
     expect(result.current.carregando).toBe(false);
 
-    await waitFor(() => expect(agendadoSpy.mock.calls.length).toBeGreaterThan(chamadasAntes));
+    await waitFor(() => expect(result.current.agendadoPorDia).toEqual([
+      { dia: 12, agendado: 5_250 },
+    ]));
+    expect(agendadoSpy.mock.calls.length).toBe(chamadasAntes);
     expect(result.current.carregando).toBe(false);
   });
 

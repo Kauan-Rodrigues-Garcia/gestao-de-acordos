@@ -175,15 +175,15 @@ export default function Dashboard() {
       data_fim:     filtroData ? undefined : mesFiltroFim,
       estado_uf:    colFiltroEstado || undefined,
       operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual') ? perfil?.id : undefined,
+      setor_id:     visaoFiltro === 'setor' ? (setorFiltro ?? undefined) : undefined,
       equipe_id:    equipeFiltroAtivo ?? undefined,
       page:         currentPage,
       perPage:      PER_PAGE,
       prioritize_today: true,
     } : {
-      // BookPlay não renderiza esta tabela (é PP-only, ver `{isPP && ...}`
-      // abaixo). Ainda assim o hook roda: limita a 1 página para NÃO disparar
-      // um fetch da empresa inteira em acordos_deduplicados (causa de 500/timeout).
-      page: 1, perPage: PER_PAGE, enableRealtime: false,
+      // BookPlay não renderiza esta tabela (é PP-only). Não há motivo para
+      // abrir uma consulta e manter uma lista invisível em memória.
+      enabled: false, enableRealtime: false,
     },
   );
 
@@ -625,6 +625,9 @@ export default function Dashboard() {
   const totalPages = Math.ceil(totalCount / PER_PAGE);
   const temFiltros = !!(busca || filtroStatus || filtroTipo || filtroData);
   const nome = perfil?.nome?.split(' ')[0] || 'Usuário';
+  const mostraFiltroVisual = (podeFiltrarSetor && setoresList.length > 0)
+    || (podeFiltrarEquipe && equipesDoSetor.length > 0)
+    || podeFiltrarUsuario;
 
   return (
     <div className="p-6 max-w-[1400px] mx-auto">
@@ -650,17 +653,25 @@ export default function Dashboard() {
            */}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {podeFiltrarEquipe && equipesDoSetor.length > 0 && (
+          {mostraFiltroVisual && (
             <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
               <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
               <div className="flex flex-wrap gap-1">
                 <button
-                  onClick={() => setVisaoFiltro('setor')}
+                  onClick={() => { setSetorFiltro(null); setVisaoFiltro('setor'); }}
                   className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                    visaoFiltro === 'setor' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                  title="Ver dados e acordos de todo o setor"
+                    visaoFiltro === 'setor' && !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
+                  title={podeFiltrarSetor ? 'Ver todos os setores' : 'Ver dados e acordos de todo o setor'}
                 ><Building2 className="w-3 h-3" /> Setor geral</button>
-                {equipesDoSetor.map(eq => (
+                {podeFiltrarSetor && setoresList.map(setor => (
+                  <button key={setor.id}
+                    onClick={() => { setSetorFiltro(setor.id); setVisaoFiltro('setor'); }}
+                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
+                      visaoFiltro === 'setor' && setorFiltro === setor.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
+                    title={`Ver dados e acordos do setor ${setor.nome}`}
+                  ><Building2 className="w-3 h-3" /> {setor.nome}</button>
+                ))}
+                {podeFiltrarEquipe && equipesDoSetor.map(eq => (
                   <button key={eq.id}
                     onClick={() => setVisaoFiltro(`equipe:${eq.id}` as VisaoFiltro)}
                     className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
@@ -678,7 +689,7 @@ export default function Dashboard() {
               </div>
             </div>
           )}
-          {podeFiltrarEquipe && equipesDoSetor.length === 0 && (
+          {!mostraFiltroVisual && podeFiltrarEquipe && (
             <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" /> Setor geral
             </span>
@@ -691,24 +702,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Analytics + setor filter */}
+      {/* Analytics — setor/equipe ficam no único filtro "Visualizar" acima. */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {podeFiltrarSetor && setoresList.length > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
-            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setSetorFiltro(null)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                Todos
-              </button>
-              {setoresList.map(s => (
-                <button key={s.id} onClick={() => setSetorFiltro(setorFiltro === s.id ? null : s.id)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', setorFiltro === s.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                  {s.nome}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
         <AnalyticsPanel
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}

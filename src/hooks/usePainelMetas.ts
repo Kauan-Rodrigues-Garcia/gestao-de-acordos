@@ -12,14 +12,16 @@
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, type Acordo } from '@/lib/supabase';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
-import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
+import {
+  ESCOPO_EMPRESA, linhaNoEscopo, type EscopoAnalitico,
+} from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarDiretoExtraDoMes, buscarAgendadoPorDia, buscarExtraTabuladoDoMes,
@@ -32,7 +34,9 @@ import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
 import { buscarRecebimentoIndireto } from '@/services/metas/recebimentoIndireto.service';
-import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
+import {
+  useRealtimeAcordos, type AcordoRealtimeEvent,
+} from '@/providers/RealtimeAcordosProvider';
 import {
   diasUteisDoMes, diasUteisDecorridos, QUARTIS_PADRAO,
 } from '@/lib/diasUteis';
@@ -136,6 +140,77 @@ export interface DadosPainelMetas {
   noMesAtual: boolean;
 }
 
+type RegistroAcordo = Partial<Acordo> & { id: string };
+
+function acordoNoEscopo(
+  acordo: Partial<Acordo>,
+  empresaId: string,
+  mes: string,
+  escopo: EscopoAnalitico,
+  data: string | null | undefined = acordo.vencimento,
+): boolean {
+  return acordo.empresa_id === empresaId
+    && !!data?.startsWith(`${mes}-`)
+    && linhaNoEscopo({
+      operador_id: acordo.operador_id ?? null,
+      setor_id: acordo.setor_id ?? null,
+    }, escopo);
+}
+
+function atualizarAgendadoPorDelta(
+  atual: PontoAgendadoDia[],
+  evento: AcordoRealtimeEvent,
+  empresaId: string,
+  mes: string,
+  escopo: EscopoAnalitico,
+): PontoAgendadoDia[] {
+  const deltas = new Map<number, number>();
+  const aplicar = (acordo: Partial<Acordo> | undefined, sinal: 1 | -1) => {
+    if (!acordo || !acordoNoEscopo(acordo, empresaId, mes, escopo)) return;
+    const dia = Number(acordo.vencimento?.slice(8, 10));
+    if (!dia) return;
+    deltas.set(dia, (deltas.get(dia) ?? 0) + sinal * (Number(acordo.valor) || 0));
+  };
+  aplicar(evento.oldRecord, -1);
+  aplicar(evento.newRecord, 1);
+  if (!deltas.size) return atual;
+
+  const porDia = new Map(atual.map(p => [p.dia, p.agendado]));
+  for (const [dia, delta] of deltas) {
+    const valor = (porDia.get(dia) ?? 0) + delta;
+    if (Math.abs(valor) < 0.005) porDia.delete(dia);
+    else porDia.set(dia, valor);
+  }
+  return [...porDia.entries()]
+    .map(([dia, agendado]) => ({ dia, agendado }))
+    .sort((a, b) => a.dia - b.dia);
+}
+
+function contribuicaoExtraTabulado(
+  acordo: Partial<Acordo> | undefined,
+  empresaId: string,
+  mes: string,
+  escopo: EscopoAnalitico,
+): number {
+  if (!acordo || acordo.status !== 'pago' || acordo.tipo_vinculo !== 'extra') return 0;
+  return acordoNoEscopo(acordo, empresaId, mes, escopo) ? (Number(acordo.valor) || 0) : 0;
+}
+
+function contribuicaoIndireta(
+  acordo: Partial<Acordo> | undefined,
+  empresaId: string,
+  mes: string,
+  operadorId: string,
+): number {
+  if (!acordo || acordo.operador_id !== operadorId
+      || acordo.status !== 'pago' || acordo.tipo_vinculo !== 'extra') return 0;
+  const data = (acordo as Partial<Acordo> & { data_pagamento?: string | null }).data_pagamento
+    ?? acordo.vencimento;
+  return acordo.empresa_id === empresaId && !!data?.startsWith(`${mes}-`)
+    ? (Number(acordo.valor) || 0)
+    : 0;
+}
+
 export interface EquipeInfo {
   id: string;
   nome: string;
@@ -217,25 +292,6 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   const realtimeInstanceId = useRef(`usePainelMetas-${Math.random().toString(36).slice(2, 10)}`).current;
-  const [revisaoAcordos, setRevisaoAcordos] = useState(0);
-
-  // Um acordo novo/alterado afeta o agendado e, em alguns escopos, Direto ×
-  // Extra. Incrementar uma revisão refaz apenas essas fontes, sem desmontar o
-  // painel nem recolocar os cards em skeleton.
-  useEffect(() => {
-    let debounce: ReturnType<typeof setTimeout> | null = null;
-    subscribe(realtimeInstanceId, () => {
-      if (debounce) clearTimeout(debounce);
-      debounce = setTimeout(() => {
-        debounce = null;
-        setRevisaoAcordos(v => v + 1);
-      }, 120);
-    });
-    return () => {
-      if (debounce) clearTimeout(debounce);
-      unsubscribe(realtimeInstanceId);
-    };
-  }, [subscribe, unsubscribe, realtimeInstanceId]);
 
   /**
    * H.O. só existe na PaguePlay: na BookPlay `total_ho` é 0,00 em toda linha.
@@ -444,7 +500,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setDxCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
+  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente]);
 
   // ── Extra por tabulação (só PaguePlay) ─────────────────────────────────────
   //
@@ -476,7 +532,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setExtraCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
+  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente]);
 
   // ── Agendado por dia (mesmo escopo do recebimento) ─────────────────────────
   const [agendadoPorDia, setAgendadoPorDia] = useState<PontoAgendadoDia[]>([]);
@@ -499,7 +555,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setAgendadoCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, escopo, escopoPendente, revisaoAcordos]);
+  }, [empresa?.id, mes, escopo, escopoPendente]);
 
   // Ranking não mora aqui. Morava no `MetaProgressoHeader` (abaixo da saudação),
   // removido em 16/08/2026 — hoje o Dashboard não mostra ranking pessoal. Se
@@ -542,7 +598,43 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       empresaId: empresa.id, mes, operadores: [alvoIndireto],
     }).then(m => { if (!cancelado) setRecebidoIndiretoBruto(m[alvoIndireto]?.bruto ?? 0); });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, alvoIndireto, revisaoAcordos]);
+  }, [empresa?.id, mes, alvoIndireto]);
+
+  // Acordos chegam com imagem anterior/nova. Cada fonte recebe somente a
+  // diferença do registro alterado; nenhuma delas pagina novamente o mês.
+  useEffect(() => {
+    const empresaId = empresa?.id;
+    if (!empresaId || !escopo) return;
+
+    subscribe(realtimeInstanceId, (evento: AcordoRealtimeEvent) => {
+      setAgendadoPorDia(atual =>
+        atualizarAgendadoPorDelta(atual, evento, empresaId, mes, escopo));
+
+      if (extraPorTabulacao) {
+        const antigo = contribuicaoExtraTabulado(evento.oldRecord, empresaId, mes, escopo);
+        const novo = contribuicaoExtraTabulado(evento.newRecord, empresaId, mes, escopo);
+        const delta = novo - antigo;
+        const deltaQtd = (novo ? 1 : 0) - (antigo ? 1 : 0);
+        if (delta || deltaQtd) {
+          setExtraTabulado(atual => {
+            const base = atual ?? { bruto: 0, ho: 0, qtd: 0 };
+            const bruto = Math.max(0, base.bruto + delta);
+            return { bruto, ho: bruto * PP_HO_PERCENTUAL, qtd: Math.max(0, base.qtd + deltaQtd) };
+          });
+        }
+      }
+
+      if (alvoIndireto) {
+        const antigo = contribuicaoIndireta(evento.oldRecord, empresaId, mes, alvoIndireto);
+        const novo = contribuicaoIndireta(evento.newRecord, empresaId, mes, alvoIndireto);
+        if (novo !== antigo) {
+          setRecebidoIndiretoBruto(atual => Math.max(0, atual + novo - antigo));
+        }
+      }
+    });
+    return () => unsubscribe(realtimeInstanceId);
+  }, [empresa?.id, mes, escopo, extraPorTabulacao, alvoIndireto,
+      subscribe, unsubscribe, realtimeInstanceId]);
 
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.

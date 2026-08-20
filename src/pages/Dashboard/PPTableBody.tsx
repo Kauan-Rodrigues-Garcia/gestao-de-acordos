@@ -1,4 +1,5 @@
-import { motion } from 'framer-motion';
+import { Fragment } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import {
   CalendarClock, CheckCircle, Edit, FileX, Link2, MapPin, Plus, Trash2, X,
@@ -111,7 +112,7 @@ export function PPTableBody({
             </div>
           </td>
         </tr>
-      ) : acordosOrdenados.map((a, i) => {
+      ) : <AnimatePresence initial={false}>{acordosOrdenados.map((a, i) => {
         const atrasado = isAtrasado(a.vencimento, a.status);
         const venceHoje = a.vencimento === hoje;
         const sel = selecionados.includes(a.id);
@@ -120,12 +121,13 @@ export function PPTableBody({
         /** Acordo com CPF: vem no topo da lista e fica em vermelho até ser corrigido. */
         const temCpf = acordoTemCpf(a);
         return (
-          <>
+          <Fragment key={a.id}>
             <motion.tr
-              key={a.id}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: Math.min(i * 0.015, 0.3) }}
+              layout="position"
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.2 }}
               className={cn(
                 'border-b border-border/50 hover:bg-accent/40 transition-colors cursor-pointer',
                 i % 2 === 0 && 'bg-muted/10',
@@ -290,9 +292,9 @@ export function PPTableBody({
                 onSaved={(atualizado) => patchAcordo(atualizado.id, atualizado)}
               />
             )}
-          </>
+          </Fragment>
         );
-      })}
+      })}</AnimatePresence>}
     </tbody>
   );
 }

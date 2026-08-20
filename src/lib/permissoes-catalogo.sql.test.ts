@@ -67,6 +67,7 @@ function catalogoSql(): LinhaSql[] {
 }
 
 const SQL = catalogoSql();
+const MIGRATION_SQL = sqlDoCatalogo();
 
 describe('contrato: catálogo TypeScript ↔ catálogo SQL', () => {
   it('a migration foi lida — o parser não devolveu lista vazia', () => {
@@ -128,5 +129,21 @@ describe('contrato: catálogo TypeScript ↔ catálogo SQL', () => {
           .toContain(cargo);
       }
     }
+  });
+});
+
+describe('compatibilidade da migration com funções existentes', () => {
+  it('preserva nomes de parâmetros públicos ao usar CREATE OR REPLACE', () => {
+    expect(MIGRATION_SQL).toMatch(
+      /FUNCTION\s+public\.fn_can_access_empresa\(target_empresa_id\s+UUID\)/i,
+    );
+    expect(MIGRATION_SQL).toMatch(
+      /FUNCTION\s+public\.fn_ouvidoria_nivel\(target_empresa_id\s+UUID\)/i,
+    );
+  });
+
+  it('é atômica para não deixar políticas parcialmente atualizadas', () => {
+    expect(MIGRATION_SQL.trimStart()).toMatch(/^--[\s\S]*?\bBEGIN\s*;/i);
+    expect(MIGRATION_SQL.trimEnd()).toMatch(/COMMIT\s*;$/i);
   });
 });

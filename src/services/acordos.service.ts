@@ -64,7 +64,9 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
   // Sem filtro de data usa a view deduplicada (DISTINCT ON por grupo).
   // Usa a tabela direta quando há filtro de intervalo de mês OU filtro de data exata
-  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim) || !!filtros?.vencimento;
+  const hasMonthRange = !!(filtros?.data_inicio && filtros?.data_fim)
+    || !!filtros?.vencimento
+    || !!filtros?.apenas_hoje;
   // 'acordos' | 'acordos_deduplicados' como union em .from() faz o supabase-js
   // tentar resolver o tipo contra as duas tabelas ao mesmo tempo (instanciação
   // excessivamente profunda). Ambas têm as mesmas colunas/relacionamentos —

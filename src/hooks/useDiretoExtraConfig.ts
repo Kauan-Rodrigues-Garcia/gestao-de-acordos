@@ -56,7 +56,20 @@ export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
         }],
       },
       {
-        onEvento:      () => { void refetch(); },
+        onEvento: (payload) => {
+          const id = String((payload.new as { id?: string } | null)?.id
+            ?? (payload.old as { id?: string } | null)?.id ?? '');
+          if (!id) return;
+          setConfigs(atual => {
+            if (payload.eventType === 'DELETE') return atual.filter(c => c.id !== id);
+            const proxima = payload.new as unknown as DiretoExtraConfig;
+            const indice = atual.findIndex(c => c.id === id);
+            if (indice < 0) return [proxima, ...atual];
+            const lista = [...atual];
+            lista[indice] = { ...atual[indice], ...proxima };
+            return lista;
+          });
+        },
         onReconectado: () => { void refetch(); },
       },
     );

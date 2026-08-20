@@ -574,6 +574,34 @@ describe('useAnalytics', () => {
       unmount();
       expect(mockRealtimeUnsubscribe).toHaveBeenCalledTimes(1);
     });
+
+    it('realtime aplica somente o delta em memória, sem nova consulta completa', async () => {
+      const acordo = makeAcordo({
+        id: 'ac-realtime', status: 'verificar_pendente', valor: 100,
+        vencimento: '2026-04-22',
+      });
+      setupOperadorResults([acordo], null);
+
+      const { result } = renderHook(() => useAnalytics());
+      await waitFor(() => expect(result.current.loading).toBe(false));
+      expect(result.current.valorRecebidoMes).toBe(0);
+
+      const handler = mockRealtimeSubscribe.mock.calls[0]?.[1] as
+        | ((evento: Record<string, unknown>) => void)
+        | undefined;
+      expect(handler).toBeTypeOf('function');
+      const consultasAntes = mockSupabaseFromSpy.mock.calls.length;
+
+      act(() => handler?.({
+        eventType: 'UPDATE',
+        oldRecord: acordo,
+        newRecord: { ...acordo, status: 'pago', valor: 250 },
+      }));
+
+      await waitFor(() => expect(result.current.valorRecebidoMes).toBe(250));
+      expect(result.current.valorAgendadoMes).toBe(250);
+      expect(mockSupabaseFromSpy.mock.calls.length).toBe(consultasAntes);
+    });
   });
 
   // ── Admin ─────────────────────────────────────────────────────────────────

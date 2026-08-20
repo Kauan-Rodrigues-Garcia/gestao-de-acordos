@@ -29,7 +29,9 @@ import { supabase, Perfil, Acordo } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
+import {
+  useRealtimeAcordos, type AcordoRealtimeEvent,
+} from '@/providers/RealtimeAcordosProvider';
 import { formatBRL, sumSafe } from '@/lib/money';
 import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
@@ -75,6 +77,32 @@ interface OpMetric {
 }
 
 type SortKey = 'recebido' | 'conversao' | 'naoPagos' | 'aReceber' | 'nome';
+
+/** Reconciliador único das duas listas desta página. Linhas fora do evento
+ * mantêm a mesma referência, então scroll, expansão e seleção não se perdem. */
+function reconciliarListaAcordos(
+  atual: Acordo[],
+  evento: AcordoRealtimeEvent,
+  aceita: (acordo: Acordo) => boolean,
+): Acordo[] {
+  const id = evento.newRecord?.id ?? evento.oldRecord?.id;
+  if (!id) return atual;
+  const indice = atual.findIndex(a => a.id === id);
+  if (evento.eventType === 'DELETE') {
+    return indice < 0 ? atual : atual.filter(a => a.id !== id);
+  }
+  if (!evento.newRecord) return atual;
+  const proximo = (indice >= 0
+    ? { ...atual[indice], ...evento.newRecord }
+    : evento.newRecord) as Acordo;
+  if (!aceita(proximo)) {
+    return indice < 0 ? atual : atual.filter(a => a.id !== id);
+  }
+  if (indice < 0) return [proximo, ...atual];
+  const lista = [...atual];
+  lista[indice] = proximo;
+  return lista;
+}
 
 /** Abas do painel (PaguePlay). 'time' = acompanhamento original; as demais são
  *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
@@ -490,18 +518,19 @@ export default function PainelLider() {
 
   useEffect(() => { void carregarTudo(); }, [carregarTudo]);
 
-  // ── Realtime: qualquer mudança em acordos recarrega os do mês ─────────────
-  const recarregarAcordos = useCallback(async () => {
-    try {
-      const acs = await carregarAcordosMes(idsRef.current);
-      setAcordosMes(acs);
-    } catch { /* silencioso — mantém dados atuais */ }
-  }, [carregarAcordosMes]);
-
+  // ── Realtime: reconcilia somente o acordo afetado ─────────────────────────
   useEffect(() => {
-    subscribe(instanceId, () => { void recarregarAcordos(); });
+    subscribe(instanceId, evento => {
+      setAcordosMes(atual => reconciliarListaAcordos(
+        atual,
+        evento,
+        acordo => idsRef.current.includes(acordo.operador_id)
+          && acordo.vencimento >= periodo.inicio
+          && acordo.vencimento <= periodo.fim,
+      ));
+    });
     return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId, recarregarAcordos]);
+  }, [subscribe, unsubscribe, instanceId, periodo.inicio, periodo.fim]);
 
   // ── Agregações ────────────────────────────────────────────────────────────
   const metricas = useMemo(() => {
@@ -949,9 +978,17 @@ function DetalheOperador({
   useEffect(() => { void carregar(); }, [carregar]);
 
   useEffect(() => {
-    subscribe(instanceId, () => { void carregar(); });
+    subscribe(instanceId, evento => {
+      setAcordos(atual => reconciliarListaAcordos(
+        atual,
+        evento,
+        acordo => acordo.operador_id === operadorId
+          && acordo.vencimento >= inicioMes
+          && acordo.vencimento <= fimMes,
+      ));
+    });
     return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId, carregar]);
+  }, [subscribe, unsubscribe, instanceId, operadorId, inicioMes, fimMes]);
 
   const hoje = getTodayISO();
   const pagos    = acordos.filter(a => a.status === 'pago');

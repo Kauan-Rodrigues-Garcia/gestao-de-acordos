@@ -10,6 +10,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
+const { listasDashboardRef, permissoesDashboardRef } = vi.hoisted(() => ({
+  listasDashboardRef: {
+    current: { setores: [] as { id: string; nome: string }[], equipes: [] as { id: string; nome: string }[] },
+  },
+  permissoesDashboardRef: { current: new Set(['ver_acordos']) },
+}));
+
 // ── Subject under test ──────────────────────────────────────────────────────
 import Dashboard from '../Dashboard';
 
@@ -56,7 +63,7 @@ vi.mock('@/hooks/useCargoPermissoes', () => ({
     permissoes: {},
     todasPermissoes: [],
     loading: false,
-    temPermissao: vi.fn((chave: string) => chave === 'ver_acordos'),
+    temPermissao: vi.fn((chave: string) => permissoesDashboardRef.current.has(chave)),
     isAdmin: false,
     refresh: vi.fn(),
   }),
@@ -94,11 +101,13 @@ vi.mock('@/hooks/useEmpresaTags', () => ({
 // O Dashboard não usa mais `useAnalytics` — as listas de setor/equipe saíram
 // para `useSetoresEquipes`, que não lê acordo nenhum. O painel de métricas, que
 // continua usando `useAnalytics`, já é mockado inteiro logo abaixo.
-const LISTAS_VAZIAS: { id: string; nome: string }[] = [];
 vi.mock('@/hooks/useSetoresEquipes', () => ({
   useSetoresEquipes: () => ({
-    setores: LISTAS_VAZIAS, setorFiltro: null, setSetorFiltro: vi.fn(),
-    equipesDoSetor: LISTAS_VAZIAS, loading: false,
+    setores: listasDashboardRef.current.setores,
+    setorFiltro: null,
+    setSetorFiltro: vi.fn(),
+    equipesDoSetor: listasDashboardRef.current.equipes,
+    loading: false,
   }),
 }));
 
@@ -212,6 +221,8 @@ function renderDashboard() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  listasDashboardRef.current = { setores: [], equipes: [] };
+  permissoesDashboardRef.current = new Set(['ver_acordos']);
 });
 
 describe('Dashboard (smoke)', () => {
@@ -239,5 +250,24 @@ describe('Dashboard (smoke)', () => {
       // For non-PaguePLAY tenants Dashboard renders a "Ver todos os acordos" link
       expect(screen.getByText(/ver todos os acordos/i)).toBeInTheDocument();
     });
+  });
+
+  it('consolida setor e equipe em um único filtro no modelo Visualizar', async () => {
+    permissoesDashboardRef.current = new Set([
+      'ver_acordos', 'ver_acordos_gerais', 'ver_todos_setores',
+      'filtrar_por_setor', 'filtrar_por_equipe', 'filtrar_por_usuario',
+    ]);
+    listasDashboardRef.current = {
+      setores: [{ id: 's1', nome: 'Play 1' }],
+      equipes: [{ id: 'e1', nome: 'Equipe Ana' }],
+    };
+
+    renderDashboard();
+
+    expect(await screen.findByText('Visualizar:')).toBeInTheDocument();
+    expect(screen.getByText('Play 1')).toBeInTheDocument();
+    expect(screen.getByText('Equipe Ana')).toBeInTheDocument();
+    expect(screen.queryByText('Filtrar setor:')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Visualizar:')).toHaveLength(1);
   });
 });

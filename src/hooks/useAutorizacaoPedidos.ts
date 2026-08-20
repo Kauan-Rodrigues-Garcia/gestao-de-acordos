@@ -8,27 +8,17 @@
  *   • quem solicitou recebe o próprio pedido, e é assim que a tela do operador
  *     descobre que foi aprovado sem uma segunda consulta.
  *
- * ## Por que reler em vez de aplicar o evento
- *
- * O payload do Realtime traz a linha crua, e `DELETE` traz só a replica
- * identity. Aplicar patches na lista daria três caminhos para o mesmo estado
- * (insert, update, releitura) e um deles ficaria errado. A tabela é pequena —
- * dezenas de linhas por dia, no máximo — e reler é uma consulta indexada.
- *
- * O debounce existe porque aprovar dispara `UPDATE` no pedido e `INSERT` em
- * `notificacoes` quase juntos; sem ele seriam duas releituras para um evento.
+ * Cada evento reconcilia somente o pedido afetado. Uma releitura completa fica
+ * reservada à reconexão, quando eventos podem ter sido perdidos.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { assinarTabela } from '@/lib/realtime';
 import {
   listarPedidos, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
-
-/** Janela de agrupamento das releituras disparadas pelo realtime. */
-const DEBOUNCE_MS = 250;
 
 export interface EstadoAutorizacoes {
   pedidos: PedidoAutorizacao[];
@@ -43,7 +33,6 @@ export function useAutorizacaoPedidos(ativo: boolean): EstadoAutorizacoes {
   const { empresa } = useEmpresa();
   const [pedidos, setPedidos] = useState<PedidoAutorizacao[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recarregar = useCallback(() => {
     if (!ativo || !empresa?.id) { setPedidos([]); setCarregando(false); return; }
@@ -58,11 +47,6 @@ export function useAutorizacaoPedidos(ativo: boolean): EstadoAutorizacoes {
   useEffect(() => {
     if (!ativo || !empresa?.id || !perfil?.id) return;
 
-    const agendar = () => {
-      if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(recarregar, DEBOUNCE_MS);
-    };
-
     // O tópico leva a empresa porque o filtro leva. Dois tópicos com o mesmo
     // nome e escutas diferentes compartilhariam um canal só — ver `realtime.ts`.
     const desassinar = assinarTabela(
@@ -70,13 +54,26 @@ export function useAutorizacaoPedidos(ativo: boolean): EstadoAutorizacoes {
         topico: `autorizacoes-${empresa.id}`,
         escutas: [{ tabela: 'autorizacoes_pedidos', filtro: `empresa_id=eq.${empresa.id}` }],
       },
-      { onEvento: agendar, onReconectado: recarregar },
+      {
+        onEvento: payload => {
+          const bruto = (payload.eventType === 'DELETE' ? payload.old : payload.new) as unknown as
+            (PedidoAutorizacao & { id?: string }) | null;
+          const id = bruto?.id;
+          if (!id) return;
+          setPedidos(atual => {
+            if (payload.eventType === 'DELETE') return atual.filter(p => p.id !== id);
+            const indice = atual.findIndex(p => p.id === id);
+            if (indice < 0) return [bruto, ...atual];
+            const lista = [...atual];
+            lista[indice] = { ...atual[indice], ...bruto };
+            return lista;
+          });
+        },
+        onReconectado: recarregar,
+      },
     );
 
-    return () => {
-      if (timer.current) clearTimeout(timer.current);
-      desassinar();
-    };
+    return desassinar;
   }, [ativo, empresa?.id, perfil?.id, recarregar]);
 
   /**

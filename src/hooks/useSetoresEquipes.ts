@@ -18,7 +18,7 @@
  * Aqui ficam apenas as duas consultas de LISTA (setores e equipes) e o estado
  * do filtro. Nenhum acordo é lido.
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -26,10 +26,12 @@ import { useCargoPermissoes } from './useCargoPermissoes';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 
 export interface SetorResumo { id: string; nome: string }
+interface EquipeResumo extends SetorResumo { setor_id: string | null }
 
 /** Referência estável para "lista vazia" — `[]` novo a cada chamada faria o
  *  consumidor re-renderizar à toa em todo `useMemo` que dependa da lista. */
 const VAZIO: SetorResumo[] = [];
+const EQUIPES_VAZIAS: EquipeResumo[] = [];
 
 export interface SetoresEquipes {
   /** Setores da empresa — só para quem pode filtrar entre eles. */
@@ -50,7 +52,7 @@ export function useSetoresEquipes(): SetoresEquipes {
   const podeFiltrarEquipe = temPermissao('filtrar_por_equipe');
 
   const [setores, setSetores]               = useState<SetorResumo[]>(VAZIO);
-  const [equipesDoSetor, setEquipesDoSetor] = useState<SetorResumo[]>(VAZIO);
+  const [equipes, setEquipes]               = useState<EquipeResumo[]>(EQUIPES_VAZIAS);
   const [setorFiltro, setSetorFiltro]       = useState<string | null>(null);
   const [loading, setLoading]               = useState(true);
 
@@ -81,12 +83,12 @@ export function useSetoresEquipes(): SetoresEquipes {
 
       // Equipes: do próprio setor, ou da empresa toda com 'ver_todos_setores'.
       if (podeFiltrarEquipe && (setorId || verTodosSetores)) {
-        let q = supabase.from('equipes').select('id, nome').eq('empresa_id', empresaId);
+        let q = supabase.from('equipes').select('id, nome, setor_id').eq('empresa_id', empresaId);
         if (!verTodosSetores && setorId) q = q.eq('setor_id', setorId);
         const { data } = await q.order('nome');
-        setEquipesDoSetor((data as SetorResumo[]) ?? []);
+        setEquipes((data as EquipeResumo[]) ?? []);
       } else {
-        setEquipesDoSetor(VAZIO);
+        setEquipes(EQUIPES_VAZIAS);
       }
     } catch (err) {
       console.warn('[useSetoresEquipes] erro ao carregar listas:', err);
@@ -96,6 +98,13 @@ export function useSetoresEquipes(): SetoresEquipes {
   }, [cargo, setorId, empresaId, verTodosSetores, podeFiltrarSetor, podeFiltrarEquipe]);
 
   useEffect(() => { void carregar(); }, [carregar]);
+
+  const equipesDoSetor = useMemo<SetorResumo[]>(
+    () => setorFiltro
+      ? equipes.filter(e => e.setor_id === setorFiltro)
+      : equipes,
+    [equipes, setorFiltro],
+  );
 
   return { setores, setorFiltro, setSetorFiltro, equipesDoSetor, loading };
 }

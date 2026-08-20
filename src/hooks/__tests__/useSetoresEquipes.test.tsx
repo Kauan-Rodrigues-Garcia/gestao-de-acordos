@@ -12,7 +12,7 @@
  * heap out of memory". Não é um caso hipotético: aconteceu.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 
 const { perfilRef, empresaRef, permissaoRef, fromSpy } = vi.hoisted(() => ({
   perfilRef:    { current: { perfil: 'lider', setor_id: 'setor-1' } as Record<string, unknown> | null },
@@ -63,7 +63,7 @@ beforeEach(() => {
   fromSpy.mockReset();
   fromSpy.mockImplementation((tabela: string) =>
     construtor(tabela === 'equipes'
-      ? [{ id: 'eq-1', nome: 'Equipe A' }]
+      ? [{ id: 'eq-1', nome: 'Equipe A', setor_id: 'setor-1' }]
       : [{ id: 's-1', nome: 'Setor 1' }]));
 });
 
@@ -112,6 +112,28 @@ describe('useSetoresEquipes — o que cada cargo enxerga', () => {
 
     expect(result.current.setores).toHaveLength(1);
     expect(result.current.equipesDoSetor).toHaveLength(1);
+  });
+
+  it('ao selecionar um setor mantém somente as equipes daquele setor', async () => {
+    permissaoRef.current = true;
+    fromSpy.mockImplementation((tabela: string) => construtor(
+      tabela === 'equipes'
+        ? [
+            { id: 'eq-1', nome: 'Equipe A', setor_id: 's-1' },
+            { id: 'eq-2', nome: 'Equipe B', setor_id: 's-2' },
+          ]
+        : [
+            { id: 's-1', nome: 'Setor 1' },
+            { id: 's-2', nome: 'Setor 2' },
+          ],
+    ));
+
+    const { result } = renderHook(() => useSetoresEquipes());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.equipesDoSetor).toHaveLength(2);
+
+    act(() => result.current.setSetorFiltro('s-2'));
+    expect(result.current.equipesDoSetor).toEqual([{ id: 'eq-2', nome: 'Equipe B', setor_id: 's-2' }]);
   });
 
   it('administrador recebe os setores e nenhuma equipe', async () => {

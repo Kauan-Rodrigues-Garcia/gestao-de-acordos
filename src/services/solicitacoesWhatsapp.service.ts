@@ -268,6 +268,21 @@ export function inicioDoHistorico(dias: number, agora = Date.now()): string {
   return new Date(agora - dias * 86_400_000).toISOString().slice(0, 10);
 }
 
+/** Anexa nome/foto a uma única linha recebida pelo realtime. */
+export async function enriquecerSolicitacao(
+  empresaId: string,
+  solicitacao: SolicitacaoWhatsapp,
+): Promise<SolicitacaoWhatsapp> {
+  const pessoas = await buscarDiretorio(empresaId);
+  return {
+    ...solicitacao,
+    solicitante: pessoas.get(solicitacao.solicitante_id) ?? null,
+    responsavel: solicitacao.responsavel_id
+      ? pessoas.get(solicitacao.responsavel_id) ?? null
+      : null,
+  };
+}
+
 /**
  * Lista as solicitações visíveis para o usuário atual.
  *

@@ -474,7 +474,7 @@ describe('RealtimeAcordosProvider', () => {
       const event: AcordoRealtimeEvent = handler.mock.calls[0][0];
       expect(event.eventType).toBe('UPDATE');
       expect(event.newRecord).toMatchObject({ valor: 7777 });
-      expect(event.oldRecord).toBeUndefined();
+      expect(event.oldRecord).toMatchObject({ id: mockAcordo.id, valor: mockAcordo.valor });
     });
 
     it('NÃO faz query no banco para evento UPDATE', async () => {
@@ -500,14 +500,16 @@ describe('RealtimeAcordosProvider', () => {
 
       await simulateEvent({
         eventType: 'DELETE',
-        old: { id: 'acordo-deletado-42' },
+        old: { id: 'acordo-deletado-42', valor: 320, vencimento: '2026-08-20' },
         new: {},
       });
 
       expect(handler).toHaveBeenCalledTimes(1);
       const event: AcordoRealtimeEvent = handler.mock.calls[0][0];
       expect(event.eventType).toBe('DELETE');
-      expect(event.oldRecord).toEqual({ id: 'acordo-deletado-42' });
+      expect(event.oldRecord).toEqual({
+        id: 'acordo-deletado-42', valor: 320, vencimento: '2026-08-20',
+      });
       expect(event.newRecord).toBeUndefined();
     });
 

@@ -1,6 +1,8 @@
 -- Permissões 3.0: a matriz passa a ser a fonte de verdade de navegação,
 -- ações e dados. Não existe bypass por cargo.
 
+BEGIN;
+
 CREATE OR REPLACE FUNCTION public.fn_permissoes_catalogo()
 RETURNS TABLE(chave TEXT, tenants TEXT[], padrao TEXT[], explicita BOOLEAN)
 LANGUAGE sql IMMUTABLE SET search_path TO 'public'
@@ -219,12 +221,12 @@ CREATE OR REPLACE FUNCTION public.fn_user_acesso_multiempresa()
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
 AS $function$ SELECT public.fn_tem_permissao('ver_multiempresa',NULL); $function$;
 
-CREATE OR REPLACE FUNCTION public.fn_can_access_empresa(p_empresa_id UUID)
+CREATE OR REPLACE FUNCTION public.fn_can_access_empresa(target_empresa_id UUID)
 RETURNS BOOLEAN LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
 AS $function$
   SELECT EXISTS (
     SELECT 1 FROM public.perfis p WHERE p.id=auth.uid()
-      AND (p.empresa_id=p_empresa_id OR public.fn_tem_permissao('ver_multiempresa',p.empresa_id))
+      AND (p.empresa_id=target_empresa_id OR public.fn_tem_permissao('ver_multiempresa',p.empresa_id))
   );
 $function$;
 
@@ -396,11 +398,11 @@ CREATE POLICY permissoes3_lixeira_delete_gate ON public.lixeira_acordos AS RESTR
   public.fn_tem_permissao('restaurar_lixeira',empresa_id) OR public.fn_tem_permissao('esvaziar_lixeira',empresa_id)
 );
 
-CREATE OR REPLACE FUNCTION public.fn_ouvidoria_nivel(p_empresa_id UUID)
+CREATE OR REPLACE FUNCTION public.fn_ouvidoria_nivel(target_empresa_id UUID)
 RETURNS TEXT LANGUAGE sql STABLE SECURITY DEFINER SET search_path TO 'public'
 AS $function$
-  SELECT CASE WHEN public.fn_tem_permissao('editar_ouvidoria',p_empresa_id) THEN 'editar'
-              WHEN public.fn_tem_permissao('ver_ouvidoria',p_empresa_id) THEN 'ver'
+  SELECT CASE WHEN public.fn_tem_permissao('editar_ouvidoria',target_empresa_id) THEN 'editar'
+              WHEN public.fn_tem_permissao('ver_ouvidoria',target_empresa_id) THEN 'ver'
               ELSE NULL END;
 $function$;
 
@@ -584,3 +586,5 @@ DO $block$ DECLARE v_faltando TEXT; BEGIN
    WHERE (c.tenants IS NULL OR e.slug=ANY(c.tenants)) AND NOT (cp.permissoes ? c.chave);
   IF v_faltando IS NOT NULL THEN RAISE EXCEPTION 'Permissões ausentes: %',v_faltando; END IF;
 END $block$;
+
+COMMIT;

@@ -36,9 +36,9 @@ export function useAnalitico(options: UseAnaliticoOptions) {
 
   const isLiderMais = temPermissao('ver_operadores') || temPermissao('ver_acordos_gerais');
 
-  const fetchDados = useCallback(async () => {
+  const fetchDados = useCallback(async (silencioso = false) => {
     if (!empresa?.id || !perfil?.id) return;
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     setError(null);
 
     let operadorId: string | null | undefined = undefined;
@@ -120,11 +120,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
                 duration: 4000,
               });
             }
-            void fetchRef.current();
+            void fetchRef.current(true);
           }, 1500);
         },
         // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(); },
+        onReconectado: () => { void fetchRef.current(true); },
       },
     );
   }, [empresa?.id, options.mes]);

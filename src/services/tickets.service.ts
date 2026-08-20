@@ -138,7 +138,11 @@ export async function listarMensagens(ticketId: string): Promise<MensagemTicket[
     .order('criado_em', { ascending: true });
 
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(l => ({
+  return (data as Record<string, unknown>[]).map(paraMensagemTicket);
+}
+
+export function paraMensagemTicket(l: Record<string, unknown>): MensagemTicket {
+  return {
     id:        String(l.id),
     ticketId:  String(l.ticket_id),
     autorId:   (l.autor_id as string | null) ?? null,
@@ -147,7 +151,7 @@ export async function listarMensagens(ticketId: string): Promise<MensagemTicket[
     texto:     (l.texto as string | null) ?? null,
     anexos:    Array.isArray(l.anexos) ? l.anexos as AnexoTicket[] : [],
     criadoEm:  String(l.criado_em),
-  }));
+  };
 }
 
 export async function listarEventos(ticketId: string): Promise<EventoTicket[]> {
@@ -157,14 +161,18 @@ export async function listarEventos(ticketId: string): Promise<EventoTicket[]> {
     .order('criado_em', { ascending: true });
 
   if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(l => ({
+  return (data as Record<string, unknown>[]).map(paraEventoTicket);
+}
+
+export function paraEventoTicket(l: Record<string, unknown>): EventoTicket {
+  return {
     id:        String(l.id),
     tipo:      String(l.tipo),
     autorNome: (l.autor_nome as string | null) ?? null,
     de:        (l.de as string | null) ?? null,
     para:      (l.para as string | null) ?? null,
     criadoEm:  String(l.criado_em),
-  }));
+  };
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
@@ -358,7 +366,7 @@ export async function definirLiberacaoDaAba(
 
 // ── Conversões e erros ───────────────────────────────────────────────────────
 
-function paraTicket(l: Record<string, unknown>): Ticket {
+export function paraTicket(l: Record<string, unknown>): Ticket {
   return {
     id:              String(l.id),
     numero:          Number(l.numero) || 0,

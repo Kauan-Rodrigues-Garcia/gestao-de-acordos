@@ -182,11 +182,12 @@ describe('fetchAcordos', () => {
   });
 
   it('aplica filtro apenas_hoje usando a data de hoje (getTodayISO)', async () => {
-    resultsByTable['acordos_deduplicados'] = [{ data: [], error: null, count: 0 }];
+    resultsByTable.acordos = [{ data: [], error: null, count: 0 }];
 
     await fetchAcordos({ apenas_hoje: true });
 
     const c = calls[0];
+    expect(c.table).toBe('acordos');
     const eqHoje = c.filters.find(f => f[1] === 'vencimento');
     expect(eqHoje?.[0]).toBe('eq');
     // Padrão ISO yyyy-mm-dd.

@@ -41,6 +41,8 @@ export type { FiltrosAcordo };
 export type { RealtimeStatus };
 
 interface UseAcordosOptions extends FiltrosAcordo {
+  /** Desabilita também a consulta inicial desta instância. */
+  enabled?: boolean;
   /**
    * Desabilita o Realtime nesta instância.
    * Útil para listas secundárias/somente-leitura que não precisam de updates ao vivo.
@@ -118,18 +120,18 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     const {
       status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
-      apenas_hoje, page, perPage, enableRealtime, prioritize_today,
+      apenas_hoje, page, perPage, enabled, enableRealtime, prioritize_today,
     } = filtros;
     return JSON.stringify({
       status, tipo, operador_id, setor_id, equipe_id, tag_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
-      apenas_hoje, page, perPage, enableRealtime, prioritize_today,
+      apenas_hoje, page, perPage, enabled, enableRealtime, prioritize_today,
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
     filtros?.equipe_id, filtros?.tag_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
     filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
-    filtros?.perPage, filtros?.enableRealtime, filtros?.prioritize_today,
+    filtros?.perPage, filtros?.enabled, filtros?.enableRealtime, filtros?.prioritize_today,
   ]);
 
   const queryKey = useMemo(
@@ -145,7 +147,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
         ...filtros,
         empresa_id: filtros?.empresa_id ?? empresaId,
       }),
-    enabled: !!perfil && !!empresaId,
+    enabled: filtros?.enabled !== false && !!perfil && !!empresaId,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
   });
@@ -153,7 +155,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // ── Resolver operadores da equipe (para filtro de realtime) ───────────────
   const equipeIdsRef = useRef<string[] | null>(null);
   useEffect(() => {
-    if (!filtros?.equipe_id) { equipeIdsRef.current = null; return; }
+    if (filtros?.enabled === false || !filtros?.equipe_id) { equipeIdsRef.current = null; return; }
     const eId        = filtros.equipe_id;
     const eEmpresaId = filtros.empresa_id ?? empresa?.id ?? perfil?.empresa_id;
     let q = supabase.from('perfis').select('id').eq('equipe_id', eId);
@@ -161,7 +163,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     q.then(({ data: rows }) => {
       equipeIdsRef.current = ((rows as { id: string }[]) ?? []).map(m => m.id);
     });
-  }, [filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);
+  }, [filtros?.enabled, filtros?.equipe_id, filtros?.empresa_id, empresa?.id, perfil?.empresa_id]);
 
   // filtrosRef estável para o handler do realtime (evita re-subscribe)
   const filtrosRef = useRef<UseAcordosOptions | undefined>(filtros);
@@ -199,7 +201,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // ── Subscribe no canal central ────────────────────────────────────────────
   const { status: realtimeStatus, subscribe, unsubscribe } = useRealtimeAcordos();
   const instanceId    = useRef(`useAcordos-${Math.random().toString(36).slice(2, 10)}`).current;
-  const enableRealtime = filtros?.enableRealtime !== false;
+  const enableRealtime = filtros?.enabled !== false && filtros?.enableRealtime !== false;
 
   useEffect(() => {
     if (!enableRealtime) return;
@@ -268,7 +270,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // vazia — e a tela de Acordos renderiza `{loading ? <TableSkeleton/> : tabela}`,
   // ou seja, piscava "nenhum acordo" antes de buscar. Do ponto de vista de quem
   // olha, ainda está carregando.
-  const aguardandoSessao = (!perfil || !empresaId) && !data;
+  const aguardandoSessao = filtros?.enabled !== false && (!perfil || !empresaId) && !data;
 
   return {
     acordos:    data?.data   ?? [],
