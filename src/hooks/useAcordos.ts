@@ -118,17 +118,22 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
       status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
+      status_exceto, tag_ids,
     } = filtros;
     return JSON.stringify({
       status, tipo, operador_id, setor_id, equipe_id, empresa_id,
       vencimento, data_inicio, data_fim, busca,
       apenas_hoje, page, perPage, enableRealtime, prioritize_today,
+      status_exceto, tag_ids,
     });
   }, [
     filtros?.status, filtros?.tipo, filtros?.operador_id, filtros?.setor_id,
     filtros?.equipe_id, filtros?.empresa_id, filtros?.vencimento, filtros?.data_inicio,
     filtros?.data_fim, filtros?.busca, filtros?.apenas_hoje, filtros?.page,
     filtros?.perPage, filtros?.enableRealtime, filtros?.prioritize_today,
+    // `join` porque array literal quebra a comparacao referencial das deps.
+    filtros?.status_exceto?.join(','),
+    filtros?.tag_ids?.join(','),
   ]);
 
   const queryKey = useMemo(

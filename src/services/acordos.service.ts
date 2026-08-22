@@ -11,6 +11,19 @@ import { mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia'
 
 export interface FiltrosAcordo {
   status?: string;
+  /**
+   * Status a EXCLUIR, aplicado no servidor.
+   *
+   * A aba Verificar precisa de "tudo que ainda nao foi resolvido", que e o
+   * complemento de uma lista de status — nao da para expressar com `status`,
+   * que e igualdade. Antes isso era feito filtrando o array no cliente, e o
+   * resultado era uma pagina quase vazia: o servidor pagina ANTES do filtro,
+   * entao devolvia 20 acordos majoritariamente pagos e o cliente jogava fora
+   * quase todos. Ver o comentario na aba Verificar em `pages/Acordos`.
+   */
+  status_exceto?: string[];
+  /** Mostra so acordos que carregam ao menos uma destas tags. */
+  tag_ids?: string[];
   tipo?: string;
   operador_id?: string;
   setor_id?: string;
@@ -58,6 +71,48 @@ async function resolverOperadoresDaEquipe(
   return [...ids];
 }
 
+/**
+ * As tags que realmente aparecem em algum acordo que esta pessoa enxerga.
+ *
+ * O filtro de tag nao deve oferecer uma tag da empresa que a pessoa nunca vai
+ * encontrar na lista dela — escolher e receber zero resultados parece bug.
+ *
+ * Recebe SO os filtros de escopo (empresa, operador, equipe, setor, intervalo),
+ * nunca busca/status/aba: as opcoes precisam ficar paradas enquanto a pessoa
+ * digita, senao o proprio filtro se reescreve embaixo do cursor.
+ *
+ * Traz uma coluna so, e apenas das linhas que tem alguma tag. Se um dia o
+ * volume de acordos etiquetados crescer a ponto de pesar, a substituta natural
+ * e uma RPC com `SELECT DISTINCT unnest(tag_ids)` — PostgREST nao expressa isso
+ * sozinho.
+ */
+export async function fetchTagsEmUso(
+  filtros?: Pick<FiltrosAcordo, 'empresa_id' | 'operador_id' | 'setor_id' | 'equipe_id' | 'data_inicio' | 'data_fim'>,
+): Promise<string[]> {
+  let membrosEquipe: string[] | null = null;
+  if (filtros?.equipe_id) {
+    membrosEquipe = await resolverOperadoresDaEquipe(filtros.equipe_id, filtros.empresa_id);
+    if (membrosEquipe.length === 0) return [];
+  }
+
+  let q = supabase.from('acordos').select('tag_ids').not('tag_ids', 'eq', '{}');
+  if (filtros?.empresa_id)  q = q.eq('empresa_id', filtros.empresa_id);
+  if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
+  if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
+  if (membrosEquipe)        q = q.in('operador_id', membrosEquipe);
+  if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
+  if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
+
+  const { data, error } = await q;
+  if (error) throw error;
+
+  const vistas = new Set<string>();
+  for (const linha of (data ?? []) as { tag_ids: string[] | null }[]) {
+    for (const id of linha.tag_ids ?? []) vistas.add(id);
+  }
+  return [...vistas];
+}
+
 /** Busca acordos com filtros opcionais e suporte a paginação server-side */
 export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Acordo[], count: number }> {
   // Quando há filtro de intervalo de mês usa a tabela direta (sem dedup).
@@ -88,6 +143,12 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const applyFilters = (q: any): any => {
     if (filtros?.status)      q = q.eq('status', filtros.status);
+    // Dentro de applyFilters de proposito: assim vale para as DUAS queries do
+    // caminho prioritize_today e tambem para os counts, mantendo a paginacao
+    // coerente com o que a tela mostra.
+    if (filtros?.status_exceto?.length) {
+      q = q.not('status', 'in', `(${filtros.status_exceto.join(',')})`);
+    }
     if (filtros?.tipo)        q = q.eq('tipo', filtros.tipo);
     if (filtros?.operador_id) q = q.eq('operador_id', filtros.operador_id);
     if (filtros?.setor_id)    q = q.eq('setor_id', filtros.setor_id);
@@ -97,6 +158,9 @@ export async function fetchAcordos(filtros?: FiltrosAcordo): Promise<{ data: Aco
     if (filtros?.data_inicio) q = q.gte('vencimento', filtros.data_inicio);
     if (filtros?.data_fim)    q = q.lte('vencimento', filtros.data_fim);
     if (filtros?.estado_uf) q = q.eq('estado_uf', filtros.estado_uf);
+    // `overlaps` = interseccao nao vazia entre o array da coluna e o filtro,
+    // que e o que "tem esta tag" significa num campo multivalorado.
+    if (filtros?.tag_ids?.length) q = q.overlaps('tag_ids', filtros.tag_ids);
     if (filtros?.busca) {
       q = q.or(
         `nome_cliente.ilike.%${filtros.busca}%,nr_cliente.ilike.%${filtros.busca}%,whatsapp.ilike.%${filtros.busca}%,instituicao.ilike.%${filtros.busca}%`

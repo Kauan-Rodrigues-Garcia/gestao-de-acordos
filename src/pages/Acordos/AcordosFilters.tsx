@@ -8,6 +8,7 @@ import {
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import type { VisaoFiltroAcordos } from './helpers';
+import type { AcordoTag } from '@/lib/supabase';
 
 export interface AcordosFiltersProps {
   activeTab: 'analitico' | 'todos' | 'pagos' | 'nao_pagos';
@@ -28,6 +29,10 @@ export interface AcordosFiltersProps {
   filtroOperador: string;
   setFiltroOperador: (v: string) => void;
   filtroVinculo: 'todos' | 'direto' | 'extra';
+  filtroTag: string;
+  setFiltroTag: (v: string) => void;
+  /** Só as tags presentes em algum acordo que esta pessoa enxerga. */
+  tagsDisponiveis: AcordoTag[];
   setFiltroVinculo: (v: 'todos' | 'direto' | 'extra') => void;
   statusLabels: Record<string, string>;
   tipoLabels: Record<string, string>;
@@ -51,6 +56,7 @@ export function AcordosFilters({
   busca, setBusca, filtroStatus, setFiltroStatus, filtroTipo, setFiltroTipo,
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
   filtroVinculo, setFiltroVinculo,
+  filtroTag, setFiltroTag, tagsDisponiveis,
   statusLabels, tipoLabels, operadoresMap,
   filtrosAtivosCount, temFiltros, isPP, usuarioTemLogicaDiretoExtra, temPermissao,
   setCurrentPage, limparFiltros,
@@ -200,6 +206,28 @@ export function AcordosFilters({
                 {Object.entries(tipoLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
               </SelectContent>
             </Select>
+            {/* Some quando nenhuma tag aparece no que a pessoa enxerga: um
+                filtro sem opção só ocupa espaço na barra. */}
+            {tagsDisponiveis.length > 0 && (
+              <Select value={filtroTag} onValueChange={v => { setFiltroTag(v); setCurrentPage(1); }}>
+                <SelectTrigger className="w-32 h-8 text-sm"><SelectValue placeholder="Tag" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todas as tags</SelectItem>
+                  {tagsDisponiveis.map(t => (
+                    <SelectItem key={t.id} value={t.id}>
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: t.cor }}
+                          aria-hidden
+                        />
+                        {t.nome}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
             {usuarioTemLogicaDiretoExtra && (
               <Select
                 value={filtroVinculo}

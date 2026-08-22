@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresaTags } from '@/hooks/useEmpresaTags';
+import { useTagsEmUso } from '@/hooks/useTagsEmUso';
 import { supabase, Acordo } from '@/lib/supabase';
 import { ModalConfirmarPagamento } from '@/components/ModalConfirmarPagamento';
 import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagendar';
@@ -42,6 +43,15 @@ import { PixAutomatico } from './PixAutomatico';
 import { AcordosTableBody } from './AcordosTableBody';
 import { AcordosModals } from './AcordosModals';
 
+/**
+ * A aba Verificar mostra o que ainda NAO foi resolvido: nem pago, nem nao_pago.
+ *
+ * Modulo, e nao dentro do componente, por dois motivos: a chamada de
+ * `useAcordos` acontece antes do ponto onde a constante morava, e um array
+ * literal novo a cada render invalidaria a chave do React Query sem parar.
+ */
+const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
+
 export default function Acordos() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
@@ -57,6 +67,7 @@ export default function Acordos() {
   const [filtroTipo, setFiltroTipo]     = useState(searchParams.get('tipo') || '');
   const [filtroData, setFiltroData]     = useState(searchParams.get('data') || '');
   const [filtroOperador, setFiltroOperador] = useState(searchParams.get('operador') || '');
+  const [filtroTag, setFiltroTag]       = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
   const isLider = isPerfilLider(perfil?.perfil ?? '');
@@ -175,11 +186,12 @@ export default function Acordos() {
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
       if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
+      if (filtroTag && filtroTag !== 'all') params.set('tag', filtroTag); else params.delete('tag');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, filtroTag, currentPage, setSearchParams]);
 
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus
@@ -209,8 +221,32 @@ export default function Acordos() {
     // com o filtro de mês do BookPlay empurrando-os para páginas tardias na
     // ordenação por vencimento). Ignorado quando há filtro de data exata.
     prioritize_today: true,
+    // Verificar exclui pago/nao_pago NO SERVIDOR. Feito no cliente, a pagina
+    // chegava com 20 acordos majoritariamente resolvidos e sobravam uns poucos
+    // — quase sempre os de hoje, que o prioritize_today poe no topo. Era esse o
+    // bug de "so aparecem alguns que vencem hoje" na BookPlay, onde o recorte
+    // por mes ainda concentra mais acordos ja resolvidos.
+    status_exceto: activeTab === 'analitico' ? STATUSES_ANALITICO_EXCLUIDOS : undefined,
+    tag_ids:      filtroTag && filtroTag !== 'all' ? [filtroTag] : undefined,
     page:         currentPage,
     perPage:      PER_PAGE,
+  });
+
+  /*
+   * As opções do filtro de tag saem do MESMO escopo da lista — empresa,
+   * operador, equipe e o recorte de mês da BookPlay —, mas sem busca, status,
+   * aba ou a própria tag escolhida. Incluir esses faria as opções se
+   * reescreverem a cada tecla digitada, e escolher uma tag apagaria as outras
+   * da lista, deixando o filtro sem volta.
+   */
+  const { tags: tagsDisponiveis } = useTagsEmUso({
+    empresa_id:  empresa?.id,
+    operador_id: (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
+      ? perfil?.id
+      : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
+    equipe_id:   equipeFiltroAtivo ?? undefined,
+    data_inicio: filtroData ? undefined : bpMesInicio,
+    data_fim:    filtroData ? undefined : bpMesFim,
   });
 
   async function findAcordoPage(acordoId: string) {
@@ -303,12 +339,13 @@ export default function Acordos() {
     filtroTipo   && filtroTipo   !== 'all' ? filtroTipo   : '',
     filtroVinculo !== 'todos' ? filtroVinculo : '',
     filtroOperador && filtroOperador !== 'all' ? filtroOperador : '',
+    filtroTag && filtroTag !== 'all' ? filtroTag : '',
   ].filter(Boolean).length;
 
 
   function limparFiltros() {
     setBusca(''); setFiltroStatus(''); setFiltroTipo('');
-    setFiltroData(''); setFiltroOperador(''); setCurrentPage(1);
+    setFiltroData(''); setFiltroOperador(''); setFiltroTag(''); setCurrentPage(1);
   }
 
   function toggleSelecionado(id: string) {
@@ -572,7 +609,6 @@ export default function Acordos() {
 
   const acordosHoje = useMemo(() => acordos.filter(a => a.vencimento === hoje), [acordos, hoje]);
 
-  const STATUSES_ANALITICO_EXCLUIDOS = ['pago', 'nao_pago'];
   const visaoAmpla = temVisaoAmpla(perfil?.perfil);
 
   const acordosParaExibir = useMemo<AcordoComVinculo[]>(() => {
@@ -583,9 +619,10 @@ export default function Acordos() {
     if (visaoAmpla && filtroVinculo === 'todos') {
       base = deduplicarVinculados(base, isPP);
     }
-    const filtrada = activeTab === 'analitico'
-      ? base.filter(a => !STATUSES_ANALITICO_EXCLUIDOS.includes(a.status))
-      : base;
+    // Sem recorte por status aqui: quem exclui pago/nao_pago na aba Verificar e
+    // o servidor, via `status_exceto`. Refiltrar aqui so mascararia divergencia
+    // entre o que a query contou e o que a tela mostra.
+    const filtrada = base;
     // Prioriza SEMPRE (todas as abas) os acordos que vencem hoje no topo; entre
     // os de hoje, os já pagos vão por último — pendentes de hoje ficam primeiro.
     return [...filtrada].sort((a, b) => {
@@ -607,7 +644,7 @@ export default function Acordos() {
       if (!aHoje && bHoje) return 1;
       return 0;
     });
-  }, [acordos, activeTab, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
+  }, [acordos, visaoAmpla, usuarioTemLogicaDiretoExtra, filtroVinculo, isPP, hoje]);
 
   if (isPP) return <Navigate to="/" replace />;
 
@@ -749,6 +786,8 @@ export default function Acordos() {
           filtroData={filtroData} setFiltroData={setFiltroData}
           filtroOperador={filtroOperador} setFiltroOperador={setFiltroOperador}
           filtroVinculo={filtroVinculo} setFiltroVinculo={setFiltroVinculo}
+          filtroTag={filtroTag || 'all'} setFiltroTag={setFiltroTag}
+          tagsDisponiveis={tagsDisponiveis}
           statusLabels={statusLabels} tipoLabels={tipoLabels} operadoresMap={operadoresMap}
           filtrosAtivosCount={filtrosAtivosCount} temFiltros={temFiltros}
           isPP={isPP} usuarioTemLogicaDiretoExtra={usuarioTemLogicaDiretoExtra}
