@@ -14,7 +14,8 @@
  * do mesmo tamanho era o defeito visual da versão 1.0.
  */
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 import { TrendingUp, TrendingDown, Minus, Target } from 'lucide-react';
 import { formatCurrency } from '@/lib/index';
 import { rotuloUnidade, type UnidadeValor } from '@/lib/unidadeValor';
@@ -73,7 +74,7 @@ interface FaixaDinheiroProps {
 export function FaixaDinheiro({
   recebido, recebidoOposto, meta, vsOntem, vsMedia, unidade, onUnidade,
 }: FaixaDinheiroProps) {
-  const semMovimento = useReducedMotion();
+  const { semMovimento } = useMovimentoPreferido();
   const pctBarra = meta ? Math.min(100, Math.max(0, meta.percentual)) : 0;
 
   return (

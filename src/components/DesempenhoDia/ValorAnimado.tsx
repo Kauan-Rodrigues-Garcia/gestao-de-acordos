@@ -21,12 +21,15 @@
  * Curta de propósito (380ms): passar disso vira espera, e o painel existe para
  * responder num relance.
  *
- * Com `prefers-reduced-motion` o valor aparece direto. Movimento de números é um
- * gatilho conhecido de desconforto vestibular, e a informação não depende dele.
+ * Movimento de números é gatilho conhecido de desconforto vestibular, então
+ * quem PEDE menos movimento recebe o valor direto, sem contagem. Mas quem pede
+ * é a pessoa, não a máquina: ver `hooks/useMovimentoPreferido.ts`. Obedecer a
+ * media query crua deixava a contagem morta em PC com modo de desempenho
+ * ligado, onde ninguém tinha configurado acessibilidade nenhuma.
  */
 
 import { useEffect, useRef } from 'react';
-import { useReducedMotion } from 'framer-motion';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 
 const DURACAO = 380;
 
@@ -43,7 +46,7 @@ interface ValorAnimadoProps {
 }
 
 export function ValorAnimado({ valor, formatar, className }: ValorAnimadoProps) {
-  const semMovimento = useReducedMotion();
+  const { semMovimento } = useMovimentoPreferido();
   const no = useRef<HTMLSpanElement>(null);
   const anterior = useRef(valor);
   const quadro = useRef<number | null>(null);

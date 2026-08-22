@@ -13,7 +13,8 @@
  * conferido" não é resultado, é trabalho pendente de outra pessoa.
  */
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 import { formatCurrency } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import type { BarraEstados as Estados } from '@/lib/desempenhoDia';
@@ -38,7 +39,7 @@ interface BarraEstadosProps {
 }
 
 export function BarraEstados({ estados, valorPago }: BarraEstadosProps) {
-  const semMovimento = useReducedMotion();
+  const { semMovimento } = useMovimentoPreferido();
   const { total } = estados;
 
   if (total === 0) {

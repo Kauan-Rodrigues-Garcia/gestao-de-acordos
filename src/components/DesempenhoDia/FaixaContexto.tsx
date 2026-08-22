@@ -13,7 +13,8 @@
  * que o olho aprendia a pular, e que empurrava o resto para baixo da rolagem.
  */
 
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion } from 'framer-motion';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 import { Zap, Tag, Link2 } from 'lucide-react';
 import { formatCurrency } from '@/lib/index';
 import type { FatiaTag, ResumoPixDia } from '@/lib/desempenhoDia';
@@ -27,7 +28,7 @@ interface FaixaContextoProps {
 }
 
 export function FaixaContexto({ diretoExtra, pix, tags }: FaixaContextoProps) {
-  const semMovimento = useReducedMotion();
+  const { semMovimento } = useMovimentoPreferido();
 
   const temDiretoExtra = diretoExtra !== null && (diretoExtra.direto > 0 || diretoExtra.extra > 0);
   const temPix = pix !== null && (pix.aprovados > 0 || pix.pendentes > 0);

@@ -25,7 +25,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 import {
   BarChart2, RefreshCw, X, Users, ChevronLeft, ChevronRight, CalendarDays,
 } from 'lucide-react';
@@ -64,7 +65,7 @@ export function DesempenhoDia({ aberto, onClose }: DesempenhoDiaProps) {
   const { tags } = useEmpresaTags();
   const tenant = useTenant();
   const { isAtivoParaUsuario } = useDiretoExtraConfig();
-  const semMovimento = useReducedMotion();
+  const { semMovimento } = useMovimentoPreferido();
 
   const [dia, setDia] = useState(getTodayISO());
   const [equipeId, setEquipeId] = useState<string | null>(null);
