@@ -387,6 +387,33 @@ nunca consultadas no código). Quando passaram a ser fiscalizadas, o padrão
 > mexa nos **dois lados na mesma migration** — o teste
 > `src/lib/__tests__/logs-permissao-vs-rls.test.ts` quebra se só um mudar.
 
+### 2.4-b Regra permanente: toda ferramenta nova passa pelo catálogo
+
+> 📌 **Vale para toda atualização, sem exceção.** Ao criar uma aba, aba interna,
+> função, filtro, ação ou qualquer ferramenta nova, é **obrigatório** decidir
+> — e registrar na própria PR — se ela precisa de permissão nova nas
+> Configurações.
+
+Checklist antes de dar a tarefa por concluída:
+
+1. A ferramenta nova aparece para todo mundo hoje? Se sim, isso é intencional?
+2. Se precisa de permissão, a chave foi criada nos **dois** catálogos
+   (`src/lib/permissoes-catalogo.ts` e `fn_permissoes_catalogo()`)? Os testes de
+   contrato quebram a CI se divergirem.
+3. A chave nova nasce com qual padrão por cargo? O padrão **não pode** conceder
+   acesso que ninguém tinha antes nem remover acesso que já existia.
+4. A ferramenta é filha de outra aba? Então desligar a aba-mãe precisa torná-la
+   inefetiva — sem exceção "funcionando por fora".
+5. A permissão está de fato **consultada no código**, e não só declarada na
+   tela? Chave declarada e nunca lida vira permissão morta — foi exatamente o
+   que gerou a lista `PERMISSOES_LEGADAS_PADRAO_TRUE` de §2.4.
+6. Se a ferramenta lê dados, o escopo dela é o **da própria aba** e não herdado
+   de outra (§2.4-c, quando a estrutura por aba entrar).
+
+Permissão esquecida não aparece como erro: aparece como aba vazia, filtro sem
+opção, ou gente vendo dado que não devia. Nenhum desses casos quebra teste
+sozinho.
+
 ### 2.5 Proteção de rotas
 
 `src/components/ProtectedRoute.tsx` combina as duas camadas. Com
