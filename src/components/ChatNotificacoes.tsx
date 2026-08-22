@@ -327,6 +327,12 @@ export function ChatNotificacoes() {
   useEffect(() => {
     if (!aberto) return;
     function handleClick(e: MouseEvent) {
+      // O sino do header fica FORA deste container, mas ele e o botao de
+      // alternar — nao e "clique fora". Sem esta guarda, o clique com o
+      // painel aberto fechava aqui no mousedown e o click seguinte reabria
+      // no gatilho oculto, porque la o toggle ja lia `aberto === false`.
+      // Na tela, o painel simplesmente nao fechava.
+      if ((e.target as Element | null)?.closest?.('[data-notif-sino]')) return;
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
         setAberto(false);
         setDetalhe(null);

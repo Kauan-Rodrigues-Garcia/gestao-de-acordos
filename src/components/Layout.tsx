@@ -617,6 +617,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               className="w-8 h-8 text-muted-foreground hover:text-foreground relative"
               title={naoLidas > 0 ? `${naoLidas} notificação${naoLidas > 1 ? 'ões' : ''} não lida${naoLidas > 1 ? 's' : ''}` : 'Notificações'}
               aria-label={`Notificações${naoLidas > 0 ? ` — ${naoLidas} não lida${naoLidas > 1 ? 's' : ''}` : ''}`}
+              data-notif-sino
               onClick={() => document.querySelector<HTMLButtonElement>('[data-notif-trigger]')?.click()}
             >
               <Bell className={`w-4 h-4 ${animarBadge ? 'animate-sino' : ''}`} />
