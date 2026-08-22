@@ -388,10 +388,49 @@ revisável e reversível sozinho, que era o objetivo declarado.
 | 3b | Dashboard (filtro único; 2 chaves aposentadas) | `2218117` | ✅ produção |
 | 4 | Analítico (escopo + 8 abas internas; encerra `veTodosOsSetores`) | `2b88f00` | ✅ produção |
 | 5a | Acordos (escopo; aposenta `ver_acordos_gerais`) | `0bad254` | ✅ produção |
-| 5b | Pix Automático (escopo + `pix_editar_configuracoes`) | — | ✅ produção |
-| 6 | Usuários, Tickets, Configurações | — | pendente |
-| 7 | RLS: teto elevado ao maior escopo | — | pendente |
-| 8 | Remoção das chaves globais restantes e faxina do JSON | — | pendente |
+| 5b | Pix Automático (escopo + `pix_editar_configuracoes`) | `3bf7585` | ✅ produção |
+| 6a | Painel Diretoria; fim de `ver_todos_setores` | `7dbb711` | ✅ produção |
+| 6b | Usuários | `dcc10f8` | ✅ produção |
+| 7 | RLS de `acordos` lê o mapa, com o teto no lugar | `43a1a63` | ✅ produção |
+| 8 | Faxina das chaves aposentadas | — | ✅ produção |
+
+### 5.2 O que a fase 7 fez, e o que ela deixou para decidir
+
+A policy de `acordos` deixou de decidir por listas de cargo e passou a ler o
+mapa, por `fn_user_escopo_acordos()`. **Ninguém ganhou acesso**: o escopo é
+cortado por `fn_teto_rls_acordos`, e nenhum cargo tem escopo menor que o teto —
+o resultado é idêntico, linha por linha.
+
+O que mudou de verdade: **baixar um escopo no painel agora baixa o acesso no
+banco**, não só na tela.
+
+O teto continua segurando cinco cargos. Levantar cada um é decisão de quem
+responde pelo dado, e o lugar é `fn_teto_rls_acordos` — quatro linhas, feitas
+para serem editadas com nome e data:
+
+| Cargo | Tem hoje | Passaria a ter | Vem de |
+| --- | --- | --- | --- |
+| bookplay/gerencia | setor | todos os setores | Pix |
+| bookplay/ouvidoria | só os próprios | setor | Dashboard, Acordos, Lixeira |
+| pagueplay/elite | só os próprios | setor | Dashboard |
+| pagueplay/gerencia | só os próprios | setor | Dashboard |
+| pagueplay/ouvidoria | só os próprios | setor | Dashboard |
+
+### 5.3 O que ficou de fora, e por quê
+
+- **Tickets** não é governado por permissão: quem vê a aba sai de
+  `useTicketsAcesso` (flag por empresa + cadastro de atendentes + cargo).
+  Chaves ali nasceriam sem consumidor, e o teste de contrato reprova — foi
+  exatamente chave decorativa que gerou o defeito de 15/08.
+- **Configurações** é uma aba única atrás de `ver_configuracoes`, que só o
+  administrador tem.
+- **Ações por aba** (§4.3): as puras renomeações são churn. As que valem são as
+  que SEPARAM um poder que hoje anda junto — `acordos_alterar_status` saindo de
+  `editar_acordos`, e as ações do Pix saindo da lista de cargo
+  (`podeAgirSobreOutros`). Entram quando alguém precisar delas.
+- **O defeito dos KPIs do Dashboard**: quem tem `todos_setores` não estreita os
+  cartões ao escolher "só os meus". Encontrado na fase 6a e não corrigido de
+  propósito — muda número na tela de quem já usa o painel.
 
 O painel de permissões (a antiga fase 3) não precisou de fase própria: ele
 desenha `GRUPOS_PERMISSAO` e o catálogo, então cada aba nova aparece nele

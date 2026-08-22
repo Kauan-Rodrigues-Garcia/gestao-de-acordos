@@ -465,11 +465,28 @@ catálogo nos dois lados, desenho e fases em
 [PERMISSOES-POR-ABA-PROJETO.md](PERMISSOES-POR-ABA-PROJETO.md).
 
 > ⚠️ **O escopo por aba também AMPLIA, e isso tem custo.** Uma política de RLS
-> não sabe de qual aba veio a consulta. Quando a fase 7 levantar o teto, ele
-> subirá para o MAIOR escopo entre as abas daquele cargo — na tela cada aba
-> continua estreitando, mas uma chamada direta à API alcança o teto, não o
-> recorte da aba. Escopo amplo numa aba é decisão sobre o **dado**, não sobre a
-> **tela**.
+> não sabe de qual aba veio a consulta. O teto de `acordos` é o MAIOR escopo
+> entre as abas daquele cargo — na tela cada aba continua estreitando, mas uma
+> chamada direta à API alcança o teto, não o recorte da aba. Escopo amplo numa
+> aba é decisão sobre o **dado**, não sobre a **tela**.
+
+#### O banco lê o mapa desde 2026-08-22
+
+`acordos_select` consulta `fn_user_escopo_acordos()`: o maior escopo entre as
+abas que leem `acordos` (Dashboard, Acordos, Lixeira, Pix, Painel Líder, Painel
+Diretoria), **cortado por `fn_teto_rls_acordos`**.
+
+Duas consequências práticas:
+
+1. **Baixar um escopo no painel baixa o acesso no banco.** Antes as permissões
+   governavam só o que a interface mostrava.
+2. **Subir um escopo não sobe o acesso além do teto.** Levantar o teto é uma
+   edição deliberada de `fn_teto_rls_acordos`, cargo a cargo — não acontece por
+   efeito colateral de mexer no painel.
+
+`analitico_escopo_*` e `usuarios_escopo_*` **não** entram nessa conta: leem
+outras tabelas, com RLS própria. Misturar as famílias daria alcance de acordos
+a quem só precisa do relatório.
 
 ### 2.5 Proteção de rotas
 
