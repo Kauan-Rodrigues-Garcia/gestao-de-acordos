@@ -252,7 +252,11 @@ export default function AdminEquipes() {
   // Permissão configurável para criar/editar/excluir equipes e membros.
   // Admin/super_admin sempre têm (temPermissao retorna true). Padrão = true
   // (espelha o acesso atual); desligar na tela de Cargos passa a restringir.
-  const podeEditarEquipes = temPermissao('editar_equipes');
+  // Uma chave por acao, e nao `editar_equipes` para tudo: criar, excluir e
+  // mexer na composicao eram tres listas de cargo diferentes dentro do RLS.
+  const podeEditarEquipes = temPermissao('equipes_criar_editar');
+  const podeExcluirEquipes = temPermissao('equipes_excluir');
+  const podeGerenciarComposicao = temPermissao('equipes_gerenciar_composicao');
 
   const [setores, setSetores] = useState<Setor[]>([]);
   const [equipes, setEquipes] = useState<Equipe[]>([]);
@@ -542,6 +546,7 @@ export default function AdminEquipes() {
   };
 
   async function handleAdicionarLider(equipe: Equipe, liderId: string) {
+    if (!podeGerenciarComposicao) return;
     if (!empresaId || !liderId) return;
     const criado = await adicionarLiderEquipe(empresaId, equipe.id, liderId, perfil?.id);
     if (!criado) { toast.error('Erro ao adicionar líder.'); return; }
@@ -551,6 +556,7 @@ export default function AdminEquipes() {
   }
 
   async function handleRemoverLider(vinculoId: string) {
+    if (!podeGerenciarComposicao) return;
     const ok = await removerLiderEquipe(vinculoId);
     if (!ok) { toast.error('Erro ao remover líder.'); return; }
     setLideresEq(prev => (prev ?? []).filter(v => v.id !== vinculoId));
@@ -576,6 +582,7 @@ export default function AdminEquipes() {
   // ── Clonar operador para outra equipe ──────────────────────────────────────
 
   async function handleClonarOperador(equipe: Equipe, operadorId: string) {
+    if (!podeGerenciarComposicao) return;
     const operador = resolverOperadorClone(operadorId);
     if (!operador || !empresaId) return;
     const criado = await criarCloneEquipe(empresaId, equipe.id, operadorId, perfil?.id ?? null);
@@ -593,6 +600,7 @@ export default function AdminEquipes() {
   }
 
   async function handleRemoverClone(cloneId: string, nomeOperador: string) {
+    if (!podeGerenciarComposicao) return;
     const ok = await removerCloneEquipe(cloneId);
     if (!ok) { toast.error('Erro ao remover clone.'); return; }
     setClones(prev => (prev ?? []).filter(c => c.id !== cloneId));
@@ -682,6 +690,8 @@ export default function AdminEquipes() {
   }
 
   async function confirmarExcluirEquipe() {
+    // Excluir equipe era so do administrador dentro do RLS. Agora e chave.
+    if (!podeExcluirEquipes) return;
     const equipe = equipeParaExcluir;
     if (!equipe) return;
     setExcluindoEquipe(true);

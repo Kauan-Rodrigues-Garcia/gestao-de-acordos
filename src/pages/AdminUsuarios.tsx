@@ -680,7 +680,7 @@ export default function AdminUsuarios() {
           )}
           {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
-          {(isAdmin || isSuperAdmin) && temPermissao('editar_usuarios') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
+          {temPermissao('usuarios_administrar') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
 
       {/* ── Tabela agrupada por setor ── */}
@@ -822,7 +822,8 @@ export default function AdminUsuarios() {
                                     <span className="text-xs">Entrar como</span>
                                   </Button>
                                 )}
-                                {!u._cloneDe && temPermissao('editar_usuarios') && (((isAdmin || isSuperAdmin || perfilAtual?.perfil === 'lider') && u.id !== perfilAtual?.id) || (isAdmin || isSuperAdmin)) ? (
+                                {!u._cloneDe && (temPermissao('usuarios_administrar')
+                                  || (temPermissao('usuarios_editar_do_setor') && u.id !== perfilAtual?.id)) ? (
                                   <Button
                                     variant="ghost"
                                     size="sm"

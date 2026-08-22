@@ -40,6 +40,7 @@ import {
   ChevronDown,
   ArrowRightLeft,
 } from 'lucide-react';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -96,6 +97,10 @@ function temAcessoSetores(perfil: string | undefined): boolean {
 export default function AdminSetoresAba() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
+  // Transferir mexe em setor e ate em empresa da pessoa. Era lista de cargo
+  // dentro do RLS; agora e interruptor do painel.
+  const { temPermissao } = useCargoPermissoes();
+  const podeTransferir = temPermissao('usuarios_transferir');
   const tenant = useTenant();
 
   const [setores, setSetores] = useState<Setor[]>([]);
@@ -355,6 +360,7 @@ export default function AdminSetoresAba() {
    * Sequencial também garante que a falha de uma não leve as outras junto.
    */
   async function transferir() {
+    if (!podeTransferir) return;
     if (!transferindo?.length || !transferAlvo || !empresaAtual?.id) return;
     setTransfSalvando(true);
 

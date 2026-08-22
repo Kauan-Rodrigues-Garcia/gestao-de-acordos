@@ -286,19 +286,9 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Gestão de pessoas', padrao: LIDERANCA,
   },
   {
-    key: 'editar_usuarios', label: 'Editar usuários',
-    descricao: 'Alterar dados, cargo e situação de uma pessoa',
-    grupo: 'Gestão de pessoas', padrao: {},
-  },
-  {
     key: 'ver_equipes', label: 'Ver equipes',
     descricao: 'Abrir a lista de equipes e seus membros',
     grupo: 'Gestão de pessoas', padrao: LIDERANCA,
-  },
-  {
-    key: 'editar_equipes', label: 'Editar equipes',
-    descricao: 'Criar, renomear e remover equipes',
-    grupo: 'Gestão de pessoas', padrao: {},
   },
   {
     key: 'ver_operadores', label: 'Ver dados de operadores',
@@ -311,11 +301,6 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_metas', label: 'Ver metas',
     descricao: 'Abrir a tela de metas, feriados e quartis',
     grupo: 'Metas', padrao: LIDERANCA,
-  },
-  {
-    key: 'gerenciar_metas', label: 'Editar metas',
-    descricao: 'Definir e alterar metas de setor, equipe e operador',
-    grupo: 'Metas', padrao: { gerencia: true, diretoria: true },
   },
 
   // ── Filtros e visão ──────────────────────────────────────────────────────
@@ -332,6 +317,68 @@ export const PERMISSOES: PermissaoMeta[] = [
    *
    * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
    */
+  /*
+   * Ações de gestão, uma por lista de cargo que vivia dentro de uma policy.
+   *
+   * Cada uma nasce EXATAMENTE com quem já podia — nada muda no dia em que
+   * entram. O que muda é que passam a ser interruptor: até aqui, "quem exclui
+   * uma equipe" estava escrito em SQL e só mudava com migration.
+   *
+   * Não dava para reaproveitar as chaves antigas: `editar_equipes` está ligada
+   * para seis cargos e a exclusão era só do administrador. Ligar uma na outra
+   * teria concedido exclusão em massa sem ninguém pedir.
+   */
+  {
+    key: 'usuarios_administrar', label: 'Usuários: administrar contas',
+    descricao: 'Criar, excluir e editar qualquer pessoa, inclusive de outros setores',
+    grupo: 'Gestão de pessoas', padrao: {},
+  },
+  {
+    key: 'usuarios_editar_do_setor', label: 'Usuários: editar quem é do meu setor',
+    descricao: 'Alterar dados das pessoas do próprio setor, sem alcançar administradores',
+    grupo: 'Gestão de pessoas', padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'usuarios_transferir', label: 'Usuários: transferir de setor ou empresa',
+    descricao: 'Abrir e concluir transferências de pessoas',
+    grupo: 'Gestão de pessoas',
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'equipes_criar_editar', label: 'Equipes: criar e editar',
+    descricao: 'Criar equipes novas e alterar as existentes',
+    grupo: 'Gestão de pessoas', padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'equipes_excluir', label: 'Equipes: excluir',
+    descricao: 'Apagar uma equipe inteira',
+    grupo: 'Gestão de pessoas', padrao: {},
+  },
+  {
+    key: 'equipes_gerenciar_composicao', label: 'Equipes: gerenciar composição',
+    descricao: 'Definir líderes da equipe e clonar operadores de outros setores',
+    grupo: 'Gestão de pessoas', padrao: { lider: true, gerencia: true },
+  },
+  {
+    key: 'metas_editar', label: 'Metas: criar e editar',
+    descricao: 'Definir e alterar metas de setor, equipe e operador',
+    grupo: 'Metas', padrao: { lider: true, elite: true, gerencia: true },
+  },
+  {
+    key: 'metas_excluir', label: 'Metas: excluir',
+    descricao: 'Apagar uma meta já definida',
+    grupo: 'Metas', padrao: {},
+  },
+  {
+    key: 'metas_editar_dias_uteis', label: 'Metas: editar dias úteis e quartis',
+    descricao: 'Alterar a configuração mensal de dias úteis, feriados e faixas de quartil',
+    grupo: 'Metas', padrao: { lider: true },
+  },
+  {
+    key: 'metas_excluir_dias_uteis', label: 'Metas: excluir a configuração do mês',
+    descricao: 'Apagar a configuração mensal de dias úteis e quartis',
+    grupo: 'Metas', padrao: {},
+  },
   {
     key: 'usuarios_escopo_setor', label: 'Usuários: pessoas do próprio setor',
     descricao: 'Ver na gestão de pessoas quem é do setor da própria pessoa',
@@ -546,6 +593,19 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a aba interna de conferência das linhas sem operador vinculado',
     grupo: 'Analítico', padrao: TODOS,
   },
+
+  /*
+   * APOSENTADAS junto com a chegada das chaves granulares: editar_usuarios,
+   * editar_equipes e gerenciar_metas.
+   *
+   * Cada uma dizia 'pode escrever aqui' para acoes que o banco tratava como
+   * coisas diferentes — criar, editar e excluir tinham listas de cargo
+   * distintas dentro do RLS. Uma chave so nunca representou isso: era por isso
+   * que ligar 'editar_equipes' nao dava poder de excluir equipe, e nada na
+   * tela explicava o porque.
+   *
+   * O teste 'as chaves aposentadas nao voltaram' as trava fora daqui.
+   */
 
   // ── Pix Automático ───────────────────────────────────────────────────────
   // Aba principal no painel mesmo vivendo dentro de Acordos na tela: foi

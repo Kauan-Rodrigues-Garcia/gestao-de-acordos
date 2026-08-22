@@ -230,9 +230,9 @@ describe('padrões de semeadura', () => {
 
   it('cargo sem padrão declarado nasce negado, não permitido', () => {
     const operador = permissoesPadraoDoCargo('operador');
-    expect(operador.editar_usuarios).toBe(false);
-    expect(operador.editar_equipes).toBe(false);
-    expect(operador.gerenciar_metas).toBe(false);
+    expect(operador.usuarios_administrar).toBe(false);
+    expect(operador.equipes_criar_editar).toBe(false);
+    expect(operador.metas_editar).toBe(false);
     expect(operador.ver_logs).toBe(false);
   });
 
@@ -271,9 +271,9 @@ describe('padrões de semeadura', () => {
     expect(ouv.ver_ouvidoria).toBe(true);
     expect(ouv.editar_ouvidoria).toBe(true);
     // Os seis casos que a tela sempre mostrou desligados e o sistema concedia.
-    expect(ouv.editar_usuarios).toBe(false);
-    expect(ouv.editar_equipes).toBe(false);
-    expect(ouv.gerenciar_metas).toBe(false);
+    expect(ouv.usuarios_administrar).toBe(false);
+    expect(ouv.equipes_criar_editar).toBe(false);
+    expect(ouv.metas_editar).toBe(false);
     expect(ouv.ver_logs).toBe(false);
     // `filtrar_por_setor` e `filtrar_por_equipe` saíram do catálogo na fase 3b;
     // o equivalente hoje é o nível da aba, e a ouvidoria não o tem por padrão.

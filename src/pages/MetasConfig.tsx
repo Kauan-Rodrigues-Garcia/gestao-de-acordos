@@ -342,7 +342,12 @@ export default function MetasConfig() {
   const isAdmin = perfil?.perfil === "administrador" || perfil?.perfil === "super_admin";
   // Editar/salvar metas exige a permissão gerenciar_metas (admin sempre tem;
   // padrão = true, espelhando o acesso atual). Sem ela, a tela fica só leitura.
-  const podeGerenciarMetas = temPermissao("gerenciar_metas");
+  // Editar, excluir e mexer nos dias uteis eram tres listas de cargo
+  // diferentes no RLS. Agora sao tres interruptores.
+  const podeGerenciarMetas = temPermissao("metas_editar");
+  const podeExcluirMetas = temPermissao("metas_excluir");
+  const podeEditarDiasUteis = temPermissao("metas_editar_dias_uteis");
+  const podeExcluirDiasUteis = temPermissao("metas_excluir_dias_uteis");
 
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
@@ -627,6 +632,7 @@ export default function MetasConfig() {
   }
 
   async function handleReabrirMeta() {
+    if (!podeExcluirMetas && !podeExcluirDiasUteis) return;
     if (!empresa?.id || !setorSelecionado) return;
     if (!motivoReabrir.trim()) { toast.warning("Informe o motivo da reabertura."); return; }
     setValidandoAcao(true);
@@ -696,7 +702,10 @@ export default function MetasConfig() {
   const equipesTreinamento = equipes.filter(e => e.treinamento);
 
   // ── Salvar TODAS as metas de uma vez ──────────────────────────────────────
+  // Tres interruptores, tres coisas diferentes: a meta em si, a configuracao
+  // do mes (dias uteis, feriados, quartis) e as exclusoes.
   async function handleSalvarTudo() {
+    if (!podeGerenciarMetas && !podeEditarDiasUteis) return;
     if (!empresa?.id || !setorSelecionado) return;
     if (!podeGerenciarMetas) { toast.error("Sem permissão para editar metas."); return; }
     if (metaTravada) { toast.error("Meta deste setor está validada — peça a um admin para reabrir."); return; }
