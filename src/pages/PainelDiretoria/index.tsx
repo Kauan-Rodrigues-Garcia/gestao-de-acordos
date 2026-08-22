@@ -13,6 +13,8 @@ import {
   PieChart as RechartsPie, Pie, Legend,
 } from 'recharts';
 import { useAnalytics } from '@/hooks/useAnalytics';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { useAuth } from '@/hooks/useAuth';
@@ -69,6 +71,22 @@ export default function PainelDiretoria() {
   /** Os dois tenants importam relatório analítico (BookPlay sem H.O.). */
   const temAnalitico = isPP || tenant.slug === 'bookplay';
 
+  /*
+   * Escopo DESTA aba.
+   *
+   * Ate a fase 6a o alcance vinha do cargo dentro de `useAnalytics`, e a
+   * mesma resposta servia o Dashboard. Nao era uniforme aqui dentro:
+   * `pagueplay/gerencia` tem `ver_painel_diretoria` e enxergava so o PROPRIO
+   * SETOR, porque caia no ramo de lideranca; diretoria e admin enxergavam a
+   * empresa. Sao dois alcances reais, e por isso a aba precisou de escopo
+   * proprio — ver `permissoes-escopo.ts`.
+   */
+  const { temPermissao } = useCargoPermissoes();
+  const niveisPainelDiretoria = useMemo(
+    () => niveisLiberados('painel_diretoria', temPermissao),
+    [temPermissao],
+  );
+
   /** Mês em análise. Nasce no corrente; o seletor permite ver o mês fechado. */
   const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
 
@@ -85,7 +103,7 @@ export default function PainelDiretoria() {
     meta, percMeta, setores, setorFiltro, setSetorFiltro,
     valorRecebidoMes: recebidoTabulado,
     loading, refetch,
-  } = useAnalytics(mesAnalise, { realtime: false });
+  } = useAnalytics(mesAnalise, { realtime: false, niveis: niveisPainelDiretoria });
 
   const { empresa } = useEmpresa();
   const {

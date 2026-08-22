@@ -94,6 +94,7 @@ export const GRUPOS_PERMISSAO = [
   'Dashboard',
   'Analítico',
   'Pix Automático',
+  'Painel Diretoria',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -318,10 +319,28 @@ export const PERMISSOES: PermissaoMeta[] = [
   },
 
   // ── Filtros e visão ──────────────────────────────────────────────────────
+  /*
+   * `ver_todos_setores` foi APOSENTADA na fase 6a — a última das seis chaves
+   * globais de escopo.
+   *
+   * O último consumidor era `useAnalytics`, que serve o Dashboard e o Painel
+   * Diretoria ao mesmo tempo. Enquanto ela existia, "enxergar além do próprio
+   * setor" era uma resposta só para as duas telas — e para Acordos, Analítico,
+   * Lixeira e Painel Líder antes delas.
+   *
+   * O equivalente hoje é `<aba>_escopo_todos_setores`, uma por aba.
+   *
+   * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
+   */
   {
-    key: 'ver_todos_setores', label: 'Ver todos os setores',
-    descricao: 'Enxergar dados além do próprio setor',
-    grupo: 'Filtros e visão', padrao: { gerencia: true, diretoria: true },
+    key: 'painel_diretoria_escopo_setor', label: 'Painel Diretoria: o próprio setor',
+    descricao: 'Ver no Painel Diretoria os números do setor da própria pessoa',
+    grupo: 'Painel Diretoria', padrao: { gerencia: true },
+  },
+  {
+    key: 'painel_diretoria_escopo_todos_setores', label: 'Painel Diretoria: todos os setores',
+    descricao: 'Ver no Painel Diretoria a empresa inteira, com o filtro de setor disponível',
+    grupo: 'Painel Diretoria', padrao: { diretoria: true },
   },
   /*
    * `ver_analiticos_global` foi APOSENTADA na fase 4.

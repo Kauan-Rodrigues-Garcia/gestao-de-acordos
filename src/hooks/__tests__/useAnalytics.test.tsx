@@ -142,6 +142,26 @@ vi.mock('@/lib/supabase', () => ({
 // ── 3. Import do SUT (depois dos mocks) ───────────────────────────────────────
 
 import { useAnalytics } from '../useAnalytics';
+import { NIVEIS_ESCOPO, type NivelEscopo } from '@/lib/permissoes-escopo';
+
+/*
+ * Os niveis da ABA que estaria chamando o hook.
+ *
+ * Desde a fase 6a o alcance nao sai mais do cargo aqui dentro: quem chama
+ * passa os niveis da propria aba. Cada bloco abaixo declara os que o cargo
+ * daquele cenario teria no Dashboard, e e isso que os testes exercitam.
+ */
+let niveisAtuais: readonly NivelEscopo[] = ['individual'];
+
+/**
+ * Monta o hook com os niveis do cenario corrente.
+ *
+ * Nome comecando em `use` porque `react-hooks/rules-of-hooks` so aceita chamada
+ * de hook dentro de componente ou de outro hook — e este wrapper e um hook.
+ */
+function useAnalyticsDoCenario() {
+  return useAnalytics(undefined, { niveis: niveisAtuais });
+}
 
 // ── 4. Helpers ────────────────────────────────────────────────────────────────
 
@@ -283,7 +303,7 @@ describe('useAnalytics', () => {
 
   describe('estado inicial', () => {
     it('retorna loading=true e dados zerados quando perfil/empresa ausentes', () => {
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
 
       expect(result.current.loading).toBe(true);
       expect(result.current.valorRecebidoMes).toBe(0);
@@ -295,7 +315,7 @@ describe('useAnalytics', () => {
     });
 
     it('expõe funções de filtro e campos esperados no retorno inicial', () => {
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
 
       expect(typeof result.current.setSetorFiltro).toBe('function');
       expect(typeof result.current.setEquipeFiltro).toBe('function');
@@ -312,7 +332,7 @@ describe('useAnalytics', () => {
 
   describe('sem perfil ou empresa', () => {
     it('não chama supabase.from enquanto perfil/empresa são nulos', async () => {
-      renderHook(() => useAnalytics());
+      renderHook(() => useAnalyticsDoCenario());
       // aguarda próximo tick para dar chance ao useEffect de rodar
       await act(async () => {
         await new Promise(r => setTimeout(r, 50));
@@ -325,6 +345,7 @@ describe('useAnalytics', () => {
 
   describe('perfil operador', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current  = makePerfilOperador();
       mockEmpresaValue.current = makeEmpresa();
     });
@@ -332,7 +353,7 @@ describe('useAnalytics', () => {
     it('termina com loading=false após fetch', async () => {
       setupOperadorResults([], null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
     });
 
@@ -346,7 +367,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.totalAcordosMes).toBe(3);
@@ -369,7 +390,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.totalAcordosHoje).toBe(2);
@@ -382,7 +403,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.porStatus).toHaveLength(1);
@@ -398,7 +419,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.porStatus).toHaveLength(3);
@@ -411,7 +432,7 @@ describe('useAnalytics', () => {
     it('porDia tem 30 entradas (abril tem 30 dias)', async () => {
       setupOperadorResults([], null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.porDia).toHaveLength(30);
@@ -427,7 +448,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const dia10 = result.current.porDia.find(d => d.dia === '10');
@@ -444,7 +465,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.acordosMes).toHaveLength(2);
@@ -456,7 +477,7 @@ describe('useAnalytics', () => {
         null,
       );
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(0);
@@ -479,7 +500,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, metaData);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(50); // 500/1000 * 100
@@ -504,7 +525,7 @@ describe('useAnalytics', () => {
         metaData,
       );
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(50);          // 500 / 1000
@@ -524,7 +545,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, metaData);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       // 2 pagos / 5 meta = 40%
@@ -534,7 +555,7 @@ describe('useAnalytics', () => {
     it('query de acordos é chamada (verifica supabase.from("acordos"))', async () => {
       setupOperadorResults([], null);
 
-      renderHook(() => useAnalytics());
+      renderHook(() => useAnalyticsDoCenario());
       await waitFor(() =>
         expect(mockSupabaseFromSpy).toHaveBeenCalledWith('acordos'),
       );
@@ -542,14 +563,14 @@ describe('useAnalytics', () => {
 
     it('realtime: subscribe chamado ao montar', async () => {
       setupOperadorResults([], null);
-      renderHook(() => useAnalytics());
+      renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(mockRealtimeSubscribe).toHaveBeenCalledTimes(1));
     });
 
     it('realtime: unsubscribe chamado ao desmontar', async () => {
       setupOperadorResults([], null);
 
-      const { unmount } = renderHook(() => useAnalytics());
+      const { unmount } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(mockRealtimeSubscribe).toHaveBeenCalledTimes(1));
       unmount();
       expect(mockRealtimeUnsubscribe).toHaveBeenCalledTimes(1);
@@ -560,6 +581,7 @@ describe('useAnalytics', () => {
 
   describe('perfil admin', () => {
     beforeEach(() => {
+      niveisAtuais = NIVEIS_ESCOPO;
       mockPerfilValue.current  = makePerfilAdmin();
       mockEmpresaValue.current = makeEmpresa();
     });
@@ -570,7 +592,7 @@ describe('useAnalytics', () => {
         acordos: [],
       });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.setores).toHaveLength(1);
@@ -580,7 +602,7 @@ describe('useAnalytics', () => {
     it('admin não tem meta principal (meta=null)', async () => {
       setupAdminResults({ acordos: [] });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.meta).toBeNull();
@@ -611,7 +633,7 @@ describe('useAnalytics', () => {
         equipes: [{ id: 'equipe-001', nome: 'Equipe Alpha' }],
       });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const eq = result.current.porEquipe?.find(e => e.nome === 'Equipe Alpha');
@@ -643,7 +665,7 @@ describe('useAnalytics', () => {
         equipes: [{ id: 'equipe-luciana', nome: 'Luciana' }],
       });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const luciana = result.current.porEquipe?.find(e => e.nome === 'Luciana');
@@ -667,7 +689,7 @@ describe('useAnalytics', () => {
         equipes: [],
       });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const semEq = result.current.porEquipe?.find(e => e.nome === 'Sem equipe');
@@ -681,7 +703,7 @@ describe('useAnalytics', () => {
       ];
       setupAdminResults({ acordos });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const opFallback = result.current.porOperador?.find(o => o.id === 'op-desconhecido');
@@ -691,7 +713,7 @@ describe('useAnalytics', () => {
     it('setSetorFiltro aciona nova carga', async () => {
       setupAdminResults({ acordos: [] });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const callsBefore = (mockSupabaseFromSpy as Mock).mock.calls.length;
@@ -712,7 +734,7 @@ describe('useAnalytics', () => {
 
     it('setSetorFiltro(null) limpa o filtro', async () => {
       setupAdminResults({ acordos: [] });
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       setupAdminResults({ acordos: [] });
@@ -729,6 +751,7 @@ describe('useAnalytics', () => {
 
   describe('perfil lider', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual', 'equipe', 'setor'];
       mockPerfilValue.current  = makePerfilLider();
       mockEmpresaValue.current = makeEmpresa();
     });
@@ -740,7 +763,7 @@ describe('useAnalytics', () => {
       ];
       setupLiderResults({ equipesDoSetor: equipes });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.equipesDoSetor).toHaveLength(2);
@@ -754,7 +777,7 @@ describe('useAnalytics', () => {
       };
       setupLiderResults({ metaSetor });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.meta?.meta_valor).toBe(5000);
@@ -763,7 +786,7 @@ describe('useAnalytics', () => {
     it('setEquipeFiltro muda estado e aciona nova carga', async () => {
       setupLiderResults();
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       // Configurar para nova carga com equipeFiltro:
@@ -792,7 +815,7 @@ describe('useAnalytics', () => {
 
     it('setOperadorFiltro muda estado e aciona nova carga', async () => {
       setupLiderResults();
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       // Nova carga com operadorFiltro ativo
@@ -815,6 +838,7 @@ describe('useAnalytics', () => {
 
   describe('perfil diretoria', () => {
     beforeEach(() => {
+      niveisAtuais = NIVEIS_ESCOPO;
       mockPerfilValue.current = {
         id: 'dir-001', perfil: 'diretoria', nome: 'Diretora',
         empresa_id: EMPRESA_ID, setor_id: null,
@@ -831,7 +855,7 @@ describe('useAnalytics', () => {
       pushResult('perfis',   { data: [], error: null });
       pushResult('equipes',  { data: [], error: null });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.setores).toHaveLength(1);
@@ -858,7 +882,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.valorHOMes).toBeCloseTo(249.6, 2);
@@ -870,7 +894,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.valorHONaoPago).toBeCloseTo(124.8, 2);
@@ -882,7 +906,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.valorHOAgendado).toBeCloseTo(99.84, 2);
@@ -902,7 +926,7 @@ describe('useAnalytics', () => {
       pushResult('acordos', { data: null, error: { message: 'network error' } });
       pushResult('metas',   { data: null, error: null });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       // Dados ficam como estado inicial (array vazio)
@@ -913,7 +937,7 @@ describe('useAnalytics', () => {
       pushResult('acordos', { data: [], error: null });
       pushResult('metas',   { data: null, error: { message: 'metas error' } });
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.meta).toBeNull();
@@ -930,7 +954,7 @@ describe('useAnalytics', () => {
 
     it('refetch dispara nova carga e atualiza os dados', async () => {
       setupOperadorResults([], null);
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       // Dados da 2ª carga
@@ -970,7 +994,7 @@ describe('useAnalytics', () => {
       );
       setupOperadorResults(acordos, meta);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(999);
@@ -987,7 +1011,7 @@ describe('useAnalytics', () => {
         meta,
       );
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       expect(result.current.percMeta).toBe(0);
@@ -1009,7 +1033,7 @@ describe('useAnalytics', () => {
       ];
       setupOperadorResults(acordos, null);
 
-      const { result } = renderHook(() => useAnalytics());
+      const { result } = renderHook(() => useAnalyticsDoCenario());
       await waitFor(() => expect(result.current.loading).toBe(false));
 
       const dia15 = result.current.porDia.find(d => d.dia === '15');

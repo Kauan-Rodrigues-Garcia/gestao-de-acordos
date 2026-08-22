@@ -311,6 +311,73 @@ describe('Pix: nivel largo sem o estreito embaixo seria concessao calada', () =>
   });
 });
 
+describe('Painel Diretoria: duas abas que dividiam o mesmo hook', () => {
+  /*
+   * Dashboard e Painel Diretoria eram servidos por `useAnalytics`, que decidia
+   * o alcance sozinho — por cargo mais `ver_todos_setores`. Era a ultima
+   * pergunta de escopo do sistema que valia para mais de uma aba. Estes testes
+   * travam a separacao.
+   */
+  it('nao registra individual nem equipe: a tela so tem filtro de setor', () => {
+    expect(ABAS_COM_ESCOPO.painel_diretoria.niveis).toEqual(['setor', 'todos_setores']);
+  });
+
+  it('o caso da gerencia da PaguePlay: abre a aba e ve so o proprio setor', () => {
+    const tem = comChaves(
+      'ver_painel_diretoria',
+      chaveEscopo('painel_diretoria', 'setor'),
+    );
+    expect(escopoEfetivo('painel_diretoria', tem)).toBe('setor');
+  });
+
+  it('alcance amplo no Dashboard nao abre o Painel Diretoria', () => {
+    const tem = comChaves(
+      'ver_painel_diretoria',
+      chaveEscopo('painel_diretoria', 'setor'),
+      chaveEscopo('dashboard', 'todos_setores'),
+    );
+    expect(escopoEfetivo('painel_diretoria', tem)).toBe('setor');
+  });
+
+  it('e o contrario tambem: o Painel Diretoria nao amplia o Dashboard', () => {
+    const tem = comChaves(
+      'ver_painel_diretoria',
+      chaveEscopo('painel_diretoria', 'todos_setores'),
+      chaveEscopo('dashboard', 'setor'),
+    );
+    expect(escopoEfetivo('dashboard', tem)).toBe('setor');
+  });
+
+  it('sem a chave da aba, o escopo nao vale nada', () => {
+    const tem = comChaves(chaveEscopo('painel_diretoria', 'todos_setores'));
+    expect(escopoEfetivo('painel_diretoria', tem)).toBeNull();
+  });
+});
+
+describe('nenhuma chave global de escopo sobrou', () => {
+  /*
+   * O fecho da reestruturacao: as seis chaves que decidiam alcance para varias
+   * abas ao mesmo tempo foram aposentadas entre as fases 3b e 6a. Ligar todas
+   * de uma vez nao pode conceder NADA em aba nenhuma.
+   */
+  const GLOBAIS_MORTAS = [
+    'ver_acordos_gerais', 'ver_todos_setores', 'ver_analiticos_global',
+    'filtrar_por_setor', 'filtrar_por_equipe', 'ver_acordos_proprios',
+  ];
+
+  it('ligadas todas juntas, com todas as abas abertas, nao liberam nivel nenhum', () => {
+    const chavesDeAba = Object.values(ABAS_COM_ESCOPO)
+      .map(m => m.chaveAba)
+      .filter((k): k is string => k !== null);
+    const tem = comChaves(...GLOBAIS_MORTAS, ...chavesDeAba);
+
+    for (const aba of Object.keys(ABAS_COM_ESCOPO) as (keyof typeof ABAS_COM_ESCOPO)[]) {
+      expect(niveisLiberados(aba, tem), `${aba} ouviu uma chave global`).toEqual([]);
+      expect(escopoEfetivo(aba, tem), `${aba} ouviu uma chave global`).toBeNull();
+    }
+  });
+});
+
 describe('amplitude', () => {
   it('compara niveis corretamente', () => {
     expect(alcancaPeloMenos('todos_setores', 'individual')).toBe(true);

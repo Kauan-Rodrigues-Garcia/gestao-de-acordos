@@ -149,6 +149,30 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'pix',
     niveis: NIVEIS_ESCOPO,
   },
+  /*
+   * O Painel Diretoria ganhou escopo, e o projeto dizia que não teria.
+   *
+   * `docs/PERMISSOES-POR-ABA-PROJETO.md` §3.7 previa só a chave de aba, "sem
+   * escopo e sem ações". Isso valeria se a tela mostrasse a mesma coisa para
+   * todo mundo que a abre — e não mostra: `pagueplay/gerencia` tem
+   * `ver_painel_diretoria` e enxerga ali só o PRÓPRIO SETOR, porque o hook
+   * caía no ramo de liderança. Diretoria e admin enxergam a empresa.
+   *
+   * Com dois alcances reais, "sem escopo" só teria duas saídas, e as duas são
+   * proibidas pelo pedido: fixar "empresa inteira" liberaria dados novos para
+   * a gerência, e fixar "próprio setor" tiraria a visão da diretoria. A
+   * terceira — ler o escopo do Dashboard — quebraria "uma aba nunca fala pela
+   * outra".
+   *
+   * Dois níveis, como o Painel Líder, e pelo mesmo motivo: `individual` não faz
+   * sentido num painel de diretoria, e `equipe` nunca existiu aqui — a tela só
+   * tem filtro de setor.
+   */
+  painel_diretoria: {
+    chaveAba: 'ver_painel_diretoria',
+    prefixo: 'painel_diretoria',
+    niveis: ['setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

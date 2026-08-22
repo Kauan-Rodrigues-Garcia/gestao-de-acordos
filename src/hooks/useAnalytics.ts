@@ -7,7 +7,7 @@ import { supabase, Acordo } from '@/lib/supabase';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
-import { useCargoPermissoes } from './useCargoPermissoes';
+import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
@@ -102,7 +102,7 @@ function calcPerc(realizado: number, meta: number): number {
  * @param mesRef mês a analisar (`yyyy-MM`). Omitido = mês corrente, que é como
  *   todos os consumidores antigos continuam se comportando.
  */
-/** Ajustes de quem chama. Hoje só o realtime; nasceu por causa da Diretoria. */
+/** Ajustes de quem chama. */
 export interface OpcoesAnalytics {
   /**
    * Recebe eventos de acordos e refaz as métricas sozinho. Padrão: `true`.
@@ -113,20 +113,41 @@ export interface OpcoesAnalytics {
    * atualizar. O Dashboard continua em tempo real.
    */
   realtime?: boolean;
+  /**
+   * Os níveis de escopo da ABA que está chamando — obrigatório.
+   *
+   * Este hook serve duas telas com alcances diferentes: o Dashboard e o Painel
+   * Diretoria. Até a fase 6a ele decidia sozinho, por cargo mais a chave global
+   * `ver_todos_setores`, e as duas telas herdavam a mesma resposta — a última
+   * pergunta de escopo do sistema que ainda valia para mais de uma aba.
+   *
+   * Obrigatório, e não opcional com padrão: um terceiro consumidor que
+   * esquecesse de passar herdaria silenciosamente o alcance de outra tela, que
+   * é exatamente o defeito que esta reestruturação existe para desfazer. Sem
+   * valor padrão, o compilador cobra.
+   */
+  niveis: readonly NivelEscopo[];
 }
 
 export function useAnalytics(
-  mesRef?: string | null,
-  opcoes?: OpcoesAnalytics,
+  mesRef: string | null | undefined,
+  opcoes: OpcoesAnalytics,
 ): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
-  // Permissão configurável (Admin → Cargos): líder/elite/gerência com
-  // 'ver_todos_setores' enxerga dados da empresa toda, não só do próprio setor
-  const verTodosSetores = temPermissao('ver_todos_setores');
+  const { niveis } = opcoes;
+  /*
+   * `todos_setores` e `setor` são o que decidia, antes, `isAdmin ||
+   * isDiretoria || (isLider && ver_todos_setores)` e o ramo de liderança.
+   * A equivalência foi verificada cargo a cargo nas duas empresas na migration
+   * da fase 6a — nenhuma linha muda de alcance.
+   */
+  const podeTodosSetores = niveis.includes('todos_setores');
+  const podeSetor        = niveis.includes('setor');
+  const podeEquipe       = niveis.includes('equipe');
   const tenant = useTenant();
-  const isPP = tenant.isPaguePlay;
+  // `isPP` foi removido: a unica referencia que restava era uma dependencia
+  // obsoleta do `useMemo` dos derivados — o corpo nao o consultava.
   const isBookplay = tenant.slug === 'bookplay';
   const { subscribe, unsubscribe } = useRealtimeAcordos();
   // ID estável por instância
@@ -162,9 +183,10 @@ export function useAnalytics(
     const isDiretoria = isPerfilDiretoria(perfil.perfil);
 
     try {
-      // ── Carregar setores para o filtro do admin/diretoria ────────────────────
-      // Líder/Elite/Gerência com 'ver_todos_setores' também ganha o filtro
-      if (isAdmin || isDiretoria || (isLider && verTodosSetores)) {
+      // ── Setores para o filtro ────────────────────────────────────────────────
+      // Quem tem `todos_setores` NESTA aba escolhe o setor; quem não tem fica
+      // travado no próprio e nem carrega a lista.
+      if (podeTodosSetores) {
         const { data: setoresData } = await supabase
           .from('setores')
           .select('id, nome')
@@ -175,15 +197,17 @@ export function useAnalytics(
 
       // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
       let equipesDoSetorAtual: { id: string; nome: string }[] = [];
-      if (isLider && (perfil.setor_id || verTodosSetores)) {
+      // `!podeTodosSetores` reproduz o antigo `isLider` LINHA A LINHA: quem
+      // enxerga a empresa (cupula) nao carregava esta lista, e continua nao
+      // carregando — ela so serve a quem esta preso a um setor. Sem isso o
+      // admin dispararia uma consulta a mais, cujo resultado ninguem le.
+      if (podeSetor && !podeTodosSetores && perfil.setor_id) {
         let eqQuery = supabase
           .from('equipes')
           .select('id, nome')
           .eq('empresa_id', empresa.id);
         // Sem 'ver_todos_setores': apenas equipes do próprio setor
-        if (!verTodosSetores && perfil.setor_id) {
-          eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
-        }
+        eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
         const { data: eqData } = await eqQuery.order('nome');
         equipesDoSetorAtual = (eqData as { id: string; nome: string }[]) ?? [];
         setEquipesDoSetor(equipesDoSetorAtual);
@@ -193,7 +217,10 @@ export function useAnalytics(
       // O campo equipe_id existe em perfis (não em acordos), então precisamos
       // buscar os operador_id dos membros da equipe e filtrar acordos por IN.
       let operadoresDaEquipe: string[] | null = null;
-      if (isLider && equipeFiltro && !operadorFiltro) {
+      // `!podeTodosSetores` porque so o ramo de setor consome esta lista: quem
+      // enxerga a empresa recorta pelo filtro de SETOR. Sem isso, um admin que
+      // escolhesse uma equipe dispararia uma consulta cujo resultado ninguem le.
+      if (podeEquipe && !podeTodosSetores && equipeFiltro && !operadorFiltro) {
         const { data: membros } = await supabase
           .from('perfis')
           .select('id')
@@ -206,7 +233,7 @@ export function useAnalytics(
       // origem diferente). A visão geral do setor precisa incluí-los, senão um
       // setor formado só por clones (ex.: Digital) fica com o dashboard zerado.
       let cloneIdsSetor: string[] = [];
-      if (isBookplay && isLider && !verTodosSetores && perfil.setor_id && !operadorFiltro && !equipeFiltro) {
+      if (isBookplay && podeSetor && !podeTodosSetores && perfil.setor_id && !operadorFiltro && !equipeFiltro) {
         const { data: eqs } = await supabase
           .from('equipes').select('id').eq('empresa_id', empresa.id).eq('setor_id', perfil.setor_id);
         const eqIds = ((eqs as { id: string }[]) ?? []).map(e => e.id);
@@ -230,39 +257,43 @@ export function useAnalytics(
           .eq('empresa_id', empresa.id)
           .order('id', { ascending: true });
 
-        if (!isAdmin && !isDiretoria) {
-          if (isLider && (perfil.setor_id || verTodosSetores)) {
-            // Líder/Elite: hierarquia de filtros
-            // 1. visão individual → filtra pelo próprio operador_id
-            // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
-            // 3. visão geral      → filtra pelo setor_id
-            //    (com 'ver_todos_setores': empresa toda, respeitando setorFiltro)
-            if (operadorFiltro) {
-              q = q.eq('operador_id', operadorFiltro);
-            } else if (operadoresDaEquipe !== null) {
-              if (operadoresDaEquipe.length === 0) {
-                // Equipe sem membros — força retorno vazio.
-                // operador_id é UUID: precisa de um UUID válido que nunca casa
-                // (o UUID nulo), senão o Postgres rejeita com 22P02.
-                q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
-              } else {
-                q = q.in('operador_id', operadoresDaEquipe);
-              }
-            } else if (verTodosSetores) {
-              if (setorFiltro) q = q.eq('setor_id', setorFiltro);
-            } else if (cloneIdsSetor.length) {
-              // BookPlay: setor do líder + operadores clonados nele (setor de
-              // origem diferente). A RLS já autoriza esses acordos ao líder.
-              q = q.or(`setor_id.eq.${perfil.setor_id},operador_id.in.(${cloneIdsSetor.join(',')})`);
+        /*
+         * A ordem dos ramos é a de antes, na letra — e o primeiro deles guarda
+         * um defeito que NÃO foi corrigido aqui, de propósito.
+         *
+         * Quem tem `todos_setores` recorta só por `setorFiltro`: escolher "só
+         * os meus" no filtro do Dashboard estreita a TABELA de acordos e não
+         * estreita estes KPIs. Vale hoje para administrador, super_admin e
+         * diretoria. Corrigir muda número na tela de quem já usa o painel, e o
+         * contrato desta reestruturação é que nada muda — fica registrado para
+         * ser decidido à parte.
+         */
+        if (podeTodosSetores) {
+          if (setorFiltro) q = q.eq('setor_id', setorFiltro);
+        } else if (podeSetor && perfil.setor_id) {
+          // 1. visão individual → filtra pelo próprio operador_id
+          // 2. visão de equipe  → filtra por operador_id IN (membros da equipe)
+          // 3. visão geral      → filtra pelo setor_id
+          if (operadorFiltro) {
+            q = q.eq('operador_id', operadorFiltro);
+          } else if (operadoresDaEquipe !== null) {
+            if (operadoresDaEquipe.length === 0) {
+              // Equipe sem membros — força retorno vazio.
+              // operador_id é UUID: precisa de um UUID válido que nunca casa
+              // (o UUID nulo), senão o Postgres rejeita com 22P02.
+              q = q.eq('operador_id', '00000000-0000-0000-0000-000000000000');
             } else {
-              q = q.eq('setor_id', perfil.setor_id);
+              q = q.in('operador_id', operadoresDaEquipe);
             }
+          } else if (cloneIdsSetor.length) {
+            // BookPlay: setor do líder + operadores clonados nele (setor de
+            // origem diferente). A RLS já autoriza esses acordos ao líder.
+            q = q.or(`setor_id.eq.${perfil.setor_id},operador_id.in.(${cloneIdsSetor.join(',')})`);
           } else {
-            q = q.eq('operador_id', perfil.id);
+            q = q.eq('setor_id', perfil.setor_id);
           }
-        } else if (setorFiltro) {
-          // Admin/Diretoria filtrou por setor específico
-          q = q.eq('setor_id', setorFiltro);
+        } else {
+          q = q.eq('operador_id', perfil.id);
         }
         return q;
       };
@@ -298,7 +329,7 @@ export function useAnalytics(
         } else if (equipeFiltro && isLider) {
           tipoMeta = 'equipe';
           refId    = equipeFiltro;
-        } else if (isLider && verTodosSetores && setorFiltro) {
+        } else if (isLider && podeTodosSetores && setorFiltro) {
           // Com 'ver_todos_setores' e um setor filtrado → meta do setor filtrado
           tipoMeta = 'setor';
           refId    = setorFiltro;
@@ -378,7 +409,8 @@ export function useAnalytics(
     } finally {
       setLoading(false);
     }
-  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro, verTodosSetores, isBookplay]);
+  }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
+      podeTodosSetores, podeSetor, podeEquipe, isBookplay]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -395,11 +427,16 @@ export function useAnalytics(
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
-    const isAdminRole    = isPerfilAdmin(perfil?.perfil ?? '');
-    const isLiderRole    = isPerfilLider(perfil?.perfil ?? '');
-    const isDiretoriaRole = isPerfilDiretoria(perfil?.perfil ?? '');
-    // Visão ampla: admin/diretoria ou líder sem filtro individual — exclui acordos Extra para não inflar totais
-    const isWideView = isAdminRole || isDiretoriaRole || (isLiderRole && !operadorFiltro);
+    /*
+     * Visão ampla: exclui acordos Extra para não inflar totais.
+     *
+     * Escrito como `todos_setores || (setor && sem filtro individual)` e não
+     * como `setor && sem filtro individual`: quem enxerga a empresa continua
+     * em visão ampla MESMO com filtro individual, que é como se comportava
+     * quando a condição era `isAdmin || isDiretoria || ...`. A forma curta
+     * teria mudado os valores de admin e diretoria ao escolher "só os meus".
+     */
+    const isWideView = podeTodosSetores || (podeSetor && !operadorFiltro);
 
     const acordosMes = acordos.filter(
       a => a.vencimento >= inicio && a.vencimento <= fim,
@@ -540,7 +577,9 @@ export function useAnalytics(
       porOperador,
       acordosMes, // NOVO: exportado para cálculo de tipo no painel
     };
-  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, isPP, perfil?.perfil, operadorFiltro]);
+  // `isPP` e `perfil.perfil` sairam daqui junto com os testes de cargo: quem
+  // decide a visao ampla agora sao os niveis da aba.
+  }, [acordos, meta, metasEquipe, metasOperador, operadoresMap, operadorEquipeMap, equipesMap, inicio, fim, hoje, mesAnalise, mes, ano, operadorFiltro, podeTodosSetores, podeSetor]);
 
   return {
     ...derived,

@@ -19,7 +19,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
-import { escopoEfetivo } from '@/lib/permissoes-escopo';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
@@ -64,6 +64,15 @@ export function AnalyticsPanel({
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
+  /*
+   * Escopo DESTE painel, e de nenhum outro. Desce para `useAnalytics`, que
+   * atende tambem o Painel Diretoria — memoizado porque `niveisLiberados`
+   * devolve um array novo a cada chamada, e ele entra em dependencia de hook.
+   */
+  const niveisDashboard = useMemo(
+    () => niveisLiberados('dashboard', temPermissao),
+    [temPermissao],
+  );
   const tenant = useTenant();
   const isPP = tenant.isPaguePlay;
   const isBookplay = tenant.slug === 'bookplay';
@@ -127,7 +136,7 @@ export function AnalyticsPanel({
     setSetorFiltro,
     setEquipeFiltro,
     setOperadorFiltro,
-  } = useAnalytics(mesAnalise);
+  } = useAnalytics(mesAnalise, { niveis: niveisDashboard });
 
   const { valorRecebidoDireto, valorRecebidoExtra, valorHODireto, valorHOExtra, qtdDireto, qtdExtra } = useMemo(() => {
     if (!isPP) {
@@ -161,7 +170,7 @@ export function AnalyticsPanel({
   // Escopo DESTE painel, e de nenhum outro. Antes vinha de `veTodosOsSetores`,
   // que respondia por cargo ou pelas chaves globais — as mesmas do Analítico,
   // do Recebimento e, até a fase 2, do Painel Líder.
-  const veTodosSetores = escopoEfetivo('dashboard', temPermissao) === 'todos_setores';
+  const veTodosSetores = niveisDashboard.includes('todos_setores');
   // Sem visão global o painel fica travado no setor do usuário — os números de
   // um setor nunca somam nos do outro.
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;
