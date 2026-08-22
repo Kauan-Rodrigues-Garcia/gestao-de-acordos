@@ -1,8 +1,9 @@
-import { Moon, Sun, Monitor, Circle, Flower2 } from 'lucide-react';
+import { Moon, Sun, Monitor, Circle, Flower2, PanelLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
@@ -22,6 +23,30 @@ const TEMAS = [
 type ThemeValue = typeof TEMAS[number]['value'];
 
 const ALL_THEME_CLASSES = ['dark', 'dark-grey', 'deep-blue', 'rosa'] as const;
+
+/**
+ * Menu lateral escuro sobre tema claro.
+ *
+ * Interruptor independente do tema: liga e o <aside> fica escuro mesmo com o
+ * resto da tela claro. Quem faz o trabalho e o CSS — a classe redefine so os
+ * tokens `--sidebar-*`, e o seletor dela ignora os temas que ja sao escuros,
+ * para nao sobrescrever o sidebar proprio do Cinza Escuro e do Azul Profundo.
+ * Ver o bloco `.menu-lateral-escuro` em `index.css`.
+ */
+const CLASSE_MENU_ESCURO = 'menu-lateral-escuro';
+const CHAVE_MENU_ESCURO = 'menuLateralEscuro';
+
+function aplicarMenuEscuro(ligado: boolean) {
+  document.documentElement.classList.toggle(CLASSE_MENU_ESCURO, ligado);
+  try { localStorage.setItem(CHAVE_MENU_ESCURO, ligado ? 'true' : 'false'); }
+  catch { /* modo privado */ }
+}
+
+/** `true` quando o tema em vigor ja e escuro — ai o interruptor nao tem efeito. */
+function temaEscuroEmVigor(): boolean {
+  const c = document.documentElement.classList;
+  return c.contains('dark') || c.contains('dark-grey') || c.contains('deep-blue');
+}
 
 function applyTheme(value: ThemeValue) {
   const html = document.documentElement;
@@ -45,12 +70,22 @@ function applyTheme(value: ThemeValue) {
 
 export function ThemeToggle() {
   const [current, setCurrent] = useState<ThemeValue>('light');
+  const [menuEscuro, setMenuEscuro] = useState(false);
+  // Recalculado a cada troca de tema: o interruptor fica inerte nos escuros.
+  const [escuroEmVigor, setEscuroEmVigor] = useState(false);
 
   // Inicializar tema salvo
   useEffect(() => {
     const saved = (localStorage.getItem('theme') as ThemeValue) ?? 'system';
     setCurrent(saved);
     applyTheme(saved);
+
+    let ligado = false;
+    try { ligado = localStorage.getItem(CHAVE_MENU_ESCURO) === 'true'; }
+    catch { /* modo privado */ }
+    setMenuEscuro(ligado);
+    aplicarMenuEscuro(ligado);
+    setEscuroEmVigor(temaEscuroEmVigor());
 
     // Listener para mudança de preferência do sistema
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
@@ -62,6 +97,15 @@ export function ThemeToggle() {
   function setTheme(value: ThemeValue) {
     setCurrent(value);
     applyTheme(value);
+    setEscuroEmVigor(temaEscuroEmVigor());
+  }
+
+  function alternarMenuEscuro() {
+    setMenuEscuro(v => {
+      const novo = !v;
+      aplicarMenuEscuro(novo);
+      return novo;
+    });
   }
 
   const isDarkish = current === 'dark' || current === 'dark-grey' || current === 'deep-blue';
@@ -90,6 +134,24 @@ export function ThemeToggle() {
           Claro
           {current === 'light' && <span className="ml-auto text-primary">✓</span>}
         </DropdownMenuItem>
+        {/*
+          Interruptor, nao tema: fica ao lado do Claro porque e la que ele
+          importa. `preventDefault` no onSelect mantem o menu aberto — quem
+          liga o menu escuro quer ver o efeito e decidir na hora.
+        */}
+        <DropdownMenuCheckboxItem
+          checked={menuEscuro}
+          onCheckedChange={alternarMenuEscuro}
+          onSelect={e => e.preventDefault()}
+          disabled={escuroEmVigor}
+          title={escuroEmVigor
+            ? 'O tema atual ja e escuro — o menu lateral tambem.'
+            : 'Deixa so o menu lateral escuro, mantendo o resto claro.'}
+          className="gap-2"
+        >
+          <PanelLeft className="h-3.5 w-3.5" />
+          Menu lateral escuro
+        </DropdownMenuCheckboxItem>
         <DropdownMenuItem onClick={() => setTheme('rosa')} className="gap-2">
           <Flower2 className="h-3.5 w-3.5 text-pink-400" />
           Rosa
