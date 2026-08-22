@@ -296,7 +296,7 @@ export default function App() {
                   `tickets_config`, e a própria página resolve isso. */}
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','elite','gerencia','diretoria','administrador','ouvidoria']}>
+                  <ProtectedRoute requiredPermissao="ver_tickets">
                     <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>

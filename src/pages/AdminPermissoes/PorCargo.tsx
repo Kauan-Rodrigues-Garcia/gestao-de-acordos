@@ -26,7 +26,9 @@ import {
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
 } from '@/lib/permissoes-catalogo';
 import { cn } from '@/lib/utils';
+import { montarPorAba } from '@/lib/permissoes-abas';
 import { GrupoPermissoes } from './GrupoPermissoes';
+import { BlocoAba } from './BlocoAba';
 import { useRascunho } from './useRascunho';
 
 const TODOS_OS_CARGOS = [...CARGOS_CONFIGURAVEIS, ...CARGOS_ACESSO_TOTAL] as const;
@@ -41,6 +43,17 @@ export function PorCargo() {
 
   const catalogo = useMemo(() => catalogoDoTenant(tenantSlug), [tenantSlug]);
   const grupos   = useMemo(() => gruposDoTenant(tenantSlug), [tenantSlug]);
+
+  /*
+   * O catalogo remontado na ordem em que a pergunta nasce: cargo -> aba -> o
+   * que ele ve e o que ele faz ali. Antes a tela listava por categoria, e
+   * responder "o que o lider pode no Analitico?" exigia cacar a chave da aba
+   * num grupo, o alcance em outro e as acoes num terceiro.
+   */
+  const { blocos, avulsos } = useMemo(
+    () => montarPorAba(catalogo, grupos),
+    [catalogo, grupos],
+  );
 
   const acessoTotal = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
 
@@ -71,11 +84,16 @@ export function PorCargo() {
     rascunho.podar(k => !!salvo[k]);
   }
 
-  function ligarGrupo(grupo: string, ligar: boolean) {
+  /**
+   * Liga ou desliga o que esta VISIVEL naquele grupo.
+   *
+   * Recebe a lista em vez de filtrar o catalogo por nome: as chaves de aba
+   * migraram para os blocos por aba, e um filtro por grupo alcancaria tambem o
+   * que sumiu da tela — o botao mexeria no que ninguem esta vendo.
+   */
+  function ligarGrupo(visiveis: { key: string }[], ligar: boolean) {
     if (acessoTotal) return;
-    const alvo = Object.fromEntries(
-      catalogo.filter(p => p.grupo === grupo).map(p => [p.key, ligar]),
-    );
+    const alvo = Object.fromEntries(visiveis.map(p => [p.key, ligar]));
     rascunho.definirVarios(alvo);
     rascunho.podar(k => !!salvo[k]);
   }
@@ -174,8 +192,18 @@ export function PorCargo() {
           )}
 
           <div className="space-y-3">
-            {grupos.map(g => {
-              const doGrupo = catalogo.filter(p => p.grupo === g);
+            {blocos.map(b => (
+              <BlocoAba
+                key={b.aba}
+                bloco={b}
+                valorDe={valorDe}
+                alternar={alternar}
+                alterada={k => k in rascunho.alteracoes}
+                somenteLeitura={acessoTotal}
+              />
+            ))}
+
+            {avulsos.map(({ grupo: g, permissoes: doGrupo }) => {
               return (
                 <GrupoPermissoes
                   key={g}
@@ -185,11 +213,11 @@ export function PorCargo() {
                   alterada={p => p.key in rascunho.alteracoes}
                   acoes={
                     <>
-                      <button onClick={() => ligarGrupo(g, true)}
+                      <button onClick={() => ligarGrupo(doGrupo, true)}
                         className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded">
                         Ligar tudo
                       </button>
-                      <button onClick={() => ligarGrupo(g, false)}
+                      <button onClick={() => ligarGrupo(doGrupo, false)}
                         className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded">
                         Desligar tudo
                       </button>

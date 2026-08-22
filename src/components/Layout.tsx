@@ -88,10 +88,10 @@ const NAV_ITEMS: NavItem[] = [
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
   { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
-  // Visibilidade especial (chave em `tickets_config` + cargo) — ver filtro abaixo.
-  // Sem `permissaoKey`: quem decide é `useTicketsAcesso`, e uma permissão a mais
-  // no painel de cargos só criaria uma segunda chave para a mesma porta.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS },
+  // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
+  // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
+  // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
@@ -302,7 +302,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
     // continua valendo POR CIMA da permissão já verificada acima.
     if (item.to === ROUTE_PATHS.OUVIDORIA) {
-      return isPP && ouvidoriaAcesso.podeVer;
+      // OU, e nao E: a permissao ja foi conferida acima. Como E, ligar
+      // `ver_ouvidoria` para um cargo nao fazia nada enquanto a pessoa nao
+      // tivesse linha em `ouvidoria_acessos` — o caso classico de "liberei e
+      // nao aconteceu". A concessao fina continua valendo como caminho extra.
+      return isPP && (temPermissao('ver_ouvidoria') || ouvidoriaAcesso.podeVer);
     }
 
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
@@ -314,6 +318,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     // Tickets: nasce só para administrador. A liderança entra quando a chave
     // `tickets_config.liberado_para_lideranca` for virada na própria aba.
     if (item.to === ROUTE_PATHS.TICKETS) {
+      // A permissao ja foi conferida acima (o item declara `ver_tickets`).
+      // O que sobra aqui e o interruptor da empresa e o cadastro de
+      // atendentes — dois controles que o proprio admin liga na tela.
       return acessoTickets.podeVerAba;
     }
 

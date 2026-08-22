@@ -171,6 +171,12 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS,
   },
   {
+    key: 'ver_tickets', label: 'Aba Tickets',
+    descricao: 'Abrir a fila de chamados internos',
+    grupo: 'Abas e telas',
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
+  },
+  {
     key: 'ver_lixeira', label: 'Lixeira',
     descricao: 'Abrir a lixeira e restaurar acordos excluídos',
     grupo: 'Abas e telas', padrao: TODOS,
