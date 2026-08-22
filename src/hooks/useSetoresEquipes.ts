@@ -66,7 +66,15 @@ export function useSetoresEquipes(): SetoresEquipes {
    * a mesma chave global que decidia Acordos, Analítico e Recebimento, mais
    * uma lista de cargos escrita à mão que discordava dela em alguns casos.
    */
-  const niveis = niveisLiberados('dashboard', temPermissao);
+  /*
+   * Memoizado de propósito: `niveisLiberados` devolve um ARRAY NOVO a cada
+   * chamada, e este valor sai daqui para fora — vira prop de `FiltroEscopo` e
+   * entra em `useEffect` do Dashboard. Sem o memo, cada render seria um array
+   * diferente por identidade, com o mesmo conteúdo: efeito disparando sem
+   * parar e uma consulta ao banco junto. `temPermissao` já é estável
+   * (`useCallback` em `useCargoPermissoes`), então a dependência basta.
+   */
+  const niveis = useMemo(() => niveisLiberados('dashboard', temPermissao), [temPermissao]);
   const podeTodosSetores = niveis.includes('todos_setores');
   const podeEquipe = niveis.includes('equipe');
 

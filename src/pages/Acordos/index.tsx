@@ -21,10 +21,8 @@ import { ModalReagendar, type ReagendarParams } from '@/components/ModalReagenda
 import { valorDemaisParcelas } from '@/lib/money';
 import { isTipoParcelado } from '@/components/AcordoDetalheInline/helpers';
 import { toast } from 'sonner';
-import {
-  ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
-  isPerfilLider,
-} from '@/lib/index';
+import { ROUTE_PATHS, formatCurrency, formatDate, getTodayISO } from '@/lib/index';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
 import { deslocarMes, mesAtual, primeiroDiaDoMes, ultimoDiaDoMes } from '@/lib/mesReferencia';
@@ -70,16 +68,31 @@ export default function Acordos() {
   const [filtroTag, setFiltroTag]       = useState(searchParams.get('tag') || '');
   const [currentPage, setCurrentPage]   = useState(Number(searchParams.get('page')) || 1);
 
-  const isLider = isPerfilLider(perfil?.perfil ?? '');
-  const isElite = perfil?.perfil === 'elite';
   const [visaoFiltroAcordos, setVisaoFiltroAcordos] = useState<VisaoFiltroAcordos>('setor');
   const [equipesDoSetor, setEquipesDoSetor] = useState<{ id: string; nome: string }[]>([]);
 
-  // Com 'ver_todos_setores' o líder vê equipes de toda a empresa no filtro
-  const verTodosSetores = temPermissao('ver_todos_setores');
+  /*
+   * Alcance DESTA aba, e de nenhuma outra.
+   *
+   * Antes vinha de duas chaves globais e de uma lista de cargo escrita aqui:
+   * `ver_acordos_gerais` decidia se a consulta ficava presa ao próprio
+   * operador, `ver_todos_setores` decidia se as listas de equipe e de pessoa
+   * passavam do próprio setor, e `isLider || isElite` decidia se os atalhos de
+   * equipe apareciam. As mesmas duas chaves mandavam no Dashboard e na
+   * Lixeira — mexer no alcance daqui mexia lá.
+   *
+   * Cuidado: `todos_setores` NÃO acrescenta filtro de setor. Esta tela nunca
+   * teve um; o nível amplia as listas dos seletores, e só.
+   */
+  // Memoizado porque desce como prop: `niveisLiberados` devolve um array novo
+  // a cada chamada, e um array novo por render remontaria o filtro à toa.
+  const niveis         = useMemo(() => niveisLiberados('acordos', temPermissao), [temPermissao]);
+  const podeVerSetor   = niveis.includes('setor');
+  const podeVerEquipe  = niveis.includes('equipe');
+  const verTodosSetores = niveis.includes('todos_setores');
 
   useEffect(() => {
-    if (!(isLider || isElite) || !empresa?.id) return;
+    if (!podeVerEquipe || !empresa?.id) return;
     if (!perfil?.setor_id && !verTodosSetores) return;
     let q = supabase
       .from('equipes')
@@ -92,7 +105,7 @@ export default function Acordos() {
       .then(({ data }) => {
         setEquipesDoSetor((data as { id: string; nome: string }[]) ?? []);
       });
-  }, [isLider, isElite, perfil?.setor_id, empresa?.id, verTodosSetores]);
+  }, [podeVerEquipe, perfil?.setor_id, empresa?.id, verTodosSetores]);
 
   const equipeFiltroAtivo  = visaoFiltroAcordos.startsWith('equipe:')
     ? visaoFiltroAcordos.replace('equipe:', '')
@@ -213,7 +226,7 @@ export default function Acordos() {
     vencimento:   filtroData || undefined,
     data_inicio:  filtroData ? undefined : bpMesInicio,
     data_fim:     filtroData ? undefined : bpMesFim,
-    operador_id:  (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
+    operador_id:  (!podeVerSetor || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:    equipeFiltroAtivo ?? undefined,
@@ -241,7 +254,7 @@ export default function Acordos() {
    */
   const { tags: tagsDisponiveis } = useTagsEmUso({
     empresa_id:  empresa?.id,
-    operador_id: (!temPermissao('ver_acordos_gerais') || isVisaoIndividual)
+    operador_id: (!podeVerSetor || isVisaoIndividual)
       ? perfil?.id
       : (filtroOperador && filtroOperador !== 'all' ? filtroOperador : undefined),
     equipe_id:   equipeFiltroAtivo ?? undefined,
@@ -650,7 +663,7 @@ export default function Acordos() {
 
   // Coluna "Operador" só para cargos que veem todos os acordos (líder/elite+);
   // para operador (só vê os próprios) a coluna é removida.
-  const mostrarColunaOperador = temPermissao('ver_acordos_gerais');
+  const mostrarColunaOperador = podeVerSetor;
   const colSpanFull = (isPP ? 11 : 10) - (mostrarColunaOperador ? 0 : 1);
   // O cadeado do mês entra AQUI, no mesmo lugar da permissão, e não numa
   // checagem separada dentro da tabela: para a linha, "não posso editar por
@@ -777,7 +790,7 @@ export default function Acordos() {
 
         <AcordosFilters
           activeTab={activeTab} setActiveTab={setActiveTab}
-          isLider={isLider} isElite={isElite}
+          niveis={niveis}
           equipesDoSetor={equipesDoSetor}
           visaoFiltroAcordos={visaoFiltroAcordos} setVisaoFiltroAcordos={setVisaoFiltroAcordos}
           busca={busca} setBusca={setBusca}

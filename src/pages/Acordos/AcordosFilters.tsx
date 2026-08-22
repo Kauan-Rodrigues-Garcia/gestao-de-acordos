@@ -8,13 +8,14 @@ import {
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
 import type { VisaoFiltroAcordos } from './helpers';
+import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import type { AcordoTag } from '@/lib/supabase';
 
 export interface AcordosFiltersProps {
   activeTab: 'analitico' | 'todos' | 'pagos' | 'nao_pagos';
   setActiveTab: (tab: 'analitico' | 'todos' | 'pagos' | 'nao_pagos') => void;
-  isLider: boolean;
-  isElite: boolean;
+  /** Níveis que este cargo pode escolher na aba Acordos. */
+  niveis: readonly NivelEscopo[];
   equipesDoSetor: { id: string; nome: string }[];
   visaoFiltroAcordos: VisaoFiltroAcordos;
   setVisaoFiltroAcordos: (v: VisaoFiltroAcordos) => void;
@@ -52,7 +53,7 @@ export interface AcordosFiltersProps {
 
 export function AcordosFilters({
   activeTab, setActiveTab,
-  isLider, isElite, equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
+  niveis, equipesDoSetor, visaoFiltroAcordos, setVisaoFiltroAcordos,
   busca, setBusca, filtroStatus, setFiltroStatus, filtroTipo, setFiltroTipo,
   filtroData, setFiltroData, filtroOperador, setFiltroOperador,
   filtroVinculo, setFiltroVinculo,
@@ -62,6 +63,10 @@ export function AcordosFilters({
   setCurrentPage, limparFiltros,
   pixAbaAtiva, setPixAbaAtiva,
 }: AcordosFiltersProps) {
+  const mostrarEquipes = niveis.includes('equipe') && equipesDoSetor.length > 0;
+  // Um "individual" sozinho não é escolha — é a única coisa que a pessoa vê.
+  const mostrarIndividual = niveis.includes('individual') && niveis.length > 1;
+
   return (
     <>
       {/* Tabs */}
@@ -106,8 +111,11 @@ export function AcordosFilters({
       {pixAbaAtiva ? null : (
       <>
 
-      {/* Seletor de visão Líder/Elite */}
-      {(isLider || isElite) && equipesDoSetor.length > 0 && (
+      {/* Seletor de visão — as opções saem dos NÍVEIS da aba Acordos.
+          Antes era `isLider || isElite` para os atalhos de equipe e `isElite`
+          para o "Individual", duas listas de cargo escritas à mão que
+          discordavam das permissões configuradas. */}
+      {(mostrarEquipes || mostrarIndividual) && (
         <div className="flex items-center gap-2 px-4 py-2.5 mb-3 rounded-xl border border-border bg-card">
           <span className="text-xs font-medium text-muted-foreground shrink-0">Visualizar acordos de:</span>
           <div className="flex flex-wrap gap-1.5">
@@ -122,7 +130,7 @@ export function AcordosFilters({
             >
               <Building2 className="w-3 h-3" /> Setor geral
             </button>
-            {equipesDoSetor.map(eq => (
+            {mostrarEquipes && equipesDoSetor.map(eq => (
               <button
                 key={eq.id}
                 onClick={() => setVisaoFiltroAcordos(`equipe:${eq.id}` as VisaoFiltroAcordos)}
@@ -136,7 +144,7 @@ export function AcordosFilters({
                 <Layers className="w-3 h-3" /> {eq.nome}
               </button>
             ))}
-            {isElite && (
+            {mostrarIndividual && (
               <button
                 onClick={() => setVisaoFiltroAcordos('individual')}
                 className={cn(

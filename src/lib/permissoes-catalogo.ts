@@ -202,10 +202,42 @@ export const PERMISSOES: PermissaoMeta[] = [
   },
 
   // ── Acordos ──────────────────────────────────────────────────────────────
+  /*
+   * `ver_acordos_gerais` foi APOSENTADA na fase 5a.
+   *
+   * Era a chave global mais usada do sistema: sozinha decidia o alcance de
+   * Acordos, Dashboard e Lixeira. As três já têm níveis próprios, e com a
+   * conversão desta aba ela ficou sem nenhum consumidor.
+   *
+   * O equivalente hoje é `acordos_escopo_setor` (e `dashboard_escopo_setor`,
+   * `lixeira_escopo_setor` nas outras abas) — que é o ponto: a mesma pergunta
+   * passa a ter uma resposta por aba, em vez de uma para todas.
+   *
+   * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
+   */
+  // Os quatro níveis desta aba. `todos_setores` aqui NÃO acrescenta filtro de
+  // setor (a tela não tem um): ele amplia as LISTAS de equipe e de pessoa, de
+  // "o meu setor" para "a empresa". Ver `permissoes-escopo.ts`.
   {
-    key: 'ver_acordos_gerais', label: 'Ver acordos de outras pessoas',
-    descricao: 'Enxergar acordos além dos próprios, dentro do que a RLS permitir',
-    grupo: 'Acordos', padrao: LIDERANCA,
+    key: 'acordos_escopo_individual', label: 'Acordos: os próprios acordos',
+    descricao: 'Ver na lista de acordos os da própria pessoa',
+    grupo: 'Acordos', tenants: ['bookplay'], padrao: TODOS,
+  },
+  {
+    key: 'acordos_escopo_equipe', label: 'Acordos: acordos da equipe',
+    descricao: 'Ver na lista os acordos da equipe, com os atalhos de equipe no topo',
+    grupo: 'Acordos', tenants: ['bookplay'],
+    padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
+  },
+  {
+    key: 'acordos_escopo_setor', label: 'Acordos: acordos do setor',
+    descricao: 'Ver na lista os acordos de outras pessoas, e a coluna Operador',
+    grupo: 'Acordos', tenants: ['bookplay'], padrao: LIDERANCA,
+  },
+  {
+    key: 'acordos_escopo_todos_setores', label: 'Acordos: todos os setores',
+    descricao: 'Listar equipes e pessoas de qualquer setor nos filtros de Acordos',
+    grupo: 'Acordos', tenants: ['bookplay'], padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'criar_acordos', label: 'Criar acordo',

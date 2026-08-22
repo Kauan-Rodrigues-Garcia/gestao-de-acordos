@@ -156,6 +156,11 @@ describe('catálogo — integridade', () => {
     // respondia por cinco telas de uma vez. Quem decide agora é o nível da
     // aba — `analitico_escopo_todos_setores` e os equivalentes das outras.
     expect(CHAVES_PERMISSAO).not.toContain('ver_analiticos_global');
+
+    // Aposentada na fase 5a: era a chave global mais usada do sistema, e
+    // sozinha decidia o alcance de Acordos, Dashboard e Lixeira. As três já
+    // têm `<aba>_escopo_setor` própria.
+    expect(CHAVES_PERMISSAO).not.toContain('ver_acordos_gerais');
   });
 
   it('só declara tenant conhecido', () => {

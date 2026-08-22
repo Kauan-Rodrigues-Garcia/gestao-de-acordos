@@ -176,7 +176,7 @@ export default function Dashboard() {
       data_inicio:  filtroData ? undefined : mesFiltroInicio,
       data_fim:     filtroData ? undefined : mesFiltroFim,
       estado_uf:    colFiltroEstado || undefined,
-      operador_id:  (!temPermissao('ver_acordos_gerais') || visaoFiltro === 'individual') ? perfil?.id : undefined,
+      operador_id:  (!niveis.includes('setor') || visaoFiltro === 'individual') ? perfil?.id : undefined,
       equipe_id:    equipeFiltroAtivo ?? undefined,
       page:         currentPage,
       perPage:      PER_PAGE,
@@ -238,7 +238,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!isPP) return;
-    if (!temPermissao('ver_acordos_gerais')) return;
+    if (!niveis.includes('setor')) return;
     const ids = [...new Set([...acordosDeHoje, ...acordos].map(a => a.operador_id).filter(Boolean))];
     if (ids.length === 0) return;
     supabase.from('perfis').select('id, nome').in('id', ids as string[]).then(({ data }) => {
@@ -248,7 +248,7 @@ export default function Dashboard() {
         setOperadoresMap(prev => ({ ...prev, ...map }));
       }
     });
-  }, [acordosDeHoje, acordos, isPP, temPermissao]);
+  }, [acordosDeHoje, acordos, isPP, niveis]);
 
   const highlightParam = searchParams.get('highlight');
   useEffect(() => {

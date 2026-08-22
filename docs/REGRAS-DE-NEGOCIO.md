@@ -331,7 +331,7 @@ Catálogo completo (`src/pages/AdminCargos.tsx`):
 | Grupo | Chave | O que libera |
 |---|---|---|
 | **Acordos** | `ver_acordos_proprios` | Ver os próprios acordos |
-| | `ver_acordos_gerais` | Ver acordos de todos os operadores do setor/empresa |
+| | `acordos_escopo_<nível>` | O alcance da aba Acordos — §2.4-c |
 | | `criar_acordos` | Cadastrar acordos |
 | | `editar_acordos` | Editar acordos existentes |
 | | `excluir_acordos` | Excluir (mover para lixeira) |
@@ -450,6 +450,15 @@ Quatro regras que o código já garante, e que os testes travam:
 4. **Aba interna escondida não pode ser a tela de entrada.** Quem esconde o
    botão da régua e serve o conteúdo dela por padrão não escondeu nada — cada
    página resolve a aba realmente visível antes de renderizar.
+5. **Linha de `administrador`/`super_admin` não tem chave desligada**, fora as
+   de concessão explícita. O app já responde `true` para elas por
+   curto-circuito; gravar `false` é inerte hoje e vira restrição real quando o
+   RLS passar a ler o JSON. As migrations verificam esse invariante.
+
+> ⚠️ **O mesmo nível não quer dizer a mesma coisa em duas abas.** No Dashboard,
+> `todos_setores` acende um seletor de setor. Em Acordos não existe seletor de
+> setor: lá o nível amplia as **listas** de equipe e de pessoa. O nível diz o
+> alcance; o que a tela faz com ele é da tela.
 
 Onde está: registro em `src/lib/permissoes-escopo.ts` (`ABAS_COM_ESCOPO`),
 catálogo nos dois lados, desenho e fases em

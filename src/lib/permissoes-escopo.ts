@@ -116,6 +116,22 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'analitico',
     niveis: ['individual', 'setor', 'todos_setores'],
   },
+  /*
+   * Acordos usa os quatro níveis, e é a aba de onde `ver_acordos_gerais` saiu.
+   *
+   * Cuidado com o que `todos_setores` significa AQUI: a tela não tem filtro de
+   * setor, e nunca teve. O nível só amplia as LISTAS — quais equipes e quais
+   * pessoas aparecem nos seletores — de "o meu setor" para "a empresa". Quantas
+   * linhas chegam continua sendo decisão do RLS.
+   *
+   * Só existe na BookPlay: a PaguePlay lê acordos pelo Dashboard, que tem os
+   * próprios níveis.
+   */
+  acordos: {
+    chaveAba: 'ver_acordos',
+    prefixo: 'acordos',
+    niveis: NIVEIS_ESCOPO,
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

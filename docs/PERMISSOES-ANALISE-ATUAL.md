@@ -86,6 +86,11 @@ Uma chave, quatro telas:
 Uma chave decidindo Acordos, Dashboard e Lixeira ao mesmo tempo é exatamente o
 caso citado no pedido: mudar o escopo de Acordos mexe na Lixeira sem querer.
 
+> ✅ **Aposentada na fase 5a.** As três abas ganharam `<aba>_escopo_setor`
+> própria — a Lixeira na fase 1, o Dashboard na 3a, Acordos na 5a — e a chave
+> ficou sem consumidor. Era a mais usada do sistema, e é a que melhor ilustra o
+> pedido: a mesma pergunta agora tem uma resposta por aba.
+
 ### As outras quatro
 
 | Chave | Lido em | Decide |

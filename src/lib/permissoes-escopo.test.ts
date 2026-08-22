@@ -217,6 +217,57 @@ describe('Analitico: tres niveis, sem equipe', () => {
   });
 });
 
+describe('Acordos: os quatro niveis, e o que todos_setores significa aqui', () => {
+  it('usa a escala inteira', () => {
+    expect(ABAS_COM_ESCOPO.acordos.niveis).toEqual(NIVEIS_ESCOPO);
+  });
+
+  it('a aba desligada zera tudo', () => {
+    const tem = comChaves(...NIVEIS_ESCOPO.map(n => chaveEscopo('acordos', n)));
+    expect(niveisLiberados('acordos', tem)).toEqual([]);
+  });
+
+  it('o operador tem so o proprio nivel', () => {
+    const tem = comChaves('ver_acordos', chaveEscopo('acordos', 'individual'));
+    expect(niveisLiberados('acordos', tem)).toEqual(['individual']);
+    expect(escopoEfetivo('acordos', tem)).toBe('individual');
+  });
+
+  it('o lider tem individual, equipe e setor — mas nao todos os setores', () => {
+    const tem = comChaves(
+      'ver_acordos',
+      chaveEscopo('acordos', 'individual'),
+      chaveEscopo('acordos', 'equipe'),
+      chaveEscopo('acordos', 'setor'),
+    );
+    expect(niveisLiberados('acordos', tem)).toEqual(['individual', 'equipe', 'setor']);
+    expect(escopoEfetivo('acordos', tem)).toBe('setor');
+  });
+
+  it('`ver_acordos_gerais` nao decide mais nada — foi aposentada na fase 5a', () => {
+    const tem = comChaves('ver_acordos', 'ver_acordos_gerais', 'ver_todos_setores');
+    expect(niveisLiberados('acordos', tem)).toEqual([]);
+    expect(escopoEfetivo('acordos', tem)).toBeNull();
+  });
+
+  it('nenhuma das outras abas empresta alcance para Acordos', () => {
+    const tem = comChaves(
+      'ver_acordos',
+      chaveEscopo('acordos', 'individual'),
+      chaveEscopo('dashboard', 'todos_setores'),
+      chaveEscopo('lixeira', 'todos_setores'),
+      chaveEscopo('analitico', 'todos_setores'),
+    );
+    expect(escopoEfetivo('acordos', tem)).toBe('individual');
+  });
+
+  it('e Acordos tambem nao empresta alcance para o Dashboard', () => {
+    // A simetria importa: as duas abas liam a MESMA chave global ate a fase 5a.
+    const tem = comChaves(...NIVEIS_ESCOPO.map(n => chaveEscopo('acordos', n)), 'ver_acordos');
+    expect(escopoEfetivo('dashboard', tem)).toBeNull();
+  });
+});
+
 describe('amplitude', () => {
   it('compara niveis corretamente', () => {
     expect(alcancaPeloMenos('todos_setores', 'individual')).toBe(true);

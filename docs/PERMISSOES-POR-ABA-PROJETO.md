@@ -260,6 +260,28 @@ governa hoje:
 
 `equipe` só nasce ligado onde `filtrar_por_equipe` já está ligado hoje.
 
+> ✏️ **Corrigido na implementação (fase 5a).** Isto vale para o Dashboard, onde
+> `filtrar_por_equipe` acendia o seletor. Em **Acordos** quem acendia os
+> atalhos de equipe era `isPerfilLider(cargo)`, uma lista de cargo escrita na
+> tela — então lá `equipe` nasce dessa lista, e a `diretoria`, que nunca viu os
+> atalhos, nasce sem o nível.
+
+### 4.2-b Chave nova nasce `true` para acesso total
+
+`temPermissao` devolve `true` para tudo quando o cargo é `administrador` ou
+`super_admin`, e o semeador de `permissoes_2_0` grava `true` para os dois por
+construção. A única exceção legítima é `ignorar_fechamento_mes`, que exige
+concessão explícita.
+
+Uma derivação que saia do CARGO quebra isso sem avisar — foi o que a fase 4 fez
+com `analitico_escopo_individual`, gravando `false` para admin. É inerte no app
+(o curto-circuito de `temPermissao` responde antes), mas é uma **armadilha para
+a fase 7**: uma policy que calcule o teto lendo o JSON não tem curto-circuito
+nenhum, e leria `false` como restrição de verdade.
+
+A migration da fase 5a corrigiu a linha e passou a **verificar o invariante** no
+bloco de prova. Toda migration nova deve repetir essa verificação.
+
 **Tickets nasce `individual` para todos** porque a tabela é nova (19/08) e tem
 RLS próprio, que continua sendo o piso. Nenhum escopo mais amplo existe hoje
 para derivar.
@@ -343,8 +365,9 @@ revisável e reversível sozinho, que era o objetivo declarado.
 | 2 | Painel Líder (escopo + 4 abas internas) | `6ac51d9` | ✅ produção |
 | 3a | Dashboard (escopo) | `d53a653` | ✅ produção |
 | 3b | Dashboard (filtro único; 2 chaves aposentadas) | `2218117` | ✅ produção |
-| 4 | Analítico (escopo + 8 abas internas; encerra `veTodosOsSetores`) | — | ✅ produção |
-| 5 | Acordos, Pix Automático | — | pendente |
+| 4 | Analítico (escopo + 8 abas internas; encerra `veTodosOsSetores`) | `2b88f00` | ✅ produção |
+| 5a | Acordos (escopo; aposenta `ver_acordos_gerais`) | — | ✅ produção |
+| 5b | Pix Automático (escopo + `pix_editar_configuracoes`) | — | pendente |
 | 6 | Usuários, Tickets, Configurações | — | pendente |
 | 7 | RLS: teto elevado ao maior escopo | — | pendente |
 | 8 | Remoção das chaves globais restantes e faxina do JSON | — | pendente |
@@ -352,3 +375,11 @@ revisável e reversível sozinho, que era o objetivo declarado.
 O painel de permissões (a antiga fase 3) não precisou de fase própria: ele
 desenha `GRUPOS_PERMISSAO` e o catálogo, então cada aba nova aparece nele
 sozinha ao ser registrada.
+
+**As ações de aba (§4.3) ficaram de fora das fases de escopo, de propósito.**
+Renomear `criar_acordos` para `acordos_criar` é churn: a chave já é da aba, só
+muda a ordem das palavras, e ela governa a rota de Novo Acordo que a PaguePlay
+também usa — onde a aba Acordos nem existe. As que valem trabalho são as que
+**separam** um poder que hoje anda junto (`acordos_alterar_status` saindo de
+`editar_acordos`, `pix_editar_configuracoes` saindo de
+`aprovar_pix_automatico`), e essas entram com a aba correspondente.
