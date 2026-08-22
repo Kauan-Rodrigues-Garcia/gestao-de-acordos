@@ -127,7 +127,9 @@ WITH base AS (
     c.empresa_id,
     c.cargo,
     e.slug,
-    COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, TRUE)          AS ve_lixeira,
+    -- FALSE, e nao TRUE: 'ver_lixeira' nao esta em PERMISSOES_LEGADAS_PADRAO_TRUE,
+    -- entao chave ausente vale false para o app. Ver REGRAS-DE-NEGOCIO 2.4.
+    COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, FALSE)          AS ve_lixeira,
     COALESCE((c.permissoes->>'ver_acordos_gerais')::BOOLEAN, FALSE)  AS ve_gerais,
     public.fn_teto_rls_acordos(e.slug, c.cargo)                      AS teto
   FROM public.cargos_permissoes c
@@ -167,9 +169,9 @@ BEGIN
   FROM public.cargos_permissoes c
   JOIN public.empresas e ON e.id = c.empresa_id
   WHERE (c.permissoes->>'lixeira_restaurar')::BOOLEAN
-        IS DISTINCT FROM COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, TRUE)
+        IS DISTINCT FROM COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, FALSE)
      OR (c.permissoes->>'lixeira_limpar')::BOOLEAN
-        IS DISTINCT FROM COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, TRUE);
+        IS DISTINCT FROM COALESCE((c.permissoes->>'ver_lixeira')::BOOLEAN, FALSE);
   IF v_erro IS NOT NULL THEN
     RAISE EXCEPTION 'Acoes da Lixeira divergiram de ver_lixeira em: %', v_erro;
   END IF;
