@@ -1,43 +1,34 @@
 /**
  * logs-permissao-vs-rls.test.ts
- * ─────────────────────────────────────────────────────────────────────────────
- * A permissão `ver_logs` abre a ABA. O RLS decide quem LÊ a trilha. São dois
- * sistemas diferentes, e em 17/08/2026 eles discordavam:
  *
- *   • o catálogo concedia `ver_logs` por padrão a gerência e diretoria;
- *   • a política `logs_sis_admin` só admite `fn_user_is_super_admin()` ou o
- *     cargo `administrador` — que NÃO EXISTE nesta base (os cargos são
- *     diretoria, elite, gerencia, lider, operador, ouvidoria, super_admin).
+ * ## O defeito que este arquivo existia para impedir
  *
- * Resultado em produção: dois diretores da PaguePlay viam a aba de Logs e
- * recebiam ZERO linhas, e mais dois cargos (elite, gerência) estavam liberados
- * esperando alguém para afetar. `fn_logs_resumo` é SECURITY INVOKER, então até
- * os números do painel vinham zerados. Nenhum erro na tela — só o vazio, que
- * qualquer um lê como sistema quebrado.
+ * Até 2026-08-23, `logs_sis_admin` decidia por CARGO — uma lista escrita dentro
+ * da policy — e `ver_logs` era uma chave do painel que ninguém no banco
+ * consultava. Conceder `ver_logs` a outro cargo não dava acesso: dava uma ABA
+ * VAZIA, porque o RLS devolvia zero linhas. Sem erro e sem explicação.
  *
- * Este teste não acopla os dois sistemas: acoplá-los deixaria uma permissão de
- * tela conceder acesso a dado de auditoria, que é exatamente o que não se quer.
- * Ele apenas impede a DIVERGÊNCIA de voltar — conceder a aba a quem o banco vai
- * calar.
+ * Estes testes comparavam os dois lados e quebravam a CI quando o padrão da
+ * chave prometia mais do que a lista de cargo permitia.
  *
- * Se um dia a trilha tiver de ser aberta a mais gente, mexa nos dois lados na
- * mesma migration e este teste passa a exigir o par.
+ * ## Por que eles mudaram
+ *
+ * A policy passou a perguntar `fn_user_tem('ver_logs')`. Os dois lados não
+ * podem mais divergir, porque viraram o mesmo lado — o que é uma garantia mais
+ * forte do que a que se checava antes.
+ *
+ * O que ainda pode quebrar, e é o que se checa agora: alguém devolver a lista
+ * de cargo para dentro da policy. Isso reabriria o defeito inteiro.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { PERMISSOES, CARGOS_CONFIGURAVEIS } from '../permissoes-catalogo';
+import { PERMISSOES } from '../permissoes-catalogo';
 
 const MIGRATIONS = path.resolve(__dirname, '../../../supabase/migrations');
 
-/**
- * Os cargos que a política `logs_sis_admin` admite, extraídos do SQL.
- *
- * Lê a definição MAIS RECENTE, pelo nome ordenável do arquivo: se uma migration
- * futura reescrever a política, o teste passa a comparar contra ela em vez de
- * contra uma cópia envelhecida aqui.
- */
-function cargosQueLeemATrilha(): { cargos: string[]; superAdmin: boolean } {
+/** A definição mais recente da política, pelo nome ordenável do arquivo. */
+function policiaDeLogs(): string {
   const arquivo = fs.readdirSync(MIGRATIONS)
     .filter(f => f.endsWith('.sql'))
     .sort()
@@ -48,96 +39,43 @@ function cargosQueLeemATrilha(): { cargos: string[]; superAdmin: boolean } {
   if (!arquivo) throw new Error('Nenhuma migration define a política logs_sis_admin.');
 
   const sql = fs.readFileSync(path.join(MIGRATIONS, arquivo), 'utf8');
-  const linha = sql.split('\n').find(l => /CREATE\s+POLICY\s+"?logs_sis_admin"?/i.test(l));
-  if (!linha) throw new Error('Política logs_sis_admin encontrada no arquivo mas não na linha.');
-
-  // `ARRAY['administrador'::"text"]` → ['administrador']
-  const arranjo = /ARRAY\s*\[([^\]]*)\]/i.exec(linha);
-  const cargos = arranjo
-    ? [...arranjo[1].matchAll(/'([^']+)'/g)].map(m => m[1])
-    : [];
-
-  return {
-    cargos,
-    superAdmin: /fn_user_is_super_admin/i.test(linha),
-  };
+  const i = sql.search(/CREATE\s+POLICY\s+"?logs_sis_admin"?/i);
+  // Do CREATE até o `;` que fecha — a expressão inteira, e não só a primeira linha.
+  return sql.slice(i, sql.indexOf(';', i));
 }
 
-const RLS = cargosQueLeemATrilha();
+const POLICY = policiaDeLogs();
 
-/** Quem o RLS deixa ler, na prática. */
-const PODEM_LER = new Set<string>([
-  ...RLS.cargos,
-  ...(RLS.superAdmin ? ['super_admin'] : []),
-]);
-
-const VER_LOGS = PERMISSOES.find(p => p.key === 'ver_logs');
-
-describe('a política do banco continua sendo o piso', () => {
-  it('a política existe e admite super_admin', () => {
-    expect(RLS.superAdmin, 'logs_sis_admin deixou de admitir super_admin').toBe(true);
-  });
-
-  it('o catálogo tem a chave `ver_logs`', () => {
-    expect(VER_LOGS, 'a permissão ver_logs saiu do catálogo').toBeDefined();
-  });
-});
-
-describe('`ver_logs` nunca é concedida a quem o banco vai calar', () => {
-  /**
-   * O caso exato de 17/08/2026: `padrao: { gerencia: true, diretoria: true }`
-   * contra uma política que só admitia super_admin e um cargo inexistente.
-   */
-  it('nenhum cargo do padrão fica com a aba e sem o conteúdo', () => {
-    const prometidos = Object.entries(VER_LOGS!.padrao ?? {})
-      .filter(([, liberado]) => liberado === true)
-      .map(([cargo]) => cargo);
-
-    const enganados = prometidos.filter(c => !PODEM_LER.has(c));
-
+describe('a trilha de auditoria obedece ao painel', () => {
+  it('a política pergunta pela chave, e não por cargo', () => {
     expect(
-      enganados,
-      `Estes cargos abririam a aba de Logs e receberiam zero linhas: `
-      + `${enganados.join(', ')}. A política logs_sis_admin admite apenas `
-      + `${[...PODEM_LER].join(', ')}. Corrija o padrão OU amplie a política — `
-      + `os dois lados, na mesma migration.`,
-    ).toEqual([]);
+      /fn_user_tem\(\s*'ver_logs'\s*\)/.test(POLICY),
+      'logs_sis_admin deixou de perguntar por `ver_logs`',
+    ).toBe(true);
   });
 
-  /**
-   * O cargo `administrador` está na política por herança e não existe como
-   * perfil real nesta base. Deixá-lo lá é inofensivo — o que não pode é alguém
-   * concluir que "administrador tem acesso" e conceder `ver_logs` a um cargo
-   * real por analogia.
-   */
-  it('a política cita `administrador`, que não é cargo configurável', () => {
-    if (!RLS.cargos.includes('administrador')) return;   // já foi limpo: ótimo
+  it('nenhuma lista de cargo voltou para dentro da política', () => {
+    // Era este o defeito: a lista no banco e a chave na tela discordando em
+    // silêncio. Se `fn_user_has_any_role` voltar aqui, ele volta junto.
     expect(
-      (CARGOS_CONFIGURAVEIS as readonly string[]).includes('administrador'),
-      'se `administrador` virar cargo configurável, revise logs_sis_admin',
+      /fn_user_has_any_role/i.test(POLICY),
+      'logs_sis_admin voltou a decidir por cargo — o painel deixa de mandar',
     ).toBe(false);
   });
 
-  it('o padrão de `ver_logs` está vazio hoje', () => {
-    // Documenta a decisão de 17/08/2026: só super_admin lê a trilha, e a
-    // permissão não é concedida por padrão a ninguém.
-    expect(Object.keys(VER_LOGS!.padrao ?? {})).toEqual([]);
+  it('`ver_logs` continua no catálogo, senão a política ficaria sem dono', () => {
+    const chave = PERMISSOES.find(p => p.key === 'ver_logs');
+    expect(chave, '`ver_logs` sumiu do catálogo').toBeDefined();
   });
-});
 
-/**
- * A migration que desligou a permissão tem de continuar existindo — sem ela,
- * um banco restaurado de backup antigo volta com as 6 pessoas na mesma
- * situação.
- */
-describe('a correção está registrada em migration', () => {
-  it('existe migration que desliga `ver_logs` fora de super_admin', () => {
-    const achou = fs.readdirSync(MIGRATIONS)
-      .filter(f => f.endsWith('.sql'))
-      .some(f => {
-        const sql = fs.readFileSync(path.join(MIGRATIONS, f), 'utf8');
-        return /jsonb_set\s*\(\s*permissoes\s*,\s*'\{ver_logs\}'/i.test(sql);
-      });
-    expect(achou).toBe(true);
+  it('o padrão de `ver_logs` não liga a trilha para ninguém sem decisão', () => {
+    /*
+     * Agora que a policy segue a chave, o padrão vira concessão de verdade —
+     * antes era inócuo, porque o RLS negava de qualquer jeito. Ligar alguém
+     * aqui passa a dar acesso à auditoria no mesmo deploy.
+     */
+    const chave = PERMISSOES.find(p => p.key === 'ver_logs')!;
+    const ligados = Object.entries(chave.padrao).filter(([, v]) => v).map(([c]) => c);
+    expect(ligados, 'alguém nasceria com a trilha de auditoria ligada').toEqual([]);
   });
 });

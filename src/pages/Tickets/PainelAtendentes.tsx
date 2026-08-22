@@ -14,6 +14,7 @@
  * que dá para removê-los, e não dá.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Loader2, Plus, Trash2, ShieldCheck } from 'lucide-react';
 import {
   Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
@@ -41,6 +42,13 @@ interface Props {
 interface Pessoa { id: string; nome: string; perfil: string | null }
 
 export default function PainelAtendentes({ aberto, onFechar, liberado, onMudou }: Props) {
+  /*
+   * Virar a chave da aba e autorizar atendente eram `administrador` escrito
+   * dentro do RLS. Agora sao a mesma chave do painel que a policy pergunta —
+   * o botao e o banco passam a concordar por construcao.
+   */
+  const { temPermissao } = useCargoPermissoes();
+  const podeAdministrar = temPermissao('administrar_sistema');
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const empresaId = empresa?.id ?? null;
@@ -79,6 +87,7 @@ export default function PainelAtendentes({ aberto, onFechar, liberado, onMudou }
   }, [busca, pessoas, atendentes]);
 
   async function virarChave(valor: boolean) {
+    if (!podeAdministrar) return;
     if (!empresaId) return;
     setSalvando(true);
     const r = await definirLiberacaoDaAba(empresaId, valor, perfil?.id ?? null);
@@ -91,6 +100,7 @@ export default function PainelAtendentes({ aberto, onFechar, liberado, onMudou }
   }
 
   async function autorizar(p: Pessoa) {
+    if (!podeAdministrar) return;
     if (!empresaId) return;
     const r = await autorizarAtendente(empresaId, p.id, perfil?.id ?? null);
     if (r.erro) { toast.error(r.erro); return; }
@@ -101,6 +111,7 @@ export default function PainelAtendentes({ aberto, onFechar, liberado, onMudou }
   }
 
   async function revogar(a: Atendente) {
+    if (!podeAdministrar) return;
     if (!empresaId) return;
     const r = await revogarAtendente(empresaId, a.perfilId);
     if (r.erro) { toast.error(r.erro); return; }

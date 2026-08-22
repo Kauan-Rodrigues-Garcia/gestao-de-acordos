@@ -15,3 +15,15 @@ export const PERFIS_CRIA_COMEMORACAO = [
 export function podeCriarComemoracao(perfil: string | null | undefined): boolean {
   return !!perfil && (PERFIS_CRIA_COMEMORACAO as readonly string[]).includes(perfil);
 }
+
+/**
+ * A versao que o painel manda: `comemoracoes_gerenciar`.
+ *
+ * A de cima decide por cargo e continua servindo aos lugares que so tem o
+ * perfil em maos. Onde da para perguntar ao painel, pergunte a esta.
+ */
+export function podeGerenciarComemoracoes(
+  temPermissao: (chave: string) => boolean,
+): boolean {
+  return temPermissao('comemoracoes_gerenciar');
+}

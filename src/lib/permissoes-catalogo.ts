@@ -329,6 +329,16 @@ export const PERMISSOES: PermissaoMeta[] = [
    * teria concedido exclusão em massa sem ninguém pedir.
    */
   {
+    key: 'administrar_sistema', label: 'Administrar o sistema',
+    descricao: 'Editar o painel de permissões, a fila de Tickets e ver o monitoramento de uso',
+    grupo: 'Ações específicas', padrao: {},
+  },
+  {
+    key: 'comemoracoes_gerenciar', label: 'Comemorações: criar e editar',
+    descricao: 'Montar e apagar comemorações e a mídia delas',
+    grupo: 'Ações específicas', padrao: { diretoria: true },
+  },
+  {
     key: 'usuarios_administrar', label: 'Usuários: administrar contas',
     descricao: 'Criar, excluir e editar qualquer pessoa, inclusive de outros setores',
     grupo: 'Gestão de pessoas', padrao: {},

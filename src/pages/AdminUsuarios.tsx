@@ -13,7 +13,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
-import { podeCriarComemoracao } from '@/pages/Comemoracoes/permissoes';
+import { podeGerenciarComemoracoes } from '@/pages/Comemoracoes/permissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
@@ -94,7 +94,7 @@ export default function AdminUsuarios() {
   // Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
   // criação — quem só assiste não precisa da aba, a comemoração chega pelo
   // overlay em qualquer página.
-  const podeVerComemoracoes = podeCriarComemoracao(perfilAtual?.perfil);
+  const podeVerComemoracoes = podeGerenciarComemoracoes(temPermissao);
   const isAdmin = perfilAtual?.perfil === 'administrador';
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
