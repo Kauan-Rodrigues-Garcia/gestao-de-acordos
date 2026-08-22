@@ -18,7 +18,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
-import { veTodosOsSetores, ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
+import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
@@ -157,7 +158,10 @@ export function AnalyticsPanel({
   // Quem enxerga a empresa toda. Mesma função da aba Analítico: as duas telas
   // discordavam (aba decidia por cargo, dashboard por permissão), e a diretoria
   // via a empresa numa e só o próprio setor na outra.
-  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
+  // Escopo DESTE painel, e de nenhum outro. Antes vinha de `veTodosOsSetores`,
+  // que respondia por cargo ou pelas chaves globais — as mesmas do Analítico,
+  // do Recebimento e, até a fase 2, do Painel Líder.
+  const veTodosSetores = escopoEfetivo('dashboard', temPermissao) === 'todos_setores';
   // Sem visão global o painel fica travado no setor do usuário — os números de
   // um setor nunca somam nos do outro.
   const setorTravado = !veTodosSetores ? (perfil?.setor_id ?? null) : null;

@@ -130,9 +130,10 @@ sobre o mapa de permissões.** Ele decide por cargo, setor e empresa.
 2. **Permissão morta é armadilha conhecida.** `ver_acordos_proprios` e
    `ver_analiticos_setor` já foram botões que ligavam e não mudavam nada. Daí
    nasceu a lista `PERMISSOES_LEGADAS_PADRAO_TRUE`.
-3. **Chave ausente não é `false`.** Chave legada ausente vale `true`; qualquer
-   outra ausente vale `false`. Uma migração que apenas adicione chaves novas muda
-   comportamento por omissão.
+3. **Chave ausente é `false`, sem exceção.** O `PERMISSOES_LEGADAS_PADRAO_TRUE`
+   foi removido em 2026-08-15, quando a migration `20260815154058` gravou o
+   catálogo inteiro em todo cargo — sem ausência, o fallback não tinha função.
+   `docs/REGRAS-DE-NEGOCIO.md` §2.4 descrevia a versão antiga até 2026-08-22.
 4. **`ON CONFLICT DO NOTHING` no seed** já deixou empresa com
    `cargos_permissoes` vazio — e aí tudo que não é legado cai em `false`.
 5. **`administrador` e `super_admin` recebem `true` sempre**, antes de consultar

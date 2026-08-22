@@ -91,6 +91,7 @@ export const GRUPOS_PERMISSAO = [
   'Ações específicas',
   'Lixeira',
   'Painel Líder',
+  'Dashboard',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -381,6 +382,32 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'painel_lider_sub_grafico_recebimento', label: 'Painel Líder: Gráfico recebimento',
     descricao: 'Abrir a aba interna do gráfico de recebimento',
     grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+
+  // ── Dashboard ────────────────────────────────────────────────────────────
+  // O Dashboard NÃO tem chave de aba, e isso é deliberado: ele é a rota `/`,
+  // para onde o login e três redirecionamentos de `ProtectedRoute` apontam.
+  // Um interruptor aqui trancaria a pessoa fora do app. Ver
+  // `permissoes-escopo.ts`.
+  {
+    key: 'dashboard_escopo_individual', label: 'Dashboard: os próprios dados',
+    descricao: 'Ver no Dashboard os acordos da própria pessoa',
+    grupo: 'Dashboard', padrao: TODOS,
+  },
+  {
+    key: 'dashboard_escopo_equipe', label: 'Dashboard: dados da equipe',
+    descricao: 'Ver no Dashboard os acordos da equipe, com o filtro de equipe',
+    grupo: 'Dashboard', padrao: LIDERANCA,
+  },
+  {
+    key: 'dashboard_escopo_setor', label: 'Dashboard: dados do setor',
+    descricao: 'Ver no Dashboard os acordos do setor inteiro',
+    grupo: 'Dashboard', padrao: LIDERANCA,
+  },
+  {
+    key: 'dashboard_escopo_todos_setores', label: 'Dashboard: todos os setores',
+    descricao: 'Ver no Dashboard qualquer setor, com o filtro de setor disponível',
+    grupo: 'Dashboard', padrao: { gerencia: true, diretoria: true },
   },
 
   // ── Ações específicas ────────────────────────────────────────────────────

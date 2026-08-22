@@ -118,9 +118,34 @@ describe('uma aba nao fala pela outra', () => {
       for (const nivel of meta.niveis) {
         expect(chaveEscopo(meta.prefixo, nivel)).toContain(meta.prefixo);
       }
-      expect(meta.chaveAba).not.toContain('escopo');
+      if (meta.chaveAba !== null) expect(meta.chaveAba).not.toContain('escopo');
       expect(nome.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('aba sem interruptor', () => {
+  /*
+   * O Dashboard e a rota `/`, para onde o login e tres redirecionamentos
+   * apontam. Uma chave que o desligue tranca a pessoa fora do app, entao ele
+   * nao tem interruptor — so escopo. Estes testes travam esse desenho.
+   */
+  it('resolve escopo mesmo sem nenhuma chave de aba ligada', () => {
+    const tem = comChaves(chaveEscopo('dashboard', 'setor'));
+    expect(escopoEfetivo('dashboard', tem)).toBe('setor');
+  });
+
+  it('sem nivel nenhum continua sem escopo', () => {
+    expect(escopoEfetivo('dashboard', comChaves())).toBeNull();
+  });
+
+  it('e continua nao ouvindo as chaves de outras abas', () => {
+    const tem = comChaves(
+      chaveEscopo('dashboard', 'individual'),
+      chaveEscopo('lixeira', 'todos_setores'),
+      chaveEscopo('painel_lider', 'todos_setores'),
+    );
+    expect(escopoEfetivo('dashboard', tem)).toBe('individual');
   });
 });
 

@@ -357,17 +357,19 @@ Catálogo completo (`src/pages/AdminCargos.tsx`):
    permissões não os limita.
 2. Se a chave **existe** no JSON do banco, o valor salvo vale — inclusive
    `false`, que bloqueia.
-3. Se a chave **não existe**:
-   - chaves da lista `PERMISSOES_LEGADAS_PADRAO_TRUE` → `true`;
-   - qualquer outra → `false`.
+3. Se a chave **não existe** → `false`. Sem exceção.
 
-O passo 3 existe porque essas permissões nasceram "mortas" (declaradas na tela,
-nunca consultadas no código). Quando passaram a ser fiscalizadas, o padrão
-`true` evitou tirar acesso de quem já tinha. As legadas são:
-`ver_acordos_proprios`, `editar_acordos`, `excluir_acordos`, `importar_excel`,
-`ver_analiticos_setor`, `gerenciar_metas`, `filtrar_por_setor`,
-`filtrar_por_equipe`, `ver_equipes`, `ver_operadores`, `editar_usuarios`,
-`editar_equipes`, `ver_logs`.
+> ⚠️ **Isto mudou em 2026-08-15, e a versão antiga desta seção circulou por
+> um tempo.** Existia um `PERMISSOES_LEGADAS_PADRAO_TRUE` com 13 chaves que
+> valiam `true` quando ausentes. Ele foi removido: a tela lia a mesma
+> ausência e desenhava o toggle DESLIGADO, então a tela dizia "não" e o
+> sistema dizia "sim" — 25 casos medidos em produção, incluindo operador da
+> BookPlay com `editar_usuarios` e `editar_equipes`.
+>
+> A migration `20260815154058` acabou com a ausência: todo cargo passou a ter
+> o catálogo inteiro gravado. Sem ausência, o fallback não tinha função.
+> Quem escrever migration de permissão deve usar **`false` como padrão de
+> chave ausente**, sempre.
 
 > ⚠️ **Armadilha do seed.** O seed de permissões usa `ON CONFLICT DO NOTHING`,
 > então uma empresa pode terminar com `cargos_permissoes` vazio — e aí toda

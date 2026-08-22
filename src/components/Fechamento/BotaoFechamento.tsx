@@ -20,10 +20,14 @@
  *
  * ## Quem baixa o quê
  *
- * O nível sai do cargo, pela mesma função do painel (`veTodosOsSetores`), e é
+ * O nível sai do escopo do Dashboard — o painel onde este botão vive — e é
  * mostrado no próprio botão em forma de legenda ("do setor", "meu"). Ninguém
  * escolhe escopo aqui: escolher seria uma segunda resposta para "quem eu
  * enxergo?", e a RLS recusaria a primeira que discordasse dela.
+ *
+ * Até a fase 3 da reestruturação por aba isso vinha de `veTodosOsSetores`,
+ * que respondia por cargo ou pelas chaves globais. Agora vem das chaves do
+ * Dashboard, e é lá que se muda quem baixa o quê.
  *
  *   operador  → "Meu fechamento"        só ele
  *   líder     → "Fechamento do setor"   o setor dele, com os operadores
@@ -38,7 +42,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { isPerfilAdminOuLider } from '@/lib/index';
 import { rotuloDoMes } from '@/lib/mesReferencia';
 import { mesFechado } from '@/lib/fechamentoMes';
@@ -70,7 +74,13 @@ export function BotaoFechamento({
   if (!mesFechado(mes)) return null;
 
   const cargo = perfil?.perfil ?? '';
-  const vejoTudo = veTodosOsSetores(cargo, temPermissao);
+  /*
+   * O nível do relatório segue o painel onde este botão vive: ele é
+   * renderizado dentro do AnalyticsPanel, no Dashboard. Usar outra fonte de
+   * escopo faria o relatório e a tela discordarem sobre o mesmo mês — que é
+   * exatamente o defeito que `escopoAnalitico` foi criado para acabar.
+   */
+  const vejoTudo = escopoEfetivo('dashboard', temPermissao) === 'todos_setores';
   const vejoOutros = isPerfilAdminOuLider(cargo);
 
   const nivel: NivelFechamento = vejoTudo ? 'diretoria' : vejoOutros ? 'setor' : 'operador';

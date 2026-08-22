@@ -43,8 +43,17 @@ const AMPLITUDE: Record<NivelEscopo, number> = {
 };
 
 export interface AbaComEscopo {
-  /** A chave que liga e desliga a aba inteira. */
-  chaveAba: string;
+  /**
+   * A chave que liga e desliga a aba inteira, ou `null` quando a aba não tem
+   * uma — caso do Dashboard.
+   *
+   * `null` não é lacuna a preencher depois sem pensar: o Dashboard é a rota
+   * `/`, para onde o login e três redirecionamentos de `ProtectedRoute`
+   * apontam. Uma chave que o desligue tranca a pessoa fora do app, e para
+   * onde ela deveria cair é decisão de produto. Enquanto não houver essa
+   * decisão, o Dashboard tem escopo próprio e nenhum interruptor.
+   */
+  chaveAba: string | null;
   /** Prefixo das chaves desta aba, sem o underscore final. */
   prefixo: string;
   /** Níveis que fazem sentido nesta aba. Nem toda aba usa os quatro. */
@@ -75,6 +84,15 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'painel_lider',
     niveis: ['setor', 'todos_setores'],
   },
+  /*
+   * O Dashboard usa os quatro níveis e não tem chave de aba — ver o comentário
+   * de `chaveAba`. Ele é a tela inicial e hoje aparece para todo cargo.
+   */
+  dashboard: {
+    chaveAba: null as string | null,
+    prefixo: 'dashboard',
+    niveis: NIVEIS_ESCOPO,
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;
@@ -93,7 +111,8 @@ export function niveisLiberados(
   temPermissao: (chave: string) => boolean,
 ): NivelEscopo[] {
   const meta = ABAS_COM_ESCOPO[aba];
-  if (!temPermissao(meta.chaveAba)) return [];
+  // Aba sem interruptor está sempre aberta; o escopo dela decide sozinho.
+  if (meta.chaveAba !== null && !temPermissao(meta.chaveAba)) return [];
   return meta.niveis.filter(n => temPermissao(chaveEscopo(meta.prefixo, n)));
 }
 
