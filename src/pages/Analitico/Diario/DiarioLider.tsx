@@ -35,7 +35,7 @@ import { useDiarioImport } from '@/hooks/useDiarioImport';
 import { normDiario } from '@/services/diario/diarioComum';
 import { copiarTexto } from '@/lib/clipboard';
 import { buscarEquipesComOperadores } from '@/services/analitico/analitico.service';
-import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import {
   escopoDoDiario, linhasVisiveis, filtrarPorEquipe, contarSetores,
   type EscopoDiario, type VinculosDiario,
@@ -71,7 +71,9 @@ export function DiarioLider({
   const mostrarNR = !tenant.isPaguePlay;   // BookPlay usa NR no lugar do Cod.Cliente
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  const veTudoSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
+  // O Recebimento Diário mora dentro do Analítico e usa o escopo DELE — é o
+  // que o projeto por aba diz em §3.8. Antes vinha de `veTodosOsSetores`.
+  const veTudoSetores = escopoEfetivo('analitico', temPermissao) === 'todos_setores';
   const importHook = useDiarioImport();
   const { dados: dadosDaEmpresa, loading: carregandoDia, refetch } = useDiario({ dia });
 

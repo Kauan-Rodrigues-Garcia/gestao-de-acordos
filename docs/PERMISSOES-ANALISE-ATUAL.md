@@ -95,14 +95,30 @@ caso citado no pedido: mudar o escopo de Acordos mexe na Lixeira sem querer.
 | `filtrar_por_equipe` | `Dashboard/index.tsx` (1 uso) | Se o seletor de equipe aparece no Dashboard |
 | `filtrar_por_usuario` | `Acordos/*` (2 usos) | Se o seletor de operador aparece em Acordos |
 
+> ✅ **Estado em 2026-08-22, depois das fases 1 a 4.** `filtrar_por_setor` e
+> `filtrar_por_equipe` foram aposentadas na fase 3b, e `ver_analiticos_global`
+> na fase 4 — as três ficaram sem consumidor no instante em que a aba
+> correspondente ganhou escopo próprio, e o teste de contrato acusou. Só
+> `filtrar_por_usuario` e `ver_todos_setores` continuam vivas, e as duas apenas
+> em Acordos. Os valores gravados viraram entradas órfãs e inertes; a faxina do
+> JSON fica para a fase 8.
+
 ### O resolvedor único
 
-`escopoAnalitico.ts` exporta `veTodosOsSetores(cargo, temPermissao)`, usado em
-**26 arquivos**.
+`escopoAnalitico.ts` exportava `veTodosOsSetores(cargo, temPermissao)`.
 
 Ele já unificou uma divergência antiga (a aba decidia por cargo, o dashboard por
-permissão, e a mesma pessoa via dois totais diferentes). Hoje é o ponto único de
-escopo — e é o encaixe natural para um parâmetro de contexto por aba.
+permissão, e a mesma pessoa via dois totais diferentes). Era o ponto único de
+escopo — e por isso mesmo era o problema: **uma resposta só para cinco telas**.
+
+> ✅ **Aposentado na fase 4.** O último consumidor saiu junto com o escopo
+> próprio do Analítico. A pergunta agora é
+> `escopoEfetivo('<aba>', temPermissao) === 'todos_setores'`, respondida por
+> aba.
+>
+> Correção de um número que este documento trouxe errado: **26 arquivos**
+> importavam *algo* de `escopoAnalitico.ts`; chamadas de `veTodosOsSetores` em
+> si eram **cinco**.
 
 ---
 
@@ -112,7 +128,7 @@ escopo — e é o encaixe natural para um parâmetro de contexto por aba.
 | --- | --- |
 | Arquivos do front que consultam permissões | 48 |
 | Ocorrências das 6 chaves globais de escopo | 76, em ~30 arquivos |
-| Arquivos que usam `veTodosOsSetores` | 26 |
+| Chamadas de `veTodosOsSetores` | 5 (26 arquivos importam algo do módulo) |
 | Políticas RLS que consultam `fn_tem_permissao` | **0** |
 | Funções que consultam `fn_tem_permissao` | **0** |
 

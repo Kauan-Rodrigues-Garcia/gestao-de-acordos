@@ -60,6 +60,7 @@ import {
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 import { ComposicaoAcumulado } from './ComposicaoAcumulado';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 // As contas desta tela vivem em `agregacaoLider`: são puras e têm teste
 // próprio, o que os `useMemo` que elas substituíram nunca tiveram.
 import {
@@ -110,6 +111,7 @@ export function AnaliticoLider({
 }: AnaliticoLiderProps) {
   const importHook = useAnaliticoImport();
   const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const perfilId = perfil?.id ?? null;
   // Quem edita a composição do acumulado é o mesmo público que importa o
   // relatório e responde pelo número do setor — igual à RLS da 20260812e.
@@ -120,6 +122,32 @@ export function AnaliticoLider({
 
   const [modalImportar, setModalImportar] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState<'operadores' | 'formas' | 'ranking' | 'destaques' | 'desempenho' | 'quartis' | 'grafico' | 'orfaos'>('operadores');
+
+  /*
+   * As cinco abas de dentro, cada uma com a própria chave — desligar uma não
+   * mexe nas outras.
+   *
+   * `abaVisivel` existe pelo mesmo motivo da régua de cima: `abaAtiva` nasce
+   * em `'operadores'`, então sem ele desligar "Por operador" tiraria o botão e
+   * deixaria a lista de operadores no ar como tela de entrada. Os efeitos que
+   * carregam órfãos e destaques também olham `abaVisivel`, senão a aba que
+   * aparece e a que busca dados seriam duas diferentes.
+   */
+  const abasInternas = useMemo(() => ([
+    { key: 'operadores', label: 'Por operador',        Icon: Users,       permissao: 'analitico_sub_por_operador' },
+    // Por onde o dinheiro entrou (Pix, Boleto, Cartão…), com período, equipe e
+    // operador — a leitura que antes só existia no ERP.
+    { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet,      permissao: 'analitico_sub_formas_pagamento' },
+    { key: 'ranking',    label: 'Ranking',             Icon: Trophy,      permissao: 'analitico_sub_ranking' },
+    { key: 'destaques',  label: 'Destaques do dia',    Icon: Star,        permissao: 'analitico_sub_destaques_dia' },
+    // Desempenho Equipes / Quartis / Gráfico mudaram para o Painel Líder nos
+    // dois tenants (BookPlay 2026-07). Aqui ficam só as de conferência.
+    { key: 'orfaos',     label: 'Sem operador',        Icon: AlertCircle, permissao: 'analitico_sub_sem_operador' },
+  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+
+  const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
+    ? abaAtiva
+    : (abasInternas[0]?.key ?? null);
 
   // ── Resumos por operador ──────────────────────────────────────────────────
   const [resumos,        setResumos]        = useState<ResumoOperadorAnalitico[]>([]);
@@ -253,10 +281,10 @@ export function AnaliticoLider({
   }, [carregarResumos, carregarSnapshot]);
 
   useEffect(() => {
-    if (abaAtiva === 'orfaos')    void carregarOrfaos();
-    if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
+    if (abaVisivel === 'orfaos')    void carregarOrfaos();
+    if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [abaAtiva]);
+  }, [abaVisivel]);
 
   useEffect(() => {
     // Passa o mês: fechado usa o retrato congelado da composição, senão mover
@@ -294,7 +322,7 @@ export function AnaliticoLider({
   // Quando o setor externo muda: reseta filtro de equipe interno e recarrega destaques
   useEffect(() => {
     setFiltroEquipeId(null);
-    if (abaAtiva === 'destaques') void carregarDestaques(null, setorId);
+    if (abaVisivel === 'destaques') void carregarDestaques(null, setorId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setorId]);
 
@@ -354,7 +382,7 @@ export function AnaliticoLider({
   // ── Filtro de equipe ──────────────────────────────────────────────────────
   function mudarFiltroEquipe(equipeId: string | null) {
     setFiltroEquipeId(equipeId);
-    if (abaAtiva === 'destaques') void carregarDestaques(equipeId, setorId);
+    if (abaVisivel === 'destaques') void carregarDestaques(equipeId, setorId);
   }
 
   // ── Toggle card de operador ───────────────────────────────────────────────
@@ -486,8 +514,8 @@ export function AnaliticoLider({
       setConfirmandoLimpeza(false);
       void carregarResumos();
       void carregarSnapshot();
-      if (abaAtiva === 'orfaos')    void carregarOrfaos();
-      if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
+      if (abaVisivel === 'orfaos')    void carregarOrfaos();
+      if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
     }
     setLimpando(false);
@@ -498,8 +526,8 @@ export function AnaliticoLider({
     if (importHook.estado === 'done') {
       void carregarResumos();
       void carregarSnapshot();
-      if (abaAtiva === 'orfaos')    void carregarOrfaos();
-      if (abaAtiva === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
+      if (abaVisivel === 'orfaos')    void carregarOrfaos();
+      if (abaVisivel === 'destaques') void carregarDestaques(filtroEquipeId, setorId);
       onRefetch();
     }
   }
@@ -669,22 +697,11 @@ export function AnaliticoLider({
         {/* Com cinco abas a régua não cabe em tela estreita: rola na horizontal
             em vez de quebrar linha — a borda inferior do strip é uma só. */}
         <div className="flex items-center gap-1 border-b border-border max-w-full overflow-x-auto">
-          {([
-            { key: 'operadores', label: 'Por operador',     Icon: Users },
-            // Por onde o dinheiro entrou (Pix, Boleto, Cartão…), com período,
-            // equipe e operador — a leitura que antes só existia no ERP.
-            { key: 'formas',     label: 'Formas de pagamento', Icon: Wallet },
-            { key: 'ranking',    label: 'Ranking',          Icon: Trophy },
-            { key: 'destaques',  label: 'Destaques do dia', Icon: Star },
-            // Desempenho Equipes / Quartis / Gráfico moraram para o Painel Líder
-            // nos dois tenants (mudança de caminho — BookPlay 2026-07). Aqui
-            // ficam só as abas de conferência do relatório.
-            { key: 'orfaos',     label: 'Sem operador',     Icon: AlertCircle },
-          ] as const).map(({ key, label, Icon }) => (
+          {abasInternas.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => setAbaAtiva(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
-                abaAtiva === key
+                abaVisivel === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
               )}
@@ -709,8 +726,16 @@ export function AnaliticoLider({
         )}
       </div>
 
+      {/* Cinco abas desligadas: os cards de resumo acima continuam valendo, e
+          esta linha explica por que a régua está vazia. */}
+      {abaVisivel === null && (
+        <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+          Nenhum detalhamento do Analítico está liberado para o seu cargo.
+        </div>
+      )}
+
       {/* ── Aba: Por operador ─────────────────────────────────────────────── */}
-      {abaAtiva === 'operadores' && (
+      {abaVisivel === 'operadores' && (
         <div className="space-y-5">
           {loadingResumos && (
             <div className="space-y-2 animate-pulse">
@@ -964,7 +989,7 @@ export function AnaliticoLider({
       )}
 
       {/* ── Aba: Formas de pagamento ──────────────────────────────────────── */}
-      {abaAtiva === 'formas' && (
+      {abaVisivel === 'formas' && (
         <FormasPagamento
           empresaId={empresaId}
           mes={mes}
@@ -982,7 +1007,7 @@ export function AnaliticoLider({
       )}
 
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}
-      {abaAtiva === 'ranking' && (
+      {abaVisivel === 'ranking' && (
         <div className="space-y-4">
           {equipesFiltradas.length > 0 && (
             <div className="flex items-center gap-2">{seletorEquipe}</div>
@@ -1002,7 +1027,7 @@ export function AnaliticoLider({
       )}
 
       {/* ── Aba: Destaques do dia ─────────────────────────────────────────── */}
-      {abaAtiva === 'destaques' && (
+      {abaVisivel === 'destaques' && (
         <div className="space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
@@ -1075,7 +1100,7 @@ export function AnaliticoLider({
           Painel Líder (os dois tenants — mudança de caminho). */}
 
       {/* ── Aba: Sem operador ─────────────────────────────────────────────── */}
-      {abaAtiva === 'orfaos' && (
+      {abaVisivel === 'orfaos' && (
         <div className="space-y-3">
           {loadingOrfaos && (
             <div className="space-y-2 animate-pulse">

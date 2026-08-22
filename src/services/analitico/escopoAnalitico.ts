@@ -179,23 +179,15 @@ export function temCarimboDeSetor(linhas: readonly LinhaEscopavel[]): boolean {
   return linhas.some(l => l.setor_id !== undefined);
 }
 
-/**
- * Quem enxerga a empresa inteira no analítico.
+/*
+ * `veTodosOsSetores` foi APOSENTADA na fase 4 da reestruturação por aba.
  *
- * Existia em duas versões que discordavam: a aba Analítico decidia pelo CARGO
- * (`administrador`/`super_admin`/`diretoria`) e o dashboard decidia por
- * PERMISSÃO (`ver_analiticos_global`/`ver_todos_setores`). A diretoria, por
- * exemplo, via a empresa toda na aba e só o próprio setor no dashboard — dois
- * totais diferentes para a mesma pessoa, na mesma hora.
+ * Ela respondia "quem enxerga a empresa inteira" para o Analítico, o
+ * Dashboard, a Lixeira, o Painel Líder e o fechamento — cinco telas, uma
+ * resposta. Era exatamente o que o pedido de reestruturação proíbe: mexer no
+ * alcance de uma aba mudava o das outras.
  *
- * Agora é uma função só: o cargo abre por si, e a permissão configurável em
- * Admin → Cargos pode abrir para os demais.
+ * Cada aba agora tem os próprios níveis, e a pergunta vira
+ * `escopoEfetivo('<aba>', temPermissao) === 'todos_setores'`. Ver
+ * `src/lib/permissoes-escopo.ts`.
  */
-export function veTodosOsSetores(
-  cargo: string | null | undefined,
-  temPermissao: (chave: string) => boolean,
-): boolean {
-  const c = String(cargo ?? '');
-  if (c === 'administrador' || c === 'super_admin' || c === 'diretoria') return true;
-  return temPermissao('ver_analiticos_global') || temPermissao('ver_todos_setores');
-}

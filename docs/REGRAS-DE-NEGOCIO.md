@@ -338,13 +338,12 @@ Catálogo completo (`src/pages/AdminCargos.tsx`):
 | | `excluir_em_lote` | Excluir vários de uma vez |
 | | `importar_excel` | Importação em lote via planilha |
 | **Painéis** | `ver_painel_lider` | Painel do líder |
-| | `ver_analiticos_setor` | Métricas e KPIs do próprio setor |
-| | `ver_analiticos_global` | Métricas de toda a empresa |
-| | `ver_todos_setores` | Dados de todos os setores |
+| | `ver_todos_setores` | Dados de todos os setores (só Acordos, em desmonte) |
 | | `gerenciar_metas` | Criar/editar/acompanhar metas |
 | | `importar_analitico` | Importar o relatório analítico do ERP |
 | | `importar_diario` | Importar o relatório de recebimento diário |
-| **Filtros** | `filtrar_por_setor` / `filtrar_por_equipe` / `filtrar_por_usuario` | Habilita cada filtro nas listagens |
+| **Filtros** | `filtrar_por_usuario` | Habilita o filtro de pessoa em Acordos |
+| **Escopo por aba** | `<aba>_escopo_<nível>` | O alcance daquela aba, e só dela — §2.4-c |
 | **Gestão** | `ver_usuarios`, `ver_equipes`, `ver_metas`, `ver_operadores` | Acesso de leitura às telas de gestão |
 | | `editar_usuarios`, `editar_equipes` | Acesso de escrita |
 | **Lixeira & Logs** | `ver_lixeira`, `ver_logs`, `ver_configuracoes` | Lixeira, auditoria e configurações |
@@ -410,11 +409,58 @@ Checklist antes de dar a tarefa por concluída:
    tela? Chave declarada e nunca lida vira permissão morta — foi exatamente o
    que gerou a lista `PERMISSOES_LEGADAS_PADRAO_TRUE` de §2.4.
 6. Se a ferramenta lê dados, o escopo dela é o **da própria aba** e não herdado
-   de outra (§2.4-c, quando a estrutura por aba entrar).
+   de outra (§2.4-c).
 
 Permissão esquecida não aparece como erro: aparece como aba vazia, filtro sem
 opção, ou gente vendo dado que não devia. Nenhum desses casos quebra teste
 sozinho.
+
+### 2.4-c Escopo por aba: uma aba nunca fala pela outra
+
+Até 2026-08-22 o alcance era **global**: `ver_acordos_gerais`,
+`ver_todos_setores` e `ver_analiticos_global` decidiam, de uma vez, o que a
+pessoa via em Acordos, Dashboard, Lixeira, Analítico e Painel Líder. Mexer no
+alcance de uma tela mexia nas outras sem ninguém pedir — foi o pedido de
+reestruturação que encerrou esse desenho.
+
+**Cada aba carrega os próprios níveis.** Um cargo pode ser `individual` em
+Acordos e `setor` na Lixeira sem contradição.
+
+| Forma | Significa | Exemplo |
+| --- | --- | --- |
+| `<aba>_escopo_<nível>` | Alcance de dados **daquela aba** | `lixeira_escopo_setor` |
+| `<aba>_sub_<nome>` | Aba interna daquela aba | `analitico_sub_colchao` |
+| `<aba>_<ação>` | Ação dentro da aba | `lixeira_restaurar` |
+
+Níveis, do mais estreito ao mais amplo: `individual`, `equipe`, `setor`,
+`todos_setores`. **Nem toda aba usa os quatro** — o Painel Líder tem dois e o
+Analítico tem três, porque os outros nunca existiram como alcance ali.
+Registrar um nível que a tela não usa cria um toggle que liga, desliga e não
+muda nada.
+
+Quatro regras que o código já garante, e que os testes travam:
+
+1. **Os níveis são chaves independentes, não uma escada.** Um cargo pode ter
+   `individual` e `setor` sem `equipe`, e o filtro mostra exatamente esses dois.
+2. **Desligar a aba-mãe torna toda chave `<aba>_*` inefetiva**, resolvido na
+   LEITURA (`niveisLiberados`) e nunca gravando `false` nas filhas. Religar a
+   aba devolve a configuração que já existia.
+3. **Nenhuma chave de outra aba concede nada aqui.** É o contrato central de
+   `src/lib/permissoes-escopo.test.ts`.
+4. **Aba interna escondida não pode ser a tela de entrada.** Quem esconde o
+   botão da régua e serve o conteúdo dela por padrão não escondeu nada — cada
+   página resolve a aba realmente visível antes de renderizar.
+
+Onde está: registro em `src/lib/permissoes-escopo.ts` (`ABAS_COM_ESCOPO`),
+catálogo nos dois lados, desenho e fases em
+[PERMISSOES-POR-ABA-PROJETO.md](PERMISSOES-POR-ABA-PROJETO.md).
+
+> ⚠️ **O escopo por aba também AMPLIA, e isso tem custo.** Uma política de RLS
+> não sabe de qual aba veio a consulta. Quando a fase 7 levantar o teto, ele
+> subirá para o MAIOR escopo entre as abas daquele cargo — na tela cada aba
+> continua estreitando, mas uma chamada direta à API alcança o teto, não o
+> recorte da aba. Escopo amplo numa aba é decisão sobre o **dado**, não sobre a
+> **tela**.
 
 ### 2.5 Proteção de rotas
 
@@ -1208,9 +1254,13 @@ Desempenho Equipes, Quartis e Gráfico recebem `setorId` e `equipeId` prontos de
 **`setorId` nulo significa "todos os setores"** e nenhum componente filho
 completa esse valor.
 
-Quem enxerga mais de um setor — decidido por `veTodosOsSetores`, a mesma função
-do dashboard — ganha os seletores no cabeçalho do painel. Quem não enxerga fica
-travado no próprio setor e não vê seletor de setor.
+Quem enxerga mais de um setor — decidido por
+`escopoEfetivo('painel_lider', …)`, o escopo **desta** aba — ganha os seletores
+no cabeçalho do painel. Quem não enxerga fica travado no próprio setor e não vê
+seletor de setor.
+
+(Até a fase 4 isso saía de `veTodosOsSetores`, que respondia por cinco telas de
+uma vez. A função foi aposentada; ver §2.4-c.)
 
 Quatro defeitos que existiam, todos da mesma pergunta respondida em quatro
 lugares:

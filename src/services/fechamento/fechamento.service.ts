@@ -21,8 +21,8 @@
  *
  * ## Escopo: o relatório vê o mesmo que o usuário
  *
- * O nível sai do CARGO (`veTodosOsSetores`, a mesma função do dashboard), nunca
- * de um parâmetro escolhido na tela:
+ * O nível sai do ESCOPO DO DASHBOARD (`escopoEfetivo('dashboard', …)`, resolvido
+ * no `BotaoFechamento`), nunca de um parâmetro escolhido na tela:
  *
  *   operador  → só ele. Sem colega, sem ranking dos outros, sem setor.
  *   setor     → o setor dele, com o detalhamento dos operadores.

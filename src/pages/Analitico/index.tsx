@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -7,10 +7,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import {
-  isPerfilAdminOuLider, isPerfilAdmin, isPerfilDiretoria,
-  getEstadoFromAcordo, ROUTE_PATHS,
-} from '@/lib/index';
+import { isPerfilAdmin, getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { toast } from 'sonner';
@@ -31,22 +29,37 @@ export default function PaginaAnalitico() {
   // ── Todos os hooks ANTES de qualquer return condicional ──────────────────
   const { perfil }       = useAuth();
   const { empresa }      = useEmpresa();
-  const { temPermissao } = useCargoPermissoes();
+  // `carregandoPermissoes` existe só para os avisos de "nada liberado": sem
+  // ele, todo mundo veria a mensagem piscar antes do mapa chegar.
+  const { temPermissao, loading: carregandoPermissoes } = useCargoPermissoes();
   const tenant           = useTenant();
   const navigate         = useNavigate();
 
-  const isElite     = perfil?.perfil === 'elite';
-  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
-  const isOperador  = !isLiderMais;
-
-  // Isolamento por setor: líder/elite/gerência enxergam APENAS o próprio setor.
-  // Só diretoria e admin/super_admin veem todos os setores (e podem filtrar).
-  const veTodosSetores = isPerfilAdmin(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
-  const setorProprio   = perfil?.setor_id ?? null;
+  /*
+   * Alcance DESTA aba, e de nenhuma outra.
+   *
+   * Antes saía de três lugares que discordavam de desenho: as listas de cargo
+   * escritas aqui (`isLiderMais` para a visão de setor, `isPerfilAdmin ||
+   * isPerfilDiretoria` para o filtro de setor) e a função `veTodosOsSetores`,
+   * usada pela importação e pelo Recebimento Diário, que olhava cargo E
+   * permissão. Hoje os três concordam por coincidência: nenhum cargo tem
+   * `ver_analiticos_global` sem ser cúpula. Bastava alguém ligar essa chave
+   * num líder para a régua da aba e a janela de importação passarem a
+   * responder coisas diferentes sobre a mesma pessoa, na mesma tela.
+   *
+   * Agora há uma fonte só, e ela é configurável.
+   */
+  const niveis            = niveisLiberados('analitico', temPermissao);
+  const podeVerIndividual = niveis.includes('individual');
+  const podeVerSetor      = niveis.includes('setor');
+  const veTodosSetores    = niveis.includes('todos_setores');
+  const setorProprio      = perfil?.setor_id ?? null;
   // Validação de relatório (Fase 1): só administrador/super_admin, nunca diretoria.
-  const isAdminReal     = isPerfilAdmin(perfil?.perfil ?? '');
+  const isAdminReal       = isPerfilAdmin(perfil?.perfil ?? '');
 
-  const [visaoElite,    setVisaoElite]    = useState<'individual' | 'geral'>('geral');
+  // O alternador de visão só faz sentido para quem tem os DOIS níveis — hoje,
+  // o elite. Antes a condição era `perfil === 'elite'` escrita à mão.
+  const [visao,         setVisao]         = useState<'individual' | 'geral'>('geral');
   const [filtroSetorId, setFiltroSetorId] = useState<string | null>(null);
   const [setores,       setSetores]       = useState<{ id: string; nome: string }[]>([]);
   // `?aba=diario` abre direto no Recebimento diário. É o destino da notificação
@@ -69,6 +82,30 @@ export default function PaginaAnalitico() {
     if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
   }, [abaDaUrl]);
 
+  /*
+   * As três abas internas, cada uma com a própria chave. Desligar uma não pode
+   * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
+   */
+  const abasPrincipais = useMemo(() => ([
+    { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico' },
+    { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario' },
+    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao' },
+  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+
+  /*
+   * A aba que a tela realmente mostra.
+   *
+   * Sem isto, desligar uma aba interna tiraria o BOTÃO da régua e deixaria o
+   * CONTEÚDO dela no ar sempre que ela fosse a aba de entrada — pelo padrão
+   * `'analitico'` ou pelo `?aba=` da notificação de importação. Esconder o
+   * botão e servir o conteúdo é o oposto do que a permissão promete.
+   *
+   * Derivado, não um `useEffect`: nada a sincronizar, nada a piscar.
+   */
+  const abaVisivel = abasPrincipais.some(a => a.key === abaPrincipal)
+    ? abaPrincipal
+    : (abasPrincipais[0]?.key ?? null);
+
   const [mesFiltro, setMesFiltro] = useState<string>(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
@@ -81,8 +118,15 @@ export default function PaginaAnalitico() {
     estadoConhecido: string | null;
   } | null>(null);
 
-  const mostrarVisaoGeral      = (isLiderMais && !isElite) || (isElite && visaoElite === 'geral');
-  const mostrarVisaoIndividual = isOperador || (isElite && visaoElite === 'individual');
+  /*
+   * Quem tem um nível só não escolhe nada: o único que ele tem é o que vale, e
+   * o estado `visao` fica inerte. Escrito assim de propósito — enquanto as
+   * permissões carregam nenhum nível está liberado, e a tela não renderiza a
+   * visão errada para corrigi-la um instante depois.
+   */
+  const podeAlternarVisao      = podeVerIndividual && podeVerSetor;
+  const mostrarVisaoGeral      = podeVerSetor && (visao === 'geral' || !podeVerIndividual);
+  const mostrarVisaoIndividual = podeVerIndividual && (visao === 'individual' || !podeVerSetor);
 
   // Somente operadores e elite-individual carregam seus próprios dados upfront
   const { dados: dadosProprios, loading: loadingProprios, novosCount, refetch: refetchProprios } = useAnalitico({
@@ -287,14 +331,14 @@ export default function PaginaAnalitico() {
           </div>
         </div>
 
-        {/* Toggle elite */}
-        {isElite && (
+        {/* Alternador de visão — para quem tem os dois níveis (hoje, o elite) */}
+        {podeAlternarVisao && (
           <div className="flex items-center gap-1 border rounded-lg p-0.5 bg-muted/30">
             <button
-              onClick={() => setVisaoElite('individual')}
+              onClick={() => setVisao('individual')}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                visaoElite === 'individual'
+                visao === 'individual'
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
@@ -302,10 +346,10 @@ export default function PaginaAnalitico() {
               <User className="w-3.5 h-3.5" /> Minha visão
             </button>
             <button
-              onClick={() => setVisaoElite('geral')}
+              onClick={() => setVisao('geral')}
               className={cn(
                 'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors',
-                visaoElite === 'geral'
+                visao === 'geral'
                   ? 'bg-background shadow-sm text-foreground'
                   : 'text-muted-foreground hover:text-foreground',
               )}
@@ -316,17 +360,13 @@ export default function PaginaAnalitico() {
         )}
       </div>
 
-      {/* Abas internas: Analítico × Recebimento diário */}
+      {/* Abas internas: Analítico × Recebimento diário × Colchão */}
       <div className="flex items-center gap-1 border-b border-border">
-        {([
-          { key: 'analitico', label: 'Analítico',          Icon: BarChart2 },
-          { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins },
-          { key: 'colchao', label: 'Colchão', Icon: Layers3 },
-        ] as const).map(({ key, label, Icon }) => (
+        {abasPrincipais.map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setAbaPrincipal(key)}
             className={cn(
               'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              abaPrincipal === key
+              abaVisivel === key
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
             )}
@@ -336,8 +376,16 @@ export default function PaginaAnalitico() {
         ))}
       </div>
 
+      {/* Nenhuma aba interna liberada: dizer isso é melhor do que uma página
+          em branco, que se lê como defeito. */}
+      {abaVisivel === null && !carregandoPermissoes && (
+        <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+          Nenhuma aba do Analítico está liberada para o seu cargo.
+        </div>
+      )}
+
       {/* Seletor de mês + filtro de setor (somente aba Analítico) */}
-      {abaPrincipal !== 'diario' && (
+      {abaVisivel !== 'diario' && (
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
@@ -393,7 +441,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaPrincipal === 'analitico' && isAdminReal && (
+      {abaVisivel === 'analitico' && isAdminReal && (
         <ValidacaoRelatorioSetor
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}
@@ -403,7 +451,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Conteúdo por cargo — aba Analítico */}
-      {abaPrincipal === 'analitico' && mostrarVisaoIndividual && (
+      {abaVisivel === 'analitico' && mostrarVisaoIndividual && (
         <AnaliticoOperador
           dados={dadosProprios}
           loading={loadingProprios}
@@ -418,7 +466,7 @@ export default function PaginaAnalitico() {
         />
       )}
 
-      {abaPrincipal === 'analitico' && mostrarVisaoGeral && (
+      {abaVisivel === 'analitico' && mostrarVisaoGeral && (
         <AnaliticoLider
           empresaId={empresa.id}
           mes={mesFiltro}
@@ -434,8 +482,18 @@ export default function PaginaAnalitico() {
         />
       )}
 
+      {/* Aba aberta e nenhum alcance liberado. Acontece se alguém desligar os
+          três níveis mantendo a aba ligada — a régua aparece e o conteúdo não
+          teria o que mostrar. Melhor dizer o motivo do que ficar vazio. */}
+      {abaVisivel !== null && !carregandoPermissoes
+        && !mostrarVisaoGeral && !mostrarVisaoIndividual && (
+        <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
+          Nenhum alcance de dados está liberado para o seu cargo no Analítico.
+        </div>
+      )}
+
       {/* Conteúdo por cargo — aba Recebimento diário */}
-      {abaPrincipal === 'diario' && (
+      {abaVisivel === 'diario' && (
         <AbaDiario
           empresaId={empresa.id}
           operadorId={perfil.id}
@@ -445,7 +503,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Conteúdo isolado — nunca participa dos totais do Analítico */}
-      {abaPrincipal === 'colchao' && (
+      {abaVisivel === 'colchao' && (
         <AbaColchao
           empresaId={empresa.id}
           mes={mesFiltro}

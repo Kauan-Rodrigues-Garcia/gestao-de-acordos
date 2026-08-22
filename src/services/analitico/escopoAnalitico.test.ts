@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  linhaNoEscopo, escopoDeSetor, temCarimboDeSetor, veTodosOsSetores,
+  linhaNoEscopo, escopoDeSetor, temCarimboDeSetor,
   setorSomaPorUsuarios, ESCOPO_EMPRESA,
   type EscopoAnalitico, type LinhaEscopavel,
 } from './escopoAnalitico';
@@ -169,31 +169,10 @@ describe('temCarimboDeSetor', () => {
   });
 });
 
-describe('veTodosOsSetores', () => {
-  const nega = () => false;
-  const libera = () => true;
-
-  it('cargo abre por si', () => {
-    for (const cargo of ['administrador', 'super_admin', 'diretoria']) {
-      expect(veTodosOsSetores(cargo, nega)).toBe(true);
-    }
-  });
-
-  it('diretoria enxerga a empresa toda no dashboard, como já enxergava na aba', () => {
-    // O defeito: a aba decidia por cargo e o dashboard por permissão, então a
-    // diretoria via a empresa numa tela e só o próprio setor na outra.
-    expect(veTodosOsSetores('diretoria', nega)).toBe(true);
-  });
-
-  it('permissão configurável abre para os demais', () => {
-    expect(veTodosOsSetores('lider', nega)).toBe(false);
-    expect(veTodosOsSetores('lider', libera)).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'ver_todos_setores')).toBe(true);
-    expect(veTodosOsSetores('lider', c => c === 'ver_analiticos_global')).toBe(true);
-  });
-
-  it('cargo ausente não abre nada', () => {
-    expect(veTodosOsSetores(null, nega)).toBe(false);
-    expect(veTodosOsSetores(undefined, nega)).toBe(false);
-  });
-});
+/*
+ * O bloco `veTodosOsSetores` saiu com a função, na fase 4. O que ele protegia
+ * — "a aba e o dashboard não podem discordar sobre a mesma pessoa" — agora é
+ * garantido de outro jeito, e mais forte: as duas telas leem escopos
+ * declarados por aba, e `permissoes-escopo.test.ts` trava que uma nunca fala
+ * pela outra.
+ */

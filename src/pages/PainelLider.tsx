@@ -55,6 +55,7 @@ import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -152,7 +153,17 @@ export default function PainelLider() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
-  const verTodosSetores = temPermissao('ver_todos_setores');
+  /*
+   * Segunda ponta solta da fase 2: esta linha ainda lia a chave GLOBAL
+   * `ver_todos_setores` para recortar a consulta do Acompanhamento, enquanto a
+   * régua de filtros da mesma tela já usava `painel_lider_escopo_*`. Uma aba
+   * com duas fontes de alcance é exatamente o que o §2 do pedido proíbe.
+   *
+   * A troca é comprovadamente inerte: nas duas empresas,
+   * `painel_lider_escopo_todos_setores` e `ver_todos_setores` valem o mesmo em
+   * todos os dezesseis cargos — a derivação da fase 2 saiu dessa chave.
+   */
+  const verTodosSetores = escopoEfetivo('painel_lider', temPermissao) === 'todos_setores';
   // Drill-down com dados detalhados de cada operador (padrão true; desligar
   // a permissão ver_operadores esconde a expansão da linha do operador).
   const podeVerOperadores = temPermissao('ver_operadores');
@@ -215,10 +226,29 @@ export default function PainelLider() {
     setAbaAtiva(k);
     setAbasVisitadas(prev => (prev.has(k) ? prev : new Set(prev).add(k)));
   }, []);
+
+  /*
+   * A aba que a tela realmente mostra.
+   *
+   * Ponta solta da fase 2, encontrada na fase 4: `abaAtiva` nasce em `'time'`,
+   * e os guardas de conteúdo perguntavam por ele direto. Desligar
+   * `painel_lider_sub_acompanhamento` tirava o BOTÃO da régua e deixava o
+   * Acompanhamento no ar como tela de entrada — permissão que esconde o
+   * caminho e serve o destino não é permissão.
+   *
+   * Hoje é inofensivo (as quatro chaves nasceram ligadas), e é por isso que
+   * dava para arrumar sem mudar o comportamento de ninguém.
+   */
+  const abaVisivel = abasInternas.some(a => a.key === abaAtiva)
+    ? abaAtiva
+    : (abasInternas[0]?.key ?? null);
+
   // Monitoramento de uso: a URL não muda ao trocar de aba aqui, então sem isto
   // "quais líderes abrem o Desempenho Equipes" ficaria sem resposta — as quatro
   // abas apareceriam somadas como um único `/lider`.
-  useSubAbaUso(abaAtiva);
+  // Aceita `null` — nenhuma aba liberada é um fato a registrar, não um 'time'
+  // inventado que sujaria a contagem de quem abre o Acompanhamento.
+  useSubAbaUso(abaVisivel);
   const mesStr = `${mesRef.ano}-${pad(mesRef.mes + 1)}`;
 
   // ── Recorte das abas analíticas: setor + equipe, um só para as três ────────
@@ -640,7 +670,7 @@ export default function PainelLider() {
             <button key={key} onClick={() => mudarAba(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',
-                abaAtiva === key
+                abaVisivel === key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground hover:border-border',
               )}
@@ -654,7 +684,7 @@ export default function PainelLider() {
       {/* Recorte de setor/equipe: um só, valendo para as três abas analíticas.
           Fica fora do conteúdo das abas de propósito — trocar de aba não deve
           trocar o recorte, que era o efeito de cada aba ter o seu. */}
-      {mostrarAbasAnaliticas && abaAtiva !== 'time' && (
+      {mostrarAbasAnaliticas && abaVisivel !== 'time' && (
         <FiltrosEscopo
           escopo={escopoAbas}
           setores={setoresLista}
@@ -664,7 +694,7 @@ export default function PainelLider() {
         />
       )}
 
-      {abaAtiva === 'time' && erro && (
+      {abaVisivel === 'time' && erro && (
         <div className="p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-sm text-destructive flex items-center justify-between">
           <span>{erro}</span>
           <Button size="sm" variant="link" className="text-destructive h-auto p-0" onClick={() => void carregarTudo()}>
@@ -679,8 +709,8 @@ export default function PainelLider() {
       {/* ── Aba: Desempenho Equipes (relatório analítico, os dois tenants) ── */}
       {/* PaguePlay: card do setor = soma dos operadores (setorSomaMembros).    */}
       {/* BookPlay: card do setor = total do relatório carimbado por setor_id.  */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('desempenho') && (
-        <div className={cn(abaAtiva !== 'desempenho' && 'hidden')}>
+      {mostrarAbasAnaliticas && (abasVisitadas.has('desempenho') || abaVisivel === 'desempenho') && (
+        <div className={cn(abaVisivel !== 'desempenho' && 'hidden')}>
           <DesempenhoEquipes
             empresaId={empresa.id}
             mes={mesStr}
@@ -701,8 +731,8 @@ export default function PainelLider() {
       )}
 
       {/* ── Aba: Quartis (relatório analítico, os dois tenants) ───────────── */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('quartis') && (
-        <div className={cn(abaAtiva !== 'quartis' && 'hidden')}>
+      {mostrarAbasAnaliticas && (abasVisitadas.has('quartis') || abaVisivel === 'quartis') && (
+        <div className={cn(abaVisivel !== 'quartis' && 'hidden')}>
           <QuartisOperadores
             empresaId={empresa.id}
             mes={mesStr}
@@ -720,8 +750,8 @@ export default function PainelLider() {
       {/* ── Aba: Gráfico recebimento ──────────────────────────────────────── */}
       {/* PaguePlay: recebimento diário (linhasExternas). BookPlay: analítico    */}
       {/* (o componente busca por dia internamente, sem linhasExternas).         */}
-      {mostrarAbasAnaliticas && abasVisitadas.has('grafico') && (
-        <div className={cn(abaAtiva !== 'grafico' && 'hidden')}>
+      {mostrarAbasAnaliticas && (abasVisitadas.has('grafico') || abaVisivel === 'grafico') && (
+        <div className={cn(abaVisivel !== 'grafico' && 'hidden')}>
           {isPP && loadingDiario ? (
             <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground text-sm">
               <Loader2 className="w-4 h-4 animate-spin" /> Carregando recebimentos do mês…
@@ -744,7 +774,7 @@ export default function PainelLider() {
       )}
 
       {/* ── KPIs do time ─────────────────────────────────────────────────── */}
-      {abaAtiva === 'time' && (loading ? (
+      {abaVisivel === 'time' && (loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {Array.from({ length: 5 }).map((_, i) => <div key={i} className="h-[76px] bg-muted rounded-xl animate-pulse" />)}
         </div>
@@ -771,7 +801,7 @@ export default function PainelLider() {
       ))}
 
       {/* ── Lista de operadores ──────────────────────────────────────────── */}
-      {abaAtiva === 'time' && (
+      {abaVisivel === 'time' && (
       <Card className="border-border">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between gap-2 flex-wrap">

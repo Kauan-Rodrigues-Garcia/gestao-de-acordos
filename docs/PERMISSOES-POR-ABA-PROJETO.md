@@ -126,8 +126,18 @@ Só `aba_painel_diretoria`. Sem escopo e sem ações, como pedido.
 
 ### 3.8 Analítico
 
-Escopo: `analitico_escopo_propria` · `analitico_escopo_geral` — vale para o
-Analítico **e** para o Recebimento Diário.
+Escopo: `analitico_escopo_individual` · `_setor` · `_todos_setores` — vale para
+o Analítico **e** para o Recebimento Diário.
+
+> ✏️ **Corrigido na implementação (fase 4).** Este documento previa dois níveis,
+> `propria` e `geral`. Estavam errados: a tela sempre teve **três** alcances —
+> operador vê os próprios números, liderança vê o setor, cúpula escolhe entre os
+> setores. Com dois níveis, `geral` teria que significar "setor" e "todos os
+> setores" ao mesmo tempo, e um líder ganharia o filtro de setor que não tem
+> hoje — exatamente a concessão automática que o §5 do pedido proíbe.
+>
+> `equipe` continua de fora: o seletor de equipe do Recebimento Diário recorta
+> dentro do setor que a pessoa já enxerga. É filtro de tela, não permissão.
 
 Abas internas primárias: `analitico_sub_analitico`, `_sub_recebimento_diario`,
 `_sub_colchao`
@@ -241,7 +251,7 @@ governa hoje:
 | Acordos | `ver_acordos_gerais` + `ver_todos_setores` |
 | Lixeira | `ver_acordos_gerais` + `ver_todos_setores` |
 | Pix Automático | `ver_acordos_gerais` + `ver_todos_setores` |
-| Analítico | `ver_analiticos_global` ou `ver_todos_setores` |
+| Analítico | cargo (`isLiderMais`, `isElite`) + `ver_analiticos_global` / `ver_todos_setores` |
 | Painel Líder | `ver_todos_setores` → `todos_setores`, senão `setor` |
 | Usuários | `ver_todos_setores` → `todos_setores`, senão `proprio_setor` |
 | Equipes | `ver_equipes` + `ver_todos_setores` |
@@ -318,3 +328,27 @@ A fase 7 é a única que mexe em segurança, e vem depois de tudo funcionar com 
 teto atual. Assim, se ela precisar voltar, as fases 1 a 6 continuam de pé.
 
 A fase 8 só roda quando nenhuma leitura das chaves antigas sobrar no código.
+
+### 5.1 Como as fases realmente saíram
+
+O quadro acima separava por **camada** (catálogo, resolvedor, painel, telas). Na
+execução isso não se sustentou: o teste de contrato exige que chave nova e seu
+consumidor entrem **juntos**, então cada fase virou **uma aba inteira** —
+catálogo, migração, prova de equivalência e telas no mesmo commit. É mais
+revisável e reversível sozinho, que era o objetivo declarado.
+
+| Fase | Aba | Commit | Estado |
+| --- | --- | --- | --- |
+| 1 | Lixeira (escopo + restaurar/limpar) | `7d5b245` | ✅ produção |
+| 2 | Painel Líder (escopo + 4 abas internas) | `6ac51d9` | ✅ produção |
+| 3a | Dashboard (escopo) | `d53a653` | ✅ produção |
+| 3b | Dashboard (filtro único; 2 chaves aposentadas) | `2218117` | ✅ produção |
+| 4 | Analítico (escopo + 8 abas internas; encerra `veTodosOsSetores`) | — | ✅ produção |
+| 5 | Acordos, Pix Automático | — | pendente |
+| 6 | Usuários, Tickets, Configurações | — | pendente |
+| 7 | RLS: teto elevado ao maior escopo | — | pendente |
+| 8 | Remoção das chaves globais restantes e faxina do JSON | — | pendente |
+
+O painel de permissões (a antiga fase 3) não precisou de fase própria: ele
+desenha `GRUPOS_PERMISSAO` e o catálogo, então cada aba nova aparece nele
+sozinha ao ser registrada.

@@ -93,6 +93,29 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'dashboard',
     niveis: NIVEIS_ESCOPO,
   },
+  /*
+   * O Analítico tem TRÊS níveis, e a ausência de `equipe` é deliberada.
+   *
+   * A tela sempre teve três alcances, e não dois: o operador vê só os próprios
+   * números; líder, elite, gerência e ouvidoria veem o setor; diretoria e admin
+   * escolhem entre os setores. O elite é o único que hoje alterna entre dois
+   * ("Minha visão" × "Visão geral") — e é exatamente por ter dois níveis.
+   *
+   * `equipe` não entra porque nunca existiu como ALCANCE aqui. O Recebimento
+   * Diário tem um seletor de equipe, mas ele é filtro dentro do setor que a
+   * pessoa já enxerga — recorte de tela, não permissão. Registrar o nível
+   * criaria um toggle que liga, desliga e não muda nada.
+   *
+   * O projeto em `docs/PERMISSOES-POR-ABA-PROJETO.md` §3.8 previa dois níveis,
+   * `propria` e `geral`. Estavam errados: `geral` teria que significar "setor"
+   * e "todos os setores" ao mesmo tempo, e aí um líder ganharia o filtro de
+   * setor que ele não tem hoje. O documento foi corrigido junto com esta fase.
+   */
+  analitico: {
+    chaveAba: 'ver_analitico',
+    prefixo: 'analitico',
+    niveis: ['individual', 'setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

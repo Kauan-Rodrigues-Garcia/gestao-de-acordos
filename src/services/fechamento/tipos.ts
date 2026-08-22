@@ -17,8 +17,8 @@ import type { ResultadoProjecao } from '@/lib/projecaoMetas';
 /**
  * Quanto do mundo este relatório enxerga.
  *
- * A escolha NÃO é do usuário — sai do cargo, pela mesma função que o dashboard
- * usa (`veTodosOsSetores`). Um líder não escolhe baixar "a empresa inteira", e
+ * A escolha NÃO é do usuário — sai do escopo da aba Dashboard, de onde o botão
+ * é acionado. Um líder não escolhe baixar "a empresa inteira", e
  * um operador não escolhe baixar o setor: seria a mesma pergunta de sempre
  * ("quem eu enxergo?") respondida por um segundo caminho, que é como as telas
  * deste projeto já divergiram antes.

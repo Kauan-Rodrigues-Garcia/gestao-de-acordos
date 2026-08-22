@@ -92,6 +92,7 @@ export const GRUPOS_PERMISSAO = [
   'Lixeira',
   'Painel Líder',
   'Dashboard',
+  'Analítico',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -289,11 +290,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Enxergar dados além do próprio setor',
     grupo: 'Filtros e visão', padrao: { gerencia: true, diretoria: true },
   },
-  {
-    key: 'ver_analiticos_global', label: 'Métricas da empresa inteira',
-    descricao: 'Ver números consolidados de todos os setores',
-    grupo: 'Filtros e visão', padrao: { gerencia: true, diretoria: true },
-  },
+  /*
+   * `ver_analiticos_global` foi APOSENTADA na fase 4.
+   *
+   * Ela tinha um consumidor só, `veTodosOsSetores`, que respondia por cinco
+   * telas ao mesmo tempo. Com o Analítico ganhando escopo próprio, a função
+   * saiu e a chave ficou sem ninguém para perguntar por ela — um toggle que
+   * liga, desliga e não muda nada. Quem decide agora é
+   * `analitico_escopo_todos_setores`, e o Dashboard tem o dele.
+   *
+   * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
+   */
   /*
    * `filtrar_por_setor` e `filtrar_por_equipe` foram APOSENTADAS na fase 3b.
    *
@@ -409,6 +416,72 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'dashboard_escopo_todos_setores', label: 'Dashboard: todos os setores',
     descricao: 'Ver no Dashboard qualquer setor, com o filtro de setor disponível',
     grupo: 'Dashboard', padrao: { gerencia: true, diretoria: true },
+  },
+
+  // ── Analítico ────────────────────────────────────────────────────────────
+  // Quarta aba a sair do escopo global, e a que encerra `veTodosOsSetores`.
+  //
+  // Os padrões abaixo reproduzem o que o CARGO decidia no código: a visão
+  // individual era de quem não é liderança (mais o elite, que alterna), a
+  // visão de setor era da liderança inteira — `ouvidoria` incluída, porque ela
+  // está em `PERFIS_LIDER` — e o alcance total vinha das duas chaves globais.
+  {
+    key: 'analitico_escopo_individual', label: 'Analítico: os próprios números',
+    descricao: 'Ver no Analítico o recebimento da própria pessoa',
+    grupo: 'Analítico', padrao: { operador: true, elite: true },
+  },
+  {
+    key: 'analitico_escopo_setor', label: 'Analítico: o próprio setor',
+    descricao: 'Ver no Analítico o recebimento do setor inteiro, operador a operador',
+    grupo: 'Analítico',
+    padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true, diretoria: true },
+  },
+  {
+    key: 'analitico_escopo_todos_setores', label: 'Analítico: todos os setores',
+    descricao: 'Ver no Analítico qualquer setor, com o filtro de setor disponível',
+    grupo: 'Analítico', padrao: { gerencia: true, diretoria: true },
+  },
+  // Abas internas primárias — a régua de cima da tela.
+  {
+    key: 'analitico_sub_analitico', label: 'Analítico: aba Analítico',
+    descricao: 'Abrir a aba interna do relatório analítico mensal',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_recebimento_diario', label: 'Analítico: Recebimento diário',
+    descricao: 'Abrir a aba interna do recebimento do dia',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_colchao', label: 'Analítico: Colchão',
+    descricao: 'Abrir a aba interna do colchão, que nunca entra nos totais do Analítico',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  // Abas internas secundárias — a régua de dentro da visão de setor.
+  {
+    key: 'analitico_sub_por_operador', label: 'Analítico: Por operador',
+    descricao: 'Abrir a aba interna com o recebimento operador a operador',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_formas_pagamento', label: 'Analítico: Formas de pagamento',
+    descricao: 'Abrir a aba interna de Pix, boleto e cartão por período',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_ranking', label: 'Analítico: Ranking',
+    descricao: 'Abrir a aba interna do ranking de recebimento',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_destaques_dia', label: 'Analítico: Destaques do dia',
+    descricao: 'Abrir a aba interna dos destaques do dia',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  {
+    key: 'analitico_sub_sem_operador', label: 'Analítico: Sem operador',
+    descricao: 'Abrir a aba interna de conferência das linhas sem operador vinculado',
+    grupo: 'Analítico', padrao: TODOS,
   },
 
   // ── Ações específicas ────────────────────────────────────────────────────

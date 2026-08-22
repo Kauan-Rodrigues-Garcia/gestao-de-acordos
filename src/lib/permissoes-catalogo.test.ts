@@ -151,6 +151,11 @@ describe('catálogo — integridade', () => {
     // Dashboard. Quem decide agora são os níveis daquela aba.
     expect(CHAVES_PERMISSAO).not.toContain('filtrar_por_setor');
     expect(CHAVES_PERMISSAO).not.toContain('filtrar_por_equipe');
+
+    // Aposentada na fase 4: seu único consumidor era `veTodosOsSetores`, que
+    // respondia por cinco telas de uma vez. Quem decide agora é o nível da
+    // aba — `analitico_escopo_todos_setores` e os equivalentes das outras.
+    expect(CHAVES_PERMISSAO).not.toContain('ver_analiticos_global');
   });
 
   it('só declara tenant conhecido', () => {

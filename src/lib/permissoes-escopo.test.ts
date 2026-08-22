@@ -149,6 +149,74 @@ describe('aba sem interruptor', () => {
   });
 });
 
+describe('Analitico: tres niveis, sem equipe', () => {
+  /*
+   * A aba tem tres alcances desde sempre — proprios numeros, setor, todos os
+   * setores — e `equipe` nunca foi um deles. O seletor de equipe do
+   * Recebimento Diario recorta DENTRO do setor que a pessoa ja enxerga: e
+   * filtro, nao permissao. Estes testes travam essa distincao.
+   */
+  it('nao registra o nivel de equipe', () => {
+    expect(ABAS_COM_ESCOPO.analitico.niveis).toEqual(['individual', 'setor', 'todos_setores']);
+  });
+
+  it('uma chave de equipe inventada nao concede nada', () => {
+    const tem = comChaves('ver_analitico', 'analitico_escopo_equipe');
+    expect(niveisLiberados('analitico', tem)).toEqual([]);
+    expect(escopoEfetivo('analitico', tem)).toBeNull();
+  });
+
+  it('o caso do elite: dois niveis, e o mais amplo vale por padrao', () => {
+    // E o que faz o alternador "Minha visao" x "Visao geral" aparecer — por
+    // ter dois niveis, nao por ser elite.
+    const tem = comChaves(
+      'ver_analitico',
+      chaveEscopo('analitico', 'individual'),
+      chaveEscopo('analitico', 'setor'),
+    );
+    expect(niveisLiberados('analitico', tem)).toEqual(['individual', 'setor']);
+    expect(escopoEfetivo('analitico', tem)).toBe('setor');
+  });
+
+  it('o caso do operador: um nivel so, sem alternador', () => {
+    const tem = comChaves('ver_analitico', chaveEscopo('analitico', 'individual'));
+    expect(niveisLiberados('analitico', tem)).toEqual(['individual']);
+  });
+
+  it('a aba desligada zera tudo, inclusive para a cupula', () => {
+    // `bookplay/ouvidoria` guarda os niveis do cargo com `ver_analitico` em
+    // false: a dependencia e resolvida aqui, na leitura, e religar a aba
+    // devolve a configuracao inteira.
+    const tem = comChaves(
+      chaveEscopo('analitico', 'individual'),
+      chaveEscopo('analitico', 'setor'),
+      chaveEscopo('analitico', 'todos_setores'),
+    );
+    expect(niveisLiberados('analitico', tem)).toEqual([]);
+    expect(niveisLiberados('analitico', comChaves('ver_analitico', ...[
+      chaveEscopo('analitico', 'individual'),
+      chaveEscopo('analitico', 'setor'),
+      chaveEscopo('analitico', 'todos_setores'),
+    ]))).toEqual(['individual', 'setor', 'todos_setores']);
+  });
+
+  it('as chaves globais aposentadas nao decidem mais nada aqui', () => {
+    // `ver_analiticos_global` saiu do catalogo nesta fase; `ver_todos_setores`
+    // ainda existe para Acordos. Nenhuma das duas fala pelo Analitico.
+    const tem = comChaves('ver_analitico', 'ver_analiticos_global', 'ver_todos_setores');
+    expect(escopoEfetivo('analitico', tem)).toBeNull();
+  });
+
+  it('o Dashboard nao empresta alcance para o Analitico', () => {
+    const tem = comChaves(
+      'ver_analitico',
+      chaveEscopo('analitico', 'individual'),
+      chaveEscopo('dashboard', 'todos_setores'),
+    );
+    expect(escopoEfetivo('analitico', tem)).toBe('individual');
+  });
+});
+
 describe('amplitude', () => {
   it('compara niveis corretamente', () => {
     expect(alcancaPeloMenos('todos_setores', 'individual')).toBe(true);

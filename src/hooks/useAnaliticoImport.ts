@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { supabase } from '@/lib/supabase';
 // Tipos e helpers puros vêm dos módulos *Comum. Os parsers (que carregam xlsx,
@@ -103,8 +103,13 @@ export function useAnaliticoImport() {
   // o arquivo, senão o carimbo sai errado e o acumulado do setor vai junto.
   const setorAutomatico = perfil?.setor_id ?? null;
   const [setorEscolhido, setSetorEscolhido] = useState<string | null>(null);
-  /** Enxerga mais de um setor? Mesma definição da aba Analítico e do dashboard. */
-  const veTodosSetores = veTodosOsSetores(perfil?.perfil, temPermissao);
+  /**
+   * Enxerga mais de um setor? Vem do escopo DA ABA ANALÍTICO, e de nenhuma
+   * outra — o dashboard tem o dele. Antes saía de `veTodosOsSetores`, que
+   * misturava cargo com duas chaves globais e respondia por várias telas ao
+   * mesmo tempo.
+   */
+  const veTodosSetores = escopoEfetivo('analitico', temPermissao) === 'todos_setores';
 
   // Item 9: quando o setor do importador é ALTERNATIVO (ex.: Digital), o
   // relatório na verdade é de outro setor (Play 4/5). Ele deve escolher o setor
