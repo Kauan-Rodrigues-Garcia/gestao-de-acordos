@@ -333,6 +333,17 @@ export const PERMISSOES: PermissaoMeta[] = [
    * O teste "as chaves aposentadas não voltaram" a trava fora daqui.
    */
   {
+    key: 'usuarios_escopo_setor', label: 'Usuários: pessoas do próprio setor',
+    descricao: 'Ver na gestão de pessoas quem é do setor da própria pessoa',
+    grupo: 'Gestão de pessoas', padrao: TODOS,
+  },
+  {
+    key: 'usuarios_escopo_todos_setores', label: 'Usuários: pessoas de todos os setores',
+    descricao: 'Ver na gestão de pessoas quem é de qualquer setor da empresa',
+    grupo: 'Gestão de pessoas',
+    padrao: { gerencia: true, diretoria: true, ouvidoria: true },
+  },
+  {
     key: 'painel_diretoria_escopo_setor', label: 'Painel Diretoria: o próprio setor',
     descricao: 'Ver no Painel Diretoria os números do setor da própria pessoa',
     grupo: 'Painel Diretoria', padrao: { gerencia: true },

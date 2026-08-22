@@ -173,6 +173,23 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'painel_diretoria',
     niveis: ['setor', 'todos_setores'],
   },
+  /*
+   * Usuários: quem aparece na lista de gestão de pessoas.
+   *
+   * Dois níveis. `individual` não faz sentido — uma tela de gestão com uma
+   * pessoa só não é gestão — e `equipe` nunca existiu aqui: o recorte sempre
+   * foi setor ou empresa.
+   *
+   * Este escopo NÃO governa a outra dimensão da tela, que é se as contas de
+   * `administrador` e `super_admin` aparecem na lista. Essa continua saindo do
+   * cargo de quem olha, e é outra pergunta: "até onde eu enxergo" e "quem eu
+   * enxergo" são eixos diferentes.
+   */
+  usuarios: {
+    chaveAba: 'ver_usuarios',
+    prefixo: 'usuarios',
+    niveis: ['setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

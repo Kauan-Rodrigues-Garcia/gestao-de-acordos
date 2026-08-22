@@ -6,6 +6,7 @@ import {
   resumoExclusao, excluirUsuarioComAcordos,
   type ResumoExclusao,
 } from '@/services/admin/exclusaoUsuario.service';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -77,6 +78,15 @@ export default function AdminUsuarios() {
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
+  /*
+   * Escopo DESTA aba — quem aparece na lista de gestão de pessoas.
+   * Memoizado porque `niveisLiberados` devolve array novo a cada chamada.
+   */
+  const niveisUsuarios = useMemo(
+    () => niveisLiberados('usuarios', temPermissao),
+    [temPermissao],
+  );
+  const veUsuariosDeTodosSetores = niveisUsuarios.includes('todos_setores');
   const tenant = useTenant();
   // Item 6: a aba Metas passa a viver dentro de Usuários (BookPlay e PaguePlay).
   // `tenant` é usado em outras partes; mantém a referência p/ clareza.
@@ -520,26 +530,27 @@ export default function AdminUsuarios() {
     return () => { cancel = true; };
   }, [empresaAtual?.id, tenant.slug]);
 
-  // ── Filtro de acesso por cargo ──────────────────────────────────────────────
-  // Regras:
-  //   • Admin / Super Admin → vê todos sem restrição
-  //   • Qualquer cargo abaixo de Admin → NUNCA vê administradores ou super_admins
-  //   • Operador / Líder / Elite → vê apenas usuários do próprio setor
-  //   • Gerência / Diretoria → vê todos da empresa, exceto admins
+  /*
+   * ── Filtro de acesso ──────────────────────────────────────────────────────
+   *
+   * Duas perguntas diferentes, e só uma delas é escopo de aba:
+   *
+   *   1. ATÉ ONDE eu enxergo — próprio setor ou empresa. Vinha de duas listas
+   *      de cargo escritas aqui, e a `ouvidoria` não estava em nenhuma das
+   *      duas: caía no `return` final e via a empresa inteira sem que uma
+   *      linha sequer dissesse isso. Agora é `usuarios_escopo_*`.
+   *   2. QUEM eu enxergo — se contas de administrador aparecem na lista. Essa
+   *      continua saindo do cargo de quem olha, de propósito: é outro eixo, e
+   *      transformá-la em nível de escopo misturaria as duas.
+   */
   const PERFIS_ADMIN = ['administrador', 'super_admin'];
 
   const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
     if (isSuperAdmin || isAdmin) return lista;
-    // Para qualquer cargo não-admin: ocultar administradores e super_admins
+    // Cargo não-admin nunca vê administrador nem super_admin.
     const semAdmins = lista.filter(u => !PERFIS_ADMIN.includes(u.perfil));
-    const p = perfilAtual?.perfil ?? '';
-    if (['operador', 'lider', 'elite'].includes(p)) {
-      return semAdmins.filter(u => u.setor_id === perfilAtual?.setor_id);
-    }
-    if (['gerencia', 'diretoria'].includes(p)) {
-      return semAdmins;
-    }
-    return semAdmins;
+    if (veUsuariosDeTodosSetores) return semAdmins;
+    return semAdmins.filter(u => u.setor_id === perfilAtual?.setor_id);
   };
 
   const usuariosFiltrados = aplicarFiltroAcesso(
