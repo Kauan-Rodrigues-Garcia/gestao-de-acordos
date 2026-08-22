@@ -23,6 +23,29 @@ O histórico remoto da CLI foi reconciliado para considerar a baseline já
 aplicada. Isso altera somente os metadados de migrations; não reaplica a
 baseline nem modifica tabelas ou dados de produção.
 
+## Reconciliação de 2026-08-22
+
+O histórico remoto tinha divergido da pasta ativa: das 33 migrations do repo,
+apenas 3 constavam no banco. As 30 de 15/08 a 19/08 haviam sido aplicadas por
+fora da CLI (SQL Editor / MCP), então o schema estava lá mas sem registro em
+`supabase_migrations.schema_migrations`. Um `supabase db push` teria tentado
+reaplicar as 30.
+
+Antes do reparo foi verificado que as 11 tabelas e 53 funções criadas por essas
+30 migrations existiam no remoto — todas existiam. Só então elas foram marcadas
+com `supabase migration repair --status applied`.
+
+No sentido inverso, o banco guardava 5 registros de 20/08 sem arquivo
+correspondente: as 4 migrations daquele dia mais o `rollback_all_changes_20260820`
+que as desfez. Como o commit `c953f04` removeu os arquivos do repo e o rollback
+já havia revertido os efeitos no banco, os 5 foram marcados com
+`--status reverted`. O SQL do rollback foi preservado em
+`legacy_migrations/20260820232302_rollback_all_changes_20260820.sql`; ele não
+entra na pasta ativa porque não é reexecutável e quebraria o `db reset`.
+
+Resultado: 33 migrations locais, 33 no remoto, zero divergências. Nenhuma
+tabela, função ou linha de dado foi alterada — o reparo mexe só em metadados.
+
 ## Fluxo obrigatório daqui para a frente
 
 1. Crie cada arquivo com `supabase migration new <nome_descritivo>`; nunca
