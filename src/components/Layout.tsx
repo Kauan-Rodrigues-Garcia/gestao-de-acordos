@@ -22,13 +22,13 @@
  * ```
  */
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound,
+  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound, ArrowUpDown,
   LifeBuoy, Megaphone, MessageSquarePlus, Ticket,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -40,6 +40,9 @@ import { ROUTE_PATHS, PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { ordenarMenu } from '@/lib/menuLateralOrdem';
+import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
+import { MenuLateralEditor } from '@/components/MenuLateralEditor';
 import { Separator } from '@/components/ui/separator';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { supabase } from '@/lib/supabase';
@@ -319,6 +322,21 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
   });
 
+  /*
+   * Ordem configuravel, aplicada DEPOIS do filtro de permissao.
+   *
+   * A ordem e so apresentacao: reposiciona o que a pessoa ja podia ver e nunca
+   * traz de volta uma aba que o filtro acima descartou. Inverter os dois passos
+   * transformaria uma preferencia visual em concessao de acesso.
+   */
+  const { ordem: ordemMenu, setOrdem: setOrdemMenu } = useMenuLateralOrdem(empresa?.id);
+  const navItensOrdenados = useMemo(
+    () => ordenarMenu(navItems, ordemMenu),
+    [navItems, ordemMenu],
+  );
+  const [editorMenuAberto, setEditorMenuAberto] = useState(false);
+  const podeEditarMenu = perfil?.perfil === 'super_admin';
+
   const initials = perfil?.nome?.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() || '?';
   const nomeSetor = (perfil?.setores as { nome?: string } | undefined)?.nome || null;
 
@@ -414,7 +432,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Nav */}
       <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto">
-        {navItems.map(item => (
+        {navItensOrdenados.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -437,6 +455,32 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </AnimatePresence>
           </NavLink>
         ))}
+
+        {/*
+          Editar a ordem do menu. So super_admin, e dentro do <nav> de
+          proposito: o botao edita esta lista, entao mora nela. Com a barra
+          recolhida sobra so o icone, como nos demais itens.
+        */}
+        {podeEditarMenu && (
+          <button
+            type="button"
+            onClick={() => setEditorMenuAberto(true)}
+            title="Editar a ordem do menu"
+            className={cn(
+              'flex w-full items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              'text-sidebar-foreground/50 hover:bg-sidebar-accent hover:text-sidebar-foreground',
+            )}
+          >
+            <ArrowUpDown className="w-4 h-4 flex-shrink-0" />
+            <AnimatePresence>
+              {(sidebarOpen || mobileOpen) && (
+                <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex-1 truncate text-left">
+                  Editar menu
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+        )}
 
       </nav>
 
@@ -839,6 +883,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             transition={{ delay: 0.62, duration: 0.5, times: [0, 0.3, 0.7, 1], ease: 'easeInOut' }}
           />
         </div>
+      )}
+
+      {/*
+        Editor da ordem do menu. Renderizado UMA vez aqui, e nao dentro da
+        barra: a barra e montada duas vezes (desktop e mobile) e dois dialogos
+        com o mesmo estado brigariam pelo foco.
+
+        `abas` sai da lista JA ordenada — quem abre o editor ve a ordem que
+        esta na tela, nao a do codigo.
+      */}
+      {podeEditarMenu && (
+        <MenuLateralEditor
+          aberto={editorMenuAberto}
+          onFechar={() => setEditorMenuAberto(false)}
+          abas={navItensOrdenados.map(i => ({ to: i.to, label: i.label }))}
+          empresaId={empresa?.id}
+          perfilId={perfil?.id}
+          aoSalvar={setOrdemMenu}
+        />
       )}
 
       {/* Recorte da foto de perfil antes do upload */}
