@@ -294,16 +294,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver números consolidados de todos os setores',
     grupo: 'Filtros e visão', padrao: { gerencia: true, diretoria: true },
   },
-  {
-    key: 'filtrar_por_setor', label: 'Filtrar por setor',
-    descricao: 'Usar o filtro de setor nas listagens e painéis',
-    grupo: 'Filtros e visão', padrao: LIDERANCA,
-  },
-  {
-    key: 'filtrar_por_equipe', label: 'Filtrar por equipe',
-    descricao: 'Usar o filtro de equipe nas listagens e painéis',
-    grupo: 'Filtros e visão', padrao: LIDERANCA,
-  },
+  /*
+   * `filtrar_por_setor` e `filtrar_por_equipe` foram APOSENTADAS na fase 3b.
+   *
+   * Elas eram globais e tinham um consumidor cada, os dois no Dashboard. Com
+   * o filtro único, quem decide se a linha de setor ou de equipe aparece são
+   * os níveis daquela aba — `dashboard_escopo_setor` e `_equipe`. Manter as
+   * antigas no catálogo criaria dois toggles que ligam, desligam e não mudam
+   * nada, que é o defeito que estes testes existem para impedir.
+   *
+   * O teste "as chaves aposentadas não voltaram" as trava fora daqui.
+   */
   {
     key: 'filtrar_por_usuario', label: 'Filtrar por pessoa',
     descricao: 'Usar o filtro de pessoa nas listagens e painéis',

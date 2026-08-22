@@ -99,6 +99,9 @@ vi.mock('@/hooks/useSetoresEquipes', () => ({
   useSetoresEquipes: () => ({
     setores: LISTAS_VAZIAS, setorFiltro: null, setSetorFiltro: vi.fn(),
     equipesDoSetor: LISTAS_VAZIAS, loading: false,
+    // Sem niveis o <FiltroEscopo /> nao tem o que oferecer e nao desenha nada,
+    // que e o certo para um smoke de renderizacao.
+    niveis: [],
   }),
 }));
 

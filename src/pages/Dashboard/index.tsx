@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Building2, Layers, MessageSquare, Plus, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Building2, MessageSquare, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
@@ -10,7 +10,6 @@ import { useAcordos } from '@/hooks/useAcordos';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   ROUTE_PATHS, formatCurrency, formatDate, getTodayISO,
-  isPerfilAdmin, isPerfilLider,
 } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { acordoTemCpf } from '@/lib/cpf';
@@ -31,6 +30,7 @@ import { tratarExclusaoVinculo } from '@/services/tratarExclusaoVinculo';
 import { registrarLog } from '@/services/logs.service';
 import { AnalyticsPanel } from '@/components/AnalyticsPanel';
 import { useSetoresEquipes } from '@/hooks/useSetoresEquipes';
+import { FiltroEscopo } from './FiltroEscopo';
 import type { ReagendarParams } from '@/components/ModalReagendar';
 import {
   PER_PAGE, TIPOS_PARCELADOS_PP, VisaoFiltro,
@@ -53,11 +53,11 @@ export default function Dashboard() {
   // varre todos os acordos do mês — e o `AnalyticsPanel` logo abaixo monta o
   // mesmo hook, então a tela fazia a varredura duas vezes. Pior: esta instância
   // rodava sem mês, presa ao corrente, enquanto o painel usa o mês do seletor.
-  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor } = useSetoresEquipes();
-  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '');
-  const isLiderOuElite = isPerfilLider(perfil?.perfil ?? '');
-  const isElite = perfil?.perfil === 'elite';
-  const isLider = perfil?.perfil === 'lider';
+  const { setores: setoresList, setorFiltro, setSetorFiltro, equipesDoSetor, niveis } = useSetoresEquipes();
+  // Os quatro testes por cargo que moravam aqui (`isAdmin`, `isLiderOuElite`,
+  // `isElite`, `isLider`) decidiam quem via cada filtro. Quem decide agora sao
+  // os niveis da aba, resolvidos em `useSetoresEquipes` e lidos por
+  // <FiltroEscopo />.
 
   const [visaoFiltro, setVisaoFiltro] = useState<VisaoFiltro>('setor');
   const equipeFiltroAtivo = visaoFiltro.startsWith('equipe:') ? visaoFiltro.replace('equipe:', '') : null;
@@ -650,39 +650,9 @@ export default function Dashboard() {
            */}
         </div>
         <div className="flex gap-2 flex-wrap items-center">
-          {(isLider || isElite) && temPermissao('filtrar_por_equipe') && equipesDoSetor.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-card border border-border rounded-xl px-3 py-1.5">
-              <span className="text-xs text-muted-foreground font-medium shrink-0">Visualizar:</span>
-              <div className="flex flex-wrap gap-1">
-                <button
-                  onClick={() => setVisaoFiltro('setor')}
-                  className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                    visaoFiltro === 'setor' ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                  title="Ver dados e acordos de todo o setor"
-                ><Building2 className="w-3 h-3" /> Setor geral</button>
-                {equipesDoSetor.map(eq => (
-                  <button key={eq.id}
-                    onClick={() => setVisaoFiltro(`equipe:${eq.id}` as VisaoFiltro)}
-                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                      visaoFiltro === `equipe:${eq.id}` ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground')}
-                    title={`Ver dados e acordos da equipe ${eq.nome}`}
-                  ><Layers className="w-3 h-3" /> {eq.nome}</button>
-                ))}
-                {isElite && (
-                  <button onClick={() => setVisaoFiltro('individual')}
-                    className={cn('flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all',
-                      visaoFiltro === 'individual' ? 'bg-role-elite text-white border-role-elite' : 'bg-background text-muted-foreground border-border hover:border-role-elite/40 hover:text-foreground')}
-                    title="Ver apenas seus próprios acordos"
-                  ><Users className="w-3 h-3" /> Individual</button>
-                )}
-              </div>
-            </div>
-          )}
-          {(isLider || isElite) && equipesDoSetor.length === 0 && (
-            <span className="text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-              <Building2 className="w-3.5 h-3.5" /> Setor geral
-            </span>
-          )}
+          {/* O recorte de setor/equipe/pessoa mora num controle so, logo acima
+              do painel — ver <FiltroEscopo />. Ficava aqui, partido em dois
+              filtros que nao conversavam. */}
           {isPP && acordosDeHoje.length > 0 && (
             <Button variant="outline" size="sm" className="hidden text-xs h-8 gap-1.5 text-success border-success/30 hover:bg-success/10" onClick={enviarLembretesHoje}>
               <MessageSquare className="w-3.5 h-3.5" /> Lembretes do dia ({acordosDeHoje.length})
@@ -693,22 +663,16 @@ export default function Dashboard() {
 
       {/* Analytics + setor filter */}
       <div className="mb-6 space-y-2" data-tour="metricas">
-        {(isAdmin || (isLiderOuElite && temPermissao('ver_todos_setores'))) && temPermissao('filtrar_por_setor') && setoresList.length > 0 && (
-          <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border bg-card">
-            <Building2 className="w-4 h-4 text-muted-foreground shrink-0" />
-            <span className="text-xs font-medium text-muted-foreground">Filtrar setor:</span>
-            <div className="flex flex-wrap gap-1.5">
-              <button onClick={() => setSetorFiltro(null)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', !setorFiltro ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                Todos
-              </button>
-              {setoresList.map(s => (
-                <button key={s.id} onClick={() => setSetorFiltro(setorFiltro === s.id ? null : s.id)} className={cn('px-3 py-1 rounded-full text-xs font-medium border transition-colors', setorFiltro === s.id ? 'bg-primary text-primary-foreground border-primary' : 'bg-background text-muted-foreground border-border hover:border-primary/50')}>
-                  {s.nome}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <FiltroEscopo
+          niveis={niveis}
+          setores={setoresList}
+          setorFiltro={setorFiltro}
+          onSetor={setSetorFiltro}
+          equipes={equipesDoSetor}
+          visao={visaoFiltro}
+          onVisao={setVisaoFiltro}
+          setorDoPerfil={perfil?.setor_id ?? null}
+        />
         <AnalyticsPanel
           setorFiltro={setorFiltro}
           equipeFiltroExterno={equipeFiltroAtivo}

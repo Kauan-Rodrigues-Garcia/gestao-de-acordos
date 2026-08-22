@@ -141,11 +141,16 @@ describe('catálogo — integridade', () => {
     expect(exigeConcessaoExplicita('ver_analitico')).toBe(false);
   });
 
-  it('as duas chaves aposentadas não voltaram', () => {
+  it('as chaves aposentadas não voltaram', () => {
     // Governadas por RLS, nunca por toggle: o operador vê os próprios acordos
     // porque a política do banco diz isso.
     expect(CHAVES_PERMISSAO).not.toContain('ver_acordos_proprios');
     expect(CHAVES_PERMISSAO).not.toContain('ver_analiticos_setor');
+
+    // Aposentadas na fase 3b: eram globais e decidiam os dois filtros do
+    // Dashboard. Quem decide agora são os níveis daquela aba.
+    expect(CHAVES_PERMISSAO).not.toContain('filtrar_por_setor');
+    expect(CHAVES_PERMISSAO).not.toContain('filtrar_por_equipe');
   });
 
   it('só declara tenant conhecido', () => {
@@ -260,7 +265,8 @@ describe('padrões de semeadura', () => {
     expect(ouv.editar_equipes).toBe(false);
     expect(ouv.gerenciar_metas).toBe(false);
     expect(ouv.ver_logs).toBe(false);
-    expect(ouv.filtrar_por_setor).toBe(false);
-    expect(ouv.filtrar_por_equipe).toBe(false);
+    // `filtrar_por_setor` e `filtrar_por_equipe` saíram do catálogo na fase 3b;
+    // o equivalente hoje é o nível da aba, e a ouvidoria não o tem por padrão.
+    expect(ouv.dashboard_escopo_todos_setores).toBe(false);
   });
 });
