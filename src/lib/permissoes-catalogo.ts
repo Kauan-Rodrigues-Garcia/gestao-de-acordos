@@ -67,6 +67,20 @@ export function exigeConcessaoExplicita(key: string): boolean {
 
 export type TenantSlug = 'bookplay' | 'pagueplay';
 
+/**
+ * Os grupos do painel.
+ *
+ * Os cinco primeiros são a organização antiga, por CATEGORIA — "Filtros e
+ * visão" decide filtro em toda parte do sistema de uma vez. É exatamente o que
+ * a reestruturação por aba está desmontando.
+ *
+ * Os grupos com nome de aba são a organização nova: tudo que aquela aba decide
+ * mora junto, e não fala pela vizinha. Cada fase move uma aba para cá, e o
+ * grupo antigo encolhe. Quando "Filtros e visão" ficar vazio, ele sai — junto
+ * com as chaves globais que ele agrupava.
+ *
+ * Ver `docs/PERMISSOES-POR-ABA-PROJETO.md`.
+ */
 export const GRUPOS_PERMISSAO = [
   'Abas e telas',
   'Acordos',
@@ -75,6 +89,7 @@ export const GRUPOS_PERMISSAO = [
   'Metas',
   'Filtros e visão',
   'Ações específicas',
+  'Lixeira',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -291,6 +306,44 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'filtrar_por_usuario', label: 'Filtrar por pessoa',
     descricao: 'Usar o filtro de pessoa nas listagens e painéis',
     grupo: 'Filtros e visão', padrao: LIDERANCA,
+  },
+
+  // ── Lixeira ──────────────────────────────────────────────────────────────
+  // A primeira aba com escopo próprio. Antes, o alcance dela vinha de
+  // `ver_acordos_gerais` — a mesma chave que decidia Acordos e Dashboard, então
+  // mexer numa mexia nas três. Agora a Lixeira responde só pelas chaves abaixo.
+  //
+  // Os quatro níveis são independentes: ligar e desligar cada um faz a opção
+  // aparecer ou sumir do filtro da aba. Ver `permissoes-escopo.ts`.
+  {
+    key: 'lixeira_escopo_individual', label: 'Lixeira: os próprios acordos',
+    descricao: 'Ver na lixeira os acordos excluídos pela própria pessoa',
+    grupo: 'Lixeira', padrao: TODOS,
+  },
+  {
+    key: 'lixeira_escopo_equipe', label: 'Lixeira: acordos da equipe',
+    descricao: 'Ver na lixeira os acordos excluídos pela equipe',
+    grupo: 'Lixeira', padrao: LIDERANCA,
+  },
+  {
+    key: 'lixeira_escopo_setor', label: 'Lixeira: acordos do setor',
+    descricao: 'Ver na lixeira os acordos excluídos no setor inteiro',
+    grupo: 'Lixeira', padrao: LIDERANCA,
+  },
+  {
+    key: 'lixeira_escopo_todos_setores', label: 'Lixeira: todos os setores',
+    descricao: 'Ver na lixeira os acordos excluídos em qualquer setor da empresa',
+    grupo: 'Lixeira', padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'lixeira_restaurar', label: 'Restaurar da lixeira',
+    descricao: 'Devolver um acordo excluído para a lista',
+    grupo: 'Lixeira', padrao: TODOS,
+  },
+  {
+    key: 'lixeira_limpar', label: 'Esvaziar a lixeira',
+    descricao: 'Apagar de vez tudo que está na lixeira',
+    grupo: 'Lixeira', padrao: TODOS,
   },
 
   // ── Ações específicas ────────────────────────────────────────────────────

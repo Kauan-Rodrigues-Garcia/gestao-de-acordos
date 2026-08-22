@@ -22,6 +22,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { fetchLixeira, esvaziarLixeira, purgarExpirados, restaurarItemLixeira, LixeiraAcordo } from '@/services/lixeira.service';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { formatCurrency, formatDate } from '@/lib/index';
 import { toast } from 'sonner';
@@ -78,7 +79,33 @@ export default function Lixeira() {
   const [fotoMap, setFotoMap]           = useState<Record<string, string | null>>({});
 
   const podeAcessar = temPermissao('ver_lixeira');
-  const podeEsvaziar = podeAcessar;
+
+  /*
+   * Acoes proprias da aba.
+   *
+   * `podeEsvaziar` era `podeAcessar`: quem enxergava a lixeira podia apaga-la
+   * inteira. Agora e chave propria — mas ela NASCE ligada para todo cargo que
+   * tem `ver_lixeira` hoje, entao ninguem perde a acao nesta entrega. Derivar
+   * de `excluir_em_lote`, como cheguei a considerar, teria tirado o esvaziar
+   * da ouvidoria da BookPlay e da gerencia da PaguePlay.
+   */
+  const podeEsvaziar  = temPermissao('lixeira_limpar');
+  const podeRestaurar = temPermissao('lixeira_restaurar');
+
+  /*
+   * Escopo DESTA aba, e de nenhuma outra.
+   *
+   * Antes vinha de `ver_acordos_gerais`, a mesma chave que decidia Acordos e
+   * Dashboard — mexer no alcance de uma mexia nas tres. Agora a Lixeira
+   * responde so pelas chaves `lixeira_escopo_*`.
+   *
+   * `equipe`, `setor` e `todos_setores` ainda produzem a mesma consulta: sem
+   * recorte por operador, deixando o teto do RLS decidir — que e exatamente o
+   * que a tela faz hoje. Eles passam a se distinguir quando a aba ganhar
+   * filtro proprio e quando o teto subir. Ver o projeto em docs/.
+   */
+  const escopo = escopoEfetivo('lixeira', temPermissao);
+  const soOsProprios = escopo === 'individual' || escopo === null;
 
   async function carregar() {
     if (!empresa?.id) return;
@@ -90,11 +117,11 @@ export default function Lixeira() {
       // Idealmente deveria existir um job pg_cron no Supabase; aqui fica
       // como garantia de funcionalidade client-side.
       await purgarExpirados(empresa.id);
-      // #8: operador só vê os próprios acordos excluídos. Elite/Líder/Gerência/Diretoria/Admin veem tudo.
-      const ehOperador = !temPermissao('ver_acordos_gerais');
+      // Escopo individual recorta por pessoa; qualquer nivel acima entrega o que
+      // o RLS permitir, como sempre foi.
       const data = await fetchLixeira(
         empresa.id,
-        ehOperador && perfil?.id ? { operadorId: perfil.id } : undefined,
+        soOsProprios && perfil?.id ? { operadorId: perfil.id } : undefined,
       );
       setItens(data);
 
@@ -462,6 +489,7 @@ export default function Lixeira() {
                         {/* Ações */}
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-150">
+                            {podeRestaurar && (
                             <button
                               title="Restaurar acordo"
                               disabled={restaurandoId === item.id}
@@ -472,6 +500,7 @@ export default function Lixeira() {
                                 ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                                 : <RotateCcw className="w-3.5 h-3.5" />}
                             </button>
+                            )}
                             <button
                               title="Ver detalhes"
                               onClick={() => setDetalhe(item)}
@@ -643,6 +672,7 @@ export default function Lixeira() {
                 >
                   Fechar
                 </Button>
+                {podeRestaurar && (
                 <Button
                   size="sm"
                   onClick={() => handleRestaurar(detalhe)}
@@ -654,6 +684,7 @@ export default function Lixeira() {
                     : <RotateCcw className="w-3.5 h-3.5" />}
                   {restaurandoId === detalhe.id ? 'Restaurando...' : 'Restaurar Acordo'}
                 </Button>
+                )}
               </div>
               </>
             )}

@@ -22,6 +22,7 @@ import {
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
   exigeConcessaoExplicita,
 } from './permissoes-catalogo';
+import { ABAS_COM_ESCOPO, chaveEscopo } from './permissoes-escopo';
 
 const RAIZ_SRC = path.resolve(__dirname, '..');
 
@@ -51,6 +52,34 @@ const CODIGO = varrer(RAIZ_SRC)
   .map(f => fs.readFileSync(f, 'utf8'))
   .join('\n');
 
+/**
+ * As chaves de escopo por aba nao aparecem literais em lugar nenhum: elas sao
+ * montadas por `chaveEscopo(prefixo, nivel)`, e uma varredura textual nunca as
+ * acharia.
+ *
+ * Conta-las como fiscalizadas so por existirem no registro seria afrouxar o
+ * contrato — voltaria a permitir a chave decorativa que estes testes existem
+ * para impedir. Entao a exigencia e outra, e mais forte: a aba so passa se o
+ * app realmente chamar um dos resolvedores COM O NOME DELA. Aba registrada e
+ * nunca consultada reprova, exatamente como uma chave solta reprovaria.
+ */
+function chavesDeEscopoResolvidas(): string[] {
+  const achadas: string[] = [];
+  for (const [aba, meta] of Object.entries(ABAS_COM_ESCOPO)) {
+    // Sem regex de proposito: montar padrao com aspas dentro de aspas e o
+    // tipo de coisa que passa no teste e falha em silencio depois.
+    const alvos = [
+      "escopoEfetivo('" + aba + "'",
+      'escopoEfetivo("' + aba + '"',
+      "niveisLiberados('" + aba + "'",
+      'niveisLiberados("' + aba + '"',
+    ];
+    if (!alvos.some(a => CODIGO.includes(a))) continue;
+    for (const nivel of meta.niveis) achadas.push(chaveEscopo(meta.prefixo, nivel));
+  }
+  return achadas;
+}
+
 /** Toda chave fiscalizada no app, venha de onde vier. */
 function chavesFiscalizadas(): Set<string> {
   const achadas = new Set<string>();
@@ -60,6 +89,7 @@ function chavesFiscalizadas(): Set<string> {
   for (const m of CODIGO.matchAll(/temPermissaoExplicita\(\s*['"]([a-z_]+)['"]\s*\)/g)) achadas.add(m[1]);
   for (const m of CODIGO.matchAll(/requiredPermissao=["']([a-z_]+)["']/g)) achadas.add(m[1]);
   for (const m of CODIGO.matchAll(/permissao:\s*['"]([a-z_]+)['"]/g)) achadas.add(m[1]);
+  for (const k of chavesDeEscopoResolvidas()) achadas.add(k);
   return achadas;
 }
 
