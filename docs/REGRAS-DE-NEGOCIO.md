@@ -470,19 +470,28 @@ catálogo nos dois lados, desenho e fases em
 > chamada direta à API alcança o teto, não o recorte da aba. Escopo amplo numa
 > aba é decisão sobre o **dado**, não sobre a **tela**.
 
-#### O banco lê o mapa desde 2026-08-22
+#### O painel manda no banco, sem teto
+
+> 📌 **REGRA ABSOLUTA DO PROJETO** (Cleber, 2026-08-23): o painel de
+> permissões tem poder total. Nenhuma regra de código ou de banco pode passar
+> por cima de uma decisão tomada nele. Quem define o teto é quem edita o
+> painel — não o código.
 
 `acordos_select` consulta `fn_user_escopo_acordos()`: o maior escopo entre as
 abas que leem `acordos` (Dashboard, Acordos, Lixeira, Pix, Painel Líder, Painel
-Diretoria), **cortado por `fn_teto_rls_acordos`**.
+Diretoria), **sem teto**. O que a tela diz vale no banco.
 
-Duas consequências práticas:
+As duas únicas regras acima do painel, e o motivo de cada uma:
 
-1. **Baixar um escopo no painel baixa o acesso no banco.** Antes as permissões
-   governavam só o que a interface mostrava.
-2. **Subir um escopo não sobe o acesso além do teto.** Levantar o teto é uma
-   edição deliberada de `fn_teto_rls_acordos`, cargo a cargo — não acontece por
-   efeito colateral de mexer no painel.
+1. **Os próprios acordos da pessoa.** Não é regra de cargo — é o piso de
+   qualquer um sobre o próprio trabalho.
+2. **A chave-mestra do `super_admin`.** Existe para que ninguém se tranque para
+   fora editando o painel. É o único cargo que a tela não consegue reduzir.
+
+⚠️ **Ainda não obedecem ao painel:** outras 39 tabelas decidem por cargo dentro
+das próprias policies (`analitico_recebimentos`, `diario_recebimentos`,
+`perfis`, `equipes`, `metas`, Pix, Tickets…). Liberar uma aba dessas na tela
+continua sem efeito no banco.
 
 `analitico_escopo_*` e `usuarios_escopo_*` **não** entram nessa conta: leem
 outras tabelas, com RLS própria. Misturar as famílias daria alcance de acordos
