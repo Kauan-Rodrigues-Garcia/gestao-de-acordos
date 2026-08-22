@@ -104,8 +104,15 @@ Acordo é sempre inefetiva; com Acordos ligada, pode ser desligada sozinha.
 
 Escopo: `pix_escopo_individual` · `_equipe` · `_setor` · `_todos_setores`
 
-Ações: `pix_editar_configuracoes` (percentual de comissão, critérios de meta e
-demais ajustes da aba)
+Ações: `pix_editar_configuracoes` (percentual de comissão, interruptor de
+registro manual e as metas de Pix do setor)
+
+> ⚠️ **Os níveis aqui decidem só o que a pessoa VÊ.** Aprovar Pix mexe em
+> comissão: aprovar, reprovar, editar registro alheio, restaurar da lixeira e
+> registrar em nome de outro seguem em `aprovar_pix_automatico` e numa lista de
+> cargo (`podeAgirSobreOutros` no arquivo). Separá-las do cargo é trabalho da
+> fase de ações — fazê-lo junto com o escopo arriscaria tirar de alguém um
+> botão que hoje funciona.
 
 ### 3.5 Lixeira
 
@@ -295,7 +302,7 @@ para derivar.
 | `acordos_alterar_status` | `editar_acordos` |
 | `acordos_excluir` | `excluir_acordos` |
 | `acordos_excluir_em_lote` | `excluir_em_lote` |
-| `pix_editar_configuracoes` | `aprovar_pix_automatico` |
+| ~~`pix_editar_configuracoes`~~ | ~~`aprovar_pix_automatico`~~ — **errado, ver abaixo** |
 | `lixeira_restaurar` | `ver_lixeira` |
 | `lixeira_limpar` | `excluir_em_lote` |
 | `usuarios_editar` | `editar_usuarios` |
@@ -312,6 +319,20 @@ para derivar.
 | `tickets_abrir` | `true` (hoje quem vê a aba abre) |
 | `tickets_atender` | é atendente hoje |
 | `tickets_solicitar_atendimento` | `true` |
+
+> ✏️ **Corrigido na implementação (fase 5b).** `pix_editar_configuracoes` **não**
+> nasce de `aprovar_pix_automatico`. Derivar assim erraria nos dois sentidos:
+> `elite` e `ouvidoria` têm o painel de configuração hoje e **não** têm
+> `aprovar_pix_automatico` — perderiam o percentual de comissão do setor; e
+> `diretoria` tem `aprovar_pix_automatico` e **não** tem o painel — ganharia
+> poder de editar comissão que nunca teve.
+>
+> Quem acende o painel hoje é `isPerfilAdminOuLider(cargo)`, e é daí que a chave
+> nasce. Mesmo tipo de erro que a fase 1 pegou em `lixeira_limpar`: a tabela
+> acima foi escrita por afinidade de nome, e o código diz outra coisa.
+>
+> **Regra que sai disso:** conferir a derivação de toda ação contra o gate REAL
+> na tela, nunca contra a chave de nome parecido.
 
 ### 4.4 Abas internas
 
@@ -366,8 +387,8 @@ revisável e reversível sozinho, que era o objetivo declarado.
 | 3a | Dashboard (escopo) | `d53a653` | ✅ produção |
 | 3b | Dashboard (filtro único; 2 chaves aposentadas) | `2218117` | ✅ produção |
 | 4 | Analítico (escopo + 8 abas internas; encerra `veTodosOsSetores`) | `2b88f00` | ✅ produção |
-| 5a | Acordos (escopo; aposenta `ver_acordos_gerais`) | — | ✅ produção |
-| 5b | Pix Automático (escopo + `pix_editar_configuracoes`) | — | pendente |
+| 5a | Acordos (escopo; aposenta `ver_acordos_gerais`) | `0bad254` | ✅ produção |
+| 5b | Pix Automático (escopo + `pix_editar_configuracoes`) | — | ✅ produção |
 | 6 | Usuários, Tickets, Configurações | — | pendente |
 | 7 | RLS: teto elevado ao maior escopo | — | pendente |
 | 8 | Remoção das chaves globais restantes e faxina do JSON | — | pendente |

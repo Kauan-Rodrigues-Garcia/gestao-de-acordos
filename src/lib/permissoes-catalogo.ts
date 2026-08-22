@@ -93,6 +93,7 @@ export const GRUPOS_PERMISSAO = [
   'Painel Líder',
   'Dashboard',
   'Analítico',
+  'Pix Automático',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -514,6 +515,41 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'analitico_sub_sem_operador', label: 'Analítico: Sem operador',
     descricao: 'Abrir a aba interna de conferência das linhas sem operador vinculado',
     grupo: 'Analítico', padrao: TODOS,
+  },
+
+  // ── Pix Automático ───────────────────────────────────────────────────────
+  // Aba principal no painel mesmo vivendo dentro de Acordos na tela: foi
+  // pedida assim, e é o que a torna independente de `ver_acordos`.
+  //
+  // Os níveis decidem só o que a pessoa VÊ. Aprovar Pix mexe em comissão e
+  // continua em `aprovar_pix_automatico`, separado de propósito.
+  {
+    key: 'pix_escopo_individual', label: 'Pix: os próprios registros',
+    descricao: 'Ver no Pix Automático os registros da própria pessoa',
+    grupo: 'Pix Automático', tenants: ['bookplay'], padrao: TODOS,
+  },
+  {
+    key: 'pix_escopo_equipe', label: 'Pix: registros da equipe',
+    descricao: 'Ver no Pix Automático os registros da equipe, com o filtro de equipe',
+    grupo: 'Pix Automático', tenants: ['bookplay'],
+    padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
+  },
+  {
+    key: 'pix_escopo_setor', label: 'Pix: registros do setor',
+    descricao: 'Ver no Pix Automático os registros de outras pessoas do setor, e a coluna Operador',
+    grupo: 'Pix Automático', tenants: ['bookplay'],
+    padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
+  },
+  {
+    key: 'pix_escopo_todos_setores', label: 'Pix: todos os setores',
+    descricao: 'Ver no Pix Automático qualquer setor, com o filtro de setor disponível',
+    grupo: 'Pix Automático', tenants: ['bookplay'], padrao: { gerencia: true },
+  },
+  {
+    key: 'pix_editar_configuracoes', label: 'Pix: editar a configuração do setor',
+    descricao: 'Alterar o percentual de comissão, o registro manual e as metas de Pix do setor',
+    grupo: 'Pix Automático', tenants: ['bookplay'],
+    padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
   },
 
   // ── Ações específicas ────────────────────────────────────────────────────

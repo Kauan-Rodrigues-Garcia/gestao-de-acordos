@@ -132,6 +132,23 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'acordos',
     niveis: NIVEIS_ESCOPO,
   },
+  /*
+   * Pix Automático é aba principal no painel de permissões mesmo aparecendo
+   * dentro de Acordos na tela — foi pedido assim, e é o que a torna
+   * independente de `ver_acordos`.
+   *
+   * Os níveis aqui decidem só o que a pessoa VÊ: quais registros a consulta
+   * traz, quais filtros aparecem e se a coluna Operador existe. Quem pode
+   * APROVAR continua em `aprovar_pix_automatico`, e quem edita a configuração
+   * do setor em `pix_editar_configuracoes` — aprovar Pix mexe em comissão, e
+   * misturar isso com alcance de leitura seria juntar de novo o que esta
+   * reestruturação está separando.
+   */
+  pix: {
+    chaveAba: 'ver_pix_automatico',
+    prefixo: 'pix',
+    niveis: NIVEIS_ESCOPO,
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

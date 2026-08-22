@@ -268,6 +268,49 @@ describe('Acordos: os quatro niveis, e o que todos_setores significa aqui', () =
   });
 });
 
+describe('Pix: nivel largo sem o estreito embaixo seria concessao calada', () => {
+  /*
+   * O caso real da fase 5b: `diretoria` estava em CARGOS_MULTI_SETOR mas nao
+   * em `isPerfilAdminOuLider`, e o filtro de setor do Pix mora DENTRO do bloco
+   * de lider — entao ela nunca viu registro de outra pessoa. Derivar
+   * `todos_setores` so do multi-setor teria dado a ela a visao de lider
+   * inteira, porque `escopoEfetivo` devolve o mais amplo LIBERADO e nao exige
+   * que os niveis abaixo estejam ligados.
+   */
+  it('escopoEfetivo devolve o mais amplo mesmo com buraco embaixo', () => {
+    const tem = comChaves('ver_pix_automatico', chaveEscopo('pix', 'todos_setores'));
+    expect(escopoEfetivo('pix', tem)).toBe('todos_setores');
+    expect(niveisLiberados('pix', tem)).toEqual(['todos_setores']);
+  });
+
+  it('a diretoria de hoje: so o proprio', () => {
+    const tem = comChaves('ver_pix_automatico', chaveEscopo('pix', 'individual'));
+    expect(escopoEfetivo('pix', tem)).toBe('individual');
+  });
+
+  it('o lider de hoje: individual, equipe e setor', () => {
+    const tem = comChaves(
+      'ver_pix_automatico',
+      chaveEscopo('pix', 'individual'),
+      chaveEscopo('pix', 'equipe'),
+      chaveEscopo('pix', 'setor'),
+    );
+    expect(escopoEfetivo('pix', tem)).toBe('setor');
+  });
+
+  it('Acordos e Pix nao falam um pelo outro, mesmo vivendo na mesma tela', () => {
+    // O Pix aparece dentro de Acordos, e por isso mesmo foi pedido como aba
+    // independente: desligar uma nao pode mexer na outra.
+    const tem = comChaves(
+      'ver_pix_automatico', 'ver_acordos',
+      ...NIVEIS_ESCOPO.map(n => chaveEscopo('acordos', n)),
+      chaveEscopo('pix', 'individual'),
+    );
+    expect(escopoEfetivo('pix', tem)).toBe('individual');
+    expect(escopoEfetivo('acordos', tem)).toBe('todos_setores');
+  });
+});
+
 describe('amplitude', () => {
   it('compara niveis corretamente', () => {
     expect(alcancaPeloMenos('todos_setores', 'individual')).toBe(true);

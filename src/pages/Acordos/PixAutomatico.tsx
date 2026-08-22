@@ -51,6 +51,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
 import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
 import { mesAtual } from '@/lib/mesReferencia';
@@ -95,7 +96,6 @@ function fmtPct(pct: number): string {
 }
 
 /** Cargos com visão de mais de um setor (podem filtrar e configurar por setor). */
-const CARGOS_MULTI_SETOR = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
 
 /** Rótulo curto de cada ação do log. */
 const PIX_LOG_LABEL: Record<PixLogItem['acao'], string> = {
@@ -134,8 +134,32 @@ export function PixAutomatico() {
   const podeAprovar = temPermissao('aprovar_pix_automatico');
 
   const cargo   = String(perfil?.perfil ?? '').toLowerCase();
-  const ehLider = isPerfilAdminOuLider(cargo);
-  const ehMultiSetor = CARGOS_MULTI_SETOR.includes(cargo);
+  /*
+   * ESCOPO desta aba — o que a pessoa VÊ.
+   *
+   * Antes saía de duas listas de cargo escritas neste arquivo: `ehLider`
+   * (`isPerfilAdminOuLider`) decidia se a consulta trazia registros de outras
+   * pessoas, e uma lista `CARGOS_MULTI_SETOR` decidia se ela via além do próprio setor.
+   * Nenhuma das duas era configurável, então "quem enxerga o quê no Pix" só
+   * mudava mexendo em código.
+   *
+   * O que NÃO passa por aqui, de propósito: aprovar, editar registro alheio,
+   * restaurar da lixeira e registrar em nome de outro. Aprovar Pix mexe em
+   * comissão — juntar isso com alcance de leitura é exatamente a mistura que
+   * esta reestruturação está desfazendo. Essas ações seguem em
+   * `aprovar_pix_automatico` e em `podeAgirSobreOutros`, abaixo.
+   */
+  const niveisPix = useMemo(() => niveisLiberados('pix', temPermissao), [temPermissao]);
+  const podeVerDeOutros     = niveisPix.includes('setor');
+  const podeVerTodosSetores = niveisPix.includes('todos_setores');
+
+  /*
+   * AÇÃO sobre registro alheio. Continua saindo do cargo, como sempre saiu —
+   * separar isso é trabalho da fase de ações, e fazê-lo junto com o escopo
+   * arriscaria tirar de alguém um botão que hoje funciona.
+   */
+  const podeAgirSobreOutros = isPerfilAdminOuLider(cargo);
+  const podeEditarConfig = temPermissao('pix_editar_configuracoes');
 
   const [itens, setItens]           = useState<PixAutoAcordo[]>([]);
   const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>({});
@@ -214,7 +238,7 @@ export function PixAutomatico() {
   const meuSetor = perfil?.setor_id ?? null;
   // Setor cuja configuração (% e interruptor) está em edição: multi-setor usa o
   // filtro de setor; líder/elite sempre o próprio setor.
-  const setorConfig = ehMultiSetor ? (filtroSetor || meuSetor) : meuSetor;
+  const setorConfig = podeVerTodosSetores ? (filtroSetor || meuSetor) : meuSetor;
 
   /**
    * Setor a que o líder está preso.
@@ -229,7 +253,7 @@ export function PixAutomatico() {
    * `setorEscopo`; as duas expressões eram idênticas e ficou esta, que já
    * era aplicada também nas consultas de perfis/equipes/setores.
    */
-  const setorEscopo = ehLider && !ehMultiSetor ? meuSetor : null;
+  const setorEscopo = podeVerDeOutros && !podeVerTodosSetores ? meuSetor : null;
 
   const pctPorSetor = useMemo(() => {
     const m: Record<string, number> = {};
@@ -252,7 +276,7 @@ export function PixAutomatico() {
     ? (Number(configs[setorConfig]?.meta_acordos_dobra) || PIX_META_ACORDOS_DOBRA)
     : PIX_META_ACORDOS_DOBRA;
   // Operador só registra com o interruptor do PRÓPRIO setor ligado
-  const podeRegistrar = ehLider
+  const podeRegistrar = podeAgirSobreOutros
     || meuSetor == null
     || (configs[meuSetor]?.permite_registro_operador ?? true);
 
@@ -269,7 +293,7 @@ export function PixAutomatico() {
       // exceção abortava o `carregar` inteiro e a aba aparecia VAZIA — com 73
       // pendentes e 148 aprovados intactos no banco. Nada aqui pode impedir a
       // lista de carregar.
-      if (ehLider) {
+      if (podeVerDeOutros) {
         try {
           await expurgarDesaprovadosVencidos(empresa.id);
         } catch (e) {
@@ -278,7 +302,7 @@ export function PixAutomatico() {
       }
 
       const [lista, cfgs, bloqueados] = await Promise.all([
-        fetchAcordosPix(empresa.id, ehLider
+        fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
         fetchConfigsPix(empresa.id),
@@ -290,7 +314,7 @@ export function PixAutomatico() {
       setConfigs(mapa);
       setNrsBloqueados(bloqueados);
 
-      if (ehLider) {
+      if (podeVerDeOutros) {
         // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
         // Presos ao setor do líder — ver `setorEscopo`.
         let qOps = supabase.from('perfis').select('id, nome, equipe_id, setor_id, perfil')
@@ -314,7 +338,7 @@ export function PixAutomatico() {
     } finally {
       setLoading(false);
     }
-  }, [empresa?.id, perfil?.id, ehLider, setorEscopo]);
+  }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo]);
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { setPctInput(String(pctSetorConfig).replace('.', ',')); }, [pctSetorConfig]);
@@ -471,7 +495,7 @@ export function PixAutomatico() {
   // "faltam X para o setor" calculado só com as linhas de uma pessoa seria
   // um número errado apresentado como certo.
   const consolidadoMetaPix = useMemo(() => {
-    if (!ehLider) return null;
+    if (!podeVerDeOutros) return null;
     const nomeEquipe = new Map(equipes.map(e => [e.id, e.nome]));
     return calcularMetaPixPorEquipe({
       itens,
@@ -487,7 +511,7 @@ export function PixAutomatico() {
       configMes,
       mes: mesAtual(), hojeISO: getTodayISO(),
     });
-  }, [ehLider, itens, metasPix, equipes, operadorEquipe, configMes]);
+  }, [podeVerDeOutros, itens, metasPix, equipes, operadorEquipe, configMes]);
 
   // ── Ações ───────────────────────────────────────────────────────────────
   async function registrar() {
@@ -505,7 +529,7 @@ export function PixAutomatico() {
       return;
     }
     // Líder+ pode vincular o acordo a um operador; sem vínculo, registra em nome próprio
-    const dono = ehLider && vinculoOp ? vinculoOp : null;
+    const dono = podeAgirSobreOutros && vinculoOp ? vinculoOp : null;
     setSalvando(true);
     try {
       const { ok, error } = await criarAcordoPix({
@@ -574,7 +598,7 @@ export function PixAutomatico() {
   // comissão que o líder já conferiu, e mudá-los por baixo apagaria a conferência.
   function podeEditarLinha(item: PixAutoAcordo): boolean {
     if (item.status !== 'pendente') return false;
-    return ehLider || item.operador_id === perfil?.id;
+    return podeAgirSobreOutros || item.operador_id === perfil?.id;
   }
 
   function abrirEdicao(item: PixAutoAcordo) {
@@ -751,7 +775,7 @@ export function PixAutomatico() {
         // Acessório: a listagem é o que importa. Ver o comentário em `carregar`.
         console.warn('[PixAutomatico] purga da lixeira:', e);
       }
-      setLixeira(await fetchLixeiraPix(empresa.id, ehLider ? undefined : { operadorId: perfil.id }));
+      setLixeira(await fetchLixeiraPix(empresa.id, podeVerDeOutros ? undefined : { operadorId: perfil.id }));
     } finally {
       setLixeiraCarregando(false);
     }
@@ -1040,7 +1064,7 @@ export function PixAutomatico() {
         let opId = perfil.id;
         let opNomeFinal = perfil.nome ?? perfil.email ?? '—';
         let setorId = perfil.setor_id ?? null;
-        if (ehLider && opNome) {
+        if (podeAgirSobreOutros && opNome) {
           const match = operadores.find(o => o.nome.trim().toLowerCase() === opNome.toLowerCase());
           if (match) { opId = match.id; opNomeFinal = match.nome; setorId = match.setor_id; }
         }
@@ -1160,7 +1184,7 @@ export function PixAutomatico() {
                 placeholder="0,00" className="h-9 text-sm font-mono"
                 onKeyDown={e => { if (e.key === 'Enter') registrar(); }} />
             </div>
-            {ehLider && (
+            {podeVerDeOutros && (
               <div className="space-y-1 flex-1 max-w-[260px] relative">
                 <Label className="text-xs font-medium flex items-center gap-1">
                   <User className="w-3 h-3" /> Vincular a um operador
@@ -1214,7 +1238,7 @@ export function PixAutomatico() {
           <p className="text-[11px] text-muted-foreground mt-2">
             Todo registro entra como <strong>verificação pendente</strong> — o líder aprova ou desaprova.
             Cada NR só pode registrar <strong>um</strong> acordo no Pix automático.
-            {ehLider && ' Sem vínculo, o acordo é registrado em seu próprio nome.'}
+            {podeAgirSobreOutros && ' Sem vínculo, o acordo é registrado em seu próprio nome.'}
           </p>
         </CardContent>
       </Card>
@@ -1264,7 +1288,7 @@ export function PixAutomatico() {
       {/* ── Meta de Pix do setor (líder+): quanto falta e projeção ──
           Não se mistura com a meta de recebimento: o valor do Pix já entra no
           recebimento pelo analítico, e somar de novo contaria duas vezes. */}
-      {!loading && ehLider && setorConfig && (
+      {!loading && podeVerDeOutros && setorConfig && (
         <PixMetaPainel
           consolidado={consolidadoMetaPix}
           nomeSetor={setores.find(s => s.id === setorConfig)?.nome}
@@ -1275,7 +1299,7 @@ export function PixAutomatico() {
               { valor: Number(m.meta_valor) || 0, acordos: Number(m.meta_acordos) || 0 },
             ]),
           )}
-          podeEditar
+          podeEditar={podeEditarConfig}
           salvando={salvandoMetaPix}
           onSalvar={salvarMetaPix}
           parseValor={parseCurrencyInput}
@@ -1287,14 +1311,14 @@ export function PixAutomatico() {
           sempre para o operador — que precisa saber que a regra existe.
           Substituiu o contador dos 18 + o bloco de "bônus por meta", que eram
           dois desenhos diferentes contando metades da mesma regra. */}
-      {!loading && (!ehLider || dobra.feitos > 0) && (
+      {!loading && (!podeVerDeOutros || dobra.feitos > 0) && (
         <PixComissaoDobrada dobra={dobra} projecao={bonusMeta?.projecao ?? null} />
       )}
 
       {/* ── Ranking do setor ──
           Só para líder+: o operador enxerga apenas os próprios acordos (RLS),
           então um "ranking" para ele seria uma lista de uma pessoa só. */}
-      {!loading && ehLider && (
+      {!loading && podeVerDeOutros && (
         <PixRankingSetor
           linhas={ranking}
           nomeSetor={setorConfig ? setores.find(s => s.id === setorConfig)?.nome : undefined}
@@ -1323,7 +1347,7 @@ export function PixAutomatico() {
       <div className="flex flex-wrap gap-2 items-center">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/70 pointer-events-none" />
-          <Input placeholder={ehLider ? 'Buscar por NR ou operador...' : 'Buscar por NR...'}
+          <Input placeholder={podeVerDeOutros ? 'Buscar por NR ou operador...' : 'Buscar por NR...'}
             value={busca} onChange={e => setBusca(e.target.value)}
             className="pl-9 pr-8 h-9 text-sm rounded-lg" />
           {busca && (
@@ -1388,9 +1412,9 @@ export function PixAutomatico() {
           )}
         </div>
 
-        {ehLider && (
+        {podeVerDeOutros && (
           <>
-            {ehMultiSetor && (
+            {podeVerTodosSetores && (
               <Select value={filtroSetor || '__todos__'}
                 onValueChange={v => setFiltroSetor(v === '__todos__' ? '' : v)}>
                 <SelectTrigger className="h-9 w-40 text-xs rounded-lg">
@@ -1427,7 +1451,7 @@ export function PixAutomatico() {
       </div>
 
       {/* ── Configuração do setor (líder+): % de comissão + registro manual ── */}
-      {ehLider && setorConfig && (
+      {podeEditarConfig && setorConfig && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-[11px] font-semibold text-muted-foreground flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5 text-violet-400" />
@@ -1506,7 +1530,7 @@ export function PixAutomatico() {
       </AlertDialog>
 
       {/* ── Barra de ação em lote (líder) ── */}
-      {ehLider && selecionados.size > 0 && (
+      {podeAgirSobreOutros && selecionados.size > 0 && (
         <div className="flex flex-wrap items-center gap-2 rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2">
           <span className="text-xs font-medium text-violet-500 mr-1">{selecionados.size} selecionado(s)</span>
           <Button size="sm" onClick={copiarSelecionados} disabled={loteProcessando} className="h-7 gap-1.5 text-xs">
@@ -1564,14 +1588,14 @@ export function PixAutomatico() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border/60 bg-muted/20">
-                    {ehLider && (
+                    {podeVerDeOutros && (
                       <th className="px-3 py-3 w-8">
                         <Checkbox checked={todosVisiveisSelecionados} onCheckedChange={toggleTodosVisiveis}
                           aria-label="Selecionar todos os visíveis" />
                       </th>
                     )}
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">NR</th>
-                    {ehLider && <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Operador</th>}
+                    {podeVerDeOutros && <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Operador</th>}
                     <th className="text-right px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Valor</th>
                     <th className="text-right px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Comissão Pix</th>
                     <th className="text-left px-4 py-3 font-semibold text-muted-foreground/80 uppercase tracking-wider text-[10px]">Status</th>
@@ -1597,7 +1621,7 @@ export function PixAutomatico() {
                           'border-b border-border/30 group transition-colors hover:bg-accent/20',
                           desaprovado && 'opacity-60',
                         )}>
-                        {ehLider && (
+                        {podeVerDeOutros && (
                           <td className="px-3 py-3 w-8">
                             <Checkbox checked={selecionados.has(item.id)}
                               onCheckedChange={() => toggleSelecionado(item.id)}
@@ -1622,7 +1646,7 @@ export function PixAutomatico() {
                             </div>
                           )}
                         </td>
-                        {ehLider && (
+                        {podeVerDeOutros && (
                           <td className="px-4 py-3 text-foreground/80 max-w-[160px]">
                             <span className="truncate block">{item.operador_nome ?? '—'}</span>
                           </td>
@@ -1709,7 +1733,7 @@ export function PixAutomatico() {
                                 <Pencil className="w-3.5 h-3.5" />
                               </button>
                             )}
-                            {ehLider && podeAprovar && item.status === 'pendente' && (
+                            {podeAgirSobreOutros && podeAprovar && item.status === 'pendente' && (
                               <>
                                 <button title="Aprovar" disabled={avaliandoId === item.id}
                                   onClick={() => avaliar(item, true)}
@@ -1724,7 +1748,7 @@ export function PixAutomatico() {
                               </>
                             )}
                             {/* Pagar só o que está aprovado — é o que o banco aceita. */}
-                            {ehLider && item.status === 'aprovado' && (
+                            {podeAgirSobreOutros && item.status === 'aprovado' && (
                               <button title={item.pago ? 'Desfazer pagamento' : 'Marcar comissão como paga'}
                                 disabled={avaliandoId === item.id}
                                 onClick={() => alternarPago(item)}
@@ -1741,7 +1765,7 @@ export function PixAutomatico() {
                                 pendente com pagamento feito, estado que a regra
                                 do NR não sabe ler. Desfaz-se o pagamento
                                 primeiro — o botão ao lado faz isso. */}
-                            {ehLider && item.status !== 'pendente' && !item.pago && (
+                            {podeAgirSobreOutros && item.status !== 'pendente' && !item.pago && (
                               <button title="Voltar para pendente" disabled={avaliandoId === item.id}
                                 onClick={() => voltarPendente(item)}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent/60 disabled:opacity-50">
@@ -1753,7 +1777,7 @@ export function PixAutomatico() {
                                 destrancaria. O banco recusa de qualquer jeito
                                 (trg_pix_a_impede_pago) — aqui é só não oferecer
                                 um botão que vai dar erro. */}
-                            {!item.pago && (ehLider || (desaprovado && item.operador_id === perfil?.id)) && (
+                            {!item.pago && (podeAgirSobreOutros || (desaprovado && item.operador_id === perfil?.id)) && (
                               <button title="Excluir registro" onClick={() => excluir(item)}
                                 className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10">
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1821,7 +1845,7 @@ export function PixAutomatico() {
             </DialogTitle>
             <DialogDescription id="dlg-lixeira-pix">
               Registros excluídos ficam aqui por 3 dias e depois somem de vez.
-              {!ehLider && ' Restaurar é com o líder.'}
+              {!podeAgirSobreOutros && ' Restaurar é com o líder.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -1867,7 +1891,7 @@ export function PixAutomatico() {
                         <div className="flex items-center justify-end gap-1">
                           {/* Restaurar é líder+ — a RPC confere no servidor, o
                               botão só evita o clique que ia falhar. */}
-                          {ehLider && (
+                          {podeAgirSobreOutros && (
                             <button
                               title="Restaurar este registro"
                               disabled={restaurandoId === item.id}
@@ -1880,7 +1904,7 @@ export function PixAutomatico() {
                               Restaurar
                             </button>
                           )}
-                          {ehLider && (
+                          {podeAgirSobreOutros && (
                             <button
                               title="Apagar em definitivo"
                               onClick={() => apagarDaLixeira(item)}
@@ -1915,7 +1939,7 @@ export function PixAutomatico() {
             <DialogDescription id="dlg-historico-pix">
               Tudo o que aconteceu com os registros: criação, edição, avaliação,
               pagamento e exclusão.
-              {!ehLider && ' Você vê o histórico dos seus registros.'}
+              {!podeVerDeOutros && ' Você vê o histórico dos seus registros.'}
             </DialogDescription>
           </DialogHeader>
 
