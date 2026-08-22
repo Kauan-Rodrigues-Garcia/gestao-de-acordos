@@ -72,6 +72,10 @@ export default function PainelDiretoria() {
   /** Mês em análise. Nasce no corrente; o seletor permite ver o mês fechado. */
   const [mesAnalise, setMesAnalise] = useState<string>(() => mesAtual());
 
+  // Sem realtime de propósito: esta tela é de leitura. Os dados chegam ao abrir
+  // a página e pelo botão de atualizar do cabeçalho — número que se mexe sozinho
+  // no meio de uma análise atrapalha mais do que ajuda. O Dashboard, que usa o
+  // mesmo hook, segue em tempo real.
   const {
     valorAgendadoMes, valorNaoPago,
     valorHOAgendado, valorHONaoPago,
@@ -81,7 +85,7 @@ export default function PainelDiretoria() {
     meta, percMeta, setores, setorFiltro, setSetorFiltro,
     valorRecebidoMes: recebidoTabulado,
     loading, refetch,
-  } = useAnalytics(mesAnalise);
+  } = useAnalytics(mesAnalise, { realtime: false });
 
   const { empresa } = useEmpresa();
   const {

@@ -102,7 +102,23 @@ function calcPerc(realizado: number, meta: number): number {
  * @param mesRef mês a analisar (`yyyy-MM`). Omitido = mês corrente, que é como
  *   todos os consumidores antigos continuam se comportando.
  */
-export function useAnalytics(mesRef?: string | null): AnalyticsData {
+/** Ajustes de quem chama. Hoje só o realtime; nasceu por causa da Diretoria. */
+export interface OpcoesAnalytics {
+  /**
+   * Recebe eventos de acordos e refaz as métricas sozinho. Padrão: `true`.
+   *
+   * O Painel Diretoria passa `false`: é uma tela de leitura, consultada com
+   * calma, onde número mudando sob o olho de quem analisa atrapalha mais do
+   * que ajuda. Lá os dados chegam ao abrir a página e pelo botão de
+   * atualizar. O Dashboard continua em tempo real.
+   */
+  realtime?: boolean;
+}
+
+export function useAnalytics(
+  mesRef?: string | null,
+  opcoes?: OpcoesAnalytics,
+): AnalyticsData {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const { temPermissao } = useCargoPermissoes();
@@ -367,11 +383,15 @@ export function useAnalytics(mesRef?: string | null): AnalyticsData {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
-  // Qualquer evento de acordos dispara um refetch completo das métricas analíticas
+  // Qualquer evento de acordos dispara um refetch completo das métricas analíticas.
+  // Quem passa `realtime: false` fica de fora do registry: nem assina, nem paga
+  // o refetch. Ver `OpcoesAnalytics`.
+  const realtimeLigado = opcoes?.realtime !== false;
   useEffect(() => {
+    if (!realtimeLigado) return;
     subscribe(instanceId, () => { fetchAll(); });
     return () => unsubscribe(instanceId);
-  }, [subscribe, unsubscribe, instanceId, fetchAll]);
+  }, [realtimeLigado, subscribe, unsubscribe, instanceId, fetchAll]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
