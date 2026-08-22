@@ -405,9 +405,9 @@ export default function PaginaAnalitico() {
           </div>
         </div>
 
-        {/* Filtro de setor — só diretoria/admin podem alternar entre setores;
-            líder/gerência ficam travados no próprio setor */}
-        {isLiderMais && veTodosSetores && setores.length > 0 && (
+        {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
+            Quem não tem fica no próprio setor e vê a etiqueta abaixo. */}
+        {podeVerSetor && veTodosSetores && setores.length > 0 && (
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             <span className="text-xs text-muted-foreground font-medium shrink-0">Setor:</span>
@@ -431,7 +431,7 @@ export default function PaginaAnalitico() {
             )}
           </div>
         )}
-        {isLiderMais && !veTodosSetores && setorProprio && (
+        {podeVerSetor && !veTodosSetores && setorProprio && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/40 border border-border px-3 py-1.5 rounded-lg">
             <Building2 className="w-3.5 h-3.5" />
             {setores.find(s => s.id === setorProprio)?.nome ?? 'Meu setor'}
