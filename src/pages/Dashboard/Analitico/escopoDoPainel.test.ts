@@ -15,12 +15,29 @@ const EQUIPES = [
   { id: 'eqB1', nome: 'Digital', setor_id: 'setorB' },
 ] as unknown as EquipeAnalitico[];
 
+/*
+ * O escopo desta tela saiu do CARGO e foi para as chaves da aba. Antes,
+ * `diretoria` recebia "todos os setores" por estar numa lista dentro do
+ * codigo; agora recebe porque a permissao esta ligada — e por isso da para
+ * desliga-la sem mexer no codigo, que era o pedido.
+ *
+ * Os cargos continuam nos casos abaixo por legibilidade: eles dizem QUEM esta
+ * olhando. Quem decide o alcance e o `temPermissao`.
+ */
 const SEM_PERMISSAO = () => false;
+
+/** Tem a aba e enxerga o proprio setor. O caso do lider. */
+const SO_SETOR = (c: string) => c === 'ver_painel_lider' || c === 'painel_lider_escopo_setor';
+
+/** Tem a aba e enxerga todos os setores. O caso da diretoria. */
+const VE_TUDO = (c: string) =>
+  c === 'ver_painel_lider' || c === 'painel_lider_escopo_setor'
+  || c === 'painel_lider_escopo_todos_setores';
 
 function escopo(over: Partial<Parameters<typeof resolverEscopoPainel>[0]> = {}) {
   return resolverEscopoPainel({
     cargo: 'lider',
-    temPermissao: SEM_PERMISSAO,
+    temPermissao: SO_SETOR,
     setorDoPerfil: 'setorA',
     setorEscolhido: null,
     equipeEscolhida: null,
@@ -36,7 +53,7 @@ describe('quem enxerga a empresa toda', () => {
    */
   it('diretoria sem escolha vê TODOS os setores, não o setor do próprio perfil', () => {
     const r = escopo({
-      cargo: 'diretoria',
+      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO,
       setorDoPerfil: 'setorA',      // era o valor de preenchimento que vazava
       setorEscolhido: null,
     });
@@ -46,34 +63,51 @@ describe('quem enxerga a empresa toda', () => {
 
   it('super_admin e administrador também', () => {
     for (const cargo of ['super_admin', 'administrador']) {
-      expect(escopo({ cargo, setorEscolhido: null }).setorId).toBeNull();
+      expect(escopo({ cargo, temPermissao: VE_TUDO, setorEscolhido: null }).setorId).toBeNull();
     }
   });
 
   it('escolher um setor estreita de verdade', () => {
-    const r = escopo({ cargo: 'diretoria', setorEscolhido: 'setorB' });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorB' });
     expect(r.setorId).toBe('setorB');
   });
 
   /**
    * `QuartisOperadores` decidia por lista de cargo escrita à mão. Gerência com
-   * `ver_todos_setores` recebia `null` do pai — vendo tudo — e não ganhava
-   * filtro: via a empresa inteira sem poder estreitar.
+   * alcance amplo recebia `null` do pai — vendo tudo — e não ganhava filtro:
+   * via a empresa inteira sem poder estreitar. Agora quem abre é a chave da
+   * própria aba.
    */
-  it('gerência COM ver_todos_setores ganha o filtro', () => {
-    const r = escopo({
-      cargo: 'gerencia',
-      temPermissao: (c) => c === 'ver_todos_setores',
-    });
+  it('gerência com a chave da aba ganha o filtro', () => {
+    const r = escopo({ cargo: 'gerencia', temPermissao: VE_TUDO });
     expect(r.podeFiltrarSetor).toBe(true);
   });
 
-  it('a permissão de analítico global também abre', () => {
+  /*
+   * O contrato da reestruturação, do lado de dentro desta tela: as chaves
+   * GLOBAIS pararam de mandar aqui. Enquanto elas existirem no catálogo — e
+   * elas ainda decidem Dashboard, Analítico e Recebimento — este teste é o que
+   * garante que não voltaram a decidir o Painel Líder pelas costas.
+   */
+  it('as chaves globais antigas NÃO abrem mais o filtro', () => {
+    for (const global of ['ver_todos_setores', 'ver_analiticos_global', 'ver_acordos_gerais']) {
+      const r = escopo({
+        cargo: 'gerencia',
+        temPermissao: (c) => c === 'ver_painel_lider' || c === global,
+      });
+      expect(r.podeFiltrarSetor, global).toBe(false);
+    }
+  });
+
+  /* Escopo amplo em OUTRA aba não abre nada aqui. */
+  it('escopo amplo em outra aba não vaza para o Painel Líder', () => {
     const r = escopo({
       cargo: 'gerencia',
-      temPermissao: (c) => c === 'ver_analiticos_global',
+      temPermissao: (c) => c === 'ver_painel_lider'
+        || c === 'lixeira_escopo_todos_setores'
+        || c === 'acordos_escopo_todos_setores',
     });
-    expect(r.podeFiltrarSetor).toBe(true);
+    expect(r.podeFiltrarSetor).toBe(false);
   });
 });
 
@@ -92,7 +126,7 @@ describe('quem só enxerga o próprio setor', () => {
   it('escolha anterior não sobrevive à perda da permissão', () => {
     const r = escopo({
       cargo: 'lider',
-      temPermissao: SEM_PERMISSAO,
+      temPermissao: SEM_PERMISSAO,   // a chave da aba caiu junto
       setorDoPerfil: 'setorA',
       setorEscolhido: 'setorB',     // escolhido quando ainda podia
     });
@@ -108,12 +142,12 @@ describe('quem só enxerga o próprio setor', () => {
 
 describe('filtro de equipe', () => {
   it('lista só as equipes do setor em foco', () => {
-    const r = escopo({ cargo: 'diretoria', setorEscolhido: 'setorA' });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorA' });
     expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqA1', 'eqA2']);
   });
 
   it('sem setor em foco, lista as equipes de todos os setores', () => {
-    const r = escopo({ cargo: 'diretoria', setorEscolhido: null });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: null });
     expect(r.equipesDisponiveis).toHaveLength(3);
   });
 
@@ -124,7 +158,7 @@ describe('filtro de equipe', () => {
    */
   it('equipe de outro setor é descartada ao trocar o setor', () => {
     const r = escopo({
-      cargo: 'diretoria',
+      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO,
       setorEscolhido: 'setorB',
       equipeEscolhida: 'eqA1',      // ficou do setor anterior
     });
@@ -133,14 +167,14 @@ describe('filtro de equipe', () => {
 
   it('equipe do setor em foco sobrevive', () => {
     const r = escopo({
-      cargo: 'diretoria', setorEscolhido: 'setorA', equipeEscolhida: 'eqA2',
+      cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorEscolhido: 'setorA', equipeEscolhida: 'eqA2',
     });
     expect(r.equipeId).toBe('eqA2');
     expect(r.temFiltroAtivo).toBe(true);
   });
 
   it('equipe inexistente é descartada', () => {
-    const r = escopo({ cargo: 'diretoria', equipeEscolhida: 'eqFantasma' });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, equipeEscolhida: 'eqFantasma' });
     expect(r.equipeId).toBeNull();
   });
 
@@ -163,13 +197,13 @@ describe('cúpula sem setor no perfil', () => {
    * algum filho complete de novo.
    */
   it('setor nulo no perfil continua significando todos os setores', () => {
-    const r = escopo({ cargo: 'diretoria', setorDoPerfil: null, setorEscolhido: null });
+    const r = escopo({ cargo: 'diretoria', temPermissao: VE_TUDO, temPermissao: VE_TUDO, setorDoPerfil: null, setorEscolhido: null });
     expect(r.setorId).toBeNull();
     expect(r.equipesDisponiveis).toHaveLength(3);
   });
 
   it('e ainda pode escolher um setor específico', () => {
-    const r = escopo({ cargo: 'super_admin', setorDoPerfil: null, setorEscolhido: 'setorB' });
+    const r = escopo({ cargo: 'super_admin', temPermissao: VE_TUDO, setorDoPerfil: null, setorEscolhido: 'setorB' });
     expect(r.setorId).toBe('setorB');
     expect(r.equipesDisponiveis.map(e => e.id)).toEqual(['eqB1']);
   });

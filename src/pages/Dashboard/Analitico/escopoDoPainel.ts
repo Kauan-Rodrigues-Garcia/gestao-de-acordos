@@ -26,19 +26,30 @@
  * fica travado no próprio, e para essa pessoa o filtro nem aparece — um seletor
  * com uma opção só é ruído.
  *
- * Quem decide isso é `veTodosOsSetores` de `escopoAnalitico.ts`, a mesma função
- * que o dashboard e a aba Analítico usam. O cabeçalho dela conta que existiam
- * duas versões discordantes, uma por cargo e outra por permissão; repetir a
- * lista aqui recriaria o problema.
+ * Quem decide isso são as permissões DESTA aba, resolvidas por
+ * `escopoEfetivo("painel_lider")`. Antes vinha de `veTodosOsSetores`, que
+ * respondia por cargo (diretoria e admin sempre) ou pelas chaves globais
+ * `ver_todos_setores` / `ver_analiticos_global` — as mesmas que decidiam
+ * Dashboard, Analítico e Recebimento. Mexer no alcance de uma mexia em todas.
+ *
+ * A diretoria continua enxergando todos os setores: a migration ligou a chave
+ * para ela. O que muda é que agora isso é configurável, em vez de escrito no
+ * código — que era o pedido.
  */
 
-import { veTodosOsSetores } from '@/services/analitico/escopoAnalitico';
+import { escopoEfetivo } from '@/lib/permissoes-escopo';
 
 import type { EquipeAnalitico } from '@/services/analitico/analitico.service';
 
 export interface EntradaEscopoPainel {
-  /** Cargo de quem está olhando. */
-  cargo: string | null | undefined;
+  /**
+   * Cargo de quem está olhando.
+   *
+   * Não decide mais nada aqui — o escopo saiu do cargo e foi para as chaves
+   * da aba. Continua no tipo para quem chama não precisar mudar junto, e sai
+   * quando a última tela parar de passá-lo.
+   */
+  cargo?: string | null;
   /** `temPermissao` de `useCargoPermissoes`. */
   temPermissao: (chave: string) => boolean;
   /** Setor do próprio perfil. Nulo para a cúpula — ver `PERFIS_ESCOPO_EMPRESA`. */
@@ -86,7 +97,9 @@ export interface EscopoPainel {
 export function resolverEscopoPainel(e: EntradaEscopoPainel): EscopoPainel {
   const { equipes, setorDoPerfil } = e;
 
-  const podeFiltrarSetor = veTodosOsSetores(e.cargo, e.temPermissao);
+  // Só as chaves do Painel Líder respondem por esta tela. Escopo amplo em
+  // Acordos, Lixeira ou Pix não abre setor nenhum aqui.
+  const podeFiltrarSetor = escopoEfetivo('painel_lider', e.temPermissao) === 'todos_setores';
 
   const setorId = podeFiltrarSetor ? e.setorEscolhido : setorDoPerfil;
 

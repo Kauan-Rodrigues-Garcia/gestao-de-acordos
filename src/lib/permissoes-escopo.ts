@@ -63,6 +63,18 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'lixeira',
     niveis: NIVEIS_ESCOPO,
   },
+  /*
+   * O Painel Lider so tem dois niveis, e isso e proposital: a aba nasceu para
+   * a lideranca olhar o proprio setor, e a unica pergunta que ela faz e se
+   * essa pessoa enxerga alem dele. `individual` nao faria sentido — um painel
+   * de equipe com uma pessoa so nao e painel — e `equipe` ja e o recorte
+   * interno da tela, escolhido no filtro, nao uma permissao.
+   */
+  painel_lider: {
+    chaveAba: 'ver_painel_lider',
+    prefixo: 'painel_lider',
+    niveis: ['setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

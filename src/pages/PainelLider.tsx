@@ -166,6 +166,20 @@ export default function PainelLider() {
   // As abas Desempenho Equipes / Quartis / Gráfico moram no Painel Líder nos dois
   // tenants. Fonte: PaguePlay = analítico (Gráfico = diário); BookPlay = analítico.
   const mostrarAbasAnaliticas = isPP || isBookplay;
+
+  /*
+   * As quatro abas internas, cada uma com permissão própria.
+   *
+   * Nenhuma era escondida antes, então todas nasceram ligadas para quem tem o
+   * Painel Líder — ninguém perdeu conteúdo nesta entrega. A partir daqui dá
+   * para desligar uma sem mexer nas outras, que era o pedido.
+   */
+  const abasInternas = useMemo(() => ([
+    { key: 'time',       label: 'Acompanhamento',      Icon: Users,       permissao: 'painel_lider_sub_acompanhamento' },
+    { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3,   permissao: 'painel_lider_sub_desempenho_equipes' },
+    { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp,  permissao: 'painel_lider_sub_quartis' },
+    { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart,   permissao: 'painel_lider_sub_grafico_recebimento' },
+  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
   const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
@@ -622,12 +636,7 @@ export default function PainelLider() {
       {/* ── Abas: acompanhamento × desempenho × quartis × gráfico ───────── */}
       {mostrarAbasAnaliticas && (
         <div className="flex items-center gap-1 border-b border-border overflow-x-auto">
-          {([
-            { key: 'time',       label: 'Acompanhamento',      Icon: Users },
-            { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3 },
-            { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp },
-            { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart },
-          ] as const).map(({ key, label, Icon }) => (
+          {abasInternas.map(({ key, label, Icon }) => (
             <button key={key} onClick={() => mudarAba(key)}
               className={cn(
                 'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px whitespace-nowrap',

@@ -90,6 +90,7 @@ export const GRUPOS_PERMISSAO = [
   'Filtros e visão',
   'Ações específicas',
   'Lixeira',
+  'Painel Líder',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -344,6 +345,42 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'lixeira_limpar', label: 'Esvaziar a lixeira',
     descricao: 'Apagar de vez tudo que está na lixeira',
     grupo: 'Lixeira', padrao: TODOS,
+  },
+
+  // ── Painel Líder ─────────────────────────────────────────────────────────
+  // Segunda aba a sair do escopo global. O alcance vinha de
+  // `veTodosOsSetores`, que decidia por CARGO (diretoria e admin sempre) ou
+  // pelas chaves globais. Agora vem daqui — o que torna configurável o que
+  // antes era fixo no código para a diretoria.
+  {
+    key: 'painel_lider_escopo_setor', label: 'Painel Líder: o próprio setor',
+    descricao: 'Ver no Painel Líder os dados do setor da própria pessoa',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  {
+    key: 'painel_lider_escopo_todos_setores', label: 'Painel Líder: todos os setores',
+    descricao: 'Ver no Painel Líder qualquer setor, com o filtro de setor disponível',
+    grupo: 'Painel Líder', padrao: { diretoria: true },
+  },
+  {
+    key: 'painel_lider_sub_acompanhamento', label: 'Painel Líder: Acompanhamento',
+    descricao: 'Abrir a aba interna de acompanhamento do time',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  {
+    key: 'painel_lider_sub_desempenho_equipes', label: 'Painel Líder: Desempenho Equipes',
+    descricao: 'Abrir a aba interna de desempenho por equipe',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  {
+    key: 'painel_lider_sub_quartis', label: 'Painel Líder: Quartis',
+    descricao: 'Abrir a aba interna de quartis por operador',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  {
+    key: 'painel_lider_sub_grafico_recebimento', label: 'Painel Líder: Gráfico recebimento',
+    descricao: 'Abrir a aba interna do gráfico de recebimento',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
   },
 
   // ── Ações específicas ────────────────────────────────────────────────────
