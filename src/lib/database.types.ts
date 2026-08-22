@@ -173,30 +173,6 @@ export type Database = {
           },
         ]
       }
-      api_rate_limits: {
-        Row: {
-          atualizado_em: string
-          janela_inicio: string
-          requisicoes: number
-          rota: string
-          usuario_id: string
-        }
-        Insert: {
-          atualizado_em?: string
-          janela_inicio?: string
-          requisicoes?: number
-          rota: string
-          usuario_id: string
-        }
-        Update: {
-          atualizado_em?: string
-          janela_inicio?: string
-          requisicoes?: number
-          rota?: string
-          usuario_id?: string
-        }
-        Relationships: []
-      }
       ai_config: {
         Row: {
           empresa_id: string | null
@@ -237,65 +213,6 @@ export type Database = {
             columns: ["empresa_id"]
             isOneToOne: false
             referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      analitico_exclusoes_setor: {
-        Row: {
-          criado_em: string
-          empresa_id: string
-          excluido_por: string | null
-          id: string
-          mes: string
-          setor_id: string
-          setor_origem_id: string | null
-        }
-        Insert: {
-          criado_em?: string
-          empresa_id: string
-          excluido_por?: string | null
-          id?: string
-          mes: string
-          setor_id: string
-          setor_origem_id?: string | null
-        }
-        Update: {
-          criado_em?: string
-          empresa_id?: string
-          excluido_por?: string | null
-          id?: string
-          mes?: string
-          setor_id?: string
-          setor_origem_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "analitico_exclusoes_setor_empresa_id_fkey"
-            columns: ["empresa_id"]
-            isOneToOne: false
-            referencedRelation: "empresas"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "analitico_exclusoes_setor_excluido_por_fkey"
-            columns: ["excluido_por"]
-            isOneToOne: false
-            referencedRelation: "perfis"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "analitico_exclusoes_setor_setor_id_fkey"
-            columns: ["setor_id"]
-            isOneToOne: false
-            referencedRelation: "setores"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "analitico_exclusoes_setor_setor_origem_id_fkey"
-            columns: ["setor_origem_id"]
-            isOneToOne: false
-            referencedRelation: "setores"
             referencedColumns: ["id"]
           },
         ]
@@ -391,6 +308,65 @@ export type Database = {
           {
             foreignKeyName: "analitico_colchao_fora_meta_setor_id_fkey"
             columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      analitico_exclusoes_setor: {
+        Row: {
+          criado_em: string
+          empresa_id: string
+          excluido_por: string | null
+          id: string
+          mes: string
+          setor_id: string
+          setor_origem_id: string | null
+        }
+        Insert: {
+          criado_em?: string
+          empresa_id: string
+          excluido_por?: string | null
+          id?: string
+          mes: string
+          setor_id: string
+          setor_origem_id?: string | null
+        }
+        Update: {
+          criado_em?: string
+          empresa_id?: string
+          excluido_por?: string | null
+          id?: string
+          mes?: string
+          setor_id?: string
+          setor_origem_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analitico_exclusoes_setor_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_excluido_por_fkey"
+            columns: ["excluido_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analitico_exclusoes_setor_setor_origem_id_fkey"
+            columns: ["setor_origem_id"]
             isOneToOne: false
             referencedRelation: "setores"
             referencedColumns: ["id"]
@@ -555,6 +531,30 @@ export type Database = {
           },
         ]
       }
+      api_rate_limits: {
+        Row: {
+          atualizado_em: string
+          janela_inicio: string
+          requisicoes: number
+          rota: string
+          usuario_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          janela_inicio?: string
+          requisicoes?: number
+          rota: string
+          usuario_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          janela_inicio?: string
+          requisicoes?: number
+          rota?: string
+          usuario_id?: string
+        }
+        Relationships: []
+      }
       atendimento_responsaveis: {
         Row: {
           criado_em: string
@@ -595,6 +595,139 @@ export type Database = {
           {
             foreignKeyName: "atendimento_responsaveis_usuario_id_fkey"
             columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      autorizacoes_pedidos: {
+        Row: {
+          acordo_alvo_id: string | null
+          acordo_criado_id: string | null
+          acordo_editado_id: string | null
+          criado_em: string
+          decidido_em: string | null
+          decidido_por_id: string | null
+          decidido_por_nome: string | null
+          dono_id: string | null
+          dono_nome: string | null
+          empresa_id: string
+          erro: string | null
+          expira_em: string
+          extra_atual_id: string | null
+          extra_atual_op_id: string | null
+          extra_atual_op_nome: string | null
+          id: string
+          modo: string
+          motivo_recusa: string | null
+          nr_label: string
+          nr_valor: string
+          payload: Json
+          resumo: Json
+          setor_id: string | null
+          setores_escopo: string[]
+          solicitante_id: string
+          solicitante_nome: string
+          status: string
+        }
+        Insert: {
+          acordo_alvo_id?: string | null
+          acordo_criado_id?: string | null
+          acordo_editado_id?: string | null
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por_id?: string | null
+          decidido_por_nome?: string | null
+          dono_id?: string | null
+          dono_nome?: string | null
+          empresa_id: string
+          erro?: string | null
+          expira_em?: string
+          extra_atual_id?: string | null
+          extra_atual_op_id?: string | null
+          extra_atual_op_nome?: string | null
+          id?: string
+          modo: string
+          motivo_recusa?: string | null
+          nr_label: string
+          nr_valor: string
+          payload: Json
+          resumo?: Json
+          setor_id?: string | null
+          setores_escopo?: string[]
+          solicitante_id: string
+          solicitante_nome: string
+          status?: string
+        }
+        Update: {
+          acordo_alvo_id?: string | null
+          acordo_criado_id?: string | null
+          acordo_editado_id?: string | null
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por_id?: string | null
+          decidido_por_nome?: string | null
+          dono_id?: string | null
+          dono_nome?: string | null
+          empresa_id?: string
+          erro?: string | null
+          expira_em?: string
+          extra_atual_id?: string | null
+          extra_atual_op_id?: string | null
+          extra_atual_op_nome?: string | null
+          id?: string
+          modo?: string
+          motivo_recusa?: string | null
+          nr_label?: string
+          nr_valor?: string
+          payload?: Json
+          resumo?: Json
+          setor_id?: string | null
+          setores_escopo?: string[]
+          solicitante_id?: string
+          solicitante_nome?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "autorizacoes_pedidos_decidido_por_id_fkey"
+            columns: ["decidido_por_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autorizacoes_pedidos_dono_id_fkey"
+            columns: ["dono_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autorizacoes_pedidos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autorizacoes_pedidos_extra_atual_op_id_fkey"
+            columns: ["extra_atual_op_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autorizacoes_pedidos_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "autorizacoes_pedidos_solicitante_id_fkey"
+            columns: ["solicitante_id"]
             isOneToOne: false
             referencedRelation: "perfis"
             referencedColumns: ["id"]
@@ -1766,6 +1899,27 @@ export type Database = {
           },
         ]
       }
+      login_busca_limite: {
+        Row: {
+          atualizado_em: string
+          janela_inicio: string
+          origem: string
+          vazias: number
+        }
+        Insert: {
+          atualizado_em?: string
+          janela_inicio?: string
+          origem: string
+          vazias?: number
+        }
+        Update: {
+          atualizado_em?: string
+          janela_inicio?: string
+          origem?: string
+          vazias?: number
+        }
+        Relationships: []
+      }
       logs_sistema: {
         Row: {
           acao: string
@@ -1855,6 +2009,42 @@ export type Database = {
             columns: ["usuario_id"]
             isOneToOne: false
             referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      menu_lateral_ordem: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          empresa_id: string
+          ordem: string[]
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id: string
+          ordem?: string[]
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id?: string
+          ordem?: string[]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_lateral_ordem_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_lateral_ordem_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
             referencedColumns: ["id"]
           },
         ]
@@ -2336,6 +2526,9 @@ export type Database = {
       }
       perfis: {
         Row: {
+          acesso_multiempresa: boolean
+          acesso_multiempresa_em: string | null
+          acesso_multiempresa_por_id: string | null
           arquivado: boolean
           ativo: boolean
           atualizado_em: string
@@ -2358,6 +2551,9 @@ export type Database = {
           viu_notificacao_chatplay: boolean | null
         }
         Insert: {
+          acesso_multiempresa?: boolean
+          acesso_multiempresa_em?: string | null
+          acesso_multiempresa_por_id?: string | null
           arquivado?: boolean
           ativo?: boolean
           atualizado_em?: string
@@ -2380,6 +2576,9 @@ export type Database = {
           viu_notificacao_chatplay?: boolean | null
         }
         Update: {
+          acesso_multiempresa?: boolean
+          acesso_multiempresa_em?: string | null
+          acesso_multiempresa_por_id?: string | null
           arquivado?: boolean
           ativo?: boolean
           atualizado_em?: string
@@ -2402,6 +2601,13 @@ export type Database = {
           viu_notificacao_chatplay?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "perfis_acesso_multiempresa_por_id_fkey"
+            columns: ["acesso_multiempresa_por_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "perfis_empresa_id_fkey"
             columns: ["empresa_id"]
@@ -2457,7 +2663,29 @@ export type Database = {
           permissoes?: Json
           usuario_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "perfis_permissoes_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_permissoes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "perfis_permissoes_usuario_id_fkey"
+            columns: ["usuario_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       perfis_transferencias: {
         Row: {
@@ -3174,36 +3402,6 @@ export type Database = {
           },
         ]
       }
-      profiles: {
-        Row: {
-          created_at: string | null
-          id: string
-          nome: string | null
-          perfil: string | null
-          setor: string | null
-          setores_permitidos: string[] | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id: string
-          nome?: string | null
-          perfil?: string | null
-          setor?: string | null
-          setores_permitidos?: string[] | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          nome?: string | null
-          perfil?: string | null
-          setor?: string | null
-          setores_permitidos?: string[] | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
       profissionais: {
         Row: {
           atualizado_em: string
@@ -3710,42 +3908,251 @@ export type Database = {
           },
         ]
       }
-      autorizacoes_pedidos: {
+      tickets: {
         Row: {
-          id: string
-          empresa_id: string
-          solicitante_id: string
-          solicitante_nome: string
-          setor_id: string | null
-          setores_escopo: string[]
-          modo: string
-          nr_label: string
-          nr_valor: string
-          acordo_alvo_id: string | null
-          dono_id: string | null
-          dono_nome: string | null
-          extra_atual_id: string | null
-          extra_atual_op_id: string | null
-          extra_atual_op_nome: string | null
-          payload: Json
-          resumo: Json
-          status: string
-          decidido_por_id: string | null
-          decidido_por_nome: string | null
-          decidido_em: string | null
-          motivo_recusa: string | null
-          erro: string | null
-          acordo_criado_id: string | null
-          acordo_editado_id: string | null
+          aberto_por: string
+          aberto_por_nome: string | null
+          assunto: string
+          atualizado_em: string
+          campos: Json
+          categoria: string
           criado_em: string
-          expira_em: string
+          descricao: string | null
+          empresa_id: string
+          fechado_em: string | null
+          id: string
+          numero: number
+          prioridade: string
+          responsavel_id: string | null
+          responsavel_nome: string | null
+          setor_id: string | null
+          status: string
         }
-        // Sem Insert/Update utilizáveis de propósito: a tabela não tem policy de
-        // escrita. Só `fn_autorizacao_solicitar` e `fn_autorizacao_decidir`
-        // gravam, e as duas são SECURITY DEFINER.
-        Insert: never
-        Update: never
-        Relationships: []
+        Insert: {
+          aberto_por: string
+          aberto_por_nome?: string | null
+          assunto: string
+          atualizado_em?: string
+          campos?: Json
+          categoria: string
+          criado_em?: string
+          descricao?: string | null
+          empresa_id: string
+          fechado_em?: string | null
+          id?: string
+          numero?: number
+          prioridade?: string
+          responsavel_id?: string | null
+          responsavel_nome?: string | null
+          setor_id?: string | null
+          status?: string
+        }
+        Update: {
+          aberto_por?: string
+          aberto_por_nome?: string | null
+          assunto?: string
+          atualizado_em?: string
+          campos?: Json
+          categoria?: string
+          criado_em?: string
+          descricao?: string | null
+          empresa_id?: string
+          fechado_em?: string | null
+          id?: string
+          numero?: number
+          prioridade?: string
+          responsavel_id?: string | null
+          responsavel_nome?: string | null
+          setor_id?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_aberto_por_fkey"
+            columns: ["aberto_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_responsavel_id_fkey"
+            columns: ["responsavel_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_atendentes: {
+        Row: {
+          criado_em: string
+          criado_por: string | null
+          empresa_id: string
+          id: string
+          perfil_id: string
+        }
+        Insert: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id: string
+          id?: string
+          perfil_id: string
+        }
+        Update: {
+          criado_em?: string
+          criado_por?: string | null
+          empresa_id?: string
+          id?: string
+          perfil_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_atendentes_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_atendentes_perfil_id_fkey"
+            columns: ["perfil_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_config: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          empresa_id: string
+          liberado_para_lideranca: boolean
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id: string
+          liberado_para_lideranca?: boolean
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          empresa_id?: string
+          liberado_para_lideranca?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_config_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: true
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_eventos: {
+        Row: {
+          autor_id: string | null
+          autor_nome: string | null
+          criado_em: string
+          de: string | null
+          id: string
+          para: string | null
+          ticket_id: string
+          tipo: string
+        }
+        Insert: {
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          ticket_id: string
+          tipo: string
+        }
+        Update: {
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          de?: string | null
+          id?: string
+          para?: string | null
+          ticket_id?: string
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_eventos_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets_mensagens: {
+        Row: {
+          anexos: Json
+          autor_foto: string | null
+          autor_id: string | null
+          autor_nome: string | null
+          criado_em: string
+          id: string
+          texto: string | null
+          ticket_id: string
+        }
+        Insert: {
+          anexos?: Json
+          autor_foto?: string | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          id?: string
+          texto?: string | null
+          ticket_id: string
+        }
+        Update: {
+          anexos?: Json
+          autor_foto?: string | null
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          id?: string
+          texto?: string | null
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_mensagens_autor_id_fkey"
+            columns: ["autor_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_mensagens_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       uso_telas: {
         Row: {
@@ -3860,19 +4267,6 @@ export type Database = {
         Args: { p_empresa_slug?: string; p_usuario: string }
         Returns: string
       }
-      fn_api_rate_limit_consumir: {
-        Args: {
-          p_janela_segundos: number
-          p_limite: number
-          p_rota: string
-          p_usuario_id: string
-        }
-        Returns: {
-          permitido: boolean
-          restantes: number
-          tentar_novamente_em_s: number
-        }[]
-      }
       fn_admin_apagar_acordos_do_usuario: {
         Args: { p_empresa_id?: string; p_user_id: string }
         Returns: number
@@ -3933,37 +4327,49 @@ export type Database = {
           total_recebido: number
         }[]
       }
+      fn_api_rate_limit_consumir: {
+        Args: {
+          p_janela_segundos: number
+          p_limite: number
+          p_rota: string
+          p_usuario_id: string
+        }
+        Returns: {
+          permitido: boolean
+          restantes: number
+          tentar_novamente_em_s: number
+        }[]
+      }
       fn_arquivar_desligados_anteriores: {
         Args: { p_empresa_id: string }
         Returns: number
       }
+      fn_autorizacao_cancelar: { Args: { p_id: string }; Returns: Json }
+      fn_autorizacao_decidir: {
+        Args: { p_aprovar: boolean; p_id: string; p_motivo?: string }
+        Returns: Json
+      }
+      fn_autorizacao_faxina: { Args: never; Returns: number }
+      fn_autorizacao_solicitar: {
+        Args: {
+          p_acordo_alvo_id?: string
+          p_acordo_editado_id?: string
+          p_dono_id?: string
+          p_dono_nome?: string
+          p_extra_atual_id?: string
+          p_extra_atual_op_id?: string
+          p_extra_atual_op_nome?: string
+          p_modo: string
+          p_nr_label: string
+          p_nr_valor: string
+          p_payload: Json
+          p_resumo?: Json
+        }
+        Returns: Json
+      }
       fn_can_access_empresa: {
         Args: { target_empresa_id: string }
         Returns: boolean
-      }
-      fn_creators_lab_descobridores: {
-        Args: never
-        Returns: {
-          descoberto_em: string
-          foto_url: string | null
-          nome: string
-          posicao: number
-          usuario_id: string
-        }[]
-      }
-      fn_creators_lab_ranking: {
-        Args: never
-        Returns: {
-          duracao_ms: number | null
-          foto_url: string | null
-          jogado_em: string
-          nome: string
-          pontos: number
-          posicao: number
-          usuario_id: string
-          venceu: boolean
-          vidas_usadas: number
-        }[]
       }
       fn_comemoracao_faxina: {
         Args: never
@@ -4018,6 +4424,30 @@ export type Database = {
         }
         Returns: undefined
       }
+      fn_creators_lab_descobridores: {
+        Args: never
+        Returns: {
+          descoberto_em: string
+          foto_url: string
+          nome: string
+          posicao: number
+          usuario_id: string
+        }[]
+      }
+      fn_creators_lab_ranking: {
+        Args: never
+        Returns: {
+          duracao_ms: number
+          foto_url: string
+          jogado_em: string
+          nome: string
+          pontos: number
+          posicao: number
+          usuario_id: string
+          venceu: boolean
+          vidas_usadas: number
+        }[]
+      }
       fn_diario_resumo_mensal: {
         Args: { p_empresa_id: string; p_mes: string }
         Returns: {
@@ -4042,7 +4472,17 @@ export type Database = {
         Args: { p_empresa_id: string; p_user_id: string }
         Returns: boolean
       }
+      fn_direto_extra_definir: {
+        Args: {
+          p_ativo: boolean
+          p_empresa_id: string
+          p_escopo: string
+          p_referencia_id: string
+        }
+        Returns: Json
+      }
       fn_eh_cpf: { Args: { p_valor: string }; Returns: boolean }
+      fn_empresa_id_bookplay: { Args: never; Returns: string }
       fn_equipes_do_operador: {
         Args: { p_operador: string }
         Returns: {
@@ -4089,128 +4529,6 @@ export type Database = {
         Args: { p_dias?: number; p_empresa_id?: string }
         Returns: number
       }
-      fn_uso_registrar: {
-        Args: { p_tela: string; p_segundos?: number; p_abertura?: boolean }
-        Returns: undefined
-      }
-      fn_autorizacao_solicitar: {
-        Args: {
-          p_modo: string
-          p_nr_label: string
-          p_nr_valor: string
-          p_payload: Json
-          p_resumo?: Json
-          p_acordo_alvo_id?: string | null
-          p_dono_id?: string | null
-          p_dono_nome?: string | null
-          p_extra_atual_id?: string | null
-          p_extra_atual_op_id?: string | null
-          p_extra_atual_op_nome?: string | null
-          p_acordo_editado_id?: string | null
-        }
-        Returns: Json
-      }
-      fn_autorizacao_decidir: {
-        Args: { p_id: string; p_aprovar: boolean; p_motivo?: string | null }
-        Returns: Json
-      }
-      fn_autorizacao_cancelar: {
-        Args: { p_id: string }
-        Returns: Json
-      }
-      fn_direto_extra_definir: {
-        Args: {
-          p_empresa_id: string
-          p_escopo: string
-          p_referencia_id: string
-          p_ativo: boolean
-        }
-        Returns: Json
-      }
-      fn_uso_por_pessoa: {
-        Args: {
-          p_empresa_id: string | null
-          p_desde: string
-          p_ate: string
-          p_cargo?: string | null
-        }
-        Returns: {
-          usuario_id: string
-          nome: string
-          cargo: string | null
-          empresa_id: string
-          empresa_nome: string
-          aberturas: number
-          segundos: number
-          dias_ativos: number
-          telas_usadas: number
-          ultimo_em: string | null
-        }[]
-      }
-      fn_uso_detalhe_pessoa: {
-        Args: { p_usuario_id: string; p_desde: string; p_ate: string }
-        Returns: {
-          tela: string
-          aberturas: number
-          segundos: number
-          dias: number
-          primeiro_em: string | null
-          ultimo_em: string | null
-        }[]
-      }
-      fn_uso_detalhe_pessoa_dias: {
-        Args: { p_usuario_id: string; p_desde: string; p_ate: string }
-        Returns: {
-          dia: string
-          aberturas: number
-          segundos: number
-        }[]
-      }
-      fn_recebimento_indireto_mes: {
-        Args: { p_empresa_id: string; p_mes: string; p_operadores?: string[] | null }
-        Returns: {
-          operador_id: string
-          total_bruto: number
-          qtd: number
-        }[]
-      }
-      fn_uso_por_tela: {
-        Args: { p_empresa_id: string | null; p_desde: string; p_ate: string; p_cargo?: string | null }
-        Returns: {
-          tela: string
-          aberturas: number
-          segundos: number
-          pessoas: number
-        }[]
-      }
-      fn_uso_por_dia: {
-        Args: { p_empresa_id: string | null; p_desde: string; p_ate: string; p_cargo?: string | null }
-        Returns: {
-          dia: string
-          aberturas: number
-          segundos: number
-          pessoas: number
-        }[]
-      }
-      fn_uso_adocao_tela: {
-        Args: {
-          p_empresa_id: string | null
-          p_desde: string
-          p_ate: string
-          p_tela: string
-          p_cargo?: string | null
-        }
-        Returns: {
-          usuario_id: string
-          nome: string
-          cargo: string | null
-          empresa_id: string
-          empresa_nome: string
-          aberturas: number
-          segundos: number
-          ultimo_em: string | null
-        }[]
-      }
       fn_logs_resumo: {
         Args: {
           p_acao?: string
@@ -4226,6 +4544,7 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_logs_retencao_aplicar: { Args: { p_dias?: number }; Returns: number }
       fn_meta_esta_bloqueada: {
         Args: {
           p_ano: number
@@ -4277,6 +4596,35 @@ export type Database = {
           ok: boolean
         }[]
       }
+      fn_multiempresa_definir: {
+        Args: { p_liberado: boolean; p_usuario_id: string }
+        Returns: Json
+      }
+      fn_multiempresa_elegiveis: {
+        Args: never
+        Returns: {
+          email: string
+          empresa_nome: string
+          foto_url: string
+          nome: string
+          perfil: string
+          usuario_id: string
+        }[]
+      }
+      fn_multiempresa_listar: {
+        Args: never
+        Returns: {
+          concedido_em: string
+          concedido_por: string
+          e_super_admin: boolean
+          email: string
+          empresa_nome: string
+          foto_url: string
+          nome: string
+          perfil: string
+          usuario_id: string
+        }[]
+      }
       fn_nr_campo_chave: {
         Args: { p_instituicao: string; p_nr_cliente: string }
         Returns: string
@@ -4306,9 +4654,23 @@ export type Database = {
         Returns: boolean
       }
       fn_operador_setor_id: { Args: { p_operador_id: string }; Returns: string }
+      fn_origem_da_requisicao: { Args: never; Returns: string }
       fn_ouvidoria_nivel: {
         Args: { target_empresa_id: string }
         Returns: string
+      }
+      fn_permissoes_catalogo: {
+        Args: never
+        Returns: {
+          chave: string
+          explicita: boolean
+          padrao: string[]
+          tenants: string[]
+        }[]
+      }
+      fn_permissoes_semear_empresa: {
+        Args: { p_empresa_id: string }
+        Returns: number
       }
       fn_pet_admin_ajustar_moedas:
         | {
@@ -4461,6 +4823,10 @@ export type Database = {
       fn_pix_nr_normalizar: { Args: { p_nr: string }; Returns: string }
       fn_pix_restaurar_lixeira: { Args: { p_item_id: string }; Returns: string }
       fn_pix_valor_br: { Args: { p_valor: number }; Returns: string }
+      fn_pode_autorizar_pedido: {
+        Args: { p_empresa_id: string; p_setores: string[] }
+        Returns: boolean
+      }
       fn_pode_editar_foto_setor: {
         Args: { p_setor_id: string }
         Returns: boolean
@@ -4469,6 +4835,7 @@ export type Database = {
         Args: { p_operador_id: string; p_setor_id: string }
         Returns: boolean
       }
+      fn_pp_ho_percentual: { Args: never; Returns: number }
       fn_profissional_registrar_uf: {
         Args: {
           p_codigo: string
@@ -4477,6 +4844,14 @@ export type Database = {
           p_nome?: string
         }
         Returns: string
+      }
+      fn_recebimento_indireto_mes: {
+        Args: { p_empresa_id: string; p_mes: string; p_operadores?: string[] }
+        Returns: {
+          operador_id: string
+          qtd: number
+          total_bruto: number
+        }[]
       }
       fn_relatorio_reabrir_setor: {
         Args: {
@@ -4551,6 +4926,23 @@ export type Database = {
       }
       fn_texto_censurado_cpf: { Args: never; Returns: string }
       fn_texto_tem_cpf: { Args: { p_texto: string }; Returns: boolean }
+      fn_ticket_nome_do_autor: { Args: never; Returns: string }
+      fn_ticket_notificar: {
+        Args: {
+          p_destinos: string[]
+          p_empresa_id: string
+          p_mensagem: string
+          p_ticket_id: string
+          p_titulo: string
+        }
+        Returns: undefined
+      }
+      fn_ticket_pode_abrir: { Args: never; Returns: boolean }
+      fn_ticket_pode_atender: { Args: never; Returns: boolean }
+      fn_ticket_visivel: {
+        Args: { p_aberto_por: string; p_empresa_id: string; p_setor_id: string }
+        Returns: boolean
+      }
       fn_transferencia_desfazer: {
         Args: { p_transferencia_id: string }
         Returns: Json
@@ -4567,6 +4959,7 @@ export type Database = {
         }
         Returns: Json
       }
+      fn_user_acesso_multiempresa: { Args: never; Returns: boolean }
       fn_user_empresa_id: { Args: never; Returns: string }
       fn_user_empresa_is_bookplay: { Args: never; Returns: boolean }
       fn_user_empresa_is_pagueplay: { Args: never; Returns: boolean }
@@ -4574,6 +4967,97 @@ export type Database = {
       fn_user_is_super_admin: { Args: never; Returns: boolean }
       fn_user_perfil: { Args: never; Returns: string }
       fn_user_setor_id: { Args: never; Returns: string }
+      fn_uso_adocao_tela: {
+        Args: {
+          p_ate: string
+          p_cargo?: string
+          p_desde: string
+          p_empresa_id: string
+          p_tela: string
+        }
+        Returns: {
+          aberturas: number
+          cargo: string
+          empresa_id: string
+          empresa_nome: string
+          nome: string
+          segundos: number
+          ultimo_em: string
+          usuario_id: string
+        }[]
+      }
+      fn_uso_detalhe_pessoa: {
+        Args: { p_ate: string; p_desde: string; p_usuario_id: string }
+        Returns: {
+          aberturas: number
+          dias: number
+          primeiro_em: string
+          segundos: number
+          tela: string
+          ultimo_em: string
+        }[]
+      }
+      fn_uso_detalhe_pessoa_dias: {
+        Args: { p_ate: string; p_desde: string; p_usuario_id: string }
+        Returns: {
+          aberturas: number
+          dia: string
+          segundos: number
+        }[]
+      }
+      fn_uso_expurgar: { Args: { p_dias?: number }; Returns: number }
+      fn_uso_por_dia: {
+        Args: {
+          p_ate: string
+          p_cargo?: string
+          p_desde: string
+          p_empresa_id: string
+        }
+        Returns: {
+          aberturas: number
+          dia: string
+          pessoas: number
+          segundos: number
+        }[]
+      }
+      fn_uso_por_pessoa: {
+        Args: {
+          p_ate: string
+          p_cargo?: string
+          p_desde: string
+          p_empresa_id: string
+        }
+        Returns: {
+          aberturas: number
+          cargo: string
+          dias_ativos: number
+          empresa_id: string
+          empresa_nome: string
+          nome: string
+          segundos: number
+          telas_usadas: number
+          ultimo_em: string
+          usuario_id: string
+        }[]
+      }
+      fn_uso_por_tela: {
+        Args: {
+          p_ate: string
+          p_cargo?: string
+          p_desde: string
+          p_empresa_id: string
+        }
+        Returns: {
+          aberturas: number
+          pessoas: number
+          segundos: number
+          tela: string
+        }[]
+      }
+      fn_uso_registrar: {
+        Args: { p_abertura?: boolean; p_segundos?: number; p_tela: string }
+        Returns: undefined
+      }
       fn_vincular_extra_ao_direto: {
         Args: {
           p_direto_id: string
