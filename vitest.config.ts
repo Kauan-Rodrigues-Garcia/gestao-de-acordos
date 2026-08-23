@@ -71,16 +71,18 @@ export default defineConfig({
       ],
       thresholds: {
         // Catraca: cada valor fica logo abaixo do que a suíte entrega hoje
-        // (32,76 / 27,26 / 26,46 / 31,39 em 2026-08-12, com os testes de Logs
-        // 2.0). A folga é pequena de propósito — o portão só serve enquanto doer
-        // descer. Ao subir a cobertura, suba estes números junto, no mesmo
-        // commit.
+        // (35,09 / 30,07 / 28,80 / 33,76 em 2026-08-23, com `fila.ts`, o cartão
+        // de ticket e os três módulos de carregamento — cache instantâneo,
+        // agrupador e estado de atualização). A folga é pequena de propósito — o
+        // portão só serve enquanto doer descer. Ao subir a cobertura, suba estes
+        // números junto, no mesmo commit.
         //
-        // Histórico: 27,5 / 22,5 / 21 / 26,5 em 2026-08-03.
-        lines: 32.5,
-        functions: 27,
-        branches: 26,
-        statements: 31,
+        // Histórico: 32,5 / 27 / 26 / 31 em 2026-08-12 (Logs 2.0);
+        //            27,5 / 22,5 / 21 / 26,5 em 2026-08-03.
+        lines: 34.5,
+        functions: 29.5,
+        branches: 28.3,
+        statements: 33.2,
       },
     },
   },

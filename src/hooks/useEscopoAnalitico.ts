@@ -20,6 +20,7 @@ import {
   type EscopoAnalitico, type LinhaEscopavel,
 } from '@/services/analitico/escopoAnalitico';
 import { buscarExclusoesSetor } from '@/services/analitico/exclusoesSetor.service';
+import { chaveDeCache, gravarInstantaneo, valorInstantaneo } from '@/lib/cacheInstantaneo';
 import type { OrigemKey } from '@/services/analitico/composicaoAcumulado';
 
 export interface ParametrosEscopo {
@@ -67,13 +68,38 @@ export interface ResultadoEscopo {
 export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
   const { ativo, empresaId, isPaguePlay, setorId, equipeId, operadorId, mes, linhas } = params;
 
-  const [fontes, setFontes] = useState<FontesDeEscopo | null>(null);
+  /*
+   * As fontes do escopo reabrem do instantâneo.
+   *
+   * `pendente` é `escopo === null`, e quem consome PRECISA segurar a tela nesse
+   * estado — o que, para um líder, significava esqueleto no Dashboard a cada
+   * volta de outra aba, mesmo com as métricas já em cache. A semente entra no
+   * estado inicial, e não num efeito, para que nem um quadro seja pintado como
+   * pendente.
+   *
+   * Sem persistência em disco de propósito: `FontesDeEscopo` carrega `Set`, que
+   * não sobrevive a `JSON.stringify`. A camada de memória guarda o objeto como
+   * ele é, e é ela que resolve a navegação entre telas.
+   */
+  const chaveFontes = chaveDeCache('escopo-fontes', empresaId, mes);
+  const [fontes, setFontes] = useState<FontesDeEscopo | null>(
+    () => (ativo && empresaId ? valorInstantaneo<FontesDeEscopo>(chaveFontes) : null),
+  );
   useEffect(() => {
     if (!ativo || !empresaId) { setFontes(null); return; }
+    // Troca de mês já visto: pinta o guardado antes de ir à rede. Quando o
+    // valor é o mesmo objeto, o React nem renderiza.
+    const guardado = valorInstantaneo<FontesDeEscopo>(chaveFontes);
+    if (guardado) setFontes(guardado);
+
     let cancelado = false;
-    void buscarFontesDeEscopo(empresaId, mes).then(f => { if (!cancelado) setFontes(f); });
+    void buscarFontesDeEscopo(empresaId, mes).then(f => {
+      if (cancelado) return;
+      setFontes(f);
+      gravarInstantaneo(chaveFontes, f);
+    });
     return () => { cancelado = true; };
-  }, [ativo, empresaId, mes]);
+  }, [ativo, empresaId, mes, chaveFontes]);
 
   /** O carimbo de setor chegou? (migration 20260802a aplicada) */
   const carimboDisponivel = useMemo(() => temCarimboDeSetor(linhas), [linhas]);
@@ -86,15 +112,27 @@ export function useEscopoAnalitico(params: ParametrosEscopo): ResultadoEscopo {
    * número que o card da aba Analítico. Tabela ausente devolve `{}` e nada
    * muda — a leitura é tolerante à migration pendente.
    */
-  const [exclusoes, setExclusoes] = useState<Record<string, Set<OrigemKey>>>({});
+  const chaveExclusoes = chaveDeCache('escopo-exclusoes', empresaId, mes);
+  const [exclusoes, setExclusoes] = useState<Record<string, Set<OrigemKey>>>(
+    () => (ativo && empresaId && mes
+      ? valorInstantaneo<Record<string, Set<OrigemKey>>>(chaveExclusoes) ?? {}
+      : {}),
+  );
   useEffect(() => {
     if (!ativo || !empresaId || !mes) { setExclusoes({}); return; }
+    // Também do instantâneo: sem isto, o escopo abre com todas as origens
+    // dentro do acumulado e o número corrige sozinho meio segundo depois.
+    const guardado = valorInstantaneo<Record<string, Set<OrigemKey>>>(chaveExclusoes);
+    if (guardado) setExclusoes(guardado);
+
     let cancelado = false;
     void buscarExclusoesSetor(empresaId, mes).then(({ porSetor }) => {
-      if (!cancelado) setExclusoes(porSetor);
+      if (cancelado) return;
+      setExclusoes(porSetor);
+      gravarInstantaneo(chaveExclusoes, porSetor);
     });
     return () => { cancelado = true; };
-  }, [ativo, empresaId, mes]);
+  }, [ativo, empresaId, mes, chaveExclusoes]);
 
   /** Setor de uma pessoa — equipe primeiro, cadastro na falta dela. */
   const setorDoOperador = useMemo(

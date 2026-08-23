@@ -41,6 +41,7 @@ import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
+import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
 import { registrarLog, registrarLoginRecusado } from '@/services/logs.service';
 
 interface AuthContextType {
@@ -402,6 +403,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       alvoTipo: 'usuario',
     });
     await forceSignOut();
+    // Os instantâneos de tela são o que faz o Gestão reabrir já pintado. Trocar
+    // de usuário na mesma aba é caminho real (o suporte faz isso o dia inteiro),
+    // e a primeira tela do próximo não pode nascer com os números do anterior.
+    esquecerInstantaneos();
     setPerfil(null);
     setEmpresa(null);
     setUser(null);

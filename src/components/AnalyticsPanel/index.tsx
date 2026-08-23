@@ -133,6 +133,7 @@ export function AnalyticsPanel({
     porDia,
     acordosMes,
     loading,
+    atualizando,
     refetch,
     setSetorFiltro,
     setEquipeFiltro,
@@ -544,10 +545,18 @@ export function AnalyticsPanel({
             size="icon"
             className="h-7 w-7 rounded-lg"
             onClick={refetch}
-            disabled={carregando}
+            disabled={carregando || atualizando}
             title="Atualizar dados"
           >
-            <RefreshCw className={cn('w-3.5 h-3.5 text-muted-foreground', carregando && 'animate-spin')} />
+            {/* Gira com `atualizando`, não com `carregando`.
+                Desde que a releitura deixou de trocar o painel por esqueleto,
+                `carregando` só é verdadeiro na primeira carga — e o botão de
+                atualizar ficava parado enquanto a busca acontecia, dando a
+                impressão de que o clique não tinha pegado. */}
+            <RefreshCw className={cn(
+              'w-3.5 h-3.5 text-muted-foreground',
+              (carregando || atualizando) && 'animate-spin',
+            )} />
           </Button>
           {!alwaysOpen && (
             <Button

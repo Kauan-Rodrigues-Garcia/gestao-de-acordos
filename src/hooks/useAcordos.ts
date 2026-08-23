@@ -22,6 +22,7 @@
 import { useEffect, useCallback, useRef, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase, Acordo } from '@/lib/supabase';
+import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { useAuth }    from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import { getTodayISO } from '@/lib/index';
@@ -58,6 +59,8 @@ export interface UseAcordosResult {
   acordos: Acordo[];
   totalCount: number;
   loading: boolean;
+  /** Releitura em silêncio com a tela cheia — sinal discreto, nunca esqueleto. */
+  atualizando: boolean;
   error: string | null;
   /** Estado do canal Realtime central — use para indicador visual */
   realtimeStatus: RealtimeStatus;
@@ -103,6 +106,28 @@ function matchesFiltros(acordo: Acordo, filtros?: UseAcordosOptions): boolean {
   return true;
 }
 
+/**
+ * Dois filtros serializados descrevem o mesmo recorte, ignorando a página?
+ *
+ * Recebe as strings que entram na `queryKey`. JSON inválido devolve `false` —
+ * na dúvida, esqueleto: manter na tela linhas que talvez não pertençam ao
+ * recorte novo é o único erro que importa aqui.
+ */
+function mesmoRecorte(a: string, b: string): boolean {
+  if (a === b) return true;
+  try {
+    return semPagina(a) === semPagina(b);
+  } catch {
+    return false;
+  }
+}
+
+function semPagina(bruto: string): string {
+  const objeto = JSON.parse(bruto || '{}') as Record<string, unknown>;
+  delete objeto.page;
+  return JSON.stringify(objeto);
+}
+
 // ─── Hook principal ───────────────────────────────────────────────────────────
 export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   const { perfil }       = useAuth();
@@ -142,7 +167,7 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   );
 
   // ── React Query — gerencia loading, error, cache e refetch-on-focus ───────
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey,
     queryFn: () =>
       fetchAcordosService({
@@ -152,6 +177,26 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
     enabled: !!perfil && !!empresaId,
     staleTime: 60 * 1000,
     refetchOnWindowFocus: false,
+    /*
+     * Trocar de PÁGINA não apaga a tabela.
+     *
+     * A regra do projeto é que troca de recorte merece esqueleto — o conteúdo
+     * em tela responde a outra pergunta. Página seguinte não é outra pergunta:
+     * é a mesma lista, mais adiante. Antes, cada clique em "próxima" trocava as
+     * 25 linhas por um esqueleto de 25 linhas por uns 300 ms, e a página inteira
+     * pulava de altura duas vezes por clique.
+     *
+     * A comparação ignora `page` e só `page`: mudar status, mês, busca ou
+     * empresa continua caindo no esqueleto, porque aí as linhas antigas seriam
+     * apresentadas como resposta do filtro que a pessoa acabou de escolher.
+     */
+    placeholderData: (anterior, consultaAnterior) => {
+      if (!anterior) return undefined;
+      const chaveAnterior = consultaAnterior?.queryKey as typeof queryKey | undefined;
+      if (!chaveAnterior) return undefined;
+      if (chaveAnterior[1] !== (empresaId ?? '')) return undefined;
+      return mesmoRecorte(chaveAnterior[2], filtrosEstavel) ? anterior : undefined;
+    },
   });
 
   // ── Resolver operadores da equipe (para filtro de realtime) ───────────────
@@ -262,10 +307,25 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   // olha, ainda está carregando.
   const aguardandoSessao = (!perfil || !empresaId) && !data;
 
+  /*
+   * Busca em segundo plano alimenta o fio de 2 px no topo da janela.
+   *
+   * `!isLoading` de propósito: a primeira carga já tem o esqueleto dela, e dois
+   * avisos para a mesma espera é um a mais. O que entra aqui é a releitura com
+   * a tela cheia — tempo real, reconexão, página seguinte.
+   */
+  const atualizando = isFetching && !isLoading;
+  useEffect(() => {
+    if (!atualizando) return;
+    const encerrar = comecouAtualizacao();
+    return () => encerrar();
+  }, [atualizando]);
+
   return {
     acordos:    data?.data   ?? [],
     totalCount: data?.count  ?? 0,
     loading:    isLoading || aguardandoSessao,
+    atualizando,
     // Erro que não é Error (string lançada, objeto solto) não vai cru para a
     // tela: `String(err)` já exibiu coisas como "string-error" para o usuário.
     error:      error instanceof Error ? error.message

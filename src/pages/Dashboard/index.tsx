@@ -167,7 +167,7 @@ export default function Dashboard() {
     }
   }, [novoInlineAbertoTabela]);
 
-  const { acordos, totalCount, loading, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
+  const { acordos, totalCount, loading, atualizando, refetch, patchAcordo, removeAcordo, addAcordo, realtimeStatus } = useAcordos(
     isPP ? {
       busca:        busca || undefined,
       status:       statusFiltroComputed,
@@ -713,7 +713,10 @@ export default function Dashboard() {
                 <Button variant="outline" size="icon" className="w-8 h-8 relative" onClick={refetch}
                   title={realtimeStatus === 'connected' ? 'Realtime ativo' : realtimeStatus === 'connecting' ? 'Conectando...' : realtimeStatus === 'error' ? 'Erro no Realtime' : 'Sem Realtime'}
                 >
-                  <RefreshCw className={cn('w-3.5 h-3.5', loading && 'animate-spin')} />
+                  {/* `atualizando` junto: a releitura silenciosa não liga
+                      `loading`, e sem isto o botão ficava parado enquanto a
+                      busca acontecia — parecia que o clique não pegou. */}
+                  <RefreshCw className={cn('w-3.5 h-3.5', (loading || atualizando) && 'animate-spin')} />
                   <span className={cn('absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full',
                     realtimeStatus === 'connected'  && 'bg-green-500',
                     realtimeStatus === 'connecting' && 'bg-yellow-400 animate-pulse',

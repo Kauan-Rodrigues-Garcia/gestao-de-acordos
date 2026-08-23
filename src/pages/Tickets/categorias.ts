@@ -166,3 +166,57 @@ export const PRIORIDADES: Record<PrioridadeTicket, { label: string; cor: string 
   alta:    { label: 'Alta',    cor: 'text-amber-600' },
   urgente: { label: 'Urgente', cor: 'text-destructive font-semibold' },
 };
+
+/**
+ * A ordem em que os estados aparecem — no quadro, nos agrupamentos e nos
+ * seletores.
+ *
+ * É a ordem do CAMINHO do ticket, não a alfabética nem a do enum do banco:
+ * chega, alguém pega, alguém trava, termina. `recusado` e `cancelado` ficam no
+ * fim porque são saídas, não etapas — e no quadro eles nem viram coluna, senão
+ * a tela ganharia duas colunas quase sempre vazias ocupando um terço da largura.
+ */
+export const ORDEM_STATUS: StatusTicket[] = [
+  'aberto', 'em_andamento', 'pendente', 'concluido', 'recusado', 'cancelado',
+];
+
+/**
+ * As colunas do quadro.
+ *
+ * Quatro, e não seis. Um quadro de tickets com seis colunas numa tela de
+ * notebook dá 180 px por coluna — estreito demais para o assunto, que é a
+ * única coisa que a pessoa lê ao varrer o quadro. Recusado e cancelado
+ * continuam alcançáveis pelo segmento "Encerrados" e pelo filtro de estado.
+ */
+export const COLUNAS_QUADRO: StatusTicket[] = ['aberto', 'em_andamento', 'pendente', 'concluido'];
+
+/**
+ * Uma frase por estado, para o cabeçalho da coluna vazia.
+ *
+ * Coluna vazia sem explicação parece defeito de carregamento. Com a frase, ela
+ * vira informação: "ninguém está travado esperando resposta" é uma boa notícia,
+ * e a tela devia saber dizê-la.
+ */
+export const VAZIO_DA_COLUNA: Record<StatusTicket, string> = {
+  aberto:       'Nada esperando para ser pego.',
+  em_andamento: 'Ninguém está com a mão em nada agora.',
+  pendente:     'Ninguém travado esperando resposta.',
+  concluido:    'Nada concluído neste recorte.',
+  recusado:     'Nada recusado.',
+  cancelado:    'Nada cancelado.',
+};
+
+/**
+ * A cor da faixa de prioridade do cartão.
+ *
+ * Separada de `PRIORIDADES[].cor` de propósito: aquela é cor de TEXTO, e usar
+ * a mesma classe como fundo produziria uma faixa cinza para "normal" — que é a
+ * maioria dos tickets, e faria a tela inteira parecer desabilitada. Aqui
+ * "normal" não pinta nada, e a faixa só existe quando ela quer dizer algo.
+ */
+export const FAIXA_PRIORIDADE: Record<PrioridadeTicket, string> = {
+  urgente: 'bg-destructive',
+  alta:    'bg-amber-500',
+  normal:  'bg-transparent',
+  baixa:   'bg-transparent',
+};

@@ -1,9 +1,34 @@
 /**
- * useAnalytics.ts — ATUALIZADO
+ * useAnalytics.ts — as métricas do Dashboard.
+ *
  * Adicionado: `acordosMes: Acordo[]` no retorno para o AnalyticsPanel calcular % por tipo.
+ *
+ * ## O esqueleto que sumiu (2026-08-23)
+ *
+ * Este hook era a maior fonte do piscar do Dashboard. Cada evento de tempo real
+ * de `acordos` chamava `fetchAll()`, que começava com `setLoading(true)` — e o
+ * `AnalyticsPanel` troca o painel INTEIRO por seis cartões de esqueleto enquanto
+ * `loading` for verdadeiro. Uma importação de 300 acordos fazia isso 300 vezes.
+ *
+ * Três mudanças desfizeram aquilo, e nenhuma delas mexe num número:
+ *
+ *   1. `loading` vale para a PRIMEIRA carga e para troca de recorte (mês,
+ *      filtro, empresa) — o conteúdo em tela é resposta de outra pergunta.
+ *      Tempo real e reconexão relêem em silêncio, sob `atualizando`.
+ *   2. Os eventos passam por um agrupador: a rajada da importação vira uma
+ *      releitura por segundo, e uma última no fim.
+ *   3. A lista de acordos passa por `reconciliarLista`. Quando a releitura traz
+ *      o mesmo conteúdo — que é o caso quase sempre — o array volta com a MESMA
+ *      referência, o `useMemo` dos derivados nem recalcula e o painel não
+ *      renderiza. Antes, cada releitura revarria 2.400 acordos para chegar aos
+ *      mesmos números.
  */
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase, Acordo } from '@/lib/supabase';
+import { reconciliarLista } from '@/lib/dadosVivos';
+import { chaveDeCache, gravarInstantaneo, lerInstantaneo } from '@/lib/cacheInstantaneo';
+import { criarAgrupador } from '@/lib/agrupador';
+import { comecouAtualizacao } from '@/lib/estadoAtualizacao';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
@@ -87,8 +112,35 @@ export interface AnalyticsData {
   operadorFiltro: string | null;
   setOperadorFiltro: (id: string | null) => void;
 
+  /** Só a PRIMEIRA carga e a troca de recorte. Nunca uma releitura. */
   loading: boolean;
+  /**
+   * Releitura silenciosa em andamento (tempo real, reconexão, botão).
+   *
+   * É sinal discreto — o fio no topo da janela. Quem renderizar esqueleto a
+   * partir daqui traz de volta exatamente o piscar que foi retirado.
+   */
+  atualizando: boolean;
   refetch: () => void;
+}
+
+/**
+ * O que o instantâneo guarda — tudo que a busca escreve em estado.
+ *
+ * Guardar só `acordos` faria o painel reabrir com as metas vazias, ou seja,
+ * mostrando "0% da meta" por um instante. Um número errado exibido com
+ * confiança é pior que o esqueleto que este trabalho está tirando da tela.
+ */
+interface InstantaneoAnalytics {
+  acordos: Acordo[];
+  meta: MetaInfo | null;
+  metasEquipe: MetaInfo[];
+  metasOperador: MetaInfo[];
+  operadoresMap: Record<string, string>;
+  operadorEquipeMap: Record<string, string | null>;
+  equipesMap: Record<string, string>;
+  setores: { id: string; nome: string }[];
+  equipesDoSetor: { id: string; nome: string }[];
 }
 
 function calcPerc(realizado: number, meta: number): number {
@@ -169,18 +221,75 @@ export function useAnalytics(
   // operador_id → equipe_id. Sem isto, todos os acordos caíam em "Sem equipe".
   const [operadorEquipeMap, setOperadorEquipeMap] = useState<Record<string, string | null>>({});
   const [loading, setLoading] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
+  /**
+   * Número de série da carga. Duas releituras sobrepostas terminam fora de
+   * ordem, e a mais VELHA chegando por último gravaria dado vencido — o agrupador
+   * torna isso raro, e este contador torna impossível.
+   */
+  const serieCarga = useRef(0);
   const mesAnalise  = normalizarMes(mesRef);
   const { mes, ano } = partesDoMes(mesAnalise);
   const inicio = primeiroDiaDoMes(mesAnalise);
   const fim = ultimoDiaDoMes(mesAnalise);
   const hoje = getTodayISO();
 
-  const fetchAll = useCallback(async () => {
+  /**
+   * A identidade DESTE recorte.
+   *
+   * Precisa carregar tudo que muda o resultado — inclusive o cargo e os três
+   * níveis de alcance, porque eles decidem quais ramos da busca rodam. Uma parte
+   * esquecida não dá erro: dá o painel de outra pergunta pintado por 300 ms,
+   * que é pior que um esqueleto.
+   */
+  const chaveCache = useMemo(() => chaveDeCache(
+    'analytics', empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id,
+    mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
+    podeTodosSetores ? 'T' : '-', podeSetor ? 'S' : '-', podeEquipe ? 'E' : '-',
+    isBookplay ? 'bp' : 'pp',
+  ), [
+    empresa?.id, perfil?.id, perfil?.perfil, perfil?.setor_id, mes, ano,
+    setorFiltro, equipeFiltro, operadorFiltro,
+    podeTodosSetores, podeSetor, podeEquipe, isBookplay,
+  ]);
+
+  /**
+   * @param primeira Carga que MERECE esqueleto: a primeira da tela, ou a troca
+   *   de recorte (mês, filtro, empresa). Tudo o mais é releitura silenciosa.
+   */
+  const carregarTudo = useCallback(async (primeira: boolean) => {
     if (!perfil || !empresa?.id) return;
-    setLoading(true);
+
+    const meu = ++serieCarga.current;
+    const vencida = () => meu !== serieCarga.current;
+
+    if (primeira) setLoading(true);
+    else          setAtualizando(true);
+
+    // O fio de 2 px no topo. A primeira carga fica de fora: ela já tem o
+    // esqueleto dela, e dois avisos para a mesma espera é um a mais.
+    const encerrar = primeira ? null : comecouAtualizacao();
+
     const isAdmin = isPerfilAdmin(perfil.perfil);
     const isLider = isPerfilLider(perfil.perfil);
     const isDiretoria = isPerfilDiretoria(perfil.perfil);
+
+    /*
+     * O que vai para o instantâneo.
+     *
+     * Tudo junto, e não só os acordos: seedar a lista sem as metas faria o
+     * painel abrir mostrando "0% da meta" por um instante antes de a meta
+     * chegar — um número errado exibido com confiança, que é pior que o
+     * esqueleto que estamos tirando.
+     *
+     * Os campos que este recorte não busca ficam no padrão de propósito: é
+     * exatamente o que uma montagem nova produziria para o mesmo escopo.
+     */
+    const pacote: InstantaneoAnalytics = {
+      acordos: [], meta: null, metasEquipe: [], metasOperador: [],
+      operadoresMap: {}, operadorEquipeMap: {}, equipesMap: {},
+      setores: [], equipesDoSetor: [],
+    };
 
     try {
       // ── Setores para o filtro ────────────────────────────────────────────────
@@ -192,7 +301,8 @@ export function useAnalytics(
           .select('id, nome')
           .eq('empresa_id', empresa.id)
           .order('nome');
-        setSetores((setoresData as { id: string; nome: string }[]) ?? []);
+        pacote.setores = (setoresData as { id: string; nome: string }[]) ?? [];
+        setSetores(pacote.setores);
       }
 
       // ── Carregar equipes do setor para o Líder/Elite ─────────────────────────
@@ -210,6 +320,7 @@ export function useAnalytics(
         eqQuery = eqQuery.eq('setor_id', perfil.setor_id);
         const { data: eqData } = await eqQuery.order('nome');
         equipesDoSetorAtual = (eqData as { id: string; nome: string }[]) ?? [];
+        pacote.equipesDoSetor = equipesDoSetorAtual;
         setEquipesDoSetor(equipesDoSetorAtual);
       }
 
@@ -310,7 +421,22 @@ export function useAnalytics(
         if (batch.length < PAGE) break;
         offset += PAGE;
       }
-      setAcordos(acordosData);
+      if (vencida()) { encerrar?.(false); return; }
+
+      /*
+       * O ponto da reestruturação.
+       *
+       * `acordosData` é sempre um array novo, com objetos novos — e é ele que
+       * alimenta o `useMemo` dos derivados. Sem reconciliar, toda releitura
+       * revarria a empresa inteira e re-renderizaria o painel para chegar aos
+       * mesmos números. Com ela, uma releitura sem novidade devolve o array
+       * anterior por referência e nada acontece na tela.
+       *
+       * Comparação RASA porque a linha de `acordos` é `select('*')`: colunas
+       * escalares, sem `join` e sem `jsonb`.
+       */
+      pacote.acordos = acordosData;
+      setAcordos(atual => reconciliarLista(atual, acordosData, { chave: a => a.id }));
 
       // ── Meta: hierarquia dependente do filtro ativo ──────────────────────────
       // Prioridade:
@@ -352,7 +478,9 @@ export function useAnalytics(
           .eq('mes', mes)
           .eq('ano', ano)
           .maybeSingle();
-        setMeta(metaData as MetaInfo | null);
+        if (vencida()) { encerrar?.(false); return; }
+        pacote.meta = (metaData as MetaInfo | null) ?? null;
+        setMeta(pacote.meta);
       } else if (isAdmin) {
         setMeta(null);
       }
@@ -375,8 +503,10 @@ export function useAnalytics(
             .eq('mes', mes)
             .eq('ano', ano),
         ]);
-        setMetasEquipe((meq as MetaInfo[]) || []);
-        setMetasOperador((mop as MetaInfo[]) || []);
+        pacote.metasEquipe   = (meq as MetaInfo[]) || [];
+        pacote.metasOperador = (mop as MetaInfo[]) || [];
+        setMetasEquipe(pacote.metasEquipe);
+        setMetasOperador(pacote.metasOperador);
 
         // Mapas de nomes
         const [{ data: ops }, { data: eqs }] = await Promise.all([
@@ -390,6 +520,7 @@ export function useAnalytics(
             .select('id, nome')
             .eq('empresa_id', empresa.id),
         ]);
+        if (vencida()) { encerrar?.(false); return; }
 
         const opMap: Record<string, string> = {};
         const opEqMap: Record<string, string | null> = {};
@@ -397,22 +528,71 @@ export function useAnalytics(
           opMap[o.id]   = o.nome;
           opEqMap[o.id] = o.equipe_id ?? null;
         });
+        pacote.operadoresMap     = opMap;
+        pacote.operadorEquipeMap = opEqMap;
         setOperadoresMap(opMap);
         setOperadorEquipeMap(opEqMap);
 
         const eqMap: Record<string, string> = {};
         ((eqs as { id: string; nome: string }[]) || []).forEach(e => { eqMap[e.id] = e.nome; });
+        pacote.equipesMap = eqMap;
         setEquipesMap(eqMap);
       }
+
+      // O instantâneo é o que faz a volta ao Dashboard não ter esqueleto.
+      gravarInstantaneo(chaveCache, pacote);
+      encerrar?.(true);
     } catch (err) {
+      encerrar?.(false);
       console.error('[useAnalytics] erro:', err);
+      // Numa releitura o dado antigo FICA na tela. Ele é velho, mas é verdade
+      // de um minuto atrás — melhor que um painel zerado por falha de rede.
     } finally {
-      setLoading(false);
+      if (!vencida()) {
+        if (primeira) setLoading(false);
+        setAtualizando(false);
+      }
     }
   }, [perfil, empresa, mes, ano, setorFiltro, equipeFiltro, operadorFiltro,
-      podeTodosSetores, podeSetor, podeEquipe, isBookplay]);
+      podeTodosSetores, podeSetor, podeEquipe, isBookplay, chaveCache]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  /*
+   * Recorte novo — outro mês, outro filtro, outra empresa.
+   *
+   * Se já houve resposta para ESTE recorte, a tela é pintada com ela AGORA e a
+   * busca vira silenciosa: voltar ao Dashboard depois de passar pelos Acordos
+   * deixa de custar um esqueleto de 400 ms para mostrar, no fim, os mesmos
+   * números. Sem instantâneo é a primeira vez de verdade, e aí o esqueleto é a
+   * resposta certa — o que está em tela responde a outra pergunta.
+   */
+  useEffect(() => {
+    const semente = lerInstantaneo<InstantaneoAnalytics>(chaveCache);
+    if (semente) {
+      const p = semente.valor;
+      setAcordos(atual => reconciliarLista(atual, p.acordos, { chave: a => a.id }));
+      setMeta(p.meta);
+      setMetasEquipe(p.metasEquipe);
+      setMetasOperador(p.metasOperador);
+      setOperadoresMap(p.operadoresMap);
+      setOperadorEquipeMap(p.operadorEquipeMap);
+      setEquipesMap(p.equipesMap);
+      setSetores(p.setores);
+      setEquipesDoSetor(p.equipesDoSetor);
+      setLoading(false);
+      void carregarTudo(false);
+      return;
+    }
+    void carregarTudo(true);
+  }, [carregarTudo, chaveCache]);
+
+  /**
+   * Releitura silenciosa, para o botão de atualizar e para o tempo real.
+   *
+   * Nunca recebe argumento: exposta como `refetch`, ela vira `onClick` em algum
+   * lugar mais cedo ou mais tarde, e o `MouseEvent` no primeiro parâmetro faria
+   * a tela inteira virar esqueleto num clique de "atualizar".
+   */
+  const releituraSilenciosa = useCallback(() => { void carregarTudo(false); }, [carregarTudo]);
 
   // ── Realtime: subscribe no canal central (sem canal próprio) ────────────────
   // Qualquer evento de acordos dispara um refetch completo das métricas analíticas.
@@ -421,9 +601,24 @@ export function useAnalytics(
   const realtimeLigado = opcoes?.realtime !== false;
   useEffect(() => {
     if (!realtimeLigado) return;
-    subscribe(instanceId, () => { fetchAll(); });
-    return () => unsubscribe(instanceId);
-  }, [realtimeLigado, subscribe, unsubscribe, instanceId, fetchAll]);
+
+    /*
+     * Uma releitura por rajada, não uma por evento.
+     *
+     * A importação do Excel insere em lote: um evento por acordo. Sem o
+     * agrupador, importar 300 acordos disparava 300 varreduras da empresa
+     * inteira — a rede engasgava, as respostas voltavam fora de ordem e o
+     * painel piscava 300 vezes para terminar onde uma única releitura no fim
+     * teria chegado.
+     *
+     * O teto de 1,2 s mantém a sensação de tempo real: durante a importação o
+     * painel se atualiza cerca de uma vez por segundo, e uma última quando ela
+     * termina.
+     */
+    const grupo = criarAgrupador(releituraSilenciosa, { esperaMs: 300, tetoMs: 1_200 });
+    subscribe(instanceId, () => grupo.avisar());
+    return () => { grupo.cancelar(); unsubscribe(instanceId); };
+  }, [realtimeLigado, subscribe, unsubscribe, instanceId, releituraSilenciosa]);
 
   // ── Derivados computados ─────────────────────────────────────────────────────
   const derived = useMemo(() => {
@@ -585,7 +780,8 @@ export function useAnalytics(
     ...derived,
     meta,
     loading,
-    refetch: fetchAll,
+    atualizando,
+    refetch: releituraSilenciosa,
     setores,
     setorFiltro,
     setSetorFiltro,

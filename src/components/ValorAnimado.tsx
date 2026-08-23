@@ -53,12 +53,21 @@ export interface ValorAnimadoProps {
    */
   classeSubindo?: string;
   classeDescendo?: string;
+  /**
+   * O número ainda não é conhecido — primeira carga sem instantâneo em cache.
+   *
+   * Renderiza uma barra do TAMANHO que o número vai ocupar, e não um traço ou
+   * um zero. Um traço mente por omissão; um zero mente por afirmação; e os dois
+   * empurram o resto do cartão quando o valor real chega. A barra reserva o
+   * espaço e some sem mover nada.
+   */
+  carregando?: boolean;
   /** Rótulo para leitor de tela, quando o número sozinho não se explica. */
   'aria-label'?: string;
 }
 
 export function ValorAnimado({
-  valor, formatar, className, classeSubindo, classeDescendo, ...resto
+  valor, formatar, className, classeSubindo, classeDescendo, carregando = false, ...resto
 }: ValorAnimadoProps) {
   const [exibido, setExibido] = useState(valor);
   const anterior = useRef(valor);
@@ -104,6 +113,23 @@ export function ValorAnimado({
     return () => cancelAnimationFrame(quadro);
   }, [valor]);
 
+  const texto = formatar(exibido);
+
+  if (carregando) {
+    return (
+      <span className={cn('tabular-nums relative inline-flex items-center', className)} {...resto}>
+        {/* O texto real fica no fluxo, invisível: é ele que dá a largura certa,
+            sem nenhuma tabela de "quantos ch tem um valor em reais". */}
+        <span aria-hidden="true" className="invisible">{texto}</span>
+        <span
+          aria-hidden="true"
+          className="absolute inset-y-[15%] left-0 right-[10%] rounded bg-muted animate-pulse"
+        />
+        <span className="sr-only">Carregando…</span>
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
@@ -114,7 +140,7 @@ export function ValorAnimado({
       )}
       {...resto}
     >
-      {formatar(exibido)}
+      {texto}
     </span>
   );
 }

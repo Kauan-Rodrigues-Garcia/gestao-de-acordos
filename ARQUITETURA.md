@@ -84,6 +84,10 @@ src/
 │   ├── diasUteis.ts      # Dias úteis, feriados, quartis
 │   ├── mesReferencia.ts  # Recorte de mês no fuso de São Paulo
 │   ├── cpf.ts            # Detecção de CPF (nenhum CPF de cliente é gravado)
+│   ├── dadosVivos.ts     # Reconciliação: item igual volta com a MESMA referência
+│   ├── cacheInstantaneo.ts  # Última resposta de cada consulta — a tela reabre pintada
+│   ├── agrupador.ts      # Rajada de eventos vira uma releitura (debounce com teto)
+│   ├── estadoAtualizacao.ts # Contador global de releitura → fio de 2 px no topo
 │   └── observabilidade.ts # Sentry
 │
 ├── pages/                # Uma pasta por módulo
@@ -100,6 +104,7 @@ src/
 │   ├── Ouvidoria/            # Reclamações e sugestões [PP]
 │   ├── CampanhaFacil/        # Campanhas de cobrança [BP]
 │   ├── SolicitacoesWhatsapp/ # Chat interno de solicitação
+│   ├── Tickets/              # Fila de pedidos da liderança (fila + quadro)
 │   ├── Comemoracoes/         # Comemorações de meta (aba de Admin → Usuários)
 │   ├── MetasConfig.tsx       # Metas, feriados e quartis
 │   └── AdminUsuarios · AdminEquipes · AdminSetoresAba · AdminCargos ·
@@ -834,8 +839,10 @@ src/lib/supabase.ts             # + interface DiarioRecebimento
 
 ## Atualização incremental da interface
 
-> `src/lib/dadosVivos.ts` · `src/hooks/useDadosVivos.ts` ·
-> `src/components/ValorAnimado.tsx` · `src/components/LinhaViva.tsx`
+> `src/lib/dadosVivos.ts` · `src/lib/cacheInstantaneo.ts` · `src/lib/agrupador.ts` ·
+> `src/lib/estadoAtualizacao.ts` · `src/hooks/useDadosVivos.ts` ·
+> `src/hooks/useRelogioLento.ts` · `src/components/ValorAnimado.tsx` ·
+> `src/components/LinhaViva.tsx` · `src/components/BarraAtualizacao.tsx`
 
 **O dado novo quase sempre é o mesmo dado.** O padrão que se espalhou pelo
 projeto era `onEvento: () => recarregar()`, com `recarregar` ligando `loading` —
@@ -852,7 +859,7 @@ está certa depois de uma queda de realtime. O que mudou é o custo dela.
 | `reconciliarLista(atual, nova, { chave, iguais })` | Devolve um array em que os itens iguais são **os objetos antigos**. Nada mudou → devolve o array anterior por referência, e o `setState` não renderiza |
 | `reconciliarItem` · `reconciliarMapa` | O mesmo para um registro e para `Record<string, T>` |
 | `iguaisRaso` (padrão) · `iguaisProfundo` | Rasa serve linha de PostgREST; profunda é obrigatória quando a linha traz `join` ou `jsonb` (Analítico, permissões, tickets) |
-| `useDadosVivos` | Junta tudo: `carregando` só na PRIMEIRA carga, `atualizando` para o sinal discreto, número de série contra releituras fora de ordem |
+| `useDadosVivos` | Junta tudo: `carregando` só na PRIMEIRA carga, `atualizando` para o sinal discreto, número de série contra releituras fora de ordem, tempo real embutido e agrupado |
 | `ValorAnimado` | O número anda até o valor novo. Sem o piscar, uma mudança de total passaria despercebida — a animação é o aviso |
 | `LinhaViva` / `ItemVivo` | Entrada e saída de linha por opacidade, dentro de `AnimatePresence`. Sem `layout` e sem altura: linha que colapsa empurra o resto e traz de volta o salto de scroll |
 
@@ -864,9 +871,36 @@ Convertidos nesta frente: `useAnalitico`, `useDiario`, `useCargoPermissoes`
 (era o pior — `permLoading` esconde **todo** o menu lateral),
 `NotificacoesProvider`, `useComemoracoes`, `useSolicitacoesWhatsapp`,
 `useDiretoExtraConfig`, `PixAutomatico`, `Tickets` (lista e conversa),
-`DesempenhoEquipes`. `useAcordos` já era incremental por `setQueryData`; o que
-ganhou foi o agrupamento de 500 ms nas métricas do Dashboard — uma importação de
-300 acordos disparava 300 varreduras da empresa inteira.
+`DesempenhoEquipes`.
+
+### Segunda fase (2026-08-23) — mascarar o carregamento
+
+A primeira fase tirou o piscar das **atualizações**. Sobrou o caso mais comum de
+todos: **abrir a tela**. Sair do Dashboard, ir aos Acordos e voltar desmontava o
+componente, e na volta o estado nascia vazio — esqueleto de novo, para no fim
+mostrar os mesmos números de quinze segundos atrás.
+
+| Peça | O que faz |
+|---|---|
+| `cacheInstantaneo.ts` | Guarda a última resposta de cada consulta (memória sempre, `sessionStorage` opcional). A tela reabre **pintada**, em tempo zero, e relê em silêncio por trás. Chave montada com `chaveDeCache(...)`, sempre com empresa e perfil; `esquecerInstantaneos()` roda no `signOut` |
+| `agrupador.ts` | Rajada de eventos vira **uma** releitura. Debounce com **teto**: a espera reinicia a cada aviso mas nunca passa de 1,2 s desde o primeiro — sem o teto, uma importação de três minutos deixaria a tela parada três minutos |
+| `estadoAtualizacao.ts` + `BarraAtualizacao` | O fio de 2 px no topo da janela substituiu os esqueletos de releitura. **Carência de 320 ms**: releitura curta não produz sinal nenhum, senão o topo vira pisca-pisca. Contador, não booleano — três telas buscando ao mesmo tempo, a primeira a terminar não apaga o sinal das outras |
+| `useRelogioLento` | Um `setInterval` por app, não um por cartão. "há 3 h" envelhece sozinho sem quarenta componentes repintando sessenta vezes por minuto; congela com a aba oculta |
+| `ValorAnimado carregando` | Barra do tamanho exato que o número vai ocupar. Traço mente por omissão, zero mente por afirmação, e os dois empurram o cartão quando o valor chega |
+
+**Onde foi aplicado**
+
+| Hook / tela | Antes | Depois |
+|---|---|---|
+| `useAnalytics` (métricas do Dashboard) | `fetchAll()` começava com `setLoading(true)`, e o `AnalyticsPanel` troca o painel inteiro por 6 esqueletos enquanto `loading`. Uma importação de 300 acordos fazia isso 300 vezes | `loading` só na primeira carga e na troca de recorte; eventos agrupados; a lista de acordos passa por `reconciliarLista` — releitura sem novidade devolve o mesmo array e o `useMemo` dos derivados **nem recalcula**; instantâneo do pacote inteiro (acordos + metas + mapas), para voltar ao Dashboard não custar esqueleto |
+| `useEscopoAnalitico` | `pendente` é `escopo === null`, e quem consome segura a tela — para um **líder** isso era esqueleto a cada volta, mesmo com as métricas em cache | Fontes e exclusões vêm do instantâneo no **estado inicial**, não num efeito: nem um quadro é pintado como pendente. Só em memória — `FontesDeEscopo` carrega `Set`, que não sobrevive a `JSON.stringify` |
+| `useAcordos` | Trocar de página trocava as 25 linhas por um esqueleto de 25 linhas | `placeholderData` mantém a tabela na tela quando **só a página** mudou; qualquer outro filtro continua caindo no esqueleto, porque aí as linhas antigas responderiam outra pergunta |
+| `Tickets` | Estado local + `setVersao(v => v + 1)` a cada evento | `useDadosVivos` com instantâneo e assinatura embutida |
+
+**A armadilha da chave de cache.** `chaveCache` precisa mudar **junto** com
+`carregar`. Uma chave que muda sozinha pinta a resposta de outra pergunta por
+alguns quadros — e uma chave que não muda quando o filtro muda pinta o resultado
+do filtro anterior. Inclua empresa, perfil e todo filtro que muda o resultado.
 
 ---
 
@@ -1043,11 +1077,90 @@ src/pages/RhGestao/       # index + tabela, visão consolidada, cabeçalho, 4 di
 
 ---
 
+## Aba Tickets — a fila de pedidos da liderança
+
+> `src/pages/Tickets/` · migration `20260819100000` (tabelas + RLS) e
+> `20260819120000` (bucket de anexos).
+
+### O que a tela é
+
+Uma fila de trabalho, no sentido literal: ela existe para responder **"o que
+precisa de mim agora?"** e **"o que está apodrecendo?"**. Toda a estrutura vem
+dessas duas perguntas — não de uma lista de campos que a tabela tem.
+
+### As peças
+
+| Arquivo | Papel |
+|---|---|
+| `fila.ts` | **Toda a lógica**, em função pura: segmentos, filtro, ordenação, agrupamento, envelhecimento. A tela pergunta, não decide |
+| `index.tsx` | Orquestra dados, recorte e modo de exibição |
+| `ResumoFila.tsx` | Os contadores do topo, que **também são o filtro** |
+| `CartaoTicket.tsx` | O ticket como ele aparece na fila e no quadro. `memo`, e recebe URL de foto — nunca o `Map` |
+| `QuadroTickets.tsx` | Kanban por estado, com arrastar do próprio HTML |
+| `DetalheTicket.tsx` | Cabeçalho, **linha do tempo unificada** e caixa de envio |
+| `categorias.ts` | Categorias, campos por categoria, estados, ordem e colunas do quadro |
+
+### As três decisões de desenho
+
+**1. Contador é filtro.** Um painel que mostra "Sem dono: 3" e não deixa clicar
+obriga a pessoa a reproduzir o recorte à mão nos seletores — e ela erra, porque
+"sem dono" não é valor de campo nenhum, é combinação de estado com ausência de
+responsável. Aqui ver e ir são o mesmo gesto.
+
+Os seis segmentos: **Na fila** (tudo que ainda pede algo), **Comigo**,
+**Sem dono**, **Parados**, **Encerrados**, **Todos**.
+
+**2. Envelhecimento, não SLA.** Não há prazo contratado, e inventar um encheria a
+tela de vermelho que todo mundo aprende a ignorar em duas semanas. O que há é um
+limiar por prioridade — urgente 2 h, alta 8 h, normal 24 h, baixa 72 h — medido
+sobre `atualizado_em`, **não** sobre `criado_em`: um ticket de três semanas que
+recebeu resposta agora está sendo tratado, e marcá-lo de vermelho puniria quem
+está trabalhando nele. Encerrado nunca está parado — sem essa linha, a aba
+abriria com o histórico do mês passado inteiro marcado.
+
+**3. Uma linha do tempo, não duas listas.** A trilha de auditoria vivia atrás de
+um botão "Histórico": quem lia a conversa não sabia que, entre a segunda e a
+terceira mensagem, o ticket tinha trocado de dono. Agora mensagem e evento são a
+mesma lista em ordem cronológica, com separador por dia. Empate de carimbo
+resolve a favor do **evento** — "Ana assumiu" precede "Ana: já estou vendo", que
+é a ordem em que a coisa se deu.
+
+### Dois modos, um conjunto de dados
+
+A **fila** responde a quem executa; o **quadro** responde a quem coordena, porque
+mostra onde a coisa entope. O quadro não tem filtro próprio — recebe a lista já
+filtrada e ordenada. Quatro colunas, não seis: `recusado` e `cancelado` são
+saídas, não etapas, e como colunas ocupariam um terço da largura quase sempre
+vazias.
+
+O arrastar é o do próprio HTML (`draggable` + `dragover` + `drop`). Uma
+biblioteca custaria ~30 KB para fazer o que o navegador já faz; e como não há
+reordenação dentro da coluna — a ordem é da fila, não do gosto de quem arrasta —
+sobra só o caso simples. Soltar chama `mudarStatus`; quem pode mover, o banco
+decide.
+
+### Permissão
+
+Três perguntas diferentes, resolvidas em `useTicketsAcesso`: **podeVerAba**
+(administrador sempre; liderança depois que a chave de `tickets_config` for
+virada), **podeAtender** (administrador + `tickets_atendentes`), **podeAbrir**
+(liderança para cima). As três são conveniência de tela — a RLS repete cada uma
+por conta própria.
+
+### Carregamento
+
+A fila usa `useDadosVivos` com instantâneo: reabrir a aba pinta a última resposta
+conhecida em tempo zero. O esqueleto só aparece na primeiríssima vez. As fotos de
+perfil **não** assinam tempo real de propósito — uma foto muda uma vez por ano, e
+um canal a mais em toda abertura da aba para isso não se paga.
+
+---
+
 ## Qualidade e Ferramentas
 
 | Frente | Como está |
 |---|---|
-| **Testes** | Vitest + Testing Library (happy-dom). 3572 testes em 206 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
+| **Testes** | Vitest + Testing Library (happy-dom). 3648 testes em 211 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
 | **Cobertura** | `vitest.config.ts` tem thresholds como **catraca**: cada valor fica logo abaixo do que a suíte entrega hoje. Ao subir a cobertura, suba os números **no mesmo commit**. |
 | **E2E** | Playwright em `tests/e2e/`. |
 | **CI** | `.github/workflows/ci.yml`: lint → typecheck → testes com cobertura → build. |

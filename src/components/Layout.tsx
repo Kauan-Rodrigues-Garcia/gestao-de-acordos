@@ -55,6 +55,7 @@ import { OnboardingTour, ONBOARDING_STORAGE_KEY } from './OnboardingTour';
 import { PetDespedida } from './pet/PetDespedida';
 import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
+import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
@@ -579,6 +580,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen bg-background overflow-hidden">
+      {/* O fio de 2 px que substituiu os esqueletos de releitura. Fica fora do
+          fluxo e acima de tudo: aparecer e sumir não move um pixel do conteúdo,
+          e ele só acende quando a busca passa de 320 ms. */}
+      <BarraAtualizacao />
+
       {/* Desktop Sidebar */}
       <motion.aside
         animate={{ width: sidebarOpen ? 240 : 64 }}
