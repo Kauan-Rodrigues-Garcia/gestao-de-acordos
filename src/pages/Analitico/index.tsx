@@ -532,6 +532,7 @@ export default function PaginaAnalitico() {
           operadorId={perfil.id}
           operadorNome={perfil.nome}
           filtroSetorId={veTodosSetores ? filtroSetorId : null}
+          setorProprio={setorProprio}
           priorizarEquipes={mostrarVisaoGeral}
           podeConfigurar={temPermissao('desafios_configurar')}
         />

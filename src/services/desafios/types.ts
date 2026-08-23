@@ -48,13 +48,69 @@ export interface ParticipantesDesafio {
   operadores: string[];
 }
 
+/**
+ * Contra quem se disputa.
+ *
+ * `empresa` = um placar só, com todo mundo. `setor` = cada pessoa disputa
+ * dentro do próprio setor, e o placar dela é o do setor dela — três setores,
+ * três disputas paralelas, sem uma comparar com a outra.
+ *
+ * A pergunta "qual é o setor desta pessoa" continua sendo respondida pela
+ * regra de sempre (cadastro + clones que contam), resolvida no servidor.
+ */
+export type EscopoDisputa = 'empresa' | 'setor';
+
+/**
+ * Quem leva o prêmio.
+ *
+ * `todos_que_batem` — atingir o valor até o encerramento já ganha; não há um
+ * vencedor único, e o ranking é só a forma de acompanhar. É o caso do Café no
+ * IBIS.
+ *
+ * `melhor_colocado` — o primeiro do ranking leva. Aí o critério de ordenação é
+ * também o critério do prêmio.
+ */
+export type Premiacao = 'todos_que_batem' | 'melhor_colocado';
+
 export interface RegraDesafio {
   versao: 1;
   metrica: MetricaDesafio;
   modo: ModoDisputa[];
   criterioRanking: CriterioRanking;
-  /** `null` = o modelo não usa meta (corrida, top ranking). */
+  /** Contra quem se disputa: a empresa inteira ou o próprio setor. */
+  escopoDisputa: EscopoDisputa;
+  /** Prêmio de quem bate a meta, ou do primeiro colocado. */
+  premiacao: Premiacao;
+  /**
+   * Meta padrão, para quando todo mundo tem o mesmo número.
+   *
+   * `null` = o modelo não usa meta (corrida, top ranking) OU cada pessoa tem a
+   * sua, em `metasPorOperador`.
+   */
   metaIndividual: number | null;
+  /**
+   * Meta de cada operador, quando elas são diferentes entre si.
+   *
+   * A chave é o `id` do perfil; um login normalizado (minúsculas, sem espaço)
+   * também é aceito, porque é assim que a meta chega das planilhas. Ver
+   * `metaDoParticipante` em `calcularDesafio.ts`.
+   *
+   * ## O mapa também define quem disputa
+   *
+   * Preenchido, ele passa a ser a LISTA de participantes: quem não tem meta
+   * aqui não está na campanha. É o comportamento que a operação espera — a
+   * planilha de metas é a convocação — e evita o ranking encher de gente
+   * zerada com "sem meta definida" no rodapé.
+   */
+  metasPorOperador: Record<string, number>;
+  /**
+   * Meta da equipe.
+   *
+   * `null` com metas individuais definidas = a meta da equipe é a SOMA das
+   * metas de quem está nela. Fixar um número aqui quando cada integrante tem a
+   * sua faria a barra da equipe contar uma história diferente da soma das
+   * barras dos integrantes.
+   */
   metaEquipe:     number | null;
   /** Meta única da operação inteira (modelo `meta_coletiva`). */
   metaColetiva:   number | null;

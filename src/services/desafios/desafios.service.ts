@@ -64,6 +64,24 @@ function listaDeTextos(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
 }
 
+/**
+ * O mapa de metas por operador.
+ *
+ * A chave fica como veio — id de perfil ou login — e quem resolve qual das
+ * duas serve é `metaDoParticipante`. Valor que não é número positivo cai fora:
+ * uma célula em branco na planilha não pode virar meta zero, que a tela leria
+ * como "meta batida".
+ */
+function normalizarMetas(v: unknown): Record<string, number> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const saida: Record<string, number> = {};
+  for (const [chave, valor] of Object.entries(v as Record<string, unknown>)) {
+    const n = Number(valor);
+    if (Number.isFinite(n) && n > 0) saida[chave] = n;
+  }
+  return saida;
+}
+
 function normalizarParticipantes(v: unknown): ParticipantesDesafio {
   const o = (v ?? {}) as Record<string, unknown>;
   return {
@@ -93,7 +111,12 @@ export function normalizarRegra(bruto: unknown, tipo: TipoDesafio): RegraDesafio
     metrica: metrica as MetricaDesafio,
     modo: modo.length ? modo : [...modelo.modoPadrao],
     criterioRanking: criterioValido ? criterio : modelo.criterioPadrao,
+    // Campanha gravada antes destes dois campos existirem abre com o
+    // comportamento que ela tinha: placar da empresa, prêmio do primeiro.
+    escopoDisputa: o.escopoDisputa === 'setor' ? 'setor' : 'empresa',
+    premiacao: o.premiacao === 'todos_que_batem' ? 'todos_que_batem' : 'melhor_colocado',
     metaIndividual: numeroOuNulo(o.metaIndividual),
+    metasPorOperador: normalizarMetas(o.metasPorOperador),
     metaEquipe:     numeroOuNulo(o.metaEquipe),
     metaColetiva:   numeroOuNulo(o.metaColetiva),
     participantes:  normalizarParticipantes(o.participantes),

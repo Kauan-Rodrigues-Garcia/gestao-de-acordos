@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   calcularDesafio, diasRestantes, faltaParaMeta, participaDaCampanha,
-  progressoDaMeta, situacaoDoPeriodo, somarPorOperador,
+  progressoDaMeta, situacaoDoPeriodo, somarPorOperador, chaveDeLogin,
 } from './calcularDesafio';
 import type {
   Desafio, LinhaDesafio, PessoaDesafio, RegraDesafio, VisualDesafio,
@@ -69,7 +69,10 @@ function desafio(over: OverDesafio = {}): Desafio {
       metrica: 'valor_recebido',
       modo: ['individual', 'equipe'],
       criterioRanking: 'menor_falta',
+      escopoDisputa: 'empresa',
+      premiacao: 'melhor_colocado',
       metaIndividual: 20000,
+      metasPorOperador: {},
       metaEquipe: 80000,
       metaColetiva: null,
       participantes: { setores: [], equipes: [], operadores: [] },
@@ -416,5 +419,178 @@ describe('situacaoDoPeriodo e diasRestantes', () => {
   it('o último dia mostra zero, não um número negativo', () => {
     expect(diasRestantes('2026-08-28', '2026-08-28')).toBe(0);
     expect(diasRestantes('2026-08-28', '2026-09-10')).toBe(0);
+  });
+});
+
+// ── Meta por operador, disputa por setor e regra do prêmio ──────────────────
+
+describe('calcularDesafio — meta por operador', () => {
+  const participantes = [
+    pessoa({ id: 'k', nome: 'Kauan',  usuario: 'kauan_teixeira' }),
+    pessoa({ id: 't', nome: 'Thiago', usuario: 'THIAGO_ALVES' }),
+  ];
+
+  const comMetas = desafio({
+    regra: {
+      criterioRanking: 'maior_percentual',
+      premiacao: 'todos_que_batem',
+      metaIndividual: null,
+      metaEquipe: null,
+      metasPorOperador: { kauan_teixeira: 40857.14, thiago_alves: 15714.29 },
+    },
+  });
+
+  it('usa a meta da pessoa, achando pelo login como a planilha manda', () => {
+    const r = calcularDesafio({
+      desafio: comMetas,
+      dados: { participantes, linhas: [linha('k', 20_000), linha('t', 15_714.29)] },
+    });
+    expect(r.individual.find(i => i.pessoa.id === 'k')?.meta).toBeCloseTo(40857.14, 2);
+    expect(r.individual.find(i => i.pessoa.id === 't')?.meta).toBeCloseTo(15714.29, 2);
+  });
+
+  it('login com caixa alta e sujeira ainda casa com a meta', () => {
+    const sujo = pessoa({ id: 'd', nome: 'Debora', usuario: 'debora_portela  |' });
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: { metaIndividual: null, metasPorOperador: { debora_portela: 9428.57 } },
+      }),
+      dados: { participantes: [sujo], linhas: [linha('d', 1_000)] },
+    });
+    expect(r.individual[0].meta).toBeCloseTo(9428.57, 2);
+  });
+
+  it('a chave por id do perfil tem prioridade sobre o login', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: { metaIndividual: null, metasPorOperador: { k: 1_000, kauan_teixeira: 40_857 } },
+      }),
+      dados: { participantes, linhas: [] },
+    });
+    expect(r.individual.find(i => i.pessoa.id === 'k')?.meta).toBe(1_000);
+  });
+
+  it('mapa preenchido É a convocação: quem não está nele fica fora', () => {
+    const forasteiro = pessoa({ id: 'x', nome: 'Xavier', usuario: 'xavier' });
+    const r = calcularDesafio({
+      desafio: comMetas,
+      dados: {
+        participantes: [...participantes, forasteiro],
+        linhas: [linha('x', 90_000)],
+      },
+    });
+    expect(r.individual.map(i => i.pessoa.id)).not.toContain('x');
+    expect(r.totalParticipantes).toBe(2);
+    // E o recebimento de quem não disputa não infla o total da campanha.
+    expect(r.totalRecebido).toBe(0);
+  });
+
+  it('quem tem meta menor pode liderar recebendo menos — é o percentual que ordena', () => {
+    const r = calcularDesafio({
+      desafio: comMetas,
+      // Thiago bate a dele; Kauan recebe mais em dinheiro e fica em 49%.
+      dados: { participantes, linhas: [linha('k', 20_000), linha('t', 15_800)] },
+    });
+    expect(r.individual[0].pessoa.id).toBe('t');
+    expect(r.individual[0].bateuMeta).toBe(true);
+    expect(r.individual[1].pessoa.id).toBe('k');
+    expect(r.individual[1].bateuMeta).toBe(false);
+  });
+
+  it('a distância para ultrapassar é o dinheiro que ESTE participante precisa', () => {
+    const r = calcularDesafio({
+      desafio: comMetas,
+      dados: { participantes, linhas: [linha('k', 20_000), linha('t', 15_800)] },
+    });
+    // Thiago está em 100,54%; Kauan precisa de 100,54% da meta DELE.
+    const kauan = r.individual[1];
+    const alvo = (r.individual[0].progresso / 100) * 40857.14;
+    expect(kauan.paraUltrapassar).toBeCloseTo(alvo - 20_000, 2);
+  });
+
+  it('meta de equipe não fixada vira a soma das metas dos integrantes', () => {
+    const r = calcularDesafio({
+      desafio: comMetas,
+      dados: { participantes, linhas: [linha('k', 10_000), linha('t', 5_000)] },
+    });
+    expect(r.equipes).toHaveLength(1);
+    expect(r.equipes[0].meta).toBeCloseTo(40857.14 + 15714.29, 2);
+    expect(r.equipes[0].falta).toBeCloseTo(40857.14 + 15714.29 - 15_000, 2);
+  });
+
+  it('meta de equipe fixada continua mandando', () => {
+    const r = calcularDesafio({
+      desafio: desafio({
+        regra: {
+          metaIndividual: null, metaEquipe: 80_000,
+          metasPorOperador: { kauan_teixeira: 40857.14, thiago_alves: 15714.29 },
+        },
+      }),
+      dados: { participantes, linhas: [linha('k', 10_000)] },
+    });
+    expect(r.equipes[0].meta).toBe(80_000);
+  });
+});
+
+describe('calcularDesafio — escopo da disputa', () => {
+  const participantes = [
+    pessoa({ id: 'a', nome: 'Ana',  setores: ['setorA'] }),
+    pessoa({ id: 'z', nome: 'Zeca', setores: ['setorB'] }),
+  ];
+  const linhas = [linha('a', 1_000), linha('z', 9_000)];
+
+  it('«empresa» junta todo mundo num placar só', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ regra: { escopoDisputa: 'empresa' } }),
+      dados: { participantes, linhas },
+      setorDoUsuario: 'setorA',
+    });
+    expect(r.individual).toHaveLength(2);
+  });
+
+  it('«setor» recorta pelo setor de quem está olhando', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ regra: { escopoDisputa: 'setor' } }),
+      dados: { participantes, linhas },
+      setorDoUsuario: 'setorA',
+    });
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['a']);
+    expect(r.totalRecebido).toBe(1_000);
+  });
+
+  it('o filtro de setor da tela manda sobre o setor de quem olha', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ regra: { escopoDisputa: 'setor' } }),
+      dados: { participantes, linhas },
+      setorDoUsuario: 'setorA',
+      filtroSetorId: 'setorB',
+    });
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['z']);
+  });
+
+  it('sem setor conhecido, mostra o placar inteiro em vez de uma tela vazia', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ regra: { escopoDisputa: 'setor' } }),
+      dados: { participantes, linhas },
+    });
+    expect(r.individual).toHaveLength(2);
+  });
+
+  it('conta o setor em que a pessoa é clone', () => {
+    const clonada = pessoa({ id: 'c', nome: 'Cleber', setores: ['setorB', 'setorA'] });
+    const r = calcularDesafio({
+      desafio: desafio({ regra: { escopoDisputa: 'setor' } }),
+      dados: { participantes: [clonada], linhas: [linha('c', 500)] },
+      setorDoUsuario: 'setorA',
+    });
+    expect(r.individual).toHaveLength(1);
+  });
+});
+
+describe('chaveDeLogin', () => {
+  it('normaliza o que vem da planilha', () => {
+    expect(chaveDeLogin('NAYARA_CRUZ')).toBe('nayara_cruz');
+    expect(chaveDeLogin('debora_portela  |')).toBe('debora_portela');
+    expect(chaveDeLogin(null)).toBe('');
   });
 });

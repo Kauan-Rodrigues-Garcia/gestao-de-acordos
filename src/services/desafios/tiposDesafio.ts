@@ -13,7 +13,9 @@
  * campanha: um `top_ranking` com critério trocado à mão é válido, e a tela não
  * precisa saber disso.
  */
-import type { CriterioRanking, ModoDisputa, TipoDesafio } from './types';
+import type {
+  CriterioRanking, EscopoDisputa, ModoDisputa, Premiacao, TipoDesafio,
+} from './types';
 
 export interface ModeloDesafio {
   tipo: TipoDesafio;
@@ -92,11 +94,30 @@ export function modeloDoTipo(tipo: TipoDesafio | string): ModeloDesafio {
   return POR_TIPO.get(tipo as TipoDesafio) ?? MODELOS_DESAFIO[0];
 }
 
-/** Rótulo do critério, como aparece no Hero e na configuração. */
+/** Rótulo do critério de ORDENAÇÃO do ranking. */
 export function rotuloCriterio(criterio: CriterioRanking): string {
   switch (criterio) {
-    case 'menor_falta':      return 'Mais perto da meta';
-    case 'maior_percentual': return 'Maior percentual da meta';
-    case 'maior_recebido':   return 'Maior valor recebido';
+    case 'menor_falta':      return 'Ordenado por quem está mais perto da meta';
+    case 'maior_percentual': return 'Ordenado pelo percentual da meta';
+    case 'maior_recebido':   return 'Ordenado pelo valor recebido';
   }
+}
+
+/**
+ * Rótulo da regra do PRÊMIO — quem leva.
+ *
+ * Separado do critério de propósito: ordenar o ranking e ganhar o prêmio
+ * deixaram de ser a mesma pergunta no dia em que a campanha passou a premiar
+ * todo mundo que bate a meta. Escrever "mais perto da meta leva" numa gincana
+ * em que basta alcançar o valor é dizer ao operador o contrário da regra.
+ */
+export function rotuloPremiacao(premiacao: Premiacao): string {
+  return premiacao === 'todos_que_batem'
+    ? 'Quem alcançar a meta até o encerramento leva'
+    : 'Leva o primeiro colocado';
+}
+
+/** Rótulo de contra quem se disputa. */
+export function rotuloEscopoDisputa(escopo: EscopoDisputa): string {
+  return escopo === 'setor' ? 'Disputa por setor' : 'Disputa entre toda a empresa';
 }

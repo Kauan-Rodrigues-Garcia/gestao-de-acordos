@@ -48,6 +48,13 @@ export interface AbaDesafiosProps {
   filtroSetorId?: string | null;
   /** Perfil de liderança: as equipes vêm antes da corrida pessoal. */
   priorizarEquipes?: boolean;
+  /**
+   * Setor do cadastro de quem está olhando.
+   *
+   * Só é lido quando a campanha diz `escopoDisputa = 'setor'`, e como plano B:
+   * o setor bom é o que o servidor resolveu na lista de participantes.
+   */
+  setorProprio?: string | null;
   /** `desafios_configurar` — decide o botão. Quem decide a gravação é a RLS. */
   podeConfigurar?: boolean;
 }
@@ -69,14 +76,16 @@ function EsqueletoDesafio() {
 }
 
 export function AbaDesafios({
-  empresaId, operadorId, operadorNome, filtroSetorId = null,
+  empresaId, operadorId, operadorNome, filtroSetorId = null, setorProprio = null,
   priorizarEquipes = false, podeConfigurar = false,
 }: AbaDesafiosProps) {
   const { ativo, encerrados, rascunhos, carregando, dbAtiva, erro, recarregar } = useDesafios(true);
   const [editando, setEditando] = useState<Desafio | null>(null);
   const [criando, setCriando]   = useState(false);
 
-  const { resultado, carregando: calculando } = useResultadoDesafio(ativo, filtroSetorId);
+  const { resultado, carregando: calculando } = useResultadoDesafio(ativo, {
+    filtroSetorId, operadorId, setorDeCadastro: setorProprio,
+  });
 
   const tema = useMemo(
     () => estiloDoTema(ativo?.visual.tema ?? 'padrao'),
@@ -150,7 +159,7 @@ export function AbaDesafios({
           )}
         </div>
 
-        <HistoricoDesafios encerrados={encerrados} voceId={operadorId} />
+        <HistoricoDesafios encerrados={encerrados} voceId={operadorId} setorProprio={setorProprio} />
 
         <ConfigurarDesafio
           aberto={criando || !!editando}
@@ -252,7 +261,7 @@ export function AbaDesafios({
         </>
       )}
 
-      <HistoricoDesafios encerrados={encerrados} voceId={operadorId} />
+      <HistoricoDesafios encerrados={encerrados} voceId={operadorId} setorProprio={setorProprio} />
 
       <MetaConquistada
         nome={eu?.pessoa.nome ?? null}

@@ -37,7 +37,8 @@ import {
   atualizarDesafio, criarDesafio, type DadosGravacaoDesafio,
 } from '@/services/desafios/desafios.service';
 import type {
-  CriterioRanking, Desafio, StatusDesafio, TemaDesafio, TipoDesafio,
+  CriterioRanking, Desafio, EscopoDisputa, Premiacao, StatusDesafio,
+  TemaDesafio, TipoDesafio,
 } from '@/services/desafios/types';
 import { hojeISO } from './tema';
 
@@ -60,6 +61,45 @@ const STATUS: { valor: StatusDesafio; rotulo: string }[] = [
   { valor: 'encerrado', rotulo: 'Encerrado' },
 ];
 
+const ESCOPOS: { valor: EscopoDisputa; rotulo: string }[] = [
+  { valor: 'empresa', rotulo: 'Toda a empresa' },
+  { valor: 'setor',   rotulo: 'Apenas o setor' },
+];
+
+const PREMIACOES: { valor: Premiacao; rotulo: string }[] = [
+  { valor: 'todos_que_batem', rotulo: 'Todos que alcançarem a meta' },
+  { valor: 'melhor_colocado', rotulo: 'Somente o primeiro colocado' },
+];
+
+/**
+ * Metas por operador em texto: uma linha por pessoa, `login = valor`.
+ *
+ * É um `textarea` e não 27 campos porque as metas chegam de planilha e são
+ * coladas em bloco. `#` abre comentário — dá para deixar anotado por que
+ * alguém saiu da lista sem apagar a linha.
+ */
+function metasParaTexto(mapa: Record<string, number>): string {
+  return Object.entries(mapa)
+    .map(([chave, valor]) => `${chave} = ${valor.toFixed(2).replace('.', ',')}`)
+    .join('\n');
+}
+
+function textoParaMetas(texto: string): Record<string, number> {
+  const saida: Record<string, number> = {};
+  for (const bruta of texto.split('\n')) {
+    const linha = bruta.split('#')[0].trim();
+    if (!linha) continue;
+    // Separador `=` ou `:`; o resto da linha é o valor, que pode vir com
+    // "R$" e ponto de milhar — é o formato que sai da planilha.
+    const partes = linha.split(/\s*[=:]\s*/);
+    if (partes.length < 2) continue;
+    const chave = partes[0].trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const valor = parseBRL(partes.slice(1).join('=').replace(/r\$/i, '').trim());
+    if (chave && Number.isFinite(valor) && valor > 0) saida[chave] = valor;
+  }
+  return saida;
+}
+
 interface Formulario {
   nome: string;
   descricao: string;
@@ -67,9 +107,13 @@ interface Formulario {
   dataInicio: string;
   dataFim: string;
   tipo: TipoDesafio;
+  escopoDisputa: EscopoDisputa;
+  premiacao: Premiacao;
   individual: boolean;
   equipe: boolean;
   metaIndividual: string;
+  /** Uma linha por pessoa: `login = valor`. Ver `textoParaMetas`. */
+  metasPorOperador: string;
   metaEquipe: string;
   metaColetiva: string;
   criterio: CriterioRanking;
@@ -86,8 +130,9 @@ function formularioVazio(): Formulario {
     nome: '', descricao: '', premio: '',
     dataInicio: hoje, dataFim: hoje,
     tipo: 'bater_meta',
+    escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
     individual: true, equipe: true,
-    metaIndividual: '', metaEquipe: '', metaColetiva: '',
+    metaIndividual: '', metasPorOperador: '', metaEquipe: '', metaColetiva: '',
     criterio: 'menor_falta',
     tema: 'padrao',
     mostrarFotos: true, animarUltrapassagem: true, comemorarMeta: true,
@@ -104,9 +149,12 @@ function formularioDe(d: Desafio): Formulario {
     dataInicio: d.dataInicio,
     dataFim: d.dataFim,
     tipo: d.tipo,
+    escopoDisputa: d.regra.escopoDisputa,
+    premiacao: d.regra.premiacao,
     individual: d.regra.modo.includes('individual'),
     equipe:     d.regra.modo.includes('equipe'),
     metaIndividual: emReais(d.regra.metaIndividual),
+    metasPorOperador: metasParaTexto(d.regra.metasPorOperador),
     metaEquipe:     emReais(d.regra.metaEquipe),
     metaColetiva:   emReais(d.regra.metaColetiva),
     criterio: d.regra.criterioRanking,
@@ -182,7 +230,10 @@ export function ConfigurarDesafio({
           ...(form.equipe ? ['equipe' as const] : []),
         ],
         criterioRanking: form.criterio,
+        escopoDisputa: form.escopoDisputa,
+        premiacao: form.premiacao,
         metaIndividual: metaOuNulo(form.metaIndividual),
+        metasPorOperador: textoParaMetas(form.metasPorOperador),
         metaEquipe:     metaOuNulo(form.metaEquipe),
         metaColetiva:   metaOuNulo(form.metaColetiva),
         // Recorte de participantes: por ora a campanha vale para quem o escopo
@@ -300,6 +351,39 @@ export function ConfigurarDesafio({
             </div>
           </div>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="desafio-escopo">Contra quem se disputa</Label>
+              <select
+                id="desafio-escopo"
+                value={form.escopoDisputa}
+                onChange={e => set('escopoDisputa', e.target.value as EscopoDisputa)}
+                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {ESCOPOS.map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                «Apenas o setor» dá a cada setor o próprio placar, em vez de um
+                ranking único da empresa.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="desafio-premiacao">Quem leva o prêmio</Label>
+              <select
+                id="desafio-premiacao"
+                value={form.premiacao}
+                onChange={e => set('premiacao', e.target.value as Premiacao)}
+                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                {PREMIACOES.map(o => <option key={o.valor} value={o.valor}>{o.rotulo}</option>)}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                É esta frase que o Hero anuncia — o critério acima só ordena a lista.
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-2">
             <Label>Disputa</Label>
             <div className="flex flex-wrap gap-4">
@@ -330,6 +414,24 @@ export function ConfigurarDesafio({
               <Input id="desafio-meta-col" inputMode="decimal" value={form.metaColetiva}
                 onChange={e => set('metaColetiva', e.target.value)} placeholder="—" />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="desafio-metas-op">Metas por operador</Label>
+            <Textarea
+              id="desafio-metas-op"
+              rows={6}
+              value={form.metasPorOperador}
+              onChange={e => set('metasPorOperador', e.target.value)}
+              className="font-mono text-xs"
+              placeholder={'kauan_teixeira = 40857,14\nthiago_alves = 15714,29'}
+            />
+            <p className="text-[11px] text-muted-foreground">
+              Uma linha por pessoa, <code>login = valor</code>. Preenchido, este
+              campo passa a ser a LISTA de participantes: quem não estiver aqui
+              fica fora do ranking. Vazio, todo mundo usa a meta individual acima.
+              A meta de cada equipe vira a soma das metas de quem está nela.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

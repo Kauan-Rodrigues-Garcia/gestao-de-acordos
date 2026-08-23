@@ -125,15 +125,34 @@ export interface UsoResultadoDesafio {
   erro: string | null;
 }
 
+export interface OpcoesResultado {
+  /**
+   * Setor escolhido na régua do Analítico, para quem tem o nível
+   * `todos_setores`. `null` = sem recorte de tela.
+   */
+  filtroSetorId?: string | null;
+  /** Quem está olhando — usado para achar o setor dele na disputa por setor. */
+  operadorId?: string | null;
+  /**
+   * Setor do cadastro de quem está olhando.
+   *
+   * É o plano B. O setor bom é o que o servidor resolveu para a pessoa na
+   * lista de participantes (equipe primeiro, cadastro na falta dela); este
+   * aqui cobre quem não disputa — um gerente sem recebimento, por exemplo, que
+   * mesmo assim precisa ver o placar do setor dele.
+   */
+  setorDeCadastro?: string | null;
+}
+
 /**
  * @param desafio  a campanha, ou `null` para não buscar nada.
- * @param filtroSetorId setor escolhido na régua do Analítico, para quem tem o
- *   nível `todos_setores`. `null` = a campanha inteira, como configurada.
+ * @param opcoes   recortes de quem está olhando. Ver `OpcoesResultado`.
  */
 export function useResultadoDesafio(
   desafio: Desafio | null,
-  filtroSetorId: string | null = null,
+  opcoes: OpcoesResultado = {},
 ): UsoResultadoDesafio {
+  const { filtroSetorId = null, operadorId = null, setorDeCadastro = null } = opcoes;
   const { empresa } = useEmpresa();
   const queryClient = useQueryClient();
   const empresaId   = empresa?.id ?? null;
@@ -197,13 +216,19 @@ export function useResultadoDesafio(
     const mapa: Record<string, SituacaoUsuario> = {};
     for (const p of dados.participantes) mapa[p.id] = p.situacao as SituacaoUsuario;
 
+    // O setor de quem olha vem da lista de participantes — que o servidor
+    // montou com a regra oficial (equipe primeiro, cadastro na falta dela).
+    // O `setorDeCadastro` cobre quem não está na lista.
+    const eu = operadorId ? dados.participantes.find(p => p.id === operadorId) : null;
+
     return calcularDesafio({
       desafio,
       dados,
       ocultos: idsOcultosRankingQuartil(mapa),
       filtroSetorId,
+      setorDoUsuario: eu?.setorId ?? setorDeCadastro,
     });
-  }, [desafio, dados, filtroSetorId]);
+  }, [desafio, dados, filtroSetorId, operadorId, setorDeCadastro]);
 
   return {
     resultado,

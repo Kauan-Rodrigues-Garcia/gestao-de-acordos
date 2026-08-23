@@ -24,10 +24,16 @@ import { dataBR, estiloDoTema } from './tema';
 import { AvatarParticipante } from './AvatarParticipante';
 import { RankingDesafio } from './RankingDesafio';
 
-function ItemHistorico({ desafio, voceId }: { desafio: Desafio; voceId?: string | null }) {
+function ItemHistorico(
+  { desafio, voceId, setorProprio }:
+  { desafio: Desafio; voceId?: string | null; setorProprio?: string | null },
+) {
   const [aberto, setAberto] = useState(false);
   // `null` enquanto fechado: o hook não busca nada.
-  const { resultado, carregando } = useResultadoDesafio(aberto ? desafio : null);
+  const { resultado, carregando } = useResultadoDesafio(
+    aberto ? desafio : null,
+    { operadorId: voceId, setorDeCadastro: setorProprio },
+  );
   const tema = estiloDoTema(desafio.visual.tema);
   const campeao = resultado?.individual[0] ?? null;
 
@@ -134,9 +140,11 @@ function ItemHistorico({ desafio, voceId }: { desafio: Desafio; voceId?: string 
 interface Props {
   encerrados: Desafio[];
   voceId?: string | null;
+  /** Plano B do setor de quem olha, para campanha encerrada com disputa por setor. */
+  setorProprio?: string | null;
 }
 
-export function HistoricoDesafios({ encerrados, voceId }: Props) {
+export function HistoricoDesafios({ encerrados, voceId, setorProprio }: Props) {
   if (!encerrados.length) return null;
 
   return (
@@ -146,7 +154,7 @@ export function HistoricoDesafios({ encerrados, voceId }: Props) {
       </h3>
       <ul className="space-y-2">
         {encerrados.map(d => (
-          <ItemHistorico key={d.id} desafio={d} voceId={voceId} />
+          <ItemHistorico key={d.id} desafio={d} voceId={voceId} setorProprio={setorProprio} />
         ))}
       </ul>
     </section>

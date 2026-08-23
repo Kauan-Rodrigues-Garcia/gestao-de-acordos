@@ -16,7 +16,9 @@ import { CalendarDays, Trophy, Users } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { cn } from '@/lib/utils';
 import { ValorAnimado } from '@/components/ValorAnimado';
-import { rotuloCriterio } from '@/services/desafios/tiposDesafio';
+import {
+  rotuloCriterio, rotuloEscopoDisputa, rotuloPremiacao,
+} from '@/services/desafios/tiposDesafio';
 import { diasRestantes, situacaoDoPeriodo } from '@/services/desafios/calcularDesafio';
 import type { Desafio } from '@/services/desafios/types';
 import { dataBR, diaCurto, estiloDoTema, hojeISO } from './tema';
@@ -78,7 +80,16 @@ export function DesafioHero({
             <p className="max-w-xl text-sm text-muted-foreground">{desafio.descricao}</p>
           )}
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-xs text-muted-foreground">
+          {/* A REGRA DO PRÊMIO, e não o critério de ordenação: numa campanha em
+              que basta alcançar o valor, anunciar "mais perto da meta leva"
+              seria dizer o contrário do que vale. O critério de ordenação
+              continua visível, uma linha abaixo, como o que ele é. */}
+          <p className="pt-1 text-sm font-medium text-foreground">
+            {rotuloPremiacao(desafio.regra.premiacao)}
+            {desafio.premio ? ` ${desafio.premio}.` : '.'}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             {desafio.premio && (
               <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                 <Trophy className={cn('h-3.5 w-3.5', tema.destaque)} /> {desafio.premio}
@@ -91,6 +102,7 @@ export function DesafioHero({
             {totalEquipes > 0 && (
               <span>{totalEquipes} equipe{totalEquipes === 1 ? '' : 's'}</span>
             )}
+            <span>{rotuloEscopoDisputa(desafio.regra.escopoDisputa)}</span>
             <span>{rotuloCriterio(desafio.regra.criterioRanking)}</span>
             <span>Encerra {dataBR(desafio.dataFim)}</span>
           </div>
