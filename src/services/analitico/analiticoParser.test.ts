@@ -219,9 +219,14 @@ describe('regra do Colchão', () => {
     expect(ehLinhaColchao(null)).toBe(false);
   });
 
-  it('conta na meta somente até 12/08/2026', () => {
+  // O corte era o dia 12 e virou o 14 em 23/08/2026, por decisão da diretoria.
+  // Os dias 13 e 14 estão aqui nomeadamente: são exatamente os que mudaram de
+  // lado, e é neles que um retrocesso passaria despercebido.
+  it('conta na meta somente até 14/08/2026', () => {
     expect(colchaoContaNaMeta(new Date(2026, 7, 12))).toBe(true);
-    expect(colchaoContaNaMeta(new Date(2026, 7, 13))).toBe(false);
+    expect(colchaoContaNaMeta(new Date(2026, 7, 13))).toBe(true);
+    expect(colchaoContaNaMeta(new Date(2026, 7, 14))).toBe(true);
+    expect(colchaoContaNaMeta(new Date(2026, 7, 15))).toBe(false);
     expect(colchaoContaNaMeta(new Date(2026, 8, 1))).toBe(false);
     expect(colchaoContaNaMeta(new Date(2027, 7, 1))).toBe(false);
   });
@@ -246,8 +251,9 @@ describe('regra do Colchão', () => {
       headers,
       linha('OPERADOR_A', 'RECEPTIVO', 'Não', 1, 1001, '13/08/2026', 10),
       linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 2, 1002, '12/08/2026', 20),
-      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 15, 12847788, '13/08/2026', 30),
-      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 16, 12847788, '13/08/2026', 40),
+      // 15/08: DEPOIS do corte (que passou a ser o dia 14 em 23/08/2026).
+      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 15, 12847788, '15/08/2026', 30),
+      linha('OPERADOR_A', 'RECEPTIVO', 'Sim', 16, 12847788, '15/08/2026', 40),
       linha('OPERADOR_B', 'EQUIPE RETENÇÃO', 'Não', 1, 1003, '10/08/2026', 50),
     ]);
 

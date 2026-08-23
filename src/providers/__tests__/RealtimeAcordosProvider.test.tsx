@@ -27,6 +27,7 @@ const {
   mockRemoveChannelSpy,
   mockSupabaseFromSpy,
   capturedHandlerRef,
+  capturedEscutasRef,
   capturedStatusCallbackRef,
 } = vi.hoisted(() => {
   // Refs mutáveis para controlar o valor retornado pelos mocks em cada teste
@@ -35,6 +36,17 @@ const {
 
   // Referências para capturar o handler de postgres_changes e o status callback
   const capturedHandlerRef:        { current: ((payload: unknown) => void) | null } = { current: null };
+  /**
+   * TODAS as escutas registradas no canal, com a config de cada uma.
+   *
+   * O provider passou a registrar DUAS: uma só de DELETE, sem filtro (o payload
+   * de DELETE não carrega `empresa_id`, então um filtro por essa coluna nunca
+   * casa e o evento não chega), e a filtrada por empresa para INSERT/UPDATE.
+   * Guardar só o último handler fazia o teste de DELETE bater na escuta errada.
+   */
+  const capturedEscutasRef: {
+    current: { config: { event?: string }; handler: (payload: unknown) => void }[];
+  } = { current: [] };
   const capturedStatusCallbackRef: { current: ((status: string, err?: unknown) => void) | null } = { current: null };
 
   // Spies do canal fake
@@ -53,6 +65,7 @@ const {
     mockRemoveChannelSpy,
     mockSupabaseFromSpy,
     capturedHandlerRef,
+    capturedEscutasRef,
     capturedStatusCallbackRef,
   };
 });
@@ -107,6 +120,7 @@ vi.mock('@/lib/supabase', () => {
     on: vi.fn((_type: string, _config: unknown, handler: (payload: unknown) => void) => {
       mockChannelOnSpy(_type, _config, handler);
       capturedHandlerRef.current = handler;
+      capturedEscutasRef.current.push({ config: (_config ?? {}) as { event?: string }, handler });
       return fakeChannel;
     }),
     subscribe: vi.fn((cb: (status: string, err?: unknown) => void) => {
@@ -212,12 +226,22 @@ function makeWrapper() {
   };
 }
 
-/** Dispara um evento de postgres_changes no handler capturado */
+/**
+ * Dispara um evento de postgres_changes nas escutas que o pediram.
+ *
+ * Roteia por `event` como o próprio Supabase faz: a escuta de DELETE só recebe
+ * DELETE, e a escuta `*` recebe tudo. Sem o roteamento, o teste de DELETE caía
+ * na escuta filtrada — que hoje ignora DELETE de propósito, porque quem trata
+ * esse evento é a escuta dedicada.
+ */
 async function simulateEvent(payload: unknown) {
-  const handler = capturedHandlerRef.current;
-  if (!handler) throw new Error('Handler de postgres_changes não foi capturado');
+  const tipo = (payload as { eventType?: string } | null)?.eventType;
+  const alvos = capturedEscutasRef.current.filter(
+    e => !e.config.event || e.config.event === '*' || e.config.event === tipo,
+  );
+  if (!alvos.length) throw new Error('Nenhuma escuta de postgres_changes foi registrada');
   await act(async () => {
-    await handler(payload);
+    for (const alvo of alvos) await alvo.handler(payload);
   });
 }
 
@@ -228,6 +252,7 @@ describe('RealtimeAcordosProvider', () => {
     // Reseta todos os spies
     vi.clearAllMocks();
     capturedHandlerRef.current        = null;
+    capturedEscutasRef.current        = [];
     capturedStatusCallbackRef.current = null;
     // Empresa e perfil válidos por padrão
     mockEmpresaRef.current = mockEmpresa;
@@ -257,15 +282,44 @@ describe('RealtimeAcordosProvider', () => {
     it('registra listener postgres_changes com filtro empresa_id correto', () => {
       renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
 
-      expect(mockChannelOnSpy).toHaveBeenCalledTimes(1);
-      const [type, config] = mockChannelOnSpy.mock.calls[0];
-      expect(type).toBe('postgres_changes');
-      expect(config).toMatchObject({
+      const filtrada = mockChannelOnSpy.mock.calls.find(
+        ([, config]) => (config as { filter?: string }).filter,
+      );
+      expect(filtrada).toBeDefined();
+      expect(filtrada![0]).toBe('postgres_changes');
+      expect(filtrada![1]).toMatchObject({
         event:  '*',
         schema: 'public',
         table:  'acordos',
         filter: `empresa_id=eq.${EMPRESA_ID}`,
       });
+    });
+
+    /*
+     * A escuta que faltava — e o defeito que ela desfaz.
+     *
+     * O payload de DELETE carrega apenas a replica identity da linha, que por
+     * padrão é só a chave primária. `empresa_id` não está lá, então o filtro
+     * `empresa_id=eq.…` nunca casa e o evento não é entregue. Medido em
+     * 23/08/2026: excluir um acordo não mexia em nada do Dashboard — nem nos
+     * cartões, nem no gráfico, nem na tela das outras pessoas.
+     *
+     * Este caso trava a correção: se alguém voltar a pôr filtro no DELETE, ou
+     * unificar as duas escutas de novo, o teste cai aqui.
+     */
+    it('escuta DELETE SEM filtro — com filtro o evento nunca chega', () => {
+      renderHook(() => useRealtimeAcordos(), { wrapper: makeWrapper() });
+
+      const doDelete = mockChannelOnSpy.mock.calls.find(
+        ([, config]) => (config as { event?: string }).event === 'DELETE',
+      );
+      expect(doDelete).toBeDefined();
+      expect(doDelete![1]).toMatchObject({
+        event:  'DELETE',
+        schema: 'public',
+        table:  'acordos',
+      });
+      expect((doDelete![1] as { filter?: string }).filter).toBeUndefined();
     });
 
     it('chama subscribe no canal após configurar o listener', () => {

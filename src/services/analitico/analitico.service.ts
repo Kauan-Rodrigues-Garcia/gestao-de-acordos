@@ -27,6 +27,8 @@ import {
 } from './fantasmaTransferencia';
 import { equipeUnicaPorLider } from '@/services/equipes/equipeDoLider';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
+import { getConfiguredTenantSlug } from '@/lib/tenant';
+import { somasPorOperador, ajustesComoLinhas } from './ajusteManual.service';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -737,7 +739,32 @@ export interface ResumoOperadorAnalitico {
   total_pagamentos: number;
 }
 
-/** Retorna totais por operador via RPC (sem varrer linhas individuais). */
+/**
+ * A operação é PaguePlay?
+ *
+ * Serviço não tem hook, e `useTenant()` é hook. `getConfiguredTenantSlug` lê a
+ * mesma configuração de build que ele — é o caminho que
+ * `autorizacao_lider.service.ts` já usa por aqui.
+ */
+function ehPaguePlay(): boolean {
+  return getConfiguredTenantSlug() === 'pagueplay';
+}
+
+/**
+ * Totais por operador, com o ajuste manual somado.
+ *
+ * É um dos DOIS pontos por onde a correção temporária entra (o outro é
+ * `buscarAnaliticoDashboardMes`). Somando aqui, a aba Quartis, o Painel Líder e
+ * o agrupamento por equipe recebem o valor corrigido sem nenhum deles saber que
+ * a correção existe — e o dia em que ela for desligada, some do mesmo jeito.
+ *
+ * Operador que só tem ajuste (nenhum recebimento no relatório) entra na lista:
+ * omiti-lo faria o valor sumir da tela de quem o lançou, que é o pior desfecho
+ * possível para uma correção manual.
+ *
+ * `total_pagamentos` NÃO muda: o ajuste não é um pagamento, e contá-lo
+ * estragaria o ticket médio, que é `recebido ÷ pagamentos`.
+ */
 export async function buscarResumoOperadoresAnalitico(
   empresaId: string,
   mes: string,
@@ -748,7 +775,39 @@ export async function buscarResumoOperadoresAnalitico(
       p_mes:        mes,
     })
     .order('total_recebido', { ascending: false });
-  return { data: (data ?? []) as ResumoOperadorAnalitico[], error: error?.message ?? null };
+
+  const linhas = (data ?? []) as ResumoOperadorAnalitico[];
+  if (error) return { data: linhas, error: error.message };
+
+  const ajustes = await somasPorOperador(empresaId, mes);
+  if (ajustes.size === 0) return { data: linhas, error: null };
+
+  const pp = ehPaguePlay();
+  const porId = new Map(linhas.map(l => [l.operador_id, { ...l }]));
+
+  for (const [operadorId, info] of ajustes) {
+    const atual = porId.get(operadorId);
+    if (atual) {
+      atual.total_recebido = (Number(atual.total_recebido) || 0) + info.valor;
+      atual.total_ho = (Number(atual.total_ho) || 0) + (pp ? info.valor * PP_HO_PERCENTUAL : 0);
+    } else {
+      porId.set(operadorId, {
+        operador_id:      operadorId,
+        operador_usuario: '',
+        operador_nome:    null,
+        total_recebido:   info.valor,
+        total_ho:         pp ? info.valor * PP_HO_PERCENTUAL : 0,
+        total_pagamentos: 0,
+      });
+    }
+  }
+
+  // A RPC ordena por recebimento; somar o ajuste pode trocar posições, e a
+  // tabela de Quartis assume a lista já ordenada.
+  const ordenadas = [...porId.values()]
+    .sort((a, b) => (Number(b.total_recebido) || 0) - (Number(a.total_recebido) || 0));
+
+  return { data: ordenadas, error: null };
 }
 
 // ── Agregado do mês para o dashboard (ver 20260710c) ─────────────────────────
@@ -770,7 +829,8 @@ export async function buscarAnaliticoDashboardMes(
 
     if (!viaJson.error) {
       const linhas = (viaJson.data ?? []) as unknown as AnaliticoDashboardLinha[];
-      return { data: Array.isArray(linhas) ? linhas : [], dbAtiva: true, error: null };
+      const base = Array.isArray(linhas) ? linhas : [];
+      return { data: await comAjustesManuais(base, empresaId, mes), dbAtiva: true, error: null };
     }
 
     // A RPC nova ainda não existe no banco → cai no caminho paginado antigo.
@@ -822,7 +882,32 @@ async function buscarAnaliticoDashboardMesPaginado(
     if (lote.length < PAGE_SUPABASE) break;
     offset += PAGE_SUPABASE;
   }
-  return { data: todas, dbAtiva: true, error: null };
+  return { data: await comAjustesManuais(todas, empresaId, mes), dbAtiva: true, error: null };
+}
+
+/**
+ * Acrescenta as linhas sintéticas da correção manual às do relatório.
+ *
+ * O SEGUNDO — e último — ponto por onde o ajuste entra. Daqui ele sobe sozinho
+ * para operador, equipe e setor: `escopoAnalitico` recorta por `operador_id` e
+ * por `setor_id`, e a linha sintética carrega os dois.
+ *
+ * Falha em silêncio de propósito. A tabela pode não existir ainda (a Vercel
+ * publica no push, antes de a migration ser aplicada), e um relatório sem a
+ * correção é muito melhor que um dashboard que não abre.
+ */
+async function comAjustesManuais(
+  linhas: AnaliticoDashboardLinha[],
+  empresaId: string,
+  mes: string,
+): Promise<AnaliticoDashboardLinha[]> {
+  try {
+    const somas = await somasPorOperador(empresaId, mes);
+    if (somas.size === 0) return linhas;
+    return [...linhas, ...ajustesComoLinhas(somas, mes, ehPaguePlay())];
+  } catch {
+    return linhas;
+  }
 }
 
 // ── Busca ────────────────────────────────────────────────────────────────────

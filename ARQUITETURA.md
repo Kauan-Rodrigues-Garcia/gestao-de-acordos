@@ -897,6 +897,40 @@ mostrar os mesmos números de quinze segundos atrás.
 | `useAcordos` | Trocar de página trocava as 25 linhas por um esqueleto de 25 linhas | `placeholderData` mantém a tabela na tela quando **só a página** mudou; qualquer outro filtro continua caindo no esqueleto, porque aí as linhas antigas responderiam outra pergunta |
 | `Tickets` | Estado local + `setVersao(v => v + 1)` a cada evento | `useDadosVivos` com instantâneo e assinatura embutida |
 
+### O DELETE que nunca chegava (23/08/2026)
+
+Excluir um acordo não mexia em nada do Dashboard. A aba de quem clicava
+*parecia* funcionar porque ela remove o item da lista localmente
+(`removeAcordo`); nos cartões, no gráfico e na tela das outras pessoas o
+acordo excluído seguia contando até alguém recarregar a página.
+
+A causa estava escrita em `src/lib/realtime.ts` desde sempre, e o
+`RealtimeAcordosProvider` — que é anterior a ela — nunca foi corrigido: **o
+payload de DELETE carrega apenas a replica identity**, que por padrão é só a
+chave primária. `empresa_id` não está lá, então o `filter: empresa_id=eq.…`
+nunca casa.
+
+O conserto tem duas metades:
+
+| Onde | O quê |
+|---|---|
+| `RealtimeAcordosProvider` | Escuta de DELETE **sem filtro**, separada da filtrada de INSERT/UPDATE. Funciona hoje, sem depender de migration. Recebe também o DELETE da outra empresa — sobra um id que não está na lista local, e a releitura passa pela RLS do mesmo jeito |
+| `20260823140000` | `REPLICA IDENTITY FULL` em `acordos`: o registro antigo passa a vir inteiro, o filtro casa e a RLS consegue avaliar o DELETE |
+
+### O painel de metas não ouvia `acordos` (23/08/2026)
+
+Salvar um acordo mexia em alguns cartões e não em outros, e o gráfico não se
+movia. `usePainelMetas` bebe de duas fontes: `analitico_recebimentos` (que
+assina a própria tabela desde sempre) e **`acordos`** — o agendado por dia, o
+Direto/Extra, o extra tabulado e o recebimento indireto. Nenhuma das quatro
+ouvia nada.
+
+Agora o hook assina o canal central de acordos e sobe `versaoAcordos`, que
+entra na dependência das quatro. E `carregando` passou a significar **a
+primeira pintura deste recorte**, não "há busca em curso": sem isso, cada
+evento de tempo real traria o esqueleto de volta — o defeito que esta frente
+inteira existe para desfazer.
+
 **A armadilha da chave de cache.** `chaveCache` precisa mudar **junto** com
 `carregar`. Uma chave que muda sozinha pinta a resposta de outra pergunta por
 alguns quadros — e uma chave que não muda quando o filtro muda pinta o resultado
@@ -1156,11 +1190,74 @@ um canal a mais em toda abertura da aba para isso não se paga.
 
 ---
 
+## Ajuste manual de recebimento — correção TEMPORÁRIA
+
+> `src/services/analitico/ajusteManual.service.ts` ·
+> `src/pages/Dashboard/Analitico/AjusteRecebimento.tsx` ·
+> migrations `20260823150000` (tabelas + RLS) e `20260823151000` (chaves).
+
+**O relatório analítico do ERP está com erro.** Enquanto a origem não é
+corrigida, a liderança soma ou tira valor do recebimento de um operador, com
+motivo registrado. É correção manual, e ela avisa que é temporária num banner
+fixo — ferramenta temporária que não diz que é temporária vira permanente.
+
+### A regra do analítico continua de pé
+
+`analitico_recebimentos` **não é tocado**. O ajuste vive em tabela separada e é
+somado na LEITURA. A consequência prática: desligar a correção é parar de
+somar — sem desfazer dado, sem reimportar, e com a trilha inteira preservada.
+
+### Os dois pontos por onde ele entra
+
+| Ponto | Alimenta |
+|---|---|
+| `buscarAnaliticoDashboardMes` | Dashboard, Painel Metas, gráfico de evolução |
+| `buscarResumoOperadoresAnalitico` | Aba Quartis, Painel Líder, agrupamento por equipe |
+
+Entrando **ali** e não em cada tela, o valor sobe sozinho para operador →
+equipe → setor: `escopoAnalitico` recorta por `operador_id` e por `setor_id`, e
+a linha sintética carrega os dois. Somar em cada tela seria somar em oito
+lugares e esquecer o nono.
+
+### Não é Pix e não é cartão
+
+A linha sintética sai com `forma_detalhe = 'Ajuste manual'`, e é assim que ela
+aparece na quebra por forma. Rotulá-la como Pix inflaria um número que a
+conciliação bancária confere — alguém iria procurar o dinheiro. `qtd = 0`
+porque o ajuste não é um pagamento: contá-lo estragaria o ticket médio.
+
+Entra no **dia 1** do mês: o ajuste é de competência, e ninguém informa em que
+dia o erro do ERP aconteceu. A coluna do dia 1 no gráfico cresce, e é a leitura
+honesta — espalhar pelos dias inventaria um histórico que não existe.
+
+### Quem faz o quê
+
+| Chave | Padrão | O que dá |
+|---|---|---|
+| `painel_lider_sub_ajuste_recebimento` | liderança | A aba interna no Painel Líder |
+| `ajuste_recebimento_lancar` | liderança | Lançar; ver o próprio histórico |
+| `ajuste_recebimento_administrar` | ninguém (admin tem por construção) | Ver tudo, editar, cancelar, responder pedidos |
+
+O líder **não edita e não cancela**: ele abre uma solicitação e a administração
+é notificada — o destinatário sai do painel de permissões, não de uma lista de
+cargo no código. É o que mantém a diferença entre "o valor estava errado" e "o
+valor mudou de ideia".
+
+**Cancelar não apaga.** A linha fica, para de somar, e guarda quem cancelou e
+por quê.
+
+### Como desligar quando o ERP for consertado
+
+Desligue `ajuste_recebimento_lancar` no painel: a aba some e os lançamentos
+param. O que já foi lançado **continua somando** até ser cancelado — para zerar
+também, cancele os lançamentos ou desligue a aba inteira.
+
+---
 ## Qualidade e Ferramentas
 
 | Frente | Como está |
 |---|---|
-| **Testes** | Vitest + Testing Library (happy-dom). 3648 testes em 211 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
+| **Testes** | Vitest + Testing Library (happy-dom). 3694 testes em 214 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
 | **Cobertura** | `vitest.config.ts` tem thresholds como **catraca**: cada valor fica logo abaixo do que a suíte entrega hoje. Ao subir a cobertura, suba os números **no mesmo commit**. |
 | **E2E** | Playwright em `tests/e2e/`. |
 | **CI** | `.github/workflows/ci.yml`: lint → typecheck → testes com cobertura → build. |

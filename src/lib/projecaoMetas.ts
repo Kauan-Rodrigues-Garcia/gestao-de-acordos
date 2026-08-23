@@ -223,6 +223,62 @@ export function degrausQuartis(
     });
 }
 
+export interface DegrauComAmanha extends DegrauQuartil {
+  /**
+   * Quanto precisa entrar para ESTAR nesta faixa amanhã.
+   *
+   * `null` quando não há amanhã útil no mês — no último dia útil a pergunta não
+   * tem resposta, e um número aqui seria invenção.
+   */
+  faltaAmanha: number | null;
+}
+
+/**
+ * Os degraus de hoje e os de amanhã, lado a lado.
+ *
+ * ## A pergunta que faltava
+ *
+ * `degrausQuartis` responde "quanto falta para eu ENTRAR nesta faixa hoje".
+ * Quem lidera precisa da segunda metade da pergunta: **entrar não é ficar.**
+ * A régua sobe todo dia útil, porque `esperado` é `metaDiaria × dias
+ * decorridos`. Um operador que faz exatamente o que falta hoje amanhece fora da
+ * faixa outra vez, e a conversa com ele se repete no dia seguinte.
+ *
+ * ## A conta
+ *
+ * Alcançar a faixa de `min_pct` P amanhã é ter recebido
+ * `(esperado + metaDiaria) × P ÷ 100`. Ou seja, a régua sobe
+ * `metaDiaria × P ÷ 100` por dia útil — e é ESSE o acréscimo, não a média
+ * diária do operador.
+ *
+ * A diferença importa e não é sutil: a média diária é o que a pessoa PRODUZ; o
+ * acréscimo da régua é o que a meta EXIGE. Num operador atrasado os dois números
+ * são bem distintos, e usar a média dele devolveria um alvo que não o mantém na
+ * faixa — o recado sairia errado justamente para quem mais precisa dele certo.
+ *
+ * `diasRestantes` só serve para saber se existe amanhã. Zero = fim do mês.
+ */
+export function degrausComAmanha(
+  entrada: {
+    recebido: number;
+    esperado: number;
+    metaDiaria: number;
+    diasRestantes: number;
+    quartis: QuartilConfig[];
+  },
+): DegrauComAmanha[] {
+  const { recebido, esperado, metaDiaria, diasRestantes, quartis } = entrada;
+  const temAmanha = diasRestantes > 0 && metaDiaria > 0;
+  const esperadoAmanha = esperado + metaDiaria;
+
+  return degrausQuartis({ recebido, esperado, quartis }).map(g => ({
+    ...g,
+    faltaAmanha: temAmanha
+      ? Math.max(0, (esperadoAmanha * g.minPct) / 100 - recebido)
+      : null,
+  }));
+}
+
 /**
  * % de um valor sobre uma base, arredondada e limitada.
  *

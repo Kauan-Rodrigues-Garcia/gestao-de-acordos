@@ -18,7 +18,7 @@ import {
   Users, AlertTriangle, ArrowRight, Calendar,
   ChevronRight, ChevronLeft, ChevronDown, RefreshCw, X, Loader2,
   TrendingUp, Wallet, Percent, ArrowUpDown, Search, Radio,
-  BarChart3, LineChart,
+  BarChart3, LineChart, SlidersHorizontal,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -53,6 +53,7 @@ import {
 import { DesempenhoEquipes } from '@/pages/Dashboard/Analitico/DesempenhoEquipes';
 import { QuartisOperadores } from '@/pages/Dashboard/Analitico/QuartisOperadores';
 import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimento';
+import AjusteRecebimento from '@/pages/Dashboard/Analitico/AjusteRecebimento';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
 import { escopoEfetivo } from '@/lib/permissoes-escopo';
@@ -79,7 +80,7 @@ type SortKey = 'recebido' | 'conversao' | 'naoPagos' | 'aReceber' | 'nome';
 
 /** Abas do painel (PaguePlay). 'time' = acompanhamento original; as demais são
  *  as antigas abas do Analítico, agora alimentadas pelo recebimento diário. */
-type AbaPainel = 'time' | 'desempenho' | 'quartis' | 'grafico';
+type AbaPainel = 'time' | 'desempenho' | 'quartis' | 'grafico' | 'ajuste';
 
 // ─── Helpers de período ─────────────────────────────────────────────────────
 
@@ -190,6 +191,10 @@ export default function PainelLider() {
     { key: 'desempenho', label: 'Desempenho Equipes',  Icon: BarChart3,   permissao: 'painel_lider_sub_desempenho_equipes' },
     { key: 'quartis',    label: 'Quartis',             Icon: TrendingUp,  permissao: 'painel_lider_sub_quartis' },
     { key: 'grafico',    label: 'Gráfico recebimento', Icon: LineChart,   permissao: 'painel_lider_sub_grafico_recebimento' },
+    // Correção TEMPORÁRIA do relatório do ERP. Fica por último de propósito:
+    // é conserto, não rotina, e não devia disputar a atenção com as quatro
+    // abas que a liderança abre todo dia.
+    { key: 'ajuste',     label: 'Ajuste de recebimento', Icon: SlidersHorizontal, permissao: 'painel_lider_sub_ajuste_recebimento' },
   ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
@@ -288,6 +293,29 @@ export default function PainelLider() {
 
   /** Setor em foco. `null` = todos. É este valor que as três abas recebem. */
   const setorAbas = escopoAbas.setorId;
+
+  /**
+   * As pessoas que o seletor do Ajuste de recebimento oferece.
+   *
+   * Sai da MESMA lista de operadores que o Acompanhamento já carregou — a RLS
+   * define quem cabe ali, e reaproveitá-la evita uma consulta a mais e evita
+   * que a aba de ajuste enxergue alguém que o resto do painel não enxerga.
+   *
+   * Setor e equipe vêm do mapa de equipes quando ele já chegou, com o cadastro
+   * do perfil como reserva: o ajuste carimba os dois na linha, e um carimbo
+   * vazio tiraria o valor da soma do setor.
+   */
+  const operadoresParaAjuste = useMemo(
+    () => operadores
+      .map(o => ({
+        id: o.id,
+        nome: o.nome ?? o.email ?? 'Sem nome',
+        setorId:  equipesInfo?.operadorEquipeMap[o.id]?.setor_id ?? o.setor_id ?? null,
+        equipeId: equipesInfo?.operadorEquipeMap[o.id]?.equipe_id ?? null,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome)),
+    [operadores, equipesInfo],
+  );
   const nomeSetorTravado = useMemo(
     () => (escopoAbas.podeFiltrarSetor || !setorAbas
       ? null
@@ -770,6 +798,13 @@ export default function PainelLider() {
               rotuloEscopo={rotuloDoEscopo}
             />
           )}
+        </div>
+      )}
+
+      {/* ── Aba: Ajuste de recebimento (correção temporária) ──────────────── */}
+      {(abasVisitadas.has('ajuste') || abaVisivel === 'ajuste') && (
+        <div className={cn(abaVisivel !== 'ajuste' && 'hidden')}>
+          <AjusteRecebimento mes={mesStr} operadores={operadoresParaAjuste} />
         </div>
       )}
 

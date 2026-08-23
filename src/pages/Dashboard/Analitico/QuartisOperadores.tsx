@@ -61,7 +61,7 @@
  */
 
 import { Fragment, useState, useEffect, useMemo, useId } from 'react';
-import { ChevronDown, Target, CalendarClock, BarChart3 } from 'lucide-react';
+import { ChevronDown, Target, CalendarClock, BarChart3, Copy } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { formatBRL } from '@/lib/money';
@@ -85,6 +85,8 @@ import {
 } from '@/services/analitico/analitico.service';
 import { PizzaQuartis3D } from './PizzaQuartis3D';
 import { detalharOperador } from './detalheOperador';
+import { montarMensagemOperador } from './mensagemOperador';
+import { copiarTexto } from '@/lib/clipboard';
 import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
 } from '@/services/metas/metaIndireta';
@@ -180,10 +182,23 @@ function LinhaValor({
   );
 }
 
-/** Uma faixa na lista de degraus: quanto falta, ou o carimbo de alcançada. */
+/**
+ * Uma faixa na lista de degraus — com as DUAS respostas.
+ *
+ * `hoje` é quanto falta para entrar na faixa agora. `amanhã` é quanto falta
+ * para ainda estar nela depois que a régua subir mais um dia útil — porque
+ * `esperado` é `meta diária × dias decorridos`, e ele cresce sozinho.
+ *
+ * Entrar não é ficar: quem faz exatamente o de hoje amanhece fora da faixa
+ * outra vez, e a conversa com o operador se repete no dia seguinte. Era a
+ * metade que faltava na linha expandida.
+ */
 function Degrau({
-  quartil, falta, alcancado, ehAtual,
-}: { quartil: number; falta: number; alcancado: boolean; ehAtual: boolean }) {
+  quartil, falta, faltaAmanha, alcancado, ehAtual,
+}: {
+  quartil: number; falta: number; faltaAmanha: number | null;
+  alcancado: boolean; ehAtual: boolean;
+}) {
   const cor = COR_QUARTIL[quartil] ?? '#6366f1';
   return (
     <div className={cn(
@@ -197,10 +212,26 @@ function Degrau({
         {quartil}º quartil
         {ehAtual && <span className="text-[10px] text-muted-foreground"> · atual</span>}
       </span>
-      <span className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
-        style={{ color: alcancado ? COR_QUARTIL[1] : cor }}>
-        {alcancado ? 'alcançado' : `faltam ${formatBRL(falta)}`}
-      </span>
+
+      {alcancado ? (
+        <span className="text-[11px] tabular-nums font-mono font-semibold shrink-0"
+          style={{ color: COR_QUARTIL[1] }}>
+          alcançado
+        </span>
+      ) : (
+        <span className="flex items-baseline gap-2 shrink-0">
+          <span className="text-[11px] tabular-nums font-mono font-semibold" style={{ color: cor }}
+            title="Quanto falta para entrar nesta faixa hoje">
+            {formatBRL(falta)}
+          </span>
+          {faltaAmanha !== null && (
+            <span className="text-[11px] tabular-nums font-mono text-muted-foreground"
+              title="Quanto precisa para AINDA estar nesta faixa amanhã — a régua sobe um dia útil">
+              {formatBRL(faltaAmanha)}
+            </span>
+          )}
+        </span>
+      )}
     </div>
   );
 }
@@ -214,7 +245,7 @@ function Degrau({
  * setor. As contas vêm todas de `detalheOperador.ts`, testado à parte.
  */
 function DetalheOperador({
-  linha, quartis, recebidosDoGrupo, rotuloUnidadeAtiva, nomeDoGrupo,
+  linha, quartis, recebidosDoGrupo, rotuloUnidadeAtiva, nomeDoGrupo, mes,
 }: {
   linha: LinhaQuartil;
   quartis: QuartilConfig[];
@@ -222,6 +253,8 @@ function DetalheOperador({
   /** 'H.O.' ou 'Bruto' — o painel inteiro já vem convertido; isto só rotula. */
   rotuloUnidadeAtiva: string;
   nomeDoGrupo: string;
+  /** Mês em análise ('yyyy-MM') — entra no texto que o líder encaminha. */
+  mes: string;
 }) {
   const d = detalharOperador({
     recebido:   linha.recebido,
@@ -240,6 +273,43 @@ function DetalheOperador({
 
   return (
     <div className="px-3 py-3 bg-muted/20 space-y-4">
+    {/* ── Cabeçalho da linha aberta ────────────────────────────────────
+        O botão de copiar mora aqui e não no fim: quem abre a linha para
+        falar com o operador não deveria ter que rolar os três blocos até
+        achar como levar aquilo para a conversa. */}
+    <div className="flex items-center justify-between gap-3">
+      {/* A posição no grupo NÃO é repetida aqui — ela já tem linha própria no
+          bloco "Números do operador", e dizer o mesmo duas vezes na mesma área
+          aberta é o tipo de ruído que faz a pessoa parar de ler os dois. */}
+      <p className="text-[11px] text-muted-foreground min-w-0 truncate">
+        <strong className="text-foreground">{linha.op.nome ?? 'Operador'}</strong>
+      </p>
+      <button
+        type="button"
+        onClick={() => {
+          void copiarTexto(
+            montarMensagemOperador({
+              nome: linha.op.nome ?? "Operador",
+              mes,
+              recebido: linha.recebido,
+              meta: linha.meta,
+              rotuloUnidade: rotuloUnidadeAtiva,
+              detalhe: d,
+            }),
+            "Texto copiado — é só colar no WhatsApp.",
+            "Não foi possível copiar o texto.",
+          );
+        }}
+        className="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-border
+          bg-card px-2.5 py-1 text-[11px] font-medium hover:bg-accent transition-colors
+          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        title="Copia um resumo pronto para mandar ao operador no WhatsApp"
+      >
+        <Copy className="w-3 h-3" />
+        Copiar para o operador
+      </button>
+    </div>
+
     {/* ── As duas frentes, quando existem ──────────────────────────────────
         Faixa própria acima dos três blocos, e não uma linha dentro de um
         deles: os números da tabela ao lado são a SOMA, e quem abre a linha
@@ -292,12 +362,30 @@ function DetalheOperador({
           </p>
         ) : (
           <div className="space-y-1">
+            {/* Os rótulos das duas colunas. Sem eles, os dois valores lado a
+                lado seriam adivinhação — e adivinhar num painel de dinheiro é
+                pior que não mostrar. */}
+            <div className="flex items-center gap-2 px-1.5 pb-0.5">
+              <span className="w-2.5 shrink-0" />
+              <span className="text-[10px] text-muted-foreground flex-1">faixa</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide shrink-0 w-[4.5rem] text-right">
+                hoje
+              </span>
+              <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0 w-[4.5rem] text-right">
+                amanhã
+              </span>
+            </div>
+
             {d.degraus.map(g => (
               <Degrau key={g.quartil} quartil={g.quartil} falta={g.falta}
+                faltaAmanha={g.faltaAmanha}
                 alcancado={g.alcancado} ehAtual={d.faixaAtual?.quartil === g.quartil} />
             ))}
-            <p className="text-[10px] text-muted-foreground pt-0.5">
-              Medido contra o esperado até hoje, igual à % da linha.
+
+            <p className="text-[10px] text-muted-foreground pt-0.5 leading-relaxed">
+              <strong>Hoje</strong> entra na faixa; <strong>amanhã</strong> é o que mantém —
+              a régua sobe {d.metaDiaria !== null ? formatBRL(d.metaDiaria) : 'um dia de meta'} a
+              cada dia útil. Medido contra o esperado até hoje, igual à % da linha.
             </p>
           </div>
         )}
@@ -868,6 +956,7 @@ export function QuartisOperadores({
                                   recebidosDoGrupo={recebidosDoGrupo}
                                   rotuloUnidadeAtiva={rotuloUnidade(unidade)}
                                   nomeDoGrupo={nomeDoGrupo}
+                                  mes={mes}
                                 />
                               </td>
                             </tr>

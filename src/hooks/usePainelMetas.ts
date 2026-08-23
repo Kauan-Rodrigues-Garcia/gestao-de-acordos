@@ -9,10 +9,31 @@
  *
  * A matemática também não mora aqui: é `lib/projecaoMetas.ts`, a mesma que o
  * `MetaProgressoHeader` e a tabela `QuartisOperadores` usam.
+ *
+ * ## Duas fontes, e só uma se atualizava sozinha (corrigido em 23/08/2026)
+ *
+ * O painel bebe de dois lugares:
+ *
+ *   • `analitico_recebimentos` — o recebido do mês, via `useAnaliticoDashboard`,
+ *     que assina a própria tabela e se atualiza sozinho desde sempre;
+ *   • `acordos` — o agendado por dia (a série do gráfico), Direto/Extra, o
+ *     extra tabulado e o recebimento indireto. **Nenhum deles ouvia nada.**
+ *
+ * O resultado, relatado por quem estava com o Dashboard aberto: salvar um
+ * acordo de valor alto mexia em alguns cartões e não em outros, e o gráfico não
+ * se movia. Não era o cache nem a reconciliação — as quatro consultas acima
+ * simplesmente nunca eram refeitas até alguém trocar de mês ou recarregar.
+ *
+ * Agora o hook escuta o canal central de acordos (o mesmo do `useAcordos` e do
+ * `useAnalytics` — sem canal novo) e sobe `versaoAcordos`, que entra na
+ * dependência das quatro. A rajada é agrupada: uma importação de 300 acordos
+ * refaz as consultas cerca de uma vez por segundo, não 300 vezes.
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
+import { criarAgrupador } from '@/lib/agrupador';
+import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import type { MetasConfigMes, QuartilConfig } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -261,6 +282,31 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   /** A equipe do próprio usuário — dá o início de treinamento no escopo pessoal. */
   const minhaEquipe = equipesConhecidas.find(e => e.id === perfilEquipeId) ?? null;
 
+  /*
+   * ── Tempo real das consultas que batem em `acordos` ────────────────────────
+   *
+   * Só um contador: as quatro consultas dependentes de acordos o trazem na
+   * lista de dependências, e subir o número refaz as quatro. É de propósito que
+   * ele não carregue o payload do evento — reagir a "mudou alguma coisa"
+   * relendo é a única forma de manter o agendado por dia e o Direto/Extra
+   * certos sem reimplementar no cliente a agregação que o serviço faz.
+   *
+   * O canal é o CENTRAL (`useRealtimeAcordos`), não um novo: o provider já
+   * mantém um por empresa, com reconexão.
+   */
+  const { subscribe, unsubscribe } = useRealtimeAcordos();
+  const idAssinatura = useRef(`painel-metas-${Math.random().toString(36).slice(2, 10)}`).current;
+  const [versaoAcordos, setVersaoAcordos] = useState(0);
+
+  useEffect(() => {
+    if (!ativo) return;
+    const grupo = criarAgrupador(() => setVersaoAcordos(v => v + 1), {
+      esperaMs: 300, tetoMs: 1_200,
+    });
+    subscribe(idAssinatura, () => grupo.avisar());
+    return () => { grupo.cancelar(); unsubscribe(idAssinatura); };
+  }, [ativo, subscribe, unsubscribe, idAssinatura]);
+
   // ── Analítico + escopo — a MESMA base do AnalyticsPanel ────────────────────
   const analitico = useAnaliticoDashboard(ativo, mes);
 
@@ -418,7 +464,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setDxCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente]);
+    // `versaoAcordos`: Direto/Extra sai da TABULACAO, ou seja, de `acordos`.
+  }, [temLogicaDiretoExtra, empresa?.id, mes, escopo, escopoPendente, versaoAcordos]);
 
   // ── Extra por tabulação (só PaguePlay) ─────────────────────────────────────
   //
@@ -446,7 +493,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setExtraCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente]);
+    // `versaoAcordos`: o extra tabulado tambem e lido de `acordos`.
+  }, [extraPorTabulacao, empresa?.id, mes, escopo, escopoPendente, versaoAcordos]);
 
   // ── Agendado por dia (mesmo escopo do recebimento) ─────────────────────────
   const [agendadoPorDia, setAgendadoPorDia] = useState<PontoAgendadoDia[]>([]);
@@ -465,7 +513,9 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       setAgendadoCarregado(true);
     });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, escopo, escopoPendente]);
+    // `versaoAcordos`: e ESTA a serie do grafico que nao se movia ao salvar
+    // ou apagar um acordo — o agendado por dia vem inteiro de `acordos`.
+  }, [empresa?.id, mes, escopo, escopoPendente, versaoAcordos]);
 
   // Ranking não mora aqui. Morava no `MetaProgressoHeader` (abaixo da saudação),
   // removido em 16/08/2026 — hoje o Dashboard não mostra ranking pessoal. Se
@@ -508,7 +558,8 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
       empresaId: empresa.id, mes, operadores: [alvoIndireto],
     }).then(m => { if (!cancelado) setRecebidoIndiretoBruto(m[alvoIndireto]?.bruto ?? 0); });
     return () => { cancelado = true; };
-  }, [empresa?.id, mes, alvoIndireto]);
+    // `versaoAcordos`: o indireto sao os acordos EXTRA pagos do mes.
+  }, [empresa?.id, mes, alvoIndireto, versaoAcordos]);
 
   // ── Unidade ────────────────────────────────────────────────────────────────
   // Recebido: campo já agregado, nunca convertido — `ho` vem do relatório.
@@ -594,9 +645,38 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
    * dependem das fontes (equipe e setor) e `false` no escopo de operador, que
    * não depende delas.
    */
-  const carregando = !analitico.carregado || escopoPendente || !configCarregada
+  const faltaAlgumaPeca = !analitico.carregado || escopoPendente || !configCarregada
     || !metaCarregada || !dxCarregado || !extraCarregado || !equipesCarregadas
     || !agendadoCarregado;
+
+  /*
+   * `carregando` é a PRIMEIRA pintura deste recorte, não "há busca em curso".
+   *
+   * Cada uma das buscas acima liga o próprio `carregado = false` antes de sair,
+   * e agora elas também rodam a cada evento de tempo real. Sem esta distinção, o
+   * painel voltaria a ser trocado por esqueleto toda vez que alguém salvasse um
+   * acordo — que é exatamente o defeito que o trabalho de 23/08 tirou da tela.
+   *
+   * O recorte é montado só com os parâmetros PRIMITIVOS que definem a pergunta.
+   * `escopo` fica de fora de propósito: ele é derivado destes, e carrega `Set`,
+   * que não tem representação estável em texto.
+   */
+  const recorte = [
+    empresa?.id ?? '', mes, setorId ?? '', equipeSelecionadaId ?? '',
+    operadorEfetivo ?? '', modo, unidade,
+  ].join('|');
+
+  const recorteAnterior = useRef(recorte);
+  const jaPintou = useRef(false);
+  if (recorteAnterior.current !== recorte) {
+    recorteAnterior.current = recorte;
+    jaPintou.current = false;
+  }
+  useEffect(() => {
+    if (!faltaAlgumaPeca) jaPintou.current = true;
+  }, [faltaAlgumaPeca]);
+
+  const carregando = faltaAlgumaPeca && !jaPintou.current;
 
   // Segue `modo`, e não a mera presença de `equipeSelecionada`: com operador E
   // equipe escolhidos o operador vence (mesma ordem do `useEscopoAnalitico`), e

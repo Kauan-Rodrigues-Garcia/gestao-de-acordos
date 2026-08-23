@@ -49,13 +49,14 @@ function linha({
 }
 
 describe('parseRelatorioBookplayRows — relatório 58', () => {
-  it('aceita Colchão somente até 12/08/2026 e preserva NR/parcelas posteriores', () => {
+  it('aceita Colchão somente até 14/08/2026 e preserva NR/parcelas posteriores', () => {
     const resultado = parseRelatorioBookplayRows([
       CABECALHO,
       linha({ colchao: 'Sim', data: '12/08/2026', valor: 125 }),
-      linha({ colchao: 'Sim', data: '13/08/2026', parcela: '15', valor: 40 }),
-      linha({ colchao: 'Sim', data: '13/08/2026', parcela: '16', valor: 60 }),
-      linha({ colchao: 'Não', data: '13/08/2026', nr: '999', valor: 75 }),
+      // 15/08: DEPOIS do corte (que passou a ser o dia 14 em 23/08/2026).
+      linha({ colchao: 'Sim', data: '15/08/2026', parcela: '15', valor: 40 }),
+      linha({ colchao: 'Sim', data: '15/08/2026', parcela: '16', valor: 60 }),
+      linha({ colchao: 'Não', data: '15/08/2026', nr: '999', valor: 75 }),
     ]);
 
     expect(resultado.colchaoNaMeta).toEqual({ linhas: 1, valor: 125 });

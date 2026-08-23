@@ -147,8 +147,50 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
     // Nome único por empresa — ao recriar, usamos um novo nome para forçar
     // o Supabase a criar um canal fresh (não reutilizar um canal CLOSED)
     const channelName = `rt-acordos-${empresaId}-${reconnectTick}`;
+
+    /*
+     * ── Por que o DELETE tem escuta PRÓPRIA, e sem filtro ────────────────────
+     *
+     * O payload de DELETE do Postgres carrega apenas a *replica identity* da
+     * linha — com a identidade padrão, só a chave primária. `empresa_id` não
+     * está lá, então o filtro `empresa_id=eq.…` NUNCA casa e o evento
+     * simplesmente não chega. A consequência, medida em 23/08/2026: excluir um
+     * acordo não mexia em nada do painel de quem estava olhando, e não mexia em
+     * nada NENHUM na tela das outras pessoas. Só a aba de quem clicou parecia
+     * funcionar, porque ela remove o item localmente (`removeAcordo`).
+     *
+     * A armadilha já estava escrita em `src/lib/realtime.ts` e este provider,
+     * que é anterior a ela, nunca foi corrigido.
+     *
+     * A escuta sem filtro resolve hoje, sem depender de migration. O preço é
+     * receber também o DELETE da outra empresa: sobra um id que não está na
+     * lista local (remoção vira no-op) e, no pior caso, uma releitura agrupada
+     * cujo resultado a RLS recorta do mesmo jeito. Nenhum dado atravessa — um
+     * UUID solto não diz nada, e toda leitura continua passando pelo banco.
+     *
+     * A migration `20260823140000_acordos_replica_identity_full.sql` completa o
+     * conserto: com `REPLICA IDENTITY FULL` o registro antigo vem inteiro, o
+     * que permite à RLS avaliar o DELETE e nos deixa saber de que empresa ele
+     * era. A escuta segue sem filtro de propósito — ela funciona nos dois
+     * mundos, e é o que evita que a tela volte a depender de uma migration
+     * aplicada para o básico funcionar.
+     */
     const channel: RealtimeChannel = supabase
       .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'acordos' },
+        (payload) => {
+          if (!mountedRef.current) return;
+          const deletedId = (payload.old as { id?: string } | null)?.id;
+          if (!deletedId) return;
+          const event: AcordoRealtimeEvent = {
+            eventType: 'DELETE',
+            oldRecord: { id: deletedId },
+          };
+          subscribersRef.current.forEach(cb => cb(event));
+        },
+      )
       .on(
         'postgres_changes',
         {
@@ -175,17 +217,11 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           }
 
           // ── DELETE ──────────────────────────────────────────────────────────
-          // Apenas o id é necessário para remover da lista local.
-          if (eventType === 'DELETE') {
-            const deletedId = (payload.old as { id?: string } | null)?.id;
-            if (!deletedId) return;
-            const event: AcordoRealtimeEvent = {
-              eventType: 'DELETE',
-              oldRecord: { id: deletedId },
-            };
-            subscribersRef.current.forEach(cb => cb(event));
-            return;
-          }
+          // Já tratado pela escuta dedicada acima. Com a identidade padrão ele
+          // nem chega aqui (o filtro não casa); depois de `REPLICA IDENTITY
+          // FULL` ele passa a chegar, e sem esta saída o mesmo id seria
+          // despachado duas vezes.
+          if (eventType === 'DELETE') return;
 
           // ── INSERT ──────────────────────────────────────────────────────────
           // Busca o registro COMPLETO com joins antes de notificar os subscribers.

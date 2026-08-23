@@ -552,6 +552,34 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a aba interna do gráfico de recebimento',
     grupo: 'Painel Líder', padrao: LIDERANCA,
   },
+  /*
+   * Ajuste manual de recebimento — correção TEMPORÁRIA do relatório do ERP.
+   *
+   * As três nascem no painel porque é a regra permanente do projeto: toda
+   * ferramenta nova é governada por chave. O pedido diz que "o líder não
+   * precisa de permissão nenhuma", e as duas coisas convivem — `_lancar` nasce
+   * LIGADA para a liderança inteira, então ninguém precisa ligar nada, e mesmo
+   * assim dá para desligar sem deploy no dia em que o ERP for consertado.
+   */
+  {
+    key: 'painel_lider_sub_ajuste_recebimento', label: 'Painel Líder: Ajuste de recebimento',
+    descricao: 'Abrir a aba interna de ajuste manual de recebimento (correção temporária)',
+    grupo: 'Painel Líder', padrao: LIDERANCA,
+  },
+  {
+    key: 'ajuste_recebimento_lancar', label: 'Lançar ajuste de recebimento',
+    descricao: 'Somar ou tirar valor do recebimento de um operador, com motivo registrado',
+    grupo: 'Ações específicas', padrao: LIDERANCA,
+    depende: {
+      chaves: ['painel_lider_sub_ajuste_recebimento'],
+      motivo: 'O formulário de lançamento vive dentro da aba de Ajuste de recebimento, no Painel Líder.',
+    },
+  },
+  {
+    key: 'ajuste_recebimento_administrar', label: 'Administrar ajustes de recebimento',
+    descricao: 'Ver todos os ajustes da empresa, editar, cancelar e responder pedidos de alteração',
+    grupo: 'Ações específicas', padrao: {},
+  },
 
   // ── Dashboard ────────────────────────────────────────────────────────────
   // O Dashboard NÃO tem chave de aba, e isso é deliberado: ele é a rota `/`,

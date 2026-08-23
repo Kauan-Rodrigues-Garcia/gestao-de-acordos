@@ -25,7 +25,7 @@
  */
 
 import {
-  calcularProjecao, degrausQuartis, ritmoDoPeriodo, type DegrauQuartil,
+  calcularProjecao, degrausComAmanha, ritmoDoPeriodo, type DegrauComAmanha,
 } from '@/lib/projecaoMetas';
 
 import type { QuartilConfig } from '@/lib/supabase';
@@ -90,8 +90,21 @@ export interface DetalheOperador {
   faixaAtual: QuartilConfig | null;
   /** Faixa imediatamente acima. `null` quando já está na melhor. */
   proximaFaixa: QuartilConfig | null;
-  /** Quanto falta para CADA faixa, da melhor para a pior. Vazio sem meta. */
-  degraus: DegrauQuartil[];
+  /**
+   * Quanto falta para CADA faixa, da melhor para a pior. Vazio sem meta.
+   *
+   * Cada degrau traz DOIS números: o de hoje (entrar na faixa) e o de amanhã
+   * (continuar nela depois que a régua subir mais um dia útil). Entrar não é
+   * ficar, e a linha expandida só respondia a primeira metade.
+   */
+  degraus: DegrauComAmanha[];
+  /**
+   * Meta ÷ dias úteis do mês — o quanto a régua sobe por dia.
+   *
+   * `null` sem meta. Não confundir com `mediaDiaria`, que é o que a pessoa
+   * produz: esta é o que a meta exige.
+   */
+  metaDiaria: number | null;
   /** Quanto já deveria ter recebido até hoje. `null` sem meta. */
   esperadoHoje: number | null;
 
@@ -130,7 +143,13 @@ export function detalharOperador(entrada: EntradaDetalheOperador): DetalheOperad
   const proj = calcularProjecao({ meta, recebido, totalUteis, decorridos, quartis });
 
   const degraus = proj
-    ? degrausQuartis({ recebido, esperado: proj.esperado, quartis })
+    ? degrausComAmanha({
+        recebido,
+        esperado:      proj.esperado,
+        metaDiaria:    proj.metaDiaria,
+        diasRestantes: ritmo.diasRestantes,
+        quartis,
+      })
     : [];
 
   const metaNum = Number(meta) || 0;
@@ -166,6 +185,7 @@ export function detalharOperador(entrada: EntradaDetalheOperador): DetalheOperad
     faixaAtual:   proj?.quartil ?? null,
     proximaFaixa: proj?.proximo ?? null,
     degraus,
+    metaDiaria:   proj?.metaDiaria ?? null,
     esperadoHoje: proj?.esperado ?? null,
 
     pctMeta,

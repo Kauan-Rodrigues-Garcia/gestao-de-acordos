@@ -164,13 +164,23 @@ export function ehLinhaColchao(valor: unknown): boolean {
 }
 
 /**
- * Exceção única autorizada para a meta: Colchão pago até 12/08/2026.
- * A partir de 13/08/2026 — e em qualquer outro mês — fica só no acompanhamento.
+ * Exceção única autorizada para a meta: Colchão pago até **14/08/2026**.
+ * A partir de 15/08/2026 — e em qualquer outro mês — fica só no acompanhamento.
+ *
+ * O corte nasceu no dia 12 e foi movido para o 14 em 23/08/2026, a pedido da
+ * diretoria. É uma decisão de negócio, não um cálculo: não há fórmula que
+ * derive o dia, e por isso ele está escrito aqui, num lugar só, em vez de
+ * espalhado pelos dois parsers que o consultam (PaguePlay e BookPlay).
+ *
+ * ⚠️ Mexer neste número muda valor de meta já apurado. Quem mover o corte
+ * outra vez precisa reimportar agosto/2026 para os dias 13 e 14 mudarem de
+ * lado — a classificação é gravada na linha no momento da importação
+ * (`analiticoParser.ts`), não recalculada na leitura.
  */
 export function colchaoContaNaMeta(dataPagamento: Date): boolean {
   return dataPagamento.getFullYear() === 2026
     && dataPagamento.getMonth() === 7
-    && dataPagamento.getDate() <= 12;
+    && dataPagamento.getDate() <= 14;
 }
 
 /**
