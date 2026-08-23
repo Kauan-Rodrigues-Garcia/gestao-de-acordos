@@ -26,7 +26,8 @@ import {
 import { partesDoMes, type MesRef } from '@/lib/mesReferencia';
 import { contaNoRecebimento } from '@/lib/index';
 import {
-  comissaoDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor, PIX_DIAS_UTEIS_EXPURGO,
+  comissaoDe, valorAPagarDe, PIX_META_ACORDOS_DOBRA, metaDobraDoSetor,
+  PIX_DIAS_UTEIS_EXPURGO,
   type PixAutoAcordo, type PixAutoStatus,
 } from '@/services/pix_automatico.service';
 
@@ -183,12 +184,17 @@ export function totaisPorStatus(
 }
 
 /**
- * Comissão que JÁ SAIU e comissão que ainda falta sair.
+ * Dinheiro que JÁ SAIU e dinheiro que ainda falta sair.
  *
  * Aprovado e pago são coisas diferentes, e era essa a dúvida do operador: o
  * card "Aprovado" diz R$ 105,49 e ele recebeu R$ 50,00 — os dois números estão
  * certos, faltava a tela mostrar o segundo. `aPagar` é o resto: aprovado que
  * ainda não foi marcado como pago.
+ *
+ * Aqui a conta é `valorAPagarDe`, e não `comissaoDe`: estes dois cards falam
+ * de CAIXA, e a correção de divergência muda o que sai. Os cards Pendente e
+ * Aprovado continuam em comissão pura — eles falam de desempenho, e um acerto
+ * de pagamento do mês passado não é desempenho deste.
  */
 export function totalPagoPix(
   visiveis: PixAutoAcordo[],
@@ -197,7 +203,7 @@ export function totalPagoPix(
   const soma = (linhas: PixAutoAcordo[]): TotalPix => ({
     qtd:      linhas.length,
     valor:    linhas.reduce((acc, i) => acc + Number(i.valor), 0),
-    comissao: linhas.reduce((acc, i) => acc + comissaoDe(i, pctPorSetor), 0),
+    comissao: linhas.reduce((acc, i) => acc + valorAPagarDe(i, pctPorSetor), 0),
   });
   return {
     pago:   soma(visiveis.filter(i => i.pago)),

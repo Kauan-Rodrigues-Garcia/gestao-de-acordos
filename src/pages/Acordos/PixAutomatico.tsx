@@ -22,7 +22,7 @@ import {
   Zap, Plus, RefreshCw, Search, X, Check, XCircle, Trash2, Undo2,
   Clock, CheckCircle2, Percent, Hash, DollarSign, User, Layers, Save,
   Copy, Upload, Download, Building2, Lock,
-  Pencil, Banknote, AlertTriangle, History,
+  Pencil, Banknote, AlertTriangle, History, Scale, Eraser,
 } from 'lucide-react';
 import { read as xlsxRead, utils as xlsxUtils, write as xlsxWrite } from '@e965/xlsx';
 import { toast } from 'sonner';
@@ -79,11 +79,31 @@ import {
   purgarLixeiraPixExpirada, type PixLixeiraItem,
   fetchLogPix, type PixLogItem,
   setPermiteRegistroOperador, normalizarNr, fetchNrsBloqueados,
-  comissaoDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
+  comissaoDe, valorAPagarDe, formatarCopiaPix, criarAcordosPixLote, editarAcordoPix,
   marcarComissaoPaga, fetchMetasPixEquipes, upsertMetaPixEquipe,
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
-  type LinhaPixLote, type PixAutoMeta,
+  fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
+  type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo,
 } from '@/services/pix_automatico.service';
+import { PixSaldoPainel } from './PixSaldoPainel';
+import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
+import { ValorAnimado } from '@/components/ValorAnimado';
+import { LinhaViva } from '@/components/LinhaViva';
+import { AnimatePresence } from 'framer-motion';
+
+/**
+ * Dois conjuntos têm o mesmo conteúdo?
+ *
+ * `fetchNrsBloqueados` devolve um `Set` novo a cada leitura, e a aba recarrega
+ * depois de toda ação. Guardar o objeto novo faria re-renderizar quem depende
+ * dele — o formulário de registro — com exatamente os mesmos NRs dentro.
+ */
+function conjuntosIguais(a: Set<string>, b: Set<string>): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
+}
 
 const STATUS_INFO: Record<PixAutoStatus, { label: string; cls: string }> = {
   pendente:    { label: 'Pendente',    cls: 'bg-sky-500/10 text-sky-500 border-sky-500/30' },
@@ -160,6 +180,13 @@ export function PixAutomatico() {
    */
   const podeAgirSobreOutros = isPerfilAdminOuLider(cargo);
   const podeEditarConfig = temPermissao('pix_editar_configuracoes');
+  /*
+   * Corrigir valor divergente mexe em dinheiro que vai sair, e é anotado em
+   * OUTRA pessoa — daí exigir as duas coisas, exatamente como
+   * `fn_pix_pode_ajustar_saldo` exige no banco. Se a tela pedisse menos que o
+   * banco, o botão apareceria e a gravação falharia sem explicação.
+   */
+  const podeAjustarSaldo = podeVerDeOutros && temPermissao('pix_ajustar_saldo');
 
   const [itens, setItens]           = useState<PixAutoAcordo[]>([]);
   const [configs, setConfigs]       = useState<Record<string, PixAutoConfig>>({});
@@ -167,6 +194,8 @@ export function PixAutomatico() {
   const [equipes, setEquipes]       = useState<{ id: string; nome: string }[]>([]);
   const [setores, setSetores]       = useState<{ id: string; nome: string }[]>([]);
   const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
+  const [saldos, setSaldos]         = useState<PixAutoSaldo[]>([]);
+  const [ajustandoId, setAjustandoId] = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
 
   // Form de registro
@@ -280,9 +309,22 @@ export function PixAutomatico() {
     || meuSetor == null
     || (configs[meuSetor]?.permite_registro_operador ?? true);
 
+  /*
+   * `carregar` é chamada depois de TODA ação da aba: aprovar, pagar, excluir,
+   * editar, aplicar correção. Enquanto ela ligava `loading`, cada clique
+   * apagava a tela — cards, filtros e as 100 linhas — para redesenhar quase
+   * tudo igual, e quem tinha rolado até o meio voltava ao topo.
+   *
+   * Agora o esqueleto vale para a primeira carga e para a troca de escopo. A
+   * releitura das ações passa por `reconciliarLista`: só a linha que mudou é
+   * substituída, e as outras 99 mantêm a mesma referência.
+   */
+  const primeiraCargaPix = useRef(true);
+
   const carregar = useCallback(async () => {
     if (!empresa?.id || !perfil?.id) return;
-    setLoading(true);
+    const comEsqueleto = primeiraCargaPix.current;
+    if (comEsqueleto) setLoading(true);
     try {
       // Expurgo dos desaprovados vencidos ANTES de listar: sem job agendado, é
       // a abertura da tela que cobra o prazo. Só líder+ tem a policy — para o
@@ -301,18 +343,29 @@ export function PixAutomatico() {
         }
       }
 
-      const [lista, cfgs, bloqueados] = await Promise.all([
+      const [lista, cfgs, bloqueados, saldosDoEscopo] = await Promise.all([
         fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
         fetchConfigsPix(empresa.id),
         fetchNrsBloqueados(empresa.id),
+        // Mesmo recorte da lista: o operador vê o próprio saldo (ele precisa
+        // saber que há um acerto no nome dele), o líder vê os do setor.
+        fetchSaldosPix(empresa.id, podeVerDeOutros
+          ? { setorId: setorEscopo }
+          : { operadorId: perfil.id }),
       ]);
-      setItens(lista);
+      // Reconciliação: a linha que não mudou volta com a MESMA referência, e
+      // uma releitura sem novidade devolve o array anterior — nesse caso o
+      // React não renderiza nada. Ver `lib/dadosVivos`.
+      setItens(atual => reconciliarLista(atual, lista, { chave: i => i.id }));
+      setSaldos(atual => reconciliarLista(atual, saldosDoEscopo, { chave: s => s.id }));
       const mapa: Record<string, PixAutoConfig> = {};
       cfgs.forEach(c => { mapa[c.setor_id] = { ...c, permite_registro_operador: c.permite_registro_operador ?? true }; });
-      setConfigs(mapa);
-      setNrsBloqueados(bloqueados);
+      setConfigs(atual => reconciliarMapa(atual, mapa));
+      // O Set é reconstruído a cada leitura; sem esta comparação todo consumidor
+      // dele re-renderizaria a cada ação, com o mesmo conteúdo dentro.
+      setNrsBloqueados(atual => conjuntosIguais(atual, bloqueados) ? atual : bloqueados);
 
       if (podeVerDeOutros) {
         // Nomes/equipes/setores para filtros, vínculo e coluna Operador.
@@ -331,14 +384,32 @@ export function PixAutomatico() {
         const [{ data: ops }, { data: eqs }, { data: sets }] = await Promise.all([
           qOps.order('nome'), qEqs.order('nome'), qSets.order('nome'),
         ]);
-        setOperadores(((ops ?? []) as OperadorInfo[]));
-        setEquipes(((eqs ?? []) as { id: string; nome: string }[]));
-        setSetores(((sets ?? []) as { id: string; nome: string }[]));
+        setOperadores(atual => reconciliarLista(
+          atual, (ops ?? []) as OperadorInfo[], { chave: o => o.id }));
+        setEquipes(atual => reconciliarLista(
+          atual, (eqs ?? []) as { id: string; nome: string }[], { chave: e => e.id }));
+        setSetores(atual => reconciliarLista(
+          atual, (sets ?? []) as { id: string; nome: string }[], { chave: x => x.id }));
       }
     } finally {
-      setLoading(false);
+      if (comEsqueleto) setLoading(false);
+      primeiraCargaPix.current = false;
     }
   }, [empresa?.id, perfil?.id, podeVerDeOutros, setorEscopo]);
+
+  // Escopo novo (outro setor, outra empresa) é conteúdo novo: a lista em tela
+  // é de outro recorte, e mantê-la seria apresentá-la como resposta do filtro.
+  useEffect(() => { primeiraCargaPix.current = true; }, [empresa?.id, setorEscopo]);
+
+  /*
+   * A primeira pintura da tabela não anima.
+   *
+   * O comportamento antigo escalonava a entrada das 100 linhas por índice, e
+   * como a lista era refeita a cada ação, aprovar um acordo redesenhava a
+   * tabela inteira em cascata. Agora só quem CHEGA se move.
+   */
+  const jaPintouPix = useRef(false);
+  useEffect(() => { if (!loading) jaPintouPix.current = true; }, [loading]);
 
   useEffect(() => { carregar(); }, [carregar]);
   useEffect(() => { setPctInput(String(pctSetorConfig).replace('.', ',')); }, [pctSetorConfig]);
@@ -442,6 +513,58 @@ export function PixAutomatico() {
   /** Quanto falta para este desaprovado ser excluído. `null` = sem prazo. */
   function prazoDesaprovado(item: PixAutoAcordo): string | null {
     return textoPrazoExpurgo(item.avaliado_em);
+  }
+
+  // ── Saldo de divergência ────────────────────────────────────────────────
+  // O acerto do Pix que saiu com valor errado. Ver `PixSaldoPainel` e a
+  // migration 20260823080000.
+  const saldoPorOperador = useMemo(() => saldosPorOperador(saldos), [saldos]);
+
+  /** NR de cada acordo — a lista de saldos mostra onde a correção está presa. */
+  const nrPorAcordo = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const i of itens) m[i.id] = i.nr_cliente;
+    return m;
+  }, [itens]);
+
+  /**
+   * Esta linha pode receber a correção?
+   *
+   * As três condições são as mesmas que `fn_pix_saldo_aplicar` cobra. Repetir a
+   * régra aqui não é desconfiança da RPC: é o que faz o botão sumir em vez de
+   * aparecer e devolver erro.
+   */
+  function saldoAplicavelNa(item: PixAutoAcordo): PixAutoSaldo | null {
+    if (!podeAjustarSaldo) return null;
+    if (item.status !== 'aprovado' || item.pago) return null;
+    if (item.ajuste_valor != null) return null;
+    const s = saldoPorOperador[item.operador_id];
+    if (!s || s.acordo_id) return null;   // sem saldo, ou já reservado alhures
+    return s;
+  }
+
+  async function aplicarCorrecao(item: PixAutoAcordo) {
+    setAjustandoId(item.id);
+    try {
+      const { ok, error } = await aplicarSaldoNoAcordo(item.id);
+      if (!ok) { toast.error(error ?? 'Não foi possível aplicar a correção.'); return; }
+      toast.success('Correção aplicada. Ela some quando este acordo for marcado como pago.');
+      await carregar();
+    } finally {
+      setAjustandoId(null);
+    }
+  }
+
+  async function retirarCorrecao(item: PixAutoAcordo) {
+    setAjustandoId(item.id);
+    try {
+      const { ok, error } = await retirarSaldoDoAcordo(item.id);
+      if (!ok) { toast.error(error ?? 'Não foi possível retirar a correção.'); return; }
+      toast.success('Correção retirada — o saldo voltou a ficar pendente.');
+      await carregar();
+    } finally {
+      setAjustandoId(null);
+    }
   }
 
   // ── Bônus por meta (card dinâmico) ──────────────────────────────────────
@@ -936,9 +1059,16 @@ export function PixAutomatico() {
   }
 
   async function copiarSelecionados() {
+    // `valorAPagarDe`, e não `comissaoDe`: quem recebe este texto vai PAGAR o
+    // total. Deixar a correção de fora aqui seria mandar o Pix errado de novo,
+    // que é exatamente o que ela existe para consertar.
     const alvos = visiveis
       .filter(i => selecionados.has(i.id))
-      .map(i => ({ acordo: i, comissao: comissaoDe(i, pctPorSetor) }));
+      .map(i => ({
+        acordo: i,
+        comissao: valorAPagarDe(i, pctPorSetor),
+        ajuste: i.ajuste_valor,
+      }));
     if (alvos.length === 0) { toast.error('Nenhum acordo selecionado.'); return; }
     // Só NR e comissão, com o TOTAL somado no fim quando há mais de um — ver
     // `formatarCopiaPix`. Somar isso à mão no WhatsApp é onde o erro entrava.
@@ -1266,12 +1396,18 @@ export function PixAutomatico() {
                     {s.icon}
                     <div>
                       <p className="text-[11px] text-muted-foreground">{s.label} · {s.qtd} acordo{s.qtd !== 1 ? 's' : ''}</p>
-                      <p className="text-lg font-bold font-mono text-foreground leading-tight">{formatCurrency(s.valor)}</p>
+                      {/* Sem o piscar da tela inteira, um total que muda
+                          passaria despercebido. A animacao e o aviso. */}
+                      <ValorAnimado
+                        valor={s.valor} formatar={formatCurrency}
+                        className="block text-lg font-bold font-mono text-foreground leading-tight" />
                     </div>
                   </div>
                   <div className="text-right">
                     <p className="text-[11px] text-muted-foreground">Comissão Pix</p>
-                    <p className={cn('text-lg font-bold font-mono leading-tight', s.comissaoCls)}>{formatCurrency(s.comissao)}</p>
+                    <ValorAnimado
+                      valor={s.comissao} formatar={formatCurrency}
+                      className={cn('block text-lg font-bold font-mono leading-tight', s.comissaoCls)} />
                   </div>
                 </div>
                 {s.rodape && (
@@ -1304,6 +1440,42 @@ export function PixAutomatico() {
           onSalvar={salvarMetaPix}
           parseValor={parseCurrencyInput}
         />
+      )}
+
+      {/* ── Correção de valor divergente (líder+ com a chave) ──
+          Fica perto das metas e longe do formulário de registro de propósito:
+          é acerto de pagamento, não registro de acordo. */}
+      {!loading && podeAjustarSaldo && empresa?.id && (
+        <PixSaldoPainel
+          empresaId={empresa.id}
+          operadores={operadoresFiltro}
+          saldos={saldos}
+          nrPorAcordo={nrPorAcordo}
+          onMudou={carregar}
+        />
+      )}
+
+      {/* O operador não anota saldo, mas precisa saber que há um no nome dele —
+          senão o próximo Pix chega com valor diferente e ninguém explicou. */}
+      {!loading && !podeAjustarSaldo && saldos.length > 0 && (
+        <Card className="border-violet-500/25 bg-violet-500/5">
+          <CardContent className="p-3 flex items-start gap-2">
+            <Scale className="w-4 h-4 text-violet-400 shrink-0 mt-0.5" />
+            <div className="space-y-0.5 min-w-0">
+              <p className="text-xs font-semibold text-foreground">
+                Há correção de valor pendente para você
+              </p>
+              {saldos.map(s => (
+                <p key={s.id} className="text-[11px] text-muted-foreground">
+                  {s.valor > 0
+                    ? `A empresa vai somar ${formatCurrency(s.valor)} num próximo pagamento`
+                    : `A empresa vai descontar ${formatCurrency(Math.abs(s.valor))} num próximo pagamento`}
+                  {s.motivo ? ` — ${s.motivo}` : ''}
+                </p>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Comissão dobrada: os dois requisitos num card só ──
@@ -1605,7 +1777,13 @@ export function PixAutomatico() {
                   </tr>
                 </thead>
                 <tbody>
-                  {daPagina.map((item, i) => {
+                  {/* A tabela nao e mais refeita a cada acao: a releitura
+                      reconcilia e so a linha que mudou troca de objeto. O que
+                      resta animar e a ENTRADA de quem chega e a SAIDA de quem
+                      some — sem escalonamento por indice, que redesenhava as
+                      100 linhas em cascata a cada clique. */}
+                  <AnimatePresence initial={false}>
+                  {daPagina.map((item) => {
                     const comissao = comissaoDe(item, pctPorSetor);
                     const pctLinha = item.status === 'aprovado' && item.pct_comissao != null
                       ? Number(item.pct_comissao)
@@ -1614,9 +1792,7 @@ export function PixAutomatico() {
                     const desaprovado = item.status === 'desaprovado';
                     const emEdicao = editandoId === item.id;
                     return (
-                      <motion.tr key={item.id}
-                        initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: Math.min(i * 0.02, 0.3), duration: 0.25 }}
+                      <LinhaViva key={item.id} nova={jaPintouPix.current}
                         className={cn(
                           'border-b border-border/30 group transition-colors hover:bg-accent/20',
                           desaprovado && 'opacity-60',
@@ -1666,6 +1842,24 @@ export function PixAutomatico() {
                             {formatCurrency(comissao)}
                           </span>
                           <span className="text-[10px] text-muted-foreground ml-1">({fmtPct(pctLinha)})</span>
+                          {/* A correção fica ao lado da comissão, e não somada
+                              dentro dela: quem confere precisa ver os dois
+                              números para saber por que o total mudou. */}
+                          {item.ajuste_valor != null && (
+                            <p
+                              className={cn(
+                                'text-[10px] font-mono font-semibold mt-0.5',
+                                Number(item.ajuste_valor) > 0 ? 'text-emerald-400' : 'text-amber-400',
+                              )}
+                              title={item.ajuste_motivo ?? 'Correção de valor divergente'}
+                            >
+                              {Number(item.ajuste_valor) > 0 ? '+' : '−'}
+                              {formatCurrency(Math.abs(Number(item.ajuste_valor)))} correção
+                              <span className="block text-muted-foreground font-normal">
+                                a pagar {formatCurrency(valorAPagarDe(item, pctPorSetor))}
+                              </span>
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <Badge variant="outline" className={cn('text-[10px] font-semibold', sInfo.cls)}>{sInfo.label}</Badge>
@@ -1747,6 +1941,35 @@ export function PixAutomatico() {
                                 </button>
                               </>
                             )}
+                            {/* Corrigir valor divergente. Só aparece quando há
+                                saldo LIVRE da pessoa e o acordo está aprovado e
+                                não pago — as mesmas três condições que a RPC
+                                cobra, para o botão não prometer o que o banco
+                                vai recusar. */}
+                            {saldoAplicavelNa(item) && (
+                              <button
+                                title={`Aplicar ${formatCurrency(saldoAplicavelNa(item)!.valor)} de correção neste pagamento`}
+                                disabled={ajustandoId === item.id}
+                                onClick={() => aplicarCorrecao(item)}
+                                className="h-7 px-2 rounded-lg flex items-center gap-1 text-[11px] font-semibold text-violet-300 border border-violet-500/30 bg-violet-500/10 hover:bg-violet-500/20 disabled:opacity-50">
+                                {ajustandoId === item.id
+                                  ? <RefreshCw className="w-3 h-3 animate-spin" />
+                                  : <Scale className="w-3 h-3" />}
+                                Corrigir valor
+                              </button>
+                            )}
+                            {/* Retirar a correção só faz sentido antes do
+                                pagamento: depois dele o carimbo é histórico, e
+                                o caminho de volta é desfazer o pagamento. */}
+                            {podeAjustarSaldo && item.ajuste_valor != null && !item.pago && (
+                              <button
+                                title="Retirar a correção deste acordo"
+                                disabled={ajustandoId === item.id}
+                                onClick={() => retirarCorrecao(item)}
+                                className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 disabled:opacity-50">
+                                <Eraser className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                             {/* Pagar só o que está aprovado — é o que o banco aceita. */}
                             {podeAgirSobreOutros && item.status === 'aprovado' && (
                               <button title={item.pago ? 'Desfazer pagamento' : 'Marcar comissão como paga'}
@@ -1786,9 +2009,10 @@ export function PixAutomatico() {
                           </div>
                           )}
                         </td>
-                      </motion.tr>
+                      </LinhaViva>
                     );
                   })}
+                  </AnimatePresence>
                 </tbody>
               </table>
 

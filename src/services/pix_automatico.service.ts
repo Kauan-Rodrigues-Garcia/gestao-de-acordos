@@ -82,6 +82,45 @@ export interface PixAutoAcordo {
   pago_em: string | null;
   pago_por: string | null;
   pago_por_nome: string | null;
+  /**
+   * Correção de divergência carimbada NESTE pagamento.
+   *
+   * Positivo: a empresa devia e está devolvendo aqui. Negativo: a empresa pagou
+   * a mais antes e está descontando aqui. `null` = pagamento sem acerto.
+   *
+   * Fica na linha depois de o saldo ser quitado — é o histórico de "este
+   * pagamento levou R$ 10,00 a mais, e por quê".
+   */
+  ajuste_valor: number | null;
+  ajuste_motivo: string | null;
+  ajuste_em: string | null;
+  ajuste_por: string | null;
+  ajuste_por_nome: string | null;
+  criado_em: string;
+  atualizado_em: string;
+}
+
+/**
+ * O que a empresa deve (ou tem a descontar) de uma pessoa no Pix automático.
+ *
+ * Nasce quando a liderança anota a divergência, fica RESERVADO quando alguém o
+ * aplica num acordo aprovado e não pago, e só some quando esse acordo é pago.
+ * Ver a migration `20260823080000` para o ciclo completo.
+ */
+export interface PixAutoSaldo {
+  id: string;
+  empresa_id: string;
+  operador_id: string;
+  operador_nome: string | null;
+  setor_id: string | null;
+  /** Positivo = a empresa deve. Negativo = a empresa tem a descontar. */
+  valor: number;
+  motivo: string | null;
+  /** Acordo em que o saldo está reservado esperando o pagamento. */
+  acordo_id: string | null;
+  reservado_em: string | null;
+  criado_por: string | null;
+  criado_por_nome: string | null;
   criado_em: string;
   atualizado_em: string;
 }
@@ -134,6 +173,26 @@ export function comissaoDe(a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comi
   return Math.round(Number(a.valor) * pct) / 100; // valor × pct ÷ 100, 2 casas
 }
 
+/**
+ * O que de fato sai para o operador nesta linha: a comissão mais a correção de
+ * divergência carimbada nela.
+ *
+ * Existe separada de `comissaoDe` de propósito. A comissão é a conta do
+ * percentual sobre o acordo — ela não muda porque alguém errou um Pix no mês
+ * passado. O acerto é outro fato, com outra origem e outro histórico; somá-los
+ * dentro de `comissaoDe` faria o ranking, a meta e o card de bônus passarem a
+ * contar dinheiro que não é comissão.
+ *
+ * Quem paga usa esta; quem mede desempenho usa `comissaoDe`.
+ */
+export function valorAPagarDe(
+  a: Pick<PixAutoAcordo, 'valor' | 'status' | 'pct_comissao' | 'setor_id' | 'ajuste_valor'>,
+  pctPorSetor: Record<string, number>,
+): number {
+  const bruto = comissaoDe(a, pctPorSetor) + (Number(a.ajuste_valor) || 0);
+  return Math.round(bruto * 100) / 100;
+}
+
 /** Valor numérico BR sem "R$" (ex.: 1234.5 → "1.234,50"). */
 function valorBR(v: number): string {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -160,12 +219,32 @@ export function formatarLinhaPix(a: Pick<PixAutoAcordo, 'nr_cliente'>): string {
  * comissão por linha não haveria valor nenhum no texto.
  */
 export function formatarCopiaPix(
-  itens: { acordo: Pick<PixAutoAcordo, 'nr_cliente'>; comissao: number }[],
+  itens: {
+    acordo: Pick<PixAutoAcordo, 'nr_cliente'>;
+    /** Já com a correção somada, quando houver — ver `valorAPagarDe`. */
+    comissao: number;
+    /**
+     * Correção de divergência desta linha, quando houver.
+     *
+     * Ganha uma linha própria antes do total. Sem ela, quem recebe o texto
+     * somaria os códigos de cabeça, não bateria com o total e voltaria a
+     * perguntar — que é justamente o que este formato existe para evitar.
+     */
+    ajuste?: number | null;
+  }[],
 ): string {
   if (itens.length === 0) return '';
   const linhas = itens.map(i => formatarLinhaPix(i.acordo));
   const total = itens.reduce((s, i) => s + i.comissao, 0);
-  return [...linhas, `R$ ${valorBR(total)}`].join('\n');
+
+  const correcoes = itens
+    .filter(i => Number(i.ajuste) !== 0 && i.ajuste != null)
+    .map(i => {
+      const v = Number(i.ajuste);
+      return `Correção no ${i.acordo.nr_cliente}: ${v > 0 ? '+' : '−'}R$ ${valorBR(Math.abs(v))}`;
+    });
+
+  return [...linhas, ...correcoes, `R$ ${valorBR(total)}`].join('\n');
 }
 
 // ── Acordos ────────────────────────────────────────────────────────────────
@@ -951,4 +1030,139 @@ export async function setPermiteRegistroOperador(p: {
     }, { onConflict: 'empresa_id,setor_id' });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
+}
+
+// ── Saldo de divergência ───────────────────────────────────────────────────
+//
+// O acerto de quando o Pix saiu com valor errado. Positivo: a empresa pagou de
+// menos e deve. Negativo: pagou de mais e vai descontar. O ciclo inteiro está
+// no cabeçalho da migration `20260823080000`.
+//
+// Toda escrita passa por RPC: aplicar e retirar mexem em `pix_automatico_saldos`
+// e em `pix_automatico_acordos` ao mesmo tempo, e as duas precisam acontecer ou
+// nenhuma. Não há policy de INSERT/UPDATE/DELETE na tabela de saldos — um
+// UPDATE direto conseguiria mudar o valor de um saldo já reservado, que é
+// exatamente o que as RPCs impedem.
+
+/**
+ * Saldos abertos da empresa. `setorId` recorta pelo setor CARIMBADO na linha —
+ * o mesmo critério de `fetchAcordosPix`, para o líder não ver pendência de
+ * setor que ele não acompanha.
+ *
+ * Migration ausente → lista vazia, no padrão do resto do arquivo: o recurso
+ * some da tela e o Pix continua funcionando.
+ */
+export async function fetchSaldosPix(
+  empresaId: string,
+  opts?: { operadorId?: string; setorId?: string | null },
+): Promise<PixAutoSaldo[]> {
+  let q = supabase
+    .from('pix_automatico_saldos')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .order('atualizado_em', { ascending: false });
+  if (opts?.operadorId) q = q.eq('operador_id', opts.operadorId);
+  if (opts?.setorId)    q = q.eq('setor_id', opts.setorId);
+
+  const { data, error } = await q;
+  if (error) {
+    console.warn('[pix_automatico.service] fetchSaldosPix:', error.message);
+    return [];
+  }
+  return (data as unknown as PixAutoSaldo[]) ?? [];
+}
+
+/** Mapa `operador_id → saldo`, do jeito que a tabela e o formulário consomem. */
+export function saldosPorOperador(saldos: PixAutoSaldo[]): Record<string, PixAutoSaldo> {
+  const mapa: Record<string, PixAutoSaldo> = {};
+  for (const s of saldos) mapa[s.operador_id] = s;
+  return mapa;
+}
+
+/**
+ * Traduz o erro do banco para uma frase que explica o que fazer.
+ *
+ * Os códigos vêm das RPCs da migration. Sem esta tradução a tela mostraria
+ * "new row violates..." ou o texto cru do RAISE, que não diz a ninguém qual é
+ * o próximo passo.
+ */
+function mensagemSaldo(bruta: string): string {
+  const t = bruta;
+  if (t.includes('PIX_SALDO_SEM_PERMISSAO'))
+    return 'Você não tem permissão para corrigir valor divergente.';
+  if (t.includes('PIX_SALDO_RESERVADO'))
+    return 'Este saldo já está aplicado num acordo aguardando pagamento. Retire a correção de lá antes.';
+  if (t.includes('PIX_SALDO_INEXISTENTE'))
+    return 'Não há saldo de divergência para este operador.';
+  if (t.includes('PIX_SALDO_JA_APLICADO'))
+    return 'Este acordo já carrega uma correção.';
+  if (t.includes('PIX_SALDO_JA_PAGO'))
+    return 'A comissão deste acordo já foi paga. Desfaça o pagamento antes.';
+  if (t.includes('PIX_SALDO_SO_APROVADO'))
+    return 'A correção só entra em acordo aprovado e ainda não pago.';
+  if (t.includes('PIX_SALDO_SEM_CORRECAO'))
+    return 'Este acordo não carrega correção.';
+  if (t.includes('PIX_SALDO_OPERADOR'))
+    return 'Operador não encontrado nesta empresa.';
+  if (t.includes('PIX_SALDO_ACORDO'))
+    return 'Registro não encontrado — recarregue a lista.';
+  if (t.includes('PIX_SALDO_EMPRESA'))
+    return 'Este registro é de outra empresa.';
+  if (/function|does not exist|schema cache/i.test(t))
+    return 'A correção de valor divergente ainda não está disponível neste banco.';
+  return t;
+}
+
+/**
+ * Anota o saldo de um operador.
+ *
+ * `somar` distingue as duas intenções que a tela oferece: «achei outra
+ * divergência» soma ao que já existe; «eu tinha digitado errado» substitui.
+ * Adivinhar qual delas é errar metade das vezes.
+ *
+ * Valor resultante zero apaga o saldo — saldo zerado e saldo inexistente são a
+ * mesma coisa, e uma linha com 0 apareceria na tela como pendência que não pende.
+ */
+export async function definirSaldoPix(p: {
+  empresaId: string;
+  operadorId: string;
+  valor: number;
+  motivo?: string | null;
+  somar?: boolean;
+}): Promise<{ ok: boolean; saldo?: PixAutoSaldo | null; error?: string }> {
+  if (!Number.isFinite(p.valor)) return { ok: false, error: 'Valor inválido.' };
+
+  const { data, error } = await supabase.rpc('fn_pix_saldo_definir', {
+    p_empresa_id:  p.empresaId,
+    p_operador_id: p.operadorId,
+    p_valor:       p.valor,
+    p_motivo:      p.motivo ?? null,
+    p_somar:       p.somar === true,
+  });
+  if (error) return { ok: false, error: mensagemSaldo(error.message) };
+  return { ok: true, saldo: (data as unknown as PixAutoSaldo | null) ?? null };
+}
+
+/**
+ * Carimba o saldo do operador num acordo aprovado e ainda não pago.
+ *
+ * O saldo fica RESERVADO ali — ainda existe, e só some quando esse acordo for
+ * marcado como pago. É o que o pedido descreve: o valor não se limpa ao aplicar
+ * a correção, se limpa quando o pagamento com ela acontece.
+ */
+export async function aplicarSaldoNoAcordo(
+  acordoId: string,
+): Promise<{ ok: boolean; acordo?: PixAutoAcordo; error?: string }> {
+  const { data, error } = await supabase.rpc('fn_pix_saldo_aplicar', { p_acordo_id: acordoId });
+  if (error) return { ok: false, error: mensagemSaldo(error.message) };
+  return { ok: true, acordo: (data as unknown as PixAutoAcordo) ?? undefined };
+}
+
+/** Tira a correção de um acordo ainda não pago; o saldo volta a ficar livre. */
+export async function retirarSaldoDoAcordo(
+  acordoId: string,
+): Promise<{ ok: boolean; acordo?: PixAutoAcordo; error?: string }> {
+  const { data, error } = await supabase.rpc('fn_pix_saldo_retirar', { p_acordo_id: acordoId });
+  if (error) return { ok: false, error: mensagemSaldo(error.message) };
+  return { ok: true, acordo: (data as unknown as PixAutoAcordo) ?? undefined };
 }

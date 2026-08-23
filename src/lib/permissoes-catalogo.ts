@@ -693,6 +693,24 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Pix Automático', tenants: ['bookplay'],
     padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
   },
+  {
+    key: 'pix_ajustar_saldo', label: 'Pix: corrigir valor divergente',
+    descricao:
+      'Anotar quanto a empresa pagou a mais ou a menos a uma pessoa, e aplicar '
+      + 'essa correção num próximo pagamento — mexe em dinheiro que vai sair',
+    grupo: 'Pix Automático', tenants: ['bookplay'],
+    padrao: { lider: true, elite: true, gerencia: true },
+    /*
+     * Anotar saldo é ação sobre registro alheio: quem só enxerga os próprios
+     * não tem em quem anotar. O banco cobra o mesmo par (ver
+     * `fn_pix_pode_ajustar_saldo`), então declarar aqui é o que impede o painel
+     * de oferecer uma chave que liga e não faz nada.
+     */
+    depende: {
+      chaves: ['pix_escopo_setor', 'pix_escopo_todos_setores'],
+      motivo: 'a correção é anotada em OUTRA pessoa — sem alcance de setor não há em quem anotar',
+    },
+  },
 
   // ── Ações específicas ────────────────────────────────────────────────────
   // Separadas de "abrir a aba": ver o módulo e agir dentro dele são decisões

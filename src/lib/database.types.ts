@@ -3079,6 +3079,11 @@ export type Database = {
       }
       pix_automatico_acordos: {
         Row: {
+          ajuste_em: string | null
+          ajuste_motivo: string | null
+          ajuste_por: string | null
+          ajuste_por_nome: string | null
+          ajuste_valor: number | null
           atualizado_em: string
           avaliado_em: string | null
           avaliado_por: string | null
@@ -3099,6 +3104,11 @@ export type Database = {
           valor: number
         }
         Insert: {
+          ajuste_em?: string | null
+          ajuste_motivo?: string | null
+          ajuste_por?: string | null
+          ajuste_por_nome?: string | null
+          ajuste_valor?: number | null
           atualizado_em?: string
           avaliado_em?: string | null
           avaliado_por?: string | null
@@ -3119,6 +3129,11 @@ export type Database = {
           valor: number
         }
         Update: {
+          ajuste_em?: string | null
+          ajuste_motivo?: string | null
+          ajuste_por?: string | null
+          ajuste_por_nome?: string | null
+          ajuste_valor?: number | null
           atualizado_em?: string
           avaliado_em?: string | null
           avaliado_por?: string | null
@@ -3402,6 +3417,76 @@ export type Database = {
           },
         ]
       }
+      pix_automatico_saldos: {
+        Row: {
+          acordo_id: string | null
+          atualizado_em: string
+          criado_em: string
+          criado_por: string | null
+          criado_por_nome: string | null
+          empresa_id: string
+          id: string
+          motivo: string | null
+          operador_id: string
+          operador_nome: string | null
+          reservado_em: string | null
+          setor_id: string | null
+          valor: number
+        }
+        Insert: {
+          acordo_id?: string | null
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id: string
+          id?: string
+          motivo?: string | null
+          operador_id: string
+          operador_nome?: string | null
+          reservado_em?: string | null
+          setor_id?: string | null
+          valor: number
+        }
+        Update: {
+          acordo_id?: string | null
+          atualizado_em?: string
+          criado_em?: string
+          criado_por?: string | null
+          criado_por_nome?: string | null
+          empresa_id?: string
+          id?: string
+          motivo?: string | null
+          operador_id?: string
+          operador_nome?: string | null
+          reservado_em?: string | null
+          setor_id?: string | null
+          valor?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_saldos_acordo_id_fkey"
+            columns: ["acordo_id"]
+            isOneToOne: false
+            referencedRelation: "pix_automatico_acordos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_saldos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_saldos_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profissionais: {
         Row: {
           atualizado_em: string
@@ -3497,6 +3582,408 @@ export type Database = {
             columns: ["validado_por"]
             isOneToOne: false
             referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_celulas: {
+        Row: {
+          ativo: boolean
+          criado_em: string
+          empresa_id: string
+          id: string
+          nome: string
+          ordem: number
+        }
+        Insert: {
+          ativo?: boolean
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          nome: string
+          ordem?: number
+        }
+        Update: {
+          ativo?: boolean
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          nome?: string
+          ordem?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_celulas_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_config_setores: {
+        Row: {
+          ativo: boolean
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          celula_id: string
+          criado_em: string
+          empresa_id: string
+          id: string
+          setor_id: string
+          tipo_remuneracao: string
+        }
+        Insert: {
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          celula_id: string
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          setor_id: string
+          tipo_remuneracao: string
+        }
+        Update: {
+          ativo?: boolean
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          celula_id?: string
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          setor_id?: string
+          tipo_remuneracao?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_config_setores_celula_id_fkey"
+            columns: ["celula_id"]
+            isOneToOne: false
+            referencedRelation: "rh_celulas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_config_setores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_config_setores_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_dados_operadores: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          cracha: string | null
+          criado_em: string
+          empresa_id: string
+          id: string
+          operador_id: string
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          cracha?: string | null
+          criado_em?: string
+          empresa_id: string
+          id?: string
+          operador_id: string
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          cracha?: string | null
+          criado_em?: string
+          empresa_id?: string
+          id?: string
+          operador_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_dados_operadores_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_dados_operadores_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_fechamentos: {
+        Row: {
+          aberto_em: string
+          aberto_por: string | null
+          aberto_por_nome: string | null
+          atualizado_em: string
+          competencia: string
+          criado_em: string
+          empresa_id: string
+          finalizado_em: string | null
+          finalizado_por: string | null
+          finalizado_por_nome: string | null
+          id: string
+          mes_apuracao: string
+          observacao: string | null
+          prazo: string | null
+          status: string
+        }
+        Insert: {
+          aberto_em?: string
+          aberto_por?: string | null
+          aberto_por_nome?: string | null
+          atualizado_em?: string
+          competencia: string
+          criado_em?: string
+          empresa_id: string
+          finalizado_em?: string | null
+          finalizado_por?: string | null
+          finalizado_por_nome?: string | null
+          id?: string
+          mes_apuracao: string
+          observacao?: string | null
+          prazo?: string | null
+          status?: string
+        }
+        Update: {
+          aberto_em?: string
+          aberto_por?: string | null
+          aberto_por_nome?: string | null
+          atualizado_em?: string
+          competencia?: string
+          criado_em?: string
+          empresa_id?: string
+          finalizado_em?: string | null
+          finalizado_por?: string | null
+          finalizado_por_nome?: string | null
+          id?: string
+          mes_apuracao?: string
+          observacao?: string | null
+          prazo?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_fechamentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_lancamentos: {
+        Row: {
+          atualizado_em: string
+          celula_snapshot: string
+          cracha_snapshot: string | null
+          criado_em: string
+          decidido_em: string | null
+          decidido_por: string | null
+          decidido_por_nome: string | null
+          devolucao_escopo: string | null
+          empresa_id: string
+          enviado_em: string | null
+          equipe_id_snapshot: string | null
+          equipe_nome_snapshot: string | null
+          fechamento_id: string
+          id: string
+          meta_snapshot: number | null
+          motivo_devolucao: string | null
+          nome_snapshot: string
+          observacao: string | null
+          operador_id: string
+          percentual_snapshot: number | null
+          preenchido_em: string | null
+          preenchido_por: string | null
+          preenchido_por_nome: string | null
+          recebido_snapshot: number | null
+          setor_id_snapshot: string
+          setor_nome_snapshot: string
+          status: string
+          tipo_remuneracao_snapshot: string
+          validado_em: string | null
+          validado_por: string | null
+          validado_por_nome: string | null
+          valor: number | null
+        }
+        Insert: {
+          atualizado_em?: string
+          celula_snapshot: string
+          cracha_snapshot?: string | null
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          decidido_por_nome?: string | null
+          devolucao_escopo?: string | null
+          empresa_id: string
+          enviado_em?: string | null
+          equipe_id_snapshot?: string | null
+          equipe_nome_snapshot?: string | null
+          fechamento_id: string
+          id?: string
+          meta_snapshot?: number | null
+          motivo_devolucao?: string | null
+          nome_snapshot: string
+          observacao?: string | null
+          operador_id: string
+          percentual_snapshot?: number | null
+          preenchido_em?: string | null
+          preenchido_por?: string | null
+          preenchido_por_nome?: string | null
+          recebido_snapshot?: number | null
+          setor_id_snapshot: string
+          setor_nome_snapshot: string
+          status?: string
+          tipo_remuneracao_snapshot: string
+          validado_em?: string | null
+          validado_por?: string | null
+          validado_por_nome?: string | null
+          valor?: number | null
+        }
+        Update: {
+          atualizado_em?: string
+          celula_snapshot?: string
+          cracha_snapshot?: string | null
+          criado_em?: string
+          decidido_em?: string | null
+          decidido_por?: string | null
+          decidido_por_nome?: string | null
+          devolucao_escopo?: string | null
+          empresa_id?: string
+          enviado_em?: string | null
+          equipe_id_snapshot?: string | null
+          equipe_nome_snapshot?: string | null
+          fechamento_id?: string
+          id?: string
+          meta_snapshot?: number | null
+          motivo_devolucao?: string | null
+          nome_snapshot?: string
+          observacao?: string | null
+          operador_id?: string
+          percentual_snapshot?: number | null
+          preenchido_em?: string | null
+          preenchido_por?: string | null
+          preenchido_por_nome?: string | null
+          recebido_snapshot?: number | null
+          setor_id_snapshot?: string
+          setor_nome_snapshot?: string
+          status?: string
+          tipo_remuneracao_snapshot?: string
+          validado_em?: string | null
+          validado_por?: string | null
+          validado_por_nome?: string | null
+          valor?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_lancamentos_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_lancamentos_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "rh_fechamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_lancamentos_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      rh_eventos: {
+        Row: {
+          autor_id: string | null
+          autor_nome: string | null
+          criado_em: string
+          descricao: string
+          empresa_id: string
+          equipe_id: string | null
+          escopo: string
+          fechamento_id: string
+          id: string
+          lancamento_id: string | null
+          motivo: string | null
+          setor_id: string | null
+          tipo: string
+          valor_anterior: number | null
+          valor_novo: number | null
+        }
+        Insert: {
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          descricao: string
+          empresa_id: string
+          equipe_id?: string | null
+          escopo: string
+          fechamento_id: string
+          id?: string
+          lancamento_id?: string | null
+          motivo?: string | null
+          setor_id?: string | null
+          tipo: string
+          valor_anterior?: number | null
+          valor_novo?: number | null
+        }
+        Update: {
+          autor_id?: string | null
+          autor_nome?: string | null
+          criado_em?: string
+          descricao?: string
+          empresa_id?: string
+          equipe_id?: string | null
+          escopo?: string
+          fechamento_id?: string
+          id?: string
+          lancamento_id?: string | null
+          motivo?: string | null
+          setor_id?: string | null
+          tipo?: string
+          valor_anterior?: number | null
+          valor_novo?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "rh_eventos_fechamento_id_fkey"
+            columns: ["fechamento_id"]
+            isOneToOne: false
+            referencedRelation: "rh_fechamentos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "rh_eventos_lancamento_id_fkey"
+            columns: ["lancamento_id"]
+            isOneToOne: false
+            referencedRelation: "rh_lancamentos"
             referencedColumns: ["id"]
           },
         ]
@@ -4821,6 +5308,25 @@ export type Database = {
         Returns: undefined
       }
       fn_pix_nr_normalizar: { Args: { p_nr: string }; Returns: string }
+      fn_pix_pode_ajustar_saldo: { Args: Record<string, never>; Returns: boolean }
+      fn_pix_saldo_aplicar: {
+        Args: { p_acordo_id: string }
+        Returns: Database["public"]["Tables"]["pix_automatico_acordos"]["Row"]
+      }
+      fn_pix_saldo_definir: {
+        Args: {
+          p_empresa_id: string
+          p_operador_id: string
+          p_valor: number
+          p_motivo?: string | null
+          p_somar?: boolean
+        }
+        Returns: Database["public"]["Tables"]["pix_automatico_saldos"]["Row"] | null
+      }
+      fn_pix_saldo_retirar: {
+        Args: { p_acordo_id: string }
+        Returns: Database["public"]["Tables"]["pix_automatico_acordos"]["Row"]
+      }
       fn_pix_restaurar_lixeira: { Args: { p_item_id: string }; Returns: string }
       fn_pix_valor_br: { Args: { p_valor: number }; Returns: string }
       fn_pode_autorizar_pedido: {
@@ -4960,6 +5466,70 @@ export type Database = {
         Returns: Json
       }
       fn_user_acesso_multiempresa: { Args: never; Returns: boolean }
+      fn_rh_abrir_competencia: {
+        Args: {
+          p_empresa_id: string
+          p_competencia: string
+          p_mes_apuracao?: string | null
+          p_prazo?: string | null
+        }
+        Returns: Database["public"]["Tables"]["rh_fechamentos"]["Row"]
+      }
+      fn_rh_aprovar_equipe: {
+        Args: { p_fechamento_id: string; p_equipe_id: string }
+        Returns: number
+      }
+      fn_rh_aprovar_operador: {
+        Args: { p_lancamento_id: string }
+        Returns: Database["public"]["Tables"]["rh_lancamentos"]["Row"]
+      }
+      fn_rh_concluir_equipe: {
+        Args: { p_fechamento_id: string; p_equipe_id: string }
+        Returns: number
+      }
+      fn_rh_congelar_percentual: {
+        Args: {
+          p_lancamento_id: string
+          p_percentual: number
+          p_meta: number
+          p_recebido: number
+        }
+        Returns: Database["public"]["Tables"]["rh_lancamentos"]["Row"]
+      }
+      fn_rh_definir_prazo: {
+        Args: { p_fechamento_id: string; p_prazo: string | null; p_motivo?: string | null }
+        Returns: Database["public"]["Tables"]["rh_fechamentos"]["Row"]
+      }
+      fn_rh_devolver_equipe: {
+        Args: { p_fechamento_id: string; p_equipe_id: string; p_motivo: string }
+        Returns: number
+      }
+      fn_rh_devolver_operador: {
+        Args: { p_lancamento_id: string; p_motivo: string }
+        Returns: Database["public"]["Tables"]["rh_lancamentos"]["Row"]
+      }
+      fn_rh_enviar_setor: {
+        Args: { p_fechamento_id: string; p_setor_id: string }
+        Returns: number
+      }
+      fn_rh_equipes_que_lidero: { Args: Record<string, never>; Returns: string[] }
+      fn_rh_finalizar_competencia: {
+        Args: { p_fechamento_id: string }
+        Returns: Database["public"]["Tables"]["rh_fechamentos"]["Row"]
+      }
+      fn_rh_pode: { Args: { p_chave: string }; Returns: boolean }
+      fn_rh_reabrir_competencia: {
+        Args: { p_fechamento_id: string; p_motivo: string }
+        Returns: Database["public"]["Tables"]["rh_fechamentos"]["Row"]
+      }
+      fn_rh_salvar_cracha: {
+        Args: { p_empresa_id: string; p_operador_id: string; p_cracha: string | null }
+        Returns: Database["public"]["Tables"]["rh_dados_operadores"]["Row"]
+      }
+      fn_rh_salvar_lancamento: {
+        Args: { p_lancamento_id: string; p_valor: number; p_observacao?: string | null }
+        Returns: Database["public"]["Tables"]["rh_lancamentos"]["Row"]
+      }
       fn_user_empresa_id: { Args: never; Returns: string }
       fn_user_empresa_is_bookplay: { Args: never; Returns: boolean }
       fn_user_empresa_is_pagueplay: { Args: never; Returns: boolean }
