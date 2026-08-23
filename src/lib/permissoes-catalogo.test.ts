@@ -163,6 +163,25 @@ describe('catálogo — integridade', () => {
     expect(CHAVES_PERMISSAO).not.toContain('ver_acordos_gerais');
   });
 
+  it('toda dependência declarada aponta para chave que existe', () => {
+    /*
+     * Uma `depende.chaves` com erro de digitação criaria o pior tipo de item:
+     * um que a tela marca como «sem efeito» para sempre, e cujo atalho não liga
+     * nada. É o defeito que o `depende` veio corrigir, só que pior.
+     */
+    for (const p of PERMISSOES) {
+      if (!p.depende) continue;
+      expect(p.depende.chaves.length, `${p.key} depende de lista vazia`)
+        .toBeGreaterThan(0);
+      expect(p.depende.motivo.trim(), `${p.key} não explica a dependência`)
+        .not.toBe('');
+      for (const c of p.depende.chaves) {
+        expect(PERMISSOES_POR_CHAVE[c], `${p.key} depende de ${c}, que não existe`)
+          .toBeDefined();
+      }
+    }
+  });
+
   it('só declara tenant conhecido', () => {
     for (const p of PERMISSOES) {
       for (const t of p.tenants ?? []) {

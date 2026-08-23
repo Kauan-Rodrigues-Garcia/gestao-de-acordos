@@ -16,12 +16,18 @@
  * funciona: um cargo pode ter "só os próprios" e "do setor" sem ter "da
  * equipe". Um seletor único mentiria sobre isso.
  */
-import { ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ROTULO_NIVEL, type BlocoDeAba } from '@/lib/permissoes-abas';
 import type { PermissaoMeta } from '@/lib/permissoes-catalogo';
+
+/** «analitico_escopo_setor» → «Do setor», para o atalho falar a língua da tela. */
+function rotuloDaChave(chave: string): string {
+  const nivel = chave.split('_escopo_')[1];
+  return ROTULO_NIVEL[nivel] ?? chave;
+}
 
 interface Props {
   bloco: BlocoDeAba;
@@ -38,6 +44,19 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
   const niveisLigados = bloco.niveis.filter(n => valorDe(n.key)).length;
   const acoesLigadas  = bloco.acoes.filter(a => valorDe(a.key)).length;
 
+  /**
+   * A acao esta ligada mas nao tem onde agir?
+   *
+   * E o caso das cinco abas internas secundarias do Analitico: elas vivem na
+   * visao de setor, e um cargo com alcance «so os proprios» abre a lista
+   * individual, que nao tem regua de abas. Ligadas, nao acontecia nada — e o
+   * painel nao dizia por que.
+   */
+  const semEfeito = (p: PermissaoMeta) =>
+    !!p.depende && !p.depende.chaves.some(k => valorDe(k));
+
+  const inertes = bloco.acoes.filter(a => valorDe(a.key) && semEfeito(a)).length;
+
   /** O resumo do cabeçalho: o que essa aba faz por este cargo, em uma linha. */
   const resumo = !abaLigada
     ? 'aba desligada'
@@ -48,6 +67,7 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
               : 'sem alcance')
           : null,
         bloco.acoes.length > 0 ? `${acoesLigadas} de ${bloco.acoes.length} ações` : null,
+        inertes > 0 ? `${inertes} sem efeito` : null,
       ].filter(Boolean).join(' · ');
 
   return (
@@ -142,6 +162,27 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
                   <div className="flex-1 min-w-0">
                     <p className="text-sm leading-tight">{a.label}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">{a.descricao}</p>
+
+                    {/* Ligada e sem ter onde agir. Em vez de deixar o admin
+                        descobrir sozinho — que foi o que aconteceu —, a linha
+                        diz o motivo e oferece o clique que resolve. */}
+                    {valorDe(a.key) && semEfeito(a) && abaLigada && (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                        <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                          Ligada, mas sem efeito: {a.depende!.motivo}.
+                        </span>
+                        {!somenteLeitura && (
+                          <button
+                            type="button"
+                            onClick={() => alternar(a.depende!.chaves[0])}
+                            className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline"
+                          >
+                            Ligar «{rotuloDaChave(a.depende!.chaves[0])}»
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <Switch
                     className="shrink-0 mt-0.5"

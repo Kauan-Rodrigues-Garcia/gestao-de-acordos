@@ -115,6 +115,22 @@ export interface PermissaoMeta {
   tenants?: TenantSlug[];
   /** Valor de partida ao semear. Cargo omitido nasce `false`. */
   padrao: Partial<Record<CargoConfiguravel, boolean>>;
+  /**
+   * Chave que só tem efeito se OUTRA estiver ligada.
+   *
+   * Existe porque a tela mentiu uma vez: as cinco abas internas secundárias do
+   * Analítico apareciam no painel como interruptores comuns, o administrador
+   * ligava as oito para o `operador`, e cinco não faziam nada — elas vivem
+   * dentro da visão de setor, e um cargo com alcance «só os próprios» abre a
+   * lista individual, que não tem régua de abas.
+   *
+   * Ligar e não acontecer nada, sem explicação, é o defeito que este projeto
+   * inteiro existe para desfazer. Declarar a dependência aqui faz o painel
+   * mostrá-la — e oferecer o atalho para satisfazê-la.
+   *
+   * `chaves` é um OU: basta uma delas estar ligada.
+   */
+  depende?: { chaves: string[]; motivo: string };
 }
 
 /** Atalhos para os padrões que se repetem. */
@@ -588,26 +604,46 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'analitico_sub_por_operador', label: 'Analítico: Por operador',
     descricao: 'Abrir a aba interna com o recebimento operador a operador',
     grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
+      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
+    },
   },
   {
     key: 'analitico_sub_formas_pagamento', label: 'Analítico: Formas de pagamento',
     descricao: 'Abrir a aba interna de Pix, boleto e cartão por período',
     grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
+      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
+    },
   },
   {
     key: 'analitico_sub_ranking', label: 'Analítico: Ranking',
     descricao: 'Abrir a aba interna do ranking de recebimento',
     grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
+      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
+    },
   },
   {
     key: 'analitico_sub_destaques_dia', label: 'Analítico: Destaques do dia',
     descricao: 'Abrir a aba interna dos destaques do dia',
     grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
+      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
+    },
   },
   {
     key: 'analitico_sub_sem_operador', label: 'Analítico: Sem operador',
     descricao: 'Abrir a aba interna de conferência das linhas sem operador vinculado',
     grupo: 'Analítico', padrao: TODOS,
+    depende: {
+      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
+      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
+    },
   },
 
   /*
