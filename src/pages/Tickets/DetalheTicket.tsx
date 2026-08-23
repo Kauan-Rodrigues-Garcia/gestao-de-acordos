@@ -10,7 +10,7 @@
  * estado e prioridade. Quem abriu cancela, e só enquanto o ticket não fechou. A
  * RLS repete essas duas regras — esconder botão não é proteção.
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Send, Paperclip, Loader2, X, FileText, UserCheck, Ban, History,
 } from 'lucide-react';
@@ -23,6 +23,7 @@ import {
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   listarMensagens, listarEventos, enviarMensagem, mudarStatus, assumirTicket,
   mudarPrioridade, subirAnexo,
@@ -56,15 +57,34 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
   const souAutor = perfil?.id === ticket.abertoPor;
   const fechado = STATUS_FECHADOS.includes(ticket.status);
 
+  /*
+   * A releitura da conversa não recria as mensagens que já estavam na tela.
+   *
+   * Cada mensagem nova relê a lista inteira — é o mais simples, e continua
+   * sendo. O que mudou é que `reconciliarLista` devolve as mensagens antigas
+   * com a MESMA referência, então só a que chegou monta. Antes, uma resposta
+   * num ticket de trinta mensagens remontava as trinta, e a imagem anexada
+   * recarregava junto.
+   */
+  const aplicarConversa = useCallback((m: MensagemTicket[], e: EventoTicket[]) => {
+    setMensagens(atual => reconciliarLista(atual, m, { chave: x => x.id, iguais: iguaisProfundo }));
+    setEventos(atual => reconciliarLista(atual, e, { chave: x => x.id, iguais: iguaisProfundo }));
+  }, []);
+
+  const reler = useCallback(async () => {
+    const [m, e] = await Promise.all([listarMensagens(ticket.id), listarEventos(ticket.id)]);
+    aplicarConversa(m, e);
+  }, [ticket.id, aplicarConversa]);
+
   useEffect(() => {
     let vivo = true;
     (async () => {
       const [m, e] = await Promise.all([listarMensagens(ticket.id), listarEventos(ticket.id)]);
       if (!vivo) return;
-      setMensagens(m); setEventos(e);
+      aplicarConversa(m, e);
     })();
     return () => { vivo = false; };
-  }, [ticket.id, ticket.atualizadoEm]);
+  }, [ticket.id, ticket.atualizadoEm, aplicarConversa]);
 
   useEffect(() => {
     fimRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -87,17 +107,13 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
         ],
       },
       {
-        onEvento: () => {
-          void listarMensagens(ticket.id).then(setMensagens);
-          void listarEventos(ticket.id).then(setEventos);
-        },
-        onReconectado: () => {
-          void listarMensagens(ticket.id).then(setMensagens);
-          void listarEventos(ticket.id).then(setEventos);
-        },
+        onEvento:      () => { void reler(); },
+        onReconectado: () => { void reler(); },
       },
     );
-  }, [ticket.id]);
+    // `reler` está aqui de direito: ela só muda quando o ticket muda, e o
+    // tópico já depende do mesmo id — a assinatura não é recriada à toa.
+  }, [ticket.id, reler]);
 
   /*
    * Prévia do que está para ser enviado.
@@ -153,7 +169,7 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
       if (r.erro) { toast.error(r.erro); return; }
 
       setTexto(''); setPendentes([]);
-      setMensagens(await listarMensagens(ticket.id));
+      await reler();
       onMudou();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : String(e));
@@ -164,7 +180,7 @@ export default function DetalheTicket({ ticket, podeAtender, onMudou }: Props) {
     const r = await acao();
     if (r.erro) { toast.error(r.erro); return; }
     toast.success(ok);
-    setEventos(await listarEventos(ticket.id));
+    await reler();
     onMudou();
   }
 

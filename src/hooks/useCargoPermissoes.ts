@@ -29,11 +29,12 @@
  * `ver_acordos_gerais` num operador não faz ele enxergar acordo alheio — a
  * política do banco continua negando, e isso é o comportamento correto.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { CARGOS_ACESSO_TOTAL } from '@/lib/permissoes-catalogo';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 
 export type PermissoesMap = Record<string, boolean>;
 
@@ -108,13 +109,27 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
   const cargo = perfil?.perfil ?? '';
   const isAdmin = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
 
+  /*
+   * O realtime deste hook dispara a cada salvamento no painel de permissões — e
+   * `loading` aqui não é detalhe de uma tela: `Layout` esconde TODO item de
+   * menu enquanto ele é verdadeiro (`permLoading || !temPermissao(...)`). Ligá-lo
+   * numa releitura fazia a barra lateral inteira sumir e voltar, para todo mundo
+   * logado, a cada vez que alguém mexia numa chave.
+   *
+   * Agora ele vale só para a primeira carga. A releitura reconcilia: linha de
+   * cargo que não mudou volta com a mesma referência, e quando nada mudou o
+   * `setState` recebe o array anterior e não renderiza.
+   */
+  const primeiraCarga = useRef(true);
+
   const fetch = useCallback(async () => {
     if (!empresa?.id || !cargo) {
       setLoading(false);
       return;
     }
 
-    setLoading(true);
+    const comEsqueleto = primeiraCarga.current;
+    if (comEsqueleto) setLoading(true);
     try {
       const [resCargos, resExcecoes] = await Promise.all([
         supabase.from('cargos_permissoes').select('*')
@@ -127,7 +142,11 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
       ]);
 
       if (resCargos.error) throw resCargos.error;
-      setTodasPermissoes((resCargos.data as CargoPermissaoRow[]) ?? []);
+      // `iguaisProfundo`: a coluna `permissoes` é um JSONB, então o objeto vem
+      // novo a cada leitura — a comparação rasa nunca acharia duas linhas iguais.
+      setTodasPermissoes(atual => reconciliarLista(
+        atual, (resCargos.data as CargoPermissaoRow[]) ?? [],
+        { chave: r => r.id, iguais: iguaisProfundo }));
 
       // Tabela nova: tolera ausência para o app não quebrar entre o deploy do
       // frontend e a aplicação da migration.
@@ -135,14 +154,21 @@ export function useCargoPermissoes(): UseCargoPermissoesReturn {
         console.warn('[permissoes] exceções indisponíveis:', resExcecoes.error.message);
         setTodasExcecoes([]);
       } else {
-        setTodasExcecoes((resExcecoes.data as PerfilPermissaoRow[]) ?? []);
+        setTodasExcecoes(atual => reconciliarLista(
+          atual, (resExcecoes.data as PerfilPermissaoRow[]) ?? [],
+          { chave: r => r.id, iguais: iguaisProfundo }));
       }
     } catch (e) {
       console.warn('[useCargoPermissoes] fetch error:', e);
     } finally {
-      setLoading(false);
+      if (comEsqueleto) setLoading(false);
+      primeiraCarga.current = false;
     }
   }, [empresa?.id, cargo]);
+
+  // Trocar de empresa ou de cargo e contexto novo: o mapa em memoria e de
+  // outra pessoa, e responder com ele seria conceder o que ela tinha.
+  useEffect(() => { primeiraCarga.current = true; }, [empresa?.id, cargo]);
 
   useEffect(() => { void fetch(); }, [fetch]);
 

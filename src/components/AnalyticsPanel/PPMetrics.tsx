@@ -1,6 +1,7 @@
 import { DollarSign, BarChart2, Calendar, Clock, XCircle, CreditCard, QrCode } from 'lucide-react';
 import { MetricCard, BannerNaoTabulado } from './SubComponents';
 import { formatCurrency, calcHO } from '@/lib/index';
+import { ValorAnimado } from '@/components/ValorAnimado';
 
 interface PPMetricsProps {
   temLogicaDiretoExtra: boolean;
@@ -68,7 +69,7 @@ export function PPMetrics({
             icon={<QrCode className="w-4 h-4" />}
             accentColor="#06b6d4"
             gradientFrom="#06b6d4"
-            value={<span className="text-cyan-500">{formatCurrency(pixBruto)}</span>}
+            value={<ValorAnimado valor={pixBruto} formatar={formatCurrency} className="text-cyan-500" />}
             sub={`H.O.: ${formatCurrency(pixHO)}`}
           />
           <MetricCard
@@ -76,7 +77,7 @@ export function PPMetrics({
             icon={<CreditCard className="w-4 h-4" />}
             accentColor="#8b5cf6"
             gradientFrom="#8b5cf6"
-            value={<span className="text-violet-500">{formatCurrency(cartaoBruto)}</span>}
+            value={<ValorAnimado valor={cartaoBruto} formatar={formatCurrency} className="text-violet-500" />}
             sub={`H.O.: ${formatCurrency(cartaoHO)}`}
           />
         </div>
@@ -91,7 +92,7 @@ export function PPMetrics({
               accentColor="#10b981"
               gradientFrom="#10b981"
               trend="up"
-              value={<span className="text-emerald-500">{formatCurrency(valorHODireto)}</span>}
+              value={<ValorAnimado valor={valorHODireto} formatar={formatCurrency} className="text-emerald-500" />}
               sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoDireto)}`}
             />
             <MetricCard
@@ -100,7 +101,7 @@ export function PPMetrics({
               accentColor="#7c3aed"
               gradientFrom="#7c3aed"
               trend="up"
-              value={<span className="text-violet-500">{formatCurrency(valorHOExtra)}</span>}
+              value={<ValorAnimado valor={valorHOExtra} formatar={formatCurrency} className="text-violet-500" />}
               sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''} · 24,96% de ${formatCurrency(valorRecebidoExtra)}`}
             />
             <MetricCard
@@ -127,7 +128,7 @@ export function PPMetrics({
               icon={<DollarSign className="w-4 h-4" />}
               accentColor="#22c55e"
               gradientFrom="#22c55e"
-              value={<span className="text-emerald-500">{formatCurrency(valorRecebidoDireto)}</span>}
+              value={<ValorAnimado valor={valorRecebidoDireto} formatar={formatCurrency} className="text-emerald-500" />}
               sub={`${qtdDireto} pago${qtdDireto !== 1 ? 's' : ''}`}
             />
             <MetricCard
@@ -135,7 +136,7 @@ export function PPMetrics({
               icon={<DollarSign className="w-4 h-4" />}
               accentColor="#8b5cf6"
               gradientFrom="#8b5cf6"
-              value={<span className="text-violet-500">{formatCurrency(valorRecebidoExtra)}</span>}
+              value={<ValorAnimado valor={valorRecebidoExtra} formatar={formatCurrency} className="text-violet-500" />}
               sub={`${qtdExtra} pago${qtdExtra !== 1 ? 's' : ''}`}
             />
             <MetricCard
@@ -169,7 +170,7 @@ export function PPMetrics({
               accentColor="#6366f1"
               gradientFrom="#6366f1"
               trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
-              value={formatCurrency(valorAgendadoRestanteMes)}
+              value={<ValorAnimado valor={valorAgendadoRestanteMes} formatar={formatCurrency} />}
               sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
             />
             <MetricCard
@@ -178,7 +179,7 @@ export function PPMetrics({
               accentColor="#ef4444"
               gradientFrom="#ef4444"
               trend={valorNaoPago > 0 ? 'down' : 'neutral'}
-              value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+              value={<ValorAnimado valor={valorNaoPago} formatar={formatCurrency} className="text-red-500" />}
               sub={`${totalNaoPagos} acordo${totalNaoPagos !== 1 ? 's' : ''} no mês`}
             />
           </div>
@@ -208,7 +209,7 @@ export function PPMetrics({
               accentColor="#6366f1"
               gradientFrom="#6366f1"
               trend="neutral"
-              value={formatCurrency(valorHOAgendado)}
+              value={<ValorAnimado valor={valorHOAgendado} formatar={formatCurrency} />}
               sub={`Bruto agendado: ${formatCurrency(valorAgendadoMes)}`}
             />
             <MetricCard
@@ -256,7 +257,7 @@ export function PPMetrics({
               accentColor="#ef4444"
               gradientFrom="#ef4444"
               trend={valorNaoPago > 0 ? 'down' : 'neutral'}
-              value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+              value={<ValorAnimado valor={valorNaoPago} formatar={formatCurrency} className="text-red-500" />}
               sub={`${totalNaoPagos} acordo${totalNaoPagos !== 1 ? 's' : ''} no mês`}
             />
           </div>

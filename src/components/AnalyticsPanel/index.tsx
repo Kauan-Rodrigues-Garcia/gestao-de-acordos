@@ -45,6 +45,7 @@ import {
 // segue no repositório enquanto houver quem o importe.
 import { PPMetrics } from './PPMetrics';
 import { CHART_RECEBIDO } from './constants';
+import { ValorAnimado } from '@/components/ValorAnimado';
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -386,7 +387,7 @@ export function AnalyticsPanel({
         icon={<Calendar className="w-4 h-4" />}
         accentColor="#6366f1"
         trend="neutral"
-        value={formatCurrency(valorAgendadoMes)}
+        value={<ValorAnimado valor={valorAgendadoMes} formatar={formatCurrency} />}
         sub={`${totalAcordosMes} acordos`}
       />
       <MetricCard
@@ -394,7 +395,7 @@ export function AnalyticsPanel({
         icon={<XCircle className="w-4 h-4" />}
         accentColor="#ef4444"
         trend={valorNaoPago > 0 ? 'down' : 'neutral'}
-        value={<span className="text-red-500">{formatCurrency(valorNaoPago)}</span>}
+        value={<ValorAnimado valor={valorNaoPago} formatar={formatCurrency} className="text-red-500" />}
         sub={`${totalNaoPagos} acordos`}
       />
       {/* "Hoje" só existe dentro do mês corrente. Num mês fechado este card
@@ -404,7 +405,7 @@ export function AnalyticsPanel({
           label="Agendado hoje"
           icon={<Clock className="w-4 h-4" />}
           accentColor="#f59e0b"
-          value={formatCurrency(valorAgendadoHoje)}
+          value={<ValorAnimado valor={valorAgendadoHoje} formatar={formatCurrency} />}
         />
       )}
       <MetricCard
@@ -420,7 +421,7 @@ export function AnalyticsPanel({
           icon={<Clock className="w-4 h-4" />}
           accentColor="#a855f7"
           trend={valorAgendadoRestanteMes > 0 ? 'neutral' : 'up'}
-          value={<span className="text-purple-500">{formatCurrency(valorAgendadoRestanteMes)}</span>}
+          value={<ValorAnimado valor={valorAgendadoRestanteMes} formatar={formatCurrency} className="text-purple-500" />}
           sub={`${totalAgendadoRestanteMes} pendente${totalAgendadoRestanteMes !== 1 ? 's' : ''} · exclui pago/não pago`}
         />
       )}
@@ -439,7 +440,7 @@ export function AnalyticsPanel({
         label="Ticket médio"
         icon={<TrendingUp className="w-4 h-4" />}
         accentColor="#6366f1"
-        value={<span className="text-indigo-500">{formatCurrency(ticketMedio)}</span>}
+        value={<ValorAnimado valor={ticketMedio} formatar={formatCurrency} className="text-indigo-500" />}
         sub={ticketMedioSub}
       />
     </div>

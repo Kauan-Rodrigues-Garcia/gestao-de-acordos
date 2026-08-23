@@ -3,12 +3,28 @@
  *
  * Ao montar, marca como vistos os registros não vistos do operador atual
  * (tag "novo" desaparece após a primeira visualização do mês).
+ *
+ * ## A releitura não troca a tela
+ *
+ * Uma importação insere em lote e dispara um evento por linha. Até aqui o
+ * `onEvento` chamava a mesma função da carga inicial, que liga `loading` — e a
+ * tabela de 2.400 linhas virava esqueleto, com quem estava lendo perdendo o
+ * scroll, para no fim reaparecer quase idêntica.
+ *
+ * Agora `loading` vale só para a PRIMEIRA carga e para a troca de filtro (mês,
+ * operador — recortes diferentes, conteúdo diferente). A releitura do realtime
+ * passa por `reconciliarLista`: as linhas iguais voltam com a mesma referência
+ * e, quando nada mudou, o próprio array anterior volta e o React não renderiza.
+ *
+ * A comparação é PROFUNDA porque a linha traz `perfis` (join) e
+ * `pagamentos_detalhados` (array) — com a rasa, nenhuma linha seria igual.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import type { AnaliticoRecebimento } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarAnalitico, marcarVistoAnalitico } from '@/services/analitico/analitico.service';
@@ -35,9 +51,16 @@ export function useAnalitico(options: UseAnaliticoOptions) {
 
   const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
 
-  const fetchDados = useCallback(async () => {
+  /**
+   * `silencioso` = a tela já tem conteúdo e alguém está lendo.
+   *
+   * O padrão é falso para que a troca de filtro continue mostrando esqueleto:
+   * o conteúdo em tela é de OUTRO recorte, e deixá-lo visível enquanto o novo
+   * não chega seria apresentá-lo como resposta do filtro recém-escolhido.
+   */
+  const fetchDados = useCallback(async (silencioso = false) => {
     if (!empresa?.id || !perfil?.id) return;
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     setError(null);
 
     let operadorId: string | null | undefined = undefined;
@@ -55,12 +78,21 @@ export function useAnalitico(options: UseAnaliticoOptions) {
       operadorId,
     });
 
-    if (err) { setError(err); setLoading(false); return; }
+    if (err) {
+      setError(err);
+      // Falha em releitura mantém o que está na tela: é dado de um minuto
+      // atrás, e vale mais que uma tabela vazia por queda de rede.
+      if (!silencioso) setLoading(false);
+      return;
+    }
 
-    setDados(data);
+    // A releitura substitui só o que mudou. Ver o cabeçalho.
+    setDados(atual => reconciliarLista(atual, data, {
+      chave: d => d.id, iguais: iguaisProfundo,
+    }));
     const naoVistos = data.filter(d => !d.visto && d.operador_id === perfil.id).length;
     setNovosCount(naoVistos);
-    setLoading(false);
+    if (!silencioso) setLoading(false);
     hasLoadedOnce.current = true;
   }, [empresa?.id, perfil?.id, options.mes, options.operadorFiltro, options.apenasOrfaos, isLiderMais]);
 
@@ -119,11 +151,11 @@ export function useAnalitico(options: UseAnaliticoOptions) {
                 duration: 4000,
               });
             }
-            void fetchRef.current();
+            void fetchRef.current(true);   // silencioso: a tabela fica na tela
           }, 1500);
         },
         // Sem toast: a reconexão é assunto interno, não "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(); },
+        onReconectado: () => { void fetchRef.current(true); },
       },
     );
   }, [empresa?.id, options.mes]);

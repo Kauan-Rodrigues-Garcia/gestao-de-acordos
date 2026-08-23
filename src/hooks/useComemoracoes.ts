@@ -11,6 +11,7 @@
  */
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import {
   buscarComemoracoes, buscarParabens, parabenizar, finalizarComemoracao,
   buscarMinhasEquipes,
@@ -62,7 +63,12 @@ export function useComemoracoes(empresaId: string | null, habilitado = true) {
     if (res.agoraServidor) {
       desvioRef.current = desvioDoServidor(res.agoraServidor, Date.now());
     }
-    setComemoracoes(res.data);
+    // A releitura do realtime devolve a lista inteira. Sem reconciliar, cada
+    // evento trocaria TODOS os cartoes de comemoracao por objetos novos e o
+    // overlay em cena remontaria no meio da animacao. Ver `lib/dadosVivos`.
+    setComemoracoes(atual => reconciliarLista(atual, res.data, {
+      chave: c => c.id, iguais: iguaisProfundo,
+    }));
     setDbAtiva(res.dbAtiva);
     setErro(res.erro);
     setLoading(false);

@@ -277,6 +277,14 @@ export function useAcordos(filtros?: UseAcordosOptions): UseAcordosResult {
   };
 }
 
+/**
+ * Janela de agrupamento das releituras de métrica disparadas pelo realtime.
+ *
+ * Exportada para o teste não cravar o número: quem muda a constante muda o
+ * teste junto, sem descobrir por um teste vermelho que não explica nada.
+ */
+export const MS_AGRUPAMENTO_METRICAS = 500;
+
 // ─── Hook de métricas do dashboard ───────────────────────────────────────────
 export function useDashboardMetricas() {
   const { perfil }  = useAuth();
@@ -304,12 +312,36 @@ export function useDashboardMetricas() {
     refetchOnWindowFocus: false,
   });
 
-  // Invalida cache de métricas em qualquer evento do realtime
+  /*
+   * Invalida o cache de métricas em qualquer evento do realtime — agrupado.
+   *
+   * Sem o agrupamento, uma importação de 300 acordos disparava 300 eventos e,
+   * com eles, 300 releituras de `status, valor, vencimento` da empresa inteira.
+   * O resultado era o oposto do pretendido: a tela ficava MAIS lenta justamente
+   * quando havia mais dado chegando.
+   *
+   * Meio segundo é curto o bastante para parecer instantâneo a quem acabou de
+   * marcar um acordo como pago, e longo o bastante para uma rajada de
+   * importação virar uma consulta só.
+   *
+   * O React Query preserva a identidade das partes que não mudaram
+   * (`structuralSharing`, padrão na v5), então uma releitura que devolve os
+   * mesmos números não re-renderiza os cards.
+   */
+  const agrupador = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     subscribe(instanceId, () => {
-      queryClient.invalidateQueries({ queryKey: ['metricas-dashboard', empresaId ?? ''] });
+      if (agrupador.current) clearTimeout(agrupador.current);
+      agrupador.current = setTimeout(() => {
+        agrupador.current = null;
+        queryClient.invalidateQueries({ queryKey: ['metricas-dashboard', empresaId ?? ''] });
+      }, MS_AGRUPAMENTO_METRICAS);
     });
-    return () => unsubscribe(instanceId);
+    return () => {
+      if (agrupador.current) clearTimeout(agrupador.current);
+      unsubscribe(instanceId);
+    };
   }, [subscribe, unsubscribe, instanceId, queryClient, empresaId]);
 
   const defaultMetricas: MetricasDashboard = {

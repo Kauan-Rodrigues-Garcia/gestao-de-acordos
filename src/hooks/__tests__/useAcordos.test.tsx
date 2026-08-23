@@ -150,7 +150,7 @@ vi.mock('@/lib/supabase', () => ({
 
 // ── 3. Importa SUT APÓS os mocks ─────────────────────────────────────────────
 
-import { useAcordos, useDashboardMetricas } from '../useAcordos';
+import { useAcordos, useDashboardMetricas, MS_AGRUPAMENTO_METRICAS } from '../useAcordos';
 import type { Acordo } from '@/lib/supabase';
 
 // ── 4. Factories ──────────────────────────────────────────────────────────────
@@ -927,9 +927,37 @@ describe('useDashboardMetricas', () => {
     const [, realtimeCallback] = mockRealtimeSubscribe.mock.calls[0];
     await act(async () => {
       realtimeCallback({ eventType: 'INSERT', newRecord: rows2[1] });
-      await new Promise(r => setTimeout(r, 20));
+      // A releitura e AGRUPADA: uma importacao de 300 acordos dispara 300
+      // eventos, e sem a janela cada um custaria uma varredura da empresa
+      // inteira. Esperar a janela e parte do contrato.
+      await new Promise(r => setTimeout(r, MS_AGRUPAMENTO_METRICAS + 80));
     });
 
     expect(result.current.metricas.total_geral).toBe(2);
+  });
+
+  it('uma rajada de eventos vira UMA releitura, nao uma por evento', async () => {
+    mockPerfilValue.current  = fakePerfil();
+    mockEmpresaValue.current = fakeEmpresa();
+
+    const linha = { status: 'pago', valor: 100, vencimento: '2024-06-01' };
+    supabaseResultsByTable['acordos'] = [
+      { data: [linha], error: null, count: 1 },
+      { data: [linha], error: null, count: 1 },
+      { data: [linha], error: null, count: 1 },
+    ];
+
+    const { result } = renderHook(() => useDashboardMetricas());
+    await esperarMetricas(result);
+    const consultasDepoisDaCarga = supabaseCalls.filter(c => c.table === 'acordos').length;
+
+    const [, realtimeCallback] = mockRealtimeSubscribe.mock.calls[0];
+    await act(async () => {
+      for (let i = 0; i < 10; i++) realtimeCallback({ eventType: 'INSERT', newRecord: linha });
+      await new Promise(r => setTimeout(r, MS_AGRUPAMENTO_METRICAS + 80));
+    });
+
+    const novas = supabaseCalls.filter(c => c.table === 'acordos').length - consultasDepoisDaCarga;
+    expect(novas).toBe(1);
   });
 });

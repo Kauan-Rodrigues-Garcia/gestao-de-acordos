@@ -15,6 +15,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { logger } from '@/lib/logger';
 import {
   buscarSolicitacoes, buscarMensagens, enviarMensagem, marcarConversaLida,
@@ -125,7 +126,12 @@ export function useSolicitacoesWhatsapp(
     if (!empresaId || !habilitado) { setLoading(false); return; }
     const res = await buscarSolicitacoes({ empresaId, setorId, equipeId, dias });
     if (!montadoRef.current) return;
-    setSolicitacoes(res.data);
+    // Cada mensagem nova relia a lista inteira e trocava todos os cartoes por
+    // objetos novos — inclusive o que estava aberto. Reconciliar mantem a
+    // identidade de quem nao mudou. Ver `lib/dadosVivos`.
+    setSolicitacoes(atual => reconciliarLista(atual, res.data, {
+      chave: s => s.id, iguais: iguaisProfundo,
+    }));
     setDbAtiva(res.dbAtiva);
     setErro(res.erro);
     setLoading(false);

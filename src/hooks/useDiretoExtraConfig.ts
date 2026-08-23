@@ -5,8 +5,9 @@
  * da empresa atual + utilitário para resolver se um operador está com a
  * lógica ativada.
  */
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   fetchDiretoExtraConfigs,
@@ -32,13 +33,31 @@ export function useDiretoExtraConfig(): UseDiretoExtraConfigResult {
   const [configs, setConfigs] = useState<DiretoExtraConfig[]>([]);
   const [loading, setLoading] = useState(true);
 
+  /*
+   * `loading` daqui não é um esqueleto de tela: quem consome usa para saber se
+   * já dá para decidir Direto × Extra de um acordo. Ligá-lo a cada evento de
+   * realtime fazia o vínculo "voltar a ser desconhecido" por um instante, e as
+   * telas que dependem disso oscilavam de rótulo.
+   *
+   * Agora ele vale só até a primeira resposta. A releitura reconcilia: config
+   * que não mudou volta com a mesma referência.
+   */
+  const primeiraCarga = useRef(true);
+
   const refetch = useCallback(async () => {
     if (!empresaId) { setConfigs([]); setLoading(false); return; }
-    setLoading(true);
+    const comEsqueleto = primeiraCarga.current;
+    if (comEsqueleto) setLoading(true);
     const data = await fetchDiretoExtraConfigs(empresaId);
-    setConfigs(data);
-    setLoading(false);
+    setConfigs(atual => reconciliarLista(atual, data, {
+      chave: c => c.id, iguais: iguaisProfundo,
+    }));
+    if (comEsqueleto) setLoading(false);
+    primeiraCarga.current = false;
   }, [empresaId]);
+
+  // Empresa nova, cache antigo: volta a merecer espera.
+  useEffect(() => { primeiraCarga.current = true; }, [empresaId]);
 
   useEffect(() => { refetch(); }, [refetch]);
 

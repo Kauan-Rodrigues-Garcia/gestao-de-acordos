@@ -29,6 +29,7 @@ import {
 import type { Notificacao } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista } from '@/lib/dadosVivos';
 import { logger } from '@/lib/logger';
 import {
   fetchNotificacoes, marcarComoLida, marcarTodasLidas as marcarTodasLidasNoBanco,
@@ -109,16 +110,39 @@ export function NotificacoesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // ── Carga ──────────────────────────────────────────────────────────────────
+  /*
+   * A releitura da reconexão não esvazia o painel.
+   *
+   * `refresh` é chamada em duas situações muito diferentes: ao entrar (painel
+   * vazio, `loading` é a resposta certa) e ao reconectar o realtime (painel
+   * cheio, possivelmente aberto e sendo lido). Ligar `loading` na segunda
+   * trocava a lista por "carregando" e fechava o que estava em tela, para
+   * devolver quase sempre exatamente as mesmas notificações.
+   *
+   * A reconciliação faz mais que evitar o piscar: as notificações que já
+   * estavam ali voltam com a MESMA referência, então nada re-renderiza — e a
+   * contagem do sino, que é derivada da lista, não muda de identidade à toa.
+   */
+  const jaCarregou = useRef(false);
+
   const refresh = useCallback(async () => {
-    if (!userId) { setNotificacoes(VAZIO); return; }
-    setLoading(true);
+    if (!userId) { setNotificacoes(VAZIO); jaCarregou.current = false; return; }
+    const comEsqueleto = !jaCarregou.current;
+    if (comEsqueleto) setLoading(true);
     try {
       const dados = await fetchNotificacoes(userId);
-      if (montadoRef.current) setNotificacoes(dados);
+      if (montadoRef.current) {
+        setNotificacoes(atual => reconciliarLista(atual, dados, { chave: n => n.id }));
+        jaCarregou.current = true;
+      }
     } finally {
-      if (montadoRef.current) setLoading(false);
+      if (montadoRef.current && comEsqueleto) setLoading(false);
     }
   }, [userId]);
+
+  // Outra pessoa entrou: a lista em memória é dela, não desta. Volta a merecer
+  // esqueleto.
+  useEffect(() => { jaCarregou.current = false; }, [userId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
 

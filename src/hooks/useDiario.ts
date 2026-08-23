@@ -12,6 +12,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { toast } from 'sonner';
 import type { DiarioRecebimento } from '@/lib/supabase';
 import { assinarTabela } from '@/lib/realtime';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarDiario, marcarVistoDiario } from '@/services/diario/diario.service';
@@ -37,13 +38,21 @@ export function useDiario(options: UseDiarioOptions) {
   const [novosIds, setNovosIds] = useState<Set<string>>(new Set());
   const hasLoadedOnce = useRef(false);
 
-  const fetchDados = useCallback(async () => {
+  /**
+   * `silencioso` = a tela já tem conteúdo e alguém está lendo.
+   *
+   * A importação do diário insere em lote e dispara um evento por linha; até
+   * aqui cada rajada trocava a tabela inteira por esqueleto. Falso por padrão
+   * para que a troca de dia continue mostrando esqueleto — o conteúdo em tela
+   * é de OUTRO dia, e mantê-lo visível seria apresentá-lo como o do dia novo.
+   */
+  const fetchDados = useCallback(async (silencioso = false) => {
     if (!empresa?.id || !perfil?.id || !options.dia) {
       setDados([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silencioso) setLoading(true);
     setError(null);
 
     const { data, error: err } = await buscarDiario({
@@ -52,9 +61,19 @@ export function useDiario(options: UseDiarioOptions) {
       operadorId: options.operadorFiltro,
     });
 
-    if (err) { setError(err); setLoading(false); return; }
+    if (err) {
+      setError(err);
+      // Em releitura o dado antigo fica: é verdade de um minuto atrás, e vale
+      // mais que uma tabela vazia por queda de rede.
+      if (!silencioso) setLoading(false);
+      return;
+    }
 
-    setDados(data);
+    // Linhas iguais voltam com a MESMA referência; lista sem novidade volta
+    // por referência e não renderiza. Ver `lib/dadosVivos`.
+    setDados(atual => reconciliarLista(atual, data, {
+      chave: d => d.id, iguais: iguaisProfundo,
+    }));
 
     // Congela os "novos" da sessão e marca como vistos no banco
     const naoVistosProprios = data.filter(d => !d.visto && d.operador_id === perfil.id);
@@ -66,7 +85,7 @@ export function useDiario(options: UseDiarioOptions) {
       }
     }
 
-    setLoading(false);
+    if (!silencioso) setLoading(false);
     hasLoadedOnce.current = true;
   }, [empresa?.id, perfil?.id, options.dia, options.operadorFiltro, options.marcarVisto]);
 
@@ -102,7 +121,7 @@ export function useDiario(options: UseDiarioOptions) {
             duration: 4000,
           });
         }
-        void fetchRef.current();
+        void fetchRef.current(true);   // silencioso: a tabela fica na tela
       }, 1500);
     };
 
@@ -136,7 +155,7 @@ export function useDiario(options: UseDiarioOptions) {
           agendarRefetch();
         },
         // Sem toast: reconexão não é "chegou importação nova".
-        onReconectado: () => { void fetchRef.current(); },
+        onReconectado: () => { void fetchRef.current(true); },
       },
     );
   }, [empresa?.id, options.dia]);

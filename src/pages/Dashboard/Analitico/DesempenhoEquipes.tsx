@@ -29,7 +29,8 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarTabela } from '@/lib/realtime';
+import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
 import {
@@ -319,7 +320,10 @@ export function DesempenhoEquipes({
     if (isPP) return;
     const { porSetor, dbAtiva } = await buscarContribuicoesReceptivo(empresaId, mes);
     setContribDbAtiva(dbAtiva);
-    if (dbAtiva) { setContrib(porSetor); return; }
+    // Reconciliado: o evento de realtime chega a cada tecla salva do outro
+    // lado, e sem isto todo cartao de equipe do setor re-renderizaria com
+    // exatamente os mesmos numeros dentro.
+    if (dbAtiva) { setContrib(atual => reconciliarMapa(atual, porSetor)); return; }
     // Migration pendente → localStorage antigo, setor por setor.
     const local: Record<string, ContribuicaoReceptivo> = {};
     for (const sid of Object.keys(setores)) {

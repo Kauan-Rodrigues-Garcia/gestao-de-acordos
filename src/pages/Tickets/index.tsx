@@ -8,9 +8,12 @@
  * O filtro padrão esconde o que já fechou. Uma fila que mostra concluído junto
  * com aberto deixa de ser fila em duas semanas.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useSearchParams } from 'react-router-dom';
 import { Plus, ShieldCheck, Inbox, Loader2, Search } from 'lucide-react';
+import { ItemVivo } from '@/components/LinhaViva';
+import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -33,6 +36,24 @@ import DetalheTicket from './DetalheTicket';
 import PainelAtendentes from './PainelAtendentes';
 
 type FiltroStatus = 'abertos' | 'todos' | StatusTicket;
+
+/**
+ * Dois mapas de foto têm o mesmo conteúdo?
+ *
+ * `buscarFotosDosPerfis` devolve um `Map` novo a cada leitura. Guardá-lo direto
+ * faria todos os avatares da fila re-renderizarem a cada evento de realtime,
+ * mesmo com as fotos idênticas — que é o caso quase sempre.
+ */
+function mapaDeFotosIgual(
+  a: Map<string, string | null>, b: Map<string, string | null>,
+): boolean {
+  if (a === b) return true;
+  if (a.size !== b.size) return false;
+  for (const [k, v] of a) {
+    if (!b.has(k) || b.get(k) !== v) return false;
+  }
+  return true;
+}
 
 export default function Tickets() {
   const { empresa } = useEmpresa();
@@ -72,21 +93,57 @@ export default function Tickets() {
     return () => { vivo = false; };
   }, [veDuasEmpresas]);
 
+  /*
+   * A fila não pisca quando alguém mexe num ticket.
+   *
+   * Antes, todo evento de realtime — inclusive de um ticket que nem estava na
+   * lista filtrada — trocava a fila inteira por "Carregando…", e quem estava
+   * rolando voltava ao topo. Agora o esqueleto vale só para a PRIMEIRA carga:
+   * `versao` sobe, a releitura acontece, e `reconciliarLista` devolve os cards
+   * iguais com a mesma referência. Quando nada mudou, devolve o array anterior
+   * e o React não renderiza nada.
+   */
+  const primeiraCarga = useRef(true);
+
   useEffect(() => {
     if (!empresaId) return;
     let vivo = true;
-    setCarregando(true);
+    const comEsqueleto = primeiraCarga.current;
+    if (comEsqueleto) setCarregando(true);
     (async () => {
       const [lista, mapaFotos] = await Promise.all([
         listarTickets(escopo), buscarFotosDosPerfis(),
       ]);
       if (!vivo) return;
-      setTickets(lista);
-      setFotos(mapaFotos);
-      setCarregando(false);
+      setTickets(atual => reconciliarLista(atual, lista, {
+        chave: t => t.id, iguais: iguaisProfundo,
+      }));
+      // O mapa de fotos é reconstruído a cada leitura; sem esta comparação o
+      // `Map` novo re-renderizaria todos os avatares a cada evento.
+      setFotos(atual => mapaDeFotosIgual(atual, mapaFotos) ? atual : mapaFotos);
+      if (comEsqueleto) setCarregando(false);
+      primeiraCarga.current = false;
     })();
     return () => { vivo = false; };
+    // Trocar de empresa é recorte novo: `escopo` volta a merecer esqueleto, e
+    // por isso ele zera o marcador logo abaixo.
   }, [empresaId, escopo, versao]);
+
+  // Recorte diferente = conteúdo diferente. A lista atual é de outra empresa,
+  // e mantê-la enquanto a nova chega seria apresentá-la como resposta.
+  useEffect(() => { primeiraCarga.current = true; }, [escopo]);
+
+  /*
+   * A primeira pintura NÃO anima.
+   *
+   * Sem isto, abrir a aba faria os quarenta cards entrarem de uma vez — efeito
+   * de abertura, não aviso de novidade. `AnimatePresence` só roda `initial` em
+   * quem monta, então depois desta virada só o card que chega de fato se move.
+   */
+  const jaPintou = useRef(false);
+  useEffect(() => {
+    if (!carregando) jaPintou.current = true;
+  }, [carregando]);
 
   /*
    * Tempo real na lista.
@@ -257,8 +314,10 @@ export default function Tickets() {
                 <p className="text-sm">Nenhum ticket por aqui.</p>
               </div>
             )}
+            <AnimatePresence initial={false}>
             {visiveis.map(t => (
-              <button key={t.id} onClick={() => alternar(t.id)}
+              <ItemVivo key={t.id} nova={jaPintou.current}>
+              <button onClick={() => alternar(t.id)}
                 className={`w-full text-left rounded-lg border p-3 transition-colors ${
                   t.id === selecionado
                     ? 'border-primary bg-primary/5'
@@ -318,7 +377,9 @@ export default function Tickets() {
                   </div>
                 </div>
               </button>
+              </ItemVivo>
             ))}
+            </AnimatePresence>
           </div>
         </div>
 
