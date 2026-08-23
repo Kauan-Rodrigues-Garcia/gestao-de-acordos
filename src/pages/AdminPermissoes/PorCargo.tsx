@@ -1,21 +1,29 @@
 /**
  * PorCargo — a permissão que vale para todo mundo daquele cargo.
  *
- * ## O que mudou em relação à tela antiga
+ * ## O desenho, e o que ele conserta
  *
- * 1. **Os oito cargos aparecem.** `ouvidoria` era invisível: `CARGOS_EDITAVEIS`
- *    listava cinco. O cargo existe, tem linha no banco e está em
- *    `PERFIS_LIDER` — só não havia como configurá-lo.
- * 2. **`administrador` e `super_admin` aparecem em leitura**, com a explicação
- *    de por que não são editáveis. Antes sumiam sem motivo aparente, e a
- *    pergunta "por que não posso configurar o administrador?" já foi feita.
- * 3. **O catálogo é recortado pela operação.** Quem entra pela BookPlay não vê
- *    toggle de Ouvidoria, e vice-versa.
+ * 1. **Duas colunas.** Os cargos ficam numa coluna fixa à esquerda, com quantas
+ *    permissões cada um tem. Antes eram pílulas numa fileira no topo: para
+ *    comparar dois cargos era preciso trocar e decorar o que se viu.
+ * 2. **Cartões, não linhas.** Cada permissão é um cartão estreito com o
+ *    interruptor ao lado do rótulo. Em linha de largura total, num monitor
+ *    grande, o controle ficava a mil e seiscentos pixels do texto que governa —
+ *    e é aí que se erra o clique.
+ * 3. **Busca.** Com mais de oitenta chaves, rolar para achar «quem exclui
+ *    equipe» não é navegação, é garimpo.
+ * 4. **A barra de salvar acompanha a rolagem**, porque a alteração acontece no
+ *    fim da página e o botão ficava no começo.
+ *
+ * Os oito cargos aparecem — `ouvidoria` era invisível na versão antiga —, e
+ * `administrador`/`super_admin` aparecem em leitura, com a explicação de por
+ * que não são editáveis.
  */
 import { useMemo, useState } from 'react';
-import { Save, RotateCcw, ShieldCheck, Loader2 } from 'lucide-react';
+import { Save, RotateCcw, ShieldCheck, Loader2, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/lib/supabase';
 import { PERFIL_LABELS } from '@/lib/index';
@@ -25,8 +33,8 @@ import {
   CARGOS_CONFIGURAVEIS, CARGOS_ACESSO_TOTAL,
   catalogoDoTenant, gruposDoTenant, permissoesPadraoDoCargo,
 } from '@/lib/permissoes-catalogo';
-import { cn } from '@/lib/utils';
 import { montarPorAba } from '@/lib/permissoes-abas';
+import { cn } from '@/lib/utils';
 import { GrupoPermissoes } from './GrupoPermissoes';
 import { BlocoAba } from './BlocoAba';
 import { useRascunho } from './useRascunho';
@@ -39,16 +47,17 @@ export function PorCargo() {
 
   const [cargo, setCargo] = useState<string>('operador');
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState('');
   const rascunho = useRascunho<boolean>();
 
   const catalogo = useMemo(() => catalogoDoTenant(tenantSlug), [tenantSlug]);
   const grupos   = useMemo(() => gruposDoTenant(tenantSlug), [tenantSlug]);
 
   /*
-   * O catalogo remontado na ordem em que a pergunta nasce: cargo -> aba -> o
-   * que ele ve e o que ele faz ali. Antes a tela listava por categoria, e
-   * responder "o que o lider pode no Analitico?" exigia cacar a chave da aba
-   * num grupo, o alcance em outro e as acoes num terceiro.
+   * O catálogo remontado na ordem em que a pergunta nasce: cargo → aba → o que
+   * ele vê e o que ele faz ali. Antes a tela listava por categoria, e responder
+   * "o que o líder pode no Analítico?" exigia caçar a chave da aba num grupo, o
+   * alcance em outro e as ações num terceiro.
    */
   const { blocos, avulsos } = useMemo(
     () => montarPorAba(catalogo, grupos),
@@ -56,6 +65,7 @@ export function PorCargo() {
   );
 
   const acessoTotal = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);
+  const filtro = busca.trim().toLowerCase();
 
   /**
    * O valor gravado. Depois da migration `20260815154058` toda chave existe em
@@ -72,6 +82,14 @@ export function PorCargo() {
   const valorDe = (key: string): boolean =>
     key in rascunho.alteracoes ? rascunho.alteracoes[key] : !!salvo[key];
 
+  /** Quantas permissões cada cargo tem — o número que a coluna da esquerda mostra. */
+  const contarDe = useMemo(() => (c: string): number => {
+    if ((CARGOS_ACESSO_TOTAL as readonly string[]).includes(c)) return catalogo.length;
+    const mapa = todasPermissoes.find(r => r.cargo === c)?.permissoes
+      ?? permissoesPadraoDoCargo(c);
+    return catalogo.filter(p => !!mapa[p.key]).length;
+  }, [todasPermissoes, catalogo]);
+
   function trocarCargo(novo: string) {
     if (rascunho.sujo && !confirm('Descartar as alterações não salvas?')) return;
     rascunho.descartar();
@@ -85,11 +103,11 @@ export function PorCargo() {
   }
 
   /**
-   * Liga ou desliga o que esta VISIVEL naquele grupo.
+   * Liga ou desliga o que está VISÍVEL naquele grupo.
    *
-   * Recebe a lista em vez de filtrar o catalogo por nome: as chaves de aba
-   * migraram para os blocos por aba, e um filtro por grupo alcancaria tambem o
-   * que sumiu da tela — o botao mexeria no que ninguem esta vendo.
+   * Recebe a lista em vez de filtrar o catálogo por nome: as chaves de aba
+   * migraram para os blocos por aba, e um filtro por grupo alcançaria também o
+   * que sumiu da tela — o botão mexeria no que ninguém está vendo.
    */
   function ligarGrupo(visiveis: { key: string }[], ligar: boolean) {
     if (acessoTotal) return;
@@ -125,73 +143,115 @@ export function PorCargo() {
   }
 
   return (
-    <div className="space-y-4">
-      {/* Seletor de cargo */}
-      <div className="flex flex-wrap gap-1.5">
-        {TODOS_OS_CARGOS.map(c => {
-          const total = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(c);
-          return (
-            <button
-              key={c}
-              onClick={() => trocarCargo(c)}
-              className={cn(
-                'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
-                cargo === c
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground',
-                total && cargo !== c && 'opacity-70',
-              )}
-            >
-              {PERFIL_LABELS[c] ?? c}
-              {total && <ShieldCheck className="inline w-3 h-3 ml-1" />}
-            </button>
-          );
-        })}
-      </div>
+    <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
 
-      {acessoTotal ? (
-        <div className="rounded-xl border border-border bg-muted/20 px-4 py-4 text-sm">
-          <p className="font-semibold text-foreground flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4" />
-            {PERFIL_LABELS[cargo]} tem acesso total, por construção
-          </p>
-          <p className="text-muted-foreground mt-1 leading-relaxed">
-            Não é uma lista de permissões que dá esse acesso — é o próprio cargo.
-            A migration <code className="text-xs">20260812b</code> estabeleceu isso no
-            banco, e o app responde &laquo;pode&raquo; antes mesmo de consultar a tabela.
-            Para tirar o acesso de alguém, <strong>troque o cargo da pessoa</strong>.
-          </p>
-          {/* A exceção existe; omiti-la faria o painel prometer mais do que
-              entrega, justamente no ponto em que a diferença aparece. */}
-          <p className="text-muted-foreground mt-2 leading-relaxed border-t border-border/60 pt-2">
-            <strong className="text-foreground">Uma exceção:</strong> escrever em
-            mês já fechado não vem junto. Só o super admin passa por esse cadeado,
-            e ele passa por regra de código — não por esta tela. É o único poder
-            aqui que ninguém herda de &laquo;acesso total&raquo;.
-          </p>
+      {/* ── Coluna dos cargos ───────────────────────────────────────────── */}
+      <aside className="lg:sticky lg:top-4 lg:w-56 lg:shrink-0">
+        <p className="mb-2 px-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Cargo
+        </p>
+        <div className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible lg:pb-0">
+          {TODOS_OS_CARGOS.map(c => {
+            const total = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(c);
+            const ativo = cargo === c;
+            return (
+              <button
+                key={c}
+                onClick={() => trocarCargo(c)}
+                className={cn(
+                  'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors lg:w-full',
+                  ativo
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                )}
+              >
+                <span className={cn(
+                  'h-6 w-1 shrink-0 rounded-full transition-colors',
+                  ativo ? 'bg-primary' : 'bg-transparent',
+                )} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1 text-[13px] font-medium">
+                    {PERFIL_LABELS[c] ?? c}
+                    {total && <ShieldCheck className="h-3 w-3 text-primary/70" />}
+                  </span>
+                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                    {total ? 'acesso total' : `${contarDe(c)} de ${catalogo.length}`}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-      ) : (
-        <>
-          {rascunho.sujo && (
-            <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-              <span className="text-xs font-medium text-amber-600 dark:text-amber-400">
-                {rascunho.total} alteração{rascunho.total !== 1 ? 'ões' : ''} não salva
-                {rascunho.total !== 1 ? 's' : ''}
-              </span>
-              <div className="ml-auto flex gap-1.5">
-                <Button size="sm" variant="ghost" className="h-7 text-xs gap-1"
-                  onClick={rascunho.descartar}>
-                  <RotateCcw className="w-3.5 h-3.5" /> Descartar
-                </Button>
-                <Button size="sm" className="h-7 text-xs gap-1" onClick={salvar} disabled={salvando}>
-                  {salvando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                  Salvar
-                </Button>
-              </div>
-            </div>
-          )}
+      </aside>
 
-          <div className="space-y-3">
+      {/* ── Conteúdo ────────────────────────────────────────────────────── */}
+      <div className="min-w-0 flex-1 space-y-3">
+
+        {acessoTotal ? (
+          <div className="rounded-xl border border-border bg-muted/20 px-4 py-4 text-sm">
+            <p className="flex items-center gap-1.5 font-semibold text-foreground">
+              <ShieldCheck className="h-4 w-4" />
+              {PERFIL_LABELS[cargo]} tem acesso total, por construção
+            </p>
+            <p className="mt-1 leading-relaxed text-muted-foreground">
+              Não é uma lista de permissões que dá esse acesso — é o próprio cargo.
+              A migration <code className="text-xs">20260812b</code> estabeleceu isso no
+              banco, e o app responde &laquo;pode&raquo; antes mesmo de consultar a tabela.
+              Para tirar o acesso de alguém, <strong>troque o cargo da pessoa</strong>.
+            </p>
+            {/* A exceção existe; omiti-la faria o painel prometer mais do que
+                entrega, justamente no ponto em que a diferença aparece. */}
+            <p className="mt-2 border-t border-border/60 pt-2 leading-relaxed text-muted-foreground">
+              <strong className="text-foreground">Uma exceção:</strong> escrever em
+              mês já fechado não vem junto. Só o super admin passa por esse cadeado,
+              e ele passa por regra de código — não por esta tela. É o único poder
+              aqui que ninguém herda de &laquo;acesso total&raquo;.
+            </p>
+          </div>
+        ) : (
+          <>
+            {/* Busca + barra de alterações, coladas no topo ao rolar */}
+            <div className="sticky top-0 z-10 -mx-1 space-y-2 bg-background/95 px-1 py-2 backdrop-blur">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                  placeholder="Buscar permissão — «excluir equipe», «setor», «importar»…"
+                  className="h-9 pl-9 pr-9 text-sm"
+                />
+                {busca && (
+                  <button
+                    type="button"
+                    onClick={() => setBusca('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+                    aria-label="Limpar busca"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {rascunho.sujo && (
+                <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    {rascunho.total} alteração{rascunho.total !== 1 ? 'ões' : ''} não salva
+                    {rascunho.total !== 1 ? 's' : ''}
+                  </span>
+                  <div className="ml-auto flex gap-1.5">
+                    <Button size="sm" variant="ghost" className="h-7 gap-1 text-xs"
+                      onClick={rascunho.descartar}>
+                      <RotateCcw className="h-3.5 w-3.5" /> Descartar
+                    </Button>
+                    <Button size="sm" className="h-7 gap-1 text-xs" onClick={salvar} disabled={salvando}>
+                      {salvando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+                      Salvar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {blocos.map(b => (
               <BlocoAba
                 key={b.aba}
@@ -200,42 +260,43 @@ export function PorCargo() {
                 alternar={alternar}
                 alterada={k => k in rascunho.alteracoes}
                 somenteLeitura={acessoTotal}
+                filtro={filtro}
               />
             ))}
 
-            {avulsos.map(({ grupo: g, permissoes: doGrupo }) => {
-              return (
-                <GrupoPermissoes
-                  key={g}
-                  grupo={g}
-                  permissoes={doGrupo}
-                  concedidas={doGrupo.filter(p => valorDe(p.key)).length}
-                  alterada={p => p.key in rascunho.alteracoes}
-                  acoes={
-                    <>
-                      <button onClick={() => ligarGrupo(doGrupo, true)}
-                        className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded">
-                        Ligar tudo
-                      </button>
-                      <button onClick={() => ligarGrupo(doGrupo, false)}
-                        className="text-[11px] text-muted-foreground hover:text-foreground px-1.5 py-0.5 rounded">
-                        Desligar tudo
-                      </button>
-                    </>
-                  }
-                  renderControle={p => (
-                    <Switch
-                      checked={valorDe(p.key)}
-                      onCheckedChange={() => alternar(p.key)}
-                      aria-label={p.label}
-                    />
-                  )}
-                />
-              );
-            })}
-          </div>
-        </>
-      )}
+            {avulsos.map(({ grupo: g, permissoes: doGrupo }) => (
+              <GrupoPermissoes
+                key={g}
+                grupo={g}
+                permissoes={doGrupo}
+                filtro={filtro}
+                concedidas={doGrupo.filter(p => valorDe(p.key)).length}
+                ligada={p => valorDe(p.key)}
+                alterada={p => p.key in rascunho.alteracoes}
+                acoes={
+                  <>
+                    <button onClick={() => ligarGrupo(doGrupo, true)}
+                      className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                      Ligar tudo
+                    </button>
+                    <button onClick={() => ligarGrupo(doGrupo, false)}
+                      className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
+                      Desligar tudo
+                    </button>
+                  </>
+                }
+                renderControle={p => (
+                  <Switch
+                    checked={valorDe(p.key)}
+                    onCheckedChange={() => alternar(p.key)}
+                    aria-label={p.label}
+                  />
+                )}
+              />
+            ))}
+          </>
+        )}
+      </div>
     </div>
   );
 }

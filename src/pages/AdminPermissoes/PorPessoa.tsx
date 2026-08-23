@@ -257,6 +257,12 @@ export function PorPessoa() {
                     || (e === 'herda' && resolverParaUsuario(pessoa.id, pessoa.perfil, p.key));
                 }).length}
                 alterada={p => p.key in rascunho.alteracoes}
+                cartoesLargos
+                ligada={p => {
+                  const e = estadoDe(p.key);
+                  return e === 'sim'
+                    || (e === 'herda' && resolverParaUsuario(pessoa.id, pessoa.perfil, p.key));
+                }}
                 renderControle={p => {
                   const estado = estadoDe(p.key);
                   const doCargo = valorDoCargo(pessoa.perfil, p.key);

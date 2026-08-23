@@ -16,12 +16,13 @@
  * funciona: um cargo pode ter "só os próprios" e "do setor" sem ter "da
  * equipe". Um seletor único mentiria sobre isso.
  */
-import { AlertTriangle, ChevronDown, ChevronRight, Lock } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ROTULO_NIVEL, type BlocoDeAba } from '@/lib/permissoes-abas';
 import type { PermissaoMeta } from '@/lib/permissoes-catalogo';
+import { CartaoPermissao, GradeDeCartoes } from './CartaoPermissao';
 
 /** «analitico_escopo_setor» → «Do setor», para o atalho falar a língua da tela. */
 function rotuloDaChave(chave: string): string {
@@ -35,65 +36,96 @@ interface Props {
   alternar: (chave: string) => void;
   alterada: (chave: string) => boolean;
   somenteLeitura: boolean;
+  /** Texto da busca. Vazio mostra tudo. */
+  filtro: string;
 }
 
-export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }: Props) {
+export function BlocoAba({
+  bloco, valorDe, alternar, alterada, somenteLeitura, filtro,
+}: Props) {
   const [aberto, setAberto] = useState(true);
 
   const abaLigada = bloco.interruptor ? valorDe(bloco.interruptor.key) : true;
   const niveisLigados = bloco.niveis.filter(n => valorDe(n.key)).length;
-  const acoesLigadas  = bloco.acoes.filter(a => valorDe(a.key)).length;
 
   /**
-   * A acao esta ligada mas nao tem onde agir?
+   * A ação está ligada mas não tem onde agir?
    *
-   * E o caso das cinco abas internas secundarias do Analitico: elas vivem na
-   * visao de setor, e um cargo com alcance «so os proprios» abre a lista
-   * individual, que nao tem regua de abas. Ligadas, nao acontecia nada — e o
-   * painel nao dizia por que.
+   * É o caso das cinco abas internas secundárias do Analítico: elas vivem na
+   * visão de setor, e um cargo com alcance «só os próprios» abre a lista
+   * individual, que não tem régua de abas. Ligadas, não acontecia nada — e o
+   * painel não dizia por quê.
    */
   const semEfeito = (p: PermissaoMeta) =>
     !!p.depende && !p.depende.chaves.some(k => valorDe(k));
 
-  const inertes = bloco.acoes.filter(a => valorDe(a.key) && semEfeito(a)).length;
+  const casa = (p: PermissaoMeta) =>
+    !filtro
+    || p.label.toLowerCase().includes(filtro)
+    || p.descricao.toLowerCase().includes(filtro);
 
-  /** O resumo do cabeçalho: o que essa aba faz por este cargo, em uma linha. */
-  const resumo = !abaLigada
-    ? 'aba desligada'
-    : [
-        bloco.niveis.length > 0
-          ? (niveisLigados > 0
-              ? `${niveisLigados} de ${bloco.niveis.length} alcances`
-              : 'sem alcance')
-          : null,
-        bloco.acoes.length > 0 ? `${acoesLigadas} de ${bloco.acoes.length} ações` : null,
-        inertes > 0 ? `${inertes} sem efeito` : null,
-      ].filter(Boolean).join(' · ');
+  const acoesVisiveis = bloco.acoes.filter(casa);
+  const buscando = filtro.length > 0;
+  // Buscando, um bloco sem resultado só ocuparia espaço.
+  if (buscando && acoesVisiveis.length === 0
+      && !bloco.rotulo.toLowerCase().includes(filtro)) return null;
+
+  const acoesLigadas = bloco.acoes.filter(a => valorDe(a.key)).length;
+  const inertes = bloco.acoes.filter(a => valorDe(a.key) && semEfeito(a)).length;
 
   return (
     <section className={cn(
       'rounded-xl border bg-card overflow-hidden transition-colors',
-      abaLigada ? 'border-border' : 'border-border/60',
+      abaLigada ? 'border-border' : 'border-dashed border-border',
     )}>
-      <header className="flex items-center gap-3 px-4 py-2.5 bg-muted/30 border-b border-border">
+      <header
+        className={cn(
+          'flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-3 border-b',
+          abaLigada ? 'bg-muted/40 border-border' : 'bg-muted/20 border-border/60',
+        )}
+      >
         <button
           type="button"
           onClick={() => setAberto(v => !v)}
           className="flex items-center gap-1.5 text-sm font-semibold hover:text-primary transition-colors"
           aria-expanded={aberto}
         >
-          {aberto ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+          <ChevronDown className={cn(
+            'w-4 h-4 text-muted-foreground transition-transform',
+            !aberto && '-rotate-90',
+          )} />
           <span className={cn(!abaLigada && 'text-muted-foreground')}>{bloco.rotulo}</span>
         </button>
 
-        <span className="text-[11px] text-muted-foreground">{resumo}</span>
+        {/* Selo do estado, para o olho pegar o cartão certo sem ler o resumo. */}
+        <span className={cn(
+          'rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide',
+          abaLigada
+            ? 'bg-primary/10 text-primary'
+            : 'bg-muted text-muted-foreground',
+        )}>
+          {abaLigada ? 'ativa' : 'desligada'}
+        </span>
+
+        {abaLigada && (
+          <span className="text-[11px] text-muted-foreground tabular-nums">
+            {bloco.niveis.length > 0 && `${niveisLigados}/${bloco.niveis.length} alcances`}
+            {bloco.niveis.length > 0 && bloco.acoes.length > 0 && ' · '}
+            {bloco.acoes.length > 0 && `${acoesLigadas}/${bloco.acoes.length} ações`}
+          </span>
+        )}
+
+        {inertes > 0 && abaLigada && (
+          <span className="flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="w-3 h-3" />
+            {inertes} sem efeito
+          </span>
+        )}
 
         <div className="ml-auto flex items-center gap-2">
           {bloco.interruptor ? (
             <>
-              <span className="text-[11px] text-muted-foreground">
-                {abaLigada ? 'Abre a aba' : 'Não abre'}
-              </span>
+              <span className="text-[11px] text-muted-foreground">Abre a aba</span>
               <Switch
                 checked={abaLigada}
                 disabled={somenteLeitura}
@@ -113,15 +145,16 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
       </header>
 
       {aberto && (
-        <div className={cn('divide-y divide-border/60', !abaLigada && 'opacity-50')}>
-          {bloco.niveis.length > 0 && (
-            <div className="px-4 py-3">
-              <p className="text-xs font-medium text-foreground">Até onde enxerga aqui</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5 mb-2">
-                Cada faixa liga sozinha. Ligar duas oferece as duas como opção de
-                filtro na tela.
-              </p>
-              <div className="flex flex-wrap gap-1.5">
+        <div className={cn(!abaLigada && 'opacity-60')}>
+          {bloco.niveis.length > 0 && !buscando && (
+            <div className="border-b border-border/60 px-4 py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <p className="text-xs font-semibold text-foreground">Até onde enxerga aqui</p>
+                <p className="text-[11px] text-muted-foreground">
+                  cada faixa liga sozinha — ligar duas oferece as duas como filtro na tela
+                </p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {bloco.niveis.map(n => {
                   const nivel = n.key.split('_escopo_')[1];
                   const ligado = valorDe(n.key);
@@ -134,10 +167,10 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
                       title={n.descricao}
                       aria-pressed={ligado}
                       className={cn(
-                        'px-3 py-1 rounded-full text-xs font-medium border transition-colors disabled:cursor-not-allowed',
+                        'rounded-full border px-3 py-1 text-xs font-medium transition-all disabled:cursor-not-allowed',
                         ligado
-                          ? 'bg-primary text-primary-foreground border-primary'
-                          : 'bg-background text-muted-foreground border-border hover:border-primary/50',
+                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground',
                         alterada(n.key) && 'ring-2 ring-amber-500/60',
                       )}
                     >
@@ -149,51 +182,49 @@ export function BlocoAba({ bloco, valorDe, alternar, alterada, somenteLeitura }:
             </div>
           )}
 
-          {bloco.acoes.length > 0 && (
-            <ul className="divide-y divide-border/60">
-              {bloco.acoes.map((a: PermissaoMeta) => (
-                <li
-                  key={a.key}
-                  className={cn(
-                    'flex items-start gap-4 px-4 py-2.5',
-                    alterada(a.key) && 'bg-amber-500/5 border-l-2 border-l-amber-500',
-                  )}
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm leading-tight">{a.label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{a.descricao}</p>
-
-                    {/* Ligada e sem ter onde agir. Em vez de deixar o admin
-                        descobrir sozinho — que foi o que aconteceu —, a linha
-                        diz o motivo e oferece o clique que resolve. */}
-                    {valorDe(a.key) && semEfeito(a) && abaLigada && (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1">
-                        <AlertTriangle className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-                        <span className="text-[11px] text-amber-700 dark:text-amber-300">
-                          Ligada, mas sem efeito: {a.depende!.motivo}.
-                        </span>
+          {acoesVisiveis.length > 0 && (
+            <GradeDeCartoes>
+              {acoesVisiveis.map(a => {
+                const inerte = valorDe(a.key) && semEfeito(a) && abaLigada;
+                return (
+                  <CartaoPermissao
+                    key={a.key}
+                    permissao={a}
+                    ligada={valorDe(a.key)}
+                    alterada={alterada(a.key)}
+                    esmaecido={!abaLigada}
+                    controle={
+                      <Switch
+                        checked={valorDe(a.key)}
+                        disabled={somenteLeitura || !abaLigada}
+                        onCheckedChange={() => alternar(a.key)}
+                        aria-label={a.label}
+                      />
+                    }
+                    aviso={inerte && (
+                      /* Em vez de deixar o admin descobrir sozinho — que foi o
+                         que aconteceu —, a linha diz o motivo e oferece o
+                         clique que resolve. */
+                      <div className="mt-1 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1.5">
+                        <p className="flex items-start gap-1 text-[10px] leading-snug text-amber-700 dark:text-amber-300">
+                          <AlertTriangle className="mt-px w-3 h-3 shrink-0" />
+                          <span>Ligada, mas sem efeito: {a.depende!.motivo}.</span>
+                        </p>
                         {!somenteLeitura && (
                           <button
                             type="button"
                             onClick={() => alternar(a.depende!.chaves[0])}
-                            className="text-[11px] font-semibold text-amber-700 dark:text-amber-300 underline underline-offset-2 hover:no-underline"
+                            className="mt-1 text-[10px] font-semibold text-amber-700 underline underline-offset-2 hover:no-underline dark:text-amber-300"
                           >
                             Ligar «{rotuloDaChave(a.depende!.chaves[0])}»
                           </button>
                         )}
                       </div>
                     )}
-                  </div>
-                  <Switch
-                    className="shrink-0 mt-0.5"
-                    checked={valorDe(a.key)}
-                    disabled={somenteLeitura || !abaLigada}
-                    onCheckedChange={() => alternar(a.key)}
-                    aria-label={a.label}
                   />
-                </li>
-              ))}
-            </ul>
+                );
+              })}
+            </GradeDeCartoes>
           )}
         </div>
       )}
