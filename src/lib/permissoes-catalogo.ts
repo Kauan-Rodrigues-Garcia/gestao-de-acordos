@@ -58,7 +58,20 @@ export const CARGOS_ACESSO_TOTAL = ['administrador', 'super_admin'] as const;
  *
  * Quem lê estas chaves é `temPermissaoExplicita`, nunca `temPermissao`.
  */
-export const PERMISSOES_EXPLICITAS = ['ignorar_fechamento_mes'] as const;
+export const PERMISSOES_EXPLICITAS = [
+  'ignorar_fechamento_mes',
+  /*
+   * Reabrir competência finalizada do RH.
+   *
+   * Mesma família do cadeado do mês, e pelo mesmo motivo: a competência
+   * finalizada é a folha que já foi paga. Reabri-la reescreve um número que
+   * pessoas receberam — e quem recebeu não é avisado.
+   *
+   * Como toda chave desta lista, o acesso total do administrador não a concede
+   * sozinho. Alguém precisa ligar, e a decisão fica registrada.
+   */
+  'rh_reabrir_fechamento',
+] as const;
 
 /** A chave precisa de concessão nominal, mesmo para quem tem acesso total? */
 export function exigeConcessaoExplicita(key: string): boolean {
@@ -95,6 +108,7 @@ export const GRUPOS_PERMISSAO = [
   'Analítico',
   'Pix Automático',
   'Painel Diretoria',
+  'RH Gestão',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -191,6 +205,11 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir a fila de chamados internos',
     grupo: 'Abas e telas',
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
+  },
+  {
+    key: 'ver_rh_gestao', label: 'Aba RH Gestão',
+    descricao: 'Abrir o Controle de Premiação e Comissão',
+    grupo: 'Abas e telas', padrao: LIDERANCA,
   },
   {
     key: 'ver_lixeira', label: 'Lixeira',
@@ -736,6 +755,97 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Aprovar ou desaprovar um Pix — decide comissão',
     grupo: 'Ações específicas', tenants: ['bookplay'], padrao: LIDERANCA,
   },
+  // ── RH Gestão ────────────────────────────────────────────────────────────
+  /*
+   * O alcance e as ações moram separados, como no Pix.
+   *
+   * Os três níveis respondem "até onde eu enxergo"; as sete chaves de ação
+   * respondem "o que eu decido". O nível `individual` não existe aqui de
+   * propósito: o operador não preenche a própria premiação, então um "só os
+   * meus" seria um interruptor que liga e não mostra nada — exatamente o
+   * defeito que `depende` foi criado para expor.
+   *
+   * `equipe` significa AS EQUIPES QUE A PESSOA LIDERA (`equipe_lideres`), e não
+   * "a equipe a que ela pertence". É o requisito do pedido: estar no mesmo
+   * setor não dá acesso à equipe alheia.
+   */
+  {
+    key: 'rh_escopo_equipe', label: 'RH: as equipes que eu lidero',
+    descricao: 'Ver no RH Gestão os operadores das equipes sob a própria liderança',
+    grupo: 'RH Gestão', padrao: { lider: true, elite: true },
+  },
+  {
+    key: 'rh_escopo_setor', label: 'RH: o próprio setor',
+    descricao: 'Ver no RH Gestão todas as equipes do próprio setor — a visão da gerência',
+    grupo: 'RH Gestão', padrao: { gerencia: true },
+  },
+  {
+    key: 'rh_escopo_todos_setores', label: 'RH: todos os setores',
+    descricao: 'Ver no RH Gestão a empresa inteira, por cidade e setor — a visão do RH',
+    grupo: 'RH Gestão', padrao: { diretoria: true },
+  },
+  {
+    key: 'rh_preencher', label: 'RH: preencher premiação/comissão',
+    descricao: 'Informar e corrigir o valor de cada operador, e concluir a equipe',
+    grupo: 'RH Gestão', padrao: { lider: true, elite: true, gerencia: true },
+    depende: {
+      chaves: ['rh_escopo_equipe', 'rh_escopo_setor', 'rh_escopo_todos_setores'],
+      motivo: 'preencher é sobre operadores que se enxerga — sem alcance não há quem preencher',
+    },
+  },
+  {
+    key: 'rh_validar', label: 'RH: validar equipe',
+    descricao: 'Conferir e validar as equipes do escopo, depois de concluídas pela liderança',
+    grupo: 'RH Gestão', padrao: { gerencia: true },
+    depende: {
+      chaves: ['rh_escopo_setor', 'rh_escopo_todos_setores'],
+      motivo: 'validar é ato de gerência sobre o setor — o alcance de equipe não alcança',
+    },
+  },
+  {
+    key: 'rh_enviar', label: 'RH: enviar o setor ao RH',
+    descricao: 'Encaminhar ao RH o fechamento de um setor com todas as equipes validadas',
+    grupo: 'RH Gestão', padrao: { gerencia: true },
+    depende: {
+      chaves: ['rh_escopo_setor', 'rh_escopo_todos_setores'],
+      motivo: 'envia-se o setor inteiro — quem só alcança a equipe não tem o que enviar',
+    },
+  },
+  {
+    key: 'rh_aprovar', label: 'RH: aprovar',
+    descricao: 'Aprovar o lançamento de um operador ou de uma equipe já enviada — decide pagamento',
+    grupo: 'RH Gestão', padrao: {},
+  },
+  {
+    key: 'rh_devolver', label: 'RH: devolver',
+    descricao: 'Devolver um operador ou uma equipe para correção, sempre com motivo',
+    grupo: 'RH Gestão', padrao: {},
+  },
+  {
+    key: 'rh_gerenciar_fechamento', label: 'RH: abrir competência e definir prazo',
+    descricao: 'Abrir a competência do mês, definir/prorrogar o prazo e finalizar o fechamento',
+    grupo: 'RH Gestão', padrao: {},
+  },
+  {
+    key: 'rh_reabrir_fechamento', label: 'RH: reabrir competência finalizada',
+    descricao:
+      'Reabrir um fechamento já finalizado, com motivo obrigatório. A folha daquele '
+      + 'mês já foi paga — reabrir reescreve um número que as pessoas receberam',
+    grupo: 'RH Gestão', padrao: {},
+  },
+  {
+    key: 'rh_configurar', label: 'RH: configurar cidades e setores',
+    descricao: 'Definir quais setores entram no RH, em que cidade e sob premiação ou comissão',
+    grupo: 'RH Gestão', padrao: {},
+  },
+  {
+    key: 'rh_editar_cracha', label: 'RH: cadastrar crachá',
+    descricao:
+      'Cadastrar e alterar o crachá do operador. Ver o crachá dentro do módulo '
+      + 'já vem com o alcance; alterar é decisão separada',
+    grupo: 'RH Gestão', padrao: {},
+  },
+
   {
     key: 'ignorar_fechamento_mes', label: 'Escrever em mês fechado',
     descricao:

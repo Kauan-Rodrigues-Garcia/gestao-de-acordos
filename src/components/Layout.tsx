@@ -29,7 +29,7 @@ import {
   LogOut, Menu, X, ChevronRight,
   BarChart3, Upload, Target,
   Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound, ArrowUpDown,
-  LifeBuoy, Megaphone, MessageSquarePlus, Ticket,
+  LifeBuoy, Megaphone, MessageSquarePlus, Ticket, ClipboardList,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -92,6 +92,9 @@ const NAV_ITEMS: NavItem[] = [
   // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
   // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
   { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
+  // RH Gestão. Sem lista de cargo: quem abre é a chave, e o alcance de dentro
+  // vem dos níveis da aba. É o padrão das abas já convertidas.
+  { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           permissaoKey: 'ver_rh_gestao' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o

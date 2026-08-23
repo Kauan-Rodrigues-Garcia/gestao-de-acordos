@@ -141,7 +141,8 @@ src/
 | `public.direto_extra_config` | Ativação de Direto/Extra por setor/equipe/usuário |
 | `public.equipe_lideres` / `equipe_operadores_clones` | Liderança e clones de equipe |
 | `public.metas_config_mes` / `metas_validacoes` | Feriados, quartis e trava de meta |
-| `public.pix_automatico_*` | Acordos, config, metas e registro de NR do Pix `[BP]` |
+| `public.pix_automatico_*` | Acordos, config, metas, saldo de divergência e registro de NR do Pix `[BP]` |
+| `public.rh_*` | RH Gestão: células, configuração de setor, crachá, competências, lançamentos e trilha — vide [RH Gestão](#rh-gestão--premiação-e-comissão) |
 | `public.ouvidoria_*` · `solicitacoes_whatsapp` · `comemoracoes` · `pet_*` | Módulos auxiliares |
 
 ### Migrations
@@ -831,11 +832,222 @@ src/lib/supabase.ts             # + interface DiarioRecebimento
 
 ---
 
+## Atualização incremental da interface
+
+> `src/lib/dadosVivos.ts` · `src/hooks/useDadosVivos.ts` ·
+> `src/components/ValorAnimado.tsx` · `src/components/LinhaViva.tsx`
+
+**O dado novo quase sempre é o mesmo dado.** O padrão que se espalhou pelo
+projeto era `onEvento: () => recarregar()`, com `recarregar` ligando `loading` —
+e o resultado, medido: o Analítico com 2.400 linhas trocava a tabela inteira por
+esqueleto a cada evento de importação; a fila de Tickets voltava ao topo quando
+alguém respondia um ticket que nem estava na tela; o Pix redesenhava 100 linhas
+porque uma mudou de status.
+
+A releitura completa **continua acontecendo** — é ela que garante que a tela
+está certa depois de uma queda de realtime. O que mudou é o custo dela.
+
+| Peça | O que faz |
+|---|---|
+| `reconciliarLista(atual, nova, { chave, iguais })` | Devolve um array em que os itens iguais são **os objetos antigos**. Nada mudou → devolve o array anterior por referência, e o `setState` não renderiza |
+| `reconciliarItem` · `reconciliarMapa` | O mesmo para um registro e para `Record<string, T>` |
+| `iguaisRaso` (padrão) · `iguaisProfundo` | Rasa serve linha de PostgREST; profunda é obrigatória quando a linha traz `join` ou `jsonb` (Analítico, permissões, tickets) |
+| `useDadosVivos` | Junta tudo: `carregando` só na PRIMEIRA carga, `atualizando` para o sinal discreto, número de série contra releituras fora de ordem |
+| `ValorAnimado` | O número anda até o valor novo. Sem o piscar, uma mudança de total passaria despercebida — a animação é o aviso |
+| `LinhaViva` / `ItemVivo` | Entrada e saída de linha por opacidade, dentro de `AnimatePresence`. Sem `layout` e sem altura: linha que colapsa empurra o resto e traz de volta o salto de scroll |
+
+**A regra em uma linha:** `loading` vale para a primeira carga e para **troca de
+recorte** (outro mês, outro filtro, outra empresa) — o conteúdo em tela é de
+outra pergunta. Realtime, reconexão e "atualizar" são silenciosos.
+
+Convertidos nesta frente: `useAnalitico`, `useDiario`, `useCargoPermissoes`
+(era o pior — `permLoading` esconde **todo** o menu lateral),
+`NotificacoesProvider`, `useComemoracoes`, `useSolicitacoesWhatsapp`,
+`useDiretoExtraConfig`, `PixAutomatico`, `Tickets` (lista e conversa),
+`DesempenhoEquipes`. `useAcordos` já era incremental por `setQueryData`; o que
+ganhou foi o agrupamento de 500 ms nas métricas do Dashboard — uma importação de
+300 acordos disparava 300 varreduras da empresa inteira.
+
+---
+
+## Pix Automático — correção de valor divergente
+
+> Migration `20260823080000_pix_saldo_divergencia.sql`.
+> Permissão `pix_ajustar_saldo`.
+
+O pagamento da comissão sai **por fora** do sistema: alguém confere a lista, soma
+e manda o Pix. Quando esse alguém erra o valor, até aqui não havia onde
+registrar — o acerto virava combinado verbal.
+
+Duas peças, e a separação entre elas é o ponto:
+
+- **`pix_automatico_saldos`** — o que a empresa DEVE (positivo) ou tem A
+  DESCONTAR (negativo) de uma pessoa. Uma linha viva por operador.
+- **`pix_automatico_acordos.ajuste_*`** — o acerto CARIMBADO num pagamento
+  específico. Fica na linha para sempre, mesmo depois de o saldo sumir.
+
+O ciclo tem **duas etapas**, e é isso que o pedido descreve:
+
+```
+1. liderança anota o saldo                    → saldo vivo, livre
+2. aplica num acordo APROVADO e NÃO PAGO      → saldo RESERVADO nele
+3. esse acordo é marcado como pago            → saldo QUITADO (some)
+```
+
+Desfazer o pagamento **ressuscita** o saldo, reservado no mesmo acordo — sem
+isso, "Pagar" seguido de "Desfazer" apagaria a divergência de graça.
+
+`comissaoDe` continua sendo só a comissão; quem paga usa `valorAPagarDe`
+(comissão + correção). Somar dentro de `comissaoDe` faria o ranking, a meta e o
+card da dobra contarem como desempenho um acerto do mês passado.
+
+Aplicar e retirar passam por RPC com `FOR UPDATE` no saldo: duas telas aplicando
+o mesmo saldo em acordos diferentes é o caso real, e a segunda encontra a
+reserva feita e recusa com uma frase.
+
+---
+
+## RH Gestão — Premiação e Comissão
+
+> Migrations `20260823090000` (schema), `20260823091000` (fluxo e RLS),
+> `20260823092000` (permissões e configuração inicial).
+> Tela: `src/pages/RhGestao/` · rota `/rh-gestao`.
+
+O processo, do operador ao pagamento:
+
+```
+operador → líder → gerência → RH
+```
+
+O operador **não** preenche a própria premiação. A liderança confere e preenche,
+a gerência valida o escopo dela, e só então o pacote chega ao RH — que aprova ou
+devolve. Devolver **um** operador não reprova os outros da equipe.
+
+### As tabelas
+
+| Tabela | Papel |
+|---|---|
+| `rh_celulas` | Birigui, Marília, e o que vier. Tabela própria para renomear uma cidade não exigir mexer em N setores |
+| `rh_config_setores` | setor → célula + tipo de remuneração. É ela que substitui o `if (setor === 'Play 4')` |
+| `rh_dados_operadores` | o **crachá**, isolado de `perfis` — ver abaixo |
+| `rh_fechamentos` | a competência, com `mes_apuracao`, prazo e status |
+| `rh_lancamentos` | uma linha por operador por competência: valor, status e os snapshots |
+| `rh_eventos` | a trilha do módulo, append-only, escrita só por RPC |
+
+### Equipe e setor não têm status próprio
+
+O estado dos níveis de cima é **derivado** dos filhos (`resumirGrupo`, em
+`rhEstados.ts`): equipe concluída = todos em `concluido_lider` ou adiante; setor
+enviado = todos em `enviado_rh` ou adiante. Guardar também um `status` de equipe
+abriria a possibilidade de a equipe dizer "validada" com um operador dentro
+dizendo "devolvido". Sem a coluna, não há o que divergir.
+
+A **ordem das perguntas** de `resumirGrupo` importa: devolução vem antes de
+tudo, senão «9 aprovados e 1 devolvido» apareceria como aprovado.
+
+### A máquina de estados
+
+```
+pendente ─> preenchido ─> concluido_lider ─> validado_gerencia
+     ^                                              │
+     │                                              v
+     │                                        enviado_rh ─┬─> aprovado_rh
+     └──────────────── devolvido_rh <────────────────────┘
+```
+
+`preenchido` e `concluido_lider` são passos **diferentes** de propósito: ter
+valor digitado em todo mundo não é o líder declarar a equipe conferida — e é na
+conclusão que o percentual é congelado. Corrigir depois de concluir devolve a
+linha para `preenchido`, e a equipe precisa ser concluída de novo: uma correção
+não pode passar despercebida por quem vai validar.
+
+### O percentual não é recalculado
+
+`181%` já tem dono: `calcularProjecao` (`src/lib/projecaoMetas.ts`), a mesma
+conta da aba Quartis. `rhPercentual.ts` só junta as peças (meta, recebido, dias
+úteis, quartis) e chama. Um teste de contrato compara os dois resultados.
+
+Num mês encerrado a fórmula vira `recebido ÷ meta` — não por regra especial, e
+sim porque `decorridos` iguala `totalUteis` e os fatores se cancelam.
+
+O número é **congelado** no lançamento na conclusão da equipe. Depois disso, meta
+corrigida, feriado acrescentado ou troca de equipe não reescrevem a folha.
+
+**Bruto, e não H.O.** Desde a migration `20260818280000`, `total_ho` é 24,96% de
+`valor_recebido`, a mesma constante que `metaNaUnidade` aplica à meta: converter
+os dois lados não muda a razão. Na BookPlay só o bruto existe.
+
+### Escopo — o painel manda
+
+`ABAS_COM_ESCOPO.rh` tem três níveis, e `fn_abas_escopo()` os espelha no banco:
+
+| Nível | Quem enxerga o quê |
+|---|---|
+| `equipe` | as equipes que a pessoa **lidera** (`equipe_lideres`), e não o setor |
+| `setor` | o setor da pessoa — a visão da gerência |
+| `todos_setores` | a empresa — a visão do RH |
+
+Não há `individual`: o operador não preenche o próprio lançamento, então o nível
+seria um interruptor que liga e não mostra nada.
+
+`equipe` significa **liderar**, e não pertencer: estar no mesmo setor não dá
+acesso à equipe de outro líder. Quem cumpre isso é `fn_rh_lancamento_visivel`,
+usada por todas as policies de leitura.
+
+### Escrita só por RPC
+
+Nenhuma tabela do fluxo tem policy de INSERT, UPDATE ou DELETE. Cada passo mexe
+em várias linhas e precisa de todas ou de nenhuma, e cada RPC confere permissão,
+escopo **e estado atual** antes de agir — com `FOR UPDATE` nas linhas alvo, para
+a decisão de quem chegou primeiro não ser sobrescrita por uma tela de cinco
+minutos atrás.
+
+### O crachá
+
+Mora em `rh_dados_operadores`, e não em `perfis`, porque uma coluna no perfil
+chegaria de graça a toda tela que faz `select *`. A RLS dele é a mais estreita do
+módulo: só quem enxerga aquela pessoa no escopo do RH — e a própria pessoa.
+
+### Permissões
+
+`ver_rh_gestao` (aba) + os três níveis de escopo + sete chaves de ação
+(`rh_preencher`, `rh_validar`, `rh_enviar`, `rh_aprovar`, `rh_devolver`,
+`rh_gerenciar_fechamento`, `rh_configurar`, `rh_editar_cracha`).
+
+As chaves de **decisão do RH** nascem desligadas para todo cargo: o pedido é para
+não criar um cargo `rh` se as permissões bastarem, e bastam — o administrador
+concede nominalmente. Semear `rh_aprovar` em `gerencia` daria a quatro pessoas o
+poder de aprovar a própria folha sem ninguém ter decidido isso.
+
+`rh_reabrir_fechamento` entra em `PERMISSOES_EXPLICITAS`, ao lado de
+`ignorar_fechamento_mes`: reabrir competência finalizada desfaz uma folha já
+paga, e o acesso total do administrador não concede isso sozinho.
+
+### Arquivos
+
+```
+supabase/migrations/
+  ├── 20260823090000_rh_gestao.sql            # tabelas, índices, fn_rh_equipes_que_lidero
+  ├── 20260823091000_rh_gestao_fluxo.sql      # 13 RPCs de transição + RLS + auditoria
+  └── 20260823092000_rh_gestao_permissoes.sql # catálogo SQL + semeadura Birigui/Marília
+src/services/rh/
+  ├── rhEstados.ts        # máquina de estados, estado derivado, prazo   (puro)
+  ├── rhPercentual.ts     # junta as peças e chama calcularProjecao      (puro)
+  ├── rhAgregacao.ts      # cidade → setor → equipe → operador           (puro)
+  ├── rhExportacao.ts     # planilha: uma aba por cidade + resumo        (puro)
+  ├── rhGestao.service.ts # leitura direta, escrita por RPC
+  └── __tests__/          # inclui rhSeguranca.sql.test.ts, que lê as migrations
+src/hooks/useRhGestao.ts  # permissões, cargas reconciliadas, percentual vivo
+src/pages/RhGestao/       # index + tabela, visão consolidada, cabeçalho, 4 diálogos
+```
+
+---
+
 ## Qualidade e Ferramentas
 
 | Frente | Como está |
 |---|---|
-| **Testes** | Vitest + Testing Library (happy-dom). 2302 testes em 138 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
+| **Testes** | Vitest + Testing Library (happy-dom). 3572 testes em 206 arquivos. Os `.test.ts` ficam **ao lado** do código, não numa pasta separada. |
 | **Cobertura** | `vitest.config.ts` tem thresholds como **catraca**: cada valor fica logo abaixo do que a suíte entrega hoje. Ao subir a cobertura, suba os números **no mesmo commit**. |
 | **E2E** | Playwright em `tests/e2e/`. |
 | **CI** | `.github/workflows/ci.yml`: lint → typecheck → testes com cobertura → build. |

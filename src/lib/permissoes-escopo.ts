@@ -190,6 +190,23 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'usuarios',
     niveis: ['setor', 'todos_setores'],
   },
+  /*
+   * RH Gestão: três níveis, e o de baixo é `equipe` — não `individual`.
+   *
+   * `individual` não existe aqui porque o operador NÃO preenche a própria
+   * premiação: o nível seria um interruptor que liga e não mostra nada.
+   *
+   * E `equipe` tem um sentido próprio nesta aba: são as equipes que a pessoa
+   * LIDERA, lidas de `equipe_lideres`, e não a equipe a que ela pertence. É o
+   * requisito explícito do módulo — pertencer ao mesmo setor não pode dar
+   * acesso à equipe de outro líder. Quem cumpre isso é
+   * `fn_rh_lancamento_visivel` no banco; aqui fica o que a tela oferece.
+   */
+  rh: {
+    chaveAba: 'ver_rh_gestao',
+    prefixo: 'rh',
+    niveis: ['equipe', 'setor', 'todos_setores'],
+  },
 } as const satisfies Record<string, AbaComEscopo>;
 
 export type AbaEscopada = keyof typeof ABAS_COM_ESCOPO;

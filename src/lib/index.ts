@@ -23,6 +23,7 @@ export const ROUTE_PATHS = {
   CAMPANHA_FACIL: '/campanha-facil',
   SOLICITACOES_WHATSAPP: '/solicitacoes-whatsapp',
   TICKETS: '/tickets',
+  RH_GESTAO: '/rh-gestao',
   COMEMORACOES: '/comemoracoes',
   /**
    * Área dos criadores. NÃO entra em menu nenhum de propósito — chega-se aqui

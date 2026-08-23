@@ -49,6 +49,7 @@ export const TELA_LABEL: Record<string, string> = {
   'admin/configuracoes:logs':  'Configurações · Logs',
   'admin/configuracoes:uso':   'Configurações · Monitoramento de uso',
   'admin/configuracoes:permissoes': 'Configurações · Permissões',
+  'rh-gestao':                 'RH Gestão',
   'ouvidoria':                 'Ouvidoria',
   'campanha-facil':            'Campanha Fácil',
   'solicitacoes-whatsapp':     'Solicitações WhatsApp',

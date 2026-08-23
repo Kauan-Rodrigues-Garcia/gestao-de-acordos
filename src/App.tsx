@@ -53,6 +53,7 @@ const Ouvidoria         = lazy(() => import('@/pages/Ouvidoria'));
 const CampanhaFacil     = lazy(() => import('@/pages/CampanhaFacil'));
 const SolicitacoesWpp   = lazy(() => import('@/pages/SolicitacoesWhatsapp'));
 const Tickets           = lazy(() => import('@/pages/Tickets'));
+const RhGestao          = lazy(() => import('@/pages/RhGestao'));
 // Creators Lab: lazy como todo o resto, e por um motivo a mais — quem usa o
 // Gestão e nunca descobre o Easter Egg não baixa um byte dele.
 const CreatorsLab       = lazy(() => import('@/pages/CreatorsLab'));
@@ -298,6 +299,18 @@ export default function App() {
                 <LayoutWrapper>
                   <ProtectedRoute requiredPermissao="ver_tickets">
                     <Tickets />
+                  </ProtectedRoute>
+                </LayoutWrapper>
+              } />
+
+              {/* RH Gestão — Controle de Premiação e Comissão. O cargo não
+                  entra na rota: quem abre é `ver_rh_gestao`, e o que a pessoa
+                  enxerga dentro sai do escopo da aba (equipe que ela lidera,
+                  setor, ou a empresa). A RLS cumpre o mesmo recorte no banco. */}
+              <Route path={ROUTE_PATHS.RH_GESTAO} element={
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_rh_gestao">
+                    <RhGestao />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
