@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3 } from 'lucide-react';
+import { BarChart2, User, Users, ChevronLeft, ChevronRight, Building2, HandCoins, Layers3, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,6 +23,7 @@ import {
 } from '@/pages/Dashboard/Analitico/ModalTabularAnalitico';
 import { AbaDiario } from './Diario';
 import { AbaColchao } from './Colchao';
+import { AbaDesafios } from './Desafios';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 
 export default function PaginaAnalitico() {
@@ -65,10 +66,10 @@ export default function PaginaAnalitico() {
   // `?aba=diario` abre direto no Recebimento diário. É o destino da notificação
   // de importação do diário — sem isto ela largava o usuário na aba errada.
   const [searchParams] = useSearchParams();
-  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario' | 'colchao'>(
+  const [abaPrincipal,  setAbaPrincipal]  = useState<'analitico' | 'diario' | 'colchao' | 'desafios'>(
     () => {
       const aba = searchParams.get('aba');
-      if (aba === 'diario' || aba === 'colchao') return aba;
+      if (aba === 'diario' || aba === 'colchao' || aba === 'desafios') return aba;
       return 'analitico';
     },
   );
@@ -80,16 +81,18 @@ export default function PaginaAnalitico() {
     if (abaDaUrl === 'diario')    setAbaPrincipal('diario');
     if (abaDaUrl === 'analitico') setAbaPrincipal('analitico');
     if (abaDaUrl === 'colchao')   setAbaPrincipal('colchao');
+    if (abaDaUrl === 'desafios')  setAbaPrincipal('desafios');
   }, [abaDaUrl]);
 
   /*
-   * As três abas internas, cada uma com a própria chave. Desligar uma não pode
+   * As abas internas, cada uma com a própria chave. Desligar uma não pode
    * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
    */
   const abasPrincipais = useMemo(() => ([
     { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico' },
     { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario' },
     { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao' },
+    { key: 'desafios',  label: 'Desafios',           Icon: Trophy,    permissao: 'analitico_sub_desafios' },
   ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
 
   /*
@@ -387,6 +390,10 @@ export default function PaginaAnalitico() {
       {/* Seletor de mês + filtro de setor (somente aba Analítico) */}
       {abaVisivel !== 'diario' && (
       <div className="flex items-center gap-4 flex-wrap">
+        {/* O seletor de mês não vale para Desafios: o recorte de lá é o PERÍODO
+            da campanha, que pode atravessar a virada do mês. O filtro de setor
+            logo abaixo continua valendo — ele é o recorte de quem olha. */}
+        {abaVisivel !== 'desafios' && (
         <div className="flex items-center gap-2">
           <span className="text-xs text-muted-foreground font-medium shrink-0">Mês:</span>
           <div className="flex items-center gap-1">
@@ -404,6 +411,7 @@ export default function PaginaAnalitico() {
             </Button>
           </div>
         </div>
+        )}
 
         {/* Filtro de setor — para quem tem o nível `todos_setores` nesta aba.
             Quem não tem fica no próprio setor e vê a etiqueta abaixo. */}
@@ -484,8 +492,11 @@ export default function PaginaAnalitico() {
 
       {/* Aba aberta e nenhum alcance liberado. Acontece se alguém desligar os
           três níveis mantendo a aba ligada — a régua aparece e o conteúdo não
-          teria o que mostrar. Melhor dizer o motivo do que ficar vazio. */}
-      {abaVisivel !== null && !carregandoPermissoes
+          teria o que mostrar. Melhor dizer o motivo do que ficar vazio.
+
+          Desafios fica de fora: o placar da gincana não é recortado pelos
+          níveis do Analítico, e sim pela própria chave da aba. */}
+      {abaVisivel !== null && abaVisivel !== 'desafios' && !carregandoPermissoes
         && !mostrarVisaoGeral && !mostrarVisaoIndividual && (
         <div className="p-6 text-center text-sm text-muted-foreground border border-dashed border-border rounded-xl">
           Nenhum alcance de dados está liberado para o seu cargo no Analítico.
@@ -509,6 +520,20 @@ export default function PaginaAnalitico() {
           mes={mesFiltro}
           setorId={mostrarVisaoGeral ? (veTodosSetores ? filtroSetorId : setorProprio) : null}
           operadorId={mostrarVisaoIndividual ? perfil.id : null}
+        />
+      )}
+
+      {/* Desafios — camada de LEITURA sobre os recebimentos que o Analítico já
+          conta. Recebe o filtro de setor de quem o tem; o período é o da
+          campanha, não o mês da régua acima. */}
+      {abaVisivel === 'desafios' && (
+        <AbaDesafios
+          empresaId={empresa.id}
+          operadorId={perfil.id}
+          operadorNome={perfil.nome}
+          filtroSetorId={veTodosSetores ? filtroSetorId : null}
+          priorizarEquipes={mostrarVisaoGeral}
+          podeConfigurar={temPermissao('desafios_configurar')}
         />
       )}
 

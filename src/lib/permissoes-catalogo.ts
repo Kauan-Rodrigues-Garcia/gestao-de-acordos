@@ -580,6 +580,27 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Ver todos os ajustes da empresa, editar, cancelar e responder pedidos de alteração',
     grupo: 'Ações específicas', padrao: {},
   },
+  /*
+   * Configurar desafios.
+   *
+   * Nasce em `{}` (ninguém) e não é esquecimento: `administrador` e
+   * `super_admin` recebem `true` por regra do resolvedor, então a
+   * administração já funciona e qualquer outra pessoa precisa ser habilitada
+   * nominalmente. Quem configura decide meta e prêmio de uma disputa — é a
+   * decisão certa para essa chave.
+   *
+   * É ela que a RLS de `public.desafios` consulta (migration 20260823170000);
+   * a tela apenas esconde o botão.
+   */
+  {
+    key: 'desafios_configurar', label: 'Configurar desafios',
+    descricao: 'Criar, editar, ativar e encerrar as gincanas da aba Desafios',
+    grupo: 'Ações específicas', padrao: {},
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'A tela de configuracao vive dentro da aba Desafios, no Analitico.',
+    },
+  },
 
   // ── Dashboard ────────────────────────────────────────────────────────────
   // O Dashboard NÃO tem chave de aba, e isso é deliberado: ele é a rota `/`,
@@ -644,6 +665,22 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'analitico_sub_colchao', label: 'Analítico: Colchão',
     descricao: 'Abrir a aba interna do colchão, que nunca entra nos totais do Analítico',
+    grupo: 'Analítico', padrao: TODOS,
+  },
+  /*
+   * Desafios — a aba das gincanas internas.
+   *
+   * Nasce ligada para todo mundo porque uma gincana existe para ser vista por
+   * quem disputa: um placar que só a liderança enxerga não motiva ninguém, e
+   * "Sua corrida" (§22 do pedido) é escrita para o operador.
+   *
+   * É por esta chave, e não por uma regra nova de escopo, que uma operação
+   * encerra o placar público — desligá-la para um cargo tira a aba dele sem
+   * tocar em nada do Analítico.
+   */
+  {
+    key: 'analitico_sub_desafios', label: 'Analítico: Desafios',
+    descricao: 'Abrir a aba interna das gincanas, com ranking individual e por equipe',
     grupo: 'Analítico', padrao: TODOS,
   },
   // Abas internas secundárias — a régua de dentro da visão de setor.
