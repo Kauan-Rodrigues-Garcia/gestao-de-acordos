@@ -148,6 +148,7 @@ src/
 | `public.metas_config_mes` / `metas_validacoes` | Feriados, quartis e trava de meta |
 | `public.pix_automatico_*` | Acordos, config, metas, saldo de divergência e registro de NR do Pix `[BP]` |
 | `public.rh_*` | RH Gestão: células, configuração de setor, crachá, competências, lançamentos e trilha — vide [RH Gestão](#rh-gestão--premiação-e-comissão) |
+| `public.menu_lateral_ordem` | Ordem das abas do menu, por empresa **e por cargo** — vide [Menu lateral](#menu-lateral--a-ordem-por-cargo) |
 | `public.ouvidoria_*` · `solicitacoes_whatsapp` · `comemoracoes` · `pet_*` | Módulos auxiliares |
 
 ### Migrations
@@ -624,6 +625,19 @@ Feature adicionada em 2026-06-29, originalmente exclusiva da PaguePlay.
 > de lá. As diferenças entre as operações estão nas regras de escopo
 > (`services/analitico/escopoAnalitico.ts`), não em um gate por slug.
 
+### As abas internas, e o Colchão
+
+Cada aba interna tem a própria chave (`analitico_sub_*`): desligar uma não pode
+mexer nas outras. Além da chave há a condição `extra`, que é o que **não** é
+permissão — existir para aquela operação, ou haver algo a mostrar.
+
+**Colchão é BookPlay.** A PaguePlay não separa recebimento fora da meta, então a
+aba não existe lá (24/08/2026). O interruptor `analitico_sub_colchao` continua
+listado no painel de Permissões das duas operações; na PaguePlay ele não tem
+efeito. Fechar essa ponta exigiria marcar a chave como `bookplay` nos dois
+catálogos — o TypeScript e o SQL de `fn_permissoes_catalogo()`, que um teste de
+contrato compara.
+
 ### Visão Geral
 
 Recebimentos pagos no ERP são importados por um líder via relatório Excel.
@@ -1076,6 +1090,39 @@ Mora em `rh_dados_operadores`, e não em `perfis`, porque uma coluna no perfil
 chegaria de graça a toda tela que faz `select *`. A RLS dele é a mais estreita do
 módulo: só quem enxerga aquela pessoa no escopo do RH — e a própria pessoa.
 
+**Ele precisa chegar ao lançamento.** Até a migration `20260824120000`,
+`fn_rh_salvar_cracha` gravava só em `rh_dados_operadores`, e a tela e a planilha
+liam `rh_lancamentos.cracha_snapshot` — preenchido apenas na semeadura da
+competência, que é `ON CONFLICT DO NOTHING`. Cadastrar um crachá gravava a
+tabela certa e a coluna «Crachá» continuava `—` para sempre, inclusive no
+arquivo usado para pagar. Agora a RPC propaga o número para os lançamentos das
+competências **abertas**; competência finalizada não é tocada — folha que já
+circulou não muda porque alguém cadastrou um número hoje.
+
+### O balde «Sem equipe»
+
+`perfis.equipe_id` é opcional, e a semeadura traz todo mundo do setor
+configurado: líder sem equipe própria, gerente, recém-admitido. Essas linhas
+nascem com `equipe_id_snapshot` nulo.
+
+As RPCs de equipe comparavam com `=`, e em SQL `NULL = NULL` não é verdadeiro —
+o bloco não podia ser concluído nem validado, e `fn_rh_enviar_setor` exige
+**todos** os lançamentos do setor em `validado_gerencia` ou adiante. Um operador
+sem equipe travava o setor inteiro, para sempre, e o botão nem aparecia na tela.
+
+Desde `20260824120000` as cinco RPCs de equipe usam `IS NOT DISTINCT FROM`. Não
+há afrouxamento de escopo: `fn_rh_lancamento_visivel` só responde SIM para
+equipe nula a partir do nível de **setor** — quem responde pelo balde é a
+gerência, e não um líder qualquer do mesmo setor.
+
+### Fora da folha na exportação
+
+Uma linha dispensada chega à planilha com `valor` nulo e o status por baixo
+intacto (ele nunca avançou, porque não havia o que preencher). Escrita assim,
+ela dizia «Pendente / 0,00» — a mesma frase de quem simplesmente não foi
+preenchido, e as duas exigem ações opostas de quem confere. A coluna `Status`
+diz «Fora da folha», e a coluna `Motivo` carrega a justificativa registrada.
+
 ### Permissões
 
 `ver_rh_gestao` (aba) + os três níveis de escopo + sete chaves de ação
@@ -1097,7 +1144,8 @@ paga, e o acesso total do administrador não concede isso sozinho.
 supabase/migrations/
   ├── 20260823090000_rh_gestao.sql            # tabelas, índices, fn_rh_equipes_que_lidero
   ├── 20260823091000_rh_gestao_fluxo.sql      # 13 RPCs de transição + RLS + auditoria
-  └── 20260823092000_rh_gestao_permissoes.sql # catálogo SQL + semeadura Birigui/Marília
+  ├── 20260823092000_rh_gestao_permissoes.sql # catálogo SQL + semeadura Birigui/Marília
+  └── 20260824120000_rh_gestao_arestas.sql    # crachá no snapshot + o balde «Sem equipe»
 src/services/rh/
   ├── rhEstados.ts        # máquina de estados, estado derivado, prazo   (puro)
   ├── rhPercentual.ts     # junta as peças e chama calcularProjecao      (puro)
@@ -1253,6 +1301,54 @@ param. O que já foi lançado **continua somando** até ser cancelado — para z
 também, cancele os lançamentos ou desligue a aba inteira.
 
 ---
+## Menu lateral — a ordem por cargo
+
+> Migrations `20260822131449` (a tabela) e `20260824130000` (a coluna `cargo`).
+> Régua: `src/lib/menuLateral.ts` · editor: `src/components/MenuLateralEditor.tsx`.
+
+### Uma régua, duas telas
+
+`NAV_ITEMS` e o filtro moravam dentro do `Layout.tsx`, e isso bastava enquanto o
+menu só era desenhado para quem estava logado. O editor de ordem mudou a
+pergunta: ele precisa desenhar o menu de **outro cargo**.
+
+Por isso a lista e o filtro saíram para `lib/menuLateral.ts`, com o contexto
+como parâmetro. `abasDoMenu(ctx)` responde tanto pela pessoa logada (`Layout`)
+quanto pelo cargo escolhido (a prévia do editor). Reescrever o filtro dentro do
+editor daria duas réguas para a mesma decisão, e a segunda envelheceria na
+primeira aba nova.
+
+A prévia é **exata** no que depende de cargo — permissão, operação, listas de
+cargo do item — e **aproximada** nas duas concessões que dependem de pessoa
+(acesso individual da Ouvidoria e cadastro de atendente de Tickets). O editor
+declara isso na tela. Errar ali não concede nada: a ordem só reposiciona o que a
+pessoa já podia ver.
+
+### A linha de cargo vazio
+
+`menu_lateral_ordem` tem chave `(empresa_id, cargo)`. `cargo = ''` é a ordem
+**geral** da empresa: vale para todo cargo sem linha própria.
+
+É o que fez a mudança para «por cargo» ser sem perda — a ordem que existia virou
+a geral — e é o que faz a tabela envelhecer: cargo novo herda a geral até alguém
+decidir o contrário. Um `NULL` faria o mesmo trabalho e estragaria a chave
+primária: em Postgres `NULL` nunca é igual a `NULL`, e duas linhas «gerais»
+poderiam coexistir.
+
+**Array vazio conta como ausência.** Não há policy de `DELETE` (uma porta a
+menos), então «desfazer» é gravar `[]` — e desfazer a ordem de um cargo tem de
+devolvê-lo à geral, não deixá-lo com um menu sem abas. Na linha geral, `[]`
+devolve à ordem do código.
+
+### O que a tabela não guarda
+
+Rótulo, ícone, permissão e quais abas existem: isso é do código. A ordem é só
+apresentação, e é aplicada **depois** do filtro de permissão — reordenar nunca
+traz de volta uma aba que a permissão escondeu. Inverter os dois passos
+transformaria uma preferência visual em concessão de acesso.
+
+---
+
 ## Qualidade e Ferramentas
 
 | Frente | Como está |

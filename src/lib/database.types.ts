@@ -2017,18 +2017,21 @@ export type Database = {
         Row: {
           atualizado_em: string
           atualizado_por: string | null
+          cargo: string
           empresa_id: string
           ordem: string[]
         }
         Insert: {
           atualizado_em?: string
           atualizado_por?: string | null
+          cargo?: string
           empresa_id: string
           ordem?: string[]
         }
         Update: {
           atualizado_em?: string
           atualizado_por?: string | null
+          cargo?: string
           empresa_id?: string
           ordem?: string[]
         }

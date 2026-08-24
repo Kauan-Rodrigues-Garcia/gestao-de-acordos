@@ -81,12 +81,16 @@ describe('AdminConfiguracoes — gate do card "Banco de Dados / Migrations" (#8)
     expect(deps.trim()).toBe('podeVerBancoDados');
   });
 
-  it('a proteção no Layout aponta para apenas administrador no menu', () => {
+  it('a proteção no menu aponta para apenas administrador', () => {
     // Regressão cruzada: confirma que o item de menu segue com roles=['administrador']
-    // (super_admin passa pelo bypass). Se alguém relaxar isso no Layout no futuro,
-    // o card no AdminConfiguracoes continua protegido pelo gate local.
+    // (super_admin passa pelo bypass). Se alguém relaxar isso no futuro, o card
+    // no AdminConfiguracoes continua protegido pelo gate local.
+    //
+    // A lista mudou de `Layout.tsx` para `lib/menuLateral.ts` em 24/08/2026,
+    // quando o editor de ordem passou a precisar da mesma régua para desenhar
+    // o menu de outro cargo.
     const layoutSrc = readFileSync(
-      resolve(__dirname, '../../components/Layout.tsx'),
+      resolve(__dirname, '../../lib/menuLateral.ts'),
       'utf-8',
     );
     expect(layoutSrc).toMatch(

@@ -46,9 +46,8 @@ import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { buscarResumoOperadoresAnalitico } from '@/services/analitico/analitico.service';
 import { calcularPercentualRh, type PercentualRh } from '@/services/rh/rhPercentual';
 import {
-  listarCelulas, listarConfigSetores, listarFechamentos, listarLancamentos,
-  listarCrachas,
-  type RhCelulaRow, type RhConfigSetorRow, type RhFechamentoRow, type RhLancamento,
+  listarCelulas, listarFechamentos, listarLancamentos, listarCrachas,
+  type RhCelulaRow, type RhFechamentoRow, type RhLancamento,
 } from '@/services/rh/rhGestao.service';
 
 export interface PermissoesRh {
@@ -80,12 +79,18 @@ export interface EstadoRhGestao {
   permissoes: PermissoesRh;
 
   celulas: RhCelulaRow[];
-  configSetores: RhConfigSetorRow[];
   fechamentos: RhFechamentoRow[];
   /** A competência em foco. `null` quando ainda não há nenhuma aberta. */
   fechamento: RhFechamentoRow | null;
   lancamentos: RhLancamento[];
-  /** `operador_id` → crachá. Só o que o escopo permite ver. */
+  /**
+   * `operador_id` → crachá CADASTRADO. Só o que o escopo permite ver.
+   *
+   * O lançamento carrega `cracha_snapshot`, tirado na semeadura da competência.
+   * Este mapa é a leitura viva, e a tela usa os dois: enquanto a competência
+   * está aberta vale o cadastrado; finalizada, vale o snapshot — folha que já
+   * circulou não muda porque alguém cadastrou um número hoje.
+   */
   crachas: Record<string, string | null>;
 
   /** `operador_id` → percentual calculado AGORA, para o mês de apuração. */
@@ -134,7 +139,6 @@ export function useRhGestao(): EstadoRhGestao {
   }), [niveis, temPermissao, temPermissaoExplicita]);
 
   const [celulas, setCelulas]           = useState<RhCelulaRow[]>([]);
-  const [configSetores, setConfig]      = useState<RhConfigSetorRow[]>([]);
   const [fechamentos, setFechamentos]   = useState<RhFechamentoRow[]>([]);
   const [fechamentoId, setFechamentoId] = useState<string | null>(null);
   const [lancamentos, setLancamentos]   = useState<RhLancamento[]>([]);
@@ -160,19 +164,25 @@ export function useRhGestao(): EstadoRhGestao {
     [fechamentos, fechamentoId],
   );
 
-  // ── Carga da moldura (competências e configuração) ────────────────────────
+  /*
+   * ── Carga da moldura (competências, cidades e crachás) ────────────────────
+   *
+   * `rh_config_setores` NÃO entra aqui. Ela era lida em toda visita e o
+   * resultado não era consumido por ninguém: quem precisa da configuração é o
+   * `PainelConfiguracao`, que a carrega ao abrir. Uma consulta por visita para
+   * alimentar um campo que ninguém lê é custo sem função — e um estado morto
+   * que a próxima pessoa acharia que significa alguma coisa.
+   */
   const carregarMoldura = useCallback(async () => {
     if (!empresaId || !permissoes.podeVer) return;
-    const [cel, cfg, fechs, crc] = await Promise.all([
+    const [cel, fechs, crc] = await Promise.all([
       listarCelulas(empresaId),
-      listarConfigSetores(empresaId),
       listarFechamentos(empresaId),
       listarCrachas(empresaId),
     ]);
     if (!vivo.current) return;
 
     setCelulas(a => reconciliarLista(a, cel, { chave: c => c.id }));
-    setConfig(a => reconciliarLista(a, cfg, { chave: c => c.id, iguais: iguaisProfundo }));
     setFechamentos(a => reconciliarLista(a, fechs, { chave: f => f.id, iguais: iguaisProfundo }));
 
     const mapa: Record<string, string | null> = {};
@@ -320,7 +330,7 @@ export function useRhGestao(): EstadoRhGestao {
     carregando: carregando || permLoading,
     atualizando,
     permissoes,
-    celulas, configSetores, fechamentos, fechamento, lancamentos, crachas,
+    celulas, fechamentos, fechamento, lancamentos, crachas,
     percentuais,
     selecionarFechamento,
     recarregar,

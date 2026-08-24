@@ -101,13 +101,20 @@ export default function PaginaAnalitico() {
   /*
    * As abas internas, cada uma com a própria chave. Desligar uma não pode
    * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
+   *
+   * `extra` é a condição que NÃO é permissão: existir para esta operação, ou
+   * haver algo para mostrar. Colchão é conceito da BookPlay — a PaguePlay não
+   * separa recebimento fora da meta —, então a aba não existe lá. O
+   * interruptor `analitico_sub_colchao` continua no painel de Permissões das
+   * duas operações; na PaguePlay ele não tem efeito.
    */
   const abasPrincipais = useMemo(() => ([
     { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
     { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario', extra: true },
-    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: true },
+    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: !tenant.isPaguePlay },
     { key: 'desafios',  label: 'Desafios',           Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
-  ] as const).filter(a => a.extra && temPermissao(a.permissao)), [temPermissao, desafiosNoMeuSetor]);
+  ] as const).filter(a => a.extra && temPermissao(a.permissao)),
+  [temPermissao, desafiosNoMeuSetor, tenant.isPaguePlay]);
 
   /*
    * A aba que a tela realmente mostra.

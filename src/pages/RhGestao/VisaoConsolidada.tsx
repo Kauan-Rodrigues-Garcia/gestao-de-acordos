@@ -107,6 +107,10 @@ export function VisaoConsolidada<T extends LinhaAgregavel>({
                       <Users className="w-3 h-3 shrink-0" />
                       {s.resumo.total} pessoa{s.resumo.total !== 1 ? 's' : ''}
                       {s.resumo.pendentes > 0 && ` · ${s.resumo.pendentes} sem valor`}
+                      {/* Fora da folha não é pendência: é decisão registrada.
+                          Sem este número, o RH via «20 pessoas» e 17 valores e
+                          voltava a perguntar o que faltava. */}
+                      {s.resumo.dispensados > 0 && ` · ${s.resumo.dispensados} fora da folha`}
                       {s.resumo.devolvidos > 0 && (
                         <span className="text-red-400 inline-flex items-center gap-0.5 ml-1">
                           <AlertTriangle className="w-2.5 h-2.5" />

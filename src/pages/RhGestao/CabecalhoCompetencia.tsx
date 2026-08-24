@@ -109,7 +109,12 @@ export function CabecalhoCompetencia({
             </Button>
           )}
 
-          {fechamento && permissoes.escopoTodos && (
+          {/* Exportar vale para quem responde por um SETOR também, e não só
+              para o RH: a gerência confere a folha do setor dela na planilha
+              antes de enviar, e a exportação sai do que o escopo já entregou —
+              ninguém baixa o que não enxerga. Alcance de equipe fica de fora:
+              ali a tabela na tela já é a lista inteira. */}
+          {fechamento && (permissoes.escopoTodos || permissoes.escopoSetor) && (
             <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs" onClick={onExportar}>
               <Download className="w-3.5 h-3.5" /> Exportar
             </Button>

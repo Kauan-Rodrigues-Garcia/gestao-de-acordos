@@ -46,13 +46,21 @@ export interface TabelaOperadoresProps {
   onDispensar?: (lancamento: LancamentoComPercentual, dispensar: boolean) => void;
   /** Cadastro de crachá — só quem tem a chave. */
   onEditarCracha?: (lancamento: LancamentoComPercentual) => void;
+  /**
+   * O lançamento que a notificação de devolução aponta (`?lancamento=`).
+   *
+   * A RPC monta esse link desde o primeiro dia, e ninguém o lia: quem clicava
+   * no sino caía na competência certa e numa lista de centenas de nomes.
+   */
+  destacarId?: string | null;
   /** Nada animado na primeira pintura — só quem chega depois se move. */
   jaPintou: boolean;
 }
 
 export function TabelaOperadores({
   linhas, permissoes, competenciaAberta,
-  onSalvarValor, onAprovar, onDevolver, onDispensar, onEditarCracha, jaPintou,
+  onSalvarValor, onAprovar, onDevolver, onDispensar, onEditarCracha,
+  destacarId, jaPintou,
 }: TabelaOperadoresProps) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rascunho, setRascunho]     = useState('');
@@ -110,6 +118,7 @@ export function TabelaOperadores({
               const meta = ESTADO_META[status];
               const emEdicao = editandoId === l.id;
               const devolvido = status === 'devolvido_rh';
+              const destacada = !!destacarId && destacarId === l.id;
 
               return (
                 <LinhaViva
@@ -117,6 +126,10 @@ export function TabelaOperadores({
                   className={cn(
                     'border-b border-border/30 group transition-colors hover:bg-accent/20',
                     devolvido && 'bg-red-500/[0.03]',
+                    // O destaque é uma moldura, e não uma cor de fundo: a cor
+                    // já significa «devolvido», e é justamente a linha devolvida
+                    // que o link aponta.
+                    destacada && 'ring-1 ring-inset ring-violet-500/60 bg-violet-500/[0.04]',
                   )}
                 >
                   {/* Crachá: só existe dentro deste módulo. Ver a RLS de

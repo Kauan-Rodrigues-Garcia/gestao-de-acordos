@@ -69,7 +69,7 @@ describe('montarAbas', () => {
     const [aba] = montarAbas([linha()], '2026-09-01');
     expect(Object.keys(aba.linhas[0])).toEqual([
       'Competência', 'Cidade', 'Setor', 'Equipe', 'Crachá', 'Operador',
-      'Percentual', 'Tipo', 'Valor', 'Status',
+      'Percentual', 'Tipo', 'Valor', 'Status', 'Motivo',
     ]);
   });
 
@@ -97,6 +97,39 @@ describe('montarAbas', () => {
   it('o status sai com o rótulo humano, não com o valor do banco', () => {
     const [aba] = montarAbas([linha({ status: 'devolvido_rh' as StatusLancamento })], '2026-09-01');
     expect(aba.linhas[0].Status).toBe('Devolvido');
+  });
+
+  /*
+   * Fora da folha × pendente.
+   *
+   * A linha dispensada chega com `valor` nulo e o status por baixo intacto —
+   * ele nunca avançou, porque não havia o que preencher. Sem esta distinção a
+   * planilha do pagamento dizia «Pendente / 0,00» para quem foi tirado da
+   * folha de propósito: a mesma frase de quem apenas não foi preenchido, e as
+   * duas exigem ações opostas de quem confere.
+   */
+  it('quem está fora da folha diz isso no status, e não «Pendente»', () => {
+    const [aba] = montarAbas([linha({
+      valor: null,
+      status: 'pendente' as StatusLancamento,
+      dispensado: true,
+      motivo_dispensa: 'Não atingiu a meta',
+    })], '2026-09-01');
+    expect(aba.linhas[0].Status).toBe('Fora da folha');
+    expect(aba.linhas[0].Motivo).toBe('Não atingiu a meta');
+    expect(aba.linhas[0].Valor).toBe(0);
+  });
+
+  it('sem dispensa, a coluna Motivo carrega a observação do lançamento', () => {
+    const [aba] = montarAbas(
+      [linha({ observacao: 'Metade do mês em férias' })], '2026-09-01');
+    expect(aba.linhas[0].Status).toBe('Aprovado');
+    expect(aba.linhas[0].Motivo).toBe('Metade do mês em férias');
+  });
+
+  it('sem motivo e sem observação, a coluna sai vazia — nunca «null»', () => {
+    const [aba] = montarAbas([linha()], '2026-09-01');
+    expect(aba.linhas[0].Motivo).toBe('');
   });
 
   it('respeita a ordem configurada das cidades', () => {
@@ -127,5 +160,19 @@ describe('montarResumo', () => {
     const resumo = montarResumo(montarAbas([], '2026-09-01'), '2026-09-01');
     expect(resumo).toHaveLength(1);
     expect(resumo[0].Total).toBe(0);
+  });
+
+  // Sem este número, a primeira pergunta de quem abre a planilha é sempre a
+  // mesma: por que o bloco tem 3 pessoas e 2 valores.
+  it('conta quem ficou fora da folha, por bloco e no total', () => {
+    const abas = montarAbas([
+      linha({ valor: 450 }),
+      linha({ valor: null, dispensado: true, motivo_dispensa: 'Não atingiu' }),
+      linha({ ...MARILIA, valor: 300 }),
+    ], '2026-09-01', ['Birigui', 'Marília']);
+    const resumo = montarResumo(abas, '2026-09-01');
+    expect(resumo[0]['Fora da folha']).toBe(1);
+    expect(resumo[1]['Fora da folha']).toBe(0);
+    expect(resumo[2]['Fora da folha']).toBe(1);
   });
 });

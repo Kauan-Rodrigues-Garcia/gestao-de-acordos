@@ -282,8 +282,20 @@ export async function congelarPercentual(p: {
 
 // ── Transições ───────────────────────────────────────────────────────────────
 
+/*
+ * `equipeId` aceita `null` — é o balde «Sem equipe».
+ *
+ * `perfis.equipe_id` é opcional e a semeadura traz todo mundo do setor
+ * configurado: líder sem equipe própria, gerente, recém-admitido. Essas linhas
+ * nascem com `equipe_id_snapshot` nulo.
+ *
+ * Até a migration `20260824120000` as RPCs comparavam com `=`, e em SQL
+ * `NULL = NULL` não é verdadeiro — nenhuma linha era encontrada. O balde ficava
+ * eternamente pendente e travava o setor inteiro, porque `fn_rh_enviar_setor`
+ * exige TODOS os lançamentos do setor validados.
+ */
 export async function concluirEquipe(
-  fechamentoId: string, equipeId: string,
+  fechamentoId: string, equipeId: string | null,
 ): Promise<RhResultado<number>> {
   return chamar<number>('fn_rh_concluir_equipe', {
     p_fechamento_id: fechamentoId, p_equipe_id: equipeId,
@@ -291,7 +303,7 @@ export async function concluirEquipe(
 }
 
 export async function validarEquipe(
-  fechamentoId: string, equipeId: string,
+  fechamentoId: string, equipeId: string | null,
 ): Promise<RhResultado<number>> {
   return chamar<number>('fn_rh_validar_equipe', {
     p_fechamento_id: fechamentoId, p_equipe_id: equipeId,
@@ -313,7 +325,7 @@ export async function aprovarOperador(
 }
 
 export async function aprovarEquipe(
-  fechamentoId: string, equipeId: string,
+  fechamentoId: string, equipeId: string | null,
 ): Promise<RhResultado<number>> {
   return chamar<number>('fn_rh_aprovar_equipe', {
     p_fechamento_id: fechamentoId, p_equipe_id: equipeId,
@@ -330,7 +342,7 @@ export async function devolverOperador(
 }
 
 export async function devolverEquipe(
-  fechamentoId: string, equipeId: string, motivo: string,
+  fechamentoId: string, equipeId: string | null, motivo: string,
 ): Promise<RhResultado<number>> {
   if (!motivo.trim()) return { ok: false, erro: 'Informe o motivo da devolução.' };
   return chamar<number>('fn_rh_devolver_equipe', {

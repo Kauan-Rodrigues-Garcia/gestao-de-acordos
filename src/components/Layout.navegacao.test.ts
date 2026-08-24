@@ -9,9 +9,13 @@
  * renderizados à mão logo abaixo do laço, com condição só de slug e cargo, e
  * por isso escapavam do filtro de permissão.
  *
- * Estes testes leem os dois arquivos e comparam. Um item de menu novo escrito
+ * Estes testes leem os arquivos e comparam. Um item de menu novo escrito
  * fora da lista, ou uma rota com `requiredPermissao` sem item correspondente,
  * quebra a CI.
+ *
+ * A lista saiu do `Layout.tsx` para `lib/menuLateral.ts` (24/08/2026), quando o
+ * editor de ordem passou a desenhar o menu de outro cargo e precisou da mesma
+ * régua. O contrato é o mesmo; mudou só o arquivo onde ele mora.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -19,13 +23,14 @@ import path from 'node:path';
 
 const RAIZ = path.resolve(__dirname, '..');
 const LAYOUT = fs.readFileSync(path.join(RAIZ, 'components/Layout.tsx'), 'utf8');
+const MENU   = fs.readFileSync(path.join(RAIZ, 'lib/menuLateral.ts'), 'utf8');
 const APP    = fs.readFileSync(path.join(RAIZ, 'App.tsx'), 'utf8');
 
 /** As permissões declaradas no NAV_ITEMS. */
 function chavesDoMenu(): string[] {
-  const bloco = LAYOUT.slice(
-    LAYOUT.indexOf('const NAV_ITEMS'),
-    LAYOUT.indexOf('export default function Layout'),
+  const bloco = MENU.slice(
+    MENU.indexOf('export const NAV_ITEMS'),
+    MENU.indexOf('export interface ContextoMenu'),
   );
   return [...bloco.matchAll(/permissaoKey:\s*'([a-z_]+)'/g)].map(m => m[1]);
 }

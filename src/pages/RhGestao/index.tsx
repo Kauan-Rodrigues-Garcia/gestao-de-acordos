@@ -64,7 +64,8 @@ import HistoricoRh from './HistoricoRh';
 
 type AlvoMotivo =
   | { tipo: 'operador'; lancamento: LancamentoComPercentual }
-  | { tipo: 'equipe'; equipeId: string; equipeNome: string }
+  /* `equipeId` nulo é o balde «Sem equipe» — ver o comentário de `concluir`. */
+  | { tipo: 'equipe'; equipeId: string | null; equipeNome: string }
   | { tipo: 'reabrir' }
   /*
    * Tirar da folha também pede motivo, e pelo mesmo motivo que devolver pede:
@@ -73,6 +74,16 @@ type AlvoMotivo =
    */
   | { tipo: 'dispensar'; lancamento: LancamentoComPercentual };
 
+/**
+ * A chave de «ocupado» de um bloco de equipe.
+ *
+ * O balde «Sem equipe» não tem id, e `setOcupado(null)` significaria «ninguém
+ * ocupado» — o spinner não apareceria e um duplo clique dispararia a RPC duas
+ * vezes.
+ */
+const SEM_EQUIPE_CHAVE = '__sem_equipe__';
+const chaveDaEquipe = (id: string | null) => id ?? SEM_EQUIPE_CHAVE;
+
 export default function RhGestao() {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
@@ -80,7 +91,7 @@ export default function RhGestao() {
 
   const {
     carregando, atualizando, permissoes, celulas, fechamentos, fechamento,
-    lancamentos, percentuais, selecionarFechamento, recarregar,
+    lancamentos, crachas, percentuais, selecionarFechamento, recarregar,
   } = useRhGestao();
 
   const [setorAberto, setSetorAberto] = useState<string | null>(null);
@@ -93,17 +104,51 @@ export default function RhGestao() {
   const [crachaAlvo, setCrachaAlvo]   = useState<LancamentoComPercentual | null>(null);
   const [ocupado, setOcupado]         = useState<string | null>(null);
 
-  // A notificação de devolução leva `?fechamento=…&equipe=…`: quem clica cai no
-  // registro, e não numa lista onde ainda teria que procurar do que se tratava.
+  // A notificação de devolução leva `?fechamento=…&equipe=…&lancamento=…`: quem
+  // clica cai no registro, e não numa lista onde ainda teria que procurar do que
+  // se tratava. O `setor` só vem no aviso do balde «Sem equipe», que não tem
+  // equipe para apontar.
   useEffect(() => {
     const alvo = params.get('fechamento');
     if (alvo && fechamentos.some(f => f.id === alvo)) selecionarFechamento(alvo);
   }, [params, fechamentos, selecionarFechamento]);
 
-  const linhas = useMemo(
-    () => lancamentos.map(l => comPercentual(l, percentuais)),
-    [lancamentos, percentuais],
-  );
+  const setorDaNotificacao = params.get('setor');
+  useEffect(() => {
+    if (setorDaNotificacao) setSetorAberto(setorDaNotificacao);
+  }, [setorDaNotificacao]);
+
+  /*
+   * A linha que a notificação aponta.
+   *
+   * Sem isto, o link levava à competência certa e largava a pessoa numa tela de
+   * centenas de nomes — o `&lancamento=` que a RPC monta desde o primeiro dia
+   * era lido por ninguém.
+   */
+  const lancamentoDestacado = params.get('lancamento');
+
+  /*
+   * O crachá que a tela mostra: o CADASTRADO, com o snapshot como reserva.
+   *
+   * `cracha_snapshot` só é escrito na semeadura da competência, que é
+   * `ON CONFLICT DO NOTHING` — quem já tinha linha nunca recebia o número
+   * cadastrado depois, e a coluna ficava «—» para sempre. A migration
+   * `20260824120000` passou a propagar o crachá para as competências abertas;
+   * aqui a leitura viva cobre o intervalo entre salvar e reler, e as bases que
+   * ainda não aplicaram a migration.
+   *
+   * Competência FINALIZADA fica com o snapshot: folha que já circulou não muda
+   * porque alguém cadastrou um número hoje.
+   */
+  const linhas = useMemo(() => {
+    const finalizada = fechamento?.status === 'finalizado';
+    return lancamentos.map(l => {
+      const base = comPercentual(l, percentuais);
+      if (finalizada) return base;
+      const vivo = crachas[l.operador_id];
+      return vivo === undefined ? base : { ...base, cracha_snapshot: vivo };
+    });
+  }, [lancamentos, percentuais, crachas, fechamento?.status]);
 
   const ordemCelulas = useMemo(() => celulas.map(c => c.nome), [celulas]);
   const arvore = useMemo(() => montarArvore(linhas, ordemCelulas), [linhas, ordemCelulas]);
@@ -169,10 +214,18 @@ export default function RhGestao() {
    * inversa e algo falhasse no meio, a equipe ficaria concluída com percentual
    * nulo — e o número que a gerência confere teria voltado a acompanhar o mês.
    * Falhando o congelamento, nada é concluído e a mensagem explica.
+   *
+   * `equipeId` nulo é o balde «Sem equipe»: líder sem equipe própria, gerente,
+   * recém-admitido. Ele existe desde o primeiro dia do módulo e não tinha como
+   * ser concluído — a RPC comparava `equipe_id_snapshot = NULL`, que nunca é
+   * verdadeiro, e o botão nem aparecia. Um operador assim travava o setor
+   * inteiro, porque enviar ao RH exige todas as linhas validadas.
    */
-  const concluir = useCallback(async (equipeId: string, doEscopo: LancamentoComPercentual[]) => {
+  const concluir = useCallback(async (
+    equipeId: string | null, doEscopo: LancamentoComPercentual[],
+  ) => {
     if (!fechamento) return;
-    setOcupado(equipeId);
+    setOcupado(chaveDaEquipe(equipeId));
     try {
       for (const l of doEscopo) {
         // Já congelado e não devolvido: a fotografia é da primeira conclusão e
@@ -201,9 +254,9 @@ export default function RhGestao() {
     }
   }, [fechamento, percentuais, avisar, recarregar]);
 
-  const validar = useCallback(async (equipeId: string) => {
+  const validar = useCallback(async (equipeId: string | null) => {
     if (!fechamento) return;
-    setOcupado(equipeId);
+    setOcupado(chaveDaEquipe(equipeId));
     try {
       const r = await validarEquipe(fechamento.id, equipeId);
       avisar(r.ok, r.erro, 'Equipe validada.');
@@ -230,9 +283,9 @@ export default function RhGestao() {
     } finally { setOcupado(null); }
   }, [avisar, recarregar]);
 
-  const aprovarTime = useCallback(async (equipeId: string) => {
+  const aprovarTime = useCallback(async (equipeId: string | null) => {
     if (!fechamento) return;
-    setOcupado(equipeId);
+    setOcupado(chaveDaEquipe(equipeId));
     try {
       const r = await aprovarEquipe(fechamento.id, equipeId);
       avisar(r.ok, r.erro, `${r.dados ?? 0} lançamento(s) aprovado(s).`);
@@ -456,7 +509,7 @@ export default function RhGestao() {
 
             {setor.equipes.map(eq => {
               const g = GRUPO_META[eq.resumo.estado];
-              const emAcao = ocupado === (eq.equipeId ?? '');
+              const emAcao = ocupado === chaveDaEquipe(eq.equipeId);
 
               return (
                 <Card key={eq.equipeId ?? 'sem-equipe'} className="border-border/70 overflow-hidden">
@@ -465,11 +518,18 @@ export default function RhGestao() {
                       <p className="text-sm font-semibold text-foreground truncate">
                         {eq.equipeNome}
                       </p>
+                      {/* Os três números fecham com o total.
+                          «total − pendentes» contava devolvido e fora da folha
+                          como preenchido, e a soma não batia com a tabela logo
+                          abaixo. `resumirGrupo` já separa as quatro contagens. */}
                       <p className="text-[11px] text-muted-foreground">
                         {eq.resumo.total} operador{eq.resumo.total !== 1 ? 'es' : ''} ·{' '}
-                        {eq.resumo.total - eq.resumo.pendentes} preenchido
-                        {eq.resumo.total - eq.resumo.pendentes !== 1 ? 's' : ''} ·{' '}
+                        {eq.resumo.preenchidos} preenchido
+                        {eq.resumo.preenchidos !== 1 ? 's' : ''} ·{' '}
                         {eq.resumo.pendentes} pendente{eq.resumo.pendentes !== 1 ? 's' : ''}
+                        {eq.resumo.devolvidos > 0
+                          && ` · ${eq.resumo.devolvidos} devolvido${eq.resumo.devolvidos !== 1 ? 's' : ''}`}
+                        {eq.resumo.dispensados > 0 && ` · ${eq.resumo.dispensados} fora da folha`}
                       </p>
                     </div>
 
@@ -484,50 +544,56 @@ export default function RhGestao() {
                       {emAcao && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
 
                       {/* Concluir: só quando falta a conclusão, e nunca em
-                          silêncio — a RPC recusa com a lista de quem falta. */}
-                      {permissoes.podePreencher && competenciaAberta && eq.equipeId
+                          silêncio — a RPC recusa com a lista de quem falta.
+
+                          Sem `eq.equipeId &&`: o balde «Sem equipe» também
+                          precisa ser concluído, senão o setor nunca é enviado.
+                          Quem tem alcance só de equipe não enxerga esse balde —
+                          `fn_rh_lancamento_visivel` exige nível de setor quando
+                          a equipe é nula —, então o botão não aparece para ele. */}
+                      {permissoes.podePreencher && competenciaAberta
                         && (eq.resumo.estado === 'em_preenchimento'
                             || eq.resumo.estado === 'nao_iniciado'
                             || eq.resumo.estado === 'com_devolucao') && (
                         <Button
                           size="sm" variant="outline" className="h-7 text-[11px] gap-1"
                           disabled={emAcao}
-                          onClick={() => void concluir(eq.equipeId!, eq.linhas)}
+                          onClick={() => void concluir(eq.equipeId, eq.linhas)}
                         >
                           <CheckCircle2 className="w-3 h-3" /> Concluir equipe
                         </Button>
                       )}
 
-                      {permissoes.podeValidar && competenciaAberta && eq.equipeId
+                      {permissoes.podeValidar && competenciaAberta
                         && eq.resumo.estado === 'concluido' && (
                         <Button
                           size="sm" variant="outline" className="h-7 text-[11px] gap-1"
                           disabled={emAcao}
-                          onClick={() => void validar(eq.equipeId!)}
+                          onClick={() => void validar(eq.equipeId)}
                         >
                           <ShieldCheck className="w-3 h-3" /> Validar
                         </Button>
                       )}
 
-                      {permissoes.podeAprovar && competenciaAberta && eq.equipeId
+                      {permissoes.podeAprovar && competenciaAberta
                         && eq.resumo.estado === 'enviado' && (
                         <Button
                           size="sm" className="h-7 text-[11px] gap-1"
                           disabled={emAcao}
-                          onClick={() => void aprovarTime(eq.equipeId!)}
+                          onClick={() => void aprovarTime(eq.equipeId)}
                         >
                           <CheckCircle2 className="w-3 h-3" /> Aprovar equipe
                         </Button>
                       )}
 
-                      {permissoes.podeDevolver && competenciaAberta && eq.equipeId
+                      {permissoes.podeDevolver && competenciaAberta
                         && (eq.resumo.estado === 'enviado' || eq.resumo.estado === 'aprovado') && (
                         <Button
                           size="sm" variant="outline"
                           className="h-7 text-[11px] gap-1 text-red-400 border-red-500/30 hover:bg-red-500/10"
                           disabled={emAcao}
                           onClick={() => setMotivoAlvo({
-                            tipo: 'equipe', equipeId: eq.equipeId!, equipeNome: eq.equipeNome,
+                            tipo: 'equipe', equipeId: eq.equipeId, equipeNome: eq.equipeNome,
                           })}
                         >
                           <Undo2 className="w-3 h-3" /> Devolver equipe
@@ -541,6 +607,7 @@ export default function RhGestao() {
                       linhas={eq.linhas}
                       permissoes={permissoes}
                       competenciaAberta={!!competenciaAberta}
+                      destacarId={lancamentoDestacado}
                       jaPintou={jaPintou.current}
                       onSalvarValor={salvarValor}
                       onAprovar={aprovarUm}

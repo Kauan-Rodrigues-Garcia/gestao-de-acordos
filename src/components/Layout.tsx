@@ -25,11 +25,8 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  LayoutDashboard, FileText, Plus, Users, Settings,
   LogOut, Menu, X, ChevronRight,
-  BarChart3, Upload, Target,
-  Camera, Loader2, Trash2, TrendingUp, Bell, MessageCircle, BarChart2, KeyRound, ArrowUpDown,
-  LifeBuoy, Megaphone, MessageSquarePlus, Ticket, ClipboardList,
+  Camera, Loader2, Trash2, Bell, MessageCircle, BarChart2, KeyRound, ArrowUpDown,
 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -41,6 +38,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
+import { abasDoMenu } from '@/lib/menuLateral';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { MenuLateralEditor } from '@/components/MenuLateralEditor';
 import { Separator } from '@/components/ui/separator';
@@ -59,7 +57,6 @@ import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
-import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
 // só onde ela é criada. Só a aba de criação mudou de lugar.
 import { ComemoracaoOverlay } from './comemoracao/ComemoracaoOverlay';
@@ -70,53 +67,13 @@ import { ModalRecortarFoto } from './ModalRecortarFoto';
 import { TrocarSenhaModal } from './TrocarSenhaModal';
 import { SeletorEmpresa } from './SeletorEmpresa';
 
-interface NavItem {
-  label: string;
-  icon: React.ElementType;
-  to: string;
-  roles?: string[];
-  /** Se true, o item fica oculto quando o tenant for PaguePay */
-  hiddenForPaguePay?: boolean;
-  /** Se true, o item fica oculto quando o tenant for BookPlay */
-  hiddenForBookplay?: boolean;
-  /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
-  permissaoKey?: string;
-}
-
-const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
-  // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
-  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
-  // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
-  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
-  // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
-  // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
-  // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
-  // RH Gestão. Sem lista de cargo: quem abre é a chave, e o alcance de dentro
-  // vem dos níveis da aba. É o padrão das abas já convertidas.
-  { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           permissaoKey: 'ver_rh_gestao' },
-  // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
-  // item de menu. A rota antiga redireciona para lá.
-  // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
-  // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
-  // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
-  // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
-  // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
-  // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
-  // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
-  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           permissaoKey: 'ver_analitico' },
-  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
-  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             permissaoKey: 'importar_excel' },
-];
+/*
+ * A lista e o filtro mudaram de casa: `src/lib/menuLateral.ts`.
+ *
+ * O editor de ordem precisa desenhar o menu de OUTRO cargo, e reescrever o
+ * filtro lá dentro criaria uma segunda régua — que envelheceria na primeira aba
+ * nova. Aqui ficou só o consumo.
+ */
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { perfil, signOut } = useAuth();
@@ -251,7 +208,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const isPP = tenant.isPaguePlay || empresa?.slug === 'pagueplay';
   const userRole = perfil?.perfil ?? 'operador';
-  const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  // `valorDoCargo` é o que o editor de ordem usa para desenhar o menu de OUTRO
+  // cargo: ele responde «o que este cargo concede», sem aplicar exceção de
+  // pessoa nenhuma — que é exatamente a pergunta de uma prévia por cargo.
+  const { temPermissao, valorDoCargo, loading: permLoading } = useCargoPermissoes();
   const ouvidoriaAcesso = useOuvidoriaAcesso();
   const acessoTickets   = useTicketsAcesso();
   // Mesmo estado que o painel (ChatNotificacoes) usa — antes o header tinha um
@@ -282,56 +242,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [senhaTrocadaLocal, setSenhaTrocadaLocal] = useState(false);
   const mostrarBotaoSenha = !!perfil?.id && !perfil?.senha_alterada && !senhaTrocadaLocal;
 
-  // Filtra por role, visibilidade PaguePay e permissões configuráveis.
-  //
-  // Itens COM permissaoKey são controlados exclusivamente pela permissão:
-  //   - admin/super_admin sempre veem (temPermissao retorna true)
-  //   - outros cargos: visível se e somente se a permissão estiver ativa no painel
-  //   Isso mantém a nav consistente com o ProtectedRoute da rota correspondente.
-  //
-  // Itens SEM permissaoKey são controlados pelo cargo (roles), como antes.
-  const navItems = NAV_ITEMS.filter(item => {
-    if (item.hiddenForPaguePay && isPP) return false;
-    if (item.hiddenForBookplay && tenant.slug === 'bookplay') return false;
-
-    // A permissão configurável vem PRIMEIRO e vale para todo item que a
-    // declara. Ela ficava depois dos casos especiais abaixo, que retornam cedo
-    // — então Ouvidoria e Solicitar Atendimento nunca chegavam a consultá-la, e
-    // o menu continuava mostrando a aba de quem tinha a permissão desligada.
-    if (item.permissaoKey && (permLoading || !temPermissao(item.permissaoKey))) {
-      return false;
-    }
-
-    // Ouvidoria: PaguePlay only; visível para cargo ouvidoria, admins e
-    // usuários com acesso concedido em ouvidoria_acessos. A concessão fina
-    // continua valendo POR CIMA da permissão já verificada acima.
-    if (item.to === ROUTE_PATHS.OUVIDORIA) {
-      // OU, e nao E: a permissao ja foi conferida acima. Como E, ligar
-      // `ver_ouvidoria` para um cargo nao fazia nada enquanto a pessoa nao
-      // tivesse linha em `ouvidoria_acessos` — o caso classico de "liberei e
-      // nao aconteceu". A concessao fina continua valendo como caminho extra.
-      return isPP && (temPermissao('ver_ouvidoria') || ouvidoriaAcesso.podeVer);
-    }
-
-    // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
-    // e quem garante isso é a RLS, não este filtro.
-    if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
-      return isPP && podeAcessarAbaWpp(userRole);
-    }
-
-    // Tickets: nasce só para administrador. A liderança entra quando a chave
-    // `tickets_config.liberado_para_lideranca` for virada na própria aba.
-    if (item.to === ROUTE_PATHS.TICKETS) {
-      // A permissao ja foi conferida acima (o item declara `ver_tickets`).
-      // O que sobra aqui e o interruptor da empresa e o cadastro de
-      // atendentes — dois controles que o proprio admin liga na tela.
-      return acessoTickets.podeVerAba;
-    }
-
-    if (item.permissaoKey) return true;
-
-    return !item.roles || item.roles.includes(userRole) || userRole === 'super_admin';
-  });
+  /*
+   * As abas que ESTA pessoa enxerga.
+   *
+   * A régua mora em `lib/menuLateral.ts` e é a mesma que o editor de ordem usa
+   * para desenhar a prévia de cada cargo. Ela não é barreira de segurança:
+   * quem manda no dado é a RLS.
+   *
+   * `permLoading` continua escondendo tudo enquanto as permissões carregam —
+   * pintar o menu completo e recolher meio segundo depois é pior do que abrir
+   * com ele vazio.
+   */
+  const navItems = useMemo(() => abasDoMenu({
+    cargo: userRole,
+    isPaguePlay: isPP,
+    isBookplay: tenant.slug === 'bookplay',
+    temPermissao: chave => !permLoading && temPermissao(chave),
+    acessoOuvidoria: ouvidoriaAcesso.podeVer,
+    acessoTickets: acessoTickets.podeVerAba,
+  }), [
+    userRole, isPP, tenant.slug, permLoading, temPermissao,
+    ouvidoriaAcesso.podeVer, acessoTickets.podeVerAba,
+  ]);
 
   /*
    * Ordem configuravel, aplicada DEPOIS do filtro de permissao.
@@ -340,7 +272,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * traz de volta uma aba que o filtro acima descartou. Inverter os dois passos
    * transformaria uma preferencia visual em concessao de acesso.
    */
-  const { ordem: ordemMenu, setOrdem: setOrdemMenu } = useMenuLateralOrdem(empresa?.id);
+  const {
+    ordem: ordemMenu, ordens: ordensMenu, aplicar: aplicarOrdemMenu,
+  } = useMenuLateralOrdem(empresa?.id, userRole);
   const navItensOrdenados = useMemo(
     () => ordenarMenu(navItems, ordemMenu),
     [navItems, ordemMenu],
@@ -906,17 +840,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         barra: a barra e montada duas vezes (desktop e mobile) e dois dialogos
         com o mesmo estado brigariam pelo foco.
 
-        `abas` sai da lista JA ordenada — quem abre o editor ve a ordem que
-        esta na tela, nao a do codigo.
+        Ele nao recebe mais a lista pronta: recebe o CONTEXTO e monta a previa
+        de cada cargo com `abasDoMenu`, a mesma regua que pintou a barra ao
+        lado. Passar a lista de quem esta editando faria a previa do operador
+        mostrar as abas do super_admin.
       */}
       {podeEditarMenu && (
         <MenuLateralEditor
           aberto={editorMenuAberto}
           onFechar={() => setEditorMenuAberto(false)}
-          abas={navItensOrdenados.map(i => ({ to: i.to, label: i.label }))}
           empresaId={empresa?.id}
           perfilId={perfil?.id}
-          aoSalvar={setOrdemMenu}
+          ordens={ordensMenu}
+          isPaguePlay={isPP}
+          isBookplay={tenant.slug === 'bookplay'}
+          valorDoCargo={valorDoCargo}
+          ticketsLiberadoParaLideranca={acessoTickets.liberadoParaLideranca}
+          aoSalvar={aplicarOrdemMenu}
         />
       )}
 

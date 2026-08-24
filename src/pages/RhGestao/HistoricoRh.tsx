@@ -39,6 +39,12 @@ const EVENTO_META: Record<string, { label: string; cls: string }> = {
   aprovado:               { label: 'Aprovado',    cls: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-400' },
   devolvido_operador:     { label: 'Devolvido',   cls: 'border-red-500/30 bg-red-500/10 text-red-400' },
   devolvido_equipe:       { label: 'Devolvida',   cls: 'border-red-500/30 bg-red-500/10 text-red-400' },
+  // Os três abaixo já eram gravados pelo banco e não tinham rótulo aqui: o
+  // badge mostrava o slug cru (`operador_dispensado`) no meio de uma lista em
+  // português.
+  operador_dispensado:    { label: 'Fora da folha', cls: 'border-amber-500/30 bg-amber-500/10 text-amber-400' },
+  operador_reincluido:    { label: 'De volta',    cls: 'border-sky-500/30 bg-sky-500/10 text-sky-400' },
+  cracha_definido:        { label: 'Crachá',      cls: 'border-border text-muted-foreground' },
 };
 
 export interface HistoricoRhProps {
