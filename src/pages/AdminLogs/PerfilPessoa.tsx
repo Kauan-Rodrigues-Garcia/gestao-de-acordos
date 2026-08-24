@@ -278,6 +278,22 @@ export default function PerfilPessoa({
                   calculado sobre `ALTURA_GRAFICO`, não há dependência de
                   layout e a barra mede o que diz medir.
                 */}
+                {/*
+                  Barras e rótulos em DUAS linhas, e não empilhados dentro da
+                  mesma coluna.
+                  ───────────────────────────────────────────────────────────
+                  Empilhados, a coluna tinha altura fixa e precisava caber a
+                  barra (que vai até a altura inteira, no dia de pico) MAIS o
+                  rótulo. O flex encolhia o embrulho da barra, a barra mantinha a
+                  altura fixa que recebeu, e o resultado era barra transbordando
+                  por cima do número do dia — e colunas desalinhadas, porque
+                  cada uma transbordava um tanto diferente.
+
+                  Separadas, a linha de cima só tem barras e a de baixo só tem
+                  rótulos. As duas repetem `flex-1` e o mesmo `gap`, então as
+                  colunas continuam alinhadas na vertical, e nenhuma altura de
+                  barra pode invadir o texto.
+                */}
                 <div className="flex items-end gap-[2px]" style={{ height: ALTURA_GRAFICO }}>
                   {serie.map(d => {
                     const acoes = acoesPorDia.get(d.dia) ?? 0;
@@ -290,37 +306,45 @@ export default function PerfilPessoa({
                       ? Math.max(4, Math.round((acoes / maxAcao) * ALTURA_GRAFICO))
                       : 0;
                     return (
-                      <div key={d.dia} className="flex-1 flex flex-col justify-end items-center min-w-0 h-full">
-                        <div className="w-full flex items-end justify-center gap-[1px]">
-                          <div
-                            className={cn(
-                              'flex-1 rounded-t transition-colors',
-                              d.vazio ? 'bg-muted' : 'bg-primary/70 hover:bg-primary',
-                            )}
-                            style={{ height: hTempo }}
-                            title={d.vazio
-                              ? `${d.rotulo}: sem uso`
-                              : `${d.rotulo}: ${formatarDuracao(d.segundos)} · ${d.aberturas} abertura(s)`}
-                          />
-                          {/* A barra fina de AÇÕES ao lado da de tempo: as duas
-                              contam histórias diferentes, e ver as duas juntas é
-                              o que mostra quem navega sem fazer nada. */}
-                          {hAcoes > 0 && (
-                            <div
-                              className="w-[3px] rounded-t bg-amber-500/70 shrink-0"
-                              style={{ height: hAcoes }}
-                              title={`${d.rotulo}: ${acoes} ação(ões) registrada(s)`}
-                            />
+                      <div key={d.dia} className="flex-1 min-w-0 flex items-end justify-center gap-[1px]">
+                        <div
+                          className={cn(
+                            'flex-1 rounded-t transition-colors',
+                            d.vazio ? 'bg-muted' : 'bg-primary/70 hover:bg-primary',
                           )}
-                        </div>
-                        {/* Com 90 dias os números viram uma tarja cinza: só o
-                            dia 1 sobrevive. */}
-                        <span className="text-[8px] text-muted-foreground tabular-nums truncate w-full text-center mt-1">
-                          {serie.length <= 31 || d.dia.slice(8, 10) === '01' ? d.dia.slice(8, 10) : ''}
-                        </span>
+                          style={{ height: hTempo }}
+                          title={d.vazio
+                            ? `${d.rotulo}: sem uso`
+                            : `${d.rotulo}: ${formatarDuracao(d.segundos)} · ${d.aberturas} abertura(s)`}
+                        />
+                        {/* A barra fina de AÇÕES ao lado da de tempo: as duas
+                            contam histórias diferentes, e ver as duas juntas é
+                            o que mostra quem navega sem fazer nada. */}
+                        {hAcoes > 0 && (
+                          <div
+                            className="w-[3px] rounded-t bg-amber-500/70 shrink-0"
+                            style={{ height: hAcoes }}
+                            title={`${d.rotulo}: ${acoes} ação(ões) registrada(s)`}
+                          />
+                        )}
                       </div>
                     );
                   })}
+                </div>
+
+                {/* A régua dos dias. Mesmo `flex-1` e mesmo `gap` da linha de
+                    cima — é o que mantém cada rótulo debaixo da sua barra.
+                    Com 90 dias os números viram uma tarja cinza: só o dia 1
+                    sobrevive. */}
+                <div className="flex gap-[2px] mt-1">
+                  {serie.map(d => (
+                    <span
+                      key={d.dia}
+                      className="flex-1 min-w-0 text-[8px] text-muted-foreground tabular-nums text-center truncate"
+                    >
+                      {serie.length <= 31 || d.dia.slice(8, 10) === '01' ? d.dia.slice(8, 10) : ''}
+                    </span>
+                  ))}
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-1.5 flex items-center gap-3">
                   <span className="inline-flex items-center gap-1">
