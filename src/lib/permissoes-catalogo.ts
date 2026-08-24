@@ -17,13 +17,59 @@
  *
  * Mesmo padrão de `logs-catalogo.ts`, que já provou funcionar.
  *
- * ## O que estas permissões governam
+ * ## O que estas permissões governam: TUDO
  *
- * **Navegação e interface.** Elas decidem qual menu aparece, qual rota abre e
- * qual botão fica visível. Elas NÃO são barreira de segurança: quem manda no
- * dado é a RLS. Forçar `ver_acordos_gerais` num operador não faz ele enxergar
- * acordo de outra pessoa — a política do banco continua negando, e isso é o
- * comportamento correto.
+ * **O painel é a autoridade única sobre acesso.** Se ele liga uma aba para um
+ * cargo, aquele cargo abre a aba. Se ele limita a um setor, o banco limita ao
+ * setor. Se ele desliga, está desligado e não há caminho alternativo — nem
+ * digitando a URL, nem por lista de cargo escrita em algum arquivo.
+ *
+ * Regra ditada pelo Cleber em 23/08/2026, e ela não admite exceção de código:
+ *
+ *   «Eu quero ter o poder absoluto dessa aba de permissões. Não quero nenhum
+ *    tipo de regra que bloqueie uma decisão minha. Eu quero definir o teto.»
+ *
+ * ## Isto INVERTEU o modelo anterior — e o anterior está morto
+ *
+ * Até 23/08 estas chaves eram cosmética: decidiam menu e botão, e a RLS decidia
+ * o dado por listas de cargo escritas dentro das próprias policies. O cabeçalho
+ * deste arquivo dizia, com todas as letras, que forçar uma chave num operador
+ * «não faz ele enxergar acordo de outra pessoa — e isso é o comportamento
+ * correto».
+ *
+ * Não é mais. Aquele texto era a causa direta da queixa que se repetiu por
+ * meses: **«eu libero na tela e não acontece nada»**. Ele foi removido em
+ * 24/08/2026 para que ninguém — pessoa ou IA — volte a implementar o modelo
+ * antigo achando que está seguindo o projeto.
+ *
+ * O que tornou a inversão real, e está aplicado em produção:
+ *
+ *   `20260823010000` .. matou `fn_teto_rls_acordos`, o teto por cargo que ficava
+ *                       ACIMA do painel e silenciosamente cortava o que ele
+ *                       liberava
+ *   `20260823020000` .. criou `fn_user_tem()` e `fn_user_escopo()` — o painel
+ *                       dentro do Postgres, espelhando `useCargoPermissoes`
+ *   `20260823030000`–`060000` .. converteu ~76 policies em 40 tabelas de
+ *                       lista-de-cargo para pergunta-ao-painel
+ *
+ * ## A única exceção, e por que ela existe
+ *
+ * `super_admin` passa por cima de tudo. Não é resíduo do modelo antigo: é a
+ * garantia de que ninguém se tranca para fora do sistema editando o próprio
+ * painel. É o único cargo que o painel não consegue reduzir, e ele existe para
+ * proteger quem configura — nunca para limitá-lo.
+ *
+ * ## O que isso exige de TODO código novo
+ *
+ * Nenhuma decisão de acesso pode perguntar o cargo. Nem na tela, nem no hook,
+ * nem na policy. A pergunta certa é sempre ao painel:
+ *
+ *   tela ....... `temPermissao('chave')` / `niveisLiberados('aba', temPermissao)`
+ *   banco ...... `fn_user_tem('chave')` / `fn_user_escopo('aba')`
+ *
+ * `isPerfilLider(cargo)`, `perfil === 'diretoria'` e afins são o modelo antigo
+ * sobrevivendo. `painel-manda.test.ts` reprova qualquer uso novo deles: os que
+ * restam estão numa lista nominal, justificada caso a caso, que só encolhe.
  */
 
 /** Os cargos que o administrador configura na tela. */
@@ -109,6 +155,9 @@ export const GRUPOS_PERMISSAO = [
   'Pix Automático',
   'Painel Diretoria',
   'RH Gestão',
+  // Tickets entrou em 24/08/2026. Era o único módulo cujo acesso ficava
+  // inteiramente fora do painel — flag por empresa + cadastro + cargo.
+  'Tickets',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -233,21 +282,21 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_logs', label: 'Logs do sistema',
     descricao: 'Abrir a trilha de auditoria em Configurações',
     /*
-     * Padrão VAZIO, e isto não é descuido.
+     * Padrão VAZIO — mas a chave FUNCIONA, e a diferença é toda.
      *
-     * A leitura de `logs_sistema` é limitada pelo RLS a super_admin (e ao cargo
-     * legado `administrador`) — ver `logs_sis_admin`. Conceder `ver_logs` a
-     * outro cargo não dá acesso: dá uma ABA VAZIA, porque o RLS devolve zero
-     * linhas e `fn_logs_resumo` devolve zeros. Sem erro e sem explicação.
+     * Até 23/08/2026 a policy `logs_sis_admin` decidia por cargo, e conceder
+     * `ver_logs` a outro cargo não dava acesso: dava uma ABA VAZIA, porque o
+     * RLS devolvia zero linhas. Sem erro e sem explicação. Foi o que aconteceu
+     * quando o padrão era `{ gerencia: true, diretoria: true }` — dois
+     * diretores com a aba e nada dentro dela.
      *
-     * Foi o que aconteceu: até 17/08/2026 este padrão era
-     * `{ gerencia: true, diretoria: true }`. Na PaguePlay isso deixou dois
-     * diretores com a aba e sem nada dentro dela, mais dois cargos (elite e
-     * gerência) armados para o próximo contratado.
+     * `20260823060000` trocou aquela lista por `fn_user_tem('ver_logs')`. Ligar
+     * a chave hoje abre a trilha de verdade, sem mexer em migration nenhuma.
+     * O padrão continua vazio porque é assim que está configurado, não porque
+     * ligá-lo não teria efeito.
      *
-     * Se um dia a trilha precisar ser aberta a mais gente, mexa nos DOIS lados
-     * na mesma migration. O teste `logs-permissao-vs-rls.test.ts` quebra se só
-     * um dos lados mudar.
+     * `logs-permissao-vs-rls.test.ts` reprova se a lista de cargo voltar para
+     * dentro da policy.
      */
     grupo: 'Abas e telas', padrao: {},
   },
@@ -255,6 +304,36 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_configuracoes', label: 'Configurações',
     descricao: 'Abrir a tela de configurações da empresa',
     grupo: 'Abas e telas', padrao: {},
+  },
+  {
+    key: 'ver_monitoramento_uso', label: 'Monitoramento de uso',
+    descricao: 'Abrir a aba «Monitoramento de uso» dentro de Logs: quem acessa o sistema, quais telas e por quanto tempo',
+    /*
+     * Padrão vazio porque hoje só o acesso total tem — mas isto é
+     * CONFIGURÁVEL, e a diferença importa.
+     *
+     * Até 24/08/2026 `uso_telas_select` exigia cargo `administrador`, escrito
+     * dentro da policy. Quem tinha `ver_logs` via a sub-aba e recebia zero
+     * linhas: a trilha abria, o monitoramento não, e nada na tela dizia por
+     * quê. Foi o exemplo que o dono do projeto deu ao descrever a queixa.
+     *
+     * `20260824200000` trocou a lista de cargo por esta chave. Ligá-la para a
+     * diretoria agora abre o monitoramento de verdade.
+     */
+    grupo: 'Abas e telas', padrao: {},
+    depende: {
+      chaves: ['ver_configuracoes'],
+      motivo: 'O monitoramento é uma aba interna de Configurações → Logs.',
+    },
+  },
+  {
+    key: 'ver_banco_dados', label: 'Banco de dados',
+    descricao: 'Abrir a sub-aba «Banco de dados» em Configurações',
+    grupo: 'Abas e telas', padrao: {},
+    depende: {
+      chaves: ['ver_configuracoes'],
+      motivo: 'É uma sub-aba de Configurações.',
+    },
   },
 
   // ── Acordos ──────────────────────────────────────────────────────────────
@@ -314,6 +393,32 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'excluir_em_lote', label: 'Excluir em lote',
     descricao: 'Excluir vários acordos de uma vez',
     grupo: 'Acordos', padrao: LIDERANCA,
+  },
+  {
+    key: 'acordos_autorizar_tabulacao', label: 'Autorizar tabulação',
+    descricao: 'Digitar usuário e senha para liberar transferência de NR, vínculo EXTRA e duplicados na importação',
+    /*
+     * Nasce com `PERFIS_AUTORIZADORES` — a lista que estava em `lib/index.ts`.
+     *
+     * Ela existia porque QUATRO listas diferentes respondiam a mesma pergunta
+     * em 2026-08-09, e gerência e elite eram recusadas numa tela e aceitas em
+     * outra. A lista única resolveu a divergência; esta chave a torna
+     * configurável, que é o passo que faltava.
+     *
+     * ⚠️ O servidor confere a MESMA chave em `fn_transferir_acordo_nr`. Os dois
+     * lados mudam juntos — `20260824200000` os converteu de uma vez.
+     */
+    grupo: 'Acordos', padrao: LIDERANCA,
+  },
+  {
+    key: 'acordos_capturar_erp', label: 'Capturar relatório do ERP',
+    descricao: 'Disparar a captura automática do relatório do ERP',
+    grupo: 'Acordos', tenants: ['pagueplay'], padrao: {},
+  },
+  {
+    key: 'acordos_campos_admin', label: 'Campos de administrador no formulário',
+    descricao: 'Ver e preencher os campos restritos no cadastro rápido de acordo',
+    grupo: 'Acordos', tenants: ['bookplay'], padrao: {},
   },
 
   // ── Importações ──────────────────────────────────────────────────────────
@@ -407,6 +512,38 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Abrir e concluir transferências de pessoas',
     grupo: 'Gestão de pessoas',
     padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+  },
+  {
+    key: 'usuarios_ver_administradores', label: 'Usuários: enxergar contas de administrador',
+    descricao: 'Mostrar as contas de administrador e super admin na lista de pessoas',
+    /*
+     * Outro EIXO, e não outro nível de escopo.
+     *
+     * «Até onde eu vejo» (setor × empresa) é `usuarios_escopo_*`. «Quem eu
+     * vejo» é esta chave. Juntar as duas foi o que produziu o filtro atual, em
+     * que ampliar o alcance de um cargo revelava as contas de administração
+     * sem ninguém ter decidido isso.
+     */
+    grupo: 'Gestão de pessoas', padrao: {},
+  },
+  {
+    key: 'usuarios_desfazer_transferencia', label: 'Usuários: desfazer transferência',
+    descricao: 'Reverter uma transferência de setor ou empresa já concluída',
+    grupo: 'Gestão de pessoas', padrao: {},
+  },
+  {
+    key: 'acesso_multiempresa_permitido', label: 'Acesso às duas operações',
+    descricao: 'Cargo que pode receber a chave de multiempresa e alternar entre BookPlay e PaguePlay',
+    /*
+     * Esta chave habilita o CARGO. Quem de fato alterna é quem também tem a
+     * flag `acesso_multiempresa` no próprio cadastro — são duas travas, e a
+     * segunda continua sendo por pessoa.
+     *
+     * `administrador` responde `true` aqui por acesso total, e isso é um ganho
+     * declarado em `20260824200000`: antes o seletor exigia gerência ou
+     * diretoria, e um administrador com a flag ligada não via as duas empresas.
+     */
+    grupo: 'Gestão de pessoas', padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'equipes_criar_editar', label: 'Equipes: criar e editar',
@@ -760,6 +897,16 @@ export const PERMISSOES: PermissaoMeta[] = [
       motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
     },
   },
+  {
+    key: 'analitico_validar_relatorio', label: 'Analítico: validar relatório',
+    descricao: 'Marcar um relatório importado como conferido',
+    /*
+     * Era `isPerfilAdmin`, e a diretoria ficava de fora DE PROPÓSITO: validar
+     * assina que o número está certo, e o número já circulou. Nasce igual — o
+     * que muda é que agora dá para mudar de ideia sem migration.
+     */
+    grupo: 'Analítico', padrao: {},
+  },
 
   /*
    * APOSENTADAS junto com a chegada das chaves granulares: editar_usuarios,
@@ -840,6 +987,38 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'gerenciar_acessos_ouvidoria', label: 'Conceder acesso à Ouvidoria',
     descricao: 'Definir quem enxerga a Ouvidoria e em qual nível',
     grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: {},
+  },
+  {
+    key: 'ouvidoria_responsavel', label: 'Responsável pela Ouvidoria',
+    descricao: 'Enxergar a Ouvidoria inteira sem depender de concessão individual em «Conceder acesso»',
+    /*
+     * Era `cargo === 'ouvidoria'` dentro de `useOuvidoriaAcesso`.
+     *
+     * Responsável e convidado são coisas diferentes: o responsável vê tudo por
+     * ser dono do módulo; o convidado vê no nível que alguém lhe concedeu em
+     * `ouvidoria_acessos`. Com o cargo escrito na tela, promover outra pessoa a
+     * responsável exigia mexer em código.
+     */
+    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: { ouvidoria: true },
+  },
+  {
+    key: 'tickets_administrar', label: 'Tickets: administrar a fila',
+    descricao: 'Atender qualquer ticket e gerenciar o cadastro de atendentes',
+    grupo: 'Tickets', padrao: {},
+  },
+  {
+    key: 'tickets_abrir', label: 'Tickets: abrir chamado',
+    descricao: 'Criar tickets. A aba em si depende de «Aba Tickets» e do interruptor da empresa',
+    /*
+     * Tickets era o único módulo FORA do painel: quem via a aba saía de
+     * `useTicketsAcesso` — flag por empresa + cadastro de atendentes + cargo.
+     * `docs/PERMISSOES-POR-ABA-PROJETO.md` §5.3 registrou isso como pendência
+     * consciente, porque chave sem consumidor reprova no teste de contrato.
+     *
+     * Agora tem consumidor, e o cargo saiu do caminho.
+     */
+    grupo: 'Tickets',
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true, ouvidoria: true },
   },
   {
     key: 'criar_solicitacao_whatsapp', label: 'Abrir solicitação de WhatsApp',

@@ -74,6 +74,17 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: perfilValue }),
 }));
 
+// O formulário pergunta ao PAINEL quais campos mostra (`acordos_campos_admin`)
+// desde 24/08/2026. Sem este mock o hook real tenta abrir um canal de realtime
+// no supabase falso e derruba a montagem inteira.
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({
+    temPermissao: () => false,
+    temPermissaoExplicita: () => false,
+    loading: false,
+  }),
+}));
+
 let empresaValue: { id: string } | null = { id: 'emp-1' };
 vi.mock('@/hooks/useEmpresa', () => ({
   useEmpresa: () => ({ empresa: empresaValue }),

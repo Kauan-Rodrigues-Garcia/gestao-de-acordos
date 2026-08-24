@@ -15,6 +15,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
+import { useCargoPermissoes } from './useCargoPermissoes';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
   buscarAnaliticoPeriodo, somarPorDia, buscarAcordosDoDia,
@@ -114,7 +116,14 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
 
-  const cargo = perfil?.perfil ?? '';
+  const { temPermissao } = useCargoPermissoes();
+  // O painel vive no Dashboard, entao usa a regua do Dashboard. Memoizado
+  // porque `niveisLiberados` devolve um array novo a cada chamada e ele entra
+  // na dependencia do efeito abaixo.
+  const niveis = useMemo(
+    () => niveisLiberados('dashboard', temPermissao),
+    [temPermissao],
+  );
 
   const [escopoBase, setEscopoBase] = useState<EscopoDoDia | null>(null);
   const [porDiaBruto, setPorDiaBruto] = useState<Record<string, number>>({});
@@ -135,24 +144,24 @@ export function useDesempenhoDia(params: ParametrosDesempenhoDia): DadosDesempen
    */
   const requisicao = useRef(0);
 
-  // ── Escopo: consequência do cargo, resolvido uma vez ───────────────────────
+  // ── Escopo: consequência dos níveis da aba, resolvido uma vez ─────────────
   // A regra inteira mora em `resolverEscopoDoDia`. Aqui só se guarda o
   // resultado, para as seis consultas do dia partirem todas do mesmo recorte.
   useEffect(() => {
     let cancelado = false;
     async function resolver() {
-      if (!aberto || !empresa?.id || !perfil?.id || !cargo) return;
+      if (!aberto || !empresa?.id || !perfil?.id) return;
       const r = await resolverEscopoDoDia({
         empresaId: empresa.id,
         perfilId: perfil.id,
-        cargo,
+        niveis,
         setorId: perfil.setor_id ?? null,
       });
       if (!cancelado) setEscopoBase(r);
     }
     void resolver();
     return () => { cancelado = true; };
-  }, [aberto, empresa?.id, perfil?.id, perfil?.setor_id, cargo]);
+  }, [aberto, empresa?.id, perfil?.id, perfil?.setor_id, niveis]);
 
   /**
    * O escopo efetivo: a base do cargo, recortada pela equipe escolhida.

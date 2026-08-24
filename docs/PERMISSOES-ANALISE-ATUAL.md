@@ -1,41 +1,90 @@
-# Permissões: como o sistema funciona hoje
+# Permissões: como o sistema funcionava até 23/08/2026
 
-Levantamento feito em 2026-08-22, **antes** de qualquer alteração, como exige o
-pedido de reestruturação. Serve para duas coisas: entender o que existe e medir
-o que a mudança precisa preservar.
-
-Nada aqui é proposta. É o retrato do que está em produção.
+> ⚠️ **DOCUMENTO HISTÓRICO. NÃO É O MODELO ATUAL.**
+>
+> Este é o levantamento feito em 2026-08-22, **antes** da reestruturação, para
+> medir o que existia. As seções 1 e 2 descrevem um mundo que **não existe
+> mais** — e descrevem-no como se fosse correto, que é pior.
+>
+> Quem procura como o sistema funciona **hoje**: cabeçalho de
+> [`src/lib/permissoes-catalogo.ts`](../src/lib/permissoes-catalogo.ts) e a
+> seção «§0. O que mudou» logo abaixo.
+>
+> O arquivo fica no repositório porque explica de onde cada chave veio e qual
+> alcance ela precisava preservar. Apagá-lo perderia essa rastreabilidade.
 
 ---
 
-## 1. São três camadas, não uma
+## 0. O que mudou em 23/08/2026 — leia isto antes do resto
 
-O acesso de uma pessoa é decidido em três lugares independentes. Confundi-los é
-a origem da maior parte dos bugs desta área.
+O modelo abaixo foi **invertido**. Onde este documento diz que a RLS manda e a
+permissão só esconde, hoje vale o oposto:
 
-| Camada | Onde mora | O que decide |
+> **O painel de permissões é a autoridade única.** Se ele liga uma aba para um
+> cargo, aquele cargo abre a aba. Se ele limita a um setor, o banco limita ao
+> setor. Se ele desliga, está desligado — e não há caminho alternativo.
+
+Regra ditada pelo Cleber em 23/08/2026:
+
+> «Eu quero ter o poder absoluto dessa aba de permissões. Não quero nenhum tipo
+> de regra que bloqueie uma decisão minha. Eu quero definir o teto.»
+
+O que a executou, aplicado em produção:
+
+| Migration | O que fez |
+| --- | --- |
+| `20260823010000` | **Matou `fn_teto_rls_acordos`** — o teto por cargo que ficava acima do painel e cortava, em silêncio, o que ele liberava |
+| `20260823020000` | Criou `fn_user_tem()` e `fn_user_escopo()`: o painel dentro do Postgres, espelhando `useCargoPermissoes` |
+| `20260823030000`–`060000` | Converteu ~76 policies em 40 tabelas de lista-de-cargo para pergunta-ao-painel |
+| `20260824200000` | Monitoramento de uso — a última policy que ainda decidia por cargo |
+
+**A única exceção é `super_admin`**, e ela é deliberada: é a garantia de que
+ninguém se tranca para fora editando o próprio painel.
+
+O resto deste documento fica como registro do ponto de partida. **A tabela de
+tetos da §2 não vale mais** — aquele teto foi removido.
+
+---
+
+## 1. Eram três camadas ~~, não uma~~ — hoje são duas, e uma manda
+
+> **Superado pela §0.** Fica registrado porque explica a origem dos defeitos.
+
+O acesso era decidido em três lugares independentes:
+
+| Camada | Onde mora | O que decidia |
 | --- | --- | --- |
 | **RLS** | Políticas no Postgres | Quais LINHAS existem para esta pessoa |
 | **Permissão** | `cargos_permissoes` (JSONB por empresa+cargo) | Qual aba/botão/filtro aparece |
 | **Exceção** | `perfis_permissoes` | Sobrescreve o cargo, chave a chave |
 
-A regra que resulta disso, e que precisa sobreviver à reestruturação:
+E a regra que resultava disso — **hoje falsa, e era a causa da queixa**:
 
-> **A permissão nunca amplia o que o RLS nega.** Ela só esconde o que o RLS
+> ~~A permissão nunca amplia o que o RLS nega. Ela só esconde o que o RLS
 > permitiria. Ligar uma permissão de escopo para um cargo cujo RLS não alcança
-> aquele dado não abre nada — entrega uma tela vazia, sem erro.
+> aquele dado não abre nada — entrega uma tela vazia, sem erro.~~
 
-O próprio catálogo já diz isso:
+Era exatamente isto que produzia «eu libero na tela e não acontece nada». Hoje a
+RLS **lê** o painel: `fn_user_tem()` e `fn_user_escopo()` são as mesmas quatro
+camadas de resolução do frontend (acesso total → exceção da pessoa → mapa do
+cargo → negado), avaliadas dentro da policy.
 
-> Elas NÃO são barreira de segurança: quem manda no dado é a RLS. Forçar
-> `ver_acordos_gerais` num operador não faz ele enxergar acordo de outra pessoa.
+Das três camadas, **`perfis_permissoes` continua valendo e vale acima do
+cargo** — é como se libera ou bloqueia uma pessoa específica sem mexer no cargo
+dela.
 
 ---
 
-## 2. O teto do RLS, por cargo
+## 2. ~~O teto do RLS, por cargo~~ — REMOVIDO
 
-Lido direto da política `acordos_select` em produção. **É este o limite máximo
-que qualquer escopo por aba poderá alcançar.**
+> **Esta seção descreve algo que não existe mais.** `fn_teto_rls_acordos` foi
+> derrubada por `20260823010000`. Nenhum cargo tem teto acima do painel, exceto
+> a chave-mestra do `super_admin`.
+>
+> Fica como registro do alcance que cada cargo tinha antes da virada — é a
+> linha de base contra a qual as migrations provaram «ninguém perdeu acesso».
+
+Lido da política `acordos_select` **em 22/08/2026**:
 
 | Cargo | BookPlay | PaguePlay |
 | --- | --- | --- |
@@ -48,14 +97,15 @@ que qualquer escopo por aba poderá alcançar.**
 | `administrador` | empresa inteira | empresa inteira |
 | `super_admin` | tudo | tudo |
 
-Duas assimetrias que não são erro de leitura:
+Duas assimetrias que não eram erro de leitura:
 
-- A política tem um ramo exclusivo da BookPlay para `lider`/`elite`/`gerencia`
+- A política tinha um ramo exclusivo da BookPlay para `lider`/`elite`/`gerencia`
   com recorte por setor (incluindo operador clonado no setor). Fora da BookPlay,
-  o ramo equivalente cita **apenas `lider`**.
-- Por isso `elite` e `gerencia` na PaguePlay têm teto de "só os próprios" em
-  `acordos`, mesmo tendo `ver_acordos_gerais = true` hoje. A permissão está
-  ligada e o RLS não acompanha.
+  o ramo equivalente citava **apenas `lider`**.
+- Por isso `elite` e `gerencia` na PaguePlay tinham teto de "só os próprios" em
+  `acordos`, mesmo tendo `ver_acordos_gerais = true`. A permissão estava ligada
+  e o RLS não acompanhava. **É este o defeito que a §0 encerrou**: hoje o que
+  está ligado no painel funciona.
 
 ---
 

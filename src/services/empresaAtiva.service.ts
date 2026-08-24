@@ -26,7 +26,6 @@
 
 import { supabase } from '@/lib/supabase';
 import type { Empresa } from '@/lib/supabase';
-import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 
 const CHAVE = 'empresa-ativa-super-admin';
 
@@ -65,23 +64,26 @@ export async function resolverEmpresaEscolhida(): Promise<Empresa | null> {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;   // sem sessão não se decide nada; a chave fica.
 
-  // `select('*')` e não a lista de colunas: `acesso_multiempresa` nasce numa
-  // migration, e front e banco não sobem no mesmo instante. Pedir a coluna pelo
-  // nome faria o PostgREST recusar a consulta inteira na janela entre o deploy e
-  // a migration — e o super_admin perderia a troca de empresa que já tinha.
-  const { data: meuPerfil, error: erroPerfil } = await supabase
-    .from('perfis').select('*').eq('id', user.id).maybeSingle();
+  /*
+   * Quem responde é o BANCO, e não uma cópia da regra aqui.
+   *
+   * Até 24/08/2026 este trecho lia `perfis` e reaplicava `perfilVeDuasEmpresas`
+   * — a mesma regra escrita em dois lugares, que é a forma como front e banco
+   * passam a discordar. `fn_user_acesso_multiempresa` já resolve as duas
+   * travas: a flag por pessoa e a chave `acesso_multiempresa_permitido` do
+   * painel, conferida no cargo ATUAL.
+   *
+   * Sobra a vantagem de não precisar mais do resolvedor de permissões, que num
+   * serviço puro não existe.
+   */
+  const { data: podeTrocar, error: erroAcesso } = await supabase
+    .rpc('fn_user_acesso_multiempresa');
 
   // Erro de rede não é resposta: apagar aqui derrubaria a escolha de um
   // super_admin legítimo por causa de uma consulta que falhou.
-  if (erroPerfil) return null;
+  if (erroAcesso) return null;
 
-  // Não é mais só o cargo `super_admin`: gerência e diretoria liberados pelo
-  // super_admin também trocam de empresa (migration 20260818300000). A regra é
-  // a mesma que `fn_user_acesso_multiempresa` aplica no banco — flag E cargo —
-  // porque uma tela que aceita a troca e um banco que recusa os dados é pior
-  // que não ter o botão.
-  if (!perfilVeDuasEmpresas(meuPerfil as { perfil?: string; acesso_multiempresa?: boolean } | null)) {
+  if (podeTrocar !== true) {
     esquecerEmpresaEscolhida();
     return null;
   }

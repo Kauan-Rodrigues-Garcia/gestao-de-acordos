@@ -31,7 +31,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { formatBRL, sumSafe } from '@/lib/money';
-import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, isPerfilAdmin, isPerfilLider, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
+import { formatDate, STATUS_LABELS, STATUS_COLORS, getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { DatePickerField } from '@/components/DatePickerField';
 import { cn } from '@/lib/utils';
@@ -56,7 +56,7 @@ import { GraficoRecebimento } from '@/pages/Dashboard/Analitico/GraficoRecebimen
 import AjusteRecebimento from '@/pages/Dashboard/Analitico/AjusteRecebimento';
 import { FiltrosEscopo } from '@/pages/Dashboard/Analitico/FiltrosEscopo';
 import { resolverEscopoPainel } from '@/pages/Dashboard/Analitico/escopoDoPainel';
-import { escopoEfetivo } from '@/lib/permissoes-escopo';
+import { escopoEfetivo, niveisLiberados } from '@/lib/permissoes-escopo';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
@@ -198,8 +198,21 @@ export default function PainelLider() {
   ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
   const instanceId = useRef(`painel-lider-${Math.random().toString(36).slice(2, 9)}`).current;
 
-  const isAdmin = isPerfilAdmin(perfil?.perfil ?? '') || perfil?.perfil === 'diretoria';
-  const isLiderOuSimilar = isPerfilLider(perfil?.perfil ?? '') && !isAdmin;
+  /*
+   * «Fico preso ao meu setor nesta aba?»
+   *
+   * O Painel Líder tem dois níveis e só dois: `setor` e `todos_setores`. Estar
+   * preso ao próprio setor é ter o primeiro sem o segundo — e é a única coisa
+   * que `isAdmin`/`isLiderOuSimilar` decidiam aqui.
+   *
+   * Eram `isPerfilAdmin(cargo) || cargo === 'diretoria'` e `isPerfilLider(cargo)
+   * && !isAdmin`, ao lado de `verTodosSetores`, que já vinha do painel. Duas
+   * autoridades no mesmo arquivo: dar `painel_lider_escopo_todos_setores` a um
+   * líder ampliava metade da tela e a outra metade continuava travada no setor
+   * dele.
+   */
+  const soMeuSetor = niveisLiberados('painel_lider', temPermissao).includes('setor')
+    && !verTodosSetores;
 
   const [mesRef, setMesRef] = useState<MesRef>(() => {
     const d = new Date();
@@ -490,7 +503,7 @@ export default function PainelLider() {
   // ── Carregar operadores (não depende do mês) ──────────────────────────────
   const carregarOperadores = useCallback(async (): Promise<Perfil[]> => {
     if (!perfil || !empresa?.id) return [];
-    const escopoSetor = !isAdmin && isLiderOuSimilar && !!perfil.setor_id && !verTodosSetores;
+    const escopoSetor = soMeuSetor && !!perfil.setor_id;
 
     // BookPlay: um setor pode ser formado SÓ por operadores CLONADOS (setor de
     // origem diferente). O filtro por setor_id os deixaria de fora e o painel
@@ -524,7 +537,7 @@ export default function PainelLider() {
     const { data, error } = await q.order('nome');
     if (error) throw new Error(`Operadores: ${error.message}`);
     return (data as Perfil[]) ?? [];
-  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isAdmin, isBookplay, isLiderOuSimilar, verTodosSetores]);
+  }, [perfil?.id, perfil?.perfil, perfil?.setor_id, empresa?.id, isBookplay, soMeuSetor]);
 
   // ── Carregar acordos do mês para os operadores ────────────────────────────
   const carregarAcordosMes = useCallback(async (ids: string[]): Promise<Acordo[]> => {

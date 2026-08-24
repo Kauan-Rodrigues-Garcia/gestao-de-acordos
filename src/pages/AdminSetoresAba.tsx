@@ -810,9 +810,10 @@ export default function AdminSetoresAba() {
       <div className="mt-6">
         <HistoricoTransferencias
           empresaId={empresaAtual?.id}
-          podeDesfazer={
-            perfilAtual?.perfil === 'administrador' || perfilAtual?.perfil === 'super_admin'
-          }
+          // Era `perfil === 'administrador'` escrito aqui. Desfazer reverte uma
+          // transferência já concluída — decisão de quem responde pelo cadastro,
+          // e agora configurável em Permissões.
+          podeDesfazer={temPermissao('usuarios_desfazer_transferencia')}
           nomeDoSetor={nomeDoSetorPorId}
           nomeDaEmpresa={nomeDaEmpresaPorId}
           nomeDoPerfil={id => perfis.find(p => p.id === id)?.nome}

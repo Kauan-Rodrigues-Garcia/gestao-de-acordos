@@ -18,11 +18,13 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 const mockGetUser = vi.fn();
 const mockFrom    = vi.fn();
+const mockRpc     = vi.fn();
 
 vi.mock('@/lib/supabase', () => ({
   supabase: {
     auth: { getUser: () => mockGetUser() },
     from: (t: string) => mockFrom(t),
+    rpc:  (n: string) => mockRpc(n),
   },
 }));
 
@@ -43,19 +45,31 @@ function tabela(resposta: { data: unknown; error: unknown }) {
   return chain;
 }
 
+/**
+ * Cargos que o painel deixa receber a flag — o padrão de
+ * `acesso_multiempresa_permitido` no catálogo.
+ *
+ * Está aqui, e não no serviço, porque desde 24/08/2026 quem responde é o BANCO:
+ * `resolverEmpresaEscolhida` chama `fn_user_acesso_multiempresa` em vez de
+ * reaplicar a regra no cliente. Estes testes passam a simular a RESPOSTA
+ * daquela função, e é por isso que a lista mora no mock.
+ */
+const CARGOS_QUE_PODEM = ['gerencia', 'diretoria', 'administrador', 'super_admin'];
+
 function comSessao(
   perfil: string | null,
   empresa: typeof EMPRESA_B | null = EMPRESA_B,
   acessoMultiempresa = false,
 ) {
   mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
+
+  // O que `fn_user_acesso_multiempresa` responderia: chave-mestra do
+  // super_admin (sem exigir flag), ou flag E cargo permitido pelo painel.
+  const podeTrocar = perfil === 'super_admin'
+    || (!!perfil && acessoMultiempresa && CARGOS_QUE_PODEM.includes(perfil));
+  mockRpc.mockResolvedValue({ data: podeTrocar, error: null });
+
   mockFrom.mockImplementation((t: string) => {
-    if (t === 'perfis') {
-      return tabela({
-        data: perfil ? { perfil, acesso_multiempresa: acessoMultiempresa } : null,
-        error: null,
-      });
-    }
     if (t === 'empresas') return tabela({ data: empresa, error: null });
     throw new Error(`tabela inesperada: ${t}`);
   });
@@ -65,6 +79,7 @@ beforeEach(() => {
   localStorage.clear();
   mockGetUser.mockReset();
   mockFrom.mockReset();
+  mockRpc.mockReset();
 });
 
 describe('guardar e ler a escolha', () => {
@@ -171,10 +186,13 @@ describe('falha não é resposta', () => {
    * legítimo de volta para a empresa do domínio a cada oscilação de rede — e ele
    * não saberia por quê.
    */
-  it('erro ao ler o perfil mantém a escolha para a próxima tentativa', async () => {
+  it('erro ao perguntar o acesso mantém a escolha para a próxima tentativa', async () => {
     definirEmpresaEscolhida('emp-b');
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
-    mockFrom.mockImplementation(() => tabela({ data: null, error: { message: 'rede' } }));
+    // A pergunta é uma RPC desde 24/08/2026 — antes era uma leitura de `perfis`.
+    // O que este teste protege não mudou: falha de rede não é «você não pode».
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'rede' } });
+    mockFrom.mockImplementation(() => tabela({ data: null, error: null }));
 
     expect(await resolverEmpresaEscolhida()).toBeNull();
     expect(getEmpresaEscolhida()).toBe('emp-b');
@@ -183,9 +201,8 @@ describe('falha não é resposta', () => {
   it('erro ao ler a empresa mantém a escolha', async () => {
     definirEmpresaEscolhida('emp-b');
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u1' } } });
-    mockFrom.mockImplementation((t: string) => (t === 'perfis'
-      ? tabela({ data: { perfil: 'super_admin' }, error: null })
-      : tabela({ data: null, error: { message: 'rede' } })));
+    mockRpc.mockResolvedValue({ data: true, error: null });
+    mockFrom.mockImplementation(() => tabela({ data: null, error: { message: 'rede' } }));
 
     expect(await resolverEmpresaEscolhida()).toBeNull();
     expect(getEmpresaEscolhida()).toBe('emp-b');

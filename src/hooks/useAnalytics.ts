@@ -33,7 +33,7 @@ import { useRealtimeAcordos } from '@/providers/RealtimeAcordosProvider';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
 import type { NivelEscopo } from '@/lib/permissoes-escopo';
-import { getTodayISO, isPerfilAdmin, isPerfilLider, isPerfilDiretoria, PP_HO_PERCENTUAL } from '@/lib/index';
+import { getTodayISO, PP_HO_PERCENTUAL } from '@/lib/index';
 import {
   normalizarMes, partesDoMes, primeiroDiaDoMes, ultimoDiaDoMes, diasNoMes,
 } from '@/lib/mesReferencia';
@@ -270,9 +270,25 @@ export function useAnalytics(
     // esqueleto dela, e dois avisos para a mesma espera é um a mais.
     const encerrar = primeira ? null : comecouAtualizacao();
 
-    const isAdmin = isPerfilAdmin(perfil.perfil);
-    const isLider = isPerfilLider(perfil.perfil);
-    const isDiretoria = isPerfilDiretoria(perfil.perfil);
+    /*
+     * A hierarquia de metas, traduzida dos níveis da aba.
+     *
+     * Este bloco era a última ilha de cargo do arquivo: `isPerfilAdmin`,
+     * `isPerfilLider` e `isPerfilDiretoria` decidindo QUAL meta é a principal,
+     * enquanto todo o resto do hook já lia `podeTodosSetores`/`podeSetor`. As
+     * duas autoridades discordavam no caso que interessa: ligar
+     * `dashboard_escopo_setor` num operador ampliava a consulta de acordos e
+     * deixava a meta dele individual — o painel mostrava o recebimento do setor
+     * contra a meta de uma pessoa.
+     *
+     *   semMetaPrincipal ... quem vê todos os setores não tem UMA meta; tinha
+     *                        `isAdmin`, e `dashboard_escopo_todos_setores` nasceu
+     *                        com gerência e diretoria, além do acesso total
+     *   veDeOutros ......... meta de setor/equipe em vez da individual; era
+     *                        `isLider`
+     */
+    const semMetaPrincipal = podeTodosSetores;
+    const veDeOutros       = podeSetor || podeEquipe;
 
     /*
      * O que vai para o instantâneo.
@@ -448,21 +464,21 @@ export function useAnalytics(
       let tipoMeta: 'setor' | 'equipe' | 'operador' | null = null;
       let refId: string | null = null;
 
-      if (!isAdmin) {
+      if (!semMetaPrincipal) {
         if (operadorFiltro) {
           tipoMeta = 'operador';
           refId    = operadorFiltro;
-        } else if (equipeFiltro && isLider) {
+        } else if (equipeFiltro && veDeOutros) {
           tipoMeta = 'equipe';
           refId    = equipeFiltro;
-        } else if (isLider && podeTodosSetores && setorFiltro) {
-          // Com 'ver_todos_setores' e um setor filtrado → meta do setor filtrado
+        } else if (veDeOutros && podeTodosSetores && setorFiltro) {
+          // Alcance de empresa com um setor filtrado → meta do setor filtrado
           tipoMeta = 'setor';
           refId    = setorFiltro;
-        } else if (isLider && perfil.setor_id) {
+        } else if (veDeOutros && perfil.setor_id) {
           tipoMeta = 'setor';
           refId    = perfil.setor_id;
-        } else if (!isLider) {
+        } else if (!veDeOutros) {
           tipoMeta = 'operador';
           refId    = perfil.id;
         }
@@ -481,12 +497,12 @@ export function useAnalytics(
         if (vencida()) { encerrar?.(false); return; }
         pacote.meta = (metaData as MetaInfo | null) ?? null;
         setMeta(pacote.meta);
-      } else if (isAdmin) {
+      } else if (semMetaPrincipal) {
         setMeta(null);
       }
 
-      // ── Metas por equipe / operador (admin/líder/diretoria) ─────────────────
-      if (isAdmin || isLider || isDiretoria) {
+      // ── Metas por equipe / operador: quem enxerga alem de si ───────────────
+      if (semMetaPrincipal || veDeOutros) {
         const [{ data: meq }, { data: mop }] = await Promise.all([
           supabase
             .from('metas')

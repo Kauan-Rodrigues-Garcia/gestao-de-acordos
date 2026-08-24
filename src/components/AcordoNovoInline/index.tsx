@@ -14,7 +14,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { toast } from 'sonner';
 import {
-  buildObservacoesComEstado, isPerfilAdminOuLider, formatarTelefonePP,
+  buildObservacoesComEstado, formatarTelefonePP,
   parseCurrencyInput, getTodayISO,
 } from '@/lib/index';
 import { calcularParcelas, totalComEntrada, formatBRL } from '@/lib/money';

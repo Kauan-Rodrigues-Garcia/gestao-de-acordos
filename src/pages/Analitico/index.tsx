@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { isPerfilAdmin, getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
+import { getEstadoFromAcordo, ROUTE_PATHS } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { supabase } from '@/lib/supabase';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
@@ -56,8 +56,10 @@ export default function PaginaAnalitico() {
   const podeVerSetor      = niveis.includes('setor');
   const veTodosSetores    = niveis.includes('todos_setores');
   const setorProprio      = perfil?.setor_id ?? null;
-  // Validação de relatório (Fase 1): só administrador/super_admin, nunca diretoria.
-  const isAdminReal       = isPerfilAdmin(perfil?.perfil ?? '');
+  // Validação de relatório. Nasceu como `isPerfilAdmin` — administrador e
+  // super_admin, nunca diretoria —, e agora é chave: validar assina que o
+  // número está certo, e quem assina é decisão de quem responde pelo dado.
+  const podeValidarRelatorio = temPermissao('analitico_validar_relatorio');
 
   // O alternador de visão só faz sentido para quem tem os DOIS níveis — hoje,
   // o elite. Antes a condição era `perfil === 'elite'` escrita à mão.
@@ -470,7 +472,7 @@ export default function PaginaAnalitico() {
       )}
 
       {/* Validação do relatório (Fase 1) — só administrador/super_admin */}
-      {abaVisivel === 'analitico' && isAdminReal && (
+      {abaVisivel === 'analitico' && podeValidarRelatorio && (
         <ValidacaoRelatorioSetor
           empresaId={empresa.id}
           setorId={veTodosSetores ? filtroSetorId : setorProprio}

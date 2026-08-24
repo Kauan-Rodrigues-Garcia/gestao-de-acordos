@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Camera, Loader2, MonitorCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { logger } from '@/lib/logger';
-import { isPerfilAdmin } from '@/lib/index';
 import { useCapturaMundialErp } from '@/hooks/useCapturaMundialErp';
 import { lerPrintMundialErp, preaquecerOcr, encerrarOcr } from '@/services/pagueplay/printOcr';
 import type { DadosExtraidosPP } from '@/services/pagueplay/printParser';
@@ -15,7 +14,7 @@ interface BotaoCapturaErpPPProps {
 }
 
 export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps) {
-  const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const { ativo, capturarFrame } = useCapturaMundialErp();
   const [processando, setProcessando] = useState(false);
   const [modeloPronto, setModeloPronto] = useState(false);
@@ -33,8 +32,9 @@ export function BotaoCapturaErpPP({ onDados, className }: BotaoCapturaErpPPProps
     };
   }, []);
 
-  // Visível somente para admins — teste controlado antes do rollout geral
-  if (!isPerfilAdmin(perfil?.perfil ?? '')) return null;
+  // Quem dispara a captura sai do painel. Era `isPerfilAdmin`, escrito aqui no
+  // rollout controlado — e liberar mais alguém exigia um deploy.
+  if (!temPermissao('acordos_capturar_erp')) return null;
 
   async function handleCapturar() {
     setProcessando(true);

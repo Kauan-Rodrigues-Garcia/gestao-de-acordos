@@ -245,6 +245,29 @@ export function escopoEfetivo(
   return liberados.reduce((a, b) => (AMPLITUDE[b] > AMPLITUDE[a] ? b : a));
 }
 
+/**
+ * Nesta aba, a pessoa enxerga gente ALÉM DELA MESMA?
+ *
+ * É a pergunta mais repetida do sistema, e até 24/08/2026 cada tela respondia à
+ * sua maneira: `isPerfilAdminOuLider(cargo)` no Dashboard e no fechamento,
+ * `isPerfilAdminOuLider || isPerfilDiretoria` nas metas e no AnalyticsPanel,
+ * `isPerfilAdmin || isPerfilLider || perfil === 'diretoria'` em marcar
+ * atrasados. Três listas de cargo ligeiramente diferentes para a mesma
+ * pergunta, na mesma tela, e nenhuma delas configurável.
+ *
+ * `true` quando existe QUALQUER nível liberado acima de `individual`. Aba
+ * fechada devolve `false` — não há tela onde olhar.
+ *
+ * ⚠️ Não confunda com «vejo o setor». Ter `equipe` já responde `true` aqui, e
+ * quem precisa do recorte exato continua lendo `niveisLiberados`.
+ */
+export function veAlemDeSi(
+  aba: AbaEscopada,
+  temPermissao: (chave: string) => boolean,
+): boolean {
+  return niveisLiberados(aba, temPermissao).some(n => n !== 'individual');
+}
+
 /** `a` alcança tudo que `b` alcança? */
 export function alcancaPeloMenos(a: NivelEscopo, b: NivelEscopo): boolean {
   return AMPLITUDE[a] >= AMPLITUDE[b];

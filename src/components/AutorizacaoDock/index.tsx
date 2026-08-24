@@ -37,7 +37,7 @@ import { cn } from '@/lib/utils';
 import { formatBRL } from '@/lib/money';
 import { useAuth } from '@/hooks/useAuth';
 import { useAutorizacaoPedidos } from '@/hooks/useAutorizacaoPedidos';
-import { podeAutorizarTabulacao } from '@/lib/index';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import {
   decidirAutorizacao, cancelarAutorizacao, type PedidoAutorizacao,
 } from '@/services/autorizacaoPedidos.service';
@@ -270,7 +270,11 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
 
 export function AutorizacaoDock() {
   const { perfil } = useAuth();
-  const souAutorizador = podeAutorizarTabulacao(perfil?.perfil);
+  const { temPermissao } = useCargoPermissoes();
+  // Pergunta ao painel, e não ao cargo. `autorizacao_lider.service` confere a
+  // MESMA chave com o token de quem digita a senha, e o servidor a confere de
+  // novo em `fn_transferir_acordo_nr` — três checagens, uma fonte.
+  const souAutorizador = temPermissao('acordos_autorizar_tabulacao');
   /**
    * A gaveta é só de quem decide.
    *

@@ -13,6 +13,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor } from '@testing-library/react';
+import { permissoesDoCargo } from '@/test/permissoesDoCargo';
 
 const { perfilRef, empresaRef, tenantRef, analiticoRef, escopoRef, configRef } = vi.hoisted(() => ({
   perfilRef:    { current: null as unknown },
@@ -24,6 +25,10 @@ const { perfilRef, empresaRef, tenantRef, analiticoRef, escopoRef, configRef } =
 }));
 
 vi.mock('@/hooks/useAuth',      () => ({ useAuth:    () => ({ perfil:  perfilRef.current }) }));
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => permissoesDoCargo(
+    (perfilRef.current as { perfil?: string } | null)?.perfil),
+}));
 vi.mock('@/hooks/useEmpresa',   () => ({ useEmpresa: () => ({ empresa: empresaRef.current }) }));
 vi.mock('@/lib/tenant-config',  () => ({ useTenant:  () => tenantRef.current }));
 vi.mock('@/hooks/useEscopoAnalitico', () => ({ useEscopoAnalitico: () => escopoRef.current }));

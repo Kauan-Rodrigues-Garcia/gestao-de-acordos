@@ -50,7 +50,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
-import { formatCurrency, parseCurrencyInput, isPerfilAdminOuLider, getTodayISO } from '@/lib/index';
+import { formatCurrency, parseCurrencyInput, getTodayISO } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
@@ -153,7 +153,6 @@ export function PixAutomatico() {
   const { temPermissao } = useCargoPermissoes();
   const podeAprovar = temPermissao('aprovar_pix_automatico');
 
-  const cargo   = String(perfil?.perfil ?? '').toLowerCase();
   /*
    * ESCOPO desta aba — o que a pessoa VÊ.
    *
@@ -174,11 +173,23 @@ export function PixAutomatico() {
   const podeVerTodosSetores = niveisPix.includes('todos_setores');
 
   /*
-   * AÇÃO sobre registro alheio. Continua saindo do cargo, como sempre saiu —
-   * separar isso é trabalho da fase de ações, e fazê-lo junto com o escopo
-   * arriscaria tirar de alguém um botão que hoje funciona.
+   * AÇÃO sobre registro alheio.
+   *
+   * Era `isPerfilAdminOuLider(cargo)` — a última lista de cargo deste arquivo,
+   * declarada como pendência em `docs/PERMISSOES-POR-ABA-PROJETO.md` §5.3.
+   * Passa a ser a mesma pergunta do escopo: quem enxerga registro de outra
+   * pessoa é quem pode agir sobre ele.
+   *
+   * Cargo a cargo o resultado é idêntico ao de antes — `pix_escopo_setor` nasceu
+   * com exatamente `lider, elite, gerencia, ouvidoria`, e o acesso total cobre o
+   * resto. O que muda é que agora dá para separar os dois: tirar `setor` de um
+   * cargo tira o botão junto, em vez de esconder a linha e deixar o botão.
+   *
+   * `todos_setores` entra explicitamente. Sem ele, desligar `setor` e manter
+   * `todos_setores` produziria alguém que vê a empresa inteira e não pode tocar
+   * em nada — um estado que ninguém pediria de propósito.
    */
-  const podeAgirSobreOutros = isPerfilAdminOuLider(cargo);
+  const podeAgirSobreOutros = podeVerDeOutros || podeVerTodosSetores;
   const podeEditarConfig = temPermissao('pix_editar_configuracoes');
   /*
    * Corrigir valor divergente mexe em dinheiro que vai sair, e é anotado em

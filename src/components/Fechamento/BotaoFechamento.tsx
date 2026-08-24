@@ -42,8 +42,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useTenant } from '@/lib/tenant-config';
-import { escopoEfetivo } from '@/lib/permissoes-escopo';
-import { isPerfilAdminOuLider } from '@/lib/index';
+import { escopoEfetivo, veAlemDeSi } from '@/lib/permissoes-escopo';
 import { rotuloDoMes } from '@/lib/mesReferencia';
 import { mesFechado } from '@/lib/fechamentoMes';
 import { baixarRelatorioFechamento } from '@/services/fechamento/baixarFechamento';
@@ -73,7 +72,6 @@ export function BotaoFechamento({
   // e `mes` muda no seletor sem desmontar o componente.
   if (!mesFechado(mes)) return null;
 
-  const cargo = perfil?.perfil ?? '';
   /*
    * O nível do relatório segue o painel onde este botão vive: ele é
    * renderizado dentro do AnalyticsPanel, no Dashboard. Usar outra fonte de
@@ -81,7 +79,10 @@ export function BotaoFechamento({
    * exatamente o defeito que `escopoAnalitico` foi criado para acabar.
    */
   const vejoTudo = escopoEfetivo('dashboard', temPermissao) === 'todos_setores';
-  const vejoOutros = isPerfilAdminOuLider(cargo);
+  // Mesma fonte da linha acima. Era `isPerfilAdminOuLider(cargo)` — o nível do
+  // relatório saía metade do painel e metade de uma lista de cargo, e as duas
+  // podiam discordar sobre a mesma pessoa no mesmo clique.
+  const vejoOutros = veAlemDeSi('dashboard', temPermissao);
 
   const nivel: NivelFechamento = vejoTudo ? 'diretoria' : vejoOutros ? 'setor' : 'operador';
 

@@ -26,7 +26,7 @@ import {
   BarChart3, Upload, Target, BarChart2, LifeBuoy, Megaphone, MessageSquarePlus,
   Ticket, ClipboardList,
 } from 'lucide-react';
-import { ROUTE_PATHS, isPerfilAdmin, isPerfilDiretoria, isPerfilLider } from '@/lib/index';
+import { ROUTE_PATHS } from '@/lib/index';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 
 export interface NavItem {
@@ -160,11 +160,17 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
  *
  * `useTicketsAcesso` responde pela pessoa logada e soma um caminho que é
  * individual: estar em `tickets_atendentes`. Numa prévia por cargo esse caminho
- * não existe — não há pessoa —, e o que sobra é a regra que o próprio cargo
- * carrega: administrador sempre, liderança depois que a chave da empresa for
- * virada, operador nunca.
+ * não existe — não há pessoa —, e o que sobra são as duas chaves do painel.
+ *
+ * Recebe `temPermissao` e não `cargo` desde 24/08/2026. Antes eram
+ * `isPerfilAdmin`/`isPerfilLider` escritos aqui, e a prévia mentia assim que
+ * alguém mexesse em Tickets no painel: a réplica mostrava a aba pela lista de
+ * cargo enquanto a tela real já a escondia pela chave.
  */
-export function ticketsVisivelParaCargo(cargo: string, liberadoParaLideranca: boolean): boolean {
-  if (isPerfilAdmin(cargo)) return true;
-  return liberadoParaLideranca && (isPerfilLider(cargo) || isPerfilDiretoria(cargo));
+export function ticketsVisivelParaCargo(
+  temPermissao: (chave: string) => boolean,
+  liberadoParaLideranca: boolean,
+): boolean {
+  if (temPermissao('tickets_administrar')) return true;
+  return liberadoParaLideranca && temPermissao('tickets_abrir');
 }

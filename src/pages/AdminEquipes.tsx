@@ -55,6 +55,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useTenant } from '@/lib/tenant-config';
 import { PERFIL_LABELS, PERFIL_COLORS } from '@/lib/index';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
@@ -248,7 +249,16 @@ export default function AdminEquipes() {
   const { temPermissao } = useCargoPermissoes();
   const tenant = useTenant();
 
-  const isAdmin = perfil?.perfil === 'administrador' || perfil?.perfil === 'super_admin';
+  /*
+   * «Não fico preso ao meu setor.»
+   *
+   * Era `perfil === 'administrador' || 'super_admin'`, e é exatamente o que o
+   * nível `todos_setores` da aba Usuários já significa — a mesma pergunta com
+   * duas respostas independentes na mesma tela. Um gerente com alcance de
+   * empresa via a lista inteira em Usuários e continuava travado no próprio
+   * setor aqui.
+   */
+  const isAdmin = niveisLiberados('usuarios', temPermissao).includes('todos_setores');
   // Permissão configurável para criar/editar/excluir equipes e membros.
   // Admin/super_admin sempre têm (temPermissao retorna true). Padrão = true
   // (espelha o acesso atual); desligar na tela de Cargos passa a restringir.

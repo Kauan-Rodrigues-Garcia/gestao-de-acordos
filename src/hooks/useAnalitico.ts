@@ -28,7 +28,8 @@ import { reconciliarLista, iguaisProfundo } from '@/lib/dadosVivos';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { buscarAnalitico, marcarVistoAnalitico } from '@/services/analitico/analitico.service';
-import { isPerfilAdminOuLider } from '@/lib/index';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { veAlemDeSi } from '@/lib/permissoes-escopo';
 
 export interface UseAnaliticoOptions {
   mes: string;                  // 'yyyy-MM'
@@ -41,6 +42,7 @@ export interface UseAnaliticoOptions {
 export function useAnalitico(options: UseAnaliticoOptions) {
   const { perfil }  = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
 
   const [dados,       setDados]       = useState<AnaliticoRecebimento[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -49,7 +51,16 @@ export function useAnalitico(options: UseAnaliticoOptions) {
   const marcouRef     = useRef(false);
   const hasLoadedOnce = useRef(false);
 
-  const isLiderMais = isPerfilAdminOuLider(perfil?.perfil ?? '');
+  /*
+   * Enxerga além de si nesta aba?
+   *
+   * Era `isPerfilAdminOuLider(cargo)`. A tela que consome este hook
+   * (`pages/Analitico`) já decidia o alcance dela por `niveisLiberados`, então
+   * ligar `analitico_escopo_setor` num operador abria a visão de setor na tela e
+   * o hook continuava filtrando pelo id dele — a lista vinha vazia, sem
+   * explicação. É o defeito clássico de duas autoridades na mesma tela.
+   */
+  const isLiderMais = veAlemDeSi('analitico', temPermissao);
 
   /**
    * `silencioso` = a tela já tem conteúdo e alguém está lendo.

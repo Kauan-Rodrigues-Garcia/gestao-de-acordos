@@ -8,8 +8,8 @@ import {
 import { FileText, Hash, Link2, Save, Tag, User, X, Info, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatBRL, parseBRL } from '@/lib/money';
-import { INSTITUICOES_OPTIONS, isPerfilAdmin, PARCELAS_MAX_DEFAULT } from '@/lib/index';
-import { useAuth } from '@/hooks/useAuth';
+import { INSTITUICOES_OPTIONS, PARCELAS_MAX_DEFAULT } from '@/lib/index';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { DropzoneImagensAcordo } from '@/components/acordo-visao/DropzoneImagensAcordo';
 import { TagsSelector } from '@/components/TagsSelector';
 import { TIPOS_BOOKPLAY, STATUS_OPTIONS, DatePickerField } from './constants';
@@ -40,8 +40,9 @@ export function FormBP({ state }: { state: SharedFormState }) {
     avisoDiretoExtra, confirmandoDiretoExtra, confirmarDiretoExtra, cancelarAvisoDiretoExtra,
   } = state;
 
-  const { perfil } = useAuth();
-  const admin = isPerfilAdmin(perfil?.perfil ?? '');
+  const { temPermissao } = useCargoPermissoes();
+  // Os campos restritos saem do painel, não do cargo.
+  const admin = temPermissao('acordos_campos_admin');
   // O botão precisa aparecer ANTES de a entrada ser ligada, então não pode
   // depender de `temEntradaForm` (que o pai já entrega desligado quando a
   // entrada não se aplica).

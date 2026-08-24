@@ -40,6 +40,8 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useTenant } from '@/lib/tenant-config';
 import { useAnaliticoDashboard, agregarAnalitico } from '@/hooks/useAnaliticoDashboard';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { veAlemDeSi } from '@/lib/permissoes-escopo';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import {
@@ -47,7 +49,7 @@ import {
   type TotaisDiretoExtra, type PontoAgendadoDia, type ExtraTabulado,
 } from '@/services/analitico/diretoExtra.service';
 import {
-  getTodayISO, isPerfilAdminOuLider, isPerfilDiretoria, PP_HO_PERCENTUAL,
+  getTodayISO, PP_HO_PERCENTUAL,
 } from '@/lib/index';
 import {
   combinarMetaDupla, lerMetaIndiretaDaLinha, type MetaDupla,
@@ -232,6 +234,7 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   const { ano, mes: mesNum } = partesDoMes(mes);
 
   const { perfil }  = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const { empresa } = useEmpresa();
   const tenant = useTenant();
   const ativo = tenant.isPaguePlay || tenant.slug === 'bookplay';
@@ -250,12 +253,15 @@ export function usePainelMetas(params: ParametrosPainelMetas): DadosPainelMetas 
   /**
    * O usuário enxerga gente além dele mesmo?
    *
-   * Decide pelo CARGO, e não pelo `setorId` recebido: o Dashboard trava o setor
-   * do próprio operador em `setorFiltro`, então um setor não-nulo não significa
-   * "posso ver o setor".
+   * Sai dos NÍVEIS do Dashboard — o painel onde as metas são exibidas —, e não
+   * do `setorId` recebido: o Dashboard trava o setor do próprio operador em
+   * `setorFiltro`, então um setor não-nulo não significa "posso ver o setor".
+   *
+   * Era `isPerfilAdminOuLider || isPerfilDiretoria`. A mesma pergunta era feita
+   * três linhas adiante no `AnalyticsPanel`, com uma lista de cargo ligeiramente
+   * diferente — as duas telas podiam discordar sobre a mesma pessoa.
    */
-  const podeVerOutros = isPerfilAdminOuLider(perfil?.perfil ?? '')
-    || isPerfilDiretoria(perfil?.perfil ?? '');
+  const podeVerOutros = veAlemDeSi('dashboard', temPermissao);
 
   const { equipes: equipesConhecidas, carregado: equipesCarregadas } =
     useEquipesDisponiveis(empresa?.id, setorId, podeVerOutros);

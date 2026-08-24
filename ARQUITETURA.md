@@ -1337,8 +1337,17 @@ também, cancele os lançamentos ou desligue a aba inteira.
 
 > Tabelas `uso_telas` e `uso_sessoes` · RPCs `fn_uso_*` · tela: `src/pages/AdminLogs/MonitoramentoUso.tsx`
 > Migrations `20260817180000`, `20260817200000`, `20260818140000`,
-> `20260824150000` (filtros de setor/equipe + quem nunca acessou) e
-> `20260824180000`/`20260824190000` (entrada no sistema).
+> `20260824150000` (filtros de setor/equipe + quem nunca acessou),
+> `20260824180000`/`20260824190000` (entrada no sistema) e `20260824200000`
+> (a chave `ver_monitoramento_uso`).
+
+### Quem abre esta aba
+
+`ver_monitoramento_uso`, no painel de Permissões — e **só ela**. Até 24/08/2026
+a policy de `uso_telas` exigia cargo `administrador`, escrito dentro dela: quem
+tinha `ver_logs` via a sub-aba e recebia zero linhas, sem nada explicando o
+motivo. Era o exemplo que originou a conversão do frontend inteiro; ver
+`src/lib/__tests__/painel-manda.test.ts`.
 
 ### O que os números medem
 

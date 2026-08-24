@@ -9,8 +9,10 @@
  *   1. fetch para /auth/v1/token?grant_type=password (não polui a sessão do
  *      operador logado).
  *   2. fetch para /rest/v1/perfis?id=eq.{uid} para verificar o perfil.
- *   3. Verifica o cargo contra `PERFIS_AUTORIZADORES` (lib/index), que espelha
- *      a checagem do servidor em `fn_transferir_acordo_nr`.
+ *   3. Pergunta ao PAINEL, com o token do líder, se ele tem
+ *      `acordos_autorizar_tabulacao` — a mesma chave que
+ *      `fn_transferir_acordo_nr` confere no servidor. Os dois lados deixaram de
+ *      poder divergir, e liberar mais uma pessoa virou um clique em Permissões.
  *
  * ## Este é o único caminho de autorização
  *
@@ -21,7 +23,7 @@
  * recusado na outra. Quem precisar autenticar um líder chama daqui.
  */
 
-import { podeAutorizarTabulacao, PERFIL_LABELS } from '@/lib/index';
+import { PERFIL_LABELS } from '@/lib/index';
 
 /**
  * Resolve um identificador de login (USUÁRIO ou e-mail) para o e-mail de
@@ -155,17 +157,45 @@ export async function autenticarLider(params: {
     return { ok: false, erro: 'Perfil do líder não encontrado' };
   }
 
-  // 3. Verificar se o cargo pode autorizar.
+  // 3. Perguntar ao PAINEL se esta pessoa pode autorizar.
   //
-  // `PERFIS_AUTORIZADORES` espelha a checagem do servidor cargo a cargo. Antes
-  // isto usava `isPerfilAdminOuLider`, que inclui `ouvidoria` (o servidor
-  // recusa) e deixa `diretoria` de fora (o servidor aceita) — ou seja, aprovava
-  // quem seria barrado depois e barrava quem tinha direito.
-  if (!podeAutorizarTabulacao(liderPerfil.perfil)) {
+  // A pergunta vai com o token do LÍDER, não com o de quem está na tela: dentro
+  // de `fn_user_tem` o `auth.uid()` é o dele, e a função resolve as quatro
+  // camadas na ordem — acesso total, exceção da pessoa, mapa do cargo, negado.
+  // É a exceção por pessoa que torna isto melhor do que a lista antiga:
+  // autorizar UM operador nominalmente passou a ser possível sem promover o
+  // cargo inteiro.
+  //
+  // Antes era `podeAutorizarTabulacao`, uma lista de cargos em `lib/index.ts`.
+  // Ela já tinha sido criada para acabar com quatro listas divergentes; o que
+  // faltava era tirar a decisão do código.
+  let podeRes: Response;
+  try {
+    podeRes = await fetch(
+      `${supabaseUrl}/rest/v1/rpc/fn_user_tem`,
+      {
+        method:  'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey:         supabaseAnon,
+          Authorization:  `Bearer ${liderToken}`,
+        },
+        body: JSON.stringify({ p_chave: 'acordos_autorizar_tabulacao' }),
+      },
+    );
+  } catch {
+    return { ok: false, erro: 'Falha de rede ao verificar permissão do líder' };
+  }
+
+  // Falha de rede ou resposta que não seja `true` reprovam. Fail-closed: uma
+  // autorização concedida por engano libera transferência de NR, e o servidor
+  // recusaria depois — mas com a tela já tendo dito que deu certo.
+  const podeAutorizar = podeRes.ok && (await podeRes.json()) === true;
+  if (!podeAutorizar) {
     return {
       ok: false,
       erro: `O cargo "${PERFIL_LABELS[liderPerfil.perfil] ?? liderPerfil.perfil}" não tem permissão para autorizar tabulações. `
-          + 'É necessário líder, elite, gerência, diretoria ou administrador.',
+          + 'Libere «Autorizar tabulação» em Permissões, ou use outra conta.',
     };
   }
 

@@ -12,10 +12,17 @@
  * O teste usa inspeção estática do fonte (AST-like via regex) porque
  * renderizar AdminConfiguracoes completo exige supabase/auth/motion +
  * sub-páginas AdminCargos/AdminLogs/AdminDiretoExtra lazy-loaded.
+ * ## O gate mudou de dono em 24/08/2026
+ *
+ * Era `isPerfilAdmin(perfil.perfil)` — uma lista de cargo escrita na tela. Com
+ * ela, ligar a chave no painel de Permissões não abria o card: o card
+ * respondia a outra autoridade. Hoje é `ver_banco_dados`, e o comportamento
+ * nasceu idêntico (a chave começou ligada só para acesso total).
+ *
  * A checagem estática garante que:
  *   1. `useAuth` é importado e usado.
- *   2. `isPerfilAdmin` é importado de `@/lib/index`.
- *   3. Existe a variável `podeVerBancoDados` derivada de isPerfilAdmin(perfil.perfil).
+ *   2. O gate pergunta ao painel, e `isPerfilAdmin` não voltou ao arquivo.
+ *   3. Existe a variável `podeVerBancoDados` derivada de `ver_banco_dados`.
  *   4. O Card que contém o título "Banco de Dados / Migrations" está
  *      renderizado dentro de `{podeVerBancoDados && (...)}`.
  *   5. O useEffect que probe `acordos.instituicao` também respeita o gate.
@@ -32,14 +39,19 @@ describe('AdminConfiguracoes — gate do card "Banco de Dados / Migrations" (#8)
     expect(src).toMatch(/import\s*\{\s*useAuth\s*\}\s*from\s*['"]@\/hooks\/useAuth['"]/);
   });
 
-  it('importa isPerfilAdmin de @/lib/index', () => {
-    expect(src).toMatch(/import\s*\{\s*isPerfilAdmin\s*\}\s*from\s*['"]@\/lib\/index['"]/);
+  it('pergunta ao PAINEL, e não ao cargo', () => {
+    expect(src).toMatch(
+      /import\s*\{\s*useCargoPermissoes\s*\}\s*from\s*['"]@\/hooks\/useCargoPermissoes['"]/,
+    );
+    // A regressão que esta linha impede: voltar a `isPerfilAdmin(cargo)`.
+    // Enquanto o gate saía do cargo, ligar a chave no painel não abria o card —
+    // e era essa a queixa que a conversão de 24/08/2026 encerrou.
+    expect(src).not.toMatch(/isPerfilAdmin\s*\(/);
   });
 
-  it('declara podeVerBancoDados derivado de isPerfilAdmin(perfil.perfil)', () => {
-    // Aceita `perfil?.perfil ?? ''` ou `perfil?.perfil || ''`
+  it('declara podeVerBancoDados a partir da chave `ver_banco_dados`', () => {
     expect(src).toMatch(
-      /const\s+podeVerBancoDados\s*=\s*isPerfilAdmin\(\s*perfil\?\.perfil\s*(\?\?|\|\|)\s*['"]{2}\s*\)/,
+      /const\s+podeVerBancoDados\s*=\s*temPermissao\(\s*['"]ver_banco_dados['"]\s*\)/,
     );
   });
 

@@ -100,20 +100,30 @@ describe('abasDoMenu', () => {
   });
 });
 
+/*
+ * `ticketsVisivelParaCargo` recebe `temPermissao`, e não `cargo`, desde
+ * 24/08/2026. Tickets era o único módulo cujo acesso vivia inteiramente fora do
+ * painel; agora as duas portas são chaves — `tickets_administrar` e
+ * `tickets_abrir` —, e a prévia por cargo do editor pergunta as mesmas.
+ */
 describe('ticketsVisivelParaCargo', () => {
-  it('administrador vê com a chave fechada', () => {
-    expect(ticketsVisivelParaCargo('administrador', false)).toBe(true);
-    expect(ticketsVisivelParaCargo('super_admin', false)).toBe(true);
+  /** Um `temPermissao` que concede só as chaves listadas. */
+  const com = (...chaves: string[]) => (c: string) => chaves.includes(c);
+
+  it('quem administra a fila vê com a chave da empresa fechada', () => {
+    expect(ticketsVisivelParaCargo(com('tickets_administrar'), false)).toBe(true);
+    // Acesso total responde `true` para as duas — e a primeira já basta.
+    expect(ticketsVisivelParaCargo(com('tickets_administrar', 'tickets_abrir'), false))
+      .toBe(true);
   });
 
-  it('a liderança entra quando a chave da empresa é virada', () => {
-    expect(ticketsVisivelParaCargo('lider', false)).toBe(false);
-    expect(ticketsVisivelParaCargo('lider', true)).toBe(true);
-    expect(ticketsVisivelParaCargo('diretoria', true)).toBe(true);
+  it('quem só abre chamado entra quando a chave da empresa é virada', () => {
+    expect(ticketsVisivelParaCargo(com('tickets_abrir'), false)).toBe(false);
+    expect(ticketsVisivelParaCargo(com('tickets_abrir'), true)).toBe(true);
   });
 
-  it('operador não vê, nem com a chave aberta', () => {
-    expect(ticketsVisivelParaCargo('operador', true)).toBe(false);
+  it('sem nenhuma das duas não vê, nem com a chave aberta', () => {
+    expect(ticketsVisivelParaCargo(com(), true)).toBe(false);
   });
 });
 

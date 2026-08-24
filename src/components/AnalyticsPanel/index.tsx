@@ -19,14 +19,11 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEscopoAnalitico } from '@/hooks/useEscopoAnalitico';
 import { ESCOPO_EMPRESA } from '@/services/analitico/escopoAnalitico';
-import { niveisLiberados } from '@/lib/permissoes-escopo';
+import { niveisLiberados, veAlemDeSi } from '@/lib/permissoes-escopo';
 import {
   buscarContribuicoesReceptivo, receptivoDoEscopo,
 } from '@/services/analitico/contribuicaoReceptivo.service';
-import {
-  formatCurrency, PP_HO_PERCENTUAL,
-  isPerfilAdminOuLider, isPerfilDiretoria,
-} from '@/lib/index';
+import { formatCurrency, PP_HO_PERCENTUAL } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
 import { diasDecorridos, diasNoMes, ehMesAtual, mesAtual } from '@/lib/mesReferencia';
 import { Button } from '@/components/ui/button';
@@ -225,8 +222,9 @@ export function AnalyticsPanel({
    * significa "estou vendo o setor". Sem esta distinção, o valor do card do
    * Receptivo era creditado no total pessoal de cada operador.
    */
-  const veDadosDeOutros =
-    isPerfilAdminOuLider(perfil?.perfil ?? '') || isPerfilDiretoria(perfil?.perfil ?? '');
+  // Sai dos níveis do Dashboard — o painel onde este componente vive. Era
+  // `isPerfilAdminOuLider || isPerfilDiretoria`, escrito à mão aqui.
+  const veDadosDeOutros = veAlemDeSi('dashboard', temPermissao);
 
   /** Quanto do Receptivo entra no que está na tela — ver `receptivoDoEscopo`. */
   const receptivoNoEscopo = useMemo(

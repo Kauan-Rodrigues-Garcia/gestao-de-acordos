@@ -31,7 +31,9 @@ describe('autenticarLider', () => {
         ok: true, 
         status: 200, 
         json: async () => [{ perfil: 'lider', nome: 'João' }] 
-      }) as unknown as typeof fetch;
+      })
+      // 3o fetch: a pergunta ao painel (fn_user_tem), com o token do lider.
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => true }) as unknown as typeof fetch;
 
     const res = await autenticarLider({ email: 'lider@test.com', senha: 'password' });
 
@@ -71,7 +73,9 @@ describe('autenticarLider', () => {
         ok: true, 
         status: 200, 
         json: async () => [{ perfil: 'operador', nome: 'Zezinho' }] 
-      }) as unknown as typeof fetch;
+      })
+      // 3o fetch: a pergunta ao painel (fn_user_tem), com o token do lider.
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => false }) as unknown as typeof fetch;
 
     const res = await autenticarLider({ email: 'op@test.com', senha: 'password' });
 
@@ -90,7 +94,9 @@ describe('autenticarLider', () => {
         ok: true, 
         status: 200, 
         json: async () => [{ perfil: 'elite', nome: 'Elite User' }] 
-      }) as unknown as typeof fetch;
+      })
+      // 3o fetch: a pergunta ao painel (fn_user_tem), com o token do lider.
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => true }) as unknown as typeof fetch;
 
     const res = await autenticarLider({ email: 'elite@test.com', senha: 'password' });
 
@@ -108,7 +114,9 @@ describe('autenticarLider', () => {
         ok: true, 
         status: 200, 
         json: async () => [{ perfil: 'gerencia', nome: 'Gerente' }] 
-      }) as unknown as typeof fetch;
+      })
+      // 3o fetch: a pergunta ao painel (fn_user_tem), com o token do lider.
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => true }) as unknown as typeof fetch;
 
     const res = await autenticarLider({ email: 'ger@test.com', senha: 'password' });
 
@@ -134,7 +142,7 @@ describe('autenticarLider', () => {
   });
 });
 
-// ── A lista de autorizadores tem que bater com a do servidor ─────────────────
+// ── Quem autoriza é decisão do painel, não do código ────────────────────────
 //
 // Existiam QUATRO listas para a mesma pergunta e elas divergiam: gerência e
 // elite eram recusadas no AcordoForm e aceitas no AcordoNovoInline, a diretoria
@@ -142,10 +150,26 @@ describe('autenticarLider', () => {
 // passava no cliente para ser recusada pelo servidor depois. Daí "alguns
 // líderes conseguem, outros não".
 //
-// `PERFIS_AUTORIZADORES` (lib/index) espelha `fn_transferir_acordo_nr`
-// (migration 20260728a) cargo a cargo. Estes testes são a trava.
+// A primeira correção juntou as quatro em `PERFIS_AUTORIZADORES` (lib/index),
+// espelhando `fn_transferir_acordo_nr`. Resolveu a divergência e deixou o
+// problema de fundo: liberar mais uma pessoa continuava exigindo um deploy.
+//
+// Em 24/08/2026 a lista virou a chave `acordos_autorizar_tabulacao`. Cliente e
+// servidor perguntam a MESMA chave, e o cargo deixou de decidir — inclusive
+// para menos: um líder com a chave desligada é recusado aqui.
 
-function mockAuthComPerfil(perfil: string) {
+
+
+/**
+ * Os TRÊS fetches do fluxo, na ordem: autenticar, ler o perfil, perguntar ao
+ * painel.
+ *
+ * O terceiro entrou em 24/08/2026. Antes o serviço conferia o cargo contra
+ * `PERFIS_AUTORIZADORES`, uma lista em `lib/index.ts`; agora chama
+ * `fn_user_tem('acordos_autorizar_tabulacao')` COM O TOKEN DO LÍDER — então o
+ * `auth.uid()` lá dentro é o dele, e a exceção por pessoa vale.
+ */
+function mockAuthComPerfil(perfil: string, podeAutorizar = true) {
   global.fetch = vi.fn()
     .mockResolvedValueOnce({
       ok: true, status: 200,
@@ -154,20 +178,64 @@ function mockAuthComPerfil(perfil: string) {
     .mockResolvedValueOnce({
       ok: true, status: 200,
       json: async () => [{ perfil, nome: `Fulano ${perfil}` }],
+    })
+    .mockResolvedValueOnce({
+      ok: true, status: 200,
+      json: async () => podeAutorizar,
     }) as unknown as typeof fetch;
 }
 
-describe('autenticarLider — cargos aceitos espelham o servidor', () => {
+describe('autenticarLider — quem autoriza sai do painel', () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
-  // O servidor aceita estes seis em fn_transferir_acordo_nr.
+  // Os seis que o padrão da chave concede (liderança + acesso total), e que
+  // `fn_transferir_acordo_nr` também aceita — as duas pontas leem a mesma chave.
   for (const cargo of ['lider', 'elite', 'gerencia', 'diretoria', 'administrador', 'super_admin']) {
-    it(`aceita "${cargo}"`, async () => {
+    it(`aceita "${cargo}" quando o painel concede`, async () => {
       mockAuthComPerfil(cargo);
       const res = await autenticarLider({ email: 'x@test.com', senha: 'senha' });
       expect(res.ok).toBe(true);
     });
   }
+
+  /*
+   * A trava que dá sentido à conversão: o CARGO não decide mais nada. Um líder
+   * com a chave desligada é recusado, e um operador com ela ligada passa.
+   *
+   * Era impossível antes — a lista de cargos estava no código, e liberar uma
+   * pessoa exigia promovê-la.
+   */
+  it('recusa um líder quando o painel nega, apesar do cargo', async () => {
+    mockAuthComPerfil('lider', false);
+    const res = await autenticarLider({ email: 'lid@test.com', senha: 'senha' });
+    expect(res.ok).toBe(false);
+    if (!res.ok) expect(res.erro).toMatch(/permissão/i);
+  });
+
+  it('aceita um operador quando o painel concede', async () => {
+    mockAuthComPerfil('operador', true);
+    const res = await autenticarLider({ email: 'op@test.com', senha: 'senha' });
+    expect(res.ok).toBe(true);
+  });
+
+  /** Falha de rede na pergunta reprova: autorizar por engano libera NR. */
+  it('erro ao perguntar ao painel recusa, em vez de liberar', async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => ({ user: { id: 'abc' }, access_token: 'tk' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: async () => [{ perfil: 'lider', nome: 'João' }],
+      })
+      .mockResolvedValueOnce({
+        ok: false, status: 500, json: async () => null,
+      }) as unknown as typeof fetch;
+
+    const res = await autenticarLider({ email: 'x@test.com', senha: 'senha' });
+    expect(res.ok).toBe(false);
+  });
 
   it('aceita diretoria — o servidor aceita, e o cliente recusava', async () => {
     mockAuthComPerfil('diretoria');
@@ -175,20 +243,20 @@ describe('autenticarLider — cargos aceitos espelham o servidor', () => {
     expect(res.ok).toBe(true);
   });
 
-  it('recusa ouvidoria — o cliente aceitava e o servidor recusava depois', async () => {
-    mockAuthComPerfil('ouvidoria');
+  it('recusa ouvidoria quando o painel nega — o padrão da chave a deixa de fora', async () => {
+    mockAuthComPerfil('ouvidoria', false);
     const res = await autenticarLider({ email: 'ouv@test.com', senha: 'senha' });
     expect(res.ok).toBe(false);
   });
 
-  it('recusa operador', async () => {
-    mockAuthComPerfil('operador');
+  it('recusa operador quando o painel nega', async () => {
+    mockAuthComPerfil('operador', false);
     const res = await autenticarLider({ email: 'op@test.com', senha: 'senha' });
     expect(res.ok).toBe(false);
   });
 
   it('a recusa nomeia o cargo, para o líder saber por que foi barrado', async () => {
-    mockAuthComPerfil('operador');
+    mockAuthComPerfil('operador', false);
     const res = await autenticarLider({ email: 'op@test.com', senha: 'senha' });
     if ('erro' in res) expect(res.erro).toMatch(/Operador/i);
     else throw new Error('deveria ter recusado');

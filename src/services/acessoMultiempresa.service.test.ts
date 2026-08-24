@@ -33,33 +33,60 @@ beforeEach(() => {
 
 // ── perfilVeDuasEmpresas ────────────────────────────────────────────────────
 
+/*
+ * A função recebe `temPermissao` desde 24/08/2026.
+ *
+ * O cargo elegível era uma lista escrita dentro dela — `gerencia || diretoria`
+ * — e a mesma lista vivia dentro de `fn_user_acesso_multiempresa`, no banco.
+ * Duas cópias da mesma regra é como front e banco passam a discordar; hoje as
+ * duas perguntam `acesso_multiempresa_permitido`.
+ *
+ * A estrutura dos casos não muda: a flag por PESSOA continua obrigatória, e
+ * continua não bastando sozinha.
+ */
 describe('perfilVeDuasEmpresas', () => {
-  it('super_admin vê pelo cargo, sem precisar de liberação', () => {
-    expect(perfilVeDuasEmpresas({ perfil: 'super_admin' })).toBe(true);
-    expect(perfilVeDuasEmpresas({ perfil: 'super_admin', acesso_multiempresa: false })).toBe(true);
+  /** O painel concede a chave? `padrao` do catálogo: gerência e diretoria. */
+  const painel = (concede: boolean) => () => concede;
+
+  it('super_admin vê pelo cargo, sem precisar de liberação nem de chave', () => {
+    expect(perfilVeDuasEmpresas({ perfil: 'super_admin' }, painel(false))).toBe(true);
+    expect(perfilVeDuasEmpresas(
+      { perfil: 'super_admin', acesso_multiempresa: false }, painel(false),
+    )).toBe(true);
   });
 
-  it('gerência e diretoria liberadas veem', () => {
-    expect(perfilVeDuasEmpresas({ perfil: 'gerencia',  acesso_multiempresa: true })).toBe(true);
-    expect(perfilVeDuasEmpresas({ perfil: 'diretoria', acesso_multiempresa: true })).toBe(true);
+  it('cargo com a chave e a flag ligadas vê', () => {
+    expect(perfilVeDuasEmpresas(
+      { perfil: 'gerencia', acesso_multiempresa: true }, painel(true),
+    )).toBe(true);
+    expect(perfilVeDuasEmpresas(
+      { perfil: 'diretoria', acesso_multiempresa: true }, painel(true),
+    )).toBe(true);
   });
 
-  it('gerência e diretoria SEM liberação não veem', () => {
-    expect(perfilVeDuasEmpresas({ perfil: 'gerencia'  })).toBe(false);
-    expect(perfilVeDuasEmpresas({ perfil: 'diretoria', acesso_multiempresa: false })).toBe(false);
+  it('a chave sem a flag não basta — a liberação é por pessoa', () => {
+    expect(perfilVeDuasEmpresas({ perfil: 'gerencia' }, painel(true))).toBe(false);
+    expect(perfilVeDuasEmpresas(
+      { perfil: 'diretoria', acesso_multiempresa: false }, painel(true),
+    )).toBe(false);
   });
 
-  /** A flag sobrevive ao rebaixamento; o cargo atual é que decide. */
-  it('cargo não elegível com a flag ligada não vê', () => {
-    for (const perfil of ['operador', 'lider', 'elite', 'administrador', 'ouvidoria']) {
-      expect(perfilVeDuasEmpresas({ perfil, acesso_multiempresa: true })).toBe(false);
+  /**
+   * A flag sobrevive ao rebaixamento — e à chave sendo desligada no painel.
+   * Nos dois casos o acesso cai na hora, sem ninguém precisar revogar a flag.
+   */
+  it('a flag sem a chave também não basta', () => {
+    for (const perfil of ['operador', 'lider', 'elite', 'ouvidoria']) {
+      expect(perfilVeDuasEmpresas(
+        { perfil, acesso_multiempresa: true }, painel(false),
+      )).toBe(false);
     }
   });
 
   it('sem perfil não vê', () => {
-    expect(perfilVeDuasEmpresas(null)).toBe(false);
-    expect(perfilVeDuasEmpresas(undefined)).toBe(false);
-    expect(perfilVeDuasEmpresas({})).toBe(false);
+    expect(perfilVeDuasEmpresas(null, painel(true))).toBe(false);
+    expect(perfilVeDuasEmpresas(undefined, painel(true))).toBe(false);
+    expect(perfilVeDuasEmpresas({}, painel(true))).toBe(false);
   });
 });
 

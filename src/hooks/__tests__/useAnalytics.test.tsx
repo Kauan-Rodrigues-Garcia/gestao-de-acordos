@@ -871,6 +871,7 @@ describe('useAnalytics', () => {
 
   describe('HO (Honorários Operacionais) — PaguePlay', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current     = makePerfilOperador();
       mockEmpresaValue.current    = makeEmpresa();
       mockTenantSlugValue.current = 'pagueplay';
@@ -917,6 +918,7 @@ describe('useAnalytics', () => {
 
   describe('error path', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current  = makePerfilOperador();
       mockEmpresaValue.current = makeEmpresa();
     });
@@ -948,6 +950,7 @@ describe('useAnalytics', () => {
 
   describe('refetch', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current  = makePerfilOperador();
       mockEmpresaValue.current = makeEmpresa();
     });
@@ -975,6 +978,7 @@ describe('useAnalytics', () => {
 
   describe('calcPerc — cap em 999', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current     = makePerfilOperador();
       mockEmpresaValue.current    = makeEmpresa();
       mockTenantSlugValue.current = 'bookplay';
@@ -1022,6 +1026,7 @@ describe('useAnalytics', () => {
 
   describe('porDia — campo ho (PaguePlay)', () => {
     beforeEach(() => {
+      niveisAtuais = ['individual'];
       mockPerfilValue.current     = makePerfilOperador();
       mockEmpresaValue.current    = makeEmpresa();
       mockTenantSlugValue.current = 'pagueplay';

@@ -116,19 +116,37 @@ export async function definirAcessoMultiempresa(
  * O perfil enxerga as duas empresas?
  *
  * Espelha `fn_user_acesso_multiempresa` no cliente, e a regra tem que ser a
- * mesma dos dois lados: a flag sozinha não basta, o cargo atual decide junto.
- * É o que impede o seletor de empresa de aparecer para quem foi rebaixado e
- * ficou com a flag ligada — a tela mostraria o botão e o banco recusaria os
- * dados, que é a pior combinação possível.
+ * mesma dos dois lados: a flag sozinha não basta, o painel decide junto. É o
+ * que impede o seletor de empresa de aparecer para quem foi rebaixado e ficou
+ * com a flag ligada — a tela mostraria o botão e o banco recusaria os dados,
+ * que é a pior combinação possível.
+ *
+ * ## Duas travas, e elas respondem coisas diferentes
+ *
+ *   flag `acesso_multiempresa` ........ ESTA PESSOA foi liberada
+ *   `acesso_multiempresa_permitido` ... o CARGO dela pode receber a liberação
+ *
+ * A segunda era `perfil === 'gerencia' || 'diretoria'`, escrita aqui e dentro
+ * da função do banco. Virou chave de painel em `20260824200000` — mudar quais
+ * cargos podem alternar deixou de ser migration.
+ *
+ * `temPermissao` é parâmetro, e não algo lido aqui dentro, porque esta função é
+ * pura e roda tanto em componente quanto em serviço. Quem não tem o resolvedor
+ * à mão chama a RPC `fn_user_acesso_multiempresa` direto — é o que
+ * `empresaAtiva.service` faz.
  *
  * Não é barreira de segurança — essa é a RLS. É o que impede a tela de mentir.
  */
-export function perfilVeDuasEmpresas(perfil: {
-  perfil?: string | null;
-  acesso_multiempresa?: boolean | null;
-} | null | undefined): boolean {
+export function perfilVeDuasEmpresas(
+  perfil: {
+    perfil?: string | null;
+    acesso_multiempresa?: boolean | null;
+  } | null | undefined,
+  temPermissao: (chave: string) => boolean,
+): boolean {
   if (!perfil) return false;
+  // Chave-mestra: o super_admin não pode se trancar fora da troca de empresa
+  // editando o próprio painel.
   if (perfil.perfil === 'super_admin') return true;
-  return !!perfil.acesso_multiempresa
-      && (perfil.perfil === 'gerencia' || perfil.perfil === 'diretoria');
+  return !!perfil.acesso_multiempresa && temPermissao('acesso_multiempresa_permitido');
 }

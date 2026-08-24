@@ -98,11 +98,24 @@ export default function AdminUsuarios() {
   // criação — quem só assiste não precisa da aba, a comemoração chega pelo
   // overlay em qualquer página.
   const podeVerComemoracoes = podeGerenciarComemoracoes(temPermissao);
-  const isAdmin = perfilAtual?.perfil === 'administrador';
+  /*
+   * Dois eixos, duas chaves — e eles não são a mesma pergunta.
+   *
+   *   `usuarios_ver_administradores` .. as contas de administração APARECEM na
+   *                                     lista
+   *   `usuarios_administrar` .......... posso escolher o cargo de alguém e
+   *                                     redefinir senha
+   *
+   * Os quatro pontos abaixo usavam `perfilAtual?.perfil === 'administrador'`.
+   * Ver e administrar andavam juntos por acidente de implementação, não por
+   * decisão — e ninguém conseguia separá-los sem mexer em código.
+   */
+  const podeVerAdministradores = temPermissao('usuarios_ver_administradores');
+  const podeAdministrarContas  = temPermissao('usuarios_administrar');
   const isSuperAdmin = perfilAtual?.perfil === 'super_admin';
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
-  // limita o líder ao próprio setor; admin/super atingem qualquer usuário.
-  const podeGerenciarSituacao = isAdmin || isSuperAdmin
+  // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
+  const podeGerenciarSituacao = podeAdministrarContas
     || ['lider', 'elite', 'gerencia', 'diretoria'].includes(perfilAtual?.perfil ?? '');
   // Gate para a aba Setores: visível apenas para Gerência ou superior
   // (gerencia, diretoria, administrador, super_admin).
@@ -565,7 +578,7 @@ export default function AdminUsuarios() {
   const PERFIS_ADMIN = ['administrador', 'super_admin'];
 
   const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
-    if (isSuperAdmin || isAdmin) return lista;
+    if (podeVerAdministradores) return lista;
     // Cargo não-admin nunca vê administrador nem super_admin.
     const semAdmins = lista.filter(u => !PERFIS_ADMIN.includes(u.perfil));
     if (veUsuariosDeTodosSetores) return semAdmins;
@@ -598,7 +611,7 @@ export default function AdminUsuarios() {
       if (escopadoAoSetor && c.destinoSetorId !== perfilAtual?.setor_id) continue;
       const p = perfilPorId.get(c.operadorId);
       if (!p || !p.setor_id || p.setor_id === c.destinoSetorId) continue;   // só cross-setor
-      if (PERFIS_ADMIN.includes(p.perfil) && !(isAdmin || isSuperAdmin)) continue;
+      if (PERFIS_ADMIN.includes(p.perfil) && !podeVerAdministradores) continue;
       const grupo = (usuariosPorSetor[c.destinoSetorId] ??= { nomeSetor: nomeSetorPorId(c.destinoSetorId), lista: [] });
       if (grupo.lista.some(x => x.id === p.id)) continue;
       grupo.lista.push({ ...p, _cloneDe: nomeSetor(p) });
@@ -1041,7 +1054,7 @@ export default function AdminUsuarios() {
                 também bloqueia via RLS; isto remove a opção enganosa da tela.) */}
             <div className="space-y-1.5">
               <Label className="text-xs">Perfil *</Label>
-              {(isAdmin || isSuperAdmin) ? (
+              {podeAdministrarContas ? (
                 <Select value={form.perfil} onValueChange={v => setForm(f => ({ ...f, perfil: v as PerfilUsuario }))}>
                   <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1136,7 +1149,7 @@ export default function AdminUsuarios() {
               A senha atual não é exibida porque não existe para ser exibida: o
               Supabase guarda o hash bcrypt dela, que não volta a texto. O que
               o admin pode fazer é definir uma nova. */}
-          {editando && (isAdmin || isSuperAdmin) && (
+          {editando && podeAdministrarContas && (
             <div className="space-y-2 py-2 border-t border-border pt-4">
               <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                 Redefinir senha

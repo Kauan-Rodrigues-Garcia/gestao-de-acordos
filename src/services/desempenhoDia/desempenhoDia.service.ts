@@ -27,6 +27,7 @@
  */
 
 import { supabase } from '@/lib/supabase';
+import type { NivelEscopo } from '@/lib/permissoes-escopo';
 import {
   linhaNoEscopo, ESCOPO_EMPRESA, type EscopoAnalitico,
 } from '@/services/analitico/escopoAnalitico';
@@ -346,28 +347,58 @@ export interface EscopoDoDia {
   equipes: EquipeDoEscopo[];
 }
 
-const CARGOS_EMPRESA = ['diretoria', 'administrador', 'super_admin'];
-
+/**
+ * O recorte que esta pessoa vê no Desempenho do Dia.
+ *
+ * ## Sai dos NÍVEIS do Dashboard, não do cargo
+ *
+ * O painel vive dentro do Dashboard, então usa a régua do Dashboard. Até
+ * 24/08/2026 eram quatro listas de cargo escritas aqui — `CARGOS_EMPRESA`,
+ * `'gerencia'`, `'lider'` e o resto —, e elas discordavam do próprio Dashboard
+ * sobre as mesmas pessoas.
+ *
+ * ## Duas pessoas passam a ver mais, e as duas já viam isso ao lado
+ *
+ *   `gerencia` .. setor inteiro → empresa inteira. Ela tem
+ *                 `dashboard_escopo_todos_setores` e já via a empresa nos
+ *                 cartões logo acima; só este painel a mantinha no setor.
+ *   `elite` ..... só os próprios → equipes que lidera (ou o setor). Ela tem
+ *                 `dashboard_escopo_setor` e `_equipe`, e caía no ramo final
+ *                 por não estar escrita em nenhuma das listas.
+ *
+ * Ninguém perde alcance: os níveis são um superconjunto das listas antigas em
+ * todo cargo. E quem quiser desfazer qualquer um dos dois ganhos agora mexe no
+ * painel, não aqui.
+ */
 export async function resolverEscopoDoDia(params: {
   empresaId: string;
   perfilId: string;
-  cargo: string;
+  /** Os níveis de `dashboard` liberados para esta pessoa. */
+  niveis: readonly NivelEscopo[];
   setorId: string | null;
 }): Promise<EscopoDoDia> {
-  const { empresaId, perfilId, cargo, setorId } = params;
+  const { empresaId, perfilId, niveis, setorId } = params;
 
-  if (CARGOS_EMPRESA.includes(cargo)) {
+  if (niveis.includes('todos_setores')) {
     return {
       escopo: ESCOPO_EMPRESA, rotulo: 'Empresa inteira',
       operadorId: null, setorId: null, equipes: [],
     };
   }
 
-  if (cargo === 'gerencia') return escopoDeSetorInteiro(empresaId, setorId, perfilId);
-
-  if (cargo === 'lider') {
+  if (niveis.includes('equipe')) {
     const equipes = await equipesQueLidera(empresaId, perfilId);
-    if (equipes.length === 0) return escopoDeSetorInteiro(empresaId, setorId, perfilId);
+    // Sem equipe sob liderança, o recorte de equipe não existe: cai para o
+    // setor quando o nível permitir, e para os próprios números quando não.
+    if (equipes.length === 0) {
+      return niveis.includes('setor')
+        ? escopoDeSetorInteiro(empresaId, setorId, perfilId)
+        : {
+            escopo: { tipo: 'operador', operadorId: perfilId },
+            rotulo: 'Os seus números',
+            operadorId: perfilId, setorId: null, equipes: [],
+          };
+    }
 
     const porEquipe = await membrosPorEquipe(empresaId, equipes.map(e => e.id));
     // O próprio líder entra no total: o acordo que ele tabula é produção da
@@ -383,6 +414,8 @@ export async function resolverEscopoDoDia(params: {
       equipes: equipes.map(e => ({ ...e, membros: porEquipe.get(e.id) ?? [] })),
     };
   }
+
+  if (niveis.includes('setor')) return escopoDeSetorInteiro(empresaId, setorId, perfilId);
 
   return {
     escopo: { tipo: 'operador', operadorId: perfilId },

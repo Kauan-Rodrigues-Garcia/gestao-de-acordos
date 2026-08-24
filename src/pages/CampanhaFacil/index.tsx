@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
-import { PERFIL_NIVEL } from '@/lib/index';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -92,6 +92,7 @@ function VariableChips({ onInsert }: { onInsert: (variable: string) => void }) {
 export default function CampanhaFacil() {
   const { empresa } = useEmpresa();
   const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const cf = useCampanhaFacil();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -131,16 +132,21 @@ export default function CampanhaFacil() {
     );
   }
 
-  // ── Gate de cargo: operador não usa o Campanha Fácil ──
-  // Mesma defesa em profundidade do gate acima: o item já some do menu, mas a
-  // rota continua acessível por URL colada. Cargo desconhecido cai no piso de
-  // operador de propósito — o padrão aqui é negar, não liberar.
-  if (perfil && (PERFIL_NIVEL[perfil.perfil] ?? PERFIL_NIVEL.operador) <= PERFIL_NIVEL.operador) {
+  // ── Gate da aba ──
+  //
+  // Defesa em profundidade: o item já some do menu e o `ProtectedRoute` já
+  // barra, mas a rota continua acessível por URL colada.
+  //
+  // Era uma comparação de HIERARQUIA — `PERFIL_NIVEL[cargo] <= operador` —, e
+  // por isso ligar `ver_campanha_facil` para um operador abria o menu, deixava
+  // a rota passar e mostrava esta tela de bloqueio. Três autoridades para a
+  // mesma porta, e a última vencia em silêncio.
+  if (!temPermissao('ver_campanha_facil')) {
     return (
       <div className="p-6">
         <Card><CardContent className="p-8 text-center text-muted-foreground">
           <Lock className="mx-auto mb-3 h-8 w-8 opacity-50" />
-          O Campanha Fácil está disponível apenas para líderes e cargos superiores.
+          O Campanha Fácil não está liberado para o seu acesso.
         </CardContent></Card>
       </div>
     );

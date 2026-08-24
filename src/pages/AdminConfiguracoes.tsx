@@ -15,7 +15,6 @@ import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { isPerfilAdmin } from '@/lib/index';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminPermissoes from '@/pages/AdminPermissoes';
 import AdminLogs from '@/pages/AdminLogs';
@@ -44,9 +43,10 @@ export default function AdminConfiguracoes() {
   const { empresa } = useEmpresa();
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
-  // Gate defensivo: card "Banco de Dados / Migrations" só para Admin/Super Admin
-  // (defesa em profundidade — além do ProtectedRoute da rota)
-  const podeVerBancoDados = isPerfilAdmin(perfil?.perfil ?? '');
+  // Card "Banco de Dados / Migrations". Era `isPerfilAdmin`; agora sai do
+  // painel, como o resto. Continua sendo defesa em profundidade — o
+  // `ProtectedRoute` da rota já barra quem não tem `ver_configuracoes`.
+  const podeVerBancoDados = temPermissao('ver_banco_dados');
   // Aba "Multiempresa": só super_admin. Esconder aqui é conveniência — quem
   // decide são as RPCs e o trigger em `perfis` (migration 20260818300000).
   const ehSuperAdmin = perfil?.perfil === 'super_admin';

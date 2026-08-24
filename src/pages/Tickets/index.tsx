@@ -55,6 +55,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useDadosVivos } from '@/hooks/useDadosVivos';
 import { useRelogioLento } from '@/hooks/useRelogioLento';
 import { useTicketsAcesso } from '@/hooks/useTicketsAcesso';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { fetchEmpresas } from '@/services/empresas.service';
 import {
@@ -107,6 +108,7 @@ function lerPreferencias(): Preferencias {
 export default function Tickets() {
   const { empresa } = useEmpresa();
   const { perfil } = useAuth();
+  const { temPermissao } = useCargoPermissoes();
   const acesso = useTicketsAcesso();
   const [params, setParams] = useSearchParams();
 
@@ -116,7 +118,10 @@ export default function Tickets() {
   // Quem responde pelas duas empresas vê as duas listas de uma vez. Trocar a
   // empresa ativa para conferir a fila da outra é um caminho ruim: muda o
   // contexto do sistema inteiro para responder uma pergunta de uma aba só.
-  const veDuasEmpresas = perfilVeDuasEmpresas(perfil as Parameters<typeof perfilVeDuasEmpresas>[0]);
+  const veDuasEmpresas = perfilVeDuasEmpresas(
+    perfil as Parameters<typeof perfilVeDuasEmpresas>[0],
+    temPermissao,
+  );
 
   /** `null` = sem filtro de empresa na consulta; a RLS resolve o resto. */
   const escopo = veDuasEmpresas ? null : empresaId;

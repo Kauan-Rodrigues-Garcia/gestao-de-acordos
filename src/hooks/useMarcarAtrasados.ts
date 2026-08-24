@@ -1,23 +1,26 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
-import { getTodayISO, formatCurrency, formatDate, isPerfilAdmin, isPerfilLider } from '@/lib/index';
+import { getTodayISO, formatCurrency, formatDate } from '@/lib/index';
+import { veAlemDeSi } from '@/lib/permissoes-escopo';
 import { criarNotificacao } from '@/services/notificacoes.service';
 import { useAuth } from './useAuth';
 import { useEmpresa } from './useEmpresa';
+import { useCargoPermissoes } from './useCargoPermissoes';
 
 /**
  * Roda uma vez por sessão, em qualquer página.
  * Busca todos os acordos verificar_pendente com vencimento anterior a hoje
  * e os converte para nao_pago no banco — sem depender de nenhuma página específica.
  *
- * Escopo:
- *  - Admin / lider / diretoria: converte todos da empresa
- *  - Operador: converte apenas os seus próprios
+ * Escopo: os NÍVEIS do Dashboard, e não uma lista de cargo.
+ *  - enxerga além de si → converte todos da empresa
+ *  - só os próprios     → converte apenas os seus
  */
 export function useMarcarAtrasados() {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
+  const { temPermissao } = useCargoPermissoes();
   const jaRodouRef = useRef(false);
 
   useEffect(() => {
@@ -28,10 +31,11 @@ export function useMarcarAtrasados() {
 
     void (async () => {
       const hoje = getTodayISO();
-      const podeVerTodos =
-        isPerfilAdmin(perfil.perfil) ||
-        isPerfilLider(perfil.perfil) ||
-        perfil.perfil === 'diretoria';
+      // Quem enxerga além de si no Dashboard varre a fila inteira; quem não,
+      // só a própria. Era `isPerfilAdmin || isPerfilLider || 'diretoria'` — uma
+      // TERCEIRA lista de cargo para a mesma pergunta que o painel de metas e o
+      // AnalyticsPanel já faziam, cada um com a sua.
+      const podeVerTodos = veAlemDeSi('dashboard', temPermissao);
 
       let query = supabase
         .from('acordos')

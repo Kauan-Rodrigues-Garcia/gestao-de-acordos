@@ -47,6 +47,7 @@ import { cn } from '@/lib/utils';
 import type { Empresa, LogSistema } from '@/lib/supabase';
 import { fetchEmpresas } from '@/services/empresas.service';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useLogs } from '@/hooks/useLogs';
 import {
@@ -80,6 +81,8 @@ export default function AdminLogs() {
     aoVivo, setAoVivo, novosDesdeCarga, atualizadoEm,
     filtrosServico,
   } = useLogs();
+
+  const { temPermissao } = useCargoPermissoes();
 
   const [vista, setVista] = useState<Vista>('timeline');
   const [abaInterna, setAbaInterna] = useState<AbaInterna>('trilha');
@@ -273,13 +276,18 @@ export default function AdminLogs() {
       {/* ══ Abas internas ═══════════════════════════════════════════════════ */}
       {/* Trilha responde "o que mudou"; uso responde "quem está usando". São
           perguntas diferentes sobre dados diferentes — `logs_sistema` registra
-          escrita, `uso_telas` registra abertura de tela. Ficam juntas porque a
-          trava de acesso é a mesma. */}
+          escrita, `uso_telas` registra abertura de tela.
+
+          E são DUAS travas, não uma. Até 24/08/2026 a régua dizia que era a
+          mesma, e não era: a trilha já obedecia a `ver_logs`, e o monitoramento
+          exigia cargo `administrador` dentro da policy. Quem tinha `ver_logs` e
+          não era admin via esta aba e recebia zero linhas, sem explicação. Foi
+          o exemplo que originou a conversão. */}
       <div className="flex items-center gap-1 border-b border-border">
         {([
-          { key: 'trilha', label: 'Trilha de auditoria', Icon: ClipboardList },
-          { key: 'uso',    label: 'Monitoramento de uso', Icon: Activity },
-        ] as const).map(({ key, label, Icon }) => (
+          { key: 'trilha', label: 'Trilha de auditoria', Icon: ClipboardList, chave: 'ver_logs' },
+          { key: 'uso',    label: 'Monitoramento de uso', Icon: Activity, chave: 'ver_monitoramento_uso' },
+        ] as const).filter(a => temPermissao(a.chave)).map(({ key, label, Icon }) => (
           <button
             key={key}
             type="button"
@@ -299,7 +307,7 @@ export default function AdminLogs() {
       {/* O monitoramento não exige empresa: mostra todas as que a RLS permitir e
           traz seletor próprio. Passar o filtro da trilha para cá acoplaria duas
           perguntas diferentes ao mesmo controle. */}
-      {abaInterna === 'uso' && (
+      {abaInterna === 'uso' && temPermissao('ver_monitoramento_uso') && (
         <MonitoramentoUso empresas={empresas.map(e => ({ id: e.id, nome: e.nome }))} />
       )}
 

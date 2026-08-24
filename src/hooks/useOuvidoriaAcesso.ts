@@ -2,13 +2,15 @@
  * src/hooks/useOuvidoriaAcesso.ts
  * ─────────────────────────────────────────────────────────────────────────
  * Quem enxerga/edita a aba Ouvidoria (PaguePlay only):
- *   • cargo 'ouvidoria'            → vê, edita e gerencia acessos
- *   • administrador / super_admin  → idem
- *   • demais                        → conforme linha em ouvidoria_acessos
+ *   • `ouvidoria_responsavel`  → vê, edita e gerencia acessos
+ *   • demais                   → conforme linha em ouvidoria_acessos
  *     ('ver' = leitura; 'editar' = leitura + escrita)
  *
- * Espelha as policies de RLS da migration 20260717b — o gate real é o banco;
- * este hook só decide o que renderizar (item na nav, botões, página).
+ * Espelha as policies de RLS da migration 20260717b.
+ *
+ * O responsável saía do CARGO (`cargo === 'ouvidoria'`) até 24/08/2026, e por
+ * isso trocar de responsável exigia deploy. Hoje é chave de painel — e quem tem
+ * acesso total responde `true` para ela por construção, como para toda chave.
  */
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
@@ -21,7 +23,7 @@ export interface OuvidoriaAcessoInfo {
   podeVer: boolean;
   podeEditar: boolean;
   podeGerenciarAcessos: boolean;
-  /** true quando o usuário é o cargo ouvidoria (responsável) */
+  /** true quando a pessoa é responsável pela Ouvidoria (`ouvidoria_responsavel`) */
   isResponsavel: boolean;
   loading: boolean;
 }
@@ -32,10 +34,17 @@ export function useOuvidoriaAcesso(): OuvidoriaAcessoInfo {
   const tenant      = useTenant();
   const { temPermissao } = useCargoPermissoes();
 
-  const cargo         = perfil?.perfil ?? '';
-  const isResponsavel = cargo === 'ouvidoria';
-  const isAdmin       = cargo === 'administrador' || cargo === 'super_admin';
-  const acessoTotal   = isResponsavel || isAdmin;
+  /*
+   * Responsável pela Ouvidoria: enxerga tudo sem depender de concessão em
+   * `ouvidoria_acessos`.
+   *
+   * Era `cargo === 'ouvidoria'` mais `cargo === 'administrador'`. A chave
+   * `ouvidoria_responsavel` cobre os dois: os cargos de acesso total respondem
+   * `true` para ela por construção, então a segunda comparação era redundante.
+   * Promover outra pessoa a responsável deixou de exigir deploy.
+   */
+  const isResponsavel = temPermissao('ouvidoria_responsavel');
+  const acessoTotal   = isResponsavel;
 
   const [nivelConcedido, setNivelConcedido] = useState<OuvidoriaNivel | null>(null);
   const [loading, setLoading] = useState(true);

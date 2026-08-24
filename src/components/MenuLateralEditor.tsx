@@ -135,7 +135,10 @@ export function MenuLateralEditor({
       temPermissao: chave => valorDoCargo(cargoParaPermissao, chave),
       // Concessão individual não existe numa prévia por cargo — ver o cabeçalho.
       acessoOuvidoria: false,
-      acessoTickets: ticketsVisivelParaCargo(cargoParaPermissao, ticketsLiberadoParaLideranca),
+      acessoTickets: ticketsVisivelParaCargo(
+        chave => valorDoCargo(cargoParaPermissao, chave),
+        ticketsLiberadoParaLideranca,
+      ),
     });
     return ordenarMenu(visiveis, ordemDoCargo(ordens, cargo));
   }, [cargo, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, ordens]);
