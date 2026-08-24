@@ -23,19 +23,34 @@
  *   • valor igual não anima (nem agenda quadro);
  *   • a primeira renderização não anima — subir de zero na carga inicial seria
  *     um efeito de abertura, não um aviso de mudança;
- *   • `prefers-reduced-motion` desliga a interpolação e mantém o valor certo.
+ *   • movimento reduzido desliga a interpolação e mantém o valor certo.
+ *
+ * ## Quem decide o "movimento reduzido"
+ *
+ * `useMovimentoPreferido`, e **não** a media query crua.
+ *
+ * O Windows 10/11 tem "Efeitos de animação" em Acessibilidade > Efeitos
+ * visuais, e imagem corporativa costuma vir com isso DESLIGADO para economizar
+ * máquina. Com ele desligado o navegador responde
+ * `prefers-reduced-motion: reduce`, e este componente parava de contar — numa
+ * máquina onde ninguém pediu acessibilidade, só ligaram um modo de desempenho.
+ *
+ * O efeito era exatamente o que a animação existe para evitar: o número trocava
+ * de R$ 12.400 para R$ 12.850 num salto seco, e ninguém via. O aviso sumia
+ * justamente nas máquinas da operação.
+ *
+ * O mesmo defeito foi diagnosticado e corrigido no Creators Lab e no Desempenho
+ * do Dia — este era o terceiro caso, e ficava no componente que o Dashboard, o
+ * Pix, os Desafios, o RH e os Tickets usam. Ver o cabeçalho de
+ * `hooks/useMovimentoPreferido.ts`: escolha explícita manda; sem escolha,
+ * movimento completo.
  */
 import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { useMovimentoPreferido } from '@/hooks/useMovimentoPreferido';
 
 /** Quanto tempo o número leva para chegar. Curto: é aviso, não espetáculo. */
 const DURACAO_MS = 420;
-
-/** O sistema pediu menos movimento? */
-function movimentoReduzido(): boolean {
-  if (typeof window === 'undefined' || !window.matchMedia) return false;
-  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
 
 /** Saída do cubic-bosso padrão da Apple: rápido no início, assenta no fim. */
 function suavizar(t: number): number {
@@ -73,6 +88,7 @@ export function ValorAnimado({
   const anterior = useRef(valor);
   const primeira = useRef(true);
   const [direcao, setDirecao] = useState<'sobe' | 'desce' | null>(null);
+  const { semMovimento } = useMovimentoPreferido();
 
   useEffect(() => {
     const de = anterior.current;
@@ -86,7 +102,7 @@ export function ValorAnimado({
     }
     if (de === valor) return;
 
-    if (movimentoReduzido()) {
+    if (semMovimento) {
       setExibido(valor);
       return;
     }
@@ -111,6 +127,10 @@ export function ValorAnimado({
 
     quadro = requestAnimationFrame(passo);
     return () => cancelAnimationFrame(quadro);
+    // `semMovimento` fica FORA das dependências de propósito: ele é lido uma vez
+    // na montagem (a escolha não muda sem recarregar), e incluí-lo faria toda
+    // troca de valor reagendar o efeito por uma constante.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valor]);
 
   const texto = formatar(exibido);

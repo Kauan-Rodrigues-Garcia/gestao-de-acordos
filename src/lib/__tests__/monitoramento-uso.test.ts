@@ -55,6 +55,10 @@ const FUNCOES = [
   // pergunta que a adoção de tela não responde: quem nunca entrou não aparece
   // na adoção de tela nenhuma.
   'fn_uso_sem_acesso',
+  // O perfil completo de uma pessoa — migration 20260824160000. Junta navegação
+  // (`uso_telas`) com ação e login (`logs_sistema`), que é o que a gerência
+  // pede: tudo o que a pessoa fez, e não só quais telas ela abriu.
+  'fn_uso_perfil_pessoa',
 ] as const;
 
 /**

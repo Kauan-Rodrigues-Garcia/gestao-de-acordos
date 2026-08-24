@@ -17,8 +17,18 @@ export interface UsoPorPessoa {
   usuario_id:   string;
   nome:         string;
   cargo:        string | null;
+  /** A empresa de MAIOR uso no período. Ver `empresas` para a lista inteira. */
   empresa_id:   string;
   empresa_nome: string;
+  /**
+   * Todas as operações em que a pessoa teve uso no período.
+   *
+   * Existe porque `uso_telas` tem a empresa na chave primária: quem trabalha
+   * nas duas tem linhas nas duas. Até a migration `20260824160000` a agregação
+   * era por (pessoa, empresa) e essa pessoa saía DUAS VEZES na lista, com o
+   * tempo dividido — parecia usar metade do que usa.
+   */
+  empresas:     string[] | null;
   /** Setor e equipe de HOJE — ver o cabeçalho de `JanelaUso`. */
   setor_nome:   string | null;
   equipe_nome:  string | null;
@@ -235,6 +245,75 @@ export function buscarAdocaoTela(j: JanelaUso, tela: string): Promise<AdocaoTela
  */
 export function buscarSemAcesso(j: JanelaUso): Promise<UsoSemAcesso[]> {
   return ler<UsoSemAcesso>('fn_uso_sem_acesso', j);
+}
+
+/**
+ * O perfil de uso de uma pessoa — navegação E ações, num JSON só.
+ *
+ * `buscarDetalhePessoa` responde «quais telas, quantos dias». Esta responde a
+ * pergunta que a gerência faz de verdade: **tudo** o que a pessoa fez no
+ * período — em quais telas, em que dias, qual foi o dia de maior uso, quantas
+ * ações registrou e quantas vezes entrou no sistema.
+ *
+ * Navegação mora em `uso_telas`; AÇÃO mora em `logs_sistema`. Quem abriu a tela
+ * de acordos dez vezes e não mexeu em nada não fez dez ações, e juntar as duas
+ * coisas num número só apagaria justamente a diferença que interessa.
+ *
+ * ## O percentual de uso não vem daqui
+ *
+ * Ele depende de DIAS ÚTEIS, e essa conta já tem dono no projeto
+ * (`lib/diasUteis.ts`), usada por metas, quartis e RH. A RPC devolve
+ * `dias_com_acesso`; quem divide é o chamador, com a mesma régua de feriado do
+ * resto do sistema.
+ */
+export interface PerfilUsoPessoa {
+  resumo: {
+    aberturas: number; segundos: number; dias_ativos: number;
+    telas_usadas: number; primeiro_em: string | null; ultimo_em: string | null;
+  } | null;
+  melhor_dia: { dia: string; segundos: number; aberturas: number; telas: number } | null;
+  por_dia: { dia: string; aberturas: number; segundos: number; telas: number }[];
+  por_tela: {
+    tela: string; aberturas: number; segundos: number; dias: number;
+    primeiro_em: string | null; ultimo_em: string | null;
+  }[];
+  acoes_total: number;
+  acoes_por_dia: { dia: string; total: number }[];
+  acoes_por_categoria: { categoria: string; total: number }[];
+  acoes_top: { acao: string; total: number }[];
+  logins_total: number;
+  logins_por_dia: { dia: string; total: number }[];
+  /** Os dias em que houve acesso. É o numerador do percentual de assiduidade. */
+  dias_com_acesso: string[];
+}
+
+const PERFIL_VAZIO: PerfilUsoPessoa = {
+  resumo: null, melhor_dia: null, por_dia: [], por_tela: [],
+  acoes_total: 0, acoes_por_dia: [], acoes_por_categoria: [], acoes_top: [],
+  logins_total: 0, logins_por_dia: [], dias_com_acesso: [],
+};
+
+export async function buscarPerfilPessoa(
+  usuarioId: string, desde: string, ate: string,
+): Promise<PerfilUsoPessoa> {
+  try {
+    const { data, error } = await (supabase.rpc as unknown as (
+      n: string, a: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>)(
+      'fn_uso_perfil_pessoa',
+      { p_usuario_id: usuarioId, p_desde: desde, p_ate: ate },
+    );
+    if (error) {
+      console.warn('[uso.service] fn_uso_perfil_pessoa:', error.message);
+      return PERFIL_VAZIO;
+    }
+    // Migration pendente ou pessoa fora do escopo: perfil vazio em vez de tela
+    // quebrada, mesmo padrão do resto do módulo.
+    return { ...PERFIL_VAZIO, ...(data as Partial<PerfilUsoPessoa> ?? {}) };
+  } catch (e) {
+    console.warn('[uso.service] fn_uso_perfil_pessoa:', e instanceof Error ? e.message : e);
+    return PERFIL_VAZIO;
+  }
 }
 
 /**

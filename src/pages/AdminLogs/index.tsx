@@ -59,6 +59,7 @@ import LogsTimeline from './LogsTimeline';
 import LogsTabela from './LogsTabela';
 import LogDetalhe from './LogDetalhe';
 import MonitoramentoUso from './MonitoramentoUso';
+import UsuariosOnline from './UsuariosOnline';
 import { numeroBr, tempoRelativo } from './formatos';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
 
@@ -195,6 +196,11 @@ export default function AdminLogs() {
             <Radio className={cn('w-3.5 h-3.5', aoVivo && 'animate-pulse')} />
             Ao vivo
           </Button>
+
+          {/* Quantas pessoas estão na planilha agora. Ao lado do "Ao vivo" de
+              propósito: é ali que quem abre a trilha está esperando ver as
+              coisas se moverem. Vem do canal de presença, não de consulta. */}
+          <UsuariosOnline />
 
           {/* Alternância de vista */}
           <div className="flex items-center rounded-lg border border-border bg-card p-0.5">

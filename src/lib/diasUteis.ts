@@ -44,6 +44,52 @@ export function listarDiasUteis(
   return dias;
 }
 
+/**
+ * Dias úteis de um INTERVALO qualquer, mesmo atravessando meses.
+ *
+ * As funções acima são por mês, porque meta e quartil são mensais. O
+ * monitoramento de uso pergunta outra coisa — «nos últimos 90 dias, quantos
+ * eram dias de trabalho?» — e essa janela cruza três meses.
+ *
+ * Existe aqui, e não no painel de uso, para que o percentual de assiduidade e o
+ * percentual de meta contem dia útil com a MESMA régua: mesmo fim de semana,
+ * mesma lista de feriados. Duas definições de «dia de trabalho» no mesmo
+ * sistema é o tipo de divergência que ninguém nota até alguém comparar dois
+ * relatórios.
+ *
+ * As datas nunca passam por `new Date(iso)` para andar no calendário:
+ * `new Date('2026-08-24')` é meia-noite UTC, que em São Paulo é 21h do dia 23.
+ * O passo é aritmética de UTC, e a comparação é textual.
+ */
+export function listarDiasUteisIntervalo(
+  desdeISO: string, ateISO: string, feriados: string[] = [],
+): string[] {
+  const MS_DIA = 86_400_000;
+  const inicio = Date.parse(`${desdeISO.slice(0, 10)}T00:00:00Z`);
+  const fim    = Date.parse(`${ateISO.slice(0, 10)}T00:00:00Z`);
+  if (Number.isNaN(inicio) || Number.isNaN(fim) || fim < inicio) return [];
+
+  // Teto de segurança: uma janela absurda vinda de estado corrompido não pode
+  // gerar um array de anos e travar a aba.
+  const total = Math.round((fim - inicio) / MS_DIA);
+  if (total > 800) return [];
+
+  const fSet = new Set(feriados);
+  const dias: string[] = [];
+  for (let i = 0; i <= total; i++) {
+    const iso = new Date(inicio + i * MS_DIA).toISOString().slice(0, 10);
+    if (ehDiaUtil(iso) && !fSet.has(iso)) dias.push(iso);
+  }
+  return dias;
+}
+
+/** Quantos dias úteis há entre duas datas, inclusive nas pontas. */
+export function diasUteisIntervalo(
+  desdeISO: string, ateISO: string, feriados: string[] = [],
+): number {
+  return listarDiasUteisIntervalo(desdeISO, ateISO, feriados).length;
+}
+
 /** Quantidade de dias úteis do mês (seg–sex − feriados). */
 export function diasUteisDoMes(
   ano: number, mes: number, feriados: string[] = [], inicioISO?: string,
