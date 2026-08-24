@@ -86,6 +86,21 @@ const CARGOS_DO_SELETOR: string[] = [
   ...CARGOS_ACESSO_TOTAL,
 ];
 
+/**
+ * O valor da ordem geral DENTRO do seletor.
+ *
+ * No banco a ordem geral é a linha de `cargo = ''`, e essa é a chave que o
+ * serviço conhece. Só que o `Select` do Radix **lança exceção** quando um item
+ * tem `value=""`: string vazia é, para ele, «sem seleção» — é assim que o
+ * placeholder aparece. Um item com esse valor derruba o render do diálogo
+ * inteiro, e o botão «Editar menu» não abre nada.
+ *
+ * Então a tela usa um sentinela e converte na fronteira. O banco continua com
+ * `''`, que é o que faz a herança funcionar.
+ */
+const VALOR_GERAL = '__geral__';
+const paraCargo = (valor: string) => (valor === VALOR_GERAL ? CARGO_GERAL : valor);
+
 const rotuloCargo = (cargo: string) =>
   cargo === CARGO_GERAL
     ? 'Todos os cargos (padrão)'
@@ -96,7 +111,9 @@ export function MenuLateralEditor({
   isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, aoSalvar,
 }: Props) {
   const { toast } = useToast();
-  const [cargo, setCargo] = useState<string>(CARGO_GERAL);
+  // O estado guarda o valor DO SELETOR; `cargo` é o que o banco entende.
+  const [selecionado, setSelecionado] = useState<string>(VALOR_GERAL);
+  const cargo = paraCargo(selecionado);
   const [rascunho, setRascunho] = useState<NavItem[]>([]);
   const [arrastando, setArrastando] = useState<number | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -213,13 +230,15 @@ export function MenuLateralEditor({
               <label className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                 Cargo
               </label>
-              <Select value={cargo} onValueChange={setCargo}>
+              <Select value={selecionado} onValueChange={setSelecionado}>
                 <SelectTrigger className="h-9 text-xs">
                   <Users2 className="w-3.5 h-3.5 mr-1 shrink-0" />
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="max-h-80">
-                  <SelectItem value={CARGO_GERAL}>{rotuloCargo(CARGO_GERAL)}</SelectItem>
+                  {/* `VALOR_GERAL`, e não `''`: item com valor vazio faz o
+                      Radix lançar exceção e o diálogo não abre. */}
+                  <SelectItem value={VALOR_GERAL}>{rotuloCargo(CARGO_GERAL)}</SelectItem>
                   {CARGOS_DO_SELETOR.map(c => (
                     <SelectItem key={c} value={c}>
                       {rotuloCargo(c)}
