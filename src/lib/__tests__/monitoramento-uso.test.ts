@@ -59,6 +59,11 @@ const FUNCOES = [
   // (`uso_telas`) com ação e login (`logs_sistema`), que é o que a gerência
   // pede: tudo o que a pessoa fez, e não só quais telas ela abriu.
   'fn_uso_perfil_pessoa',
+  // «Abriu o sistema hoje» — migration 20260824180000. Existe porque
+  // `logs_sistema.acao = 'login'` só é gravado quando alguém DIGITA a senha, e
+  // a sessão do Supabase sobrevive dias: quem usava todo dia aparecia com um
+  // login só.
+  'fn_uso_registrar_sessao',
 ] as const;
 
 /**
@@ -165,6 +170,110 @@ describe('escrita só pela RPC', () => {
       expect(corpo![0], `${fn} está DEFINER`).not.toMatch(/security definer/i);
       expect(corpo![0], `${fn} deveria declarar security invoker`).toMatch(/security invoker/i);
     }
+  });
+});
+
+/**
+ * ## «Tem gente usando todo dia mas consta 1 login»
+ *
+ * O relato estava certo e o número é que estava errado. `logs_sistema` só ganha
+ * `acao = 'login'` dentro de `signIn()` — quando alguém DIGITA a senha. A sessão
+ * do Supabase se renova por refresh token e sobrevive a fechar o navegador, então
+ * quem trabalha todo dia na mesma máquina digita a senha uma vez por mês.
+ *
+ * `uso_sessoes` (migration 20260824180000) registra ABERTURA do sistema, que não
+ * depende disso. Estas guardas existem porque a regressão aqui é silenciosa: o
+ * painel continuaria carregando, mostrando um número menor do que a verdade — que
+ * é o pior formato possível para um dado que vira cobrança de pessoas.
+ */
+describe('entrada no sistema não depende da sessão ter expirado', () => {
+  /** A última definição vale: estas funções já foram reescritas mais de uma vez. */
+  function ultimaDefinicao(fn: string): string {
+    const defs = [...SQL.matchAll(
+      new RegExp(`create or replace function public\\.${fn}[\\s\\S]*?\\$function\\$;`, 'gi'),
+    )].map(m => m[0]);
+    expect(defs.length, `${fn} não encontrada`).toBeGreaterThan(0);
+    return defs[defs.length - 1];
+  }
+
+  it('a tabela existe e é deduplicada por (empresa, pessoa, dia)', () => {
+    expect(SQL).toMatch(/create table if not exists public\.uso_sessoes/i);
+    // A chave primária É a deduplicação: sem ela seria preciso uma consulta de
+    // «já registrei hoje?» antes de cada inserção, e uma corrida entre duas abas
+    // criaria a linha duas vezes assim mesmo.
+    expect(SQL).toMatch(/primary key \(empresa_id, usuario_id, dia\)/i);
+  });
+
+  it('a leitura tem a mesma trava de uso_telas', () => {
+    const defs = [...SQL.matchAll(/create policy uso_sessoes_select[\s\S]*?;/gi)].map(m => m[0]);
+    expect(defs.length).toBeGreaterThan(0);
+    for (const sel of defs) {
+      expect(sel).toMatch(/fn_user_is_super_admin/);
+      expect(sel).toMatch(/administrador/);
+      expect(sel).not.toMatch(/'diretoria'/);
+      expect(sel).not.toMatch(/'lider'/);
+      // Embrulhadas em `(select ...)`: sem isso o Postgres avalia cada função
+      // STABLE uma vez POR LINHA, que foi a causa do `statement timeout`
+      // corrigido em 20260824170000.
+      expect(sel).toMatch(/\(\s*select\s+public\.fn_user_is_super_admin/i);
+      expect(sel).toMatch(/\(\s*select\s+public\.fn_user_empresa_id/i);
+      expect(sel).toMatch(/\(\s*select\s+public\.fn_user_has_any_role/i);
+    }
+  });
+
+  it('não há policy de escrita em uso_sessoes', () => {
+    const policies = [...SQL.matchAll(/create policy (\S+) on public\.uso_sessoes\s+for (\w+)/gi)];
+    expect(policies.length).toBeGreaterThan(0);
+    for (const [, nome, cmd] of policies) {
+      expect(cmd.toLowerCase(), `policy ${nome} permite escrita`).toBe('select');
+    }
+  });
+
+  it('a RPC de sessão resolve a identidade por auth.uid(), não por parâmetro', () => {
+    const corpo = ultimaDefinicao('fn_uso_registrar_sessao');
+    expect(corpo).toMatch(/auth\.uid\(\)/);
+    expect(corpo).not.toMatch(/p_usuario/);
+    // O dia é o de São Paulo: 22h de terça em Brasília é 01h de quarta em UTC.
+    expect(corpo).toMatch(/at time zone 'America\/Sao_Paulo'/i);
+  });
+
+  it('o expurgo leva as sessões junto, na mesma janela', () => {
+    // Retenções diferentes para o mesmo dado fariam o painel mostrar dia com
+    // sessão e sem tela (ou o contrário) nas bordas da janela.
+    expect(ultimaDefinicao('fn_uso_expurgar'))
+      .toMatch(/delete from public\.uso_sessoes where dia < v_corte/i);
+  });
+
+  it('quem só abriu o sistema não aparece como «nunca acessou»', () => {
+    // O falso positivo mais caro desta tela: ela existe para virar cobrança.
+    expect(ultimaDefinicao('fn_uso_sem_acesso')).toMatch(/public\.uso_sessoes/i);
+  });
+
+  it('o perfil separa abrir o sistema de digitar a senha', () => {
+    const corpo = ultimaDefinicao('fn_uso_perfil_pessoa');
+    expect(corpo).toMatch(/'entradas_total'/);
+    // `logins_total` continua existindo — é sinal de troca de máquina e de
+    // sessão caída. O defeito era usá-lo como presença, não tê-lo.
+    expect(corpo).toMatch(/'logins_total'/);
+  });
+
+  it('o dia conta uma vez, mesmo com tela e sessão', () => {
+    const corpo = ultimaDefinicao('fn_uso_perfil_pessoa');
+    // `UNION ALL` faria o dia de quem navegou E abriu o sistema contar em
+    // dobro, e o percentual de uso passaria de 100%.
+    const dias = /dias as \(([\s\S]*?)\)\s*select jsonb_build_object/i.exec(corpo);
+    expect(dias, 'CTE `dias` não encontrada').not.toBeNull();
+    expect(dias![1]).toMatch(/\bunion\b/i);
+    expect(dias![1]).not.toMatch(/\bunion\s+all\b/i);
+  });
+
+  it('o painel mostra aberturas, e não logins, como «entradas no sistema»', () => {
+    // A guarda do front: o SQL certo com o card lendo o campo antigo devolveria
+    // exatamente o número que o gerente não reconheceu.
+    const perfil = fs.readFileSync(
+      path.join(RAIZ, 'src/pages/AdminLogs/PerfilPessoa.tsx'), 'utf8');
+    expect(perfil).toMatch(/perfil\?\.entradas_total/);
+    expect(SERVICO).toMatch(/entradas_total:\s*number/);
   });
 });
 

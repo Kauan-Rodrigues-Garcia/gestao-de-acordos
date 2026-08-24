@@ -35,7 +35,7 @@ import {
 } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { registrarUso } from '@/services/uso.service';
+import { registrarUso, registrarSessao } from '@/services/uso.service';
 import { telaDaRota, telaComAba } from '@/lib/telas-catalogo';
 import { AcumuladorUso, type EnvioUso } from '@/lib/acumulador-uso';
 
@@ -89,6 +89,25 @@ export function RastreioUsoProvider({ children }: { children: ReactNode }) {
     acRef.current!.pausar();
     subir(acRef.current!.descarregar());
   }, [subir]);
+
+  // ── Entrada no sistema ────────────────────────────────────────────────────
+  //
+  // Uma vez por abertura do sistema, assim que houver perfil. Vale tanto para
+  // quem acabou de digitar a senha quanto para quem teve a sessão restaurada —
+  // e é justamente o segundo caso que faltava: `logs_sistema.acao = 'login'` só
+  // é gravado em `signIn()`, e a sessão do Supabase sobrevive dias, então quem
+  // usa todo dia aparecia com um login só.
+  //
+  // Em ref e não em estado: isto não pode provocar render, e não pode repetir
+  // quando o perfil é recarregado (troca de empresa, `refreshPerfil`). O banco
+  // deduplica o DIA de qualquer forma; a guarda aqui é só para não gastar
+  // requisição.
+  const sessaoRegistrada = useRef<string | null>(null);
+  useEffect(() => {
+    if (!perfil?.id || sessaoRegistrada.current === perfil.id) return;
+    sessaoRegistrada.current = perfil.id;
+    void registrarSessao();
+  }, [perfil?.id]);
 
   // ── Troca de tela ─────────────────────────────────────────────────────────
   useEffect(() => {

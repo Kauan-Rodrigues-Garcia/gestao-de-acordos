@@ -1335,16 +1335,44 @@ também, cancele os lançamentos ou desligue a aba inteira.
 ---
 ## Monitoramento de uso
 
-> Tabela `uso_telas` · RPCs `fn_uso_*` · tela: `src/pages/AdminLogs/MonitoramentoUso.tsx`
-> Migrations `20260817180000`, `20260817200000`, `20260818140000` e
-> `20260824150000` (filtros de setor/equipe + quem nunca acessou).
+> Tabelas `uso_telas` e `uso_sessoes` · RPCs `fn_uso_*` · tela: `src/pages/AdminLogs/MonitoramentoUso.tsx`
+> Migrations `20260817180000`, `20260817200000`, `20260818140000`,
+> `20260824150000` (filtros de setor/equipe + quem nunca acessou) e
+> `20260824180000`/`20260824190000` (entrada no sistema).
 
 ### O que os números medem
 
 **Tempo** é com a aba em foco, não com a aba aberta — sem isso, quem deixa a
 planilha aberta o dia todo lidera qualquer ranking sem ter usado nada.
 **Aberturas** conta entradas em tela; passagem abaixo de 2 segundos não conta.
-**Dias ativos** é em quantos dias distintos a pessoa usou alguma tela.
+**Dias ativos** é em quantos dias distintos a pessoa apareceu.
+
+### Entrar, logar e aparecer são três coisas
+
+Confundi-las produziu o relato «tem gente usando todo dia mas consta 1 login».
+
+| Número | O que é | De onde sai |
+|---|---|---|
+| **Entradas no sistema** | Vezes que o sistema foi aberto. Recarregar a página conta | `uso_sessoes.entradas` |
+| **Logins com senha** | Vezes que a credencial foi digitada | `logs_sistema`, `acao = 'login'` |
+| **Dias com acesso** | Dias distintos em que a pessoa apareceu | união de `uso_telas` e `uso_sessoes` |
+
+`logs_sistema.acao = 'login'` só é gravado dentro de `signIn()`. A sessão do
+Supabase se renova por refresh token e sobrevive a fechar o navegador, então
+**quem trabalha todo dia na mesma máquina digita a senha uma vez por mês** — e
+o inverso também vale: rede que expira sessão produz três «logins» num dia só.
+Aquele número mede política de token, nunca presença.
+
+`uso_sessoes` é gravada por `fn_uso_registrar_sessao`, chamada uma vez por
+abertura do sistema em `RastreioUsoProvider` — vale igual para quem digitou a
+senha e para quem teve a sessão restaurada. A chave primária
+`(empresa_id, usuario_id, dia)` é a deduplicação: não há consulta de «já
+registrei hoje?» antes de inserir, e duas abas simultâneas não criam duas linhas.
+
+**O percentual de uso continua contando DIAS**, jamais entradas. O que mudou é a
+fonte dos dias: antes só `uso_telas`, que tem piso de 2 segundos por tela e
+ignora rota fora do catálogo — quem abria o sistema, olhava e saía ficava de fora
+do dia.
 
 ### Cargo é histórico; setor e equipe são de hoje
 

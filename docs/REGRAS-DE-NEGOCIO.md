@@ -1693,6 +1693,39 @@ mandariam horas numa tacada.
 As quatro funções de agregação são `SECURITY INVOKER` de propósito: `DEFINER` ali
 seria um contorno da policy para qualquer um com EXECUTE.
 
+### «Consta 1 login» não era erro de contagem — era a pergunta errada
+
+Relato de 24/08/2026: *«tem gente usando todo dia mas consta 1 login»*.
+
+`logs_sistema.acao = 'login'` só é gravado dentro de `signIn()`, quando alguém
+**digita a senha**. A sessão do Supabase se renova por refresh token e sobrevive
+a fechar o navegador — quem trabalha todo dia na mesma máquina digita a senha uma
+vez por mês. O inverso também acontece: rede que expira sessão produz três
+«logins» no mesmo dia. Aquele número mede política de token, nunca presença.
+
+`uso_sessoes` (migration `20260824180000`) registra o que faltava: **abertura do
+sistema**, chamada uma vez por carga em `RastreioUsoProvider`, valendo igual para
+senha digitada e para sessão restaurada. A chave primária
+`(empresa_id, usuario_id, dia)` faz a deduplicação sem consulta prévia.
+
+| Número | Pergunta que responde |
+|---|---|
+| Entradas no sistema (`uso_sessoes.entradas`) | quantas vezes abriu |
+| Logins com senha (`logs_sistema`) | quantas vezes digitou a credencial — sinal de troca de máquina, sessão caída, conta compartilhada |
+| Dias com acesso (união de `uso_telas` e `uso_sessoes`) | em quantos dias apareceu — **o único que vira percentual de uso** |
+
+O percentual continua contando DIAS, jamais entradas: quem abre o sistema seis
+vezes num dia não é mais assíduo que quem abre uma. O que mudou foi a fonte dos
+dias — `uso_telas` sozinha tem piso de 2 segundos por tela e ignora rota fora do
+catálogo, então quem abria, olhava e saía não constava naquele dia. Pela mesma
+razão `fn_uso_sem_acesso` passou a olhar as duas tabelas: alguém que entra todo
+dia aparecer em «nunca acessou» é o falso positivo mais caro da tela, que existe
+para virar cobrança.
+
+O histórico foi semeado das duas fontes disponíveis (dias com uso de tela, mais
+os logins reais dos últimos 180 dias). `entradas` antes de 24/08/2026 é portanto
+um **piso**, não uma contagem exata; a partir dali é exata.
+
 **O achado acionável é quem NÃO usa.** `fn_uso_adocao_tela` parte de `perfis` e
 traz o uso por `LEFT JOIN`, porque quem nunca abriu a tela não tem linha em
 `uso_telas`. O líder que não olha o Desempenho Equipes é o resultado que muda uma

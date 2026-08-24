@@ -200,12 +200,19 @@ export default function PerfilPessoa({
                     Entradas no sistema
                   </p>
                   <p className="text-xl font-bold font-mono tabular-nums leading-tight">
-                    {numeroBr(perfil?.logins_total ?? 0)}
+                    {numeroBr(perfil?.entradas_total ?? 0)}
                   </p>
-                  {/* Login e presença são coisas diferentes: quem deixa a aba
-                      aberta a semana toda loga uma vez e usa cinco dias. Por
-                      isso o percentual ao lado conta DIAS, e não logins. */}
-                  <p className="text-[10px] text-muted-foreground">logins registrados</p>
+                  {/* São três coisas diferentes, e juntá-las foi o defeito:
+                      ABRIR o sistema (este número), DIGITAR a senha (o de baixo)
+                      e APARECER num dia (o percentual ao lado). Quem fica logado
+                      abre o sistema todo dia e digita a senha uma vez por mês —
+                      por isso o percentual conta DIAS, nunca logins. */}
+                  <p className="text-[10px] text-muted-foreground">
+                    aberturas ·{' '}
+                    <span title="Vezes que a senha foi digitada. A sessão se renova sozinha, então este número é sempre bem menor que o de aberturas.">
+                      {numeroBr(perfil?.logins_total ?? 0)} com senha
+                    </span>
+                  </p>
                 </div>
               </div>
               {/* A barra existe porque o número sozinho não mostra o que falta. */}

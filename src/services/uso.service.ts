@@ -170,6 +170,35 @@ export async function registrarUso(
 }
 
 /**
+ * Marca que a pessoa da sessão ABRIU o sistema.
+ *
+ * ## Por que isto existe, se já há `acao = 'login'` na trilha
+ *
+ * Aquele evento só é gravado dentro de `signIn()`, quando alguém digita a
+ * senha. A sessão do Supabase se renova por refresh token e sobrevive a fechar
+ * o navegador, então quem trabalha todo dia na mesma máquina digita a senha uma
+ * vez por mês — e aparecia com «1 login» tendo usado trinta dias.
+ *
+ * Esta chamada não depende da sessão ter expirado: sobe uma vez por abertura do
+ * sistema, e o banco deduplica o DIA pela chave primária de `uso_sessoes`.
+ *
+ * Falha vira aviso no console, igual a `registrarUso`: telemetria não derruba
+ * a abertura do sistema.
+ */
+export async function registrarSessao(): Promise<void> {
+  try {
+    // Cast: a RPC é nova e ainda não está em `database.types.ts` (que é gerado
+    // do banco). Mesmo padrão de `fn_uso_perfil_pessoa` mais abaixo.
+    const { error } = await (supabase.rpc as unknown as (
+      n: string, a?: Record<string, unknown>,
+    ) => Promise<{ error: { message: string } | null }>)('fn_uso_registrar_sessao');
+    if (error) console.warn('[uso.service] registrarSessao:', error.message);
+  } catch (e) {
+    console.warn('[uso.service] registrarSessao:', e instanceof Error ? e.message : e);
+  }
+}
+
+/**
  * Nomes aceitos por `ler`.
  *
  * União fechada, e não `string`: o cliente do Supabase tipa `rpc()` pelo catálogo
@@ -281,15 +310,35 @@ export interface PerfilUsoPessoa {
   acoes_por_dia: { dia: string; total: number }[];
   acoes_por_categoria: { categoria: string; total: number }[];
   acoes_top: { acao: string; total: number }[];
+  /**
+   * Quantas vezes a pessoa ABRIU o sistema. Recarregar a página conta.
+   *
+   * É a resposta honesta para «quantas vezes entrou»: não depende de a sessão
+   * ter expirado, que era o defeito de `logins_total`.
+   */
+  entradas_total: number;
+  /** Dias distintos com pelo menos uma abertura do sistema. */
+  dias_com_sessao: number;
+  entradas_por_dia: { dia: string; total: number }[];
+  /**
+   * Quantas vezes a SENHA foi digitada.
+   *
+   * Continua útil — sinal de troca de máquina, de sessão caída, de conta
+   * compartilhada —, mas nunca foi medida de presença. Ver `entradas_total`.
+   */
   logins_total: number;
   logins_por_dia: { dia: string; total: number }[];
-  /** Os dias em que houve acesso. É o numerador do percentual de assiduidade. */
+  /**
+   * Os dias em que houve acesso — união de tela aberta e sistema aberto. É o
+   * numerador do percentual de assiduidade.
+   */
   dias_com_acesso: string[];
 }
 
 const PERFIL_VAZIO: PerfilUsoPessoa = {
   resumo: null, melhor_dia: null, por_dia: [], por_tela: [],
   acoes_total: 0, acoes_por_dia: [], acoes_por_categoria: [], acoes_top: [],
+  entradas_total: 0, dias_com_sessao: 0, entradas_por_dia: [],
   logins_total: 0, logins_por_dia: [], dias_com_acesso: [],
 };
 
