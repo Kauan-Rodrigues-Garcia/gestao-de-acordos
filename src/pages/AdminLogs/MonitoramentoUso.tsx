@@ -270,6 +270,7 @@ export default function MonitoramentoUso({ empresas }: Props) {
   const [adocao, setAdocao]     = useState<AdocaoTela[]>([]);
   const [ausentes, setAusentes] = useState<UsoSemAcesso[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [carregandoAdocao, setCarregandoAdocao] = useState(false);
 
   const janela = useMemo(() => ({
     empresaId,
@@ -280,6 +281,11 @@ export default function MonitoramentoUso({ empresas }: Props) {
     equipeId: equipeId === TODOS ? null : equipeId,
   }), [empresaId, dias, cargo, setorId, equipeId]);
 
+  /*
+   * O que a tela precisa SEMPRE: as três agregações que alimentam os KPIs, o
+   * gráfico e as duas listas de tela — mais quem não acessou, que é o número do
+   * quinto KPI e fica visível em qualquer aba.
+   */
   useEffect(() => {
     let cancelado = false;
     setCarregando(true);
@@ -287,15 +293,34 @@ export default function MonitoramentoUso({ empresas }: Props) {
       buscarUsoPorPessoa(janela),
       buscarUsoPorTela(janela),
       buscarUsoPorDia(janela),
-      buscarAdocaoTela(janela, telaAdocao),
       buscarSemAcesso(janela),
-    ]).then(([p, t, d, a, sa]) => {
+    ]).then(([p, t, d, sa]) => {
       if (cancelado) return;
-      setPessoas(p); setTelas(t); setPorDia(d); setAdocao(a); setAusentes(sa);
+      setPessoas(p); setTelas(t); setPorDia(d); setAusentes(sa);
       setCarregando(false);
     });
     return () => { cancelado = true; };
-  }, [janela, telaAdocao]);
+  }, [janela]);
+
+  /*
+   * A adoção de tela é a única consulta cujo resultado não aparece em lugar
+   * nenhum fora da aba dela — e é a que refaz a cada troca de tela no seletor.
+   *
+   * Carregá-la junto das outras fazia toda abertura do painel disparar cinco
+   * RPCs, e trocar de filtro disparar as cinco de novo, para um bloco que a
+   * pessoa talvez nem abra.
+   */
+  useEffect(() => {
+    if (aba !== 'adocao') return;
+    let cancelado = false;
+    setCarregandoAdocao(true);
+    void buscarAdocaoTela(janela, telaAdocao).then(a => {
+      if (cancelado) return;
+      setAdocao(a);
+      setCarregandoAdocao(false);
+    });
+    return () => { cancelado = true; };
+  }, [aba, janela, telaAdocao]);
 
   // ── Derivados ──────────────────────────────────────────────────────────────
 
@@ -723,14 +748,17 @@ export default function MonitoramentoUso({ empresas }: Props) {
                 Inclui quem <strong>não</strong> abriu — é a lista acionável.
               </p>
             </div>
-            <Select value={telaAdocao} onValueChange={setTelaAdocao}>
-              <SelectTrigger className="h-8 w-64 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent className="max-h-80">
-                {opcoesAdocao.map(t => (
-                  <SelectItem key={t} value={t}>{rotuloDaTela(t)}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center gap-2">
+              {carregandoAdocao && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />}
+              <Select value={telaAdocao} onValueChange={setTelaAdocao}>
+                <SelectTrigger className="h-8 w-64 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent className="max-h-80">
+                  {opcoesAdocao.map(t => (
+                    <SelectItem key={t} value={t}>{rotuloDaTela(t)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Os três números que resumem a adoção. Sem eles é preciso contar

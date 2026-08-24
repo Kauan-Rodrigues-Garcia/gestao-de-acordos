@@ -131,14 +131,21 @@ describe('escrita só pela RPC', () => {
   });
 
   it('a leitura é travada em super_admin/administrador, igual aos logs', () => {
-    const sel = /create policy uso_telas_select[\s\S]*?;/i.exec(SQL);
-    expect(sel).not.toBeNull();
-    expect(sel![0]).toMatch(/fn_user_is_super_admin/);
-    expect(sel![0]).toMatch(/administrador/);
-    // Diretoria e líder ficaram fora dos logs por decisão explícita; uso é dado
-    // da mesma natureza e segue a mesma trava.
-    expect(sel![0]).not.toMatch(/'diretoria'/);
-    expect(sel![0]).not.toMatch(/'lider'/);
+    // TODAS as definições, e não só a primeira: a policy foi reescrita uma vez
+    // (20260824170000, para a RLS deixar de rodar por linha) e vai ser de novo.
+    // Conferir só a mais antiga deixaria uma reescrita afrouxar a trava sem que
+    // esta guarda percebesse — que é exatamente o que ela existe para pegar.
+    const defs = [...SQL.matchAll(/create policy uso_telas_select[\s\S]*?;/gi)].map(m => m[0]);
+    expect(defs.length).toBeGreaterThan(0);
+
+    for (const sel of defs) {
+      expect(sel).toMatch(/fn_user_is_super_admin/);
+      expect(sel).toMatch(/administrador/);
+      // Diretoria e líder ficaram fora dos logs por decisão explícita; uso é
+      // dado da mesma natureza e segue a mesma trava.
+      expect(sel).not.toMatch(/'diretoria'/);
+      expect(sel).not.toMatch(/'lider'/);
+    }
   });
 
   it('a RPC de registro resolve a identidade por auth.uid(), não por parâmetro', () => {

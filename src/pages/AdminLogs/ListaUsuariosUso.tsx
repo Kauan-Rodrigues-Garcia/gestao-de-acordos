@@ -20,25 +20,13 @@
  */
 
 import { useEffect, useMemo, useState } from 'react';
-import {
-  Search, ChevronDown, Clock, MousePointerClick, CalendarDays,
-  Monitor, X, Loader2, Building2,
-} from 'lucide-react';
+import { Search, ChevronDown, Loader2, Building2 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from '@/components/ui/dialog';
 import { PERFIL_LABELS } from '@/lib/index';
-import { cn } from '@/lib/utils';
-import { rotuloDaTela } from '@/lib/telas-catalogo';
-import {
-  buscarDetalhePessoa,
-  type UsoPorPessoa, type UsoDetalheTela, type UsoDetalheDia,
-} from '@/services/uso.service';
+import { type UsoPorPessoa } from '@/services/uso.service';
 import { numeroBr, tempoRelativo, iniciais, formatarDuracao } from './formatos';
-import { montarSerieDiaria } from './serieDiaria';
+import PerfilPessoa from './PerfilPessoa';
 
 /** Quantas pessoas antes do "ver mais". */
 const PAGINA = 10;
@@ -132,7 +120,11 @@ export default function ListaUsuariosUso({
               const seg = Number(p.segundos);
               return (
                 <button
-                  key={`${p.usuario_id}-${p.empresa_id}`}
+                  // A chave era `usuario_id + empresa_id` porque a lista trazia
+                  // a mesma pessoa uma vez por operação. Desde a migration
+                  // 20260824160000 é uma linha por PESSOA — a empresa saiu da
+                  // chave junto com a duplicidade.
+                  key={p.usuario_id}
                   type="button"
                   onClick={() => setAberta(p)}
                   className="w-full text-left flex items-center gap-3 py-2.5 px-1 hover:bg-muted/40 rounded-md transition-colors"
@@ -164,7 +156,13 @@ export default function ListaUsuariosUso({
                       )}
                       {mostrarEmpresa && (
                         <Badge variant="outline" className="text-[9px] h-4 px-1 gap-0.5">
-                          <Building2 className="w-2.5 h-2.5" /> {p.empresa_nome}
+                          <Building2 className="w-2.5 h-2.5" />
+                          {/* Quem usa as duas operações aparece com as duas. A
+                              lista deixou de repetir a pessoa; a informação de
+                              onde ela trabalhou vive aqui agora. */}
+                          {(p.empresas?.length ?? 0) > 1
+                            ? p.empresas!.join(' + ')
+                            : p.empresa_nome}
                         </Badge>
                       )}
                       {/* Setor e equipe do cadastro de hoje: são o mesmo eixo
@@ -205,7 +203,7 @@ export default function ListaUsuariosUso({
         </>
       )}
 
-      <DetalhePessoa
+      <PerfilPessoa
         pessoa={aberta}
         desde={desde}
         ate={ate}
@@ -215,199 +213,3 @@ export default function ListaUsuariosUso({
   );
 }
 
-// ── Janela de detalhe ────────────────────────────────────────────────────────
-
-function DetalhePessoa({
-  pessoa, desde, ate, onFechar,
-}: { pessoa: UsoPorPessoa | null; desde: string; ate: string; onFechar: () => void }) {
-  const [telas, setTelas] = useState<UsoDetalheTela[]>([]);
-  const [dias, setDias]   = useState<UsoDetalheDia[]>([]);
-  const [carregando, setCarregando] = useState(false);
-
-  useEffect(() => {
-    if (!pessoa) return;
-    let cancelado = false;
-    setCarregando(true);
-    setTelas([]); setDias([]);
-    void buscarDetalhePessoa(pessoa.usuario_id, desde, ate).then(r => {
-      if (cancelado) return;
-      setTelas(r.telas); setDias(r.dias);
-      setCarregando(false);
-    });
-    return () => { cancelado = true; };
-  }, [pessoa, desde, ate]);
-
-  /*
-   * A série vem do PERÍODO, e não das linhas do banco — ver o comentário no
-   * bloco «Por dia» abaixo. Fica antes do `return` nulo porque hooks não podem
-   * ficar depois de uma saída condicional.
-   */
-  const serie = useMemo(
-    () => (pessoa ? montarSerieDiaria(dias, desde, ate) : []),
-    [pessoa, dias, desde, ate],
-  );
-
-  if (!pessoa) return null;
-
-  const maxSeg = Math.max(...telas.map(t => Number(t.segundos)), 1);
-  const maxDia = Math.max(...serie.map(d => d.segundos), 1);
-  const totalSeg = telas.reduce((s, t) => s + Number(t.segundos), 0);
-  const totalAber = telas.reduce((s, t) => s + Number(t.aberturas), 0);
-
-  return (
-    <Dialog open onOpenChange={(v) => !v && onFechar()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto" aria-describedby="uso-detalhe-desc">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <span className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-[11px] font-bold text-muted-foreground shrink-0">
-              {iniciais(pessoa.nome)}
-            </span>
-            <span className="truncate">{pessoa.nome}</span>
-            {pessoa.cargo && (
-              <Badge variant="outline" className="text-[10px] h-5 px-1.5">
-                {PERFIL_LABELS[pessoa.cargo] ?? pessoa.cargo}
-              </Badge>
-            )}
-          </DialogTitle>
-          <DialogDescription id="uso-detalhe-desc" className="text-xs">
-            {pessoa.empresa_nome} · uso entre {desde} e {ate}. Tempo conta só com a
-            aba em foco.
-          </DialogDescription>
-        </DialogHeader>
-
-        {carregando ? (
-          <div className="flex items-center gap-2 py-10 justify-center text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> Carregando detalhe…
-          </div>
-        ) : telas.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            Nenhuma tela registrada para esta pessoa no período.
-          </p>
-        ) : (
-          <div className="space-y-4">
-            {/* Números */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              {[
-                { Icone: Clock,              label: 'Tempo total', valor: formatarDuracao(totalSeg) },
-                { Icone: MousePointerClick,  label: 'Aberturas',   valor: numeroBr(totalAber) },
-                { Icone: CalendarDays,       label: 'Dias ativos', valor: String(pessoa.dias_ativos) },
-                { Icone: Monitor,            label: 'Telas',       valor: String(telas.length) },
-              ].map(({ Icone, label, valor }) => (
-                <div key={label} className="rounded-lg border border-border bg-muted/20 p-2.5">
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                      {label}
-                    </span>
-                    <Icone className="w-3 h-3 text-muted-foreground" />
-                  </div>
-                  <p className="text-base font-bold font-mono tabular-nums mt-0.5">{valor}</p>
-                </div>
-              ))}
-            </div>
-
-            {/*
-              Série diária.
-              ─────────────────────────────────────────────────────────────────
-              Antes: `dias.length > 1` escondia a seção inteira, e as barras
-              vinham só dos dias com uso.
-
-              Os dois juntos produziam o defeito relatado: quem usou num único
-              dia — o caso mais comum numa janela de sete — não via nada, e quem
-              usou em dois dias esparsos via duas barras coladas, como se
-              tivesse usado em dias seguidos.
-
-              Agora o eixo é o PERÍODO INTEIRO (`montarSerieDiaria`), dia sem uso
-              é uma coluna vazia visível, e a seção aparece sempre.
-            */}
-            {serie.length > 0 && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                  Por dia
-                  <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/70">
-                    · {serie.filter(p => !p.vazio).length} de {serie.length} dias com uso
-                  </span>
-                </p>
-                <div className="flex items-end gap-[2px] h-20">
-                  {serie.map(d => (
-                    <div key={d.dia} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                      <div className="w-full flex-1 flex items-end">
-                        <div
-                          className={cn(
-                            'w-full rounded-t transition-colors',
-                            d.vazio ? 'bg-muted' : 'bg-primary/70 hover:bg-primary',
-                          )}
-                          style={{
-                            // Dia vazio ganha um traço de 2px em vez de sumir:
-                            // ausência precisa ocupar espaço para ser lida.
-                            height: d.vazio ? '2px' : `${Math.max(6, (d.segundos / maxDia) * 100)}%`,
-                          }}
-                          title={d.vazio
-                            ? `${d.rotulo}: sem uso`
-                            : `${d.rotulo}: ${formatarDuracao(d.segundos)} · ${d.aberturas} abertura(s)`}
-                        />
-                      </div>
-                      {/* Só o dia 1 e as segundas ganham rótulo: com 90 dias os
-                          números viram uma tarja cinza ilegível. */}
-                      <span className="text-[8px] text-muted-foreground tabular-nums truncate w-full text-center">
-                        {serie.length <= 31 || d.dia.slice(8, 10) === '01' ? d.dia.slice(8, 10) : ''}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Telas */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-                Telas mais usadas
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border text-muted-foreground">
-                      <th className="text-left px-2 py-1.5 font-semibold">TELA</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">TEMPO</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">ABERTURAS</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">DIAS</th>
-                      <th className="text-right px-2 py-1.5 font-semibold">ÚLTIMA VEZ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {telas.map(t => (
-                      <tr key={t.tela} className="border-b border-border/50">
-                        <td className="px-2 py-1.5 min-w-[160px]">
-                          <span className="font-medium" title={t.tela}>{rotuloDaTela(t.tela)}</span>
-                          <div className="h-1 rounded-full bg-muted overflow-hidden mt-1">
-                            <div className="h-full rounded-full bg-primary/70"
-                              style={{ width: `${Math.max(2, (Number(t.segundos) / maxSeg) * 100)}%` }} />
-                          </div>
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono tabular-nums font-semibold">
-                          {formatarDuracao(Number(t.segundos))}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono tabular-nums">
-                          {numeroBr(Number(t.aberturas))}
-                        </td>
-                        <td className="px-2 py-1.5 text-right font-mono tabular-nums">{t.dias}</td>
-                        <td className="px-2 py-1.5 text-right text-muted-foreground">
-                          {t.ultimo_em ? tempoRelativo(t.ultimo_em) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="flex justify-end pt-1">
-          <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5" onClick={onFechar}>
-            <X className="w-3.5 h-3.5" /> Fechar
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-}
