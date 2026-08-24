@@ -141,6 +141,16 @@ export function editavel(status: StatusLancamento): boolean {
 export interface LinhaResumivel {
   status: StatusLancamento;
   valor: number | null;
+  /**
+   * Fora da folha desta competência (não atingiu, afastamento, admissão no
+   * meio do mês).
+   *
+   * Ele NÃO é pendente: não há valor a informar, e contá-lo como falta faria a
+   * equipe aparecer eternamente «em preenchimento» com um número que ninguém
+   * vai digitar. Também não é preenchido — não há o que conferir. Tem contagem
+   * própria.
+   */
+  dispensado?: boolean | null;
 }
 
 /**
@@ -166,6 +176,10 @@ export interface ResumoGrupo {
   pendentes: number;
   devolvidos: number;
   aprovados: number;
+  /** Marcados como fora da folha. Não são pendentes nem preenchidos. */
+  dispensados: number;
+  /** Quantos realmente entram na folha — `total - dispensados`. */
+  naFolha: number;
   /** Soma dos valores informados. Linha sem valor não entra. */
   valorTotal: number;
 }
@@ -190,17 +204,23 @@ export function resumirGrupo(linhas: readonly LinhaResumivel[]): ResumoGrupo {
   const total = linhas.length;
   const base: ResumoGrupo = {
     estado: 'vazio', total,
-    preenchidos: 0, pendentes: 0, devolvidos: 0, aprovados: 0, valorTotal: 0,
+    preenchidos: 0, pendentes: 0, devolvidos: 0, aprovados: 0,
+    dispensados: 0, naFolha: total, valorTotal: 0,
   };
   if (total === 0) return base;
 
   for (const l of linhas) {
     if (l.valor != null) base.valorTotal += Number(l.valor) || 0;
-    if (l.status === 'devolvido_rh') base.devolvidos++;
+    // A dispensa é lida ANTES do status: uma linha fora da folha com status
+    // `pendente` não é uma falta de preenchimento, e contá-la como tal é o que
+    // deixava a equipe travada em «em preenchimento» para sempre.
+    if (l.dispensado) base.dispensados++;
+    else if (l.status === 'devolvido_rh') base.devolvidos++;
     else if (l.status === 'pendente') base.pendentes++;
     else base.preenchidos++;
     if (l.status === 'aprovado_rh') base.aprovados++;
   }
+  base.naFolha = total - base.dispensados;
 
   const todos = (alvo: StatusLancamento) => linhas.every(l => alcancou(l.status, alvo));
 
@@ -212,6 +232,10 @@ export function resumirGrupo(linhas: readonly LinhaResumivel[]): ResumoGrupo {
   // valor digitado». Ver o comentário de STATUS_LANCAMENTO.
   else if (todos('concluido_lider')) base.estado = 'concluido';
   else if (base.preenchidos > 0)  base.estado = 'em_preenchimento';
+  // Todo mundo fora da folha e nada preenchido: a equipe não está parada, ela
+  // não tem o que lançar. Dizer «não enviado» aqui cobraria uma ação que não
+  // existe.
+  else if (base.dispensados === total) base.estado = 'concluido';
   else                            base.estado = 'nao_iniciado';
 
   return base;

@@ -14,6 +14,7 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import {
   Check, X, Pencil, RefreshCw, Undo2, AlertTriangle, IdCard, MessageSquare,
+  Ban, RotateCcw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,14 @@ export interface TabelaOperadoresProps {
   onSalvarValor: (lancamentoId: string, valor: number, observacao: string | null) => Promise<boolean>;
   onAprovar?: (lancamentoId: string) => void;
   onDevolver?: (lancamento: LancamentoComPercentual) => void;
+  /**
+   * Marca ou desmarca o operador como fora da folha.
+   *
+   * Quem não atingiu não tem premiação a receber — e antes disto ele segurava
+   * a conclusão da equipe inteira, forçando o líder a digitar zero, que a
+   * folha leria como um pagamento de zero.
+   */
+  onDispensar?: (lancamento: LancamentoComPercentual, dispensar: boolean) => void;
   /** Cadastro de crachá — só quem tem a chave. */
   onEditarCracha?: (lancamento: LancamentoComPercentual) => void;
   /** Nada animado na primeira pintura — só quem chega depois se move. */
@@ -43,7 +52,7 @@ export interface TabelaOperadoresProps {
 
 export function TabelaOperadores({
   linhas, permissoes, competenciaAberta,
-  onSalvarValor, onAprovar, onDevolver, onEditarCracha, jaPintou,
+  onSalvarValor, onAprovar, onDevolver, onDispensar, onEditarCracha, jaPintou,
 }: TabelaOperadoresProps) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [rascunho, setRascunho]     = useState('');
@@ -196,10 +205,27 @@ export function TabelaOperadores({
                   </td>
 
                   <td className="px-4 py-3">
-                    <Badge variant="outline" className={cn('text-[10px] font-semibold', meta.cls)}>
-                      {meta.label}
-                    </Badge>
-                    {l.preenchido_por_nome && status !== 'pendente' && (
+                    {/* Fora da folha vence o estado: enquanto ela vale, o
+                        `pendente` por baixo nao cobra nada de ninguem. */}
+                    {l.dispensado ? (
+                      <Badge variant="outline"
+                        className="text-[10px] font-semibold bg-muted text-muted-foreground border-border"
+                        title={l.motivo_dispensa ?? undefined}
+                      >
+                        <Ban className="w-2.5 h-2.5 mr-1" /> Fora da folha
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className={cn('text-[10px] font-semibold', meta.cls)}>
+                        {meta.label}
+                      </Badge>
+                    )}
+                    {l.dispensado && l.motivo_dispensa && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[140px]"
+                        title={l.motivo_dispensa}>
+                        {l.motivo_dispensa}
+                      </p>
+                    )}
+                    {!l.dispensado && l.preenchido_por_nome && status !== 'pendente' && (
                       <p className="text-[10px] text-muted-foreground mt-0.5 truncate max-w-[120px]">
                         por {l.preenchido_por_nome}
                       </p>
@@ -225,13 +251,35 @@ export function TabelaOperadores({
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {podeEditar && editavel(status) && (
+                        {podeEditar && editavel(status) && !l.dispensado && (
                           <button
                             title={devolvido ? 'Corrigir o valor devolvido' : 'Informar o valor'}
                             onClick={() => abrir(l)}
                             className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-violet-400 hover:bg-violet-500/10"
                           >
                             {devolvido ? <Undo2 className="w-3.5 h-3.5" /> : <Pencil className="w-3.5 h-3.5" />}
+                          </button>
+                        )}
+                        {/* Fora da folha: so enquanto a linha esta em maos de
+                            quem preenche. Depois disso existe a devolucao, que
+                            registra motivo e autor. */}
+                        {permissoes.podeDispensar && competenciaAberta
+                          && editavel(status) && onDispensar && (
+                          <button
+                            title={l.dispensado
+                              ? 'Devolver este operador para a folha'
+                              : 'Marcar como fora da folha (nao atingiu, afastamento, admissao no meio do mes)'}
+                            onClick={() => onDispensar(l, !l.dispensado)}
+                            className={cn(
+                              'w-7 h-7 rounded-lg flex items-center justify-center',
+                              l.dispensado
+                                ? 'text-sky-400 hover:bg-sky-500/10'
+                                : 'text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10',
+                            )}
+                          >
+                            {l.dispensado
+                              ? <RotateCcw className="w-3.5 h-3.5" />
+                              : <Ban className="w-3.5 h-3.5" />}
                           </button>
                         )}
                         {permissoes.podeAprovar && competenciaAberta

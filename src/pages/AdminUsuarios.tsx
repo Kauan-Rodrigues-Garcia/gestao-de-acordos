@@ -44,6 +44,9 @@ import { ModalRecortarFoto } from '@/components/ModalRecortarFoto';
 // o carregamento sob demanda mantém esse comportamento agora que virou aba.
 const Comemoracoes = lazy(() => import('@/pages/Comemoracoes'));
 
+/** Valor sentinela do seletor de setor — o Radix não aceita `value=""`. */
+const TODOS_SETORES_SELECT_VALUE = '__todos_setores__';
+
 // Cores dos cargos — centralizadas em PERFIL_COLORS (lib/index.ts)
 const PERFIL_BADGE = PERFIL_COLORS;
 
@@ -113,6 +116,22 @@ export default function AdminUsuarios() {
   const [dialogOpen,  setDialogOpen]  = useState(false);
   const [editando,    setEditando]    = useState<Perfil | null>(null);
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
+  /*
+   * Filtro e recolhimento por setor.
+   *
+   * A lista ja vinha agrupada por setor, mas com nove setores abertos ela e uma
+   * rolagem de varias telas para achar uma pessoa. `filtroSetor` recorta;
+   * `setoresRecolhidos` guarda quem esta fechado — guarda os FECHADOS, e nao os
+   * abertos, para que um setor criado depois nasca visivel.
+   */
+  const [filtroSetor, setFiltroSetor] = useState<string>('');
+  const [setoresRecolhidos, setSetoresRecolhidos] = useState<Set<string>>(new Set());
+
+  const alternarSetor = (sid: string) => setSetoresRecolhidos(atual => {
+    const proximo = new Set(atual);
+    if (proximo.has(sid)) proximo.delete(sid); else proximo.add(sid);
+    return proximo;
+  });
   const [saving,      setSaving]      = useState(false);
   const [form,        setForm]        = useState<UserForm>({ nome: '', email: '', usuario: '', senha: '', perfil: 'operador', setor_id: '', empresa_id: '' });
 
@@ -586,8 +605,22 @@ export default function AdminUsuarios() {
     }
   }
 
+  /*
+   * As opcoes do seletor.
+   *
+   * Sai do agrupamento COMPLETO, e nao do filtrado: usar a lista ja recortada
+   * deixaria o seletor com uma opcao so depois do primeiro clique, e nao
+   * haveria como voltar sem recarregar.
+   */
+  const setoresParaFiltro = Object.entries(usuariosPorSetor)
+    .sort((a, b) => a[1].nomeSetor.localeCompare(b[1].nomeSetor, 'pt-BR'));
+
   const setoresOrdenados = (() => {
-    const entries = Object.entries(usuariosPorSetor);
+    // O filtro entra DEPOIS do agrupamento, e nao antes: o grupo de um setor
+    // pode existir so por causa de um clone de outro setor (o bloco acima), e
+    // filtrar as pessoas antes o faria sumir.
+    const entries = Object.entries(usuariosPorSetor)
+      .filter(([sid]) => !filtroSetor || sid === filtroSetor);
     // Aplica a mesma ordem persistida pelo DnD da aba Setores para manter
     // consistência visual entre as abas Usuários e Setores.
     const empresaId = empresaAtual?.id;
@@ -679,6 +712,34 @@ export default function AdminUsuarios() {
             <Badge variant="outline" className="h-8 px-3 text-xs">{empresaAtual.nome}</Badge>
           )}
           {isSuperAdmin && filtroEmpresa && <Button variant="ghost" size="sm" className="h-8" aria-label="Limpar filtro de empresa" onClick={() => setFiltroEmpresa('')}>Limpar</Button>}
+          {setoresParaFiltro.length > 1 && (
+            <Select
+              value={filtroSetor || TODOS_SETORES_SELECT_VALUE}
+              onValueChange={v => setFiltroSetor(v === TODOS_SETORES_SELECT_VALUE ? '' : v)}
+            >
+              <SelectTrigger className="w-44 h-8 text-sm" aria-label="Filtrar por setor">
+                <SelectValue placeholder="Setor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS_SETORES_SELECT_VALUE}>Todos os setores</SelectItem>
+                {setoresParaFiltro.map(([sid, g]) => (
+                  <SelectItem key={sid} value={sid}>
+                    {g.nomeSetor === '—' ? 'Sem Setor' : g.nomeSetor} ({g.lista.length})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {setoresParaFiltro.length > 1 && (
+            <Button
+              variant="ghost" size="sm" className="h-8 text-xs"
+              onClick={() => setSetoresRecolhidos(
+                atual => atual.size ? new Set() : new Set(setoresParaFiltro.map(([sid]) => sid)),
+              )}
+            >
+              {setoresRecolhidos.size ? 'Expandir todos' : 'Minimizar todos'}
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={fetchDados}><RefreshCw className="w-4 h-4" /></Button>
           {temPermissao('usuarios_administrar') && <Button size="sm" onClick={abrirCriar}><Plus className="w-4 h-4 mr-2" /> Novo Usuário</Button>}
         </div>
@@ -692,16 +753,28 @@ export default function AdminUsuarios() {
         <div className="space-y-4">
           {setoresOrdenados.map(([sid, grupo]) => (
             <div key={sid}>
-              {/* Cabeçalho do setor */}
-              <div className="flex items-center gap-2 mb-1.5 px-1">
+              {/* Cabeçalho do setor — clicar recolhe. O contador fica visível
+                  fechado de propósito: é o que permite achar o setor certo sem
+                  abrir os nove. */}
+              <button
+                type="button"
+                onClick={() => alternarSetor(sid)}
+                aria-expanded={!setoresRecolhidos.has(sid)}
+                className="flex items-center gap-2 mb-1.5 px-1 w-full text-left group/setor"
+              >
+                <ChevronDown className={cn(
+                  'w-3.5 h-3.5 text-muted-foreground flex-shrink-0 transition-transform',
+                  setoresRecolhidos.has(sid) && '-rotate-90',
+                )} />
                 <Building2 className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                <span className="text-xs font-semibold text-foreground uppercase tracking-wide">
+                <span className="text-xs font-semibold text-foreground uppercase tracking-wide group-hover/setor:text-primary transition-colors">
                   {grupo.nomeSetor === '—' ? 'Sem Setor' : grupo.nomeSetor}
                 </span>
                 <span className="text-[10px] text-muted-foreground border border-border rounded-full px-2 py-0">
                   {grupo.lista.length} {grupo.lista.length === 1 ? 'usuário' : 'usuários'}
                 </span>
-              </div>
+              </button>
+              {!setoresRecolhidos.has(sid) && (
               <Card className="border-border">
                 <CardContent className="p-0">
                   <div className="w-full overflow-x-auto">
@@ -844,6 +917,7 @@ export default function AdminUsuarios() {
                   </div>
                 </CardContent>
               </Card>
+              )}
             </div>
           ))}
         </div>
@@ -977,6 +1051,7 @@ export default function AdminUsuarios() {
                     <SelectItem value="gerencia">Gerência</SelectItem>
                     <SelectItem value="diretoria">Diretoria</SelectItem>
                     <SelectItem value="ouvidoria">Ouvidoria</SelectItem>
+                    <SelectItem value="rh">RH</SelectItem>
                     <SelectItem value="administrador">Administrador</SelectItem>
                     {isSuperAdmin && <SelectItem value="super_admin">Super Admin</SelectItem>}
                   </SelectContent>

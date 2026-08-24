@@ -49,6 +49,7 @@ import { gerarPlanilhaRh } from '@/services/rh/rhExportacao';
 import {
   salvarLancamento, congelarPercentual, concluirEquipe, validarEquipe,
   enviarSetor, aprovarOperador, aprovarEquipe, devolverOperador, devolverEquipe,
+  dispensarOperador,
   finalizarCompetencia, reabrirCompetencia,
 } from '@/services/rh/rhGestao.service';
 import { registrarLog } from '@/services/logs.service';
@@ -64,7 +65,13 @@ import HistoricoRh from './HistoricoRh';
 type AlvoMotivo =
   | { tipo: 'operador'; lancamento: LancamentoComPercentual }
   | { tipo: 'equipe'; equipeId: string; equipeNome: string }
-  | { tipo: 'reabrir' };
+  | { tipo: 'reabrir' }
+  /*
+   * Tirar da folha também pede motivo, e pelo mesmo motivo que devolver pede:
+   * o número que some da folha é o tipo de coisa que alguém audita depois, e
+   * «por que essa pessoa não recebeu» precisa ter resposta escrita.
+   */
+  | { tipo: 'dispensar'; lancamento: LancamentoComPercentual };
 
 export default function RhGestao() {
   const { perfil }  = useAuth();
@@ -245,6 +252,11 @@ export default function RhGestao() {
         const r = await devolverEquipe(fechamento.id, motivoAlvo.equipeId, motivo);
         avisar(r.ok, r.erro, `Equipe ${motivoAlvo.equipeNome} devolvida.`);
         if (r.ok) { setMotivoAlvo(null); await recarregar(); }
+      } else if (motivoAlvo.tipo === 'dispensar') {
+        const r = await dispensarOperador(motivoAlvo.lancamento.id, true, motivo);
+        avisar(r.ok, r.erro,
+          `${motivoAlvo.lancamento.nome_snapshot} ficou fora da folha desta competência.`);
+        if (r.ok) { setMotivoAlvo(null); await recarregar(); }
       } else {
         const r = await reabrirCompetencia(fechamento.id, motivo);
         avisar(r.ok, r.erro, 'Competência reaberta.');
@@ -252,6 +264,22 @@ export default function RhGestao() {
       }
     } finally { setSalvando(false); }
   }, [motivoAlvo, fechamento, avisar, recarregar]);
+
+  /**
+   * Tirar da folha, ou devolver para ela.
+   *
+   * Tirar passa pelo diálogo de motivo; devolver para a folha é imediato — ele
+   * não retira nada de ninguém, e exigir uma justificativa para desfazer um
+   * engano só faz o engano demorar mais para ser corrigido.
+   */
+  const alternarDispensa = useCallback(async (
+    l: LancamentoComPercentual, dispensar: boolean,
+  ) => {
+    if (dispensar) { setMotivoAlvo({ tipo: 'dispensar', lancamento: l }); return; }
+    const r = await dispensarOperador(l.id, false);
+    avisar(r.ok, r.erro, `${l.nome_snapshot} voltou para a folha.`);
+    if (r.ok) await recarregar();
+  }, [avisar, recarregar]);
 
   const finalizar = useCallback(async () => {
     if (!fechamento) return;
@@ -516,6 +544,7 @@ export default function RhGestao() {
                       jaPintou={jaPintou.current}
                       onSalvarValor={salvarValor}
                       onAprovar={aprovarUm}
+                      onDispensar={(l, d) => { void alternarDispensa(l, d); }}
                       onDevolver={l => setMotivoAlvo({ tipo: 'operador', lancamento: l })}
                       onEditarCracha={setCrachaAlvo}
                     />
@@ -533,17 +562,25 @@ export default function RhGestao() {
         aberto={!!motivoAlvo}
         titulo={
           motivoAlvo?.tipo === 'operador' ? `Devolver ${motivoAlvo.lancamento.nome_snapshot}`
+          : motivoAlvo?.tipo === 'dispensar' ? `Tirar ${motivoAlvo.lancamento.nome_snapshot} da folha`
           : motivoAlvo?.tipo === 'equipe' ? `Devolver a equipe ${motivoAlvo.equipeNome}`
           : 'Reabrir a competência'
         }
         descricao={
           motivoAlvo?.tipo === 'operador'
             ? 'Só este operador volta para correção. Os demais da equipe mantêm o estado atual.'
+          : motivoAlvo?.tipo === 'dispensar'
+            ? 'Ele sai da folha desta competência e deixa de ser exigido para concluir a equipe. '
+              + 'Nenhum valor é pago. O motivo fica registrado e dá para desfazer.'
           : motivoAlvo?.tipo === 'equipe'
             ? 'A equipe inteira volta para correção. As outras equipes já aprovadas não são afetadas.'
             : 'A folha desta competência já foi fechada. Reabrir permite alterar valores que já circularam.'
         }
-        rotuloConfirmar={motivoAlvo?.tipo === 'reabrir' ? 'Reabrir' : 'Devolver'}
+        rotuloConfirmar={
+          motivoAlvo?.tipo === 'reabrir'   ? 'Reabrir'
+          : motivoAlvo?.tipo === 'dispensar' ? 'Tirar da folha'
+          : 'Devolver'
+        }
         destrutivo={motivoAlvo?.tipo !== 'reabrir'}
         salvando={salvandoMotivo}
         onConfirmar={confirmarMotivo}

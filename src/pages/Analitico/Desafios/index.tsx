@@ -56,8 +56,16 @@ export interface AbaDesafiosProps {
    * o setor bom é o que o servidor resolveu na lista de participantes.
    */
   setorProprio?: string | null;
-  /** `desafios_configurar` — decide o botão. Quem decide a gravação é a RLS. */
+  /**
+   * `desafios_configurar` — configura qualquer campanha, inclusive as da
+   * empresa inteira. Decide o botão; quem decide a gravação é a RLS.
+   */
   podeConfigurar?: boolean;
+  /**
+   * `desafios_configurar_setor` — líder e gerente montam a campanha do próprio
+   * setor. O seletor de setor some e a campanha nasce presa ao setor deles.
+   */
+  podeConfigurarSetor?: boolean;
   /**
    * `administrar_sistema` — decide o painel de setores. O super_admin passa
    * pela própria política do banco, com ou sem a chave.
@@ -85,9 +93,13 @@ function EsqueletoDesafio() {
 
 export function AbaDesafios({
   empresaId, operadorId, operadorNome, filtroSetorId = null, setorProprio = null,
-  priorizarEquipes = false, podeConfigurar = false, podeAdministrar = false,
-  setores = [],
+  priorizarEquipes = false, podeConfigurar = false, podeConfigurarSetor = false,
+  podeAdministrar = false, setores = [],
 }: AbaDesafiosProps) {
+  // Quem só alcança o próprio setor vê o mesmo botão; o que muda é o alcance
+  // do que ele grava, e disso quem cuida é a RLS.
+  const podeAbrirConfiguracao = podeConfigurar || (podeConfigurarSetor && !!setorProprio);
+  const restritoAoSetor = !podeConfigurar && podeConfigurarSetor ? setorProprio : null;
   const { ativo, encerrados, rascunhos, carregando, dbAtiva, erro, recarregar } = useDesafios(true);
   const [editando, setEditando] = useState<Desafio | null>(null);
   const [criando, setCriando]   = useState(false);
@@ -122,7 +134,7 @@ export function AbaDesafios({
   const top3  = resultado?.individual.slice(0, 3) ?? [];
   const resto = resultado?.individual.slice(3)   ?? [];
 
-  const botaoConfigurar = podeConfigurar && (
+  const botaoConfigurar = podeAbrirConfiguracao && (
     <div className="flex flex-wrap items-center gap-2">
       {ativo && (
         <Button variant="outline" size="sm" className="gap-1.5"
@@ -170,11 +182,11 @@ export function AbaDesafios({
             Nenhum desafio ativo no momento.
           </p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {podeConfigurar
+            {podeAbrirConfiguracao
               ? 'Crie uma campanha ou ative um rascunho para começar a disputa.'
               : 'Quando uma campanha começar, ela aparece aqui.'}
           </p>
-          {podeConfigurar && rascunhos.length > 0 && (
+          {podeAbrirConfiguracao && rascunhos.length > 0 && (
             <p className="mt-2 text-xs text-muted-foreground">
               {rascunhos.length} rascunho{rascunhos.length === 1 ? '' : 's'} aguardando ativação.
             </p>
@@ -191,6 +203,8 @@ export function AbaDesafios({
           empresaId={empresaId}
           autorId={operadorId}
           autorNome={operadorNome}
+          setores={setores}
+          restritoAoSetor={restritoAoSetor}
           onFechar={() => { setCriando(false); setEditando(null); }}
           onSalvo={() => { void recarregar(); }}
         />
@@ -306,6 +320,8 @@ export function AbaDesafios({
         empresaId={empresaId}
         autorId={operadorId}
         autorNome={operadorNome}
+        setores={setores}
+        restritoAoSetor={restritoAoSetor}
         onFechar={() => { setCriando(false); setEditando(null); }}
         onSalvo={() => { void recarregar(); }}
       />

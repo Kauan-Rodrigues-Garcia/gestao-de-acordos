@@ -28,7 +28,7 @@
 
 /** Os cargos que o administrador configura na tela. */
 export const CARGOS_CONFIGURAVEIS = [
-  'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria',
+  'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh',
 ] as const;
 export type CargoConfiguravel = typeof CARGOS_CONFIGURAVEIS[number];
 
@@ -156,6 +156,18 @@ const TODOS: Partial<Record<CargoConfiguravel, boolean>> = {
   gerencia: true, diretoria: true,
 };
 
+/*
+ * `rh` NÃO entra em `TODOS`, e a ausência é deliberada.
+ *
+ * O atalho descreve a OPERAÇÃO — quem atende, cobra e tabula. O RH não faz
+ * nada disso: ele confere folha. Incluí-lo aqui daria a ele Acordos, Pix,
+ * Analítico e Lixeira num único caractere, sem ninguém ter decidido isso, e a
+ * descoberta viria de alguém do RH abrindo a carteira de acordos de um
+ * operador.
+ *
+ * As chaves dele são nominais, no grupo «RH Gestão».
+ */
+
 export const PERMISSOES: PermissaoMeta[] = [
   // ── Abas e telas ─────────────────────────────────────────────────────────
   // Uma permissão por destino do menu. É o grupo que o admin procura primeiro,
@@ -209,7 +221,8 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_rh_gestao', label: 'Aba RH Gestão',
     descricao: 'Abrir o Controle de Premiação e Comissão',
-    grupo: 'Abas e telas', padrao: LIDERANCA,
+    grupo: 'Abas e telas',
+    padrao: { lider: true, elite: true, gerencia: true, diretoria: true, rh: true },
   },
   {
     key: 'ver_lixeira', label: 'Lixeira',
@@ -592,6 +605,24 @@ export const PERMISSOES: PermissaoMeta[] = [
    * É ela que a RLS de `public.desafios` consulta (migration 20260823170000);
    * a tela apenas esconde o botão.
    */
+  /*
+   * Configurar a campanha DO PRÓPRIO SETOR.
+   *
+   * Nasce para a liderança: é o pedido, e o alcance dela já é o setor em todo
+   * o resto do sistema. Quem tem esta chave só alcança desafios com
+   * `setorId` igual ao setor dele — e a RLS confere isso nas DUAS pontas do
+   * UPDATE, para que ninguém pegue a campanha do próprio setor e a reescreva
+   * como sendo de outro.
+   */
+  {
+    key: 'desafios_configurar_setor', label: 'Configurar desafios do próprio setor',
+    descricao: 'Criar, editar e encerrar as gincanas do setor a que a pessoa pertence',
+    grupo: 'Ações específicas', padrao: LIDERANCA,
+    depende: {
+      chaves: ['analitico_sub_desafios'],
+      motivo: 'A tela de configuracao vive dentro da aba Desafios, no Analitico.',
+    },
+  },
   {
     key: 'desafios_configurar', label: 'Configurar desafios',
     descricao: 'Criar, editar, ativar e encerrar as gincanas da aba Desafios',
@@ -847,7 +878,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'rh_escopo_todos_setores', label: 'RH: todos os setores',
     descricao: 'Ver no RH Gestão a empresa inteira, por cidade e setor — a visão do RH',
-    grupo: 'RH Gestão', padrao: { diretoria: true },
+    grupo: 'RH Gestão', padrao: { diretoria: true, rh: true },
   },
   {
     key: 'rh_preencher', label: 'RH: preencher premiação/comissão',
@@ -879,17 +910,38 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'rh_aprovar', label: 'RH: aprovar',
     descricao: 'Aprovar o lançamento de um operador ou de uma equipe já enviada — decide pagamento',
-    grupo: 'RH Gestão', padrao: {},
+    grupo: 'RH Gestão', padrao: { gerencia: true, rh: true },
   },
   {
     key: 'rh_devolver', label: 'RH: devolver',
     descricao: 'Devolver um operador ou uma equipe para correção, sempre com motivo',
-    grupo: 'RH Gestão', padrao: {},
+    grupo: 'RH Gestão', padrao: { gerencia: true, rh: true },
+  },
+  /*
+   * Marcar um operador como fora da folha da competência.
+   *
+   * Não é o mesmo que lançar zero. Zero significa "conferi e deu zero"; fora
+   * da folha significa "não há o que pagar" — não atingiu, entrou no meio do
+   * mês, esteve afastado. Sem esta chave, quem não bateu a meta segurava a
+   * conclusão da equipe inteira e o líder digitava zero só para destravar,
+   * criando um pagamento de zero na folha que ninguém decidiu.
+   *
+   * Nasce com quem preenche: é durante o preenchimento que a ausência aparece.
+   */
+  {
+    key: 'rh_dispensar', label: 'RH: marcar operador fora da folha',
+    descricao: 'Tirar da competência quem não tem premiação a receber, com motivo registrado',
+    grupo: 'RH Gestão',
+    padrao: { lider: true, elite: true, gerencia: true, rh: true },
+    depende: {
+      chaves: ['ver_rh_gestao'],
+      motivo: 'A acao vive na tabela de operadores do RH Gestao.',
+    },
   },
   {
     key: 'rh_gerenciar_fechamento', label: 'RH: abrir competência e definir prazo',
     descricao: 'Abrir a competência do mês, definir/prorrogar o prazo e finalizar o fechamento',
-    grupo: 'RH Gestão', padrao: {},
+    grupo: 'RH Gestão', padrao: { rh: true },
   },
   {
     key: 'rh_reabrir_fechamento', label: 'RH: reabrir competência finalizada',
@@ -901,14 +953,14 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'rh_configurar', label: 'RH: configurar cidades e setores',
     descricao: 'Definir quais setores entram no RH, em que cidade e sob premiação ou comissão',
-    grupo: 'RH Gestão', padrao: {},
+    grupo: 'RH Gestão', padrao: { rh: true },
   },
   {
     key: 'rh_editar_cracha', label: 'RH: cadastrar crachá',
     descricao:
       'Cadastrar e alterar o crachá do operador. Ver o crachá dentro do módulo '
       + 'já vem com o alcance; alterar é decisão separada',
-    grupo: 'RH Gestão', padrao: {},
+    grupo: 'RH Gestão', padrao: { rh: true },
   },
 
   {

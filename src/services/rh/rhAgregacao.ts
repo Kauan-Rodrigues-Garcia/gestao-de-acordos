@@ -28,6 +28,14 @@ export interface LinhaAgregavel {
   id: string;
   status: StatusLancamento;
   valor: number | null;
+  /**
+   * Fora da folha desta competência.
+   *
+   * Opcional porque `database.types.ts` ainda não conhece a coluna (migration
+   * 20260823200000). Ausente vale «não dispensado», que é o comportamento de
+   * antes — a agregação não muda em banco sem a migration.
+   */
+  dispensado?: boolean | null;
   celula_snapshot: string;
   setor_id_snapshot: string;
   setor_nome_snapshot: string;

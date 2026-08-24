@@ -65,6 +65,8 @@ export interface PermissoesRh {
   podeEnviar: boolean;
   podeAprovar: boolean;
   podeDevolver: boolean;
+  /** Marcar operador como fora da folha. Quem preenche também pode. */
+  podeDispensar: boolean;
   podeGerenciarFechamento: boolean;
   podeReabrir: boolean;
   podeConfigurar: boolean;
@@ -119,6 +121,10 @@ export function useRhGestao(): EstadoRhGestao {
     podeEnviar:     temPermissao('rh_enviar'),
     podeAprovar:    temPermissao('rh_aprovar'),
     podeDevolver:   temPermissao('rh_devolver'),
+    // `rh_preencher` também serve: a ausência de premiação aparece durante o
+    // preenchimento, e exigir uma segunda chave para registrá-la faria o líder
+    // digitar zero — que é um pagamento de zero na folha.
+    podeDispensar:  temPermissao('rh_dispensar') || temPermissao('rh_preencher'),
     podeGerenciarFechamento: temPermissao('rh_gerenciar_fechamento'),
     // Explícita: reabrir competência finalizada desfaz uma folha já paga, e o
     // acesso total do administrador não concede isso sozinho.

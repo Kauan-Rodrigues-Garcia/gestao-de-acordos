@@ -58,6 +58,7 @@ function desafio(over: OverDesafio = {}): Desafio {
     dataInicio: '2026-08-21',
     dataFim: '2026-08-28',
     tipo: 'bater_meta',
+    setorId: null,
     status: 'ativo',
     criadoPor: null,
     criadoPorNome: null,
@@ -584,6 +585,40 @@ describe('calcularDesafio — escopo da disputa', () => {
       setorDoUsuario: 'setorA',
     });
     expect(r.individual).toHaveLength(1);
+  });
+});
+
+describe('campanha com dono (setorId)', () => {
+  const participantes = [
+    pessoa({ id: 'a', nome: 'Ana',  setores: ['setorA'] }),
+    pessoa({ id: 'z', nome: 'Zeca', setores: ['setorB'] }),
+  ];
+  const linhas = [linha('a', 1_000), linha('z', 9_000)];
+
+  it('recorta pelo setor dono, sem depender de quem olha', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ setorId: 'setorA' }),
+      dados: { participantes, linhas },
+      setorDoUsuario: 'setorB',
+    });
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['a']);
+  });
+
+  it('o dono vence o filtro de tela — ninguém alarga a campanha de outro setor', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ setorId: 'setorA' }),
+      dados: { participantes, linhas },
+      filtroSetorId: 'setorB',
+    });
+    expect(r.individual.map(i => i.pessoa.id)).toEqual(['a']);
+  });
+
+  it('sem dono, nada muda em relação ao comportamento de antes', () => {
+    const r = calcularDesafio({
+      desafio: desafio({ setorId: null }),
+      dados: { participantes, linhas },
+    });
+    expect(r.individual).toHaveLength(2);
   });
 });
 

@@ -70,6 +70,15 @@ export const PERFIL_LABELS: Record<string, string> = {
   gerencia: 'Gerência',
   diretoria: 'Diretoria',
   ouvidoria: 'Ouvidoria',
+  /*
+   * O cargo do RH (migration 20260823200000).
+   *
+   * Ele NÃO entra em `PERFIS_LIDER` nem em `PERFIS_ESCOPO_EMPRESA`: aquelas
+   * listas decidem quem enxerga acordo e recebimento alheio, e o RH não faz
+   * cobrança — ele confere folha. O alcance dele é o do módulo RH Gestão, e
+   * sai das chaves `rh_*` do painel, não de uma lista de cargo escrita aqui.
+   */
+  rh: 'RH',
 };
 
 export const PERFIL_COLORS: Record<string, string> = {
@@ -81,6 +90,7 @@ export const PERFIL_COLORS: Record<string, string> = {
   administrador: 'bg-role-admin/10 text-role-admin border-role-admin/30',
   super_admin:   'bg-role-super/10 text-role-super border-role-super/30',
   ouvidoria:     'bg-teal-500/10 text-teal-600 border-teal-500/30',
+  rh:            'bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-500/30',
 };
 
 // Perfis com acesso de líder (visão de setor + equipe).

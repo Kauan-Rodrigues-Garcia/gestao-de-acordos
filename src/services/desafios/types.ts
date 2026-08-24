@@ -138,6 +138,15 @@ export interface Desafio {
   dataInicio: string;
   dataFim: string;
   tipo: TipoDesafio;
+  /**
+   * Setor dono da campanha.
+   *
+   * `null` = campanha da empresa inteira, configurada pela administração.
+   * Preenchido = campanha DAQUELE setor: a liderança dele cria e edita
+   * (`desafios_configurar_setor`), e os outros setores nem a enxergam — a RLS
+   * recorta no SELECT.
+   */
+  setorId: string | null;
   regra: RegraDesafio;
   visual: VisualDesafio;
   status: StatusDesafio;

@@ -83,6 +83,8 @@ interface Formulario {
   dataInicio: string;
   dataFim: string;
   tipo: TipoDesafio;
+  /** `''` = campanha da empresa. */
+  setorId: string;
   escopoDisputa: EscopoDisputa;
   premiacao: Premiacao;
   individual: boolean;
@@ -104,6 +106,7 @@ function formularioVazio(): Formulario {
     nome: '', descricao: '', premio: '',
     dataInicio: hoje, dataFim: hoje,
     tipo: 'bater_meta',
+    setorId: '',
     escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
     individual: true, equipe: true,
     metaIndividual: '', metaEquipe: '', metaColetiva: '',
@@ -123,6 +126,7 @@ function formularioDe(d: Desafio): Formulario {
     dataInicio: d.dataInicio,
     dataFim: d.dataFim,
     tipo: d.tipo,
+    setorId: d.setorId ?? '',
     escopoDisputa: d.regra.escopoDisputa,
     premiacao: d.regra.premiacao,
     individual: d.regra.modo.includes('individual'),
@@ -154,12 +158,23 @@ interface Props {
   empresaId: string;
   autorId: string;
   autorNome: string;
+  /** Setores da empresa, para escolher o dono da campanha. */
+  setores?: { id: string; nome: string }[];
+  /**
+   * Quem só configura o PRÓPRIO setor.
+   *
+   * Nesse caso o seletor de setor some e a campanha nasce presa ao setor da
+   * pessoa: oferecer a escolha e deixar a RLS recusar depois seria mostrar uma
+   * porta que não abre.
+   */
+  restritoAoSetor?: string | null;
   onFechar: () => void;
   onSalvo: () => void;
 }
 
 export function ConfigurarDesafio({
-  aberto, desafio, empresaId, autorId, autorNome, onFechar, onSalvo,
+  aberto, desafio, empresaId, autorId, autorNome,
+  setores = [], restritoAoSetor = null, onFechar, onSalvo,
 }: Props) {
   const [form, setForm] = useState<Formulario>(formularioVazio);
   const [salvando, setSalvando] = useState(false);
@@ -190,8 +205,12 @@ export function ConfigurarDesafio({
   // isto, editar a segunda mostraria os valores da primeira.
   useEffect(() => {
     if (!aberto) return;
-    setForm(desafio ? formularioDe(desafio) : formularioVazio());
-  }, [aberto, desafio]);
+    const base = desafio ? formularioDe(desafio) : formularioVazio();
+    // Campanha nova de quem só configura o próprio setor já nasce com o dono
+    // certo — e o campo nem aparece para ser esquecido.
+    if (restritoAoSetor && !desafio) base.setorId = restritoAoSetor;
+    setForm(base);
+  }, [aberto, desafio, restritoAoSetor]);
 
   /*
    * Os valores digitados dependem das DUAS pontas: o mapa gravado e a lista de
@@ -219,6 +238,10 @@ export function ConfigurarDesafio({
       toast.error('Escolha ao menos um modo de disputa.');
       return;
     }
+    if (restritoAoSetor && form.setorId !== restritoAoSetor) {
+      toast.error('Você só pode configurar campanhas do seu próprio setor.');
+      return;
+    }
 
     const dados: DadosGravacaoDesafio = {
       nome: form.nome,
@@ -226,6 +249,7 @@ export function ConfigurarDesafio({
       premio: form.premio || null,
       dataInicio: form.dataInicio,
       dataFim: form.dataFim,
+      setorId: form.setorId || null,
       tipo: form.tipo,
       regra: {
         versao: 1,
@@ -455,6 +479,37 @@ export function ConfigurarDesafio({
                 {TEMAS.map(t => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
               </select>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="desafio-setor">Setor da campanha</Label>
+              {restritoAoSetor ? (
+                <>
+                  <Input
+                    id="desafio-setor"
+                    value={setores.find(x => x.id === restritoAoSetor)?.nome ?? 'Seu setor'}
+                    disabled
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Sua permissão alcança apenas o seu setor.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <select
+                    id="desafio-setor"
+                    value={form.setorId}
+                    onChange={e => set('setorId', e.target.value)}
+                    className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  >
+                    <option value="">Toda a empresa</option>
+                    {setores.map(x => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">
+                    Escolhido um setor, só ele enxerga e disputa a campanha.
+                  </p>
+                </>
+              )}
+            </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="desafio-status">Status</Label>
               <select

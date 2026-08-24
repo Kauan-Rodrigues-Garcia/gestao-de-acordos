@@ -150,6 +150,7 @@ function paraDesafio(linha: Record<string, unknown>): Desafio {
     premio:        (linha.premio as string | null) ?? null,
     dataInicio:    String(linha.data_inicio ?? '').slice(0, 10),
     dataFim:       String(linha.data_fim ?? '').slice(0, 10),
+    setorId:       (linha.setor_id as string | null) ?? null,
     tipo,
     regra:         normalizarRegra(linha.regra, tipo),
     visual:        normalizarVisual(linha.visual),
@@ -352,6 +353,8 @@ export interface DadosGravacaoDesafio {
   premio: string | null;
   dataInicio: string;
   dataFim: string;
+  /** `null` = campanha da empresa. Ver `Desafio.setorId`. */
+  setorId: string | null;
   tipo: TipoDesafio;
   regra: RegraDesafio;
   visual: VisualDesafio;
@@ -365,6 +368,7 @@ function paraColunas(d: DadosGravacaoDesafio): Record<string, unknown> {
     premio:      d.premio?.trim() || null,
     data_inicio: d.dataInicio,
     data_fim:    d.dataFim,
+    setor_id:    d.setorId,
     tipo:        d.tipo,
     regra:       d.regra,
     visual:      d.visual,

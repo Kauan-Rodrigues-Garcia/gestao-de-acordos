@@ -290,9 +290,14 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
    * Com `escopoDisputa = 'empresa'` o único recorte é o filtro da tela — que
    * continua sendo exploração, não regra da campanha.
    */
-  const setorDaDisputa = regra.escopoDisputa === 'setor'
-    ? (filtroSetorId ?? setorDoUsuario ?? null)
-    : filtroSetorId ?? null;
+  const setorDaDisputa =
+    // Campanha COM DONO recorta sozinha: quem a criou disse de que setor ela é,
+    // e nenhum filtro de tela pode alargar isso. Vem primeiro por ser a
+    // afirmação mais forte — as outras duas são preferência de quem olha.
+    desafio.setorId
+    ?? (regra.escopoDisputa === 'setor'
+          ? (filtroSetorId ?? setorDoUsuario ?? null)
+          : filtroSetorId ?? null);
 
   // ── Quem entra ────────────────────────────────────────────────────────────
   const elegiveis = dados.participantes.filter(p => {

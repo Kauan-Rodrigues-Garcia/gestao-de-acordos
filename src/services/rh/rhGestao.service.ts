@@ -34,9 +34,21 @@ export type RhConfigSetorRow = Tabelas['rh_config_setores']['Row'];
 export type RhFechamentoRow  = Tabelas['rh_fechamentos']['Row'];
 export type RhEventoRow      = Tabelas['rh_eventos']['Row'];
 
-/** Um lançamento como a tela consome, com o status já estreitado. */
+/**
+ * Um lançamento como a tela consome, com o status já estreitado.
+ *
+ * As quatro colunas de dispensa vêm da migration `20260823200000` e ainda não
+ * estão em `database.types.ts`, que é gerado do banco. Opcionais de propósito:
+ * enquanto a migration não é aplicada, o campo chega `undefined` e a tela lê
+ * isso como «não dispensado», que é o comportamento de antes.
+ */
 export interface RhLancamento extends Omit<Tabelas['rh_lancamentos']['Row'], 'status'> {
   status: StatusLancamento;
+  /** Fora da folha desta competência. Diferente de `valor = 0`. */
+  dispensado?: boolean | null;
+  motivo_dispensa?: string | null;
+  dispensado_por?: string | null;
+  dispensado_por_nome?: string | null;
 }
 
 export interface RhResultado<T> {
@@ -323,6 +335,29 @@ export async function devolverEquipe(
   if (!motivo.trim()) return { ok: false, erro: 'Informe o motivo da devolução.' };
   return chamar<number>('fn_rh_devolver_equipe', {
     p_fechamento_id: fechamentoId, p_equipe_id: equipeId, p_motivo: motivo.trim(),
+  });
+}
+
+/**
+ * Marca (ou desmarca) o operador como fora da folha desta competência.
+ *
+ * Não é lançar zero: zero é «conferi e deu zero», e é pago como zero. Fora da
+ * folha é «não há o que pagar» — não atingiu, entrou no meio do mês, esteve
+ * afastado. O motivo é obrigatório ao dispensar, e fica registrado com o autor.
+ *
+ * O efeito prático: `fn_rh_concluir_equipe` deixa de exigir valor dessa linha,
+ * e a equipe fecha sem ninguém ter digitado um zero que viraria pagamento.
+ */
+export async function dispensarOperador(
+  lancamentoId: string, dispensado: boolean, motivo?: string,
+): Promise<RhResultado<RhLancamento>> {
+  if (dispensado && !(motivo ?? '').trim()) {
+    return { ok: false, erro: 'Informe por que este operador fica fora da folha.' };
+  }
+  return chamar<RhLancamento>('fn_rh_dispensar_operador', {
+    p_lancamento_id: lancamentoId,
+    p_dispensado:    dispensado,
+    p_motivo:        dispensado ? (motivo ?? '').trim() : null,
   });
 }
 

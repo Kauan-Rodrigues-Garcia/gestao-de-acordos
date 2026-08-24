@@ -42,7 +42,7 @@ export type AcordoRow    = Database['public']['Tables']['acordos']['Row'];
 export type AcordoInsert = Database['public']['Tables']['acordos']['Insert'];
 export type AcordoUpdate = Database['public']['Tables']['acordos']['Update'];
 
-export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin' | 'elite' | 'gerencia' | 'diretoria' | 'ouvidoria';
+export type PerfilUsuario = 'operador' | 'lider' | 'administrador' | 'super_admin' | 'elite' | 'gerencia' | 'diretoria' | 'ouvidoria' | 'rh';
 export type StatusAcordo = 'verificar_pendente' | 'pago' | 'nao_pago';
 export type TipoAcordo = 'boleto' | 'pix' | 'cartao' | 'cartao_recorrente' | 'pix_automatico';
 

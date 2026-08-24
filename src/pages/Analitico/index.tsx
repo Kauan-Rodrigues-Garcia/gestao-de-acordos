@@ -549,6 +549,7 @@ export default function PaginaAnalitico() {
           setorProprio={setorProprio}
           priorizarEquipes={mostrarVisaoGeral}
           podeConfigurar={temPermissao('desafios_configurar')}
+          podeConfigurarSetor={temPermissao('desafios_configurar_setor')}
           podeAdministrar={temPermissao('administrar_sistema')}
           setores={setores}
         />
