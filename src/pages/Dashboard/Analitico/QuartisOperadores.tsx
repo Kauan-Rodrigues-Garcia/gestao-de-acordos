@@ -132,6 +132,15 @@ interface LinhaQuartil {
   /** Pagamentos do analítico — alimentam o ticket médio da linha expandida. */
   pagamentos: number;
   /**
+   * Quanto do recebimento veio de AJUSTE MANUAL. `0` = nada.
+   *
+   * Já está dentro de `recebido` — e, por consequência, dentro da projeção e do
+   * quartil da linha. O marcador existe para quem confere saber disso: um
+   * percentual que subiu por lançamento à mão não se parece com um que subiu
+   * por recebimento, e a diferença importa na hora de comparar pessoas.
+   */
+  ajusteManual: number;
+  /**
    * As duas frentes de meta `[PP]`. `dupla.ativa = false` para todo o resto —
    * e nesse caso `metaTotal`/`recebidoTotal` são a meta e o recebimento de
    * sempre, então a tabela inteira roda pelo mesmo caminho.
@@ -640,10 +649,12 @@ export function QuartisOperadores({
     // — a linha expandida mostra ticket médio e H.O. sem uma segunda consulta.
     const pagamentosMap: Record<string, number> = {};
     const hoMap: Record<string, number> = {};
+    const ajusteMap: Record<string, number> = {};
     for (const r of resumos) {
       recebidoMap[r.operador_id]   = r.total_recebido;
       pagamentosMap[r.operador_id] = Number(r.total_pagamentos) || 0;
       hoMap[r.operador_id]         = Number(r.total_ho) || 0;
+      ajusteMap[r.operador_id]     = Number(r.ajuste_manual) || 0;
     }
 
     /**
@@ -745,6 +756,9 @@ export function QuartisOperadores({
         meta: dupla.metaTotal, recebido: dupla.recebidoTotal,
         diaria, hoje, diferenca, projecao, quartil: q,
         pagamentos: pagamentosMap[op.id] ?? 0,
+        // Em H.O. o ajuste também está convertido no `hoMap`; o marcador
+        // mostra o BRUTO de propósito — é o número que o líder digitou.
+        ajusteManual: ajusteMap[op.id] ?? 0,
         dupla,
         qtdIndireta: dupla.ativa ? (indiretoMap[op.id]?.qtd ?? 0) : 0,
         dias,
@@ -914,6 +928,17 @@ export function QuartisOperadores({
                             </td>
                             <td className="px-2 py-1 text-right tabular-nums font-mono font-semibold">
                               {formatBRL(l.recebido)}
+                              {/* O aviso da liderança: parte deste número foi
+                                  lançada à mão, e a projeção ao lado já conta
+                                  com ela. */}
+                              {!!l.ajusteManual && (
+                                <span
+                                  title={`Inclui ${formatBRL(Math.abs(l.ajusteManual))} de ajuste manual (${l.ajusteManual > 0 ? 'somado' : 'descontado'})`}
+                                  className="ml-1 text-violet-500 font-sans font-normal"
+                                >
+                                  ·aj
+                                </span>
+                              )}
                             </td>
                             {!isPP && (
                               <td className="px-2 py-1 text-right tabular-nums font-mono text-muted-foreground">

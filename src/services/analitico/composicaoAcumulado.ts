@@ -52,6 +52,14 @@ export interface LinhaComOrigem {
   operador_id: string | null;
   valor_recebido?: number | string | null;
   total_ho?: number | string | null;
+  /**
+   * Quantos PAGAMENTOS a linha representa. Ausente vale 1.
+   *
+   * O ajuste manual entra como linha sintética de `qtd: 0` — ele soma dinheiro
+   * e não soma evento. Contá-lo como pagamento estragaria o ticket médio, que é
+   * `recebido ÷ pagamentos`.
+   */
+  qtd?: number | null;
 }
 
 /**
@@ -120,7 +128,7 @@ export function montarOrigens(params: {
     }
     acc.total += numero(l.valor_recebido);
     acc.ho    += numero(l.total_ho);
-    acc.qtd   += 1;
+    acc.qtd   += l.qtd == null ? 1 : numero(l.qtd);
   }
 
   return [...porChave.values()].sort((a, b) => {

@@ -29,7 +29,7 @@
  */
 
 import { useId, useState } from 'react';
-import { ChevronDown, Users, Target, CalendarClock } from 'lucide-react';
+import { ChevronDown, Users, Target, CalendarClock, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { COR_QUARTIL, corProjecao } from '@/lib/diasUteis';
@@ -69,6 +69,15 @@ interface CardEquipeProps {
   acumulado: number;
   /** PaguePlay: H.O. do acumulado. */
   acumuladoHO?: number;
+  /**
+   * Quanto do acumulado veio de AJUSTE MANUAL de recebimento.
+   *
+   * Já está DENTRO de `acumulado` — não é parcela a somar, é a resposta para
+   * «de onde veio». O card só o exibe quando existe, e é o aviso que a
+   * liderança pediu: onde o valor aparece, fica dito que um pedaço foi lançado
+   * à mão. Negativo é legítimo — o ajuste também tira.
+   */
+  ajusteManual?: number;
   mostrarHO?: boolean;
   /** H.O. da meta, quando `mostrarHO`. */
   metaHO?: number | null;
@@ -300,7 +309,7 @@ function LinhaValor({
 export function CardEquipe({
   titulo, subtitulo, lideres, avatarProprio, ehSetor,
   acumulado, acumuladoHO, mostrarHO, metaHO, meta,
-  totalUteis, decorridos, quartis, operadores,
+  totalUteis, decorridos, quartis, operadores, ajusteManual,
 }: CardEquipeProps) {
   const [aberto, setAberto] = useState(false);
   const painelId = useId();
@@ -373,6 +382,19 @@ export function CardEquipe({
         {Cabecalho}
 
         <BarraProgresso acumulado={acumulado} esperado={esperado} meta={meta} cor={cor} />
+
+        {/* De onde veio um pedaço do acumulado. Só aparece quando há ajuste —
+            o card já tem números demais para carregar uma linha sempre vazia. */}
+        {!!ajusteManual && (
+          <p
+            title="Lançado no Painel Líder › Ajuste de recebimento. Já está somado no acumulado."
+            className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-violet-500"
+          >
+            <SlidersHorizontal className="w-3 h-3 shrink-0" />
+            {ajusteManual > 0 ? 'Inclui ' : 'Descontado '}
+            {formatBRL(Math.abs(ajusteManual))} de ajuste manual
+          </p>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4">
           <Numero

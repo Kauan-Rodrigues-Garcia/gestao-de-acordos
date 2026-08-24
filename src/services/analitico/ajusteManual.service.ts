@@ -37,8 +37,16 @@
  * rótulo detalhado existe: ele é o que a tela mostra.
  */
 import { supabase } from '@/lib/supabase';
-import type { AnaliticoDashboardLinha } from '@/lib/supabase';
+import type { AnaliticoDashboardLinha, AnaliticoRecebimento } from '@/lib/supabase';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
+
+/**
+ * A linha sintética tem o formato de um recebimento, sem os campos que só um
+ * recebimento de verdade tem (`pagamentos_detalhados`, o join do perfil).
+ * Declarada assim para o compilador cobrar os obrigatórios sem exigir o que não
+ * existe.
+ */
+type AnaliticoRecebimentoSintetico = AnaliticoRecebimento;
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
 //
@@ -63,6 +71,21 @@ function db(tabela: string): Consulta {
 
 /** O rótulo da forma, na tela e no relatório. Um lugar só. */
 export const ROTULO_AJUSTE = 'Ajuste manual';
+
+/**
+ * O `lote_id` das linhas sintéticas na lista do Analítico.
+ *
+ * As linhas do relatório vêm de uma importação e carregam o id do lote. O
+ * ajuste não veio de lote nenhum, e este valor fixo é o que permite a tela
+ * reconhecê-lo sem inventar um campo novo no tipo — e sem confundi-lo com um
+ * recebimento de verdade, que tem acordo para tabular e linha para excluir.
+ */
+export const LOTE_AJUSTE_MANUAL = 'ajuste-manual';
+
+/** Esta linha da lista é um ajuste manual, e não um recebimento do ERP? */
+export function ehLinhaDeAjuste(linha: { lote_id?: string | null }): boolean {
+  return linha.lote_id === LOTE_AJUSTE_MANUAL;
+}
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -220,6 +243,61 @@ export function ajustesComoLinhas(
       // Zero pagamentos: o ajuste não é um pagamento, e contá-lo estragaria o
       // ticket médio — que é `recebido ÷ pagamentos`.
       qtd: 0,
+    });
+  }
+  return linhas;
+}
+
+/**
+ * As somas viram linhas da LISTA do Analítico (a tabela de recebimentos).
+ *
+ * `ajustesComoLinhas` serve às agregações; esta serve à lista que a pessoa lê,
+ * e ao total que essa lista soma na frente dela. Sem isto, o operador via o
+ * card «Total recebido» de «Meus recebimentos» sem o ajuste — enquanto o
+ * ranking da aba ao lado, que vem de outro caminho, já o incluía. Dois números
+ * na mesma tela, e nada explicando a diferença.
+ *
+ * A linha é de LEITURA: `lote_id` marca a origem, `TabulacaoCell` a reconhece e
+ * mostra um selo em vez de «Tabular acordo». Ela é a soma do mês, e não uma
+ * linha por lançamento: o detalhe com autor e motivo mora na aba Ajuste de
+ * recebimento, que é onde alguém vai procurá-lo.
+ */
+export function ajustesComoRecebimentos(
+  somas: Map<string, { valor: number; setorId: string | null; equipeId: string | null }>,
+  empresaId: string,
+  mes: string,
+  isPaguePlay: boolean,
+): AnaliticoRecebimentoSintetico[] {
+  const dia = primeiroDiaDaCompetencia(mes);
+  const linhas: AnaliticoRecebimentoSintetico[] = [];
+
+  for (const [operadorId, info] of somas) {
+    if (!info.valor) continue;
+    linhas.push({
+      // Determinístico: a reconciliação da lista casa por `id`, e um id novo a
+      // cada leitura faria a linha piscar em toda releitura.
+      id:                `${LOTE_AJUSTE_MANUAL}:${operadorId}:${dia}`,
+      empresa_id:        empresaId,
+      operador_id:       operadorId,
+      operador_usuario:  '',
+      codigo:            ROTULO_AJUSTE,
+      nome_cliente:      null,
+      forma_pagamento:   'boleto_pix',
+      forma_detalhe:     ROTULO_AJUSTE,
+      valor_recebido:    info.valor,
+      total_ho:          isPaguePlay ? info.valor * PP_HO_PERCENTUAL : 0,
+      data_pagamento:    dia,
+      mes_referencia:    dia,
+      acordo_id:         null,
+      // Tabulado: o ajuste tem dono e motivo. Marcá-lo como não tabulado o
+      // jogaria na fila de «recebimento sem acordo», que é outra conversa — e
+      // faria a tela sair procurando um acordo que não existe.
+      status_tabulacao:  'tabulado',
+      visto:             true,
+      importado_por_id:  null,
+      importado_em:      dia,
+      lote_id:           LOTE_AJUSTE_MANUAL,
+      setor_id:          info.setorId,
     });
   }
   return linhas;

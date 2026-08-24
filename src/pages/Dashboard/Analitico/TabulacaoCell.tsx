@@ -8,7 +8,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import { CheckCircle2, AlertTriangle, Plus, Loader2 } from 'lucide-react';
+import { CheckCircle2, AlertTriangle, Plus, Loader2, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
@@ -25,6 +25,7 @@ import {
   atualizarTabulacao,
   tabularDivergente,
 } from '@/services/analitico/analitico.service';
+import { ehLinhaDeAjuste } from '@/services/analitico/ajusteManual.service';
 
 interface TabulacaoCellProps {
   linha: AnaliticoRecebimento;
@@ -68,6 +69,9 @@ export function TabulacaoCell({
   // Stagger aleatório de até 600 ms para não sobrecarregar o banco com
   // centenas de queries simultâneas quando muitas linhas renderizam juntas.
   useEffect(() => {
+    // Ajuste manual não tem acordo para casar: a linha é sintética e o
+    // `codigo` dela é um rótulo, não um NR. A consulta acharia qualquer coisa.
+    if (ehLinhaDeAjuste(linha)) return;
     if (linha.status_tabulacao !== 'nao_tabulado') return;
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -165,6 +169,28 @@ export function TabulacaoCell({
       });
     }
     setCarregando(false);
+  }
+
+  /*
+   * Ajuste manual: selo, e não botão.
+   *
+   * A linha é sintética — não existe em `analitico_recebimentos`, não tem
+   * acordo para ver nem código para casar. Sem esta saída ela cairia no ramo
+   * «tabulado» e ofereceria «Ver acordo» para um acordo que não existe.
+   *
+   * O selo é também o aviso que a liderança pediu: em qualquer lugar onde o
+   * valor aparece, fica dito que aquele pedaço entrou por lançamento manual.
+   * O autor e o motivo estão na aba Ajuste de recebimento.
+   */
+  if (ehLinhaDeAjuste(linha)) {
+    return (
+      <span
+        title="Lançado manualmente no Painel Líder › Ajuste de recebimento"
+        className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-violet-500/40 bg-violet-500/10 text-violet-500 text-[11px] font-semibold"
+      >
+        <SlidersHorizontal className="w-3 h-3" /> Ajuste manual
+      </span>
+    );
   }
 
   // Botão de acordo já tabulado (visualizar)

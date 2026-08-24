@@ -14,7 +14,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
-  ajustesComoLinhas, primeiroDiaDaCompetencia, ROTULO_AJUSTE, traduzir,
+  ajustesComoLinhas, ajustesComoRecebimentos, ehLinhaDeAjuste,
+  primeiroDiaDaCompetencia, LOTE_AJUSTE_MANUAL, ROTULO_AJUSTE, traduzir,
 } from './ajusteManual.service';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 
@@ -98,6 +99,63 @@ describe('ajustesComoLinhas', () => {
     );
     expect(linhas.map(l => l.operador_id).sort()).toEqual(['op-1', 'op-2', 'op-3']);
     expect(linhas.reduce((s, l) => s + l.total, 0)).toBe(75);
+  });
+});
+
+/*
+ * A linha da LISTA.
+ *
+ * `ajustesComoLinhas` serve às agregações; esta serve à tabela que a pessoa lê
+ * — e ao total que essa tabela soma na frente dela. Sem ela, o operador via um
+ * «Total recebido» em «Meus recebimentos» e outro no ranking da aba ao lado.
+ */
+describe('ajustesComoRecebimentos', () => {
+  const linhaDe = (valor: number, pp = true) =>
+    ajustesComoRecebimentos(somas([['op-1', valor, 'setor-a']]), 'emp-1', '2026-08', pp)[0];
+
+  it('a linha carrega o valor, a competência e o setor carimbado', () => {
+    const l = linhaDe(10_000);
+    expect(l.valor_recebido).toBe(10_000);
+    expect(l.data_pagamento).toBe('2026-08-01');
+    expect(l.setor_id).toBe('setor-a');
+    expect(l.operador_id).toBe('op-1');
+  });
+
+  it('o id é DETERMINÍSTICO — a lista reconcilia por ele', () => {
+    // Id novo a cada leitura faria a linha piscar em toda releitura, e a
+    // animação de "linha nova" dispararia sem nada ter acontecido.
+    expect(linhaDe(500).id).toBe(linhaDe(500).id);
+    expect(linhaDe(500).id).toContain(LOTE_AJUSTE_MANUAL);
+  });
+
+  it('sai marcada como ajuste, para a tela não oferecer «Ver acordo»', () => {
+    // A linha é sintética: não existe em `analitico_recebimentos`, não tem
+    // acordo para abrir e o `codigo` dela é um rótulo, não um NR.
+    expect(ehLinhaDeAjuste(linhaDe(500))).toBe(true);
+    expect(ehLinhaDeAjuste({ lote_id: 'lote-real-123' })).toBe(false);
+  });
+
+  it('vem tabulada e vista: não é pendência de ninguém', () => {
+    const l = linhaDe(500);
+    expect(l.status_tabulacao).toBe('tabulado');
+    expect(l.acordo_id).toBeNull();
+    expect(l.visto).toBe(true);
+  });
+
+  it('H.O. só na PaguePlay — na BookPlay toda linha do relatório é zero', () => {
+    expect(linhaDe(1_000, true).total_ho).toBeCloseTo(1_000 * PP_HO_PERCENTUAL, 2);
+    expect(linhaDe(1_000, false).total_ho).toBe(0);
+  });
+
+  it('valor negativo vira linha negativa, e não some', () => {
+    // Tirar valor é metade do propósito do ajuste. Uma lista que só mostra o
+    // que somou explicaria mal um total que caiu.
+    expect(linhaDe(-800).valor_recebido).toBe(-800);
+  });
+
+  it('operador sem ajuste não gera linha', () => {
+    expect(ajustesComoRecebimentos(somas([]), 'emp-1', '2026-08', true)).toEqual([]);
+    expect(ajustesComoRecebimentos(somas([['op-1', 0, null]]), 'emp-1', '2026-08', true)).toEqual([]);
   });
 });
 

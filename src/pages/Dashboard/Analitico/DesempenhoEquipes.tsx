@@ -29,7 +29,7 @@ import { supabase } from '@/lib/supabase';
 import type { QuartilConfig } from '@/lib/supabase';
 import { getTodayISO, PP_HO_PERCENTUAL, PERFIS_QUE_CONTAM_NO_RECEBIMENTO } from '@/lib/index';
 import { useTenant } from '@/lib/tenant-config';
-import { assinarTabela } from '@/lib/realtime';
+import { assinarTabela } from '@/lib/realtime';
 import { reconciliarMapa } from '@/lib/dadosVivos';
 import { getMetasConfig } from '@/services/metas/metasConfig.service';
 import { salvarFotoSetor, type CampoFotoSetor } from '@/services/setores/fotoSetor.service';
@@ -320,9 +320,9 @@ export function DesempenhoEquipes({
     if (isPP) return;
     const { porSetor, dbAtiva } = await buscarContribuicoesReceptivo(empresaId, mes);
     setContribDbAtiva(dbAtiva);
-    // Reconciliado: o evento de realtime chega a cada tecla salva do outro
-    // lado, e sem isto todo cartao de equipe do setor re-renderizaria com
-    // exatamente os mesmos numeros dentro.
+    // Reconciliado: o evento de realtime chega a cada tecla salva do outro
+    // lado, e sem isto todo cartao de equipe do setor re-renderizaria com
+    // exatamente os mesmos numeros dentro.
     if (dbAtiva) { setContrib(atual => reconciliarMapa(atual, porSetor)); return; }
     // Migration pendente → localStorage antigo, setor por setor.
     const local: Record<string, ContribuicaoReceptivo> = {};
@@ -530,12 +530,17 @@ export function DesempenhoEquipes({
     // O card do SETOR soma TODOS os operadores do setor — inclusive quem está
     // sem equipe (o setor vem da equipe ou, na falta dela, do próprio perfil);
     // sem isso o consolidado do setor ficava menor que o card Total recebido.
-    const porEquipe: Record<string, { bruto: number; ho: number }> = {};
-    const porSetor:  Record<string, { bruto: number; ho: number }> = {};
+    // `ajuste` viaja junto com o acumulado, e não numa segunda passada: ele já
+    // está DENTRO de `total_recebido` e a pergunta que responde é «quanto deste
+    // número foi lançado à mão». Somá-lo por fora daria duas travessias da
+    // mesma lista com a mesma regra de clone — e a segunda envelheceria.
+    const porEquipe: Record<string, { bruto: number; ho: number; ajuste: number }> = {};
+    const porSetor:  Record<string, { bruto: number; ho: number; ajuste: number }> = {};
     const somar = (map: typeof porEquipe, id: string, r: ResumoOperadorAnalitico) => {
-      if (!map[id]) map[id] = { bruto: 0, ho: 0 };
-      map[id].bruto += r.total_recebido;
-      map[id].ho    += Number(r.total_ho) || 0;
+      if (!map[id]) map[id] = { bruto: 0, ho: 0, ajuste: 0 };
+      map[id].bruto  += r.total_recebido;
+      map[id].ho     += Number(r.total_ho) || 0;
+      map[id].ajuste += Number(r.ajuste_manual) || 0;
     };
     // Setor de cada equipe — o clone credita o setor DONO da equipe clonada
     const setorDaEquipe = mapaSetorDaEquipe(equipes);
@@ -560,7 +565,7 @@ export function DesempenhoEquipes({
 
     // Órfãos (sem operador) pertencem ao setor da importação
     for (const [sid, o] of Object.entries(orfaosPorSetor)) {
-      if (!porSetor[sid]) porSetor[sid] = { bruto: 0, ho: 0 };
+      if (!porSetor[sid]) porSetor[sid] = { bruto: 0, ho: 0, ajuste: 0 };
       porSetor[sid].bruto += o.total;
     }
 
@@ -693,6 +698,13 @@ export function DesempenhoEquipes({
         const baseSetorHO = usarSoma
           ? (dados.porSetor[sid]?.ho ?? 0)
           : (totalPorSetor[sid]?.ho ?? 0);
+        /*
+         * O ajuste do setor sai sempre da soma dos operadores, mesmo quando o
+         * card usa o total carimbado do relatório: nos dois caminhos o ajuste
+         * já está dentro do acumulado, e o número é o mesmo. O que muda entre
+         * eles é de onde vem o TOTAL, não de onde vem esta parcela.
+         */
+        const ajusteDoSetor = dados.porSetor[sid]?.ajuste ?? 0;
         const metaSetor = dados.metaDe('setor', sid);
         return (
         <div key={sid} className="space-y-3">
@@ -725,6 +737,7 @@ export function DesempenhoEquipes({
               // sendo a da aba Metas (decisão do usuário em 30/07/2026).
               acumulado={baseSetor + (contrib[sid]?.acumulado ?? 0)}
               acumuladoHO={baseSetorHO}
+              ajusteManual={ajusteDoSetor}
               meta={metaSetor}
               totalUteis={dados.totalUteis}
               decorridos={dados.decorridos}
@@ -775,6 +788,7 @@ export function DesempenhoEquipes({
                   metaHO={metaEquipe !== null ? metaEquipe * PP_HO_PERCENTUAL : null}
                   acumulado={dados.porEquipe[eq.id]?.bruto ?? 0}
                   acumuladoHO={dados.porEquipe[eq.id]?.ho ?? 0}
+                  ajusteManual={dados.porEquipe[eq.id]?.ajuste ?? 0}
                   meta={metaEquipe}
                   totalUteis={eqUteis}
                   decorridos={eqDecorridos}

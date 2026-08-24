@@ -28,7 +28,9 @@ import {
 import { equipeUnicaPorLider } from '@/services/equipes/equipeDoLider';
 import { PP_HO_PERCENTUAL } from '@/lib/index';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
-import { somasPorOperador, ajustesComoLinhas } from './ajusteManual.service';
+import {
+  somasPorOperador, ajustesComoLinhas, ajustesComoRecebimentos,
+} from './ajusteManual.service';
 import { primeiroDiaDoMes, ultimoDiaDoMes, ehMesAtual } from '@/lib/mesReferencia';
 import { ROTA_ANALITICO } from '@/lib/notificacoes-rota';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
@@ -737,6 +739,17 @@ export interface ResumoOperadorAnalitico {
   total_recebido: number;
   total_ho: number;
   total_pagamentos: number;
+  /**
+   * Quanto do `total_recebido` veio de AJUSTE MANUAL. Ausente ou `0` = nada.
+   *
+   * O número já está somado no total — este campo não é uma parcela a somar, é
+   * a resposta para «de onde veio». Ele existe para a liderança enxergar, em
+   * qualquer tela que leia este resumo, que aquele valor tem um pedaço lançado
+   * à mão. O operador não precisa saber; quem confere, sim.
+   *
+   * Negativo é possível e não é erro: o ajuste também tira valor.
+   */
+  ajuste_manual?: number;
 }
 
 /**
@@ -790,6 +803,7 @@ export async function buscarResumoOperadoresAnalitico(
     if (atual) {
       atual.total_recebido = (Number(atual.total_recebido) || 0) + info.valor;
       atual.total_ho = (Number(atual.total_ho) || 0) + (pp ? info.valor * PP_HO_PERCENTUAL : 0);
+      atual.ajuste_manual = (Number(atual.ajuste_manual) || 0) + info.valor;
     } else {
       porId.set(operadorId, {
         operador_id:      operadorId,
@@ -798,6 +812,7 @@ export async function buscarResumoOperadoresAnalitico(
         total_recebido:   info.valor,
         total_ho:         pp ? info.valor * PP_HO_PERCENTUAL : 0,
         total_pagamentos: 0,
+        ajuste_manual:    info.valor,
       });
     }
   }
@@ -958,13 +973,49 @@ export async function buscarAnalitico(
   // queries sem filtro de operador retornam apenas as primeiras 1000 linhas,
   // causando totais incorretos na visão do líder. Em ondas paralelas — ver
   // `paginarParalelo`.
-  return paginarParalelo<AnaliticoRecebimento>(async (de, ate) => {
+  const resultado = await paginarParalelo<AnaliticoRecebimento>(async (de, ate) => {
     const { data, error } = await buildQuery(de, ate);
     return {
       data:  (data as unknown as AnaliticoRecebimento[]) ?? [],
       error: error?.message ?? null,
     };
   });
+
+  /*
+   * O QUARTO ponto por onde o ajuste entra: a LISTA que a pessoa lê.
+   *
+   * `AnaliticoOperador` soma o card «Total recebido» a partir destas linhas, e
+   * não do resumo — então sem isto o operador via um total aqui e outro no
+   * ranking da aba ao lado, que já incluía o ajuste. O líder que abre o detalhe
+   * de uma pessoa via a mesma divergência.
+   *
+   * Fora quando o filtro é de ÓRFÃOS (`operadorId === null`): órfão é linha sem
+   * operador, e o ajuste sempre tem um. Sem mês também não entra — o ajuste é
+   * de competência, e uma lista sem recorte de mês somaria todos eles.
+   */
+  if (resultado.error || !filtros.mes || filtros.operadorId === null) return resultado;
+
+  try {
+    const somas = await somasPorOperador(filtros.empresaId, filtros.mes);
+    if (somas.size === 0) return resultado;
+
+    const doFiltro = filtros.operadorId
+      ? new Map([...somas].filter(([id]) => id === filtros.operadorId))
+      : somas;
+    if (doFiltro.size === 0) return resultado;
+
+    return {
+      data: [
+        ...ajustesComoRecebimentos(doFiltro, filtros.empresaId, filtros.mes, ehPaguePlay()),
+        ...resultado.data,
+      ],
+      error: null,
+    };
+  } catch {
+    // Tabela ainda sem migration: a lista sem a correção é melhor que uma tela
+    // que não carrega.
+    return resultado;
+  }
 }
 
 // ── Marcar como visto ─────────────────────────────────────────────────────────
@@ -1232,6 +1283,16 @@ interface LinhaMesAnalitico {
   valor_recebido:   number;
   total_ho:         number | null;
   data_pagamento:   string;   // 'yyyy-MM-dd'
+  /**
+   * Quantos PAGAMENTOS esta linha representa. Ausente vale 1.
+   *
+   * Existe por causa do ajuste manual, que é uma linha sintética valendo zero
+   * pagamentos: ele soma dinheiro e não soma evento. Contá-lo estragaria o
+   * ticket médio, que é `recebido ÷ pagamentos`.
+   */
+  qtd?:             number;
+  /** Linha sintética de ajuste manual — não veio do relatório do ERP. */
+  ajuste?:          boolean;
 }
 
 interface MesCarregado {
@@ -1282,7 +1343,10 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
   const linhas = (await buscar(true)) ?? (await buscar(false));
 
   const setorDoPerfil = new Map<string, string | null>();
-  if (linhas?.length) {
+  // A condição era `linhas?.length`. Passou a ser «a leitura funcionou», porque
+  // um mês SEM relatório ainda pode ter ajuste manual — e o ajuste precisa do
+  // mapa para achar o setor de quem não tinha carimbo.
+  if (linhas) {
     // Setor da EQUIPE, caindo no setor do cadastro quando a pessoa não tem
     // equipe — a mesma definição de `operadorEquipeMap`. Enquanto aqui era só
     // `perfis.setor_id`, a lista de origens do acumulado (que sai daqui) e o
@@ -1312,7 +1376,68 @@ async function lerMesAnalitico(empresaId: string, mes: string): Promise<MesCarre
     }
   }
 
-  return { linhas, setorDoPerfil };
+  // `linhas === null` é falha de leitura, e continua sendo: acrescentar ajuste a
+  // um mês que não carregou produziria um total que é só o ajuste — pior que a
+  // tela dizer que não conseguiu ler.
+  if (linhas === null) return { linhas, setorDoPerfil };
+
+  return {
+    linhas: [...linhas, ...await linhasDeAjusteDoMes(empresaId, mes, setorDoPerfil)],
+    setorDoPerfil,
+  };
+}
+
+/**
+ * O TERCEIRO ponto por onde o ajuste manual entra.
+ *
+ * `comAjustesManuais` cobre o dashboard e o resumo por operador. Esta varredura
+ * é outra fonte — dela saem o **total do setor** (`buscarTotalPorSetor`) e o
+ * **gráfico por dia** (`buscarRecebidoPorDia`), e nenhuma das duas passava pelos
+ * outros dois pontos. O resultado era um lançamento que mexia no card do
+ * operador e não mexia no card do setor logo ao lado, na mesma tela.
+ *
+ * As linhas sintéticas entram aqui, uma vez, e as três agregações que derivam
+ * desta leitura passam a enxergá-las juntas.
+ *
+ *   • `buscarTotalOrfaosPorSetor` ignora sozinha: ela pula toda linha COM
+ *     operador, e o ajuste sempre tem um;
+ *   • `qtd: 0` mantém o ticket médio honesto — ajuste é dinheiro, não pagamento;
+ *   • o setor é o CARIMBADO no lançamento, com o setor atual da pessoa como
+ *     reserva. Carimbo primeiro porque mover alguém de setor em setembro não
+ *     pode reescrever de qual setor foi o dinheiro de agosto.
+ *
+ * Falha em silêncio, como os outros pontos: a tabela pode não existir ainda.
+ */
+async function linhasDeAjusteDoMes(
+  empresaId: string,
+  mes: string,
+  setorDoPerfil: Map<string, string | null>,
+): Promise<LinhaMesAnalitico[]> {
+  try {
+    const somas = await somasPorOperador(empresaId, mes);
+    if (somas.size === 0) return [];
+
+    const dia = `${mes.slice(0, 7)}-01`;
+    const pp = ehPaguePlay();
+    const linhas: LinhaMesAnalitico[] = [];
+
+    for (const [operadorId, info] of somas) {
+      if (!info.valor) continue;
+      linhas.push({
+        operador_id:      operadorId,
+        setor_id:         info.setorId ?? setorDoPerfil.get(operadorId) ?? null,
+        importado_por_id: null,
+        valor_recebido:   info.valor,
+        total_ho:         pp ? info.valor * PP_HO_PERCENTUAL : 0,
+        data_pagamento:   dia,
+        qtd:              0,
+        ajuste:           true,
+      });
+    }
+    return linhas;
+  } catch {
+    return [];
+  }
 }
 
 const mesEmVoo = new Map<string, Promise<MesCarregado>>();
@@ -1458,6 +1583,43 @@ export async function buscarRecebidoPorDia(
     })),
     error: null,
   };
+}
+
+/**
+ * Os ajustes do mês no formato do gráfico por dia.
+ *
+ * Existe para o gráfico da **PaguePlay**, que não é alimentado pelo analítico:
+ * ele recebe as linhas do relatório de recebimento diário por `linhasExternas`,
+ * e por isso não passava pela varredura onde o ajuste é injetado. O resultado
+ * era um gráfico contradizendo os cards da mesma tela.
+ *
+ * A aba Recebimento Diário em si continua intacta — ela é conferência dia a dia
+ * contra o ERP, e o ajuste não tem dia. Aqui ele entra no dia 1º, que é a
+ * consequência honesta de um lançamento de competência.
+ */
+export async function buscarAjustesComoLinhasDia(
+  empresaId: string,
+  mes: string,
+): Promise<LinhaRecebidaDia[]> {
+  try {
+    const somas = await somasPorOperador(empresaId, mes);
+    if (somas.size === 0) return [];
+    const dia = `${mes.slice(0, 7)}-01`;
+    const linhas: LinhaRecebidaDia[] = [];
+    for (const [operadorId, info] of somas) {
+      if (!info.valor) continue;
+      linhas.push({
+        operador_id:      operadorId,
+        setor_id:         info.setorId,
+        importado_por_id: null,
+        valor_recebido:   info.valor,
+        data_pagamento:   dia,
+      });
+    }
+    return linhas;
+  } catch {
+    return [];
+  }
 }
 
 // ── Equipes e mapa operador→equipe ────────────────────────────────────────────

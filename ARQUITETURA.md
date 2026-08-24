@@ -1255,17 +1255,49 @@ fixo — ferramenta temporária que não diz que é temporária vira permanente.
 somado na LEITURA. A consequência prática: desligar a correção é parar de
 somar — sem desfazer dado, sem reimportar, e com a trilha inteira preservada.
 
-### Os dois pontos por onde ele entra
+### Os cinco pontos por onde ele entra
+
+Eram dois, e dois não bastavam: o lançamento mexia no card do operador e não
+mexia no card do setor logo ao lado, na mesma tela. Os três últimos entraram em
+24/08/2026.
 
 | Ponto | Alimenta |
 |---|---|
 | `buscarAnaliticoDashboardMes` | Dashboard, Painel Metas, gráfico de evolução |
-| `buscarResumoOperadoresAnalitico` | Aba Quartis, Painel Líder, agrupamento por equipe |
+| `buscarResumoOperadoresAnalitico` | Quartis, Desempenho Equipes, Painel Líder, RH Gestão, Pix |
+| `lerMesAnalitico` (a varredura única do mês) | **Total do setor**, gráfico por dia da BookPlay |
+| `buscarAnalitico` | A **lista** do Analítico e o total que ela soma na tela |
+| `fn_analitico_atualizar_resumo` (no banco) | Snapshot mensal — migration `20260824140000` |
 
 Entrando **ali** e não em cada tela, o valor sobe sozinho para operador →
 equipe → setor: `escopoAnalitico` recorta por `operador_id` e por `setor_id`, e
 a linha sintética carrega os dois. Somar em cada tela seria somar em oito
 lugares e esquecer o nono.
+
+O gráfico da **PaguePlay** é a exceção que precisa de um sexto caminho: ele não
+vem do analítico, e sim do relatório de recebimento diário (`linhasExternas`).
+`buscarAjustesComoLinhasDia` o alimenta — sem isso o gráfico contradizia os
+cards da própria tela.
+
+### O que fica FORA, e por quê
+
+| Fora | Motivo |
+|---|---|
+| Aba **Recebimento Diário** | É conferência dia a dia contra o ERP. O ajuste não tem dia, e somá-lo faria a trava de sincronia com o relatório mensal acusar divergência falsa |
+| `fn_analitico_destaques_dia` | Premia quem recebeu mais NAQUELE dia. O ajuste cairia no dia 1º e fabricaria um destaque que ninguém reconheceria |
+| **Desafios** | A gincana agrega por intervalo de datas; o ajuste é de competência e não tem como ser recortado por período |
+
+### O aviso para a liderança
+
+O operador não precisa saber que parte do número dele foi lançada à mão — para
+ele é recebimento. Quem confere, sim: um percentual que subiu por lançamento
+manual não se parece com um que subiu por recebimento, e a diferença importa na
+hora de comparar pessoas.
+
+Por isso `ResumoOperadorAnalitico` carrega `ajuste_manual` — a parcela que **já
+está** no total, não uma parcela a somar. Dela saem o selo na linha da lista
+(`TabulacaoCell`), a marca `·aj` na coluna Recebimento dos Quartis e a linha
+«Inclui R$ X de ajuste manual» nos cards de equipe e de setor.
 
 ### Não é Pix e não é cartão
 

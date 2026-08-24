@@ -74,6 +74,34 @@ describe('montarOrigens', () => {
     expect(origens[2].total).toBeCloseTo(433.21, 2);
   });
 
+  /*
+   * O ajuste manual entra na varredura do mês como linha sintética de `qtd: 0`.
+   *
+   * Ele soma DINHEIRO e não soma EVENTO: contá-lo como pagamento inflaria a
+   * quantidade e derrubaria o ticket médio do setor, que é
+   * `recebido ÷ pagamentos`. Enquanto `montarOrigens` fazia `qtd += 1` fixo, a
+   * linha do ajuste virava um pagamento que nunca existiu.
+   */
+  it('linha com qtd explícito não conta como um pagamento', () => {
+    const comAjuste = [
+      ...LINHAS,
+      { operador_id: 'izadora', valor_recebido: 10_000, total_ho: 0, qtd: 0 },
+    ];
+    const origens = montarOrigens({ setorId: PLAY5, linhas: comAjuste, setorDoOperador });
+
+    // O dinheiro entrou…
+    expect(origens[0].total).toBeCloseTo(30721.54 + 10_000, 2);
+    // …e a contagem de pagamentos ficou onde estava.
+    expect(origens[0].qtd).toBe(2);
+  });
+
+  it('linha sem qtd continua valendo um pagamento', () => {
+    // O padrão não pode mudar: toda linha do relatório é um pagamento, e
+    // nenhuma delas declara `qtd`.
+    const origens = montarOrigens({ setorId: PLAY5, linhas: LINHAS, setorDoOperador });
+    expect(origens[0].qtd).toBe(2);
+  });
+
   it('o próprio setor vem primeiro e a origem sem operador por último', () => {
     // A ordem é a de quem está conferindo: primeiro o que é meu, depois o
     // intruso maior, e no fim as linhas sem dono.

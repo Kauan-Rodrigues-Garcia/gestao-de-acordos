@@ -17,7 +17,7 @@ import { TrendingUp, Loader2 } from 'lucide-react';
 import { formatBRL } from '@/lib/money';
 import { supabase } from '@/lib/supabase';
 import {
-  buscarRecebidoPorDia, mapaSetorDaEquipe, setoresDoOperador,
+  buscarRecebidoPorDia, buscarAjustesComoLinhasDia, mapaSetorDaEquipe, setoresDoOperador,
   type EquipeAnalitico, type OperadorEquipeInfo, type LinhaRecebidaDia,
 } from '@/services/analitico/analitico.service';
 import { linhaNoEscopo, type EscopoAnalitico } from '@/services/analitico/escopoAnalitico';
@@ -96,14 +96,25 @@ export function GraficoRecebimento({
   }, [setorId]);
 
   useEffect(() => {
-    // Fonte externa (recebimento diário): usa as linhas recebidas por prop
-    if (linhasExternas) {
-      setLinhas(linhasExternas);
-      setErro(null);
-      setLoading(false);
-      return;
-    }
     let cancelado = false;
+
+    /*
+     * Fonte externa (recebimento diário, PaguePlay): usa as linhas da prop —
+     * MAIS os ajustes manuais do mês.
+     *
+     * O ajuste é somado na leitura do analítico, e este caminho não passa por
+     * lá. Sem esta busca, o gráfico da PaguePlay mostrava um total e os cards
+     * da mesma tela mostravam outro, sem nada explicando a diferença.
+     */
+    if (linhasExternas) {
+      setErro(null);
+      void buscarAjustesComoLinhasDia(empresaId, mes).then(ajustes => {
+        if (cancelado) return;
+        setLinhas(ajustes.length ? [...linhasExternas, ...ajustes] : linhasExternas);
+        setLoading(false);
+      });
+      return () => { cancelado = true; };
+    }
     setLoading(true);
     setErro(null);
     void buscarRecebidoPorDia(empresaId, mes).then(({ data, error }) => {
