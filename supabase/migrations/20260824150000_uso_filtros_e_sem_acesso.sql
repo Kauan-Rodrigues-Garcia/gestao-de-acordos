@@ -74,31 +74,45 @@ STABLE
 SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $function$
+  -- SECURITY INVOKER: a policy de `uso_telas` decide o que aparece. Com NULL em
+  -- `p_empresa_id`, o administrador continua vendo so a propria empresa porque a
+  -- policy o restringe — o parametro amplia o pedido, nunca o direito.
+  --
+  -- Tudo que nao e soma entra no GROUP BY, e nao num agregado. Postgres nao tem
+  -- `max(uuid)`, e envolver a empresa num agregado so para satisfazer o
+  -- agrupamento seria esconder a pergunta: a linha JA e por (pessoa, empresa).
   SELECT u.usuario_id,
-         COALESCE(NULLIF(TRIM(p.nome), ''), p.usuario, '—')::TEXT AS nome,
-         -- O cargo do periodo, e nao o de hoje: promover alguem nao reescreve
-         -- o historico de uso dele.
-         MAX(u.cargo)::TEXT                     AS cargo,
-         MAX(u.empresa_id)                      AS empresa_id,
-         MAX(e.nome)::TEXT                      AS empresa_nome,
-         MAX(s.nome)::TEXT                      AS setor_nome,
-         MAX(eq.nome)::TEXT                     AS equipe_nome,
+         COALESCE(NULLIF(TRIM(p.nome), ''), p.usuario, '(removido)')::TEXT AS nome,
+         -- Cargo da LINHA, nao do perfil: promover alguem nao pode reescrever o
+         -- historico dele como se sempre tivesse sido lider. `mode()` porque a
+         -- pessoa pode ter mudado de cargo NO MEIO da janela — ali vale o cargo
+         -- em que ela passou mais tempo, e nao o alfabeticamente maior.
+         (mode() WITHIN GROUP (ORDER BY u.cargo))::TEXT AS cargo,
+         u.empresa_id,
+         COALESCE(e.nome, '—')::TEXT            AS empresa_nome,
+         s.nome::TEXT                           AS setor_nome,
+         eq.nome::TEXT                          AS equipe_nome,
          SUM(u.aberturas)::BIGINT               AS aberturas,
          SUM(u.segundos)::BIGINT                AS segundos,
          COUNT(DISTINCT u.dia)::BIGINT          AS dias_ativos,
          COUNT(DISTINCT u.tela)::BIGINT         AS telas_usadas,
          MAX(u.ultimo_em)                       AS ultimo_em
     FROM public.uso_telas u
-    JOIN public.perfis    p  ON p.id = u.usuario_id
-    JOIN public.empresas  e  ON e.id = u.empresa_id
-    LEFT JOIN public.setores s  ON s.id  = p.setor_id
-    LEFT JOIN public.equipes eq ON eq.id = p.equipe_id
+    -- LEFT nos dois: perfil apagado nao pode sumir com o uso que ja aconteceu,
+    -- e e por isso que o nome cai em '(removido)' em vez de a linha desaparecer.
+    LEFT JOIN public.perfis   p  ON p.id = u.usuario_id
+    LEFT JOIN public.empresas e  ON e.id = u.empresa_id
+    LEFT JOIN public.setores  s  ON s.id  = p.setor_id
+    LEFT JOIN public.equipes  eq ON eq.id = p.equipe_id
    WHERE (p_empresa_id IS NULL OR u.empresa_id = p_empresa_id)
      AND u.dia BETWEEN p_desde AND p_ate
      AND (p_cargo     IS NULL OR u.cargo     = p_cargo)
      AND (p_setor_id  IS NULL OR p.setor_id  = p_setor_id)
      AND (p_equipe_id IS NULL OR p.equipe_id = p_equipe_id)
-   GROUP BY u.usuario_id, p.nome, p.usuario
+   -- Agrupa por (usuario, empresa): a mesma pessoa nao existe em duas empresas
+   -- (perfis tem PK no id de auth.users), mas agrupar pela empresa mantem a
+   -- coluna honesta se um dia isso mudar.
+   GROUP BY u.usuario_id, u.empresa_id, p.nome, p.usuario, e.nome, s.nome, eq.nome
    ORDER BY SUM(u.segundos) DESC;
 $function$;
 
