@@ -54,6 +54,15 @@ import { numeroBr, tempoRelativo, iniciais, formatarDuracao } from './formatos';
 import { montarSerieDiaria } from './serieDiaria';
 import { calcularAssiduidade, faixaAssiduidade, mesesDaJanela } from './assiduidade';
 
+/**
+ * Altura útil das barras do «Por dia», em pixels.
+ *
+ * Em pixel, e não em `h-20` + porcentagem: porcentagem de altura só resolve
+ * contra um pai de altura definida, e a coluna de cada dia vive dentro de um
+ * container `items-end` — que não estica os filhos. Ver o comentário no JSX.
+ */
+const ALTURA_GRAFICO = 72;
+
 /** A cor da barra segue a faixa do percentual, sem inventar uma segunda escala. */
 const BARRA_DA_FAIXA: Record<string, string> = {
   'assíduo':    'bg-emerald-500',
@@ -254,22 +263,41 @@ export default function PerfilPessoa({
                     · {serie.filter(p => !p.vazio).length} de {serie.length} dias com uso
                   </span>
                 </p>
-                <div className="flex items-end gap-[2px] h-20">
+                {/*
+                  As alturas são em PIXEL, e não em porcentagem.
+                  ───────────────────────────────────────────────────────────
+                  Porcentagem de altura só resolve contra um pai de altura
+                  DEFINIDA. Aqui a coluna de cada dia fica dentro de um
+                  container `items-end`, que não estica os filhos: a coluna
+                  passa a ter altura de conteúdo, o wrapper `flex-1` dentro
+                  dela não tem base definida, e todo `height: 60%` colapsa
+                  para zero.
+
+                  O gráfico ficava com todas as barras rasteiras — o defeito
+                  relatado como «Por dia não está funcionando». Com pixel
+                  calculado sobre `ALTURA_GRAFICO`, não há dependência de
+                  layout e a barra mede o que diz medir.
+                */}
+                <div className="flex items-end gap-[2px]" style={{ height: ALTURA_GRAFICO }}>
                   {serie.map(d => {
                     const acoes = acoesPorDia.get(d.dia) ?? 0;
+                    // Dia vazio ganha um traço de 2px em vez de sumir: ausência
+                    // precisa ocupar espaço para ser lida.
+                    const hTempo = d.vazio
+                      ? 2
+                      : Math.max(4, Math.round((d.segundos / maxDia) * ALTURA_GRAFICO));
+                    const hAcoes = acoes
+                      ? Math.max(4, Math.round((acoes / maxAcao) * ALTURA_GRAFICO))
+                      : 0;
                     return (
-                      <div key={d.dia} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                        <div className="w-full flex-1 flex items-end gap-[1px]">
+                      <div key={d.dia} className="flex-1 flex flex-col justify-end items-center min-w-0 h-full">
+                        <div className="w-full flex items-end justify-center gap-[1px]">
                           <div
                             className={cn(
                               'flex-1 rounded-t transition-colors',
                               d.vazio ? 'bg-muted' : 'bg-primary/70 hover:bg-primary',
                             )}
-                            style={{
-                              // Dia vazio ganha um traço de 2px em vez de sumir:
-                              // ausência precisa ocupar espaço para ser lida.
-                              height: d.vazio ? '2px' : `${Math.max(6, (d.segundos / maxDia) * 100)}%`,
-                            }}
+                            style={{ height: hTempo }}
                             title={d.vazio
                               ? `${d.rotulo}: sem uso`
                               : `${d.rotulo}: ${formatarDuracao(d.segundos)} · ${d.aberturas} abertura(s)`}
@@ -277,15 +305,17 @@ export default function PerfilPessoa({
                           {/* A barra fina de AÇÕES ao lado da de tempo: as duas
                               contam histórias diferentes, e ver as duas juntas é
                               o que mostra quem navega sem fazer nada. */}
-                          <div
-                            className="w-[3px] rounded-t bg-amber-500/70 shrink-0"
-                            style={{ height: acoes ? `${Math.max(6, (acoes / maxAcao) * 100)}%` : '0px' }}
-                            title={`${d.rotulo}: ${acoes} ação(ões) registrada(s)`}
-                          />
+                          {hAcoes > 0 && (
+                            <div
+                              className="w-[3px] rounded-t bg-amber-500/70 shrink-0"
+                              style={{ height: hAcoes }}
+                              title={`${d.rotulo}: ${acoes} ação(ões) registrada(s)`}
+                            />
+                          )}
                         </div>
                         {/* Com 90 dias os números viram uma tarja cinza: só o
                             dia 1 sobrevive. */}
-                        <span className="text-[8px] text-muted-foreground tabular-nums truncate w-full text-center">
+                        <span className="text-[8px] text-muted-foreground tabular-nums truncate w-full text-center mt-1">
                           {serie.length <= 31 || d.dia.slice(8, 10) === '01' ? d.dia.slice(8, 10) : ''}
                         </span>
                       </div>

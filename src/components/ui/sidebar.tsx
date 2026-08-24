@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
-import { Sheet, SheetContent } from "@/components/ui/sheet"
+import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   Tooltip,
@@ -204,6 +204,23 @@ const Sidebar = React.forwardRef<
             }
             side={side}
           >
+            {/*
+              Título e descrição só para leitor de tela.
+              ───────────────────────────────────────────────────────────────
+              `Sheet` é `@radix-ui/react-dialog` por baixo, e um diálogo sem
+              descrição faz o Radix avisar no console — com o nome
+              `{DialogContent}`, que não parece vir de um Sheet e manda quem
+              procura a origem para o lado errado.
+
+              Aqui não há cabeçalho visível de propósito (é a barra lateral
+              inteira num painel), então o texto é `sr-only`: o leitor de tela
+              anuncia o que abriu, e a tela não ganha um título que o desenho
+              não pede.
+            */}
+            <SheetTitle className="sr-only">Menu lateral</SheetTitle>
+            <SheetDescription className="sr-only">
+              Navegação principal do sistema
+            </SheetDescription>
             <div className="flex h-full w-full flex-col">{children}</div>
           </SheetContent>
         </Sheet>

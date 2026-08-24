@@ -173,8 +173,28 @@ function criarCanal(topico: string, reg: Registro): void {
     }
 
     if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-      // CLOSED é rotina (troca de aba, remoção do canal) — não é ruído de log.
-      if (status !== 'CLOSED') logger.warn(`[realtime] ${topico}: ${status}`, err);
+      /*
+       * CLOSED é rotina (troca de aba, remoção do canal) — não é ruído de log.
+       *
+       * E a PRIMEIRA falha de um ciclo também não é. Quando o WebSocket cai —
+       * máquina ociosa, wi-fi oscilando, laptop suspenso —, TODO canal aberto
+       * dispara `CHANNEL_ERROR` no mesmo instante. Com sete assinaturas numa
+       * sessão comum, isso enchia o console de sete avisos vermelhos por queda,
+       * sempre com `undefined` do lado (o Supabase não manda `Error` num
+       * fechamento de socket), e a reconexão logo abaixo resolvia tudo sozinha.
+       *
+       * O aviso passa a ser proporcional: a primeira queda é `info`, porque é
+       * o funcionamento normal da reconexão. Se a retentativa também falhar
+       * (`tentativas > 0`), aí sim vira `warn` — aí é canal que não volta, e
+       * isso alguém precisa ver.
+       */
+      if (status !== 'CLOSED') {
+        const msg = `[realtime] ${topico}: ${status}`;
+        const registrar = reg.tentativas === 0 ? logger.info : logger.warn;
+        // `err` só entra quando existe: `logger.warn(msg, undefined)` imprime a
+        // palavra "undefined" no fim da linha e não informa nada.
+        if (err) registrar(msg, err); else registrar(msg);
+      }
       agendarReconexao(topico, reg);
     }
   });

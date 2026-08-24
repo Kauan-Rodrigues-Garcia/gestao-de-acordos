@@ -283,14 +283,26 @@ export function RealtimeAcordosProvider({ children }: { children: ReactNode }) {
           handleFailure('off');
           return;
         }
+        /*
+         * A primeira falha de um ciclo é a reconexão trabalhando, não defeito:
+         * o servidor encerra o socket ocioso e o canal cai junto com todos os
+         * outros. Vira aviso só quando a retentativa também falha.
+         *
+         * `err` só entra quando existe — num fechamento de socket o Supabase
+         * não manda `Error`, e a linha terminava com a palavra "undefined".
+         */
+        const primeiraFalha = reconnectRef.current === 0;
+        const registrar = primeiraFalha ? logger.info : logger.warn;
+
         if (channelStatus === 'CHANNEL_ERROR') {
           handleFailure('error');
-          logger.warn('[Realtime] channel error:', err);
+          if (err) registrar('[Realtime] channel error:', err);
+          else registrar('[Realtime] channel error');
           return;
         }
         if (channelStatus === 'TIMED_OUT') {
           handleFailure('error');
-          logger.warn('[Realtime] channel timed out');
+          registrar('[Realtime] channel timed out');
           return;
         }
       });

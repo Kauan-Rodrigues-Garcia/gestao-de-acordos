@@ -268,7 +268,21 @@ export function PresenceProvider({ children }: { children: ReactNode }) {
         // comum de todos (o servidor encerra o socket ocioso). Sem isso, a
         // presença ficava morta em silêncio e todo mundo aparecia offline.
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          if (status !== 'CLOSED') console.warn('[Realtime] presence:', status, err);
+          /*
+           * A PRIMEIRA falha de um ciclo não é defeito, é a reconexão fazendo o
+           * trabalho dela — o servidor encerra o socket ocioso e todo canal cai
+           * junto. Avisar em vermelho a cada queda enchia o console de linhas
+           * `CHANNEL_ERROR undefined` (o Supabase não manda `Error` num
+           * fechamento de socket) para algo que se resolve sozinho logo abaixo.
+           *
+           * Se a retentativa também falhar, aí sim vira aviso: canal que não
+           * volta é problema de verdade.
+           */
+          if (status !== 'CLOSED') {
+            const registrar = reconnectAttemptsRef.current === 0 ? console.info : console.warn;
+            if (err) registrar('[Realtime] presence:', status, err);
+            else registrar('[Realtime] presence:', status);
+          }
           // Sem teto de tentativas: o backoff satura em 30 s, e uma aba aberta
           // deve continuar tentando. O limite antigo de 5 tentativas fazia a
           // presença morrer de vez depois de suspender a máquina.
