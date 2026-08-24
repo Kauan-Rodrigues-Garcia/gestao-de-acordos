@@ -31,7 +31,8 @@ import { registrarLog } from '@/services/logs.service';
 import { modeloDoTipo } from './tiposDesafio';
 import type {
   DadosDesafio, Desafio, MetricaDesafio, ModoDisputa, ParticipantesDesafio,
-  RegraDesafio, StatusDesafio, TemaDesafio, TipoDesafio, VisualDesafio,
+  PessoaDesafio, RegraDesafio, StatusDesafio, TemaDesafio, TipoDesafio,
+  VisualDesafio,
 } from './types';
 
 // ── Cliente sem tipo ─────────────────────────────────────────────────────────
@@ -40,6 +41,7 @@ interface Consulta extends PromiseLike<{ data: unknown[] | null; error: { messag
   select(colunas?: string): Consulta;
   insert(valores: unknown): Consulta;
   update(valores: unknown): Consulta;
+  upsert(valores: unknown, opcoes?: { onConflict?: string }): Consulta;
   eq(coluna: string, valor: unknown): Consulta;
   in(coluna: string, valores: unknown[]): Consulta;
   order(coluna: string, opcoes?: { ascending?: boolean }): Consulta;
@@ -206,18 +208,7 @@ export async function buscarDadosDesafio(desafioId: string): Promise<DadosDesafi
   if (error || !data) return { participantes: [], linhas: [] };
 
   return {
-    participantes: (data.participantes ?? []).map(p => ({
-      id:         String(p.id),
-      nome:       String(p.nome ?? ''),
-      usuario:    (p.usuario as string | null) ?? null,
-      fotoUrl:    (p.foto_url as string | null) ?? null,
-      equipeId:   (p.equipe_id as string | null) ?? null,
-      equipeNome: String(p.equipe_nome ?? 'Sem equipe'),
-      setorId:    (p.setor_id as string | null) ?? null,
-      situacao:   String(p.situacao ?? 'ativo'),
-      setores:    listaDeTextos(p.setores),
-      equipes:    listaDeTextos(p.equipes),
-    })),
+    participantes: (data.participantes ?? []).map(paraPessoa),
     linhas: (data.linhas ?? []).map(l => ({
       operador_id: String(l.operador_id),
       setor_id:    (l.setor_id as string | null) ?? null,
@@ -226,6 +217,131 @@ export async function buscarDadosDesafio(desafioId: string): Promise<DadosDesafi
       qtd:         Number(l.qtd) || 0,
     })),
   };
+}
+
+/** As pessoas soltas do JSONB viram `PessoaDesafio`. Um lugar só. */
+function paraPessoa(p: Record<string, unknown>) {
+  return {
+    id:         String(p.id),
+    nome:       String(p.nome ?? ''),
+    usuario:    (p.usuario as string | null) ?? null,
+    fotoUrl:    (p.foto_url as string | null) ?? null,
+    equipeId:   (p.equipe_id as string | null) ?? null,
+    equipeNome: String(p.equipe_nome ?? 'Sem equipe'),
+    setorId:    (p.setor_id as string | null) ?? null,
+    situacao:   String(p.situacao ?? 'ativo'),
+    setores:    listaDeTextos(p.setores),
+    equipes:    listaDeTextos(p.equipes),
+  };
+}
+
+/**
+ * O quadro de pessoal para MONTAR a campanha.
+ *
+ * Existe separado de `buscarDadosDesafio` porque quem cadastra precisa da lista
+ * antes de a campanha existir — e porque a política de `perfis` só entrega o
+ * cadastro dos colegas para quem tem a aba Usuários. Um líder com
+ * `desafios_configurar` e sem `ver_usuarios` abriria a tela vazia.
+ *
+ * A RPC devolve `[]` para quem não tem a chave: a tela mostra "nenhum operador
+ * disponível" em vez de estourar.
+ */
+export async function buscarPessoasParaCadastro(
+  empresaId: string,
+): Promise<PessoaDesafio[]> {
+  const { data, error } = await rpcSemTipo<Record<string, unknown>[]>(
+    'fn_desafio_pessoas', { p_empresa_id: empresaId },
+  );
+  if (error || !Array.isArray(data)) return [];
+  return data.map(paraPessoa);
+}
+
+// ── Setores que participam ───────────────────────────────────────────────────
+
+export interface SetoresDoDesafio {
+  /** setor_id → participa? Setor AUSENTE do mapa participa (o padrão). */
+  porSetor: Record<string, boolean>;
+  /** `false` = a migration 20260823190000 ainda não foi aplicada. */
+  dbAtiva: boolean;
+}
+
+/**
+ * Quais setores participam dos desafios.
+ *
+ * A tabela guarda só a EXCEÇÃO: linha ausente significa que o setor participa.
+ * É o que faz um setor novo nascer participando sem ninguém precisar lembrar
+ * de cadastrá-lo.
+ *
+ * Tabela ausente devolve mapa vazio e `dbAtiva: false` — todo mundo participa,
+ * que é o comportamento de antes desta migration.
+ */
+export async function listarSetoresDoDesafio(
+  empresaId: string,
+): Promise<SetoresDoDesafio> {
+  const { data, error } = await db('desafios_setores')
+    .select('setor_id, ativo')
+    .eq('empresa_id', empresaId);
+
+  if (error) {
+    const faltando = /relation|does not exist|schema cache/i.test(error.message);
+    return { porSetor: {}, dbAtiva: !faltando };
+  }
+
+  const porSetor: Record<string, boolean> = {};
+  for (const l of (data ?? []) as Record<string, unknown>[]) {
+    porSetor[String(l.setor_id)] = l.ativo !== false;
+  }
+  return { porSetor, dbAtiva: true };
+}
+
+/** Este setor participa? Ausente do mapa = sim. */
+export function setorParticipaDoDesafio(
+  setorId: string | null | undefined, porSetor: Record<string, boolean>,
+): boolean {
+  if (!setorId) return true;
+  return porSetor[setorId] !== false;
+}
+
+/**
+ * Liga ou desliga um setor.
+ *
+ * Grava sempre a linha, inclusive para ligar: a diferença entre "nunca foi
+ * configurado" e "foi ligado de volta" fica registrada com autor e data, e é
+ * essa a pergunta que alguém faz três meses depois.
+ */
+export async function definirSetorDoDesafio(params: {
+  empresaId: string;
+  setorId: string;
+  ativo: boolean;
+  autorId: string;
+}): Promise<{ error: string | null }> {
+  const { error } = await db('desafios_setores').upsert(
+    {
+      empresa_id:     params.empresaId,
+      setor_id:       params.setorId,
+      ativo:          params.ativo,
+      atualizado_por: params.autorId,
+      atualizado_em:  new Date().toISOString(),
+    },
+    { onConflict: 'empresa_id,setor_id' },
+  );
+
+  if (error) return { error: traduzir(error.message) };
+
+  void registrarLog({
+    acao: 'desafio_setor_alterado',
+    categoria: 'configuracao',
+    severidade: 'info',
+    descricao: `${params.ativo ? 'Ativou' : 'Desativou'} os Desafios para um setor`,
+    empresaId: params.empresaId,
+    tabela: 'desafios_setores',
+    registroId: params.setorId,
+    alvoTipo: 'setor',
+    detalhes: { setor_id: params.setorId, ativo: params.ativo },
+    usuarioId: params.autorId,
+  });
+
+  return { error: null };
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────

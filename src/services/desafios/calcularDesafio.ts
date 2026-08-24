@@ -64,9 +64,20 @@ export interface ResultadoEquipe {
   recebido: number;
   qtd: number;
   meta: number | null;
+  /**
+   * A meta da equipe é a SOMA dos desafios de quem está nela, e não um número
+   * que alguém definiu para a equipe.
+   *
+   * A distinção é do pedido e muda o que a tela diz: numa campanha em que só os
+   * operadores têm desafio, a linha da equipe é PROJEÇÃO — serve para o líder
+   * acompanhar e projetar, não é um alvo que a equipe ganha ou perde.
+   */
+  metaDerivada: boolean;
   falta: number;
   progresso: number;
   bateuMeta: boolean;
+  /** Quantos integrantes já concluíram o próprio desafio. */
+  concluiram: number;
   paraUltrapassar: number | null;
   /** Os integrantes, já ordenados pelo mesmo critério da campanha. */
   integrantes: ResultadoParticipante[];
@@ -356,9 +367,13 @@ export function calcularDesafio(params: ParametrosCalculo): ResultadoDesafio {
       recebido,
       qtd,
       meta,
+      // Derivada = ninguém definiu meta PARA a equipe; o número saiu da soma
+      // dos desafios individuais, e a tela precisa dizer isso.
+      metaDerivada: regra.metaEquipe === null && meta !== null,
       falta,
       progresso: progressoDaMeta(recebido, meta),
       bateuMeta: !!meta && meta > 0 && recebido >= meta,
+      concluiram: integrantes.filter(i => i.bateuMeta).length,
       paraUltrapassar: null as number | null,
       // Já vieram na ordem do ranking geral; a ordem interna é a mesma regra.
       integrantes,

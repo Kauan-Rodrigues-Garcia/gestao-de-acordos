@@ -34,11 +34,16 @@ import { Textarea } from '@/components/ui/textarea';
 import { parseBRL } from '@/lib/money';
 import { MODELOS_DESAFIO, modeloDoTipo } from '@/services/desafios/tiposDesafio';
 import {
-  atualizarDesafio, criarDesafio, type DadosGravacaoDesafio,
+  atualizarDesafio, buscarPessoasParaCadastro, criarDesafio,
+  type DadosGravacaoDesafio,
 } from '@/services/desafios/desafios.service';
+import { DesafiosDosOperadores } from './DesafiosDosOperadores';
+import {
+  metasParaValores, valoresParaMetas, type ValoresPorPessoa,
+} from './metasDoDesafio';
 import type {
-  CriterioRanking, Desafio, EscopoDisputa, Premiacao, StatusDesafio,
-  TemaDesafio, TipoDesafio,
+  CriterioRanking, Desafio, EscopoDisputa, PessoaDesafio, Premiacao,
+  StatusDesafio, TemaDesafio, TipoDesafio,
 } from '@/services/desafios/types';
 import { hojeISO } from './tema';
 
@@ -71,35 +76,6 @@ const PREMIACOES: { valor: Premiacao; rotulo: string }[] = [
   { valor: 'melhor_colocado', rotulo: 'Somente o primeiro colocado' },
 ];
 
-/**
- * Metas por operador em texto: uma linha por pessoa, `login = valor`.
- *
- * É um `textarea` e não 27 campos porque as metas chegam de planilha e são
- * coladas em bloco. `#` abre comentário — dá para deixar anotado por que
- * alguém saiu da lista sem apagar a linha.
- */
-function metasParaTexto(mapa: Record<string, number>): string {
-  return Object.entries(mapa)
-    .map(([chave, valor]) => `${chave} = ${valor.toFixed(2).replace('.', ',')}`)
-    .join('\n');
-}
-
-function textoParaMetas(texto: string): Record<string, number> {
-  const saida: Record<string, number> = {};
-  for (const bruta of texto.split('\n')) {
-    const linha = bruta.split('#')[0].trim();
-    if (!linha) continue;
-    // Separador `=` ou `:`; o resto da linha é o valor, que pode vir com
-    // "R$" e ponto de milhar — é o formato que sai da planilha.
-    const partes = linha.split(/\s*[=:]\s*/);
-    if (partes.length < 2) continue;
-    const chave = partes[0].trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const valor = parseBRL(partes.slice(1).join('=').replace(/r\$/i, '').trim());
-    if (chave && Number.isFinite(valor) && valor > 0) saida[chave] = valor;
-  }
-  return saida;
-}
-
 interface Formulario {
   nome: string;
   descricao: string;
@@ -112,8 +88,6 @@ interface Formulario {
   individual: boolean;
   equipe: boolean;
   metaIndividual: string;
-  /** Uma linha por pessoa: `login = valor`. Ver `textoParaMetas`. */
-  metasPorOperador: string;
   metaEquipe: string;
   metaColetiva: string;
   criterio: CriterioRanking;
@@ -132,7 +106,7 @@ function formularioVazio(): Formulario {
     tipo: 'bater_meta',
     escopoDisputa: 'empresa', premiacao: 'melhor_colocado',
     individual: true, equipe: true,
-    metaIndividual: '', metasPorOperador: '', metaEquipe: '', metaColetiva: '',
+    metaIndividual: '', metaEquipe: '', metaColetiva: '',
     criterio: 'menor_falta',
     tema: 'padrao',
     mostrarFotos: true, animarUltrapassagem: true, comemorarMeta: true,
@@ -154,7 +128,6 @@ function formularioDe(d: Desafio): Formulario {
     individual: d.regra.modo.includes('individual'),
     equipe:     d.regra.modo.includes('equipe'),
     metaIndividual: emReais(d.regra.metaIndividual),
-    metasPorOperador: metasParaTexto(d.regra.metasPorOperador),
     metaEquipe:     emReais(d.regra.metaEquipe),
     metaColetiva:   emReais(d.regra.metaColetiva),
     criterio: d.regra.criterioRanking,
@@ -190,6 +163,28 @@ export function ConfigurarDesafio({
 }: Props) {
   const [form, setForm] = useState<Formulario>(formularioVazio);
   const [salvando, setSalvando] = useState(false);
+  const [pessoas, setPessoas] = useState<PessoaDesafio[]>([]);
+  const [carregandoPessoas, setCarregandoPessoas] = useState(false);
+  /** pessoa → valor digitado. Ver `DesafiosDosOperadores`. */
+  const [valores, setValores] = useState<ValoresPorPessoa>({});
+
+  /*
+   * O quadro de pessoal, buscado ao abrir.
+   *
+   * Ao abrir, e nao ao montar: a janela vive montada com `open={false}`, e
+   * buscar 27 perfis a cada render da aba seria trabalho jogado fora.
+   */
+  useEffect(() => {
+    if (!aberto || !empresaId) return;
+    let cancelado = false;
+    setCarregandoPessoas(true);
+    void buscarPessoasParaCadastro(empresaId).then(lista => {
+      if (cancelado) return;
+      setPessoas(lista);
+      setCarregandoPessoas(false);
+    });
+    return () => { cancelado = true; };
+  }, [aberto, empresaId]);
 
   // Reabrir a janela para outra campanha precisa recarregar os campos; sem
   // isto, editar a segunda mostraria os valores da primeira.
@@ -197,6 +192,16 @@ export function ConfigurarDesafio({
     if (!aberto) return;
     setForm(desafio ? formularioDe(desafio) : formularioVazio());
   }, [aberto, desafio]);
+
+  /*
+   * Os valores digitados dependem das DUAS pontas: o mapa gravado e a lista de
+   * pessoas (para resolver uma chave que esteja gravada por login). Por isso
+   * este efeito e separado do de cima — ele precisa esperar a lista chegar.
+   */
+  useEffect(() => {
+    if (!aberto) return;
+    setValores(desafio ? metasParaValores(desafio.regra.metasPorOperador, pessoas) : {});
+  }, [aberto, desafio, pessoas]);
 
   const modelo = useMemo(() => modeloDoTipo(form.tipo), [form.tipo]);
 
@@ -233,7 +238,7 @@ export function ConfigurarDesafio({
         escopoDisputa: form.escopoDisputa,
         premiacao: form.premiacao,
         metaIndividual: metaOuNulo(form.metaIndividual),
-        metasPorOperador: textoParaMetas(form.metasPorOperador),
+        metasPorOperador: valoresParaMetas(valores),
         metaEquipe:     metaOuNulo(form.metaEquipe),
         metaColetiva:   metaOuNulo(form.metaColetiva),
         // Recorte de participantes: por ora a campanha vale para quem o escopo
@@ -398,16 +403,37 @@ export function ConfigurarDesafio({
             </div>
           </div>
 
+          {/* O DESAFIO DE CADA OPERADOR — o coracao da configuracao.
+              Vem antes das metas gerais de proposito: e aqui que a liderança
+              passa o tempo dela, e o campo geral abaixo e so o padrao de quem
+              nao recebeu um valor proprio. */}
+          <div className="space-y-2">
+            <Label>Desafio de cada operador</Label>
+            <DesafiosDosOperadores
+              pessoas={pessoas}
+              carregando={carregandoPessoas}
+              valores={valores}
+              onChange={setValores}
+            />
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="desafio-meta-ind">Meta individual (R$)</Label>
+              <Label htmlFor="desafio-meta-ind">Desafio padrão (R$)</Label>
               <Input id="desafio-meta-ind" inputMode="decimal" value={form.metaIndividual}
                 onChange={e => set('metaIndividual', e.target.value)} placeholder="20000" />
+              <p className="text-[11px] text-muted-foreground">
+                Só vale quando ninguém recebeu valor individual acima.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="desafio-meta-eq">Meta por equipe (R$)</Label>
               <Input id="desafio-meta-eq" inputMode="decimal" value={form.metaEquipe}
-                onChange={e => set('metaEquipe', e.target.value)} placeholder="80000" />
+                onChange={e => set('metaEquipe', e.target.value)} placeholder="—" />
+              <p className="text-[11px] text-muted-foreground">
+                Em branco, a equipe mostra a soma dos desafios de quem está nela
+                — projeção para o líder acompanhar, não um alvo da equipe.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="desafio-meta-col">Meta coletiva (R$)</Label>
@@ -416,23 +442,6 @@ export function ConfigurarDesafio({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="desafio-metas-op">Metas por operador</Label>
-            <Textarea
-              id="desafio-metas-op"
-              rows={6}
-              value={form.metasPorOperador}
-              onChange={e => set('metasPorOperador', e.target.value)}
-              className="font-mono text-xs"
-              placeholder={'kauan_teixeira = 40857,14\nthiago_alves = 15714,29'}
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Uma linha por pessoa, <code>login = valor</code>. Preenchido, este
-              campo passa a ser a LISTA de participantes: quem não estiver aqui
-              fica fora do ranking. Vazio, todo mundo usa a meta individual acima.
-              A meta de cada equipe vira a soma das metas de quem está nela.
-            </p>
-          </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">

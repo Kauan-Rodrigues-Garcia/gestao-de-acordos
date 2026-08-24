@@ -61,7 +61,7 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes }: Pro
             />
             {item.meta ? (
               <span className="text-sm text-muted-foreground">
-                {percentualCurto(item.progresso)} da meta de {formatBRL(item.meta)}
+                {percentualCurto(item.progresso)} do seu desafio de {formatBRL(item.meta)}
               </span>
             ) : null}
           </div>
@@ -70,18 +70,18 @@ export function MeuDesafio({ item, tema, mostrarFotos, totalParticipantes }: Pro
             progresso={item.progresso}
             cor={tema.barra}
             className="mt-2"
-            aria-label="Seu progresso na meta"
+            aria-label="Seu progresso no desafio"
           />
 
           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
             {item.meta ? (
               item.falta > 0 ? (
                 <span className="text-muted-foreground">
-                  Faltam <strong className="text-foreground">{formatBRL(item.falta)}</strong> para a meta
+                  Faltam <strong className="text-foreground">{formatBRL(item.falta)}</strong> para concluir
                 </span>
               ) : (
                 <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                  Meta batida
+                  Desafio concluído
                 </span>
               )
             ) : null}

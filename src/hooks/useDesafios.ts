@@ -37,7 +37,8 @@ import { assinarTabela } from '@/lib/realtime';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { idsOcultosRankingQuartil } from '@/services/situacaoUsuario.service';
 import {
-  buscarDadosDesafio, listarDesafios,
+  buscarDadosDesafio, definirSetorDoDesafio, listarDesafios,
+  listarSetoresDoDesafio, setorParticipaDoDesafio,
 } from '@/services/desafios/desafios.service';
 import { calcularDesafio, type ResultadoDesafio } from '@/services/desafios/calcularDesafio';
 import type { DadosDesafio, Desafio } from '@/services/desafios/types';
@@ -114,6 +115,88 @@ export function useDesafios(ativo: boolean): UsoDesafios {
     dbAtiva:    query.data?.dbAtiva ?? true,
     erro:       query.data?.error ?? (query.error instanceof Error ? query.error.message : null),
     recarregar,
+  };
+}
+
+// ── Setores que participam ───────────────────────────────────────────────────
+
+export interface UsoSetoresDoDesafio {
+  /** setor_id → participa? Setor ausente do mapa participa (o padrão). */
+  porSetor: Record<string, boolean>;
+  /** `false` = a migration 20260823190000 ainda não foi aplicada. */
+  dbAtiva: boolean;
+  carregando: boolean;
+  /** Este setor participa? `null`/ausente = sim. */
+  participa: (setorId: string | null | undefined) => boolean;
+  definir: (setorId: string, ativo: boolean) => Promise<{ error: string | null }>;
+}
+
+/** Mapa vazio compartilhado: identidade estável para os memos de quem consome. */
+const SEM_SETORES: Record<string, boolean> = {};
+
+/**
+ * O interruptor por setor.
+ *
+ * Separado de `useDesafios` porque ele é consultado num lugar onde a lista de
+ * campanhas não interessa: a régua de abas do Analítico, que só precisa saber
+ * se deve DESENHAR a aba. Buscar as campanhas ali seria trabalho por nada.
+ *
+ * @param autorId quem está mexendo — vai para a trilha de quem ligou o quê.
+ */
+export function useSetoresDoDesafio(ativo: boolean, autorId?: string | null): UsoSetoresDoDesafio {
+  const { empresa } = useEmpresa();
+  const queryClient = useQueryClient();
+  const empresaId   = empresa?.id ?? null;
+  const habilitado  = ativo && !!empresaId;
+
+  const chave = useMemo(() => ['desafios-setores', empresaId] as const, [empresaId]);
+
+  const query = useQuery({
+    queryKey: chave,
+    enabled:  habilitado,
+    queryFn:  () => listarSetoresDoDesafio(empresaId as string),
+  });
+
+  useEffect(() => {
+    if (!habilitado || !empresaId) return;
+    const invalidar = () => { void queryClient.invalidateQueries({ queryKey: chave }); };
+    return assinarTabela(
+      {
+        topico:  `desafios-setores-${empresaId}`,
+        escutas: [{ tabela: 'desafios_setores', filtro: `empresa_id=eq.${empresaId}` }],
+      },
+      { onEvento: invalidar, onReconectado: invalidar },
+    );
+  }, [habilitado, empresaId, queryClient, chave]);
+
+  const porSetor = query.data?.porSetor ?? SEM_SETORES;
+
+  const participa = useCallback(
+    (setorId: string | null | undefined) => setorParticipaDoDesafio(setorId, porSetor),
+    [porSetor],
+  );
+
+  const definir = useCallback(async (setorId: string, ligado: boolean) => {
+    if (!empresaId || !autorId) return { error: 'Sessão sem empresa ou usuário.' };
+    const r = await definirSetorDoDesafio({
+      empresaId, setorId, ativo: ligado, autorId,
+    });
+    if (!r.error) await queryClient.invalidateQueries({ queryKey: chave });
+    return r;
+  }, [empresaId, autorId, queryClient, chave]);
+
+  return {
+    porSetor,
+    dbAtiva: query.data?.dbAtiva ?? true,
+    /*
+     * Enquanto carrega, `participa` responde SIM para todo setor — e é por isso
+     * que este campo existe separado. Quem desenha a régua de abas precisa
+     * segurar a decisão até a resposta chegar; sem isso a aba apareceria e
+     * sumiria meio segundo depois, para todo mundo, em toda visita.
+     */
+    carregando: habilitado ? query.isPending : false,
+    participa,
+    definir,
   };
 }
 

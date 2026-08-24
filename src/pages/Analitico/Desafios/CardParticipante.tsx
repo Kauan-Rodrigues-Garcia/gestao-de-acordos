@@ -83,9 +83,9 @@ export function CardParticipante({
           {item.bateuMeta && (
             <span
               className="inline-flex shrink-0 items-center gap-0.5 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400"
-              title="Meta batida"
+              title="Desafio concluído"
             >
-              <Check className="h-2.5 w-2.5" /> meta
+              <Check className="h-2.5 w-2.5" /> concluído
             </span>
           )}
           {/* Aviso discreto e temporário — some na atualização seguinte. */}
@@ -119,8 +119,8 @@ export function CardParticipante({
         <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
           {!ocultarEquipe && <>{pessoa.equipeNome} · </>}
           {item.falta > 0
-            ? <>Faltam {formatBRL(item.falta)} para a meta</>
-            : item.meta ? <>Meta batida</> : <>Sem meta definida</>}
+            ? <>Faltam {formatBRL(item.falta)} do desafio de {formatBRL(item.meta ?? 0)}</>
+            : item.meta ? <>Desafio concluído</> : <>Sem desafio definido</>}
           {item.paraUltrapassar !== null && item.paraUltrapassar > 0 && (
             <> · ↑ {formatBRL(item.paraUltrapassar)} para alcançar o {item.posicao - 1}º</>
           )}

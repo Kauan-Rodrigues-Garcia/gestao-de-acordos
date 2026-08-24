@@ -29,7 +29,7 @@ export function IndicadoresDesafio({ resultado, tema, carregando }: Props) {
 
   const cartoes = [
     { rotulo: 'Recebido no período', valor: resultado.totalRecebido, destacar: true },
-    { rotulo: 'Falta para as metas', valor: faltaTotal, destacar: false },
+    { rotulo: 'Falta para os desafios', valor: faltaTotal, destacar: false },
     { rotulo: 'Média por participante', valor: media, destacar: false },
   ];
 
@@ -54,7 +54,7 @@ export function IndicadoresDesafio({ resultado, tema, carregando }: Props) {
           `ValorAnimado`, que formata em reais. */}
       <div className="rounded-xl border border-border bg-card p-3">
         <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-          Bateram a meta
+          Concluíram o desafio
         </p>
         <p className="mt-1 text-lg font-bold tabular-nums text-foreground">
           {bateram}

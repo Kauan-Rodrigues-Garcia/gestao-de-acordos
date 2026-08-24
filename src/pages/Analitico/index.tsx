@@ -24,6 +24,7 @@ import {
 import { AbaDiario } from './Diario';
 import { AbaColchao } from './Colchao';
 import { AbaDesafios } from './Desafios';
+import { useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { ValidacaoRelatorioSetor } from './ValidacaoRelatorioSetor';
 
 export default function PaginaAnalitico() {
@@ -85,15 +86,28 @@ export default function PaginaAnalitico() {
   }, [abaDaUrl]);
 
   /*
+   * A aba Desafios tem DUAS travas, e elas respondem perguntas diferentes: a
+   * chave `analitico_sub_desafios` decide por CARGO, e `desafios_setores`
+   * decide por SETOR. Um operador do Play 1 e um do Digital têm o mesmo cargo,
+   * e a campanha pode ser de um só.
+   *
+   * Enquanto o mapa não chega, `carregando` segura a decisão: sem isso a aba
+   * apareceria e sumiria meio segundo depois, em toda visita.
+   */
+  const setoresDoDesafio = useSetoresDoDesafio(temPermissao('analitico_sub_desafios'), perfil?.id);
+  const desafiosNoMeuSetor = !setoresDoDesafio.carregando
+    && setoresDoDesafio.participa(perfil?.setor_id ?? null);
+
+  /*
    * As abas internas, cada uma com a própria chave. Desligar uma não pode
    * mexer nas outras — é o §2 do pedido, aplicado dentro da aba.
    */
   const abasPrincipais = useMemo(() => ([
-    { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico' },
-    { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario' },
-    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao' },
-    { key: 'desafios',  label: 'Desafios',           Icon: Trophy,    permissao: 'analitico_sub_desafios' },
-  ] as const).filter(a => temPermissao(a.permissao)), [temPermissao]);
+    { key: 'analitico', label: 'Analítico',          Icon: BarChart2, permissao: 'analitico_sub_analitico', extra: true },
+    { key: 'diario',    label: 'Recebimento diário', Icon: HandCoins, permissao: 'analitico_sub_recebimento_diario', extra: true },
+    { key: 'colchao',   label: 'Colchão',            Icon: Layers3,   permissao: 'analitico_sub_colchao', extra: true },
+    { key: 'desafios',  label: 'Desafios',           Icon: Trophy,    permissao: 'analitico_sub_desafios', extra: desafiosNoMeuSetor },
+  ] as const).filter(a => a.extra && temPermissao(a.permissao)), [temPermissao, desafiosNoMeuSetor]);
 
   /*
    * A aba que a tela realmente mostra.
@@ -535,6 +549,8 @@ export default function PaginaAnalitico() {
           setorProprio={setorProprio}
           priorizarEquipes={mostrarVisaoGeral}
           podeConfigurar={temPermissao('desafios_configurar')}
+          podeAdministrar={temPermissao('administrar_sistema')}
+          setores={setores}
         />
       )}
 

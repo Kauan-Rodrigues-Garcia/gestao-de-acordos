@@ -88,7 +88,7 @@ export function PodioDesafio({ top3, tema, mostrarFotos, animar, voceId }: Props
                   aria-label={`Progresso de ${item.pessoa.nome}`}
                 />
                 <p className="mt-1 text-[11px] text-muted-foreground">
-                  {percentualCurto(item.progresso)} da meta
+                  {percentualCurto(item.progresso)} do desafio
                   {item.falta > 0 && <> · faltam {formatBRL(item.falta)}</>}
                 </p>
               </>

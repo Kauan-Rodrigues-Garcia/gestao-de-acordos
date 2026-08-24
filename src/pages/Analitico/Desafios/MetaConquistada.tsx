@@ -89,7 +89,7 @@ export function MetaConquistada({
               tema.borda,
             )}>
               <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                Meta conquistada
+                Desafio conquistado
               </p>
               <p className="mt-1 text-lg font-bold text-foreground">{nome}</p>
               <p className={cn('text-2xl font-bold tabular-nums', tema.destaque)}>

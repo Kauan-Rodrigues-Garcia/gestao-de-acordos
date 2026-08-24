@@ -24,7 +24,7 @@ import { useMemo, useState } from 'react';
 import { Plus, Settings2, Trophy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useDesafios, useResultadoDesafio } from '@/hooks/useDesafios';
+import { useDesafios, useResultadoDesafio, useSetoresDoDesafio } from '@/hooks/useDesafios';
 import { estiloDoTema } from './tema';
 import type { Desafio } from '@/services/desafios/types';
 import { DesafioHero } from './DesafioHero';
@@ -36,6 +36,7 @@ import { RankingDesafio } from './RankingDesafio';
 import { RankingEquipes } from './RankingEquipes';
 import { HistoricoDesafios } from './HistoricoDesafios';
 import { ConfigurarDesafio } from './ConfigurarDesafio';
+import { SetoresDoDesafio, type SetorSimples } from './SetoresDoDesafio';
 
 export interface AbaDesafiosProps {
   empresaId: string;
@@ -57,6 +58,13 @@ export interface AbaDesafiosProps {
   setorProprio?: string | null;
   /** `desafios_configurar` — decide o botão. Quem decide a gravação é a RLS. */
   podeConfigurar?: boolean;
+  /**
+   * `administrar_sistema` — decide o painel de setores. O super_admin passa
+   * pela própria política do banco, com ou sem a chave.
+   */
+  podeAdministrar?: boolean;
+  /** Setores da empresa, já na ordem escolhida na aba Setores. */
+  setores?: SetorSimples[];
 }
 
 function EsqueletoDesafio() {
@@ -77,7 +85,8 @@ function EsqueletoDesafio() {
 
 export function AbaDesafios({
   empresaId, operadorId, operadorNome, filtroSetorId = null, setorProprio = null,
-  priorizarEquipes = false, podeConfigurar = false,
+  priorizarEquipes = false, podeConfigurar = false, podeAdministrar = false,
+  setores = [],
 }: AbaDesafiosProps) {
   const { ativo, encerrados, rascunhos, carregando, dbAtiva, erro, recarregar } = useDesafios(true);
   const [editando, setEditando] = useState<Desafio | null>(null);
@@ -86,6 +95,19 @@ export function AbaDesafios({
   const { resultado, carregando: calculando } = useResultadoDesafio(ativo, {
     filtroSetorId, operadorId, setorDeCadastro: setorProprio,
   });
+
+  // O painel de setores só é buscado por quem pode mexer nele — a régua de
+  // abas já consulta o mesmo mapa pelo seu lado, e o React Query compartilha.
+  const setoresDoDesafio = useSetoresDoDesafio(podeAdministrar, operadorId);
+
+  const painelSetores = podeAdministrar && setores.length > 0 && (
+    <SetoresDoDesafio
+      setores={setores}
+      porSetor={setoresDoDesafio.porSetor}
+      dbAtiva={setoresDoDesafio.dbAtiva}
+      onDefinir={setoresDoDesafio.definir}
+    />
+  );
 
   const tema = useMemo(
     () => estiloDoTema(ativo?.visual.tema ?? 'padrao'),
@@ -158,6 +180,8 @@ export function AbaDesafios({
             </p>
           )}
         </div>
+
+        {painelSetores}
 
         <HistoricoDesafios encerrados={encerrados} voceId={operadorId} setorProprio={setorProprio} />
 
@@ -260,6 +284,8 @@ export function AbaDesafios({
           {!priorizarEquipes && secaoEquipes}
         </>
       )}
+
+      {painelSetores}
 
       <HistoricoDesafios encerrados={encerrados} voceId={operadorId} setorProprio={setorProprio} />
 

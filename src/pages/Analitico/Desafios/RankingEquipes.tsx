@@ -1,9 +1,20 @@
 /**
  * RankingEquipes — a disputa entre equipes.
  *
- * Cada equipe é um card com posição, total, meta, faltante e barra. Clicar
+ * Cada equipe é um card com posição, total, alvo, faltante e barra. Clicar
  * expande e mostra os integrantes, já ordenados pelo mesmo critério da
  * campanha.
+ *
+ * ## Projeção não é meta
+ *
+ * Quando ninguém definiu meta PARA a equipe, o número da linha é a soma dos
+ * desafios de quem está nela (`metaDerivada`). Nesse caso a tela diz
+ * «projeção», e não «meta»: numa campanha em que só os operadores têm desafio,
+ * chamar a soma de meta inventaria um alvo que a equipe não tem — e o líder
+ * cobraria a equipe por um número que ninguém combinou com ela.
+ *
+ * O que a equipe ganha em troca é o que serve de verdade ao líder: quantos dos
+ * integrantes já concluíram o próprio desafio.
  *
  * Expansão em vez de modal ou rota: é o padrão que a aba Analítico já usa para
  * abrir o detalhe de um operador, e uma gincana não justifica uma navegação
@@ -93,11 +104,16 @@ export function RankingEquipes({ equipes, tema, mostrarFotos, animar, voceId }: 
                   </div>
 
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    {eq.meta
-                      ? (eq.falta > 0
-                          ? <>Faltam {formatBRL(eq.falta)} para a meta de {formatBRL(eq.meta)}</>
-                          : <>Meta de {formatBRL(eq.meta)} batida</>)
-                      : <>Sem meta de equipe</>}
+                    <span className="font-medium text-foreground">
+                      {eq.concluiram} de {eq.integrantes.length} concluíram o desafio
+                    </span>
+                    {eq.meta && (
+                      <>
+                        {' · '}
+                        {eq.metaDerivada ? 'Projeção' : 'Meta'} {formatBRL(eq.meta)}
+                        {eq.falta > 0 && <> · faltam {formatBRL(eq.falta)}</>}
+                      </>
+                    )}
                     {eq.paraUltrapassar !== null && eq.paraUltrapassar > 0 && (
                       <> · ↑ {formatBRL(eq.paraUltrapassar)} para alcançar o {eq.posicao - 1}º</>
                     )}
