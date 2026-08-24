@@ -31,12 +31,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import { PERFIL_LABELS } from '@/lib/index';
+import { cn } from '@/lib/utils';
 import { rotuloDaTela } from '@/lib/telas-catalogo';
 import {
   buscarDetalhePessoa,
   type UsoPorPessoa, type UsoDetalheTela, type UsoDetalheDia,
 } from '@/services/uso.service';
 import { numeroBr, tempoRelativo, iniciais, formatarDuracao } from './formatos';
+import { montarSerieDiaria } from './serieDiaria';
 
 /** Quantas pessoas antes do "ver mais". */
 const PAGINA = 10;
@@ -165,6 +167,19 @@ export default function ListaUsuariosUso({
                           <Building2 className="w-2.5 h-2.5" /> {p.empresa_nome}
                         </Badge>
                       )}
+                      {/* Setor e equipe do cadastro de hoje: são o mesmo eixo
+                          dos filtros acima, e sem eles a lista filtrada não
+                          diz por que aquelas pessoas estão ali. */}
+                      {p.setor_nome && (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1">
+                          {p.setor_nome}
+                        </Badge>
+                      )}
+                      {p.equipe_nome && (
+                        <Badge variant="outline" className="text-[9px] h-4 px-1">
+                          {p.equipe_nome}
+                        </Badge>
+                      )}
                       <span className="text-[10px] text-muted-foreground tabular-nums">
                         {numeroBr(Number(p.aberturas))} aberturas · {p.dias_ativos} dia(s) ·{' '}
                         {p.telas_usadas} tela(s)
@@ -222,10 +237,20 @@ function DetalhePessoa({
     return () => { cancelado = true; };
   }, [pessoa, desde, ate]);
 
+  /*
+   * A série vem do PERÍODO, e não das linhas do banco — ver o comentário no
+   * bloco «Por dia» abaixo. Fica antes do `return` nulo porque hooks não podem
+   * ficar depois de uma saída condicional.
+   */
+  const serie = useMemo(
+    () => (pessoa ? montarSerieDiaria(dias, desde, ate) : []),
+    [pessoa, dias, desde, ate],
+  );
+
   if (!pessoa) return null;
 
   const maxSeg = Math.max(...telas.map(t => Number(t.segundos)), 1);
-  const maxDia = Math.max(...dias.map(d => Number(d.segundos)), 1);
+  const maxDia = Math.max(...serie.map(d => d.segundos), 1);
   const totalSeg = telas.reduce((s, t) => s + Number(t.segundos), 0);
   const totalAber = telas.reduce((s, t) => s + Number(t.aberturas), 0);
 
@@ -280,20 +305,51 @@ function DetalhePessoa({
               ))}
             </div>
 
-            {/* Série diária */}
-            {dias.length > 1 && (
+            {/*
+              Série diária.
+              ─────────────────────────────────────────────────────────────────
+              Antes: `dias.length > 1` escondia a seção inteira, e as barras
+              vinham só dos dias com uso.
+
+              Os dois juntos produziam o defeito relatado: quem usou num único
+              dia — o caso mais comum numa janela de sete — não via nada, e quem
+              usou em dois dias esparsos via duas barras coladas, como se
+              tivesse usado em dias seguidos.
+
+              Agora o eixo é o PERÍODO INTEIRO (`montarSerieDiaria`), dia sem uso
+              é uma coluna vazia visível, e a seção aparece sempre.
+            */}
+            {serie.length > 0 && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
                   Por dia
+                  <span className="ml-1.5 font-normal normal-case tracking-normal text-muted-foreground/70">
+                    · {serie.filter(p => !p.vazio).length} de {serie.length} dias com uso
+                  </span>
                 </p>
-                <div className="flex items-end gap-1 h-16">
-                  {dias.map(d => (
+                <div className="flex items-end gap-[2px] h-20">
+                  {serie.map(d => (
                     <div key={d.dia} className="flex-1 flex flex-col items-center gap-1 min-w-0">
-                      <div className="w-full rounded-t bg-primary/70"
-                        style={{ height: `${Math.max(3, (Number(d.segundos) / maxDia) * 100)}%` }}
-                        title={`${d.dia}: ${formatarDuracao(Number(d.segundos))} · ${d.aberturas} abertura(s)`} />
+                      <div className="w-full flex-1 flex items-end">
+                        <div
+                          className={cn(
+                            'w-full rounded-t transition-colors',
+                            d.vazio ? 'bg-muted' : 'bg-primary/70 hover:bg-primary',
+                          )}
+                          style={{
+                            // Dia vazio ganha um traço de 2px em vez de sumir:
+                            // ausência precisa ocupar espaço para ser lida.
+                            height: d.vazio ? '2px' : `${Math.max(6, (d.segundos / maxDia) * 100)}%`,
+                          }}
+                          title={d.vazio
+                            ? `${d.rotulo}: sem uso`
+                            : `${d.rotulo}: ${formatarDuracao(d.segundos)} · ${d.aberturas} abertura(s)`}
+                        />
+                      </div>
+                      {/* Só o dia 1 e as segundas ganham rótulo: com 90 dias os
+                          números viram uma tarja cinza ilegível. */}
                       <span className="text-[8px] text-muted-foreground tabular-nums truncate w-full text-center">
-                        {d.dia.slice(8, 10)}
+                        {serie.length <= 31 || d.dia.slice(8, 10) === '01' ? d.dia.slice(8, 10) : ''}
                       </span>
                     </div>
                   ))}

@@ -20,20 +20,25 @@ const MIGRATIONS = path.join(RAIZ, 'supabase/migrations');
 /**
  * As migrations de uso, concatenadas.
  *
- * São DUAS: a `monitoramento_uso` criou a tabela e as primeiras funções, e a
- * `logs_rotulos_e_uso_detalhe` refez `fn_uso_por_pessoa` (para aceitar empresa
- * nula) e acrescentou o detalhe por pessoa. Ler só a primeira faria a guarda
- * cobrar a versão antiga da assinatura.
+ * O filtro é pelo CONTEÚDO, e não pelo nome do arquivo.
+ *
+ * A lista era `/(monitoramento_uso|uso_detalhe)/`, e envelheceu duas vezes:
+ * `uso_empresa_null` refez três funções e `uso_filtros_e_sem_acesso` refez
+ * quatro e criou uma quinta — nenhuma das duas casava com o padrão, então a
+ * guarda continuava conferindo assinaturas antigas e reprovando função nova.
+ * Filtrar pelo que o arquivo FAZ não tem esse problema.
  *
  * `endsWith('.sql')`: um `.sql.bk` no diretório entraria na lista e poderia
  * mascarar o arquivo real. Já aconteceu neste projeto.
  */
 const SQL = (() => {
   const arquivos = fs.readdirSync(MIGRATIONS)
-    .filter(f => f.endsWith('.sql') && /(monitoramento_uso|uso_detalhe)/.test(f))
-    .sort();
+    .filter(f => f.endsWith('.sql'))
+    .sort()
+    .map(f => ({ nome: f, texto: fs.readFileSync(path.join(MIGRATIONS, f), 'utf8') }))
+    .filter(a => /function\s+public\.fn_uso_/i.test(a.texto));
   if (arquivos.length === 0) throw new Error('migrations de uso não encontradas');
-  return arquivos.map(f => fs.readFileSync(path.join(MIGRATIONS, f), 'utf8')).join('\n');
+  return arquivos.map(a => a.texto).join('\n');
 })();
 
 const SERVICO = fs.readFileSync(path.join(RAIZ, 'src/services/uso.service.ts'), 'utf8');
@@ -46,6 +51,10 @@ const FUNCOES = [
   'fn_uso_adocao_tela',
   'fn_uso_detalhe_pessoa',
   'fn_uso_detalhe_pessoa_dias',
+  // A lista de quem NÃO usou o sistema — migration 20260824150000. Responde a
+  // pergunta que a adoção de tela não responde: quem nunca entrou não aparece
+  // na adoção de tela nenhuma.
+  'fn_uso_sem_acesso',
 ] as const;
 
 /**
@@ -61,7 +70,13 @@ const FUNCOES = [
  * `fn_uso_por_telaX`.
  */
 function migrationDefine(fn: string): boolean {
-  return SQL.includes(`create or replace function public.${fn}(`);
+  // Case-insensitive: as migrations antigas escrevem SQL em minúsculas e as
+  // novas em maiúsculas. Exigir uma das duas grafias faria a guarda reprovar
+  // uma função definida, que é o pior tipo de falso positivo — o que ela mede
+  // é se a função existe, não como alguém digitou a palavra-chave.
+  return new RegExp(
+    `create\\s+or\\s+replace\\s+function\\s+public\\.${fn}\\s*\\(`, 'i',
+  ).test(SQL);
 }
 
 describe('as funções existem nos dois lados', () => {

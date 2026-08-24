@@ -1333,6 +1333,62 @@ param. O que já foi lançado **continua somando** até ser cancelado — para z
 também, cancele os lançamentos ou desligue a aba inteira.
 
 ---
+## Monitoramento de uso
+
+> Tabela `uso_telas` · RPCs `fn_uso_*` · tela: `src/pages/AdminLogs/MonitoramentoUso.tsx`
+> Migrations `20260817180000`, `20260817200000`, `20260818140000` e
+> `20260824150000` (filtros de setor/equipe + quem nunca acessou).
+
+### O que os números medem
+
+**Tempo** é com a aba em foco, não com a aba aberta — sem isso, quem deixa a
+planilha aberta o dia todo lidera qualquer ranking sem ter usado nada.
+**Aberturas** conta entradas em tela; passagem abaixo de 2 segundos não conta.
+**Dias ativos** é em quantos dias distintos a pessoa usou alguma tela.
+
+### Cargo é histórico; setor e equipe são de hoje
+
+`uso_telas` guarda o **cargo do momento do uso**, desnormalizado: promover
+alguém não pode reescrever meses de «uso de operador» como «uso de líder».
+
+Setor e equipe vêm de `perfis`, no estado atual, e a diferença é deliberada.
+Eles respondem outra pergunta — «de quem eu cobro isso agora» —, e essa é sempre
+sobre a estrutura de hoje. Carimbar o setor do mês passado faria o gerente atual
+não encontrar a própria equipe no filtro.
+
+### As duas ausências não são a mesma
+
+| Ausência | O que significa | De onde sai |
+|---|---|---|
+| **Nunca acessou** | Conta ativa sem nenhuma linha de uso, jamais. É onboarding que não aconteceu | `fn_uso_sem_acesso`, `ultimo_em IS NULL` |
+| **Parou de acessar** | Usou antes, nada no período. É abandono | `fn_uso_sem_acesso`, `ultimo_em` preenchido |
+| **Não abriu ESTA tela** | Usa o sistema, ignora um módulo | `fn_uso_adocao_tela` |
+
+As três partem de `perfis`, e não de `uso_telas`: **quem não usou não tem
+linha**. É a mesma razão pela qual o total do setor precisa das órfãs.
+
+`ultimo_em` em `fn_uso_sem_acesso` é de todos os tempos, e não da janela —
+dentro da janela ele seria sempre nulo, já que a pessoa está ali justamente por
+não ter usado.
+
+### A série diária é o período, não o retorno do banco
+
+As RPCs devolvem **só os dias com uso**. O gráfico desenhava uma barra por linha
+recebida: sete dias com uso em dois viravam duas barras coladas, e a tela
+mostrava uso constante onde havia uso esporádico — o oposto da pergunta «o uso
+está subindo, caindo ou parado». No detalhe de uma pessoa era pior: a seção só
+aparecia com mais de um dia, então quem usou num único dia não via nada.
+
+`serieDiaria.ts` monta o eixo a partir do PERÍODO e trata dia sem uso como zero
+visível. O zero-fill é do frontend de propósito: a série completa é desenho, e
+`generate_series` no SQL faria a função devolver noventa linhas de zero para
+dizer que nada aconteceu.
+
+As datas nunca passam por `new Date`: `new Date('2026-08-24')` é meia-noite UTC,
+que em São Paulo é 21h do dia 23 — e a série inteira andaria um dia para trás.
+
+---
+
 ## Menu lateral — a ordem por cargo
 
 > Migrations `20260822131449` (a tabela) e `20260824130000` (a coluna `cargo`).
