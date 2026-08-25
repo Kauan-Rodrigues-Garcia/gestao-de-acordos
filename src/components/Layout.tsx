@@ -39,6 +39,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import { abasDoMenu } from '@/lib/menuLateral';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { useMenuLateralOrdem } from '@/hooks/useMenuLateralOrdem';
 import { MenuLateralEditor } from '@/components/MenuLateralEditor';
 import { Separator } from '@/components/ui/separator';
@@ -253,15 +254,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
    * pintar o menu completo e recolher meio segundo depois é pior do que abrir
    * com ele vazio.
    */
+  const produto = produtoDaEmpresa(empresa, tenant.slug);
+
   const navItems = useMemo(() => abasDoMenu({
     cargo: userRole,
+    produto,
     isPaguePlay: isPP,
     isBookplay: tenant.slug === 'bookplay',
     temPermissao: chave => !permLoading && temPermissao(chave),
     acessoOuvidoria: ouvidoriaAcesso.podeVer,
     acessoTickets: acessoTickets.podeVerAba,
   }), [
-    userRole, isPP, tenant.slug, permLoading, temPermissao,
+    userRole, produto, isPP, tenant.slug, permLoading, temPermissao,
     ouvidoriaAcesso.podeVer, acessoTickets.podeVerAba,
   ]);
 
@@ -852,6 +856,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           empresaId={empresa?.id}
           perfilId={perfil?.id}
           ordens={ordensMenu}
+          produto={produto}
           isPaguePlay={isPP}
           isBookplay={tenant.slug === 'bookplay'}
           valorDoCargo={valorDoCargo}

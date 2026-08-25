@@ -51,6 +51,17 @@ export interface Empresa {
   nome: string;
   slug: string;
   ativo: boolean;
+  /**
+   * Que operação esta empresa roda: `cobranca` | `comercial` | `rh`.
+   *
+   * BookPlay e PaguePlay são duas EMPRESAS do mesmo PRODUTO. Ver
+   * `src/lib/produto.ts` e a migration 20260825170000.
+   *
+   * Opcional no tipo porque uma leitura antiga (`select` sem a coluna, ou uma
+   * base onde a migration ainda não subiu) não pode quebrar a tela; quem lê usa
+   * `produtoDaEmpresa`, que cai no slug.
+   */
+  produto?: string | null;
   config: Record<string, unknown>;
   criado_em: string;
   atualizado_em: string;

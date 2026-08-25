@@ -43,6 +43,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { ROUTE_PATHS } from '@/lib/index';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa, produtoPermite, type Produto } from '@/lib/produto';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -51,13 +53,25 @@ interface ProtectedRouteProps {
   /** Chave de permissão configurável: se o usuário tiver essa permissão,
    *  ganha acesso independente do perfil (allowedProfiles fica como fallback). */
   requiredPermissao?: string;
+  /**
+   * Em quais PRODUTOS esta rota existe. Lista branca: sem ela, a rota vale em
+   * qualquer produto — que é o padrão certo só para as rotas genéricas (perfil,
+   * termos, 404).
+   *
+   * Existe porque esconder o item do menu não fecha porta nenhuma: até 25/08 um
+   * usuário do Comercial digitava `/acordos` na barra de endereço e a tela de
+   * cobrança abria, com `ver_acordos` herdado da semeadura. Menu é conforto;
+   * rota é a porta.
+   */
+  produtos?: readonly Produto[];
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
+  const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
 
-  if (loading || (requiredPermissao && permLoading)) {
+  if (loading || (requiredPermissao && permLoading) || (produtos && empresaLoading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="space-y-3 w-64">
@@ -70,6 +84,18 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
   }
 
   if (!user) return <Navigate to={ROUTE_PATHS.LOGIN} replace />;
+
+  /*
+   * O produto vem ANTES de cargo e permissão, porque é pergunta de outra ordem.
+   *
+   * Cargo e permissão respondem «esta pessoa pode ver?». Esta responde «isto
+   * sequer existe aqui?». Um vendedor com `ver_acordos` ligado por engano na
+   * semeadura continua fora de `/acordos`: acordo não é coisa do Comercial, e
+   * nenhuma permissão faz virar.
+   */
+  if (produtos && !produtoPermite(produtos, produtoDaEmpresa(empresa, tenantSlug))) {
+    return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
+  }
 
   if (requiredPermissao) {
     /**

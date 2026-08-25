@@ -51,6 +51,7 @@ import { cn } from '@/lib/utils';
 import { PERFIL_LABELS } from '@/lib/index';
 import { CARGOS_ACESSO_TOTAL, CARGOS_CONFIGURAVEIS } from '@/lib/permissoes-catalogo';
 import { abasDoMenu, ticketsVisivelParaCargo, type NavItem } from '@/lib/menuLateral';
+import { type Produto } from '@/lib/produto';
 import { ordenarMenu } from '@/lib/menuLateralOrdem';
 import {
   CARGO_GERAL, ordemDoCargo, salvarOrdemMenu, type OrdensPorCargo,
@@ -64,6 +65,8 @@ interface Props {
   perfilId?: string;
   /** `cargo` → ordem salva. A chave `''` é a ordem geral da empresa. */
   ordens: OrdensPorCargo;
+  /** O produto da empresa cuja ordem está sendo editada. */
+  produto: Produto | null;
   isPaguePlay: boolean;
   isBookplay: boolean;
   /** O que um CARGO concede, sem exceção de pessoa. Vem de `useCargoPermissoes`. */
@@ -108,7 +111,7 @@ const rotuloCargo = (cargo: string) =>
 
 export function MenuLateralEditor({
   aberto, onFechar, empresaId, perfilId, ordens,
-  isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, aoSalvar,
+  produto, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, aoSalvar,
 }: Props) {
   const { toast } = useToast();
   // O estado guarda o valor DO SELETOR; `cargo` é o que o banco entende.
@@ -130,6 +133,7 @@ export function MenuLateralEditor({
     const cargoParaPermissao = cargo === CARGO_GERAL ? 'super_admin' : cargo;
     const visiveis = abasDoMenu({
       cargo: cargoParaPermissao,
+      produto,
       isPaguePlay,
       isBookplay,
       temPermissao: chave => valorDoCargo(cargoParaPermissao, chave),
@@ -141,7 +145,7 @@ export function MenuLateralEditor({
       ),
     });
     return ordenarMenu(visiveis, ordemDoCargo(ordens, cargo));
-  }, [cargo, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, ordens]);
+  }, [cargo, produto, isPaguePlay, isBookplay, valorDoCargo, ticketsLiberadoParaLideranca, ordens]);
 
   // Reabrir, ou trocar de cargo, descarta o rascunho anterior: quem fechou sem
   // salvar não espera reencontrar a edição pela metade, e misturar a ordem de

@@ -28,53 +28,94 @@ import {
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
 import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
+import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
   label: string;
   icon: React.ElementType;
   to: string;
   roles?: string[];
-  /** Se true, o item fica oculto quando o tenant for PaguePay */
+  /**
+   * Em quais PRODUTOS esta aba existe. Obrigatório na prática: sem a lista, a
+   * aba não aparece em lugar nenhum.
+   *
+   * É uma lista BRANCA, e essa é a mudança de 25/08. Antes a régua era por
+   * exclusão (`hiddenForPaguePay`), e uma aba sem marcação aparecia em todo
+   * tenant — o Comercial abriu mostrando Acordos, Novo Acordo e Campanha
+   * Fácil, a cobrança inteira, vazia. Com lista branca, esquecer de declarar
+   * some com a aba: o erro fica visível em vez de vazar.
+   *
+   * Não confundir com os dois campos abaixo. Aqui se decide QUAL PRODUTO; lá,
+   * qual das duas empresas de cobrança.
+   */
+  produtos?: readonly Produto[];
+  /**
+   * Oculta na PaguePlay. Distinção INTERNA da cobrança — as duas empresas
+   * cobram, mas nem toda tela serve às duas. Não tem efeito fora de `cobranca`,
+   * porque fora dela a aba já não existe.
+   */
   hiddenForPaguePay?: boolean;
-  /** Se true, o item fica oculto quando o tenant for BookPlay */
+  /** Oculta na BookPlay. Mesma natureza do campo acima. */
   hiddenForBookplay?: boolean;
   /** Chave de `cargos_permissoes` que precisa estar true (admin bypassa) */
   permissaoKey?: string;
 }
 
+/**
+ * As abas que toda operação tem, seja qual for o produto.
+ *
+ * A lista é curta de propósito. Cadastrar gente, configurar a empresa e
+ * recuperar o que foi apagado são necessidades de qualquer operação; o resto
+ * (acordo, recebimento, meta, analítico) é vocabulário da cobrança e não
+ * significa nada em Vendas ou RH.
+ */
+const TODOS_OS_PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
+
+/** Só cobrança. O apelido existe para a lista abaixo ficar legível. */
+const SO_COBRANCA: readonly Produto[] = ['cobranca'];
+
 export const NAV_ITEMS: NavItem[] = [
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
+  // A única aba que existe em todo produto por necessidade: é a rota `/`, a
+  // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
-  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           permissaoKey: 'ver_ouvidoria' },
+  { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           produtos: SO_COBRANCA, permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
-  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, permissaoKey: 'ver_solicitacoes_whatsapp' },
+  { label: 'Solicitar Atendimento', icon: MessageSquarePlus, to: ROUTE_PATHS.SOLICITACOES_WHATSAPP, produtos: SO_COBRANCA, permissaoKey: 'ver_solicitacoes_whatsapp' },
   // `ver_tickets` decide quem tem a porta; o interruptor em `tickets_config` e o
   // cadastro de atendentes decidem quando ela abre. Ate 23/08 nao havia chave
   // nenhuma aqui, e o cargo escrito na rota era o unico dono da decisao.
-  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             permissaoKey: 'ver_tickets' },
+  { label: 'Tickets',          icon: Ticket,          to: ROUTE_PATHS.TICKETS,             produtos: SO_COBRANCA, permissaoKey: 'ver_tickets' },
   // RH Gestão. Sem lista de cargo: quem abre é a chave, e o alcance de dentro
   // vem dos níveis da aba. É o padrão das abas já convertidas.
-  { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           permissaoKey: 'ver_rh_gestao' },
+  //
+  // Fica em `cobranca` e NÃO no produto `rh`: esta aba é a gestão de pessoal
+  // DA cobrança (célula, fechamento, lançamento), construída sobre os setores
+  // e equipes dela. O produto `rh`, quando tiver tela, terá a sua — com a
+  // visão das quatro empresas, que esta não tem.
+  { label: 'RH Gestão',        icon: ClipboardList,   to: ROUTE_PATHS.RH_GESTAO,           produtos: SO_COBRANCA, permissaoKey: 'ver_rh_gestao' },
   // Comemorações virou aba dentro de Usuários (BookPlay e PaguePlay) — sem
   // item de menu. A rota antiga redireciona para lá.
   // `diretoria` estava fora da lista, embora `ver_acordos` seja true para o
   // cargo na BookPlay: a rota abria por URL e o item não aparecia no menu.
-  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
-  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
-  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
-  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
-  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
+  { label: 'Acordos',          icon: FileText,        to: ROUTE_PATHS.ACORDOS,             produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia','diretoria'], hiddenForPaguePay: true, permissaoKey: 'ver_acordos' },
+  { label: 'Novo Acordo',      icon: Plus,            to: ROUTE_PATHS.ACORDO_NOVO,         produtos: SO_COBRANCA, roles: ['operador','lider','administrador','elite','gerencia'], hiddenForPaguePay: true, permissaoKey: 'criar_acordos' },
+  { label: 'Painel Líder',     icon: BarChart3,       to: ROUTE_PATHS.PAINEL_LIDER,        produtos: SO_COBRANCA, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_painel_lider' },
+  { label: 'Painel Diretoria', icon: TrendingUp,      to: ROUTE_PATHS.PAINEL_DIRETORIA,    produtos: SO_COBRANCA, roles: ['diretoria','administrador'], permissaoKey: 'ver_painel_diretoria' },
+  // Cadastrar gente é necessidade de qualquer operação, e a tela é sobre
+  // pessoa, setor e equipe — vocabulário que Vendas e RH também usam.
+  { label: 'Usuários',         icon: Users,           to: ROUTE_PATHS.ADMIN_USUARIOS,      produtos: TODOS_OS_PRODUTOS, roles: ['lider','administrador','elite','gerencia'], permissaoKey: 'ver_usuarios' },
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
-  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
-  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
+  { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
+  { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: TODOS_OS_PRODUTOS, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
   // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
   // desligar a aba na tela de Permissões bloqueava a rota e o item continuava
   // no menu. Dentro da lista, todo item passa pelo mesmo filtro.
-  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           permissaoKey: 'ver_analitico' },
-  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
-  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             permissaoKey: 'importar_excel' },
+  { label: 'Analítico',        icon: BarChart2,       to: ROUTE_PATHS.ANALITICO,           produtos: SO_COBRANCA, permissaoKey: 'ver_analitico' },
+  { label: 'Campanha Fácil',   icon: Megaphone,       to: ROUTE_PATHS.CAMPANHA_FACIL,      produtos: SO_COBRANCA, hiddenForPaguePay: true, permissaoKey: 'ver_campanha_facil' },
+  { label: 'Importar Excel',   icon: Upload,          to: '/acordos/importar',             produtos: SO_COBRANCA, permissaoKey: 'importar_excel' },
 ];
 
 /**
@@ -88,6 +129,12 @@ export const NAV_ITEMS: NavItem[] = [
 export interface ContextoMenu {
   /** O cargo de quem está vendo (ou o cargo que a prévia simula). */
   cargo: string;
+  /**
+   * O produto da empresa onde a pessoa está. `null` enquanto carrega — e nesse
+   * estado o menu sai VAZIO, de propósito: meio segundo sem abas é melhor do
+   * que meio segundo com as abas do produto errado.
+   */
+  produto: Produto | null;
   isPaguePlay: boolean;
   isBookplay: boolean;
   /**
@@ -114,6 +161,16 @@ export interface ContextoMenu {
  */
 export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
   return NAV_ITEMS.filter(item => {
+    // PRIMEIRO de tudo, e por lista branca: a aba existe neste produto?
+    //
+    // Vem antes de cargo e de permissão porque é uma pergunta de outra ordem.
+    // Cargo e permissão respondem «esta pessoa pode ver?»; esta responde «isto
+    // sequer existe aqui?». Um vendedor com `ver_acordos` ligado por engano
+    // continua sem ver Acordos, porque acordo não é coisa do Comercial.
+    if (!produtoPermite(item.produtos, ctx.produto)) return false;
+
+    // As duas empresas de cobrança. Só têm efeito dentro de `cobranca` — fora
+    // dela a aba já saiu na linha acima.
     if (item.hiddenForPaguePay && ctx.isPaguePlay) return false;
     if (item.hiddenForBookplay && ctx.isBookplay) return false;
 

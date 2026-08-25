@@ -18,6 +18,7 @@ import { ordemDoCargo, CARGO_GERAL } from '@/services/menuLateral.service';
 function ctx(over: Partial<ContextoMenu> = {}): ContextoMenu {
   return {
     cargo: 'super_admin',
+    produto: 'cobranca',
     isPaguePlay: false,
     isBookplay: true,
     temPermissao: () => true,
@@ -147,5 +148,61 @@ describe('ordemDoCargo', () => {
   it('sem nada salvo, devolve vazio — que é a ordem do código', () => {
     expect(ordemDoCargo({}, 'operador')).toEqual([]);
     expect(ordemDoCargo({ [CARGO_GERAL]: [] }, 'operador')).toEqual([]);
+  });
+});
+
+/**
+ * A régua de PRODUTO, que é de outra ordem que cargo e permissão.
+ *
+ * Cargo e permissão respondem «esta pessoa pode ver?». Produto responde «isto
+ * sequer existe aqui?». O teste do super_admin do Comercial é o que importa:
+ * ele pode tudo, e mesmo assim não vê Acordos — porque acordo não é coisa do
+ * Comercial, e nenhuma permissão faz virar.
+ */
+describe('abasDoMenu — por produto', () => {
+  it('o Comercial não vê nenhuma tela de cobrança, nem com super_admin', () => {
+    const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    for (const daCobranca of [
+      'Acordos', 'Novo Acordo', 'Painel Líder', 'Painel Diretoria',
+      'Analítico', 'Campanha Fácil', 'Importar Excel', 'Metas',
+      'Ouvidoria', 'Tickets', 'RH Gestão', 'Solicitar Atendimento',
+    ]) {
+      expect(abas).not.toContain(daCobranca);
+    }
+  });
+
+  it('o Comercial vê o que toda operação precisa', () => {
+    const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
+    expect(abas).toEqual(expect.arrayContaining(['Dashboard', 'Usuários', 'Configurações', 'Lixeira']));
+  });
+
+  it('o RH se comporta igual ao Comercial — nenhum privilégio sobre a cobrança', () => {
+    const abas = rotulos(abasDoMenu(ctx({ produto: 'rh', isBookplay: false })));
+    expect(abas).not.toContain('Acordos');
+    // `RH Gestão` é a gestão de pessoal DA cobrança, não a tela do produto RH.
+    expect(abas).not.toContain('RH Gestão');
+    expect(abas).toContain('Usuários');
+  });
+
+  it('produto desconhecido não mostra NADA', () => {
+    // Empresa nova sem produto declarado. Vazio é o comportamento certo: o erro
+    // fica visível, em vez de vazar a cobrança para uma operação qualquer.
+    expect(rotulos(abasDoMenu(ctx({ produto: null })))).toEqual([]);
+  });
+
+  it('a cobrança continua exatamente como era', () => {
+    const abas = rotulos(abasDoMenu(ctx({ produto: 'cobranca', isBookplay: true, isPaguePlay: false })));
+    expect(abas).toEqual(expect.arrayContaining([
+      'Dashboard', 'Acordos', 'Novo Acordo', 'Painel Líder', 'Analítico', 'Usuários',
+    ]));
+  });
+
+  it('toda aba declara em que produto vive', () => {
+    // A trava contra o esquecimento: aba nova sem `produtos` some do menu, e é
+    // melhor descobrir isso aqui do que num relato de que «a aba não apareceu».
+    for (const item of NAV_ITEMS) {
+      expect(item.produtos, `«${item.label}» não declara produtos`).toBeDefined();
+      expect(item.produtos!.length, `«${item.label}» declara lista vazia`).toBeGreaterThan(0);
+    }
   });
 });

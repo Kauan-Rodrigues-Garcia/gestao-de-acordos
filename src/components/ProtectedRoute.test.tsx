@@ -25,6 +25,10 @@ vi.mock('@/hooks/useAuth', () => ({ useAuth: () => authRef.current }));
 vi.mock('@/hooks/useCargoPermissoes', () => ({
   useCargoPermissoes: () => permRef.current,
 }));
+// A guarda passou a perguntar em que PRODUTO a pessoa está (25/08). Sem o
+// provider real, o hook lança — e o que estes testes medem é cargo e permissão.
+const empresaRef = { current: { empresa: { slug: 'bookplay', produto: 'cobranca' }, tenantSlug: 'bookplay', loading: false } };
+vi.mock('@/hooks/useEmpresa', () => ({ useEmpresa: () => empresaRef.current }));
 
 import { ProtectedRoute } from './ProtectedRoute';
 

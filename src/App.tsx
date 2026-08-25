@@ -22,6 +22,16 @@ import { NotificacoesProvider } from '@/providers/NotificacoesProvider';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
 import { useVersionCheck } from '@/hooks/useVersionCheck';
 import { ROUTE_PATHS } from '@/lib/index';
+import { produtoDaEmpresa, type Produto } from '@/lib/produto';
+
+/**
+ * As rotas da cobrança, declaradas uma vez.
+ *
+ * Repetir `['cobranca']` em dezesseis rotas convida à divergência: alguém
+ * acrescenta um produto em quinze e esquece a décima sexta, e o buraco não
+ * aparece em teste nenhum — aparece quando um vendedor abre a URL.
+ */
+const SO_COBRANCA: readonly Produto[] = ['cobranca'];
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +46,7 @@ const queryClient = new QueryClient({
 
 const Login             = lazy(() => import('@/pages/Login'));
 const Dashboard         = lazy(() => import('@/pages/Dashboard'));
+const ProdutoEmMontagem = lazy(() => import('@/pages/ProdutoEmMontagem'));
 const Acordos           = lazy(() => import('@/pages/Acordos'));
 const AcordoForm        = lazy(() => import('@/pages/AcordoForm'));
 const AcordoDetalhe     = lazy(() => import('@/pages/AcordoDetalhe'));
@@ -103,28 +114,58 @@ function VersionWatcher(): null {
   return null;
 }
 
+/**
+ * A rota `/` por produto.
+ *
+ * O Dashboard é da cobrança inteiro. Enquanto Comercial e RH não têm o deles,
+ * a porta de entrada avisa que a operação está sendo montada — em vez de abrir
+ * uma tela de recebimento vazia para um vendedor.
+ */
+function PainelDeEntrada(): React.ReactElement {
+  const { empresa, tenantSlug, loading } = useEmpresa();
+  const produto = produtoDaEmpresa(empresa, tenantSlug);
+
+  // Enquanto carrega, o Dashboard já se vira sozinho com os próprios estados de
+  // carregamento — e trocá-lo por um esqueleto aqui piscaria duas vezes.
+  if (loading || produto === 'cobranca') return <Dashboard />;
+  return <ProdutoEmMontagem produto={produto} />;
+}
+
 function TenantThemeApplier(): null {
-  const { tenantSlug } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   useEffect(() => {
     document.documentElement.setAttribute('data-tenant', tenantSlug);
 
     // Favicon por empresa (vale em todas as páginas, inclusive login):
-    // BookPlay = handshake azul; PaguePlay/padrão = handshake verde.
-    // PNGs com fundo transparente (sem o fundo preto do SVG antigo).
-    const href = tenantSlug === 'bookplay' ? '/logo-bookplay.png' : '/logo-pagueplay.png';
-    let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
+    // BookPlay = handshake azul; PaguePlay = handshake verde.
+    //
+    // O ternário de dois casos ficou errado quando surgiram Comercial e RH:
+    // «não é bookplay» virava PaguePlay, e as duas empresas novas nasceram com
+    // a logo de uma cobrança que não é a delas.
+    //
+    // Fora da cobrança o app NÃO troca o ícone — fica o do `index.html`. Apontar
+    // para um arquivo que ainda não existe daria 404 e ícone quebrado, que é
+    // pior do que um ícone genérico. Quando Comercial e RH tiverem logo, entram
+    // aqui como mais uma linha do mapa.
+    const produto = produtoDaEmpresa(empresa, tenantSlug);
+    const href = produto !== 'cobranca'
+      ? null
+      : (tenantSlug === 'bookplay' ? '/logo-bookplay.png' : '/logo-pagueplay.png');
+    if (href) {
+      let link = document.querySelector<HTMLLinkElement>("link[rel='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.head.appendChild(link);
+      }
+      link.type = 'image/png';
+      link.href = href;
     }
-    link.type = 'image/png';
-    link.href = href;
 
     return () => {
       document.documentElement.removeAttribute('data-tenant');
     };
-  }, [tenantSlug]);
+  }, [empresa, tenantSlug]);
   return null;
 }
 
@@ -155,39 +196,50 @@ export default function App() {
                 <PublicRoute><Registro /></PublicRoute>
               } />
 
+              {/* `/` existe em todo produto — é a porta de entrada. O que ela
+                  DESENHA é que muda: o Dashboard atual é da cobrança de ponta a
+                  ponta (recebimento, acordo, meta, ticket médio) e não significa
+                  nada em Vendas ou RH. Ver `PainelDeEntrada`. */}
               <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper><Dashboard /></LayoutWrapper>
+                <LayoutWrapper><PainelDeEntrada /></LayoutWrapper>
               } />
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_acordos">
                     <Acordos />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_NOVO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia']} requiredPermissao="criar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.ACORDO_EDITAR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="editar_acordos">
                     <AcordoForm />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
+              {/* Sem `requiredPermissao` de propósito: a rota sempre foi aberta a
+                  qualquer pessoa logada, e apertá-la agora tiraria acesso de quem
+                  usa hoje. O que entra é só a barreira de PRODUTO — quem não é da
+                  cobrança não tem o que ver aqui. Fechar por permissão é decisão à
+                  parte, e merece ser tomada em separado. */}
               <Route path={ROUTE_PATHS.ACORDO_DETALHE} element={
-                <LayoutWrapper><AcordoDetalhe /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute produtos={SO_COBRANCA}><AcordoDetalhe /></ProtectedRoute>
+                </LayoutWrapper>
               } />
 
               {/* Importar Excel — gated pela permissão importar_excel (admin bypassa) */}
               <Route path={ROUTE_PATHS.IMPORTAR_EXCEL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['operador','lider','administrador','elite','gerencia','diretoria']} requiredPermissao="importar_excel">
                     <ImportarExcel />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -195,14 +247,14 @@ export default function App() {
 
               <Route path={ROUTE_PATHS.PAINEL_LIDER} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
               } />
               <Route path={ROUTE_PATHS.PAINEL_LIDER_OPERADOR} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['lider','administrador','elite','gerencia']} requiredPermissao="ver_painel_lider">
                     <PainelLider />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -229,7 +281,7 @@ export default function App() {
               <Route path={ROUTE_PATHS.ADMIN_LOGS} element={<Navigate to={ROUTE_PATHS.ADMIN_CONFIGURACOES + '?tab=logs'} replace />} />
               <Route path={ROUTE_PATHS.ADMIN_METAS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['administrador','lider','elite','gerencia']} requiredPermissao="ver_metas">
                     <MetasConfig />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -245,7 +297,7 @@ export default function App() {
               {/* Painel Diretoria */}
               <Route path={ROUTE_PATHS.PAINEL_DIRETORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute allowedProfiles={['diretoria','administrador']}
+                  <ProtectedRoute produtos={SO_COBRANCA} allowedProfiles={['diretoria','administrador']}
                                   requiredPermissao="ver_painel_diretoria">
                     <PainelDiretoria />
                   </ProtectedRoute>
@@ -256,7 +308,7 @@ export default function App() {
                   dentro da página; a permissão decide QUEM abre) */}
               <Route path={ROUTE_PATHS.ANALITICO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_analitico">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_analitico">
                     <PaginaAnalitico />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -267,7 +319,7 @@ export default function App() {
                   `ouvidoria_acessos` continua valendo dentro da página. */}
               <Route path={ROUTE_PATHS.OUVIDORIA} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_ouvidoria">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_ouvidoria">
                     <Ouvidoria />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -276,7 +328,7 @@ export default function App() {
               {/* Campanha Fácil [BP] — o gate por slug segue dentro da página. */}
               <Route path={ROUTE_PATHS.CAMPANHA_FACIL} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_campanha_facil">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_campanha_facil">
                     <CampanhaFacil />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -286,7 +338,7 @@ export default function App() {
                   ligação e o digital. */}
               <Route path={ROUTE_PATHS.SOLICITACOES_WHATSAPP} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_solicitacoes_whatsapp">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_solicitacoes_whatsapp">
                     <SolicitacoesWpp />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -297,7 +349,7 @@ export default function App() {
                   `tickets_config`, e a própria página resolve isso. */}
               <Route path={ROUTE_PATHS.TICKETS} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_tickets">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_tickets">
                     <Tickets />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -309,7 +361,7 @@ export default function App() {
                   setor, ou a empresa). A RLS cumpre o mesmo recorte no banco. */}
               <Route path={ROUTE_PATHS.RH_GESTAO} element={
                 <LayoutWrapper>
-                  <ProtectedRoute requiredPermissao="ver_rh_gestao">
+                  <ProtectedRoute produtos={SO_COBRANCA} requiredPermissao="ver_rh_gestao">
                     <RhGestao />
                   </ProtectedRoute>
                 </LayoutWrapper>
@@ -335,7 +387,7 @@ export default function App() {
                 pessoa curiosa poder encontrar.
               */}
               <Route path={ROUTE_PATHS.CREATORS_LAB} element={
-                <ProtectedRoute>
+                <ProtectedRoute produtos={SO_COBRANCA}>
                   <CreatorsLab />
                 </ProtectedRoute>
               } />

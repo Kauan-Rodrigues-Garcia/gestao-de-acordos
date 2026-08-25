@@ -27,6 +27,7 @@ function montar(over: Partial<Parameters<typeof MenuLateralEditor>[0]> = {}) {
       empresaId="emp-1"
       perfilId="p-1"
       ordens={{}}
+      produto="cobranca"
       isPaguePlay={false}
       isBookplay
       valorDoCargo={() => true}
