@@ -134,9 +134,11 @@ describe('definir', () => {
 
   it('traduz as recusas do banco', async () => {
     const casos: Record<string, string> = {
-      sem_permissao:      'Só o super admin pode alterar o acesso às duas empresas.',
-      cargo_nao_elegivel: 'Só gerência e diretoria podem receber acesso às duas empresas.',
-      super_admin_ja_tem: 'Super admin já enxerga as duas empresas pelo cargo.',
+      sem_permissao:      'Só o super admin pode alterar o acesso entre empresas.',
+      super_admin_ja_tem: 'Super admin já enxerga todas as empresas pelo cargo.',
+      // Chaves novas de 25/08, quando a concessão passou a ser por empresa.
+      empresa_propria:    'Esta já é a empresa da pessoa — o acesso vem do cadastro, não de concessão.',
+      empresa_nao_encontrada: 'Empresa não encontrada.',
     };
     for (const [chave, frase] of Object.entries(casos)) {
       mockRpc.mockResolvedValue({ data: { ok: false, erro: chave }, error: null });

@@ -4,6 +4,47 @@
  * Service layer para operações com empresas.
  */
 import { supabase, Empresa } from '@/lib/supabase';
+import { rpcSemTipo } from '@/lib/supabaseSemTipo';
+
+/**
+ * As empresas que a pessoa logada realmente ALCANÇA.
+ *
+ * Diferente de `fetchEmpresas`, que lista todas as ativas — a policy de
+ * `empresas` é `ativo = true`, então qualquer pessoa autenticada lê as quatro
+ * linhas. Isso servia ao seletor enquanto «poder trocar» significava «pode
+ * trocar para a outra», com duas empresas no sistema.
+ *
+ * Com quatro, o seletor passaria a oferecer Comercial e RH a quem só tem
+ * cobrança liberada: a troca aconteceria, a tela abriria, e todos os dados
+ * viriam vazios — porque a RLS recusa em silêncio. Oferecer uma porta que leva
+ * a um cômodo vazio é pior do que não oferecer porta.
+ *
+ * Quem responde é o banco (`fn_user_empresas_liberadas`), e não uma cópia da
+ * regra aqui: é a mesma função que a RLS usa.
+ */
+export async function fetchEmpresasLiberadas(): Promise<Empresa[]> {
+  // `rpcSemTipo` porque `database.types.ts` é gerado do banco e ainda não
+  // conhece a função. Mesmo padrão de `acessoMultiempresa.service`.
+  const { data: ids, error: erroIds } =
+    await rpcSemTipo<{ fn_user_empresas_liberadas: string }[] | string[]>('fn_user_empresas_liberadas', {});
+
+  // Migration ainda não aplicada: cai na lista completa, que é o comportamento
+  // de antes. A RLS continua barrando o dado — o seletor é conforto.
+  if (erroIds || !ids) return fetchEmpresas();
+
+  const permitidos = (ids as ({ fn_user_empresas_liberadas: string } | string)[])
+    .map(v => (typeof v === 'string' ? v : v.fn_user_empresas_liberadas));
+  if (permitidos.length === 0) return [];
+
+  const { data, error } = await supabase
+    .from('empresas').select('*').in('id', permitidos).eq('ativo', true).order('nome');
+
+  if (error) {
+    console.warn('[empresas.service] fetchEmpresasLiberadas error:', error.message);
+    return [];
+  }
+  return (data as Empresa[]) || [];
+}
 
 /** Lista todas as empresas ativas */
 export async function fetchEmpresas(): Promise<Empresa[]> {

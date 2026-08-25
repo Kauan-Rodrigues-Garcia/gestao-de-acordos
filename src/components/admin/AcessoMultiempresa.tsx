@@ -42,8 +42,11 @@ import { PERFIL_LABELS, formatDate } from '@/lib/index';
 import { cn } from '@/lib/utils';
 import {
   listarAcessoMultiempresa, listarCandidatosMultiempresa, definirAcessoMultiempresa,
+  definirAcessoEmpresa,
   type AcessoMultiempresa as Acesso, type CandidatoMultiempresa,
 } from '@/services/acessoMultiempresa.service';
+import { fetchEmpresas } from '@/services/empresas.service';
+import type { Empresa } from '@/lib/supabase';
 
 function Avatar({ nome, foto }: { nome: string; foto: string | null }) {
   const iniciais = nome.trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
@@ -75,6 +78,11 @@ export default function AcessoMultiempresa() {
   const [busca, setBusca]                 = useState('');
 
   const [paraRemover, setParaRemover] = useState<Acesso | null>(null);
+
+  // Todas as empresas ativas. Quem abre esta tela é super_admin, então a lista
+  // completa é exatamente o que ele precisa marcar.
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  useEffect(() => { fetchEmpresas().then(setEmpresas); }, []);
 
   const recarregar = useCallback(async () => {
     setCarregando(true);
@@ -119,6 +127,27 @@ export default function AcessoMultiempresa() {
     await recarregar();
   }
 
+  /**
+   * Liga ou desliga UMA empresa para UMA pessoa.
+   *
+   * `salvando` guarda `pessoa:empresa` e não só a pessoa: sem isso, marcar uma
+   * empresa acenderia o spinner em todas as outras da mesma linha.
+   */
+  async function alternarEmpresa(a: Acesso, empresaId: string, liberar: boolean) {
+    setSalvando(`${a.usuario_id}:${empresaId}`);
+    const res = await definirAcessoEmpresa(a.usuario_id, empresaId, liberar);
+    setSalvando(null);
+    // `strict: false`: o TS não estreita união por discriminante booleano —
+    // `in` estreita. Mesmo motivo do resto do projeto.
+    if ('erro' in res) { toast.error(res.erro); return; }
+    toast.success(
+      liberar
+        ? `${a.nome} passa a enxergar ${res.empresa}.`
+        : `${a.nome} deixa de enxergar ${res.empresa}.`,
+    );
+    await recarregar();
+  }
+
   const candidatosFiltrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     const base = candidatos ?? [];
@@ -138,11 +167,12 @@ export default function AcessoMultiempresa() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-primary" /> Acesso às duas empresas
+                <Building2 className="w-4 h-4 text-primary" /> Acesso entre empresas
               </CardTitle>
               <p className="text-xs text-muted-foreground mt-1">
-                Quem está aqui enxerga o conteúdo da BookPlay e da PaguePlay e tem o
-                botão de trocar de empresa no topo da tela.
+                Marque, pessoa por pessoa, quais empresas ela enxerga além da
+                própria. Quem tem ao menos uma ganha o botão de trocar de empresa
+                no topo da tela.
               </p>
             </div>
             <Button size="sm" className="gap-1.5 shrink-0" onClick={() => abrirDialogo(true)}>
@@ -161,8 +191,9 @@ export default function AcessoMultiempresa() {
           {!carregando && lista.map(a => (
             <div
               key={a.usuario_id}
-              className="flex items-center gap-3 p-3 rounded-lg border border-border"
+              className="rounded-lg border border-border"
             >
+            <div className="flex items-center gap-3 p-3">
               <Avatar nome={a.nome} foto={a.foto_url} />
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -198,6 +229,50 @@ export default function AcessoMultiempresa() {
                 </Button>
               )}
             </div>
+
+            {/*
+            As empresas, uma a uma.
+            ───────────────────────
+            Até 25/08 esta tela tinha um interruptor só, e ele valia para TODAS
+            as empresas — inclusive as que ainda não existiam. Foi assim que duas
+            pessoas de diretoria ganharam acesso ao Comercial e ao RH no dia em
+            que essas empresas nasceram, sem ninguém decidir.
+
+            A empresa de origem aparece marcada e travada: o acesso a ela vem do
+            cadastro, não de concessão, e oferecer um botão para tirá-la sugeriria
+            um poder que esta tela não tem.
+          */}
+            {!a.e_super_admin && empresas.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pl-12 pb-1">
+              {empresas.map(emp => {
+                const propria  = emp.nome === a.empresa_nome;
+                const liberada = a.empresas_liberadas.some(x => x.id === emp.id);
+                const ocupado  = salvando === `${a.usuario_id}:${emp.id}`;
+                return (
+                  <button
+                    key={emp.id}
+                    type="button"
+                    disabled={propria || salvando !== null}
+                    onClick={() => alternarEmpresa(a, emp.id, !liberada)}
+                    className={cn(
+                      'text-[11px] px-2 py-1 rounded-full border transition-colors',
+                      propria
+                        ? 'border-border bg-muted text-muted-foreground cursor-default'
+                        : liberada
+                          ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                          : 'border-border text-muted-foreground hover:bg-accent',
+                    )}
+                    title={propria ? 'Empresa de origem — vem do cadastro' : undefined}
+                  >
+                    {ocupado && <Loader2 className="w-3 h-3 animate-spin inline mr-1" />}
+                    {emp.nome}
+                    {propria && ' · origem'}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          </div>
           ))}
 
           {!carregando && liberados.length === 0 && (

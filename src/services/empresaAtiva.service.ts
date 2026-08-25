@@ -75,9 +75,16 @@ export async function resolverEmpresaEscolhida(): Promise<Empresa | null> {
    *
    * Sobra a vantagem de não precisar mais do resolvedor de permissões, que num
    * serviço puro não existe.
+   *
+   * Desde 25/08 a pergunta é sobre ESTA empresa, e não sobre trocar em geral.
+   * `fn_user_acesso_multiempresa` responde «esta pessoa alterna entre
+   * empresas?» — verdade para quem tem cobrança liberada, e insuficiente desde
+   * que passaram a existir quatro. Alguém com acesso a BookPlay+PaguePlay podia
+   * deixar `comercial` gravado na chave e o serviço aceitava, entregando uma
+   * sessão apontada para uma empresa cujos dados a RLS recusa.
    */
   const { data: podeTrocar, error: erroAcesso } = await supabase
-    .rpc('fn_user_acesso_multiempresa');
+    .rpc('fn_can_access_empresa', { target_empresa_id: escolhida });
 
   // Erro de rede não é resposta: apagar aqui derrubaria a escolha de um
   // super_admin legítimo por causa de uma consulta que falhou.

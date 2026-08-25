@@ -37,7 +37,7 @@ import {
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { fetchEmpresas } from '@/services/empresas.service';
+import { fetchEmpresasLiberadas } from '@/services/empresas.service';
 import { definirEmpresaEscolhida } from '@/services/empresaAtiva.service';
 import { perfilVeDuasEmpresas } from '@/services/acessoMultiempresa.service';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
@@ -62,7 +62,9 @@ export function SeletorEmpresa() {
     if (!aberto || empresas || carregando) return;
     setCarregando(true);
     try {
-      setEmpresas(await fetchEmpresas());
+      // Só as que a pessoa alcança de verdade. Oferecer uma empresa cujos
+      // dados a RLS recusa abriria uma tela inteira vazia, sem explicação.
+      setEmpresas(await fetchEmpresasLiberadas());
     } finally {
       setCarregando(false);
     }

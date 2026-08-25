@@ -39,6 +39,14 @@ export interface AcessoMultiempresa {
   e_super_admin: boolean;
   concedido_por: string | null;
   concedido_em:  string | null;
+  /**
+   * As empresas EXTRAS que esta pessoa alcança, uma a uma.
+   *
+   * Vazia para o super_admin: ele atravessa por cargo, não por concessão — e
+   * mostrar uma lista para ele sugeriria que o acesso pode ser tirado marcando
+   * caixas, o que não é verdade.
+   */
+  empresas_liberadas: { id: string; nome: string; slug: string }[];
 }
 
 export interface CandidatoMultiempresa {
@@ -53,10 +61,12 @@ export interface CandidatoMultiempresa {
 /** Mensagens do banco traduzidas. O `erro` cru nunca chega à tela. */
 const MOTIVOS: Record<string, string> = {
   sem_sessao:            'Sessão expirada. Entre novamente.',
-  sem_permissao:         'Só o super admin pode alterar o acesso às duas empresas.',
+  sem_permissao:         'Só o super admin pode alterar o acesso entre empresas.',
   usuario_nao_encontrado:'Usuário não encontrado.',
-  super_admin_ja_tem:    'Super admin já enxerga as duas empresas pelo cargo.',
-  cargo_nao_elegivel:    'Só gerência e diretoria podem receber acesso às duas empresas.',
+  super_admin_ja_tem:    'Super admin já enxerga todas as empresas pelo cargo.',
+  cargo_nao_elegivel:    'O cargo desta pessoa não pode receber acesso a outra empresa. Ligue a chave «Acesso às duas operações» no painel de permissões.',
+  empresa_nao_encontrada:'Empresa não encontrada.',
+  empresa_propria:       'Esta já é a empresa da pessoa — o acesso vem do cadastro, não de concessão.',
 };
 
 /** Quem enxerga as duas empresas hoje: super_admins e os liberados. */
@@ -110,6 +120,44 @@ export async function definirAcessoMultiempresa(
     return { ok: false, erro: MOTIVOS[chave] ?? 'Não foi possível salvar.' };
   }
   return { ok: true, liberado: !!data.liberado, nome: data.nome ?? '' };
+}
+
+/**
+ * Liga ou desliga UMA empresa para UMA pessoa.
+ *
+ * É a operação que a tela faz desde 25/08. A anterior (`definirAcessoMultiempresa`)
+ * ligava um booleano que valia para TODAS as empresas — as que existiam e as
+ * que fossem criadas depois. Foi assim que duas pessoas de diretoria ganharam
+ * acesso ao Comercial e ao RH no dia em que essas empresas nasceram, sem que
+ * ninguém decidisse isso.
+ *
+ * A `definirAcessoMultiempresa` continua servindo para revogar tudo de uma vez.
+ */
+export async function definirAcessoEmpresa(
+  usuarioId: string,
+  empresaId: string,
+  liberado: boolean,
+): Promise<ResultadoDefinir & { empresa?: string }> {
+  const { data, error } = await rpcSemTipo<{
+    ok?: boolean; erro?: string; liberado?: boolean; nome?: string; empresa?: string;
+  }>('fn_multiempresa_definir_empresa', {
+    p_usuario_id: usuarioId,
+    p_empresa_id: empresaId,
+    p_liberado:   liberado,
+  });
+
+  if (error) {
+    console.warn('[acessoMultiempresa] definirEmpresa:', error.message);
+    return { ok: false, erro: 'Não foi possível salvar. Tente novamente.' };
+  }
+  if (!data?.ok) {
+    const chave = data?.erro ?? '';
+    return { ok: false, erro: MOTIVOS[chave] ?? 'Não foi possível salvar.' };
+  }
+  return {
+    ok: true, liberado: !!data.liberado,
+    nome: data.nome ?? '', empresa: data.empresa ?? '',
+  };
 }
 
 /**
