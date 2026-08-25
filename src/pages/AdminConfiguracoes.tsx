@@ -22,6 +22,7 @@ import AdminLogs from '@/pages/AdminLogs';
 import AdminDiretoExtra from '@/pages/AdminDiretoExtra';
 import AdminTags from '@/components/admin/AdminTags';
 import AcessoMultiempresa from '@/components/admin/AcessoMultiempresa';
+import LiberacaoChat from '@/components/admin/LiberacaoChat';
 import AdminDocumentacoes from '@/pages/AdminDocumentacoes';
 import ImportarAcordosCard from '@/components/admin/ImportarAcordosCard';
 
@@ -248,6 +249,13 @@ export default function AdminConfiguracoes() {
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
         <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
           <div className="max-w-4xl mx-auto space-y-6">
+
+          {/* ── Chat interno ─────────────────────────────────────────────
+              A trava de LANÇAMENTO, que é outra coisa das permissões: ela
+              segura até o administrador, e o painel de Cargos só passa a
+              mandar depois que ela abre. Só super_admin vira — a policy
+              `chat_config_update` confere de novo no banco. */}
+          {ehSuperAdmin && <LiberacaoChat />}
 
           {/* ── Status do Banco de Dados ─────────────────────────────── */}
           {/* Gate: visível apenas para Admin e Super Admin (item #8) */}

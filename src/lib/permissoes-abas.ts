@@ -43,6 +43,7 @@ export const ABA_DO_GRUPO: Partial<Record<GrupoPermissao, AbaEscopada>> = {
   'Painel Líder':     'painel_lider',
   'Painel Diretoria': 'painel_diretoria',
   'Gestão de pessoas': 'usuarios',
+  'Chat':             'chat',
 };
 
 /** Rótulo humano de cada nível, na ordem do mais estreito ao mais amplo. */

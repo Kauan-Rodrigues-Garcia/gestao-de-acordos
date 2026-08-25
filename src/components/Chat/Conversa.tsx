@@ -14,8 +14,10 @@
  * para reler continua onde parou, e um aviso discreto diz que chegou coisa
  * nova.
  */
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowLeft, Paperclip, Send, Smile, X, ArrowDown, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft, Paperclip, Send, Smile, X, ArrowDown, Loader2, Mic, Trash2, Check,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
@@ -24,9 +26,10 @@ import {
   subirAnexo, LIMITE_ANEXO,
   type MensagemChat, type ConversaChat, type AnexoChat,
 } from '@/services/chat/chat.service';
+import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat, AnexoNoBalao, EMOJIS,
-  horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel,
+  horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
 
 interface Props {
@@ -56,6 +59,26 @@ export function Conversa({
   const rolagem = useRef<HTMLDivElement>(null);
   const campo   = useRef<HTMLTextAreaElement>(null);
   const noFim   = useRef(true);
+  const gravador = useGravadorAudio();
+
+  /*
+   * Miniatura do que está para ser enviado.
+   *
+   * `URL.createObjectURL` reserva memória até alguém revogar — sem a limpeza,
+   * cada print anexado e removido ficaria pendurado pelo resto da sessão.
+   * Mesmo cuidado do chat de Tickets.
+   */
+  const previas = useMemo(
+    () => pendentes.map(f => ({
+      arquivo: f,
+      url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+    })),
+    [pendentes],
+  );
+
+  useEffect(() => {
+    return () => { for (const p of previas) if (p.url) URL.revokeObjectURL(p.url); };
+  }, [previas]);
 
   // ── Rolagem ────────────────────────────────────────────────────────────────
   const descer = useCallback((suave = true) => {
@@ -125,6 +148,27 @@ export function Conversa({
     campo.current?.focus();
   }, [texto, pendentes, subindo, conversa.id, onEnviar]);
 
+  const temAlgoParaEnviar = !!texto.trim() || pendentes.length > 0;
+
+  /**
+   * Encerra a gravação e põe o áudio na fila de anexos.
+   *
+   * NÃO envia sozinho. O áudio entra como qualquer outro arquivo: dá para
+   * escrever uma linha junto, anexar mais alguma coisa, ou desistir e tirar
+   * pelo X. Mandar na hora tiraria a chance de reconsiderar um recado — que é
+   * justamente o que mais se reconsidera.
+   */
+  const pararEAnexar = useCallback(async () => {
+    const arquivo = await gravador.parar();
+    if (!arquivo) return;
+    if (arquivo.size > LIMITE_ANEXO) {
+      setErro(`A gravação ficou com ${tamanhoLegivel(arquivo.size)} e o limite é 10 MB.`);
+      return;
+    }
+    setPendentes(atual => [...atual, arquivo]);
+    campo.current?.focus();
+  }, [gravador]);
+
   const aoTeclar = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Enter manda, Shift+Enter quebra linha. É o que a mão já espera.
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void enviar(); }
@@ -155,9 +199,17 @@ export function Conversa({
         <AvatarChat nome={conversa.outro_nome} foto={conversa.outro_foto} tamanho={34} online={online} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium truncate leading-tight">{conversa.outro_nome}</p>
-          <p className="text-[11px] text-muted-foreground leading-tight">
-            {digitando ? <span className="text-primary">digitando…</span>
-             : online ? 'online' : conversa.outro_usuario ?? ''}
+          {/*
+            Login não entra aqui: quem está conversando já sabe com quem fala, e
+            o que muda de minuto a minuto é se a pessoa está do outro lado.
+            «online» quer dizer com o sistema aberto agora — não é «trabalhando».
+          */}
+          <p className="text-[11px] leading-tight">
+            {digitando
+              ? <span className="text-primary">digitando…</span>
+              : online
+                ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
+                : <span className="text-muted-foreground">offline</span>}
           </p>
         </div>
       </header>
@@ -233,21 +285,66 @@ export function Conversa({
           </p>
         )}
 
-        {pendentes.length > 0 && (
+        {previas.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
-            {pendentes.map((a, i) => (
-              <span key={i} className="flex items-center gap-1 text-[11px] bg-muted rounded-full pl-2.5 pr-1 py-1">
-                <span className="max-w-[130px] truncate">{a.name}</span>
-                <span className="opacity-50">{tamanhoLegivel(a.size)}</span>
-                <button onClick={() => setPendentes(p => p.filter((_, j) => j !== i))}
-                        className="p-0.5 rounded-full hover:bg-background" aria-label={`Tirar ${a.name}`}>
+            {previas.map((p, i) => (
+              <div key={`${p.arquivo.name}-${i}`}
+                   className="relative rounded-lg border border-border bg-muted overflow-hidden">
+                {p.url ? (
+                  <img src={p.url} alt={p.arquivo.name} className="h-16 w-16 object-cover" />
+                ) : (
+                  <div className="h-16 min-w-[92px] max-w-[150px] flex flex-col justify-center px-2 py-1">
+                    <span className="text-[10px] leading-tight line-clamp-2 break-all">
+                      {p.arquivo.name}
+                    </span>
+                    <span className="text-[9px] opacity-50 mt-0.5">
+                      {tamanhoLegivel(p.arquivo.size)}
+                    </span>
+                  </div>
+                )}
+                <button
+                  onClick={() => setPendentes(atual => atual.filter((_, j) => j !== i))}
+                  className="absolute top-0.5 right-0.5 rounded-full bg-background/90 p-0.5 hover:bg-background"
+                  aria-label={`Tirar ${p.arquivo.name}`}
+                >
                   <X className="w-3 h-3" />
                 </button>
-              </span>
+              </div>
             ))}
           </div>
         )}
 
+        {gravador.erro && (
+          <p className="text-[11px] text-destructive">{gravador.erro}</p>
+        )}
+
+        {gravador.gravando ? (
+          /*
+            Gravando: a barra de escrita some inteira. Deixar o campo do lado
+            convida a pessoa a digitar enquanto grava, e aí o botão de enviar
+            fica com dois significados ao mesmo tempo.
+          */
+          <div className="flex items-center gap-2 h-10">
+            <button
+              onClick={gravador.cancelar}
+              className="w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-destructive hover:bg-destructive/10 transition-colors"
+              aria-label="Descartar a gravação"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+
+            <span className="w-2 h-2 rounded-full bg-destructive animate-pulse shrink-0" />
+            <span className="text-sm tabular-nums flex-1">
+              {duracaoCurta(gravador.segundos)}
+            </span>
+            <span className="text-[11px] text-muted-foreground">gravando…</span>
+
+            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
+                    onClick={() => void pararEAnexar()} aria-label="Concluir a gravação">
+              <Check className="w-4 h-4" />
+            </Button>
+          </div>
+        ) : (
         <div className="flex items-end gap-1">
           <Popover>
             <PopoverTrigger asChild>
@@ -285,13 +382,27 @@ export function Conversa({
             className="flex-1 resize-none bg-muted/60 rounded-2xl px-3 py-2 text-sm max-h-28 outline-none focus:ring-1 focus:ring-ring"
           />
 
-          <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
-                  onClick={() => void enviar()}
-                  disabled={subindo || (!texto.trim() && !pendentes.length)}
-                  aria-label="Enviar">
-            {subindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          </Button>
+          {/*
+            Microfone OU enviar, nunca os dois. Com a mensagem vazia, o botão
+            grava; com algo escrito, ele manda. É o gesto que a mão já conhece,
+            e evita dois botões redondos disputando a mesma quina.
+          */}
+          {temAlgoParaEnviar ? (
+            <Button size="icon" className="h-8 w-8 shrink-0 rounded-full"
+                    onClick={() => void enviar()} disabled={subindo} aria-label="Enviar">
+              {subindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </Button>
+          ) : (
+            <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full"
+                    onClick={() => void gravador.iniciar()}
+                    disabled={!gravador.suportado}
+                    title={gravador.suportado ? 'Gravar áudio' : 'Este navegador não grava áudio'}
+                    aria-label="Gravar áudio">
+              <Mic className="w-4 h-4" />
+            </Button>
+          )}
         </div>
+        )}
       </div>
 
       {arrastando && (

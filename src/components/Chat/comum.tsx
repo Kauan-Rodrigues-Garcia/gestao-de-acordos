@@ -5,8 +5,8 @@
  * curta, o balão de anexo. Ficam juntos para a bolha e a versão expandida
  * mostrarem exatamente a mesma coisa — duas cópias divergem no primeiro ajuste.
  */
-import { useEffect, useState } from 'react';
-import { FileText, ImageIcon, Music, Video, Download } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { FileText, ImageIcon, Music, Video, Download, Play, Pause } from 'lucide-react';
 import { urlDoAnexo, type AnexoChat } from '@/services/chat/chat.service';
 import { cn } from '@/lib/utils';
 
@@ -32,10 +32,19 @@ export function AvatarChat({
           {iniciais || '?'}
         </div>
       )}
+      {/*
+        A bolinha de online. `ring` da cor do fundo abre uma folga entre ela e a
+        foto — sem isso, num avatar escuro a bolinha some na borda.
+
+        «Online» aqui quer dizer com o sistema ABERTO agora, e não «trabalhando»:
+        quem fecha a aba some da lista em segundos. É presença de canal, não
+        registro de ponto.
+      */}
       {online && (
         <span
-          className="absolute bottom-0 right-0 block rounded-full bg-emerald-500 ring-2 ring-background"
-          style={{ width: Math.max(8, tamanho * 0.28), height: Math.max(8, tamanho * 0.28) }}
+          className="absolute -bottom-px -right-px block rounded-full bg-emerald-500 ring-2 ring-background shadow-sm"
+          style={{ width: Math.max(10, tamanho * 0.3), height: Math.max(10, tamanho * 0.3) }}
+          title="online"
         />
       )}
     </div>
@@ -180,12 +189,15 @@ export function tamanhoLegivel(bytes: number): string {
 export function AnexoNoBalao({ anexo, meu }: { anexo: AnexoChat; meu: boolean }) {
   const [url, setUrl] = useState<string | null>(null);
   const ehImagem = anexo.tipo?.startsWith('image/');
+  const ehAudio  = anexo.tipo?.startsWith('audio/');
 
   useEffect(() => {
     let vivo = true;
     void urlDoAnexo(anexo.url).then(u => { if (vivo) setUrl(u); });
     return () => { vivo = false; };
   }, [anexo.url]);
+
+  if (ehAudio) return <PlayerAudio url={url} meu={meu} />;
 
   if (ehImagem) {
     return (
@@ -215,6 +227,109 @@ export function AnexoNoBalao({ anexo, meu }: { anexo: AnexoChat; meu: boolean })
       </span>
       <Download className="w-3.5 h-3.5 shrink-0 opacity-50" />
     </a>
+  );
+}
+
+// ── Áudio ────────────────────────────────────────────────────────────────────
+
+/** `83` → `1:23`. Segundo cheio: milissegundo num áudio de recado é ruído. */
+export function duracaoCurta(segundos: number): string {
+  if (!isFinite(segundos) || segundos < 0) return '0:00';
+  const m = Math.floor(segundos / 60);
+  const s = Math.floor(segundos % 60);
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
+/**
+ * O player de áudio dentro do balão.
+ *
+ * `<audio controls>` nativo tem 250 px de largura, altura fixa e um visual que
+ * não segue tema nenhum — dentro de um balão de 78% da conversa ele fica maior
+ * que a própria mensagem. Este é o mínimo que um recado precisa: tocar, parar,
+ * saber quanto falta, e pular para um ponto.
+ *
+ * ## A duração pode não vir
+ *
+ * Áudio gravado por `MediaRecorder` costuma chegar com `duration = Infinity`
+ * até tocar inteiro — é um defeito velho de webm sem cabeçalho de duração. Por
+ * isso o número só aparece quando é finito, e enquanto não for, mostra o tempo
+ * decorrido. Melhor um campo que aparece depois do que um «Infinity:NaN».
+ */
+export function PlayerAudio({ url, meu }: { url: string | null; meu: boolean }) {
+  const audio = useRef<HTMLAudioElement>(null);
+  const [tocando, setTocando] = useState(false);
+  const [agora, setAgora] = useState(0);
+  const [total, setTotal] = useState(0);
+
+  const pronto = !!url;
+  const progresso = total > 0 ? (agora / total) * 100 : 0;
+
+  function alternar() {
+    const el = audio.current;
+    if (!el) return;
+    if (el.paused) void el.play(); else el.pause();
+  }
+
+  function pular(e: React.MouseEvent<HTMLDivElement>) {
+    const el = audio.current;
+    if (!el || !total) return;
+    const caixa = e.currentTarget.getBoundingClientRect();
+    el.currentTime = ((e.clientX - caixa.left) / caixa.width) * total;
+  }
+
+  return (
+    <div className={cn(
+      'flex items-center gap-2.5 rounded-lg px-2.5 py-2 w-[210px]',
+      meu ? 'bg-primary-foreground/15' : 'bg-background/70',
+    )}>
+      <button
+        onClick={alternar} disabled={!pronto}
+        className={cn(
+          'w-8 h-8 rounded-full shrink-0 flex items-center justify-center transition-colors',
+          meu ? 'bg-primary-foreground/25 hover:bg-primary-foreground/40'
+              : 'bg-muted hover:bg-muted-foreground/20',
+          !pronto && 'opacity-50',
+        )}
+        aria-label={tocando ? 'Pausar' : 'Tocar'}
+      >
+        {tocando ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+      </button>
+
+      <div className="flex-1 min-w-0">
+        <div
+          onClick={pular}
+          className={cn('h-1 rounded-full cursor-pointer',
+                        meu ? 'bg-primary-foreground/25' : 'bg-muted-foreground/25')}
+        >
+          <div
+            className={cn('h-full rounded-full transition-[width] duration-100',
+                          meu ? 'bg-primary-foreground' : 'bg-primary')}
+            style={{ width: `${progresso}%` }}
+          />
+        </div>
+        <p className="text-[10px] mt-1 opacity-70 tabular-nums">
+          {total > 0 ? `${duracaoCurta(agora)} / ${duracaoCurta(total)}` : duracaoCurta(agora)}
+        </p>
+      </div>
+
+      {url && (
+        <audio
+          ref={audio} src={url} preload="metadata"
+          onPlay={() => setTocando(true)}
+          onPause={() => setTocando(false)}
+          onEnded={() => { setTocando(false); setAgora(0); }}
+          onTimeUpdate={e => setAgora(e.currentTarget.currentTime)}
+          onLoadedMetadata={e => {
+            const d = e.currentTarget.duration;
+            if (isFinite(d) && d > 0) setTotal(d);
+          }}
+          onDurationChange={e => {
+            const d = e.currentTarget.duration;
+            if (isFinite(d) && d > 0) setTotal(d);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

@@ -134,6 +134,44 @@ export async function possoUsarOChat(): Promise<boolean> {
   return data === true;
 }
 
+/** A trava de lançamento está aberta nesta empresa? */
+export async function lerLiberacaoChat(empresaId: string): Promise<boolean> {
+  const { data, error } = await db('chat_config')
+    .select('liberado')
+    .eq('empresa_id', empresaId)
+    .maybeSingle() as unknown as {
+      data: { liberado: boolean } | null; error: { message: string } | null;
+    };
+  if (error) {
+    console.warn('[chat] lerLiberacao:', error.message);
+    return false;
+  }
+  return data?.liberado === true;
+}
+
+/**
+ * Vira a chave. Só super_admin passa — a policy `chat_config_update` confere.
+ *
+ * A linha já existe para toda empresa (semeada na migration), então é UPDATE e
+ * não upsert: se ela sumiu, é um problema que vale aparecer, e não um que vale
+ * remendar em silêncio.
+ */
+export async function definirLiberacaoChat(
+  empresaId: string, liberado: boolean,
+): Promise<{ erro: string | null }> {
+  const { error } = await db('chat_config')
+    .update({ liberado, atualizado_em: new Date().toISOString() })
+    .eq('empresa_id', empresaId);
+  if (error) {
+    return {
+      erro: /row-level security|violates/i.test(error.message)
+        ? 'Só o super admin pode abrir ou fechar o chat.'
+        : 'Tente novamente.',
+    };
+  }
+  return { erro: null };
+}
+
 // ── Leitura ──────────────────────────────────────────────────────────────────
 
 /**
