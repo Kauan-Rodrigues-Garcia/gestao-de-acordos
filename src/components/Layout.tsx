@@ -56,6 +56,7 @@ import { DesempenhoDia } from './DesempenhoDia';
 import { NotificacaoToast } from './NotificacaoToast';
 import { BarraAtualizacao } from './BarraAtualizacao';
 import { AutorizacaoDock } from './AutorizacaoDock';
+import { BolhaChat } from '@/components/Chat/BolhaChat';
 import { useNotificacoes } from '@/providers/NotificacoesProvider';
 import { useEasterEggCriadores, DURACAO_ESCURECIMENTO_MS } from '@/hooks/useEasterEggCriadores';
 // O overlay continua no Layout: a comemoração explode em QUALQUER página, não
@@ -776,6 +777,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           do que está fazendo devolveria a espera que este fluxo eliminou.
           Some sozinha quando não há nada a mostrar. */}
       <AutorizacaoDock />
+
+      {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
+          Fica fora das rotas de propósito: conversar não é uma tela, é uma
+          interrupção em cima do que a pessoa está fazendo. Some sozinho para
+          quem não tem `ver_chat` (e, enquanto a trava `chat_config` estiver
+          fechada, para todo mundo que não for super_admin). */}
+      <BolhaChat />
 
       {/* Comemoração de meta — explode no topo, em qualquer página, para quem
           for do setor dos homenageados. Não bloqueia cliques. */}

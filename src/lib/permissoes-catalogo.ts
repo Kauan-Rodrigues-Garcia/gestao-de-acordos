@@ -160,6 +160,8 @@ export const GRUPOS_PERMISSAO = [
   // Tickets entrou em 24/08/2026. Era o único módulo cujo acesso ficava
   // inteiramente fora do painel — flag por empresa + cadastro + cargo.
   'Tickets',
+  // Chat interno, 25/08/2026. Substitui a "Pomba" do sistema da empresa.
+  'Chat',
 ] as const;
 export type GrupoPermissao = typeof GRUPOS_PERMISSAO[number];
 
@@ -283,6 +285,37 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_pix_automatico', label: 'Aba Pix Automático',
     descricao: 'Abrir o painel de Pix automático e o ranking de comissão',
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS,
+  },
+  {
+    /*
+     * O chat NASCE fechado para todo mundo, e `padrao: {}` sozinho não garante
+     * isso: `temPermissao` responde `true` para administrador antes de olhar
+     * tabela nenhuma. Quem segura o administrador é a trava `chat_config`, no
+     * banco — ver a migration 20260825210000.
+     *
+     * Quando o chat abrir para a operação, a chave passa a mandar sozinha.
+     */
+    key: 'ver_chat', label: 'Chat interno',
+    descricao: 'Abrir o chat e conversar com outras pessoas da empresa',
+    grupo: 'Chat', padrao: {},
+  },
+  {
+    key: 'chat_escopo_equipe', label: 'Chat: pessoas da equipe',
+    descricao: 'Iniciar conversa com quem está na mesma equipe',
+    grupo: 'Chat', padrao: {},
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
+  },
+  {
+    key: 'chat_escopo_setor', label: 'Chat: pessoas do setor',
+    descricao: 'Iniciar conversa com quem está no mesmo setor',
+    grupo: 'Chat', padrao: {},
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
+  },
+  {
+    key: 'chat_escopo_todos_setores', label: 'Chat: a empresa inteira',
+    descricao: 'Iniciar conversa com qualquer pessoa da empresa',
+    grupo: 'Chat', padrao: {},
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
   },
   {
     key: 'ver_tickets', label: 'Aba Tickets',

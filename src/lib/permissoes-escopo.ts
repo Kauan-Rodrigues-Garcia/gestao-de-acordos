@@ -67,6 +67,19 @@ export interface AbaComEscopo {
  * painel de permissões desenhar a matriz sem conhecer cada tela.
  */
 export const ABAS_COM_ESCOPO = {
+  /*
+   * O Chat tem TRÊS níveis, e a ausência de `individual` é deliberada:
+   * conversar consigo mesmo não é alcance, e não existe.
+   *
+   * Cuidado com o que estes níveis significam: decidem com quem eu consigo
+   * INICIAR conversa. Responder não depende deles — quem já me escreveu eu
+   * respondo sempre, mesmo fora do meu alcance. Ver `fn_chat_abrir`.
+   */
+  chat: {
+    chaveAba: 'ver_chat',
+    prefixo: 'chat',
+    niveis: ['equipe', 'setor', 'todos_setores'],
+  },
   lixeira: {
     chaveAba: 'ver_lixeira',
     prefixo: 'lixeira',
