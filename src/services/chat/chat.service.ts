@@ -322,6 +322,50 @@ export function rotuloAnexo(anexos: AnexoChat[]): string {
   return a.nome || 'Arquivo';
 }
 
+/**
+ * UMA conversa, mesmo que ela ainda não tenha nenhuma mensagem.
+ *
+ * `listarConversas` descarta conversa sem mensagem de propósito — aberta e
+ * abandonada viraria uma linha vazia que não some sozinha. Só que a conversa
+ * RECÉM-CRIADA também não tem mensagem nenhuma, e sem esta função a tela abria
+ * um painel em branco: a conversa não estava na lista, e no tamanho compacto a
+ * lista já tinha saído de cena para dar lugar a ela.
+ */
+export async function buscarConversa(
+  conversaId: string, meuId: string,
+): Promise<ConversaChat | null> {
+  const { data, error } = await db('chat_conversas')
+    .select('id, par_menor, par_maior, ultima_mensagem_em')
+    .eq('id', conversaId)
+    .maybeSingle() as unknown as {
+      data: { id: string; par_menor: string; par_maior: string; ultima_mensagem_em: string | null } | null;
+      error: { message: string } | null;
+    };
+
+  if (error || !data) return null;
+
+  const outroId = data.par_menor === meuId ? data.par_maior : data.par_menor;
+  const [perfis, empresas] = await Promise.all([
+    buscarPerfis([outroId]),
+    buscarEmpresasDosOutros(),
+  ]);
+  const p = perfis.get(outroId);
+
+  return {
+    id:                 data.id,
+    outro_id:           outroId,
+    outro_nome:         p?.nome ?? 'Sem nome',
+    outro_usuario:      p?.usuario ?? null,
+    outro_foto:         p?.foto_url ?? null,
+    ultima_mensagem_em: data.ultima_mensagem_em,
+    ultimo_texto:       null,
+    ultimo_autor_id:    null,
+    nao_lidas:          0,
+    leitura_do_outro:   null,
+    outro_empresa:      empresas.get(outroId) ?? null,
+  };
+}
+
 export async function listarMensagens(conversaId: string): Promise<MensagemChat[]> {
   const { data, error } = await db('chat_mensagens')
     .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em')
@@ -441,6 +485,21 @@ export async function dispararMensagem(
     pulados:   data?.pulados ?? [],
     erro:      null,
   };
+}
+
+/**
+ * Registra que a pessoa leu as boas-vindas do chat.
+ *
+ * Vai por `db()` e não por `supabase.from('perfis')` porque
+ * `database.types.ts` é gerado do banco e ainda não conhece
+ * `chat_boas_vindas_em` (migration 20260825240000). Quando os tipos forem
+ * regenerados, vira substituição direta.
+ */
+export async function registrarBoasVindas(perfilId: string): Promise<{ erro: string | null }> {
+  const { error } = await db('perfis')
+    .update({ chat_boas_vindas_em: new Date().toISOString() })
+    .eq('id', perfilId);
+  return { erro: error?.message ?? null };
 }
 
 // ── Anexos ───────────────────────────────────────────────────────────────────

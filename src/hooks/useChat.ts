@@ -28,7 +28,7 @@ import { assinarTabela } from '@/lib/realtime';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
-  listarConversas, listarMensagens, listarDisparos,
+  listarConversas, listarMensagens, listarDisparos, buscarConversa,
   marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
 } from '@/services/chat/chat.service';
@@ -41,6 +41,14 @@ export interface UseChat {
   disparos:       DisparoChat[];
   mensagens:      MensagemChat[];
   conversaAberta: string | null;
+  /**
+   * A conversa aberta, venha ela da lista ou não.
+   *
+   * Conversa recém-criada ainda não tem mensagem, e por isso não aparece em
+   * `conversas` — ver `listarConversas`. A tela precisa dela mesmo assim, senão
+   * abre em branco.
+   */
+  aberta:         ConversaChat | null;
   carregando:     boolean;
   naoLidasTotal:  number;
   abrir:          (conversaId: string | null) => void;
@@ -59,6 +67,8 @@ export function useChat(ativo: boolean): UseChat {
   const [mensagens, setMensagens] = useState<MensagemChat[]>([]);
   const [conversaAberta, setConversaAberta] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(true);
+  /** Preenchida quando a conversa aberta ainda não está na lista. */
+  const [avulsa, setAvulsa] = useState<ConversaChat | null>(null);
 
   // A conversa aberta lida de dentro do ouvinte do realtime, que é criado uma
   // vez: sem a ref, ele veria para sempre o valor da primeira renderização.
@@ -148,9 +158,15 @@ export function useChat(ativo: boolean): UseChat {
   // ── Abrir / fechar ─────────────────────────────────────────────────────────
   const abrir = useCallback((conversaId: string | null) => {
     setConversaAberta(conversaId);
-    if (!conversaId) { setMensagens([]); return; }
+    if (!conversaId) { setMensagens([]); setAvulsa(null); return; }
     void listarMensagens(conversaId).then(setMensagens);
-    if (meuId) void marcarLido(conversaId, meuId).then(() => agendarRefazer());
+    if (meuId) {
+      void marcarLido(conversaId, meuId).then(() => agendarRefazer());
+      // Busca sempre, e não só quando falta na lista: no clique a lista pode
+      // estar de uma leitura anterior, e decidir por ela erraria justamente no
+      // caso que este código existe para cobrir.
+      void buscarConversa(conversaId, meuId).then(setAvulsa);
+    }
   }, [meuId, agendarRefazer]);
 
   const abrirCom = useCallback(async (pessoaId: string) => {
@@ -171,8 +187,14 @@ export function useChat(ativo: boolean): UseChat {
 
   const naoLidasTotal = conversas.reduce((s, c) => s + c.nao_lidas, 0);
 
+  // A da lista manda: ela traz não lidas e leitura do outro, que a avulsa não
+  // tem. A avulsa só cobre o intervalo em que a conversa ainda não existe lá.
+  const aberta = conversaAberta
+    ? (conversas.find(c => c.id === conversaAberta) ?? avulsa)
+    : null;
+
   return {
-    conversas, disparos, mensagens, conversaAberta, carregando,
+    conversas, disparos, mensagens, conversaAberta, aberta, carregando,
     naoLidasTotal, abrir, abrirCom, enviar, recarregar,
   };
 }

@@ -42,72 +42,48 @@ export function AvatarChat({
   );
 }
 
-// ── A nuvem ──────────────────────────────────────────────────────────────────
+// ── O ícone do botão ─────────────────────────────────────────────────────────
 
 /**
- * O botão do chat: uma nuvem de fala que respira.
+ * O balão do chat, com os três pontos.
  *
- * SVG, e não três `<div>` arredondados: a nuvem tem uma silhueta só, e montá-la
- * com caixas deixaria as junções visíveis no hover, quando o fundo clareia.
+ * SVG próprio, e não o `MessageCircle` do lucide, por dois motivos: o traço
+ * fica mais grosso e mais legível em 26 px, e os pontos precisam animar
+ * separados do balão — coisa que um ícone de biblioteca não deixa fazer.
  *
- * ## A animação
+ * A animação é discreta: os pontos sobem 1,5 px em sequência, com 160 ms entre
+ * eles, e só ganham vida quando o botão está ativo (mouse em cima, ou mensagem
+ * não lida esperando). Parado, o botão fica parado — um ícone que se mexe o dia
+ * inteiro no canto da tela vira distração, não convite.
  *
- * Dois movimentos independentes, ambos lentos de propósito. A nuvem sobe e
- * desce 2 px em 4 segundos — perto do ritmo de uma respiração, que é o que faz
- * parecer viva em vez de piscando. Os três pontos pulsam em sequência, com
- * atraso de 160 ms entre eles.
- *
- * Tudo em CSS, sem biblioteca e sem JavaScript por quadro: é um elemento que
- * fica na tela o dia inteiro, e animar isso no fio principal custaria bateria
- * de todo mundo o tempo todo.
- *
- * `prefers-reduced-motion` para tudo. Quem pediu para o sistema parar de se
- * mexer não deveria ganhar uma exceção no canto da tela.
+ * Em CSS, sem biblioteca e sem JavaScript por quadro. `prefers-reduced-motion`
+ * desliga: quem pediu para o sistema parar de se mexer não deveria ganhar uma
+ * exceção no canto da tela.
  */
-export function NuvemChat({ ativa = false }: { ativa?: boolean }) {
+export function IconeChat({ ativo = false }: { ativo?: boolean }) {
   return (
     <>
       <style>{`
-        @keyframes chat-respira {
-          0%, 100% { transform: translateY(0)     scale(1);    }
-          50%      { transform: translateY(-2px)  scale(1.015); }
-        }
         @keyframes chat-ponto {
-          0%, 100% { opacity: .45; transform: translateY(0);     }
-          50%      { opacity: 1;   transform: translateY(-1.5px); }
+          0%, 100% { transform: translateY(0);     opacity: .75; }
+          50%      { transform: translateY(-1.5px); opacity: 1;  }
         }
-        .chat-nuvem      { animation: chat-respira 4s ease-in-out infinite; }
-        .chat-nuvem-p    { animation: chat-ponto 1.8s ease-in-out infinite; }
-        .chat-nuvem-p:nth-child(2) { animation-delay: .16s; }
-        .chat-nuvem-p:nth-child(3) { animation-delay: .32s; }
+        .chat-p-anima { animation: chat-ponto 1.6s ease-in-out infinite; }
+        .chat-p-anima:nth-of-type(2) { animation-delay: .16s; }
+        .chat-p-anima:nth-of-type(3) { animation-delay: .32s; }
         @media (prefers-reduced-motion: reduce) {
-          .chat-nuvem, .chat-nuvem-p { animation: none; }
+          .chat-p-anima { animation: none; }
         }
       `}</style>
-      <svg
-        viewBox="0 0 64 52"
-        className={cn('chat-nuvem w-full h-full transition-colors duration-300',
-                      ativa ? 'text-primary/25' : 'text-muted')}
-        aria-hidden="true"
-      >
-        {/*
-          Um caminho só: quatro arcos formando a silhueta, e o rabinho embaixo à
-          esquerda, como numa fala de história em quadrinhos. Três `<div>`
-          arredondados dariam a mesma forma e mostrariam as junções no hover,
-          quando o fundo clareia.
-        */}
+      <svg viewBox="0 0 32 32" className="w-[26px] h-[26px]" aria-hidden="true">
+        {/* Balão de canto arredondado com o rabinho embaixo à esquerda. */}
         <path
-          fill="currentColor"
-          d="M20 8a13 13 0 0 1 12.4 9.1A11 11 0 0 1 46 15.5 11 11 0 0 1 56 26.5
-             a11 11 0 0 1-11 11H19.5l-7.3 8.4a1.1 1.1 0 0 1-1.9-.9l1.2-7.9
-             A15 15 0 0 1 20 8Z"
+          d="M6 4h20a3 3 0 0 1 3 3v13a3 3 0 0 1-3 3H13.6l-5.3 4.7A1 1 0 0 1 6.6 27v-4H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3Z"
+          fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinejoin="round"
         />
-        <g className={cn('transition-colors duration-300',
-                         ativa ? 'text-primary' : 'text-muted-foreground')}>
-          <circle className="chat-nuvem-p" cx="26" cy="26" r="3.2" fill="currentColor" />
-          <circle className="chat-nuvem-p" cx="35" cy="26" r="3.2" fill="currentColor" />
-          <circle className="chat-nuvem-p" cx="44" cy="26" r="3.2" fill="currentColor" />
-        </g>
+        <circle className={cn(ativo && 'chat-p-anima')} cx="11" cy="13.5" r="1.9" fill="currentColor" />
+        <circle className={cn(ativo && 'chat-p-anima')} cx="16" cy="13.5" r="1.9" fill="currentColor" />
+        <circle className={cn(ativo && 'chat-p-anima')} cx="21" cy="13.5" r="1.9" fill="currentColor" />
       </svg>
     </>
   );

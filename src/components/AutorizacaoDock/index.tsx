@@ -268,7 +268,18 @@ function Cartao({ pedido, souAutorizador, meuId, onDecidido }: CartaoProps) {
   );
 }
 
-export function AutorizacaoDock() {
+interface PropsDock {
+  /**
+   * Quanto recuar da esquerda, em pixels, para não invadir o menu lateral.
+   *
+   * Só o `Layout` sabe a largura do momento — o menu recolhe e expande, e o
+   * dock é `fixed`, fora do fluxo. Vale só a partir de `md`: abaixo disso o
+   * menu não ocupa espaço.
+   */
+  recuoEsquerda?: number;
+}
+
+export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   // Pergunta ao painel, e não ao cargo. `autorizacao_lider.service` confere a
@@ -322,14 +333,22 @@ export function AutorizacaoDock() {
 
   return (
     /*
-     * Canto ESQUERDO desde 25/08/2026.
+     * Canto ESQUERDO desde 25/08/2026, mas AO LADO do menu, nunca por cima.
      *
-     * Era o direito, e passou a dividir a quina com a bolha do chat — duas
-     * coisas que aparecem sozinhas, uma por cima da outra, e a de baixo some.
+     * Era o direito, e passou a dividir a quina com o botão do chat — duas
+     * coisas que aparecem sozinhas, uma em cima da outra, e a de baixo some.
      * Autorizar e conversar são interrupções diferentes e merecem cantos
-     * diferentes. `items-start` acompanha: a gaveta abre para a direita agora.
+     * diferentes.
+     *
+     * O recuo vem de fora porque só o `Layout` sabe se o menu está aberto (240
+     * px) ou recolhido (64). Abaixo de `md` o menu não existe, e aí o `left-4`
+     * da classe vale — por isso o recuo entra como variável usada só no
+     * `md:`, e não como `style.left`, que valeria em qualquer largura.
      */
-    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start gap-2 print:hidden">
+    <div
+      className="fixed bottom-4 left-4 md:left-[var(--recuo-dock)] z-50 flex flex-col items-start gap-2 print:hidden transition-[left] duration-300"
+      style={{ '--recuo-dock': `${recuoEsquerda}px` } as React.CSSProperties}
+    >
       <AnimatePresence>
         {aberta && (
           <motion.div

@@ -34,11 +34,12 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
 import { apagarConversa, possoUsarOChat } from '@/services/chat/chat.service';
-import { NuvemChat } from './comum';
+import { IconeChat } from './comum';
 import { ListaConversas } from './ListaConversas';
 import { Conversa } from './Conversa';
 import { DisparoDialog } from './DisparoDialog';
 import { NovaConversaDialog } from './NovaConversaDialog';
+import { BoasVindasChat } from './BoasVindasChat';
 import { useToast } from '@/components/ui/use-toast';
 
 const CHAVE_LARGURA = 'chat-expandido';
@@ -54,8 +55,21 @@ export function BolhaChat() {
   });
   const [novaConversa, setNovaConversa] = useState(false);
   const [novoDisparo, setNovoDisparo] = useState(false);
-  /** Mouse ou teclado em cima da nuvem — acende o brilho e os pontos. */
+  /** Mouse ou teclado em cima do botão — acende o brilho e os pontos. */
   const [sobre, setSobre] = useState(false);
+
+  /*
+   * As boas-vindas: aparecem uma vez, antes da PRIMEIRA conversa.
+   *
+   * `pendente` guarda o que a pessoa ia fazer quando o cartão apareceu —
+   * abrir uma conversa da lista, ou começar uma nova. Sem isso, ela leria o
+   * aviso, clicaria em «Entendi» e voltaria para a lista, tendo que repetir o
+   * clique. O cartão é uma pausa, não um cancelamento.
+   */
+  const [pendente, setPendente] = useState<
+    { tipo: 'abrir'; id: string } | { tipo: 'pessoa'; id: string } | null
+  >(null);
+  const jaLeu = !!perfil?.chat_boas_vindas_em;
 
   /*
    * DUAS travas, e as duas precisam abrir.
@@ -96,13 +110,32 @@ export function BolhaChat() {
     try { localStorage.setItem(CHAVE_LARGURA, expandido ? 'sim' : 'nao'); } catch { /* sem storage */ }
   }, [expandido]);
 
-  const conversaAtual = chat.conversas.find(c => c.id === chat.conversaAberta) ?? null;
+  const conversaAtual = chat.aberta;
 
   const abrirCom = useCallback(async (pessoaId: string) => {
     const id = await chat.abrirCom(pessoaId);
     if (!id) toast({ title: 'Não foi possível abrir a conversa', variant: 'destructive' });
     else setAberto(true);
   }, [chat, toast]);
+
+  // ── As duas portas para uma conversa, ambas passando pelo cartão ───────────
+  const pedirConversa = useCallback((id: string) => {
+    if (!jaLeu) { setPendente({ tipo: 'abrir', id }); return; }
+    chat.abrir(id);
+  }, [jaLeu, chat]);
+
+  const pedirPessoa = useCallback((pessoaId: string) => {
+    if (!jaLeu) { setPendente({ tipo: 'pessoa', id: pessoaId }); return; }
+    void abrirCom(pessoaId);
+  }, [jaLeu, abrirCom]);
+
+  const depoisDeLer = useCallback(() => {
+    const p = pendente;
+    setPendente(null);
+    if (!p) return;
+    if (p.tipo === 'abrir') chat.abrir(p.id);
+    else void abrirCom(p.id);
+  }, [pendente, chat, abrirCom]);
 
   const apagar = useCallback(async (conversaId: string) => {
     if (!perfil?.id) return;
@@ -123,29 +156,30 @@ export function BolhaChat() {
         onFocus={() => setSobre(true)}
         onBlur={() => setSobre(false)}
         className={cn(
-          'fixed bottom-6 right-6 z-40 w-16 h-16 group',
-          'transition-transform duration-300 hover:scale-105 active:scale-95',
-          // Sem fundo, sem borda: a NUVEM é o botão. Um círculo por trás dela
-          // devolveria a bolha genérica que ela existe para substituir.
-          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl',
+          'fixed bottom-6 right-6 z-40 w-14 h-14 group',
+          // Quadrado de cantos arredondados. `rounded-2xl` e não `rounded-full`:
+          // pedido explícito, e combina com o resto do sistema, que é todo
+          // feito de cartões de canto arredondado.
+          'rounded-2xl bg-primary text-primary-foreground',
+          'shadow-lg transition-all duration-300',
+          'hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 active:scale-95',
+          'flex items-center justify-center',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
         )}
         aria-label={chat.naoLidasTotal ? `Chat, ${chat.naoLidasTotal} não lidas` : 'Abrir o chat'}
       >
-        {/* O brilho. Só aparece no hover, e é o que dá o «ativo» do desenho. */}
+        {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
         <span
           aria-hidden="true"
           className={cn(
-            'absolute inset-1 rounded-full blur-xl transition-opacity duration-500',
-            'bg-primary/30',
+            'absolute inset-0 rounded-2xl blur-lg -z-10 bg-primary/40 transition-opacity duration-500',
             sobre || chat.naoLidasTotal > 0 ? 'opacity-100' : 'opacity-0',
           )}
         />
-        <span className="relative block w-full h-full drop-shadow-md">
-          <NuvemChat ativa={sobre || chat.naoLidasTotal > 0} />
-        </span>
+        <IconeChat ativo={sobre || chat.naoLidasTotal > 0} />
 
         {chat.naoLidasTotal > 0 && (
-          <span className="absolute top-0 right-0 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">
+          <span className="absolute -top-1 -right-1 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">
             {chat.naoLidasTotal > 99 ? '99+' : chat.naoLidasTotal}
           </span>
         )}
@@ -154,8 +188,14 @@ export function BolhaChat() {
   }
 
   // ── Aberto ─────────────────────────────────────────────────────────────────
-  const mostraLista = expandido || !chat.conversaAberta;
-  const mostraConversa = !!conversaAtual && (expandido || !!chat.conversaAberta);
+  /*
+   * A lista só sai de cena quando há uma conversa DE VERDADE para pôr no
+   * lugar. Antes bastava `conversaAberta` estar preenchida — e se ela não
+   * resolvesse (conversa nova, ainda fora da lista), a janela ficava vazia:
+   * lista escondida, conversa nula, nada desenhado.
+   */
+  const mostraLista = expandido || !conversaAtual;
+  const mostraConversa = !!conversaAtual;
 
   return (
     <>
@@ -194,7 +234,7 @@ export function BolhaChat() {
                 selecionada={chat.conversaAberta}
                 carregando={chat.carregando}
                 meuId={perfil?.id ?? ''}
-                onAbrir={chat.abrir}
+                onAbrir={pedirConversa}
                 onApagar={id => void apagar(id)}
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
@@ -228,8 +268,11 @@ export function BolhaChat() {
       <NovaConversaDialog
         aberto={novaConversa} online={online}
         onFechar={() => setNovaConversa(false)}
-        onEscolher={id => void abrirCom(id)}
+        onEscolher={pedirPessoa}
       />
+
+      {/* Uma vez por pessoa, antes da primeira conversa. Ver o componente. */}
+      <BoasVindasChat aberto={!!pendente} onAceitar={depoisDeLer} />
 
       <DisparoDialog
         aberto={novoDisparo}

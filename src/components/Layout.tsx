@@ -776,7 +776,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           outro lado há um operador parado esperando, e obrigar o líder a sair
           do que está fazendo devolveria a espera que este fluxo eliminou.
           Some sozinha quando não há nada a mostrar. */}
-      <AutorizacaoDock />
+      {/* O recuo acompanha o menu: 240 px aberto, 64 recolhido, mais 16 de
+          respiro. Sem isto a gaveta abria POR CIMA do menu lateral. */}
+      <AutorizacaoDock recuoEsquerda={(sidebarOpen ? 240 : 64) + 16} />
 
       {/* Chat interno — mesma quina do dock de autorizações, um degrau acima.
           Fica fora das rotas de propósito: conversar não é uma tela, é uma

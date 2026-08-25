@@ -99,6 +99,11 @@ export interface Perfil {
   /** true após o usuário trocar a senha padrão pelo botão de chave (troca 1x) */
   senha_alterada?: boolean | null;
   /**
+   * Quando a pessoa leu as boas-vindas do chat (migration 20260825240000).
+   * `null` = ainda não viu, e o cartão aparece antes da primeira conversa.
+   */
+  chat_boas_vindas_em?: string | null;
+  /**
    * Liberado pelo super_admin para enxergar as duas empresas (migration
    * 20260818300000). Só vale junto com cargo `gerencia`/`diretoria` — use
    * `perfilVeDuasEmpresas` em vez de ler a flag crua.
