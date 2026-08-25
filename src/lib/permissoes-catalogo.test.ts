@@ -299,3 +299,65 @@ describe('padrões de semeadura', () => {
     expect(ouv.dashboard_escopo_todos_setores).toBe(false);
   });
 });
+
+/**
+ * O eixo de PRODUTO, acrescentado em 25/08 junto com Comercial e RH.
+ *
+ * O que ele conserta: a tela de Permissões do Comercial mostrava as ~100 chaves
+ * da cobrança — «Ver acordos», «Tabular», «Campanha Fácil» — para uma operação
+ * de vendas. Oferecer um interruptor que não controla nada é o defeito que este
+ * catálogo inteiro existe para não cometer.
+ */
+describe('catálogo por produto', () => {
+  it('o Comercial não recebe nenhuma chave de cobrança', () => {
+    const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    for (const daCobranca of [
+      'ver_acordos', 'criar_acordos', 'ver_analitico', 'ver_painel_lider',
+      'ver_campanha_facil', 'ver_metas', 'importar_analitico',
+      'ajuste_recebimento_lancar', 'ver_pix_automatico', 'ver_tickets',
+    ]) {
+      expect(chaves.has(daCobranca), `${daCobranca} vazou para o Comercial`).toBe(false);
+    }
+  });
+
+  it('o Comercial recebe o que toda operação precisa', () => {
+    const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
+    for (const generica of [
+      'ver_usuarios', 'usuarios_administrar', 'equipes_criar_editar',
+      'ver_configuracoes', 'administrar_sistema', 'ver_lixeira', 'lixeira_restaurar',
+    ]) {
+      expect(chaves.has(generica), `${generica} sumiu do Comercial`).toBe(true);
+    }
+  });
+
+  it('RH e Comercial recebem o mesmo recorte — nenhum tem privilégio sobre a cobrança', () => {
+    const comercial = catalogoDoTenant('comercial').map(p => p.key).sort();
+    const rh        = catalogoDoTenant('rh').map(p => p.key).sort();
+    expect(rh).toEqual(comercial);
+  });
+
+  it('a cobrança continua com o catálogo inteiro', () => {
+    // A prova de que a mudança não tirou nada de quem já usava: as duas
+    // empresas de cobrança somadas cobrem todas as chaves declaradas.
+    const bp = catalogoDoTenant('bookplay').map(p => p.key);
+    const pp = catalogoDoTenant('pagueplay').map(p => p.key);
+    const juntas = new Set([...bp, ...pp]);
+    expect(juntas.size).toBe(PERMISSOES.length);
+  });
+
+  it('o recorte genérico é bem menor que o da cobrança', () => {
+    // Não é um número mágico a defender: é a garantia de que o filtro FILTRA.
+    // Se um dia isto falhar por igualdade, alguém marcou o catálogo inteiro
+    // como genérico.
+    expect(catalogoDoTenant('comercial').length)
+      .toBeLessThan(catalogoDoTenant('bookplay').length / 2);
+  });
+
+  it('slug de produto desconhecido não devolve nada', () => {
+    expect(catalogoDoTenant('financeiro')).toEqual([]);
+  });
+
+  it('sem slug (dev sem VITE_TENANT_SLUG) continua mostrando tudo', () => {
+    expect(catalogoDoTenant(null).length).toBe(PERMISSOES.length);
+  });
+});

@@ -72,6 +72,8 @@
  * restam estão numa lista nominal, justificada caso a caso, que só encolhe.
  */
 
+import { produtoDoSlug, type Produto } from '@/lib/produto';
+
 /** Os cargos que o administrador configura na tela. */
 export const CARGOS_CONFIGURAVEIS = [
   'operador', 'ouvidoria', 'lider', 'elite', 'gerencia', 'diretoria', 'rh',
@@ -176,6 +178,18 @@ export interface PermissaoMeta {
    * é oferecer um controle que não controla nada.
    */
   tenants?: TenantSlug[];
+  /**
+   * Em quais PRODUTOS esta chave existe. Ausente = só `cobranca`.
+   *
+   * Eixo diferente de `tenants`, e acima dele: `tenants` separa as duas
+   * empresas DA cobrança; `produtos` separa cobrança de Vendas e de RH.
+   *
+   * Quase todo o catálogo fala de acordo, recebimento, meta e tabulação, e por
+   * isso o padrão é cobrança. O que ganha declaração explícita é o punhado de
+   * chaves que qualquer operação precisa — cadastrar gente, configurar a
+   * empresa, recuperar o que foi apagado. Ver `produtosDaPermissao`.
+   */
+  produtos?: readonly Produto[];
   /** Valor de partida ao semear. Cargo omitido nasce `false`. */
   padrao: Partial<Record<CargoConfiguravel, boolean>>;
   /**
@@ -195,6 +209,15 @@ export interface PermissaoMeta {
    */
   depende?: { chaves: string[]; motivo: string };
 }
+
+/**
+ * As chaves que qualquer operação precisa — cobrança, vendas ou RH.
+ *
+ * Cadastrar gente, configurar a empresa e recuperar o que foi apagado. Todo o
+ * resto do catálogo fala de acordo, recebimento, meta e tabulação, e por isso
+ * o padrão de `produtos` é só cobrança.
+ */
+const TODA_OPERACAO: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
 
 /** Atalhos para os padrões que se repetem. */
 const LIDERANCA: Partial<Record<CargoConfiguravel, boolean>> = {
@@ -276,7 +299,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_lixeira', label: 'Lixeira',
     descricao: 'Abrir a lixeira e restaurar acordos excluídos',
-    grupo: 'Abas e telas', padrao: TODOS,
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: TODOS,
   },
   {
     key: 'ver_logs', label: 'Logs do sistema',
@@ -298,12 +321,12 @@ export const PERMISSOES: PermissaoMeta[] = [
      * `logs-permissao-vs-rls.test.ts` reprova se a lista de cargo voltar para
      * dentro da policy.
      */
-    grupo: 'Abas e telas', padrao: {},
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'ver_configuracoes', label: 'Configurações',
     descricao: 'Abrir a tela de configurações da empresa',
-    grupo: 'Abas e telas', padrao: {},
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'ver_monitoramento_uso', label: 'Monitoramento de uso',
@@ -320,7 +343,7 @@ export const PERMISSOES: PermissaoMeta[] = [
      * `20260824200000` trocou a lista de cargo por esta chave. Ligá-la para a
      * diretoria agora abre o monitoramento de verdade.
      */
-    grupo: 'Abas e telas', padrao: {},
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
     depende: {
       chaves: ['ver_configuracoes'],
       motivo: 'O monitoramento é uma aba interna de Configurações → Logs.',
@@ -329,7 +352,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_banco_dados', label: 'Banco de dados',
     descricao: 'Abrir a sub-aba «Banco de dados» em Configurações',
-    grupo: 'Abas e telas', padrao: {},
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
     depende: {
       chaves: ['ver_configuracoes'],
       motivo: 'É uma sub-aba de Configurações.',
@@ -442,17 +465,17 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_usuarios', label: 'Ver usuários',
     descricao: 'Abrir a lista de pessoas da empresa',
-    grupo: 'Gestão de pessoas', padrao: LIDERANCA,
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
   {
     key: 'ver_equipes', label: 'Ver equipes',
     descricao: 'Abrir a lista de equipes e seus membros',
-    grupo: 'Gestão de pessoas', padrao: LIDERANCA,
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
   {
     key: 'ver_operadores', label: 'Ver dados de operadores',
     descricao: 'Ver informações detalhadas de outras pessoas do setor',
-    grupo: 'Gestão de pessoas', padrao: LIDERANCA,
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
 
   // ── Metas ────────────────────────────────────────────────────────────────
@@ -490,7 +513,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'administrar_sistema', label: 'Administrar o sistema',
     descricao: 'Editar o painel de permissões, a fila de Tickets e ver o monitoramento de uso',
-    grupo: 'Ações específicas', padrao: {},
+    grupo: 'Ações específicas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'comemoracoes_gerenciar', label: 'Comemorações: criar e editar',
@@ -500,18 +523,18 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'usuarios_administrar', label: 'Usuários: administrar contas',
     descricao: 'Criar, excluir e editar qualquer pessoa, inclusive de outros setores',
-    grupo: 'Gestão de pessoas', padrao: {},
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'usuarios_editar_do_setor', label: 'Usuários: editar quem é do meu setor',
     descricao: 'Alterar dados das pessoas do próprio setor, sem alcançar administradores',
-    grupo: 'Gestão de pessoas', padrao: { lider: true, elite: true, gerencia: true },
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: { lider: true, elite: true, gerencia: true },
   },
   {
     key: 'usuarios_transferir', label: 'Usuários: transferir de setor ou empresa',
     descricao: 'Abrir e concluir transferências de pessoas',
     grupo: 'Gestão de pessoas',
-    padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
+    produtos: TODA_OPERACAO, padrao: { lider: true, elite: true, gerencia: true, diretoria: true },
   },
   {
     key: 'usuarios_ver_administradores', label: 'Usuários: enxergar contas de administrador',
@@ -524,12 +547,12 @@ export const PERMISSOES: PermissaoMeta[] = [
      * que ampliar o alcance de um cargo revelava as contas de administração
      * sem ninguém ter decidido isso.
      */
-    grupo: 'Gestão de pessoas', padrao: {},
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'usuarios_desfazer_transferencia', label: 'Usuários: desfazer transferência',
     descricao: 'Reverter uma transferência de setor ou empresa já concluída',
-    grupo: 'Gestão de pessoas', padrao: {},
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'acesso_multiempresa_permitido', label: 'Acesso às duas operações',
@@ -543,22 +566,22 @@ export const PERMISSOES: PermissaoMeta[] = [
      * declarado em `20260824200000`: antes o seletor exigia gerência ou
      * diretoria, e um administrador com a flag ligada não via as duas empresas.
      */
-    grupo: 'Gestão de pessoas', padrao: { gerencia: true, diretoria: true },
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'equipes_criar_editar', label: 'Equipes: criar e editar',
     descricao: 'Criar equipes novas e alterar as existentes',
-    grupo: 'Gestão de pessoas', padrao: { lider: true, elite: true, gerencia: true },
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: { lider: true, elite: true, gerencia: true },
   },
   {
     key: 'equipes_excluir', label: 'Equipes: excluir',
     descricao: 'Apagar uma equipe inteira',
-    grupo: 'Gestão de pessoas', padrao: {},
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
     key: 'equipes_gerenciar_composicao', label: 'Equipes: gerenciar composição',
     descricao: 'Definir líderes da equipe e clonar operadores de outros setores',
-    grupo: 'Gestão de pessoas', padrao: { lider: true, gerencia: true },
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: { lider: true, gerencia: true },
   },
   {
     key: 'metas_editar', label: 'Metas: criar e editar',
@@ -583,13 +606,13 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'usuarios_escopo_setor', label: 'Usuários: pessoas do próprio setor',
     descricao: 'Ver na gestão de pessoas quem é do setor da própria pessoa',
-    grupo: 'Gestão de pessoas', padrao: TODOS,
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: TODOS,
   },
   {
     key: 'usuarios_escopo_todos_setores', label: 'Usuários: pessoas de todos os setores',
     descricao: 'Ver na gestão de pessoas quem é de qualquer setor da empresa',
     grupo: 'Gestão de pessoas',
-    padrao: { gerencia: true, diretoria: true, ouvidoria: true },
+    produtos: TODA_OPERACAO, padrao: { gerencia: true, diretoria: true, ouvidoria: true },
   },
   {
     key: 'painel_diretoria_escopo_setor', label: 'Painel Diretoria: o próprio setor',
@@ -639,32 +662,32 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'lixeira_escopo_individual', label: 'Lixeira: os próprios acordos',
     descricao: 'Ver na lixeira os acordos excluídos pela própria pessoa',
-    grupo: 'Lixeira', padrao: TODOS,
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
   },
   {
     key: 'lixeira_escopo_equipe', label: 'Lixeira: acordos da equipe',
     descricao: 'Ver na lixeira os acordos excluídos pela equipe',
-    grupo: 'Lixeira', padrao: LIDERANCA,
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
   {
     key: 'lixeira_escopo_setor', label: 'Lixeira: acordos do setor',
     descricao: 'Ver na lixeira os acordos excluídos no setor inteiro',
-    grupo: 'Lixeira', padrao: LIDERANCA,
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
   {
     key: 'lixeira_escopo_todos_setores', label: 'Lixeira: todos os setores',
     descricao: 'Ver na lixeira os acordos excluídos em qualquer setor da empresa',
-    grupo: 'Lixeira', padrao: { gerencia: true, diretoria: true },
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'lixeira_restaurar', label: 'Restaurar da lixeira',
     descricao: 'Devolver um acordo excluído para a lista',
-    grupo: 'Lixeira', padrao: TODOS,
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
   },
   {
     key: 'lixeira_limpar', label: 'Esvaziar a lixeira',
     descricao: 'Apagar de vez tudo que está na lixeira',
-    grupo: 'Lixeira', padrao: TODOS,
+    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
   },
 
   // ── Painel Líder ─────────────────────────────────────────────────────────
@@ -1158,10 +1181,42 @@ export const PERMISSOES_POR_CHAVE: Record<string, PermissaoMeta> =
 
 export const CHAVES_PERMISSAO: string[] = PERMISSOES.map(p => p.key);
 
-/** A permissão vale nesta operação? Sem `tenants` declarado, vale nas duas. */
+/**
+ * Em que produtos esta chave existe. Ausente = só cobrança.
+ *
+ * O padrão não é descuido: este catálogo NASCEU sendo o da cobrança. As 100
+ * chaves falam de acordo, recebimento, meta, tabulação, Pix — vocabulário que
+ * não significa nada em Vendas ou RH. Declarar `produtos` em cada uma delas
+ * seria repetir cem vezes a mesma informação que a ausência já dá.
+ *
+ * E a omissão falha do lado seguro: chave nova sem `produtos` fica presa na
+ * cobrança. O pior que acontece é ela não aparecer onde deveria — nunca
+ * aparecer onde não deveria, que é o erro que a Fase 0 veio fechar.
+ */
+export function produtosDaPermissao(p: PermissaoMeta): readonly Produto[] {
+  return p.produtos ?? ['cobranca'];
+}
+
+/**
+ * A permissão vale nesta operação?
+ *
+ * Duas perguntas em sequência, e a ordem importa:
+ *
+ *   1. o PRODUTO tem esta chave? (`ver_acordos` não existe no Comercial)
+ *   2. dentro da cobrança, esta EMPRESA tem? (`tenants`, o eixo antigo)
+ *
+ * A segunda só faz sentido depois da primeira. Ouvidoria não existe na
+ * BookPlay — mas antes disso, Ouvidoria não existe fora da cobrança.
+ */
 export function permissaoNoTenant(p: PermissaoMeta, slug: string | null | undefined): boolean {
+  const produto = produtoDoSlug(slug);
+  // Slug indefinido (dev sem `VITE_TENANT_SLUG`) mostra tudo, como sempre fez:
+  // é ambiente de desenvolvimento, e esconder metade do painel ali só atrapalha.
+  if (slug && !produto) return false;
+  if (produto && !produtosDaPermissao(p).includes(produto)) return false;
+
   if (!p.tenants) return true;
-  if (!slug) return true; // slug indefinido (dev sem VITE_TENANT_SLUG): mostra tudo
+  if (!slug) return true;
   return p.tenants.includes(slug as TenantSlug);
 }
 
