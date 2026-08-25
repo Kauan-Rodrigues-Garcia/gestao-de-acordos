@@ -39,6 +39,7 @@ import { createContext, useContext, useEffect, useRef, useState, ReactNode } fro
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, Perfil, Empresa } from '@/lib/supabase';
 import { getConfiguredTenantSlug } from '@/lib/tenant';
+import { pareceEmailEntregavel } from '@/lib/identificadorLogin';
 import { getImpersonacaoAtiva } from '@/services/impersonacao.service';
 import { identificarUsuario, limparUsuario } from '@/lib/observabilidade';
 import { esquecerInstantaneos } from '@/lib/cacheInstantaneo';
@@ -284,9 +285,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function signIn(identifier: string, password: string) {
     let email = identifier.trim();
 
-    // If identifier does not contain '@', treat it as a username and look up email
-    // Uses RPC with SECURITY DEFINER to bypass RLS (query runs before authentication)
-    if (!email.includes('@')) {
+    // Nome de usuário vira e-mail por RPC (SECURITY DEFINER: roda antes de
+    // autenticar, então não há sessão para a RLS avaliar).
+    //
+    // A pergunta NÃO é "tem arroba?", e já foi. `camila@ribeiro` é um nome de
+    // usuário legítimo do sistema — o arroba está no cadastro dela — e a regra
+    // antiga o mandava direto ao GoTrue como se fosse endereço, onde nunca
+    // existiria. Ela não conseguia entrar pelo próprio login.
+    //
+    // A pergunta certa é "isto é um endereço para o qual dá para ENVIAR
+    // e-mail?", e `parecEmailEntregavel` responde exigindo ponto e TLD no
+    // domínio. `fulano@gmail.com` e `fulano@interno.sistema` continuam indo
+    // direto, pelo mesmo caminho de sempre; `camila@ribeiro` passa a ser
+    // tratado como o nome de usuário que é.
+    if (!pareceEmailEntregavel(email)) {
       const tenantSlug = getConfiguredTenantSlug();
       let emailResult: string | null = null;
       let lookupError: unknown = null;
@@ -316,13 +328,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (lookupError || !emailResult) {
-        // Identificador que não resolve: `fn_log_login_recusado` confirma no
-        // banco se existe alguém com esse usuário/e-mail e só grava nesse caso —
-        // então isto não enche a trilha com nomes inventados.
-        void registrarLoginRecusado(identifier.trim(), 'usuario_nao_encontrado');
-        return { error: 'Usuário não encontrado neste site. Tente novamente com seu e-mail ou confirme se o cadastro está vinculado à empresa correta.' };
+        // Tem arroba e a busca não achou: pode ser um endereço de domínio
+        // estranho que o teste de entregabilidade recusou. Deixa o GoTrue
+        // decidir, que é exatamente o que acontecia antes desta mudança —
+        // nenhum login que funcionava para de funcionar por causa dela.
+        if (!email.includes('@')) {
+          // Identificador que não resolve: `fn_log_login_recusado` confirma no
+          // banco se existe alguém com esse usuário/e-mail e só grava nesse caso —
+          // então isto não enche a trilha com nomes inventados.
+          void registrarLoginRecusado(identifier.trim(), 'usuario_nao_encontrado');
+          return { error: 'Usuário não encontrado neste site. Tente novamente com seu e-mail ou confirme se o cadastro está vinculado à empresa correta.' };
+        }
+      } else {
+        email = emailResult;
       }
-      email = emailResult;
     }
 
     isSigningIn.current = true;
