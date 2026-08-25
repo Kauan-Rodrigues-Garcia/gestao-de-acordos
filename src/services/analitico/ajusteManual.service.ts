@@ -5,7 +5,20 @@
  *
  * A regra diz que nada altera o valor do analítico. Ela continua valendo: este
  * módulo **não toca em `analitico_recebimentos`**. O ajuste vive numa tabela
- * separada (migration `20260823150000`) e é somado na LEITURA.
+ * separada (migrations `20260823150000` e `20260825120000`) e é somado na
+ * LEITURA.
+ *
+ * ## Um card por operador
+ *
+ * Desde `20260825120000` existe no máximo UMA linha ativa por operador por mês,
+ * garantida por índice único. O líder informa o valor TOTAL da pessoa; o
+ * histórico de cada alteração mora em `analitico_ajustes_eventos`, escrito por
+ * gatilho.
+ *
+ * O card é compartilhado: todo líder que enxerga o operador — inclusive por
+ * clone, via `fn_setores_do_operador` — vê e edita o mesmo registro. O desenho
+ * anterior mostrava a cada líder só o que ele mesmo tinha lançado, e em agosto
+ * isso produziu lançamentos em dobro para três operadores do Play 5.
  *
  * A diferença não é cosmética. Somar na leitura significa que desligar a
  * correção — no dia em que o ERP for consertado — é parar de somar: nenhum dado
@@ -112,19 +125,26 @@ export interface AjusteManual {
   atualizadoEm: string;
 }
 
-export interface SolicitacaoAjuste {
+/**
+ * Uma linha do histórico do card.
+ *
+ * Escrita por gatilho no banco (`fn_ajuste_registrar_evento`), nunca daqui. É
+ * dela que sai a frase que o líder lê — «atualizado de 5.000 para 6.000
+ * (+1.000) por Fulano em 25/08» —, e é `delta` que responde a pergunta que ele
+ * realmente faz: quanto entrou hoje.
+ */
+export interface EventoAjuste {
   id: string;
   ajusteId: string;
-  tipo: 'editar' | 'cancelar';
-  valorProposto: number | null;
-  motivoProposto: string | null;
-  justificativa: string;
-  status: 'aberta' | 'aprovada' | 'recusada';
-  solicitadoPorNome: string | null;
-  solicitadoEm: string;
-  resolvidoPorNome: string | null;
-  resolvidoEm: string | null;
-  resposta: string | null;
+  tipo: 'criado' | 'atualizado' | 'cancelado';
+  /** `null` na criação: não havia valor antes. */
+  valorAnterior: number | null;
+  valorNovo: number;
+  /** `valorNovo - valorAnterior`, já calculado no banco. */
+  delta: number;
+  observacao: string | null;
+  autorNome: string | null;
+  criadoEm: string;
 }
 
 /** `2026-08` → `2026-08-01`. A competência é sempre o dia 1. */
@@ -138,9 +158,10 @@ export function primeiroDiaDaCompetencia(mes: string): string {
  * Os ajustes de um mês.
  *
  * A RLS decide o recorte: quem administra recebe a empresa inteira, o líder
- * recebe o que lançou, e o operador recebe o que caiu no próprio recebimento.
- * Repetir esse recorte aqui criaria duas verdades — e a que engana é sempre a
- * do cliente.
+ * recebe os cards de quem ele supervisiona (`fn_ajuste_no_meu_alcance`, clone
+ * incluído), e o operador recebe o que caiu no próprio recebimento. Repetir
+ * esse recorte aqui criaria duas verdades — e a que engana é sempre a do
+ * cliente.
  *
  * Migration pendente devolve lista vazia em vez de tela quebrada, mesmo padrão
  * de `listarTickets`: a Vercel publica no push, antes de a migration ser
@@ -303,17 +324,27 @@ export function ajustesComoRecebimentos(
   return linhas;
 }
 
-export async function listarSolicitacoes(
-  empresaId: string,
-): Promise<SolicitacaoAjuste[]> {
-  const { data, error } = await db('analitico_ajustes_solicitacoes')
+/**
+ * O histórico de um card, do mais novo para o mais velho.
+ *
+ * Carregado sob demanda — só quando alguém abre o card. Trazê-lo junto da
+ * lista multiplicaria por N uma consulta que roda em toda abertura da aba,
+ * para mostrar o que quase ninguém abre.
+ */
+export async function listarEventos(ajusteId: string): Promise<EventoAjuste[]> {
+  const { data, error } = await db('analitico_ajustes_eventos')
     .select('*')
-    .eq('empresa_id', empresaId)
-    .order('solicitado_em', { ascending: false })
+    .eq('ajuste_id', ajusteId)
+    .order('criado_em', { ascending: false })
     .limit(200);
 
-  if (error || !data) return [];
-  return (data as Record<string, unknown>[]).map(paraSolicitacao);
+  if (error || !data) {
+    if (error && !migrationPendente(error.message)) {
+      console.warn('[ajusteManual] histórico falhou:', error.message);
+    }
+    return [];
+  }
+  return (data as Record<string, unknown>[]).map(paraEvento);
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
@@ -344,17 +375,30 @@ export async function lancarAjuste(params: {
   return { erro: error ? traduzir(error.message) : null };
 }
 
-/** Só quem administra — a RLS recusa o resto. */
+/**
+ * O total do card passa a ser outro.
+ *
+ * Note o que NÃO está aqui: nenhuma conta de diferença. O líder informa o total
+ * — «a Milena está com 6.000» — e o `delta` de +1.000 é derivado pelo gatilho, a
+ * partir do valor que já estava na linha. Calcular a diferença no cliente
+ * exigiria ler o valor atual antes de escrever, e duas pessoas editando o mesmo
+ * card fariam a segunda gravar uma diferença calculada sobre um valor velho.
+ *
+ * `motivo` é opcional: exigir texto a cada atualização diária vira pedágio, e
+ * quem paga pedágio escreve ".". Quando vem preenchido, entra no histórico
+ * daquele evento.
+ */
 export async function editarAjuste(params: {
   id: string;
   valor: number;
-  motivo: string;
+  motivo?: string;
   editadoPor: string;
   editadoPorNome: string;
 }): Promise<{ erro: string | null }> {
+  const anotacao = params.motivo?.trim();
   const { error } = await db('analitico_ajustes_manuais').update({
     valor:             params.valor,
-    motivo:            params.motivo.trim(),
+    ...(anotacao ? { motivo: anotacao } : {}),
     editado_por:       params.editadoPor,
     editado_por_nome:  params.editadoPorNome,
     atualizado_em:     new Date().toISOString(),
@@ -363,15 +407,18 @@ export async function editarAjuste(params: {
 }
 
 /**
- * Cancelar não apaga.
+ * «Apagar» o card, na tela. Cancelar, no banco.
  *
- * A linha fica, para de somar, e guarda quem cancelou e por quê. Um ajuste
- * manual de valor é exatamente o registro que alguém vai querer auditar depois
- * — inclusive, e principalmente, os que foram desfeitos.
+ * Para quem usa é apagar: o card some da lista e o valor para de somar em todo
+ * lugar. Por baixo a linha fica, com quem cancelou e quando — e some do índice
+ * único, o que libera o operador para receber um card novo no mesmo mês.
+ *
+ * Um ajuste manual de valor é exatamente o registro que alguém vai querer
+ * auditar depois; principalmente os que foram desfeitos.
  */
 export async function cancelarAjuste(params: {
   id: string;
-  motivo: string;
+  motivo?: string;
   canceladoPor: string;
   canceladoPorNome: string;
 }): Promise<{ erro: string | null }> {
@@ -380,105 +427,10 @@ export async function cancelarAjuste(params: {
     cancelado_por:        params.canceladoPor,
     cancelado_por_nome:   params.canceladoPorNome,
     cancelado_em:         new Date().toISOString(),
-    motivo_cancelamento:  params.motivo.trim(),
+    motivo_cancelamento:  params.motivo?.trim() || null,
     atualizado_em:        new Date().toISOString(),
   }).eq('id', params.id);
   return { erro: error ? traduzir(error.message) : null };
-}
-
-export async function abrirSolicitacao(params: {
-  ajusteId: string;
-  empresaId: string;
-  tipo: 'editar' | 'cancelar';
-  valorProposto: number | null;
-  motivoProposto: string | null;
-  justificativa: string;
-  solicitadoPor: string;
-  solicitadoPorNome: string;
-}): Promise<{ erro: string | null }> {
-  const { error } = await db('analitico_ajustes_solicitacoes').insert({
-    ajuste_id:            params.ajusteId,
-    empresa_id:           params.empresaId,
-    tipo:                 params.tipo,
-    valor_proposto:       params.valorProposto,
-    motivo_proposto:      params.motivoProposto?.trim() || null,
-    justificativa:        params.justificativa.trim(),
-    solicitado_por:       params.solicitadoPor,
-    solicitado_por_nome:  params.solicitadoPorNome,
-  });
-  return { erro: error ? traduzir(error.message) : null };
-}
-
-export async function responderSolicitacao(params: {
-  id: string;
-  status: 'aprovada' | 'recusada';
-  resposta: string;
-  resolvidoPor: string;
-  resolvidoPorNome: string;
-}): Promise<{ erro: string | null }> {
-  const { error } = await db('analitico_ajustes_solicitacoes').update({
-    status:              params.status,
-    resposta:            params.resposta.trim() || null,
-    resolvido_por:       params.resolvidoPor,
-    resolvido_por_nome:  params.resolvidoPorNome,
-    resolvido_em:        new Date().toISOString(),
-  }).eq('id', params.id);
-  return { erro: error ? traduzir(error.message) : null };
-}
-
-/**
- * Avisa quem pode resolver o pedido.
- *
- * O destinatário sai do PAINEL DE PERMISSÕES, não de uma lista de cargo escrita
- * aqui: lê `cargos_permissoes`, separa os cargos com
- * `ajuste_recebimento_administrar` ligada e notifica quem tem esses cargos. É a
- * regra permanente do projeto, e vale também para notificação — uma lista de
- * cargo no código voltaria a decidir por fora do painel, só que em silêncio.
- *
- * `administrador` e `super_admin` entram sempre: eles recebem `true` para toda
- * chave por construção do resolvedor, e a linha deles em `cargos_permissoes`
- * pode nem existir.
- *
- * Falha em silêncio de propósito. O pedido JÁ foi gravado quando esta função
- * roda; não avisar é ruim, mas derrubar a tela depois de gravar seria pior — a
- * pessoa tentaria de novo e abriria dois pedidos.
- */
-export async function notificarQuemAdministra(params: {
-  empresaId: string;
-  titulo: string;
-  mensagem: string;
-}): Promise<void> {
-  try {
-    const { data: cargos } = await db('cargos_permissoes')
-      .select('cargo, permissoes')
-      .eq('empresa_id', params.empresaId);
-
-    const habilitados = new Set<string>(['administrador', 'super_admin']);
-    for (const linha of (cargos ?? []) as Record<string, unknown>[]) {
-      const mapa = linha.permissoes as Record<string, boolean> | null;
-      if (mapa?.ajuste_recebimento_administrar === true) {
-        habilitados.add(String(linha.cargo));
-      }
-    }
-
-    const { data: pessoas } = await db('perfis')
-      .select('id')
-      .eq('empresa_id', params.empresaId)
-      .in('perfil', [...habilitados]);
-
-    const ids = ((pessoas ?? []) as { id: string }[]).map(p => p.id);
-    if (!ids.length) return;
-
-    const { criarNotificacao } = await import('@/services/notificacoes.service');
-    await Promise.allSettled(ids.map(id => criarNotificacao({
-      usuario_id: id,
-      titulo:     params.titulo,
-      mensagem:   params.mensagem,
-      empresa_id: params.empresaId,
-    })));
-  } catch {
-    // Ver o cabeçalho: o pedido já está gravado. Não avisar é aceitável.
-  }
 }
 
 // ── Conversões e erros ───────────────────────────────────────────────────────
@@ -507,21 +459,18 @@ function paraAjuste(l: Record<string, unknown>): AjusteManual {
   };
 }
 
-function paraSolicitacao(l: Record<string, unknown>): SolicitacaoAjuste {
+function paraEvento(l: Record<string, unknown>): EventoAjuste {
+  const anterior = l.valor_anterior;
   return {
-    id:                String(l.id),
-    ajusteId:          String(l.ajuste_id),
-    tipo:              (l.tipo as 'editar' | 'cancelar') ?? 'editar',
-    valorProposto:     l.valor_proposto === null || l.valor_proposto === undefined
-                         ? null : Number(l.valor_proposto),
-    motivoProposto:    (l.motivo_proposto as string | null) ?? null,
-    justificativa:     String(l.justificativa ?? ''),
-    status:            (l.status as SolicitacaoAjuste['status']) ?? 'aberta',
-    solicitadoPorNome: (l.solicitado_por_nome as string | null) ?? null,
-    solicitadoEm:      String(l.solicitado_em),
-    resolvidoPorNome:  (l.resolvido_por_nome as string | null) ?? null,
-    resolvidoEm:       (l.resolvido_em as string | null) ?? null,
-    resposta:          (l.resposta as string | null) ?? null,
+    id:            String(l.id),
+    ajusteId:      String(l.ajuste_id),
+    tipo:          (l.tipo as EventoAjuste['tipo']) ?? 'atualizado',
+    valorAnterior: anterior === null || anterior === undefined ? null : Number(anterior),
+    valorNovo:     Number(l.valor_novo) || 0,
+    delta:         Number(l.delta) || 0,
+    observacao:    (l.observacao as string | null) ?? null,
+    autorNome:     (l.autor_nome as string | null) ?? null,
+    criadoEm:      String(l.criado_em),
   };
 }
 
@@ -532,12 +481,18 @@ function migrationPendente(mensagem: string): boolean {
 /** Texto cru do Postgres → frase que diz o que fazer. */
 export function traduzir(mensagem: string): string {
   if (migrationPendente(mensagem)) {
-    return 'Migration 20260823150000 pendente — aplique-a no Supabase para usar o ajuste de recebimento.';
+    return 'Migration 20260825120000 pendente — aplique-a no Supabase para usar o ajuste de recebimento.';
+  }
+  // A trava do card único. Ela dispara quando duas pessoas criam o card do
+  // mesmo operador ao mesmo tempo — e a mensagem precisa dizer o que fazer, não
+  // nomear o índice: quem está na tela não sabe o que é `ux_ajuste_card…`.
+  if (/ux_ajuste_card_por_operador_mes|duplicate key/i.test(mensagem)) {
+    return 'Esta pessoa já tem um card neste mês. Recarregue a aba e edite o card existente.';
   }
   if (/ajuste_valor_nao_zero/i.test(mensagem)) {
     return 'O valor precisa ser diferente de zero.';
   }
-  if (/ajuste_motivo_preenchido|solicitacao_justificativa/i.test(mensagem)) {
+  if (/ajuste_motivo_preenchido/i.test(mensagem)) {
     return 'Escreva o motivo — ele é obrigatório e fica registrado.';
   }
   if (/row-level security|permission denied/i.test(mensagem)) {

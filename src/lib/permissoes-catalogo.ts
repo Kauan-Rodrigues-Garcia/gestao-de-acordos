@@ -718,7 +718,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   },
   {
     key: 'ajuste_recebimento_lancar', label: 'Lançar ajuste de recebimento',
-    descricao: 'Somar ou tirar valor do recebimento de um operador, com motivo registrado',
+    descricao: 'Criar, atualizar e apagar o card de recebimento de quem você supervisiona',
     grupo: 'Ações específicas', padrao: LIDERANCA,
     depende: {
       chaves: ['painel_lider_sub_ajuste_recebimento'],
@@ -727,7 +727,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   },
   {
     key: 'ajuste_recebimento_administrar', label: 'Administrar ajustes de recebimento',
-    descricao: 'Ver todos os ajustes da empresa, editar, cancelar e responder pedidos de alteração',
+    descricao: 'Ver e editar os cards de TODA a empresa, e não só os de quem você supervisiona',
     grupo: 'Ações específicas', padrao: {},
   },
   /*

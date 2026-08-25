@@ -161,8 +161,18 @@ describe('ajustesComoRecebimentos', () => {
 
 describe('traduzir', () => {
   it('nomeia a migration quando a tabela não existe', () => {
+    // A mais RECENTE, e não a que criou a tabela: quem vê esta frase precisa
+    // aplicar até o card único, senão a aba sobe com o desenho antigo.
     expect(traduzir('relation "analitico_ajustes_manuais" does not exist'))
-      .toContain('20260823150000');
+      .toContain('20260825120000');
+  });
+
+  it('manda editar o card existente quando a trava do único dispara', () => {
+    // O erro cru nomeia o índice; quem está na tela não sabe o que é
+    // `ux_ajuste_card_por_operador_mes`. A frase tem de dizer o que fazer.
+    const texto = traduzir('duplicate key value violates unique constraint "ux_ajuste_card_por_operador_mes"');
+    expect(texto).toContain('já tem um card');
+    expect(texto).not.toContain('ux_ajuste_card');
   });
 
   it('explica a recusa por permissão sem despejar SQL na tela', () => {

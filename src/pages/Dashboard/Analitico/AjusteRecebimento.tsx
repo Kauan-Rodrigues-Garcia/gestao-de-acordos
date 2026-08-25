@@ -4,34 +4,44 @@
  * ## O que esta aba é, e por quanto tempo
  *
  * Uma correção TEMPORÁRIA. O relatório analítico que vem do ERP está com erro, e
- * enquanto a origem não é consertada a liderança precisa somar ou tirar valor do
- * recebimento de um operador, com motivo registrado.
+ * enquanto a origem não é consertada a liderança precisa corrigir o recebimento
+ * de um operador, com registro de quem mexeu.
  *
  * A aba diz isso na cara, num aviso fixo. Ferramenta temporária que não avisa
  * que é temporária vira permanente em três meses — e esta mexe em número de
  * dinheiro.
  *
- * ## O valor entra por fora, e sobe sozinho
+ * ## Um card por pessoa, com o valor TOTAL
  *
- * Não é Pix e não é cartão: entra como "Ajuste manual" na quebra por forma. O
- * ajuste é somado na LEITURA do analítico (`ajusteManual.service.ts`), em dois
- * pontos, e de lá sobe para operador → equipe → setor sem que nenhuma tela
- * precise saber que ele existe.
+ * O desenho anterior era um lançamento por vez: o líder somava «o que entrou
+ * hoje» e a aba virava uma pilha de linhas da mesma pessoa. Duas coisas deram
+ * errado com isso, e as duas estão consertadas aqui.
  *
- * `analitico_recebimentos` não é tocado. Desligar a correção é parar de somar.
+ * A primeira é a rotina: ninguém sabe de cabeça o que entrou hoje, sabe-se o
+ * TOTAL acumulado. Então o líder digita o total, e a diferença é o sistema que
+ * calcula — «estava 5.000, ficou 6.000, entrou 1.000».
+ *
+ * A segunda é mais séria. A RLS antiga mostrava a cada líder só o que ele mesmo
+ * tinha lançado, e em 25/08 dois líderes lançaram o mesmo recebimento para as
+ * mesmas três pessoas, cada um sem ver o card do outro. Agora o card é ÚNICO por
+ * operador e compartilhado com todo líder que enxerga aquela pessoa — clone
+ * incluído. Quem chega depois abre o card que já existe em vez de criar outro.
  *
  * ## Quem faz o quê
  *
- * • **Liderança** lança e vê o próprio histórico. Não edita e não cancela: para
- *   mudar, abre uma solicitação, e o administrador é notificado.
- * • **Administração** vê tudo, edita, cancela e responde as solicitações.
+ * A liderança cria, edita e apaga os cards de quem supervisiona, sem pedir nada
+ * a ninguém. Não há mais fila de aprovação. O que garante a rastreabilidade não
+ * é o pedido, é o histórico: cada alteração vira um evento com autor, hora, o
+ * valor de antes e o de depois — e ele é escrito por gatilho no banco, então
+ * nenhum caminho de escrita consegue pular.
  *
- * Essa divisão não é decoração de tela — a RLS repete as duas regras. Esconder
- * botão é conforto; quem recusa é o banco.
+ * Esconder botão é conforto; quem recusa é o banco. A RLS repete a mesma regra
+ * de alcance (`fn_ajuste_no_meu_alcance`).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  AlertTriangle, Check, Loader2, Minus, Plus, Search, History, Ban, Pencil,
+  AlertTriangle, Check, Loader2, Minus, Plus, Search, History,
+  Trash2, Pencil, ChevronDown, Users,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -54,9 +64,8 @@ import { chaveDeCache } from '@/lib/cacheInstantaneo';
 import { iguaisProfundo } from '@/lib/dadosVivos';
 import { valorDigitadoParaNumero } from './ajusteValor';
 import {
-  listarAjustes, listarSolicitacoes, lancarAjuste, editarAjuste, cancelarAjuste,
-  abrirSolicitacao, responderSolicitacao, notificarQuemAdministra,
-  type AjusteManual, type SolicitacaoAjuste,
+  listarAjustes, listarEventos, lancarAjuste, editarAjuste, cancelarAjuste,
+  type AjusteManual, type EventoAjuste,
 } from '@/services/analitico/ajusteManual.service';
 
 export interface AjusteRecebimentoProps {
@@ -73,8 +82,9 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
 
   const empresaId = empresa?.id ?? null;
   const meuId = perfil?.id ?? null;
+  const meuNome = perfil?.nome ?? perfil?.email ?? 'Sem nome';
 
-  const podeLancar     = temPermissao('ajuste_recebimento_lancar');
+  const podeLancar      = temPermissao('ajuste_recebimento_lancar');
   const podeAdministrar = temPermissao('ajuste_recebimento_administrar');
 
   // ── Dados ─────────────────────────────────────────────────────────────────
@@ -92,31 +102,46 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
     iguais: iguaisProfundo,
     ativo: !!empresaId,
     chaveCache: chaveDeCache('ajustes', empresaId, mes, meuId),
+    // O card é compartilhado: quando a Brenda edita, a tela do Amauri precisa
+    // mudar sozinha. Sem realtime, o card único só evita a duplicata depois de
+    // um F5 — e o F5 é justamente o que ninguém dá antes de digitar.
     assinar: empresaId ? {
       topico: `rt-ajustes-${empresaId}`,
       escutas: [{ tabela: 'analitico_ajustes_manuais' }],
     } : undefined,
   });
 
-  const carregarSolicitacoes = useCallback(
-    () => (empresaId ? listarSolicitacoes(empresaId) : Promise.resolve([])),
-    [empresaId],
+  const cards = useMemo(
+    () => ajustes.filter(a => !a.cancelado)
+      .sort((a, b) => (a.operadorNome ?? '').localeCompare(b.operadorNome ?? '', 'pt-BR')),
+    [ajustes],
   );
 
-  const { dados: solicitacoes, recarregar: recarregarSolicitacoes } =
-    useDadosVivos<SolicitacaoAjuste>({
-      carregar: carregarSolicitacoes,
-      chave: s => s.id,
-      iguais: iguaisProfundo,
-      ativo: !!empresaId,
-      chaveCache: chaveDeCache('ajustes-solicitacoes', empresaId, meuId),
-      assinar: empresaId ? {
-        topico: `rt-ajustes-sol-${empresaId}`,
-        escutas: [{ tabela: 'analitico_ajustes_solicitacoes' }],
-      } : undefined,
-    });
+  const apagados = useMemo(
+    () => ajustes.filter(a => a.cancelado)
+      .sort((a, b) => String(b.canceladoEm ?? '').localeCompare(String(a.canceladoEm ?? ''))),
+    [ajustes],
+  );
 
-  // ── Formulário ────────────────────────────────────────────────────────────
+  const totalDoMes = useMemo(
+    () => cards.reduce((s, a) => s + a.valor, 0),
+    [cards],
+  );
+
+  /**
+   * O seletor só oferece quem AINDA não tem card.
+   *
+   * É a tradução na tela do índice único do banco: escolher alguém que já tem
+   * card só levaria ao erro de chave duplicada. Quem já tem aparece na lista de
+   * baixo, para ser editado.
+   */
+  const comCard = useMemo(() => new Set(cards.map(a => a.operadorId)), [cards]);
+  const disponiveis = useMemo(
+    () => operadores.filter(o => !comCard.has(o.id)),
+    [operadores, comCard],
+  );
+
+  // ── Formulário do card novo ───────────────────────────────────────────────
 
   const [operadorId, setOperadorId] = useState<string | null>(null);
   const [sinal, setSinal] = useState<1 | -1>(1);
@@ -126,15 +151,15 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
   const [seletorAberto, setSeletorAberto] = useState(false);
 
   const operadorEscolhido = useMemo(
-    () => operadores.find(o => o.id === operadorId) ?? null,
-    [operadores, operadorId],
+    () => disponiveis.find(o => o.id === operadorId) ?? null,
+    [disponiveis, operadorId],
   );
 
   const valorNumerico = valorDigitadoParaNumero(valorTexto);
   const podeEnviar = !!operadorEscolhido && valorNumerico !== null
     && motivo.trim().length >= 3 && !salvando;
 
-  async function enviar() {
+  async function criarCard() {
     if (!podeEnviar || !empresaId || !perfil?.id || !operadorEscolhido || valorNumerico === null) return;
     setSalvando(true);
     try {
@@ -147,48 +172,26 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
         valor: valorNumerico * sinal,
         motivo,
         criadoPor: perfil.id,
-        criadoPorNome: perfil.nome ?? perfil.email ?? 'Sem nome',
+        criadoPorNome: meuNome,
       });
       if (r.erro) { toast.error(r.erro); return; }
 
-      toast.success(
-        `${sinal > 0 ? 'Somado' : 'Retirado'} ${formatBRL(valorNumerico)} `
-        + `${sinal > 0 ? 'a' : 'de'} ${operadorEscolhido.nome}.`,
-      );
+      toast.success(`Card de ${operadorEscolhido.nome} criado com ${formatBRL(valorNumerico * sinal)}.`);
       setValorTexto(''); setMotivo(''); setOperadorId(null);
       await recarregar();
     } finally { setSalvando(false); }
   }
 
-  // ── Recortes da lista ─────────────────────────────────────────────────────
-
-  const meusAjustes = useMemo(
-    () => (podeAdministrar ? ajustes : ajustes.filter(a => a.criadoPor === meuId)),
-    [ajustes, podeAdministrar, meuId],
-  );
-
-  const totalDoMes = useMemo(
-    () => meusAjustes.filter(a => !a.cancelado).reduce((s, a) => s + a.valor, 0),
-    [meusAjustes],
-  );
-
-  const solicitacoesAbertas = useMemo(
-    () => solicitacoes.filter(s => s.status === 'aberta'),
-    [solicitacoes],
-  );
-
   // ── Diálogos ──────────────────────────────────────────────────────────────
 
   const [alvoEdicao, setAlvoEdicao] = useState<AjusteManual | null>(null);
-  const [alvoCancelamento, setAlvoCancelamento] = useState<AjusteManual | null>(null);
-  const [alvoSolicitacao, setAlvoSolicitacao] = useState<
-    { ajuste: AjusteManual; tipo: 'editar' | 'cancelar' } | null
-  >(null);
+  const [alvoRemocao, setAlvoRemocao] = useState<AjusteManual | null>(null);
+  const [verApagados, setVerApagados] = useState(false);
 
   if (!podeLancar && !podeAdministrar) {
     return (
       <p className="text-sm text-muted-foreground px-1 py-8 text-center">
-        Você não tem permissão para lançar ajustes de recebimento.
+        Você não tem permissão para ajustar recebimento.
       </p>
     );
   }
@@ -201,7 +204,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
         <div className="text-xs leading-relaxed">
           <p className="font-semibold text-foreground">Correção temporária do relatório</p>
           <p className="text-muted-foreground">
-            O que for lançado aqui soma no recebimento do operador — e, por
+            O valor de cada card soma no recebimento do operador — e, por
             consequência, no da equipe e no do setor. Entra como <strong>Ajuste
             manual</strong>, não como Pix nem cartão. O relatório importado não é
             alterado: o valor é somado na leitura, e some no dia em que esta aba
@@ -210,12 +213,17 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
         </div>
       </div>
 
-      {/* ── Lançamento ───────────────────────────────────────────────────── */}
+      {/* ── Card novo — só para quem ainda não tem ────────────────────────── */}
       {podeLancar && (
         <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+          <p className="text-xs font-semibold flex items-center gap-1.5">
+            <Plus className="w-3.5 h-3.5" /> Novo card
+            <span className="font-normal text-muted-foreground">
+              — quem já tem card aparece na lista abaixo, para editar
+            </span>
+          </p>
+
           <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto_10rem]">
-            {/* Operador — digitável, como pedido. Uma lista de 60 pessoas num
-                `<select>` é rolagem; com busca, são três letras. */}
             <Popover open={seletorAberto} onOpenChange={setSeletorAberto}>
               <PopoverTrigger asChild>
                 <button
@@ -236,9 +244,13 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
                 <Command>
                   <CommandInput placeholder="Digite o nome…" />
                   <CommandList>
-                    <CommandEmpty>Ninguém com esse nome neste recorte.</CommandEmpty>
+                    <CommandEmpty>
+                      {disponiveis.length === 0
+                        ? 'Todo mundo deste recorte já tem card.'
+                        : 'Ninguém com esse nome neste recorte.'}
+                    </CommandEmpty>
                     <CommandGroup>
-                      {operadores.map(o => (
+                      {disponiveis.map(o => (
                         <CommandItem
                           key={o.id}
                           value={o.nome}
@@ -297,7 +309,7 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
             value={motivo}
             onChange={e => setMotivo(e.target.value)}
             rows={2}
-            placeholder="Motivo — fica registrado e aparece para o administrador"
+            placeholder="Motivo — fica registrado no histórico do card"
             className="text-sm resize-none"
           />
 
@@ -305,105 +317,32 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
             <p className="text-[11px] text-muted-foreground flex-1 min-w-0">
               {operadorEscolhido && valorNumerico !== null ? (
                 <>
-                  {sinal > 0 ? 'Somar ' : 'Tirar '}
+                  Abrir o card de{' '}
+                  <strong className="text-foreground">{operadorEscolhido.nome}</strong> com{' '}
                   <strong className={sinal > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                    {formatBRL(valorNumerico)}
-                  </strong>
-                  {sinal > 0 ? ' ao ' : ' do '}recebimento de{' '}
-                  <strong className="text-foreground">{operadorEscolhido.nome}</strong>.
+                    {formatBRL(valorNumerico * sinal)}
+                  </strong>.
                 </>
               ) : (
-                'Escolha a pessoa, o valor e escreva o motivo.'
+                'Escolha a pessoa, o valor total e escreva o motivo.'
               )}
             </p>
-            <Button size="sm" disabled={!podeEnviar} onClick={enviar}>
-              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Lançar'}
+            <Button size="sm" disabled={!podeEnviar} onClick={criarCard}>
+              {salvando ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar card'}
             </Button>
           </div>
         </div>
       )}
 
-      {/* ── Pedidos de alteração (só quem administra) ─────────────────────── */}
-      {podeAdministrar && solicitacoesAbertas.length > 0 && (
-        <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 space-y-2">
-          <p className="text-xs font-semibold flex items-center gap-1.5">
-            <History className="w-3.5 h-3.5" />
-            {solicitacoesAbertas.length} pedido(s) de alteração aguardando você
-          </p>
-          {solicitacoesAbertas.map(s => {
-            const ajuste = ajustes.find(a => a.id === s.ajusteId);
-            return (
-              <div key={s.id} className="rounded-lg border border-border bg-card px-3 py-2 text-xs space-y-1">
-                <p>
-                  <strong>{s.solicitadoPorNome ?? 'Alguém'}</strong> pediu para{' '}
-                  {s.tipo === 'cancelar' ? 'cancelar' : 'editar'}
-                  {ajuste && <> o ajuste de <strong>{formatBRL(ajuste.valor)}</strong> em {ajuste.operadorNome ?? '—'}</>}
-                  {s.tipo === 'editar' && s.valorProposto !== null && (
-                    <> para <strong>{formatBRL(s.valorProposto)}</strong></>
-                  )}
-                </p>
-                <p className="text-muted-foreground">“{s.justificativa}”</p>
-                <div className="flex gap-2 pt-0.5">
-                  <Button size="sm" variant="outline" className="h-7 text-[11px]"
-                    onClick={async () => {
-                      if (!perfil?.id) return;
-                      // Aprovar aplica o pedido e resolve a solicitação. Duas
-                      // escritas, e a ordem importa: se a aplicação falhar, a
-                      // solicitação continua aberta em vez de virar mentira.
-                      if (ajuste) {
-                        const r = s.tipo === 'cancelar'
-                          ? await cancelarAjuste({
-                              id: ajuste.id,
-                              motivo: `Pedido de ${s.solicitadoPorNome ?? 'liderança'}: ${s.justificativa}`,
-                              canceladoPor: perfil.id,
-                              canceladoPorNome: perfil.nome ?? 'Administração',
-                            })
-                          : await editarAjuste({
-                              id: ajuste.id,
-                              valor: s.valorProposto ?? ajuste.valor,
-                              motivo: s.motivoProposto ?? ajuste.motivo,
-                              editadoPor: perfil.id,
-                              editadoPorNome: perfil.nome ?? 'Administração',
-                            });
-                        if (r.erro) { toast.error(r.erro); return; }
-                      }
-                      const rr = await responderSolicitacao({
-                        id: s.id, status: 'aprovada', resposta: 'Aplicado.',
-                        resolvidoPor: perfil.id,
-                        resolvidoPorNome: perfil.nome ?? 'Administração',
-                      });
-                      if (rr.erro) { toast.error(rr.erro); return; }
-                      toast.success('Pedido aplicado.');
-                      await Promise.all([recarregar(), recarregarSolicitacoes()]);
-                    }}>
-                    Aprovar
-                  </Button>
-                  <Button size="sm" variant="ghost" className="h-7 text-[11px]"
-                    onClick={async () => {
-                      if (!perfil?.id) return;
-                      const r = await responderSolicitacao({
-                        id: s.id, status: 'recusada', resposta: 'Recusado.',
-                        resolvidoPor: perfil.id,
-                        resolvidoPorNome: perfil.nome ?? 'Administração',
-                      });
-                      if (r.erro) { toast.error(r.erro); return; }
-                      toast.success('Pedido recusado.');
-                      await recarregarSolicitacoes();
-                    }}>
-                    Recusar
-                  </Button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Histórico ────────────────────────────────────────────────────── */}
+      {/* ── Os cards do mês ──────────────────────────────────────────────── */}
       <div className="rounded-xl border border-border bg-card">
         <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
-          <p className="text-xs font-semibold">
-            {podeAdministrar ? 'Todos os lançamentos do mês' : 'Seus lançamentos do mês'}
+          <p className="text-xs font-semibold flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5" />
+            Cards do mês
+            <span className="font-normal text-muted-foreground">
+              ({cards.length} {cards.length === 1 ? 'pessoa' : 'pessoas'})
+            </span>
           </p>
           <span className={cn(
             'ml-auto text-xs font-mono tabular-nums font-semibold',
@@ -413,187 +352,237 @@ export default function AjusteRecebimento({ mes, operadores }: AjusteRecebimento
           </span>
         </div>
 
-        <div className="divide-y divide-border max-h-[26rem] overflow-y-auto">
+        <div className="divide-y divide-border max-h-[30rem] overflow-y-auto">
           {carregando && (
             <p className="text-xs text-muted-foreground text-center py-6">Carregando…</p>
           )}
 
-          {!carregando && meusAjustes.length === 0 && (
+          {!carregando && cards.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-8">
-              Nenhum ajuste lançado neste mês.
+              Nenhum card neste mês.
             </p>
           )}
 
-          {meusAjustes.map(a => {
-            const pendente = solicitacoes.some(s => s.ajusteId === a.id && s.status === 'aberta');
-            return (
-              <div key={a.id} className={cn('px-3 py-2.5 text-xs', a.cancelado && 'opacity-55')}>
-                <div className="flex items-baseline gap-2 flex-wrap">
-                  <span className={cn(
-                    'font-mono tabular-nums font-semibold',
-                    a.cancelado ? 'line-through text-muted-foreground'
-                      : a.valor > 0 ? 'text-emerald-600' : 'text-destructive',
-                  )}>
-                    {a.valor > 0 ? '+' : ''}{formatBRL(a.valor)}
-                  </span>
-                  <span className="font-medium">{a.operadorNome ?? 'Operador'}</span>
-                  {a.cancelado && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-border">
-                      cancelado
-                    </span>
-                  )}
-                  {pendente && !a.cancelado && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full border border-primary/40 text-primary">
-                      alteração pedida
-                    </span>
-                  )}
-
-                  <span className="ml-auto text-[11px] text-muted-foreground">
-                    {a.criadoPorNome ?? 'alguém'} · {quando(a.criadoEm)}
-                  </span>
-                </div>
-
-                <p className="text-muted-foreground mt-0.5">“{a.motivo}”</p>
-
-                {a.cancelado && a.motivoCancelamento && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Cancelado por {a.canceladoPorNome ?? 'alguém'}: “{a.motivoCancelamento}”
-                  </p>
-                )}
-                {a.editadoPorNome && !a.cancelado && (
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Editado por {a.editadoPorNome}.
-                  </p>
-                )}
-
-                {!a.cancelado && (
-                  <div className="flex gap-1.5 mt-1.5">
-                    {podeAdministrar ? (
-                      <>
-                        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1"
-                          onClick={() => setAlvoEdicao(a)}>
-                          <Pencil className="w-3 h-3" /> Editar
-                        </Button>
-                        <Button size="sm" variant="ghost"
-                          className="h-6 text-[11px] gap-1 text-destructive"
-                          onClick={() => setAlvoCancelamento(a)}>
-                          <Ban className="w-3 h-3" /> Cancelar
-                        </Button>
-                      </>
-                    ) : a.criadoPor === meuId && !pendente ? (
-                      // O líder não edita: ele PEDE. A frase explica por quê,
-                      // porque um botão que só abre pedido sem dizer nada
-                      // parece um botão quebrado.
-                      <>
-                        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1"
-                          onClick={() => setAlvoSolicitacao({ ajuste: a, tipo: 'editar' })}>
-                          <Pencil className="w-3 h-3" /> Pedir alteração
-                        </Button>
-                        <Button size="sm" variant="ghost"
-                          className="h-6 text-[11px] gap-1 text-destructive"
-                          onClick={() => setAlvoSolicitacao({ ajuste: a, tipo: 'cancelar' })}>
-                          <Ban className="w-3 h-3" /> Pedir cancelamento
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {cards.map(a => (
+            <CardOperador
+              key={a.id}
+              ajuste={a}
+              onEditar={() => setAlvoEdicao(a)}
+              onApagar={() => setAlvoRemocao(a)}
+            />
+          ))}
         </div>
 
-        {!podeAdministrar && (
-          <p className="text-[11px] text-muted-foreground px-3 py-2 border-t border-border">
-            Lançamento já registrado não é editado por aqui — peça a alteração e a
-            administração aplica. É o que mantém a diferença entre “o valor estava
-            errado” e “o valor mudou de ideia”.
-          </p>
+        {apagados.length > 0 && (
+          <div className="border-t border-border">
+            <button
+              type="button"
+              onClick={() => setVerApagados(v => !v)}
+              className="w-full px-3 py-2 text-[11px] text-muted-foreground flex items-center gap-1.5 hover:bg-accent/40"
+            >
+              <ChevronDown className={cn('w-3 h-3 transition-transform', verApagados && 'rotate-180')} />
+              {apagados.length} {apagados.length === 1 ? 'card apagado' : 'cards apagados'} neste mês
+            </button>
+
+            {/* Apagado não some do banco. Fica aqui, sem botão, porque um ajuste
+                manual de valor é exatamente o registro que alguém audita depois
+                — principalmente os que foram desfeitos. */}
+            {verApagados && (
+              <div className="divide-y divide-border">
+                {apagados.map(a => (
+                  <div key={a.id} className="px-3 py-2 text-xs opacity-60">
+                    <div className="flex items-baseline gap-2 flex-wrap">
+                      <span className="font-mono tabular-nums line-through text-muted-foreground">
+                        {formatBRL(a.valor)}
+                      </span>
+                      <span className="font-medium">{a.operadorNome ?? 'Operador'}</span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        apagado por {a.canceladoPorNome ?? 'alguém'} · {quando(a.canceladoEm ?? a.atualizadoEm)}
+                      </span>
+                    </div>
+                    {a.motivoCancelamento && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        “{a.motivoCancelamento}”
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
       </div>
 
       {/* ── Diálogos ─────────────────────────────────────────────────────── */}
-      <DialogoEdicao
+      <DialogoNovoTotal
         alvo={alvoEdicao}
         onFechar={() => setAlvoEdicao(null)}
-        onConfirmar={async (valor, motivoNovo) => {
+        onConfirmar={async (valor, anotacao) => {
           if (!alvoEdicao || !perfil?.id) return;
           const r = await editarAjuste({
-            id: alvoEdicao.id, valor, motivo: motivoNovo,
-            editadoPor: perfil.id, editadoPorNome: perfil.nome ?? 'Administração',
+            id: alvoEdicao.id, valor, motivo: anotacao,
+            editadoPor: perfil.id, editadoPorNome: meuNome,
           });
           if (r.erro) { toast.error(r.erro); return; }
-          toast.success('Ajuste editado.');
+          const delta = valor - alvoEdicao.valor;
+          toast.success(
+            delta === 0
+              ? 'Card salvo.'
+              : `Total de ${alvoEdicao.operadorNome ?? 'operador'} agora é ${formatBRL(valor)} `
+                + `(${delta > 0 ? '+' : ''}${formatBRL(delta)}).`,
+          );
           setAlvoEdicao(null);
           await recarregar();
         }}
       />
 
-      <DialogoMotivo
-        aberto={!!alvoCancelamento}
-        titulo="Cancelar ajuste"
-        descricao="O lançamento para de somar imediatamente. Ele não é apagado — fica no histórico com o motivo."
-        rotuloBotao="Cancelar ajuste"
-        onFechar={() => setAlvoCancelamento(null)}
+      <DialogoApagar
+        alvo={alvoRemocao}
+        onFechar={() => setAlvoRemocao(null)}
         onConfirmar={async (texto) => {
-          if (!alvoCancelamento || !perfil?.id) return;
+          if (!alvoRemocao || !perfil?.id) return;
           const r = await cancelarAjuste({
-            id: alvoCancelamento.id, motivo: texto,
-            canceladoPor: perfil.id, canceladoPorNome: perfil.nome ?? 'Administração',
+            id: alvoRemocao.id, motivo: texto,
+            canceladoPor: perfil.id, canceladoPorNome: meuNome,
           });
           if (r.erro) { toast.error(r.erro); return; }
-          toast.success('Ajuste cancelado.');
-          setAlvoCancelamento(null);
+          toast.success(`Card de ${alvoRemocao.operadorNome ?? 'operador'} apagado.`);
+          setAlvoRemocao(null);
           await recarregar();
-        }}
-      />
-
-      <DialogoSolicitacao
-        alvo={alvoSolicitacao}
-        onFechar={() => setAlvoSolicitacao(null)}
-        onConfirmar={async (valorProposto, justificativa) => {
-          if (!alvoSolicitacao || !perfil?.id || !empresaId) return;
-          const r = await abrirSolicitacao({
-            ajusteId: alvoSolicitacao.ajuste.id,
-            empresaId,
-            tipo: alvoSolicitacao.tipo,
-            valorProposto,
-            motivoProposto: null,
-            justificativa,
-            solicitadoPor: perfil.id,
-            solicitadoPorNome: perfil.nome ?? 'Liderança',
-          });
-          if (r.erro) { toast.error(r.erro); return; }
-
-          await notificarQuemAdministra({
-            empresaId,
-            titulo: 'Pedido de alteração em ajuste de recebimento',
-            mensagem: `${perfil.nome ?? 'Um líder'} pediu para `
-              + `${alvoSolicitacao.tipo === 'cancelar' ? 'cancelar' : 'editar'} um ajuste `
-              + `de ${formatBRL(alvoSolicitacao.ajuste.valor)} `
-              + `em ${alvoSolicitacao.ajuste.operadorNome ?? 'um operador'}.`,
-          });
-
-          toast.success('Pedido enviado à administração.');
-          setAlvoSolicitacao(null);
-          await recarregarSolicitacoes();
         }}
       />
     </div>
   );
 }
 
+// ── O card de uma pessoa ─────────────────────────────────────────────────────
+
+/**
+ * Uma pessoa, um valor total, e o histórico embaixo quando alguém abre.
+ *
+ * O histórico carrega SOB DEMANDA. Trazê-lo junto da lista seria uma consulta
+ * por card em toda abertura da aba, para mostrar o que quase ninguém expande.
+ */
+function CardOperador({
+  ajuste, onEditar, onApagar,
+}: {
+  ajuste: AjusteManual;
+  onEditar: () => void;
+  onApagar: () => void;
+}) {
+  const [aberto, setAberto] = useState(false);
+  const [eventos, setEventos] = useState<EventoAjuste[] | null>(null);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+
+  // `atualizadoEm` na dependência: quando outro líder edita o card e o realtime
+  // traz a linha nova, o histórico aberto precisa recarregar — senão ele mostra
+  // um "valor atual" que não bate com o número logo acima.
+  useEffect(() => {
+    if (!aberto) return;
+    let vivo = true;
+    setCarregandoHistorico(true);
+    listarEventos(ajuste.id)
+      .then(lista => { if (vivo) setEventos(lista); })
+      .finally(() => { if (vivo) setCarregandoHistorico(false); });
+    return () => { vivo = false; };
+  }, [aberto, ajuste.id, ajuste.atualizadoEm]);
+
+  return (
+    <div className="px-3 py-2.5 text-xs">
+      <div className="flex items-baseline gap-2 flex-wrap">
+        <span className={cn(
+          'font-mono tabular-nums font-semibold text-sm',
+          ajuste.valor > 0 ? 'text-emerald-600' : ajuste.valor < 0 ? 'text-destructive' : 'text-muted-foreground',
+        )}>
+          {ajuste.valor > 0 ? '+' : ''}{formatBRL(ajuste.valor)}
+        </span>
+        <span className="font-medium">{ajuste.operadorNome ?? 'Operador'}</span>
+
+        <span className="ml-auto text-[11px] text-muted-foreground">
+          {ajuste.editadoPorNome
+            ? <>atualizado por {ajuste.editadoPorNome} · {quando(ajuste.atualizadoEm)}</>
+            : <>criado por {ajuste.criadoPorNome ?? 'alguém'} · {quando(ajuste.criadoEm)}</>}
+        </span>
+      </div>
+
+      {ajuste.motivo && (
+        <p className="text-muted-foreground mt-0.5">“{ajuste.motivo}”</p>
+      )}
+
+      <div className="flex items-center gap-1.5 mt-1.5">
+        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1" onClick={onEditar}>
+          <Pencil className="w-3 h-3" /> Atualizar total
+        </Button>
+        <Button size="sm" variant="ghost" className="h-6 text-[11px] gap-1 text-destructive" onClick={onApagar}>
+          <Trash2 className="w-3 h-3" /> Apagar
+        </Button>
+        <Button
+          size="sm" variant="ghost"
+          className="h-6 text-[11px] gap-1 ml-auto text-muted-foreground"
+          onClick={() => setAberto(v => !v)}
+        >
+          <History className="w-3 h-3" />
+          Histórico
+          <ChevronDown className={cn('w-3 h-3 transition-transform', aberto && 'rotate-180')} />
+        </Button>
+      </div>
+
+      {aberto && (
+        <div className="mt-2 pl-2 border-l-2 border-border space-y-1.5">
+          {carregandoHistorico && !eventos && (
+            <p className="text-[11px] text-muted-foreground">Carregando…</p>
+          )}
+          {eventos?.length === 0 && (
+            <p className="text-[11px] text-muted-foreground">Sem histórico.</p>
+          )}
+          {eventos?.map(e => (
+            <div key={e.id} className="text-[11px]">
+              <span className={cn(
+                'font-mono tabular-nums font-semibold',
+                e.delta > 0 ? 'text-emerald-600' : e.delta < 0 ? 'text-destructive' : 'text-muted-foreground',
+              )}>
+                {e.delta > 0 ? '+' : ''}{formatBRL(e.delta)}
+              </span>
+              <span className="text-muted-foreground">
+                {' '}· {textoDoEvento(e)} · {e.autorNome ?? 'alguém'} · {quando(e.criadoEm)}
+              </span>
+              {e.observacao && (
+                <p className="text-muted-foreground italic">“{e.observacao}”</p>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A frase que explica o evento. `delta` já aparece em destaque ao lado. */
+function textoDoEvento(e: EventoAjuste): string {
+  if (e.tipo === 'criado')    return `card aberto com ${formatBRL(e.valorNovo)}`;
+  if (e.tipo === 'cancelado') return `card apagado (estava ${formatBRL(e.valorAnterior ?? 0)})`;
+  return `de ${formatBRL(e.valorAnterior ?? 0)} para ${formatBRL(e.valorNovo)}`;
+}
+
 // ── Diálogos ─────────────────────────────────────────────────────────────────
 
-function DialogoEdicao({
+/**
+ * O líder informa o TOTAL, não a diferença.
+ *
+ * O diálogo mostra a diferença enquanto ele digita — «entra +1.000,00 hoje» —
+ * porque é essa a conta que ele fazia de cabeça no desenho anterior, e mostrá-la
+ * é o que prova que o sistema entendeu o que ele quis dizer. Quem grava a
+ * diferença de verdade é o gatilho, a partir do valor que já está na linha.
+ */
+function DialogoNovoTotal({
   alvo, onFechar, onConfirmar,
 }: {
   alvo: AjusteManual | null;
   onFechar: () => void;
-  onConfirmar: (valor: number, motivo: string) => Promise<void>;
+  onConfirmar: (valor: number, anotacao: string) => Promise<void>;
 }) {
   const [valorTexto, setValorTexto] = useState('');
-  const [motivo, setMotivo] = useState('');
+  const [anotacao, setAnotacao] = useState('');
   const [sinal, setSinal] = useState<1 | -1>(1);
   const [ocupado, setOcupado] = useState(false);
 
@@ -605,54 +594,80 @@ function DialogoEdicao({
     ultimoId.current = alvo.id;
     setValorTexto(String(Math.abs(alvo.valor)).replace('.', ','));
     setSinal(alvo.valor >= 0 ? 1 : -1);
-    setMotivo(alvo.motivo);
+    setAnotacao('');
   }, [alvo]);
 
   const valor = valorDigitadoParaNumero(valorTexto);
+  const novoTotal = valor === null ? null : valor * sinal;
+  const delta = novoTotal === null || !alvo ? null : novoTotal - alvo.valor;
 
   return (
     <Dialog open={!!alvo} onOpenChange={o => { if (!o) onFechar(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Editar ajuste</DialogTitle>
+          <DialogTitle>Atualizar total</DialogTitle>
           <DialogDescription>
-            {alvo?.operadorNome ?? 'Operador'} · lançado por {alvo?.criadoPorNome ?? 'alguém'}
+            {alvo?.operadorNome ?? 'Operador'} · hoje está em{' '}
+            <strong>{formatBRL(alvo?.valor ?? 0)}</strong>
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <div className="flex rounded-md border border-input overflow-hidden">
-              <button type="button" onClick={() => setSinal(1)}
-                className={cn('px-3 text-xs font-medium',
-                  sinal === 1 ? 'bg-emerald-500 text-white' : 'hover:bg-accent')}>
-                Somar
-              </button>
-              <button type="button" onClick={() => setSinal(-1)}
-                className={cn('px-3 text-xs font-medium',
-                  sinal === -1 ? 'bg-destructive text-destructive-foreground' : 'hover:bg-accent')}>
-                Tirar
-              </button>
+          <div>
+            <p className="text-[11px] text-muted-foreground mb-1">
+              Valor TOTAL da pessoa no mês — não o que entrou hoje.
+            </p>
+            <div className="flex gap-2">
+              <div className="flex rounded-md border border-input overflow-hidden">
+                <button type="button" onClick={() => setSinal(1)}
+                  className={cn('px-3 text-xs font-medium',
+                    sinal === 1 ? 'bg-emerald-500 text-white' : 'hover:bg-accent')}>
+                  Somar
+                </button>
+                <button type="button" onClick={() => setSinal(-1)}
+                  className={cn('px-3 text-xs font-medium',
+                    sinal === -1 ? 'bg-destructive text-destructive-foreground' : 'hover:bg-accent')}>
+                  Tirar
+                </button>
+              </div>
+              <Input value={valorTexto} onChange={e => setValorTexto(e.target.value)}
+                inputMode="decimal" className="h-9 font-mono tabular-nums" />
             </div>
-            <Input value={valorTexto} onChange={e => setValorTexto(e.target.value)}
-              inputMode="decimal" className="h-9 font-mono tabular-nums" />
           </div>
-          <Textarea value={motivo} onChange={e => setMotivo(e.target.value)} rows={2}
-            className="text-sm resize-none" placeholder="Motivo" />
+
+          {delta !== null && (
+            <p className="text-xs px-2.5 py-2 rounded-md bg-muted/60">
+              {delta === 0 ? (
+                <span className="text-muted-foreground">O valor não muda.</span>
+              ) : (
+                <>
+                  Entra{' '}
+                  <strong className={delta > 0 ? 'text-emerald-600' : 'text-destructive'}>
+                    {delta > 0 ? '+' : ''}{formatBRL(delta)}
+                  </strong>{' '}
+                  no histórico de hoje.
+                </>
+              )}
+            </p>
+          )}
+
+          <Textarea value={anotacao} onChange={e => setAnotacao(e.target.value)} rows={2}
+            className="text-sm resize-none"
+            placeholder="Anotação (opcional) — aparece nesta linha do histórico" />
         </div>
 
         <DialogFooter>
           <Button variant="ghost" onClick={onFechar}>Fechar</Button>
           <Button
-            disabled={valor === null || motivo.trim().length < 3 || ocupado}
+            disabled={novoTotal === null || ocupado}
             onClick={async () => {
-              if (valor === null) return;
+              if (novoTotal === null) return;
               setOcupado(true);
-              try { await onConfirmar(valor * sinal, motivo); }
+              try { await onConfirmar(novoTotal, anotacao); }
               finally { setOcupado(false); }
             }}
           >
-            {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
+            {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar total'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -660,109 +675,44 @@ function DialogoEdicao({
   );
 }
 
-function DialogoMotivo({
-  aberto, titulo, descricao, rotuloBotao, onFechar, onConfirmar,
+function DialogoApagar({
+  alvo, onFechar, onConfirmar,
 }: {
-  aberto: boolean;
-  titulo: string;
-  descricao: string;
-  rotuloBotao: string;
+  alvo: AjusteManual | null;
   onFechar: () => void;
   onConfirmar: (motivo: string) => Promise<void>;
 }) {
   const [texto, setTexto] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
-  useEffect(() => { if (aberto) setTexto(''); }, [aberto]);
-
-  return (
-    <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>{titulo}</DialogTitle>
-          <DialogDescription>{descricao}</DialogDescription>
-        </DialogHeader>
-        <Textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3}
-          placeholder="Motivo — fica registrado" className="text-sm resize-none" />
-        <DialogFooter>
-          <Button variant="ghost" onClick={onFechar}>Voltar</Button>
-          <Button
-            variant="destructive"
-            disabled={texto.trim().length < 3 || ocupado}
-            onClick={async () => {
-              setOcupado(true);
-              try { await onConfirmar(texto); } finally { setOcupado(false); }
-            }}
-          >
-            {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : rotuloBotao}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function DialogoSolicitacao({
-  alvo, onFechar, onConfirmar,
-}: {
-  alvo: { ajuste: AjusteManual; tipo: 'editar' | 'cancelar' } | null;
-  onFechar: () => void;
-  onConfirmar: (valorProposto: number | null, justificativa: string) => Promise<void>;
-}) {
-  const [valorTexto, setValorTexto] = useState('');
-  const [justificativa, setJustificativa] = useState('');
-  const [ocupado, setOcupado] = useState(false);
-
-  useEffect(() => {
-    if (!alvo) return;
-    setValorTexto(String(Math.abs(alvo.ajuste.valor)).replace('.', ','));
-    setJustificativa('');
-  }, [alvo]);
-
-  const ehEdicao = alvo?.tipo === 'editar';
-  const valor = valorDigitadoParaNumero(valorTexto);
-  const sinal = (alvo?.ajuste.valor ?? 0) >= 0 ? 1 : -1;
-  const valido = justificativa.trim().length >= 3 && (!ehEdicao || valor !== null);
+  useEffect(() => { if (alvo) setTexto(''); }, [alvo]);
 
   return (
     <Dialog open={!!alvo} onOpenChange={o => { if (!o) onFechar(); }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>
-            {ehEdicao ? 'Pedir alteração' : 'Pedir cancelamento'}
-          </DialogTitle>
+          <DialogTitle>Apagar o card</DialogTitle>
           <DialogDescription>
-            A administração recebe o pedido e decide. O lançamento continua
-            valendo até lá.
+            {alvo?.operadorNome ?? 'Operador'} perde {formatBRL(alvo?.valor ?? 0)} do
+            recebimento, na hora. O card fica guardado no histórico da aba, com
+            quem apagou — e a pessoa pode receber um card novo depois.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-3">
-          {ehEdicao && (
-            <div>
-              <p className="text-[11px] text-muted-foreground mb-1">
-                Valor proposto (o sinal continua o mesmo: {sinal > 0 ? 'somar' : 'tirar'})
-              </p>
-              <Input value={valorTexto} onChange={e => setValorTexto(e.target.value)}
-                inputMode="decimal" className="h-9 font-mono tabular-nums" />
-            </div>
-          )}
-          <Textarea value={justificativa} onChange={e => setJustificativa(e.target.value)}
-            rows={3} placeholder="Por que precisa mudar?" className="text-sm resize-none" />
-        </div>
+        <Textarea value={texto} onChange={e => setTexto(e.target.value)} rows={3}
+          placeholder="Motivo (opcional) — fica registrado" className="text-sm resize-none" />
 
         <DialogFooter>
           <Button variant="ghost" onClick={onFechar}>Voltar</Button>
           <Button
-            disabled={!valido || ocupado}
+            variant="destructive"
+            disabled={ocupado}
             onClick={async () => {
               setOcupado(true);
-              try {
-                await onConfirmar(ehEdicao && valor !== null ? valor * sinal : null, justificativa);
-              } finally { setOcupado(false); }
+              try { await onConfirmar(texto); } finally { setOcupado(false); }
             }}
           >
-            {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Enviar pedido'}
+            {ocupado ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apagar card'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -777,4 +727,3 @@ function quando(iso: string): string {
     ? d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
 }
-
