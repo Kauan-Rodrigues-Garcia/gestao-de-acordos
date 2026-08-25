@@ -333,6 +333,75 @@ export function PlayerAudio({ url, meu }: { url: string | null; meu: boolean }) 
   );
 }
 
+// ── Digitando ────────────────────────────────────────────────────────────────
+
+/**
+ * O balão de «digitando», com os três pontos.
+ *
+ * Substitui a palavra escrita dentro da conversa: um balão igual aos outros,
+ * só que com pontos em vez de texto, diz a mesma coisa sem ocupar uma linha de
+ * leitura — e é o gesto que todo chat usa, então ninguém precisa aprender.
+ *
+ * Os pontos sobem em sequência, 180 ms entre eles. Nada de opacidade piscando:
+ * o movimento é o que lê como «alguém está escrevendo», e piscar lê como
+ * «carregando».
+ */
+export function BalaoDigitando() {
+  return (
+    <>
+      <style>{`
+        @keyframes chat-digita {
+          0%, 60%, 100% { transform: translateY(0);   opacity: .45; }
+          30%           { transform: translateY(-4px); opacity: 1;  }
+        }
+        .chat-d { animation: chat-digita 1.3s ease-in-out infinite; }
+        .chat-d:nth-child(2) { animation-delay: .18s; }
+        .chat-d:nth-child(3) { animation-delay: .36s; }
+        @media (prefers-reduced-motion: reduce) {
+          .chat-d { animation: none; opacity: .7; }
+        }
+      `}</style>
+      <div className="flex justify-start">
+        <div
+          className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-3 flex items-center gap-1"
+          role="status" aria-label="digitando"
+        >
+          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+        </div>
+      </div>
+    </>
+  );
+}
+
+/**
+ * A entrada de uma mensagem nova.
+ *
+ * Sobe 6 px e aparece em 180 ms. Curto de propósito: a animação existe para os
+ * olhos acharem a linha nova, não para ser notada. Qualquer coisa mais longa
+ * atrasa a leitura de quem está conversando rápido.
+ *
+ * Aplicada SÓ em mensagem que chega depois da tela montada — ver `novasRef` em
+ * `Conversa`. Sem esse cuidado, abrir uma conversa animaria as 60 de uma vez.
+ */
+export const ANIMACAO_ENTRADA = 'chat-entra';
+
+export function EstiloEntrada() {
+  return (
+    <style>{`
+      @keyframes chat-entrada {
+        from { opacity: 0; transform: translateY(6px); }
+        to   { opacity: 1; transform: translateY(0);   }
+      }
+      .${ANIMACAO_ENTRADA} { animation: chat-entrada .18s ease-out; }
+      @media (prefers-reduced-motion: reduce) {
+        .${ANIMACAO_ENTRADA} { animation: none; }
+      }
+    `}</style>
+  );
+}
+
 // ── Emoji ────────────────────────────────────────────────────────────────────
 
 /**

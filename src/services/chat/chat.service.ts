@@ -30,6 +30,7 @@ interface Consulta extends PromiseLike<{ data: unknown[] | null; error: { messag
   insert(valores: unknown): Consulta;
   update(valores: unknown): Consulta;
   eq(coluna: string, valor: unknown): Consulta;
+  lt(coluna: string, valor: unknown): Consulta;
   is(coluna: string, valor: null): Consulta;
   in(coluna: string, valores: unknown[]): Consulta;
   order(coluna: string, opcoes?: { ascending?: boolean; nullsFirst?: boolean }): Consulta;
@@ -177,176 +178,52 @@ export async function definirLiberacaoChat(
 /**
  * As minhas conversas, na ordem da mais recente.
  *
- * Uma consulta só, com os embeds. A alternativa — listar conversas e depois
- * buscar perfil e última mensagem de cada uma — são 1 + 2N idas ao banco para
- * desenhar uma lista que muda a cada mensagem que chega.
+ * UMA ida ao banco. Até 25/08/2026 eram cinco, e duas delas baixavam o
+ * histórico INTEIRO — a prévia da última mensagem pedia todas as mensagens de
+ * todas as conversas e jogava fora tudo menos a primeira de cada, e a contagem
+ * de não lidas pedia as mesmas linhas de novo. Como esta função roda a cada
+ * evento de tempo real, cada mensagem recebida baixava o histórico duas vezes.
+ * Funcionava no primeiro dia e travaria no terceiro mês.
  *
- * Quem some daqui: conversa apagada por mim (`apagada_em`) e conversa que
- * nasceu de um disparo meu e ainda não foi respondida (`oculta_em`). As duas
- * condições são do BANCO — a policy já não me devolve o que não é meu, e o
- * filtro aqui é sobre o meu próprio estado.
+ * Agora quem monta é `fn_chat_minhas_conversas`, com `DISTINCT ON` sobre o
+ * índice `(conversa_id, criado_em DESC)`: uma linha por conversa, sem varrer
+ * o resto.
+ *
+ * Quem some daqui continua saindo do banco: conversa apagada por mim
+ * (`apagada_em`) e conversa nascida de um disparo meu ainda sem resposta
+ * (`oculta_em`).
  */
-export async function listarConversas(meuId: string): Promise<ConversaChat[]> {
-  const { data, error } = await db('chat_participantes')
-    .select(`
-      conversa_id, ultima_leitura_em,
-      chat_conversas!inner (
-        id, par_menor, par_maior, ultima_mensagem_em
-      )
-    `)
-    .eq('perfil_id', meuId)
-    .is('apagada_em', null)
-    .is('oculta_em', null);
+export async function listarConversas(): Promise<ConversaChat[]> {
+  const { data, error } = await rpcSemTipo<{
+    id: string; outro_id: string; outro_nome: string; outro_usuario: string | null;
+    outro_foto: string | null; outro_empresa: string | null;
+    ultima_mensagem_em: string | null; ultimo_texto: string | null;
+    ultimo_anexos: AnexoChat[] | null; ultimo_autor_id: string | null;
+    nao_lidas: number; leitura_do_outro: string | null;
+  }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
     console.warn('[chat] listarConversas:', error.message);
     return [];
   }
 
-  const linhas = (data ?? []) as unknown as {
-    conversa_id: string;
-    ultima_leitura_em: string | null;
-    chat_conversas: { id: string; par_menor: string; par_maior: string; ultima_mensagem_em: string | null };
-  }[];
-
-  // Conversa sem nenhuma mensagem não é conversa ainda: foi aberta e a pessoa
-  // desistiu de escrever. Mostrar seria uma linha vazia que não some sozinha.
-  const comMensagem = linhas.filter(l => l.chat_conversas?.ultima_mensagem_em);
-  if (!comMensagem.length) return [];
-
-  const outros = comMensagem.map(l =>
-    l.chat_conversas.par_menor === meuId ? l.chat_conversas.par_maior : l.chat_conversas.par_menor);
-
-  const [perfis, ultimas, leituras, naoLidas, empresas] = await Promise.all([
-    buscarPerfis(outros),
-    buscarUltimaMensagem(comMensagem.map(l => l.conversa_id)),
-    buscarLeituraDosOutros(comMensagem.map(l => l.conversa_id), meuId),
-    contarNaoLidas(comMensagem, meuId),
-    buscarEmpresasDosOutros(),
-  ]);
-
-  return comMensagem
-    .map(l => {
-      const outroId = l.chat_conversas.par_menor === meuId
-        ? l.chat_conversas.par_maior : l.chat_conversas.par_menor;
-      const p = perfis.get(outroId);
-      const u = ultimas.get(l.conversa_id);
-      return {
-        id:                 l.conversa_id,
-        outro_id:           outroId,
-        outro_nome:         p?.nome ?? 'Sem nome',
-        outro_usuario:      p?.usuario ?? null,
-        outro_foto:         p?.foto_url ?? null,
-        ultima_mensagem_em: l.chat_conversas.ultima_mensagem_em,
-        ultimo_texto:       u?.texto ?? null,
-        ultimo_autor_id:    u?.autor_id ?? null,
-        nao_lidas:          naoLidas.get(l.conversa_id) ?? 0,
-        leitura_do_outro:   leituras.get(l.conversa_id) ?? null,
-        outro_empresa:      empresas.get(outroId) ?? null,
-      };
-    })
-    .sort((a, b) => (b.ultima_mensagem_em ?? '').localeCompare(a.ultima_mensagem_em ?? ''));
-}
-
-/**
- * A empresa de cada pessoa com quem eu converso — só para quem NÃO atende as
- * duas.
- *
- * Vem de RPC, e não de um `select` em `perfis`, porque a policy de `perfis`
- * recorta por empresa: quem eu alcanço por multiempresa pode não voltar nessa
- * consulta, e a tag apareceria em algumas linhas e em outras não, sem padrão
- * visível. O banco responde só o slug e o sinal, e só sobre quem já conversa
- * comigo.
- */
-async function buscarEmpresasDosOutros(): Promise<Map<string, string | null>> {
-  const mapa = new Map<string, string | null>();
-  const { data, error } = await rpcSemTipo<{
-    perfil_id: string; empresa_slug: string | null; multiempresa: boolean;
-  }[]>('fn_chat_empresas_das_conversas', {});
-  if (error || !data) return mapa;
-
-  for (const r of data) {
-    mapa.set(r.perfil_id, r.multiempresa ? null : r.empresa_slug);
-  }
-  return mapa;
-}
-
-interface PerfilResumo { nome: string; usuario: string | null; foto_url: string | null }
-
-async function buscarPerfis(ids: string[]): Promise<Map<string, PerfilResumo>> {
-  const mapa = new Map<string, PerfilResumo>();
-  if (!ids.length) return mapa;
-
-  const { data } = await supabase
-    .from('perfis').select('id, nome, usuario, foto_url').in('id', [...new Set(ids)]);
-
-  for (const p of (data ?? []) as PerfilResumo[] & { id: string }[]) {
-    mapa.set(p.id, { nome: p.nome, usuario: p.usuario, foto_url: p.foto_url });
-  }
-  return mapa;
-}
-
-/** A última mensagem de cada conversa, para a prévia da lista. */
-async function buscarUltimaMensagem(
-  conversas: string[],
-): Promise<Map<string, { texto: string | null; autor_id: string | null }>> {
-  const mapa = new Map<string, { texto: string | null; autor_id: string | null }>();
-  if (!conversas.length) return mapa;
-
-  const { data } = await db('chat_mensagens')
-    .select('conversa_id, texto, autor_id, anexos, criado_em')
-    .in('conversa_id', conversas)
-    .order('criado_em', { ascending: false });
-
-  // A consulta vem do mais novo para o mais velho: a primeira de cada conversa
-  // é a que interessa, e as seguintes são descartadas sem custo.
-  for (const m of (data ?? []) as { conversa_id: string; texto: string | null; autor_id: string | null; anexos: AnexoChat[] }[]) {
-    if (mapa.has(m.conversa_id)) continue;
-    const anexos = Array.isArray(m.anexos) ? m.anexos : [];
-    mapa.set(m.conversa_id, {
-      texto: m.texto ?? (anexos.length ? rotuloAnexo(anexos) : null),
-      autor_id: m.autor_id,
-    });
-  }
-  return mapa;
-}
-
-/** Quando o OUTRO leu por último — o «visualizou» das minhas mensagens. */
-async function buscarLeituraDosOutros(
-  conversas: string[], meuId: string,
-): Promise<Map<string, string | null>> {
-  const mapa = new Map<string, string | null>();
-  if (!conversas.length) return mapa;
-
-  const { data } = await db('chat_participantes')
-    .select('conversa_id, perfil_id, ultima_leitura_em')
-    .in('conversa_id', conversas);
-
-  for (const p of (data ?? []) as { conversa_id: string; perfil_id: string; ultima_leitura_em: string | null }[]) {
-    if (p.perfil_id === meuId) continue;
-    mapa.set(p.conversa_id, p.ultima_leitura_em);
-  }
-  return mapa;
-}
-
-async function contarNaoLidas(
-  linhas: { conversa_id: string; ultima_leitura_em: string | null }[], meuId: string,
-): Promise<Map<string, number>> {
-  const mapa = new Map<string, number>();
-  if (!linhas.length) return mapa;
-
-  const { data } = await db('chat_mensagens')
-    .select('conversa_id, autor_id, criado_em')
-    .in('conversa_id', linhas.map(l => l.conversa_id));
-
-  const lidoAte = new Map(linhas.map(l => [l.conversa_id, l.ultima_leitura_em]));
-  for (const m of (data ?? []) as { conversa_id: string; autor_id: string | null; criado_em: string }[]) {
-    if (m.autor_id === meuId) continue;
-    const marca = lidoAte.get(m.conversa_id);
-    if (marca && m.criado_em <= marca) continue;
-    mapa.set(m.conversa_id, (mapa.get(m.conversa_id) ?? 0) + 1);
-  }
-  return mapa;
+  return (data ?? []).map(c => {
+    const anexos = Array.isArray(c.ultimo_anexos) ? c.ultimo_anexos : [];
+    return {
+      id:                 c.id,
+      outro_id:           c.outro_id,
+      outro_nome:         c.outro_nome ?? 'Sem nome',
+      outro_usuario:      c.outro_usuario,
+      outro_foto:         c.outro_foto,
+      ultima_mensagem_em: c.ultima_mensagem_em,
+      // Sem texto e com anexo, a prévia vira «Foto», «Áudio», «2 arquivos».
+      ultimo_texto:       c.ultimo_texto ?? (anexos.length ? rotuloAnexo(anexos) : null),
+      ultimo_autor_id:    c.ultimo_autor_id,
+      nao_lidas:          c.nao_lidas ?? 0,
+      leitura_do_outro:   c.leitura_do_outro,
+      outro_empresa:      c.outro_empresa,
+    };
+  });
 }
 
 /** «Foto», «Arquivo», «3 arquivos» — o que a lista mostra quando não há texto. */
@@ -363,60 +240,81 @@ export function rotuloAnexo(anexos: AnexoChat[]): string {
 /**
  * UMA conversa, mesmo que ela ainda não tenha nenhuma mensagem.
  *
- * `listarConversas` descarta conversa sem mensagem de propósito — aberta e
- * abandonada viraria uma linha vazia que não some sozinha. Só que a conversa
- * RECÉM-CRIADA também não tem mensagem nenhuma, e sem esta função a tela abria
- * um painel em branco: a conversa não estava na lista, e no tamanho compacto a
- * lista já tinha saído de cena para dar lugar a ela.
+ * `fn_chat_minhas_conversas` descarta conversa sem mensagem de propósito —
+ * aberta e abandonada viraria uma linha vazia que não some sozinha. Só que a
+ * conversa RECÉM-CRIADA também não tem mensagem, e sem esta função a tela abria
+ * um painel em branco.
  */
 export async function buscarConversa(
-  conversaId: string, meuId: string,
+  conversaId: string,
 ): Promise<ConversaChat | null> {
-  const { data, error } = await db('chat_conversas')
-    .select('id, par_menor, par_maior, ultima_mensagem_em')
-    .eq('id', conversaId)
-    .maybeSingle() as unknown as {
-      data: { id: string; par_menor: string; par_maior: string; ultima_mensagem_em: string | null } | null;
-      error: { message: string } | null;
-    };
+  const { data, error } = await rpcSemTipo<{
+    id: string; outro_id: string; outro_nome: string; outro_usuario: string | null;
+    outro_foto: string | null; outro_empresa: string | null;
+    ultima_mensagem_em: string | null;
+  }[]>('fn_chat_uma_conversa', { p_conversa: conversaId });
 
-  if (error || !data) return null;
-
-  const outroId = data.par_menor === meuId ? data.par_maior : data.par_menor;
-  const [perfis, empresas] = await Promise.all([
-    buscarPerfis([outroId]),
-    buscarEmpresasDosOutros(),
-  ]);
-  const p = perfis.get(outroId);
+  const c = data?.[0];
+  if (error || !c) return null;
 
   return {
-    id:                 data.id,
-    outro_id:           outroId,
-    outro_nome:         p?.nome ?? 'Sem nome',
-    outro_usuario:      p?.usuario ?? null,
-    outro_foto:         p?.foto_url ?? null,
-    ultima_mensagem_em: data.ultima_mensagem_em,
+    id:                 c.id,
+    outro_id:           c.outro_id,
+    outro_nome:         c.outro_nome ?? 'Sem nome',
+    outro_usuario:      c.outro_usuario,
+    outro_foto:         c.outro_foto,
+    ultima_mensagem_em: c.ultima_mensagem_em,
     ultimo_texto:       null,
     ultimo_autor_id:    null,
     nao_lidas:          0,
     leitura_do_outro:   null,
-    outro_empresa:      empresas.get(outroId) ?? null,
+    outro_empresa:      c.outro_empresa,
   };
 }
 
-export async function listarMensagens(conversaId: string): Promise<MensagemChat[]> {
-  const { data, error } = await db('chat_mensagens')
+/** Quantas mensagens a conversa abre de uma vez. */
+export const PAGINA_MENSAGENS = 60;
+
+/**
+ * As mensagens da conversa, da mais antiga para a mais nova.
+ *
+ * Traz a ÚLTIMA página, não a conversa inteira: quem abre um chat quer ver o
+ * fim, e uma conversa de meses baixaria milhares de linhas para desenhar as
+ * cinco que cabem na tela. A consulta pede em ordem decrescente (que é a que o
+ * índice serve) e devolve invertido.
+ *
+ * `antesDe` pagina para trás — é o «ver anteriores» do topo.
+ */
+export async function listarMensagens(
+  conversaId: string, antesDe?: string,
+): Promise<{ mensagens: MensagemChat[]; temMais: boolean }> {
+  let q = db('chat_mensagens')
     .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em')
-    .eq('conversa_id', conversaId)
-    .order('criado_em', { ascending: true });
+    .eq('conversa_id', conversaId);
+
+  if (antesDe) q = q.lt('criado_em', antesDe);
+
+  const { data, error } = await q
+    .order('criado_em', { ascending: false })
+    // Pede uma a mais só para saber se existe página anterior, e descarta.
+    // Uma consulta de contagem para responder isso seria uma ida a mais.
+    .limit(PAGINA_MENSAGENS + 1);
 
   if (error) {
     console.warn('[chat] listarMensagens:', error.message);
-    return [];
+    return { mensagens: [], temMais: false };
   }
-  return ((data ?? []) as MensagemChat[]).map(m => ({
-    ...m, anexos: Array.isArray(m.anexos) ? m.anexos : [],
-  }));
+
+  const linhas = (data ?? []) as MensagemChat[];
+  const temMais = linhas.length > PAGINA_MENSAGENS;
+
+  return {
+    mensagens: linhas
+      .slice(0, PAGINA_MENSAGENS)
+      .map(m => ({ ...m, anexos: Array.isArray(m.anexos) ? m.anexos : [] }))
+      .reverse(),
+    temMais,
+  };
 }
 
 /** Com quem eu posso INICIAR conversa, agrupado por setor e equipe. */
@@ -581,13 +479,34 @@ export async function subirAnexo(
  * Uma hora é o suficiente para a pessoa abrir o que está na tela, e curto o
  * bastante para um link copiado por engano não virar acesso permanente.
  */
+const VALIDADE_URL = 3600;
+/**
+ * As assinaturas já pedidas, guardadas até quase vencer.
+ *
+ * Sem cache, cada rolagem que remonta um balão pede uma assinatura nova — numa
+ * conversa com trinta fotos, subir e descer duas vezes são sessenta chamadas de
+ * rede para mostrar as mesmas trinta imagens.
+ *
+ * Guarda com cinco minutos de folga antes do vencimento real: uma URL que
+ * expira enquanto o vídeo toca quebra no meio, e renovar cedo custa nada.
+ */
+const assinaturas = new Map<string, { url: string; ate: number }>();
+
 export async function urlDoAnexo(caminho: string): Promise<string | null> {
-  const { data, error } = await supabase.storage.from('chat').createSignedUrl(caminho, 3600);
+  const guardada = assinaturas.get(caminho);
+  if (guardada && guardada.ate > Date.now()) return guardada.url;
+
+  const { data, error } = await supabase.storage
+    .from('chat').createSignedUrl(caminho, VALIDADE_URL);
   if (error) {
     console.warn('[chat] urlDoAnexo:', error.message);
     return null;
   }
-  return data?.signedUrl ?? null;
+  const url = data?.signedUrl ?? null;
+  if (url) {
+    assinaturas.set(caminho, { url, ate: Date.now() + (VALIDADE_URL - 300) * 1000 });
+  }
+  return url;
 }
 
 // ── Erros ────────────────────────────────────────────────────────────────────

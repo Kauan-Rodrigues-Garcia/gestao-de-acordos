@@ -253,6 +253,9 @@ export function BolhaChat() {
                 onVoltar={() => chat.abrir(null)}
                 onEnviar={chat.enviar}
                 onDigitando={() => avisarDigitando(conversaAtual.outro_id)}
+                temMais={chat.temMais}
+                carregandoMais={chat.carregandoMais}
+                onVerAnteriores={chat.verAnteriores}
               />
             </div>
           )}

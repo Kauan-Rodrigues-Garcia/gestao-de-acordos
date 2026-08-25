@@ -51,6 +51,10 @@ export interface UseChat {
   aberta:         ConversaChat | null;
   carregando:     boolean;
   naoLidasTotal:  number;
+  /** Existe página anterior para carregar? */
+  temMais:        boolean;
+  carregandoMais: boolean;
+  verAnteriores:  () => void;
   abrir:          (conversaId: string | null) => void;
   abrirCom:       (pessoaId: string) => Promise<string | null>;
   enviar:         (texto: string, anexos?: AnexoChat[]) => Promise<string | null>;
@@ -69,6 +73,8 @@ export function useChat(ativo: boolean): UseChat {
   const [carregando, setCarregando] = useState(true);
   /** Preenchida quando a conversa aberta ainda não está na lista. */
   const [avulsa, setAvulsa] = useState<ConversaChat | null>(null);
+  const [temMais, setTemMais] = useState(false);
+  const [carregandoMais, setCarregandoMais] = useState(false);
 
   // A conversa aberta lida de dentro do ouvinte do realtime, que é criado uma
   // vez: sem a ref, ele veria para sempre o valor da primeira renderização.
@@ -77,7 +83,7 @@ export function useChat(ativo: boolean): UseChat {
 
   const recarregar = useCallback(async () => {
     if (!meuId || !ativo) return;
-    const [c, d] = await Promise.all([listarConversas(meuId), listarDisparos()]);
+    const [c, d] = await Promise.all([listarConversas(), listarDisparos()]);
     setConversas(c);
     setDisparos(d);
     setCarregando(false);
@@ -93,6 +99,26 @@ export function useChat(ativo: boolean): UseChat {
   }, [recarregar]);
 
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+
+  /*
+   * Marcar lido, agrupado.
+   *
+   * Antes era um UPDATE por mensagem recebida. Numa rajada — alguém mandando
+   * cinco linhas seguidas, ou um disparo chegando — são cinco escritas para
+   * gravar o mesmo instante, e cada uma volta como evento de tempo real para
+   * os dois lados, que então refazem a lista. Uma só, no fim da rajada, diz
+   * exatamente a mesma coisa.
+   */
+  const timerLido = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const agendarLido = useCallback((conversaId: string) => {
+    if (!meuId) return;
+    if (timerLido.current) clearTimeout(timerLido.current);
+    timerLido.current = setTimeout(() => {
+      void marcarLido(conversaId, meuId).then(() => agendarRefazer());
+    }, 400);
+  }, [meuId, agendarRefazer]);
+
+  useEffect(() => () => { if (timerLido.current) clearTimeout(timerLido.current); }, []);
 
   // ── Tempo real ─────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -132,7 +158,7 @@ export function useChat(ativo: boolean): UseChat {
               setMensagens(atual => atual.some(m => m.id === msg.id)
                 ? atual
                 : [...atual, { ...msg, anexos: Array.isArray(msg.anexos) ? msg.anexos : [] }]);
-              if (msg.autor_id !== meuId) void marcarLido(msg.conversa_id, meuId);
+              if (msg.autor_id !== meuId) agendarLido(msg.conversa_id);
             }
             // O expurgo de CPF reescreve o texto: sem isto a mensagem
             // continuaria legível na tela de quem está com ela aberta.
@@ -149,25 +175,52 @@ export function useChat(ativo: boolean): UseChat {
         onReconectado: () => {
           void recarregar();
           const aberta = abertaRef.current;
-          if (aberta) void listarMensagens(aberta).then(setMensagens);
+          if (aberta) {
+            void listarMensagens(aberta).then(r => {
+              setMensagens(r.mensagens);
+              setTemMais(r.temMais);
+            });
+          }
         },
       },
     );
-  }, [ativo, empresa?.id, meuId, agendarRefazer, recarregar]);
+  }, [ativo, empresa?.id, meuId, agendarRefazer, agendarLido, recarregar]);
 
   // ── Abrir / fechar ─────────────────────────────────────────────────────────
   const abrir = useCallback((conversaId: string | null) => {
     setConversaAberta(conversaId);
-    if (!conversaId) { setMensagens([]); setAvulsa(null); return; }
-    void listarMensagens(conversaId).then(setMensagens);
+    if (!conversaId) { setMensagens([]); setAvulsa(null); setTemMais(false); return; }
+    void listarMensagens(conversaId).then(r => {
+      setMensagens(r.mensagens);
+      setTemMais(r.temMais);
+    });
     if (meuId) {
       void marcarLido(conversaId, meuId).then(() => agendarRefazer());
       // Busca sempre, e não só quando falta na lista: no clique a lista pode
       // estar de uma leitura anterior, e decidir por ela erraria justamente no
       // caso que este código existe para cobrir.
-      void buscarConversa(conversaId, meuId).then(setAvulsa);
+      void buscarConversa(conversaId).then(setAvulsa);
     }
   }, [meuId, agendarRefazer]);
+
+  /**
+   * Carrega a página anterior, para cima.
+   *
+   * A tela guarda a altura antes e depois para a rolagem não pular — sem isso,
+   * inserir 60 mensagens acima empurraria o que a pessoa está lendo para fora
+   * do campo de visão, que é o oposto do que ela pediu ao clicar.
+   */
+  const verAnteriores = useCallback(async () => {
+    const aberta = abertaRef.current;
+    const maisAntiga = mensagens[0]?.criado_em;
+    if (!aberta || !maisAntiga || carregandoMais) return;
+
+    setCarregandoMais(true);
+    const r = await listarMensagens(aberta, maisAntiga);
+    setCarregandoMais(false);
+    setTemMais(r.temMais);
+    if (r.mensagens.length) setMensagens(atual => [...r.mensagens, ...atual]);
+  }, [mensagens, carregandoMais]);
 
   const abrirCom = useCallback(async (pessoaId: string) => {
     const { id, erro } = await abrirConversa(pessoaId);
@@ -195,6 +248,7 @@ export function useChat(ativo: boolean): UseChat {
 
   return {
     conversas, disparos, mensagens, conversaAberta, aberta, carregando,
+    temMais, carregandoMais, verAnteriores,
     naoLidasTotal, abrir, abrirCom, enviar, recarregar,
   };
 }

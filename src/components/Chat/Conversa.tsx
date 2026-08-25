@@ -28,7 +28,8 @@ import {
 } from '@/services/chat/chat.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
-  AvatarChat, AnexoNoBalao, EMOJIS,
+  AvatarChat, AnexoNoBalao, EMOJIS, BalaoDigitando, EstiloEntrada, PlayerAudio,
+  ANIMACAO_ENTRADA,
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
 
@@ -41,10 +42,15 @@ interface Props {
   onVoltar?:  () => void;
   onEnviar:   (texto: string, anexos: AnexoChat[]) => Promise<string | null>;
   onDigitando: () => void;
+  /** Há página anterior para carregar? */
+  temMais:        boolean;
+  carregandoMais: boolean;
+  onVerAnteriores: () => void;
 }
 
 export function Conversa({
   conversa, mensagens, online, digitando, expandido, onVoltar, onEnviar, onDigitando,
+  temMais, carregandoMais, onVerAnteriores,
 }: Props) {
   const { perfil } = useAuth();
   const meuId = perfil?.id ?? '';
@@ -62,6 +68,17 @@ export function Conversa({
   const gravador = useGravadorAudio();
 
   /*
+   * As mensagens que já estavam na tela quando ela montou.
+   *
+   * A animação de entrada vale só para o que CHEGA depois. Sem esta conta,
+   * abrir uma conversa animaria as sessenta de uma vez — festa, não informação.
+   */
+  const jaVistas = useRef<Set<string>>(new Set());
+
+  /** Altura da rolagem antes de inserir a página anterior, para não pular. */
+  const alturaAntes = useRef<number | null>(null);
+
+  /*
    * Miniatura do que está para ser enviado.
    *
    * `URL.createObjectURL` reserva memória até alguém revogar — sem a limpeza,
@@ -71,7 +88,7 @@ export function Conversa({
   const previas = useMemo(
     () => pendentes.map(f => ({
       arquivo: f,
-      url: f.type.startsWith('image/') ? URL.createObjectURL(f) : null,
+      url: (f.type.startsWith('image/') || f.type.startsWith('audio/')) ? URL.createObjectURL(f) : null,
     })),
     [pendentes],
   );
@@ -98,13 +115,40 @@ export function Conversa({
   }, []);
 
   useLayoutEffect(() => {
+    const el = rolagem.current;
+
+    /*
+     * Chegou página anterior: devolve a rolagem para onde ela estava.
+     *
+     * Inserir 60 mensagens acima empurra para baixo o que a pessoa está lendo —
+     * ela clica em «ver anteriores» e perde justamente a linha que queria
+     * comparar. A diferença de altura é o quanto compensar.
+     */
+    if (el && alturaAntes.current !== null) {
+      el.scrollTop += el.scrollHeight - alturaAntes.current;
+      alturaAntes.current = null;
+      return;
+    }
+
     const ultima = mensagens[mensagens.length - 1];
     if (!ultima) return;
     if (noFim.current || ultima.autor_id === meuId) descer(mensagens.length > 1);
     else setTemNovas(true);
   }, [mensagens, meuId, descer]);
 
-  useEffect(() => { descer(false); campo.current?.focus(); }, [conversa.id, descer]);
+  useEffect(() => {
+    jaVistas.current = new Set(mensagens.map(m => m.id));
+    descer(false);
+    campo.current?.focus();
+    // Só em `conversa.id` de propósito: incluir `mensagens` semearia o conjunto
+    // a cada mensagem nova, e nada nunca seria considerado novo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversa.id]);
+
+  const pedirAnteriores = useCallback(() => {
+    alturaAntes.current = rolagem.current?.scrollHeight ?? null;
+    onVerAnteriores();
+  }, [onVerAnteriores]);
 
   // ── Arquivos ───────────────────────────────────────────────────────────────
   const receberArquivos = useCallback((arquivos: File[]) => {
@@ -217,6 +261,19 @@ export function Conversa({
       {/* Mensagens */}
       <div ref={rolagem} onScroll={aoRolar}
            className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1.5">
+        <EstiloEntrada />
+
+        {temMais && (
+          <div className="flex justify-center pb-2">
+            <button
+              onClick={pedirAnteriores} disabled={carregandoMais}
+              className="text-[11px] text-muted-foreground hover:text-foreground bg-muted/60 hover:bg-muted rounded-full px-3 py-1 transition-colors disabled:opacity-60"
+            >
+              {carregandoMais ? 'Carregando…' : 'Ver mensagens anteriores'}
+            </button>
+          </div>
+        )}
+
         {mensagens.length === 0 && (
           <p className="text-center text-xs text-muted-foreground py-8">
             Nenhuma mensagem ainda. Escreva a primeira.
@@ -230,9 +287,12 @@ export function Conversa({
           diaAnterior = dia;
           const lida = meu && conversa.leitura_do_outro !== null
                        && m.criado_em <= conversa.leitura_do_outro;
+          // Só anima o que chegou depois de a tela montar.
+          const nova = !jaVistas.current.has(m.id);
+          if (nova) jaVistas.current.add(m.id);
 
           return (
-            <div key={m.id}>
+            <div key={m.id} className={cn(nova && ANIMACAO_ENTRADA)}>
               {novoDia && (
                 <div className="flex justify-center my-3">
                   <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/60 rounded-full px-2.5 py-0.5">
@@ -267,6 +327,10 @@ export function Conversa({
             </div>
           );
         })}
+
+        {/* No fim da conversa, como em qualquer chat: é ali que a próxima
+            mensagem vai nascer, e é para lá que o olho já está indo. */}
+        {digitando && <BalaoDigitando />}
       </div>
 
       {temNovas && (
@@ -290,7 +354,17 @@ export function Conversa({
             {previas.map((p, i) => (
               <div key={`${p.arquivo.name}-${i}`}
                    className="relative rounded-lg border border-border bg-muted overflow-hidden">
-                {p.url ? (
+                {p.arquivo.type.startsWith('audio/') && p.url ? (
+                  /*
+                    Áudio ouvível ANTES de mandar. Era o pedido: depois de
+                    gravar, «audio-2026-08-25-19-04-12.webm» é feio e não diz
+                    nada — o que a pessoa quer é conferir o recado, e regravar
+                    se não gostou. O X ao lado apaga e libera o microfone de novo.
+                  */
+                  <div className="p-1.5 pr-7">
+                    <PlayerAudio url={p.url} meu={false} />
+                  </div>
+                ) : p.url ? (
                   <img src={p.url} alt={p.arquivo.name} className="h-16 w-16 object-cover" />
                 ) : (
                   <div className="h-16 min-w-[92px] max-w-[150px] flex flex-col justify-center px-2 py-1">
