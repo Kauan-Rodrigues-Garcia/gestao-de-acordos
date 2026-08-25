@@ -321,7 +321,15 @@ export function AutorizacaoDock() {
   if (ordenados.length === 0) return null;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2 print:hidden">
+    /*
+     * Canto ESQUERDO desde 25/08/2026.
+     *
+     * Era o direito, e passou a dividir a quina com a bolha do chat — duas
+     * coisas que aparecem sozinhas, uma por cima da outra, e a de baixo some.
+     * Autorizar e conversar são interrupções diferentes e merecem cantos
+     * diferentes. `items-start` acompanha: a gaveta abre para a direita agora.
+     */
+    <div className="fixed bottom-4 left-4 z-50 flex flex-col items-start gap-2 print:hidden">
       <AnimatePresence>
         {aberta && (
           <motion.div

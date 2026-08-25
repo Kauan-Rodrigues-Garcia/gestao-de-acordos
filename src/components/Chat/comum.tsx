@@ -42,6 +42,99 @@ export function AvatarChat({
   );
 }
 
+// ── A nuvem ──────────────────────────────────────────────────────────────────
+
+/**
+ * O botão do chat: uma nuvem de fala que respira.
+ *
+ * SVG, e não três `<div>` arredondados: a nuvem tem uma silhueta só, e montá-la
+ * com caixas deixaria as junções visíveis no hover, quando o fundo clareia.
+ *
+ * ## A animação
+ *
+ * Dois movimentos independentes, ambos lentos de propósito. A nuvem sobe e
+ * desce 2 px em 4 segundos — perto do ritmo de uma respiração, que é o que faz
+ * parecer viva em vez de piscando. Os três pontos pulsam em sequência, com
+ * atraso de 160 ms entre eles.
+ *
+ * Tudo em CSS, sem biblioteca e sem JavaScript por quadro: é um elemento que
+ * fica na tela o dia inteiro, e animar isso no fio principal custaria bateria
+ * de todo mundo o tempo todo.
+ *
+ * `prefers-reduced-motion` para tudo. Quem pediu para o sistema parar de se
+ * mexer não deveria ganhar uma exceção no canto da tela.
+ */
+export function NuvemChat({ ativa = false }: { ativa?: boolean }) {
+  return (
+    <>
+      <style>{`
+        @keyframes chat-respira {
+          0%, 100% { transform: translateY(0)     scale(1);    }
+          50%      { transform: translateY(-2px)  scale(1.015); }
+        }
+        @keyframes chat-ponto {
+          0%, 100% { opacity: .45; transform: translateY(0);     }
+          50%      { opacity: 1;   transform: translateY(-1.5px); }
+        }
+        .chat-nuvem      { animation: chat-respira 4s ease-in-out infinite; }
+        .chat-nuvem-p    { animation: chat-ponto 1.8s ease-in-out infinite; }
+        .chat-nuvem-p:nth-child(2) { animation-delay: .16s; }
+        .chat-nuvem-p:nth-child(3) { animation-delay: .32s; }
+        @media (prefers-reduced-motion: reduce) {
+          .chat-nuvem, .chat-nuvem-p { animation: none; }
+        }
+      `}</style>
+      <svg
+        viewBox="0 0 64 52"
+        className={cn('chat-nuvem w-full h-full transition-colors duration-300',
+                      ativa ? 'text-primary/25' : 'text-muted')}
+        aria-hidden="true"
+      >
+        {/*
+          Um caminho só: quatro arcos formando a silhueta, e o rabinho embaixo à
+          esquerda, como numa fala de história em quadrinhos. Três `<div>`
+          arredondados dariam a mesma forma e mostrariam as junções no hover,
+          quando o fundo clareia.
+        */}
+        <path
+          fill="currentColor"
+          d="M20 8a13 13 0 0 1 12.4 9.1A11 11 0 0 1 46 15.5 11 11 0 0 1 56 26.5
+             a11 11 0 0 1-11 11H19.5l-7.3 8.4a1.1 1.1 0 0 1-1.9-.9l1.2-7.9
+             A15 15 0 0 1 20 8Z"
+        />
+        <g className={cn('transition-colors duration-300',
+                         ativa ? 'text-primary' : 'text-muted-foreground')}>
+          <circle className="chat-nuvem-p" cx="26" cy="26" r="3.2" fill="currentColor" />
+          <circle className="chat-nuvem-p" cx="35" cy="26" r="3.2" fill="currentColor" />
+          <circle className="chat-nuvem-p" cx="44" cy="26" r="3.2" fill="currentColor" />
+        </g>
+      </svg>
+    </>
+  );
+}
+
+// ── Tag de empresa ───────────────────────────────────────────────────────────
+
+/**
+ * «BOOKPLAY» / «PAGUEPLAY» ao lado do nome.
+ *
+ * Mesmo desenho da tag do catálogo de permissões (`CartaoPermissao`), e de
+ * propósito: no sistema inteiro, esse retângulo pequeno em versalete significa
+ * «isto pertence a uma operação só». Inventar um segundo visual para a mesma
+ * ideia obrigaria a pessoa a aprender duas vezes.
+ *
+ * `null` não desenha nada — é o caso de quem atende as duas. Ver
+ * `fn_chat_contatos`.
+ */
+export function TagEmpresa({ slug }: { slug: string | null }) {
+  if (!slug) return null;
+  return (
+    <span className="shrink-0 text-[9px] font-mono uppercase tracking-wider text-muted-foreground border border-border rounded px-1 py-px leading-none">
+      {slug}
+    </span>
+  );
+}
+
 // ── Tempo ────────────────────────────────────────────────────────────────────
 
 /**

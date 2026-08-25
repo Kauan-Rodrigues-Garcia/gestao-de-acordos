@@ -13,7 +13,7 @@ import {
 import { listarContatos, type ContatoChat } from '@/services/chat/chat.service';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
-import { AvatarChat } from './comum';
+import { AvatarChat, TagEmpresa } from './comum';
 
 interface Props {
   aberto:    boolean;
@@ -119,7 +119,10 @@ export function NovaConversaDialog({ aberto, online, onFechar, onEscolher }: Pro
               <AvatarChat nome={p.nome} foto={p.foto_url} tamanho={34}
                           online={online.has(p.perfil_id)} />
               <div className="min-w-0 flex-1">
-                <p className="text-sm truncate leading-tight">{p.nome}</p>
+                <p className="text-sm leading-tight flex items-center gap-1.5">
+                  <span className="truncate">{p.nome}</span>
+                  <TagEmpresa slug={p.multiempresa ? null : p.empresa_slug} />
+                </p>
                 <p className="text-[11px] text-muted-foreground truncate leading-tight">
                   {[p.setor_nome, p.equipe_nome].filter(Boolean).join(' · ') || p.usuario}
                 </p>

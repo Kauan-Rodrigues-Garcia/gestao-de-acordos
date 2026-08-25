@@ -34,6 +34,7 @@ import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
 import { apagarConversa, possoUsarOChat } from '@/services/chat/chat.service';
+import { NuvemChat } from './comum';
 import { ListaConversas } from './ListaConversas';
 import { Conversa } from './Conversa';
 import { DisparoDialog } from './DisparoDialog';
@@ -53,6 +54,8 @@ export function BolhaChat() {
   });
   const [novaConversa, setNovaConversa] = useState(false);
   const [novoDisparo, setNovoDisparo] = useState(false);
+  /** Mouse ou teclado em cima da nuvem — acende o brilho e os pontos. */
+  const [sobre, setSobre] = useState(false);
 
   /*
    * DUAS travas, e as duas precisam abrir.
@@ -115,12 +118,34 @@ export function BolhaChat() {
     return (
       <button
         onClick={() => setAberto(true)}
-        className="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg hover:shadow-xl hover:scale-105 transition-all flex items-center justify-center"
+        onMouseEnter={() => setSobre(true)}
+        onMouseLeave={() => setSobre(false)}
+        onFocus={() => setSobre(true)}
+        onBlur={() => setSobre(false)}
+        className={cn(
+          'fixed bottom-6 right-6 z-40 w-16 h-16 group',
+          'transition-transform duration-300 hover:scale-105 active:scale-95',
+          // Sem fundo, sem borda: a NUVEM é o botão. Um círculo por trás dela
+          // devolveria a bolha genérica que ela existe para substituir.
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-2xl',
+        )}
         aria-label={chat.naoLidasTotal ? `Chat, ${chat.naoLidasTotal} não lidas` : 'Abrir o chat'}
       >
-        <MessageCircle className="w-6 h-6" />
+        {/* O brilho. Só aparece no hover, e é o que dá o «ativo» do desenho. */}
+        <span
+          aria-hidden="true"
+          className={cn(
+            'absolute inset-1 rounded-full blur-xl transition-opacity duration-500',
+            'bg-primary/30',
+            sobre || chat.naoLidasTotal > 0 ? 'opacity-100' : 'opacity-0',
+          )}
+        />
+        <span className="relative block w-full h-full drop-shadow-md">
+          <NuvemChat ativa={sobre || chat.naoLidasTotal > 0} />
+        </span>
+
         {chat.naoLidasTotal > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">
+          <span className="absolute top-0 right-0 min-w-[20px] h-5 px-1 rounded-full bg-destructive text-destructive-foreground text-[11px] font-semibold flex items-center justify-center ring-2 ring-background">
             {chat.naoLidasTotal > 99 ? '99+' : chat.naoLidasTotal}
           </span>
         )}

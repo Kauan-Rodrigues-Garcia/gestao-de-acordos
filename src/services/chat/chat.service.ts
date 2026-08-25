@@ -77,18 +77,28 @@ export interface ConversaChat {
   nao_lidas:          number;
   /** Quando o OUTRO leu por último — é o «visualizou» das minhas mensagens. */
   leitura_do_outro:   string | null;
+  /**
+   * A empresa da outra pessoa, para a tag da lista.
+   *
+   * `null` quando ela atende as duas: rotular de uma só seria dizer uma meia
+   * verdade sobre onde ela está.
+   */
+  outro_empresa:      string | null;
 }
 
 export interface ContatoChat {
-  perfil_id:   string;
-  nome:        string;
-  usuario:     string | null;
-  foto_url:    string | null;
-  cargo:       string;
-  setor_id:    string | null;
-  setor_nome:  string | null;
-  equipe_id:   string | null;
-  equipe_nome: string | null;
+  perfil_id:    string;
+  nome:         string;
+  usuario:      string | null;
+  foto_url:     string | null;
+  cargo:        string;
+  setor_id:     string | null;
+  setor_nome:   string | null;
+  equipe_id:    string | null;
+  equipe_nome:  string | null;
+  empresa_slug: string | null;
+  /** Atende as duas operações — e por isso não recebe tag de empresa. */
+  multiempresa: boolean;
 }
 
 export interface DisparoChat {
@@ -169,11 +179,12 @@ export async function listarConversas(meuId: string): Promise<ConversaChat[]> {
   const outros = comMensagem.map(l =>
     l.chat_conversas.par_menor === meuId ? l.chat_conversas.par_maior : l.chat_conversas.par_menor);
 
-  const [perfis, ultimas, leituras, naoLidas] = await Promise.all([
+  const [perfis, ultimas, leituras, naoLidas, empresas] = await Promise.all([
     buscarPerfis(outros),
     buscarUltimaMensagem(comMensagem.map(l => l.conversa_id)),
     buscarLeituraDosOutros(comMensagem.map(l => l.conversa_id), meuId),
     contarNaoLidas(comMensagem, meuId),
+    buscarEmpresasDosOutros(),
   ]);
 
   return comMensagem
@@ -193,9 +204,33 @@ export async function listarConversas(meuId: string): Promise<ConversaChat[]> {
         ultimo_autor_id:    u?.autor_id ?? null,
         nao_lidas:          naoLidas.get(l.conversa_id) ?? 0,
         leitura_do_outro:   leituras.get(l.conversa_id) ?? null,
+        outro_empresa:      empresas.get(outroId) ?? null,
       };
     })
     .sort((a, b) => (b.ultima_mensagem_em ?? '').localeCompare(a.ultima_mensagem_em ?? ''));
+}
+
+/**
+ * A empresa de cada pessoa com quem eu converso — só para quem NÃO atende as
+ * duas.
+ *
+ * Vem de RPC, e não de um `select` em `perfis`, porque a policy de `perfis`
+ * recorta por empresa: quem eu alcanço por multiempresa pode não voltar nessa
+ * consulta, e a tag apareceria em algumas linhas e em outras não, sem padrão
+ * visível. O banco responde só o slug e o sinal, e só sobre quem já conversa
+ * comigo.
+ */
+async function buscarEmpresasDosOutros(): Promise<Map<string, string | null>> {
+  const mapa = new Map<string, string | null>();
+  const { data, error } = await rpcSemTipo<{
+    perfil_id: string; empresa_slug: string | null; multiempresa: boolean;
+  }[]>('fn_chat_empresas_das_conversas', {});
+  if (error || !data) return mapa;
+
+  for (const r of data) {
+    mapa.set(r.perfil_id, r.multiempresa ? null : r.empresa_slug);
+  }
+  return mapa;
 }
 
 interface PerfilResumo { nome: string; usuario: string | null; foto_url: string | null }

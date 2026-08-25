@@ -15,7 +15,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type { ConversaChat, DisparoChat } from '@/services/chat/chat.service';
 import { rotuloAnexo } from '@/services/chat/chat.service';
-import { AvatarChat, horaCurta } from './comum';
+import { AvatarChat, horaCurta, TagEmpresa } from './comum';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 
@@ -128,9 +128,10 @@ export function ListaConversas({
                   <AvatarChat nome={c.outro_nome} foto={c.outro_foto} tamanho={40}
                               online={online.has(c.outro_id)} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-sm font-medium truncate flex-1">{c.outro_nome}</p>
-                      <span className="text-[10px] text-muted-foreground shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium truncate min-w-0">{c.outro_nome}</p>
+                      <TagEmpresa slug={c.outro_empresa} />
+                      <span className="text-[10px] text-muted-foreground shrink-0 ml-auto">
                         {horaCurta(c.ultima_mensagem_em)}
                       </span>
                     </div>

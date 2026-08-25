@@ -92,7 +92,18 @@ export function useChat(ativo: boolean): UseChat {
       {
         topico: `rt-chat-${empresa.id}`,
         escutas: [
-          { tabela: 'chat_mensagens',     filtro: `empresa_id=eq.${empresa.id}` },
+          /*
+           * SEM filtro de empresa, desde 25/08/2026.
+           *
+           * O chat é um só: quem tem multiempresa conversa com as duas
+           * operações, e um `empresa_id=eq.<atual>` cortaria exatamente as
+           * mensagens de quem está do outro lado — a conversa apareceria na
+           * lista e ficaria muda até um F5.
+           *
+           * A RLS já recorta o que chega. O filtro aqui só economizaria
+           * eventos, e economizava os errados.
+           */
+          { tabela: 'chat_mensagens' },
           // Sem filtro: é por aqui que a conversa APARECE na lista quando
           // alguém responde um disparo (o UPDATE que zera `oculta_em`), e a
           // tabela não tem `empresa_id` para filtrar. A RLS já recorta o que
