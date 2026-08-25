@@ -32,6 +32,7 @@ import {
   ANIMACAO_ENTRADA,
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
+import { VisualizadorMidia } from './VisualizadorMidia';
 
 interface Props {
   conversa:   ConversaChat;
@@ -144,6 +145,21 @@ export function Conversa({
     // a cada mensagem nova, e nada nunca seria considerado novo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversa.id]);
+
+  /*
+   * Todas as fotos e vídeos da conversa, na ordem em que aparecem.
+   *
+   * É o que faz as setas do visualizador andarem pela CONVERSA, e não só pela
+   * mensagem clicada: quem manda seis prints seguidos quer passar de um para o
+   * outro, não fechar e reabrir seis vezes.
+   */
+  const midias = useMemo(
+    () => mensagens.flatMap(m =>
+      m.anexos.filter(a => a.tipo?.startsWith('image/') || a.tipo?.startsWith('video/'))),
+    [mensagens],
+  );
+
+  const [midiaAberta, setMidiaAberta] = useState<number | null>(null);
 
   const pedirAnteriores = useCallback(() => {
     alturaAntes.current = rolagem.current?.scrollHeight ?? null;
@@ -306,7 +322,15 @@ export function Conversa({
                   meu ? 'bg-primary text-primary-foreground rounded-br-md'
                       : 'bg-muted rounded-bl-md',
                 )}>
-                  {m.anexos.map((a, i) => <AnexoNoBalao key={i} anexo={a} meu={meu} />)}
+                  {m.anexos.map((a, i) => (
+                    <AnexoNoBalao
+                      key={i} anexo={a} meu={meu}
+                      onAbrir={() => {
+                        const pos = midias.findIndex(x => x.url === a.url);
+                        if (pos >= 0) setMidiaAberta(pos);
+                      }}
+                    />
+                  ))}
                   {m.texto && (
                     <p className={cn(
                       'text-sm whitespace-pre-wrap break-words',
@@ -478,6 +502,12 @@ export function Conversa({
         </div>
         )}
       </div>
+
+      {/* Foto e vídeo abrem aqui dentro, e não numa aba com a URL assinada
+          à mostra. PDF continua abrindo fora — ver `VisualizadorMidia`. */}
+      <VisualizadorMidia
+        midias={midias} inicial={midiaAberta} onFechar={() => setMidiaAberta(null)}
+      />
 
       {arrastando && (
         <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/85 border-2 border-dashed border-primary rounded-xl pointer-events-none">

@@ -186,10 +186,17 @@ export function tamanhoLegivel(bytes: number): string {
  * linha com nome e tamanho. Enquanto a assinatura não volta, o espaço já fica
  * reservado, senão a conversa dá um salto quando a imagem aparece.
  */
-export function AnexoNoBalao({ anexo, meu }: { anexo: AnexoChat; meu: boolean }) {
+export function AnexoNoBalao({
+  anexo, meu, onAbrir,
+}: {
+  anexo: AnexoChat; meu: boolean;
+  /** Foto e vídeo abrem no visualizador da própria aba. Ver `VisualizadorMidia`. */
+  onAbrir?: () => void;
+}) {
   const [url, setUrl] = useState<string | null>(null);
   const ehImagem = anexo.tipo?.startsWith('image/');
   const ehAudio  = anexo.tipo?.startsWith('audio/');
+  const ehVideo  = anexo.tipo?.startsWith('video/');
 
   useEffect(() => {
     let vivo = true;
@@ -199,14 +206,34 @@ export function AnexoNoBalao({ anexo, meu }: { anexo: AnexoChat; meu: boolean })
 
   if (ehAudio) return <PlayerAudio url={url} meu={meu} />;
 
-  if (ehImagem) {
+  if (ehImagem || ehVideo) {
     return (
-      <a href={url ?? undefined} target="_blank" rel="noreferrer"
-         className="block rounded-lg overflow-hidden bg-muted/40 max-w-[240px]">
-        {url
-          ? <img src={url} alt={anexo.nome} className="w-full h-auto max-h-64 object-cover" />
-          : <div className="w-[240px] h-32 animate-pulse" />}
-      </a>
+      <button
+        onClick={onAbrir}
+        className="block rounded-lg overflow-hidden bg-muted/40 max-w-[240px] relative group"
+        aria-label={`Abrir ${anexo.nome}`}
+      >
+        {url ? (
+          ehVideo ? (
+            // Só o primeiro quadro: carregar o vídeo inteiro para desenhar uma
+            // miniatura gastaria a banda de todos os vídeos da conversa.
+            <video src={url} preload="metadata" muted
+                   className="w-full h-auto max-h-64 object-cover pointer-events-none" />
+          ) : (
+            <img src={url} alt={anexo.nome} className="w-full h-auto max-h-64 object-cover" />
+          )
+        ) : (
+          <div className="w-[240px] h-32 animate-pulse" />
+        )}
+
+        {ehVideo && (
+          <span className="absolute inset-0 flex items-center justify-center bg-black/25 group-hover:bg-black/35 transition-colors">
+            <span className="w-11 h-11 rounded-full bg-black/60 flex items-center justify-center">
+              <Play className="w-5 h-5 text-white ml-0.5" />
+            </span>
+          </span>
+        )}
+      </button>
     );
   }
 
