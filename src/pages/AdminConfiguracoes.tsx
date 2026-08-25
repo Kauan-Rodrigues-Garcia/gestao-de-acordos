@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { supabase, ModeloMensagem } from '@/lib/supabase';
 import { toast } from 'sonner';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
@@ -40,7 +41,7 @@ export default function AdminConfiguracoes() {
   const [editando, setEditando] = useState<ModeloMensagem | null>(null);
   const [form, setForm] = useState({ nome: '', conteudo: '' });
   const [saving, setSaving] = useState(false);
-  const { empresa } = useEmpresa();
+  const { empresa, tenantSlug } = useEmpresa();
   const { perfil } = useAuth();
   const { temPermissao } = useCargoPermissoes();
   // Card "Banco de Dados / Migrations". Era `isPerfilAdmin`; agora sai do
@@ -50,6 +51,21 @@ export default function AdminConfiguracoes() {
   // Aba "Multiempresa": só super_admin. Esconder aqui é conveniência — quem
   // decide são as RPCs e o trigger em `perfis` (migration 20260818300000).
   const ehSuperAdmin = perfil?.perfil === 'super_admin';
+
+  /*
+   * Configurações é de toda operação, mas duas abas de dentro NÃO são.
+   *
+   * «Direto e Extra» classifica recebimento de acordo; «Tags» são rótulos de
+   * acordo. As duas apareciam sem condição nenhuma, e o Comercial abria
+   * Configurações e encontrava vocabulário de cobrança — vazio, porque o dado é
+   * isolado por empresa, mas presente.
+   *
+   * O cabeçalho de `AdminDiretoExtra.tsx` chegava a dizer que a aba «é exibida
+   * para todas as empresas». Era verdade quando «todas» eram BookPlay e
+   * PaguePlay. A Fase 0 cuidou das abas do MENU; estas vivem um nível abaixo,
+   * dentro da tela, e nenhuma régua as alcançava.
+   */
+  const ehCobranca = produtoDaEmpresa(empresa, tenantSlug) === 'cobranca';
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -184,18 +200,22 @@ export default function AdminConfiguracoes() {
             >
               <ShieldCheck className="w-4 h-4" /> Permissões
             </TabsTrigger>
+            {ehCobranca && (
             <TabsTrigger
               value="direto_extra"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
             </TabsTrigger>
+            )}
+            {ehCobranca && (
             <TabsTrigger
               value="tags"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Tag className="w-4 h-4" /> Tags
             </TabsTrigger>
+            )}
             {temPermissao('ver_logs') && (
             <TabsTrigger
               value="logs"
@@ -364,14 +384,18 @@ export default function AdminConfiguracoes() {
         </TabsContent>
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
+        {ehCobranca && (
         <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
           <AdminDiretoExtra />
         </TabsContent>
+        )}
 
         {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
+        {ehCobranca && (
         <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
           <AdminTags />
         </TabsContent>
+        )}
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
         {temPermissao('ver_logs') && (

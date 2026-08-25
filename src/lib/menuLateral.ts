@@ -64,10 +64,14 @@ export interface NavItem {
 /**
  * As abas que toda operação tem, seja qual for o produto.
  *
- * A lista é curta de propósito. Cadastrar gente, configurar a empresa e
- * recuperar o que foi apagado são necessidades de qualquer operação; o resto
- * (acordo, recebimento, meta, analítico) é vocabulário da cobrança e não
- * significa nada em Vendas ou RH.
+ * Três, e a lista é curta de propósito: a porta de entrada, cadastrar gente e
+ * configurar a empresa. Todo o resto — acordo, recebimento, meta, analítico —
+ * é vocabulário da cobrança e não significa nada em Vendas ou RH.
+ *
+ * A Lixeira esteve aqui por um dia e saiu: ela lista ACORDOS excluídos, não
+ * "coisas apagadas" em geral. Foi o tipo de engano que a lista branca torna
+ * barato — reclassificar é mudar uma constante, e nada vazou enquanto isso,
+ * porque a tela é isolada por empresa.
  */
 const TODOS_OS_PRODUTOS: readonly Produto[] = ['cobranca', 'comercial', 'rh'];
 
@@ -108,7 +112,7 @@ export const NAV_ITEMS: NavItem[] = [
   // Metas virou aba dentro de Usuários (BookPlay e PaguePlay) — esconde o menu standalone.
   { label: 'Metas',            icon: Target,          to: '/admin/metas',                  produtos: SO_COBRANCA, roles: ['administrador','lider','elite','gerencia'], permissaoKey: 'ver_metas', hiddenForBookplay: true, hiddenForPaguePay: true },
   { label: 'Configurações',    icon: Settings,        to: ROUTE_PATHS.ADMIN_CONFIGURACOES, produtos: TODOS_OS_PRODUTOS, roles: ['administrador'], permissaoKey: 'ver_configuracoes' },
-  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: TODOS_OS_PRODUTOS, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
+  { label: 'Lixeira',          icon: Trash2,          to: '/admin/lixeira',                produtos: SO_COBRANCA, roles: ['administrador','lider','operador','elite','gerencia','diretoria'], permissaoKey: 'ver_lixeira' },
   // Estes três eram renderizados À MÃO abaixo do laço, com condição só de slug
   // e cargo. Analítico e Campanha Fácil não consultavam permissão nenhuma:
   // desligar a aba na tela de Permissões bloqueava a rota e o item continuava

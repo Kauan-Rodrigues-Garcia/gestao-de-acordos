@@ -18,6 +18,7 @@ import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
+import { produtoDaEmpresa } from '@/lib/produto';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { usePresence } from '@/hooks/usePresence';
 import { Card, CardContent } from '@/components/ui/card';
@@ -94,10 +95,18 @@ export default function AdminUsuarios() {
   // Item 6: a aba Metas passa a viver dentro de Usuários (BookPlay e PaguePlay).
   // `tenant` é usado em outras partes; mantém a referência p/ clareza.
   const metasComoAba = tenant.slug === 'bookplay' || tenant.isPaguePlay;
-  // Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
-  // criação — quem só assiste não precisa da aba, a comemoração chega pelo
-  // overlay em qualquer página.
-  const podeVerComemoracoes = podeGerenciarComemoracoes(temPermissao);
+  /*
+   * Comemorações também virou aba daqui (nos dois tenants). O gate é o mesmo da
+   * criação — quem só assiste não precisa da aba, a comemoração chega pelo
+   * overlay em qualquer página.
+   *
+   * O `ehCobranca` entrou em 25/08. `comemoracoes_gerenciar` responde `true`
+   * para todo administrador por construção, então a aba aparecia no Comercial —
+   * e comemoração aqui é meta de recebimento batida, que Vendas não tem. A
+   * permissão diz quem pode; o produto diz se a coisa existe.
+   */
+  const ehCobranca = produtoDaEmpresa(empresaAtual, tenant.slug) === 'cobranca';
+  const podeVerComemoracoes = ehCobranca && podeGerenciarComemoracoes(temPermissao);
   /*
    * Dois eixos, duas chaves — e eles não são a mesma pergunta.
    *

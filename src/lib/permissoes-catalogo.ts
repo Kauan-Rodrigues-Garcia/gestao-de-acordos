@@ -299,7 +299,7 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'ver_lixeira', label: 'Lixeira',
     descricao: 'Abrir a lixeira e restaurar acordos excluídos',
-    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: TODOS,
+    grupo: 'Abas e telas', padrao: TODOS,
   },
   {
     key: 'ver_logs', label: 'Logs do sistema',
@@ -662,32 +662,32 @@ export const PERMISSOES: PermissaoMeta[] = [
   {
     key: 'lixeira_escopo_individual', label: 'Lixeira: os próprios acordos',
     descricao: 'Ver na lixeira os acordos excluídos pela própria pessoa',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
+    grupo: 'Lixeira', padrao: TODOS,
   },
   {
     key: 'lixeira_escopo_equipe', label: 'Lixeira: acordos da equipe',
     descricao: 'Ver na lixeira os acordos excluídos pela equipe',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: LIDERANCA,
+    grupo: 'Lixeira', padrao: LIDERANCA,
   },
   {
     key: 'lixeira_escopo_setor', label: 'Lixeira: acordos do setor',
     descricao: 'Ver na lixeira os acordos excluídos no setor inteiro',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: LIDERANCA,
+    grupo: 'Lixeira', padrao: LIDERANCA,
   },
   {
     key: 'lixeira_escopo_todos_setores', label: 'Lixeira: todos os setores',
     descricao: 'Ver na lixeira os acordos excluídos em qualquer setor da empresa',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: { gerencia: true, diretoria: true },
+    grupo: 'Lixeira', padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'lixeira_restaurar', label: 'Restaurar da lixeira',
     descricao: 'Devolver um acordo excluído para a lista',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
+    grupo: 'Lixeira', padrao: TODOS,
   },
   {
     key: 'lixeira_limpar', label: 'Esvaziar a lixeira',
     descricao: 'Apagar de vez tudo que está na lixeira',
-    grupo: 'Lixeira', produtos: TODA_OPERACAO, padrao: TODOS,
+    grupo: 'Lixeira', padrao: TODOS,
   },
 
   // ── Painel Líder ─────────────────────────────────────────────────────────

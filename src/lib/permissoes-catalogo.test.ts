@@ -314,6 +314,8 @@ describe('catálogo por produto', () => {
     for (const daCobranca of [
       'ver_acordos', 'criar_acordos', 'ver_analitico', 'ver_painel_lider',
       'ver_campanha_facil', 'ver_metas', 'importar_analitico',
+      // Lixeira é acordo excluído — voltou para a cobrança em 25/08.
+      'ver_lixeira', 'lixeira_restaurar', 'lixeira_escopo_setor',
       'ajuste_recebimento_lancar', 'ver_pix_automatico', 'ver_tickets',
     ]) {
       expect(chaves.has(daCobranca), `${daCobranca} vazou para o Comercial`).toBe(false);
@@ -324,7 +326,7 @@ describe('catálogo por produto', () => {
     const chaves = new Set(catalogoDoTenant('comercial').map(p => p.key));
     for (const generica of [
       'ver_usuarios', 'usuarios_administrar', 'equipes_criar_editar',
-      'ver_configuracoes', 'administrar_sistema', 'ver_lixeira', 'lixeira_restaurar',
+      'ver_configuracoes', 'administrar_sistema',
     ]) {
       expect(chaves.has(generica), `${generica} sumiu do Comercial`).toBe(true);
     }

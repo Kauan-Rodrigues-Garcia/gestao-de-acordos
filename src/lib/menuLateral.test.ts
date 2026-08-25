@@ -173,7 +173,9 @@ describe('abasDoMenu — por produto', () => {
 
   it('o Comercial vê o que toda operação precisa', () => {
     const abas = rotulos(abasDoMenu(ctx({ produto: 'comercial', isBookplay: false })));
-    expect(abas).toEqual(expect.arrayContaining(['Dashboard', 'Usuários', 'Configurações', 'Lixeira']));
+    expect(abas).toEqual(expect.arrayContaining(['Dashboard', 'Usuários', 'Configurações']));
+    // Lixeira NÃO: ela lista acordos excluídos, não «coisas apagadas» em geral.
+    expect(abas).not.toContain('Lixeira');
   });
 
   it('o RH se comporta igual ao Comercial — nenhum privilégio sobre a cobrança', () => {
