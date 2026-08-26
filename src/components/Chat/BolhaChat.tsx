@@ -26,14 +26,17 @@
  * fora. Aqui a tela só pergunta; quem decide é o banco, e a RLS recusaria de
  * qualquer jeito.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { MessageCircle, Minus, Maximize2, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useChat } from '@/hooks/useChat';
 import { useChatPresenca } from '@/hooks/useChatPresenca';
-import { apagarConversa, possoUsarOChat } from '@/services/chat/chat.service';
+import {
+  apagarConversa, buscarConversa, possoUsarOChat, rotuloAnexo,
+  type MensagemChat,
+} from '@/services/chat/chat.service';
 import { IconeChat } from './comum';
 import { ListaConversas } from './ListaConversas';
 import { Conversa } from './Conversa';
@@ -41,6 +44,12 @@ import { DisparoDialog } from './DisparoDialog';
 import { NovaConversaDialog } from './NovaConversaDialog';
 import { BoasVindasChat } from './BoasVindasChat';
 import { useToast } from '@/components/ui/use-toast';
+import { toast as toastFlutuante } from '@/components/ui/sonner';
+import { NotificacaoMensagem } from './NotificacaoMensagem';
+import {
+  deveNotificarMensagemChat, executarNotificacaoChatUmaVez, tituloComMensagensNaoLidas,
+} from '@/lib/notificacao-chat';
+import { prepararSomChat, tocarSomChat } from '@/lib/som-chat';
 
 const CHAVE_LARGURA = 'chat-expandido';
 
@@ -57,6 +66,58 @@ export function BolhaChat() {
   const [novoDisparo, setNovoDisparo] = useState(false);
   /** Mouse ou teclado em cima do botão — acende o brilho e os pontos. */
   const [sobre, setSobre] = useState(false);
+  const abertoRef = useRef(aberto);
+  abertoRef.current = aberto;
+
+  // A assinatura do Realtime nasce dentro de useChat, mas a decisão visual
+  // mora aqui, onde sabemos se a janela está de fato aberta. Refs evitam
+  // recriar o canal a cada conversa ou a cada abrir/minimizar.
+  const chatRef = useRef<ReturnType<typeof useChat> | null>(null);
+  const aoMensagemRecebida = useCallback((mensagem: MensagemChat) => {
+    const estado = chatRef.current;
+    if (!estado || !deveNotificarMensagemChat({
+      janelaAberta: abertoRef.current,
+      conversaAberta: estado.conversaAberta,
+      conversaDaMensagem: mensagem.conversa_id,
+    })) return;
+
+    void executarNotificacaoChatUmaVez(mensagem.id, () => {
+      void (async () => {
+        const atual = chatRef.current;
+        const conversa = atual?.conversas.find(c => c.id === mensagem.conversa_id)
+          ?? await buscarConversa(mensagem.conversa_id);
+        if (!conversa) return;
+
+        // A busca da foto pode levar alguns milissegundos. Se a pessoa abriu a
+        // conversa nesse intervalo, o aviso perdeu a razão de existir.
+        const depoisDaBusca = chatRef.current;
+        if (depoisDaBusca && !deveNotificarMensagemChat({
+          janelaAberta: abertoRef.current,
+          conversaAberta: depoisDaBusca.conversaAberta,
+          conversaDaMensagem: mensagem.conversa_id,
+        })) return;
+
+        const previa = mensagem.texto?.trim()
+          || (mensagem.anexos.length ? rotuloAnexo(mensagem.anexos) : 'Nova mensagem');
+
+        toastFlutuante.custom(id => (
+          <NotificacaoMensagem
+            nome={conversa.outro_nome}
+            foto={conversa.outro_foto}
+            mensagem={previa}
+            onFechar={() => toastFlutuante.dismiss(id)}
+            onAbrir={() => {
+              toastFlutuante.dismiss(id);
+              chatRef.current?.abrir(mensagem.conversa_id);
+              abertoRef.current = true;
+              setAberto(true);
+            }}
+          />
+        ), { duration: 8_000 });
+        tocarSomChat();
+      })();
+    });
+  }, []);
 
   /*
    * As boas-vindas: aparecem uma vez, antes da PRIMEIRA conversa.
@@ -103,8 +164,33 @@ export function BolhaChat() {
    * que tem mensagem. Custa uma assinatura de realtime, que já é compartilhada
    * com o resto do app.
    */
-  const chat = useChat(podeVer);
+  const chat = useChat(podeVer, aberto, aoMensagemRecebida);
+  chatRef.current = chat;
   const { online, digitando, avisarDigitando } = useChatPresenca(podeVer);
+
+  // Contagem da própria aba do navegador. Mensagens lidas limpam o prefixo.
+  useEffect(() => {
+    document.title = tituloComMensagensNaoLidas(chat.naoLidasTotal);
+    return () => { document.title = 'Gestão de Acordos'; };
+  }, [chat.naoLidasTotal]);
+
+  // O arquivo é diferente do som do sino. O primeiro gesto apenas antecipa o
+  // download e deixa o navegador pronto para tocar quando a mensagem chegar.
+  useEffect(() => {
+    if (!podeVer) return;
+    prepararSomChat();
+    const preparar = () => {
+      prepararSomChat();
+      window.removeEventListener('pointerdown', preparar, true);
+      window.removeEventListener('keydown', preparar, true);
+    };
+    window.addEventListener('pointerdown', preparar, true);
+    window.addEventListener('keydown', preparar, true);
+    return () => {
+      window.removeEventListener('pointerdown', preparar, true);
+      window.removeEventListener('keydown', preparar, true);
+    };
+  }, [podeVer]);
 
   useEffect(() => {
     try { localStorage.setItem(CHAVE_LARGURA, expandido ? 'sim' : 'nao'); } catch { /* sem storage */ }
@@ -112,10 +198,21 @@ export function BolhaChat() {
 
   const conversaAtual = chat.aberta;
 
+  const abrirJanela = useCallback(() => {
+    abertoRef.current = true;
+    setAberto(true);
+    // Minimizar conserva a conversa selecionada. Ao voltar ela se torna
+    // visível novamente, então relê e marca como lida o que chegou no intervalo.
+    if (chat.conversaAberta) chat.abrir(chat.conversaAberta);
+  }, [chat]);
+
   const abrirCom = useCallback(async (pessoaId: string) => {
     const id = await chat.abrirCom(pessoaId);
     if (!id) toast({ title: 'Não foi possível abrir a conversa', variant: 'destructive' });
-    else setAberto(true);
+    else {
+      abertoRef.current = true;
+      setAberto(true);
+    }
   }, [chat, toast]);
 
   // ── As duas portas para uma conversa, ambas passando pelo cartão ───────────
@@ -149,8 +246,19 @@ export function BolhaChat() {
   // ── Fechado: só a bolha ────────────────────────────────────────────────────
   if (!aberto) {
     return (
+      <>
+      <style>{`
+        @keyframes chat-alerta-pendente {
+          0%   { transform: scale(.9); opacity: .85; }
+          70%  { transform: scale(1.22); opacity: 0; }
+          100% { transform: scale(1.22); opacity: 0; }
+        }
+        .chat-alerta-pendente {
+          animation: chat-alerta-pendente 1.45s ease-out infinite;
+        }
+      `}</style>
       <button
-        onClick={() => setAberto(true)}
+        onClick={abrirJanela}
         onMouseEnter={() => setSobre(true)}
         onMouseLeave={() => setSobre(false)}
         onFocus={() => setSobre(true)}
@@ -168,6 +276,12 @@ export function BolhaChat() {
         )}
         aria-label={chat.naoLidasTotal ? `Chat, ${chat.naoLidasTotal} não lidas` : 'Abrir o chat'}
       >
+        {chat.naoLidasTotal > 0 && (
+          <span
+            aria-hidden="true"
+            className="chat-alerta-pendente pointer-events-none absolute -inset-1 rounded-[18px] border-2 border-primary/70"
+          />
+        )}
         {/* O brilho, atrás. Acende no hover e fica aceso com mensagem nova. */}
         <span
           aria-hidden="true"
@@ -184,6 +298,7 @@ export function BolhaChat() {
           </span>
         )}
       </button>
+      </>
     );
   }
 
@@ -214,7 +329,7 @@ export function BolhaChat() {
                   aria-label={expandido ? 'Diminuir a janela' : 'Aumentar a janela'}>
             {expandido ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
           </button>
-          <button onClick={() => setAberto(false)}
+          <button onClick={() => { abertoRef.current = false; setAberto(false); }}
                   className="p-1.5 rounded hover:bg-muted transition-colors" aria-label="Fechar o chat">
             <Minus className="w-3.5 h-3.5" />
           </button>

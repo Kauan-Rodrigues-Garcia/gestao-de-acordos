@@ -61,7 +61,11 @@ export interface UseChat {
   recarregar:     () => void;
 }
 
-export function useChat(ativo: boolean): UseChat {
+export function useChat(
+  ativo: boolean,
+  conversaVisivel = true,
+  aoMensagemRecebida?: (mensagem: MensagemChat) => void,
+): UseChat {
   const { perfil } = useAuth();
   const { empresa } = useEmpresa();
   const meuId = perfil?.id ?? null;
@@ -80,6 +84,10 @@ export function useChat(ativo: boolean): UseChat {
   // vez: sem a ref, ele veria para sempre o valor da primeira renderização.
   const abertaRef = useRef<string | null>(null);
   abertaRef.current = conversaAberta;
+  const visivelRef = useRef(conversaVisivel);
+  visivelRef.current = conversaVisivel;
+  const aoReceberRef = useRef(aoMensagemRecebida);
+  aoReceberRef.current = aoMensagemRecebida;
 
   const recarregar = useCallback(async () => {
     if (!meuId || !ativo) return;
@@ -165,17 +173,24 @@ export function useChat(ativo: boolean): UseChat {
 
           if (payload.table === 'chat_mensagens') {
             const msg = linha as unknown as MensagemChat;
+            const normalizada = {
+              ...msg,
+              anexos: Array.isArray(msg.anexos) ? msg.anexos : [],
+            };
             // O segundo check só nasce quando o cliente do destinatário
             // recebeu de fato o INSERT pelo Realtime.
             if (payload.eventType === 'INSERT' && msg.autor_id !== meuId) {
               void marcarEntregue(msg.conversa_id, meuId);
+              aoReceberRef.current?.(normalizada);
             }
             // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
             if (msg.conversa_id === abertaRef.current && payload.eventType === 'INSERT') {
               setMensagens(atual => atual.some(m => m.id === msg.id)
                 ? atual
-                : [...atual, { ...msg, anexos: Array.isArray(msg.anexos) ? msg.anexos : [] }]);
-              if (msg.autor_id !== meuId) agendarLido(msg.conversa_id);
+                : [...atual, normalizada]);
+              // Selecionada não significa visível: ao minimizar a janela ela
+              // continua selecionada, mas mensagem nova não pode virar lida.
+              if (msg.autor_id !== meuId && visivelRef.current) agendarLido(msg.conversa_id);
             }
             // O expurgo de CPF reescreve o texto: sem isto a mensagem
             // continuaria legível na tela de quem está com ela aberta.

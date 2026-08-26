@@ -65,9 +65,10 @@ export function AvatarChat({
  * não lida esperando). Parado, o botão fica parado — um ícone que se mexe o dia
  * inteiro no canto da tela vira distração, não convite.
  *
- * Em CSS, sem biblioteca e sem JavaScript por quadro. `prefers-reduced-motion`
- * desliga: quem pediu para o sistema parar de se mexer não deveria ganhar uma
- * exceção no canto da tela.
+ * Em CSS, sem biblioteca e sem JavaScript por quadro. Não consulta
+ * `prefers-reduced-motion`: nos computadores corporativos essa preferência
+ * costuma vir ligada por política de desempenho, e o movimento aqui comunica
+ * mensagem esperando — é estado, não decoração.
  */
 export function IconeChat({ ativo = false }: { ativo?: boolean }) {
   return (
@@ -80,9 +81,6 @@ export function IconeChat({ ativo = false }: { ativo?: boolean }) {
         .chat-p-anima { animation: chat-ponto 1.6s ease-in-out infinite; }
         .chat-p-anima:nth-of-type(2) { animation-delay: .16s; }
         .chat-p-anima:nth-of-type(3) { animation-delay: .32s; }
-        @media (prefers-reduced-motion: reduce) {
-          .chat-p-anima { animation: none; }
-        }
       `}</style>
       <svg viewBox="0 0 32 32" className="w-[26px] h-[26px]" aria-hidden="true">
         {/* Balão de canto arredondado com o rabinho embaixo à esquerda. */}
@@ -384,9 +382,6 @@ export function BalaoDigitando() {
         .chat-d { animation: chat-digita 1.3s ease-in-out infinite; }
         .chat-d:nth-child(2) { animation-delay: .18s; }
         .chat-d:nth-child(3) { animation-delay: .36s; }
-        @media (prefers-reduced-motion: reduce) {
-          .chat-d { animation: none; opacity: .7; }
-        }
       `}</style>
       <div className="flex justify-start">
         <div
@@ -422,9 +417,6 @@ export function EstiloEntrada() {
         to   { opacity: 1; transform: translateY(0);   }
       }
       .${ANIMACAO_ENTRADA} { animation: chat-entrada .18s ease-out; }
-      @media (prefers-reduced-motion: reduce) {
-        .${ANIMACAO_ENTRADA} { animation: none; }
-      }
     `}</style>
   );
 }

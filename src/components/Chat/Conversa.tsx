@@ -7,16 +7,15 @@
  * clipe caem todos em `receberArquivos`. Três portas, uma sala — senão o
  * arrastar aceitaria um arquivo de 40 MB que o botão recusa.
  *
- * ## A rolagem só desce quando devia
+ * ## A conversa viva acompanha o fim
  *
- * Descer a cada mensagem arranca a pessoa de onde ela estava lendo. Aqui só
- * desce se ela JÁ estava no fim (ou se foi ela quem escreveu) — quem subiu
- * para reler continua onde parou, e um aviso discreto diz que chegou coisa
- * nova.
+ * Mensagem enviada, recebida ou o balão de «digitando» levam para o fim. É uma
+ * escolha explícita deste chat operacional: o que está acontecendo agora tem
+ * prioridade sobre a posição antiga da rolagem.
  */
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
-  ArrowLeft, Paperclip, Send, Smile, X, ArrowDown, Loader2, Mic, Trash2, Check,
+  ArrowLeft, Paperclip, Send, Smile, X, Loader2, Mic, Trash2, Check,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -63,11 +62,9 @@ export function Conversa({
   const [subindo, setSubindo] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState(false);
-  const [temNovas, setTemNovas] = useState(false);
 
   const rolagem = useRef<HTMLDivElement>(null);
   const campo   = useRef<HTMLTextAreaElement>(null);
-  const noFim   = useRef(true);
   const gravador = useGravadorAudio();
 
   /*
@@ -105,16 +102,6 @@ export function Conversa({
     const el = rolagem.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: suave ? 'smooth' : 'auto' });
-    setTemNovas(false);
-  }, []);
-
-  const aoRolar = useCallback(() => {
-    const el = rolagem.current;
-    if (!el) return;
-    // 40 px de folga: ninguém para exatamente no pixel do fim, e exigir isso
-    // faria a rolagem automática parar de funcionar sem motivo aparente.
-    noFim.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
-    if (noFim.current) setTemNovas(false);
   }, []);
 
   useLayoutEffect(() => {
@@ -135,9 +122,14 @@ export function Conversa({
 
     const ultima = mensagens[mensagens.length - 1];
     if (!ultima) return;
-    if (noFim.current || ultima.autor_id === meuId) descer(mensagens.length > 1);
-    else setTemNovas(true);
-  }, [mensagens, meuId, descer]);
+    descer(mensagens.length > 1);
+  }, [mensagens, descer]);
+
+  // O balão nasce no fim da lista. Descer depois de ele montar evita que os
+  // três pontos fiquem escondidos logo abaixo da área visível.
+  useLayoutEffect(() => {
+    if (digitando) descer(true);
+  }, [digitando, descer]);
 
   useEffect(() => {
     jaVistas.current = new Set(mensagens.map(m => m.id));
@@ -277,7 +269,7 @@ export function Conversa({
       </header>
 
       {/* Mensagens */}
-      <div ref={rolagem} onScroll={aoRolar}
+      <div ref={rolagem}
            className="flex-1 min-h-0 overflow-y-auto px-3 py-3 space-y-1.5">
         <EstiloEntrada />
 
@@ -359,13 +351,6 @@ export function Conversa({
             mensagem vai nascer, e é para lá que o olho já está indo. */}
         {digitando && <BalaoDigitando />}
       </div>
-
-      {temNovas && (
-        <button onClick={() => descer()}
-                className="absolute bottom-24 left-1/2 -translate-x-1/2 flex items-center gap-1 text-xs bg-primary text-primary-foreground rounded-full px-3 py-1.5 shadow-lg">
-          <ArrowDown className="w-3 h-3" /> mensagens novas
-        </button>
-      )}
 
       {/* Escrita */}
       <div className="border-t border-border px-2.5 py-2 space-y-2 shrink-0">
