@@ -29,7 +29,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useEmpresa } from '@/hooks/useEmpresa';
 import {
   listarConversas, listarMensagens, listarDisparos, buscarConversa,
-  marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
+  marcarEntregue, marcarLido, enviarMensagem as enviarNoBanco, abrirConversa,
   type ConversaChat, type MensagemChat, type DisparoChat, type AnexoChat,
 } from '@/services/chat/chat.service';
 
@@ -87,6 +87,18 @@ export function useChat(ativo: boolean): UseChat {
     setConversas(c);
     setDisparos(d);
     setCarregando(false);
+
+    // Abrir o chat já baixa a lista. Se a última mensagem veio do outro lado,
+    // isso é uma entrega real mesmo que ela tenha chegado enquanto eu estava
+    // offline. O corte impede UPDATEs repetidos e um ciclo de eventos realtime.
+    for (const conversa of c) {
+      if (conversa.ultimo_autor_id !== meuId
+          && conversa.ultima_mensagem_em
+          && (!conversa.entrega_minha
+              || conversa.ultima_mensagem_em > conversa.entrega_minha)) {
+        void marcarEntregue(conversa.id, meuId);
+      }
+    }
   }, [meuId, ativo]);
 
   useEffect(() => { void recarregar(); }, [recarregar]);
@@ -153,6 +165,11 @@ export function useChat(ativo: boolean): UseChat {
 
           if (payload.table === 'chat_mensagens') {
             const msg = linha as unknown as MensagemChat;
+            // O segundo check só nasce quando o cliente do destinatário
+            // recebeu de fato o INSERT pelo Realtime.
+            if (payload.eventType === 'INSERT' && msg.autor_id !== meuId) {
+              void marcarEntregue(msg.conversa_id, meuId);
+            }
             // Mensagem da conversa aberta entra direto: aqui o evento é o dado.
             if (msg.conversa_id === abertaRef.current && payload.eventType === 'INSERT') {
               setMensagens(atual => atual.some(m => m.id === msg.id)

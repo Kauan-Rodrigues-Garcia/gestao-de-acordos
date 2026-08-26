@@ -33,6 +33,8 @@ import {
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
 import { VisualizadorMidia } from './VisualizadorMidia';
+import { StatusMensagem } from './StatusMensagem';
+import { estadoMensagem } from './estadoMensagem';
 
 interface Props {
   conversa:   ConversaChat;
@@ -301,8 +303,9 @@ export function Conversa({
           const dia = diaDaMensagem(m.criado_em);
           const novoDia = dia !== diaAnterior;
           diaAnterior = dia;
-          const lida = meu && conversa.leitura_do_outro !== null
-                       && m.criado_em <= conversa.leitura_do_outro;
+          const estado = meu
+            ? estadoMensagem(m.criado_em, conversa.entrega_do_outro, conversa.leitura_do_outro)
+            : null;
           // Só anima o que chegou depois de a tela montar.
           const nova = !jaVistas.current.has(m.id);
           if (nova) jaVistas.current.add(m.id);
@@ -344,7 +347,7 @@ export function Conversa({
                     meu ? 'text-primary-foreground/60' : 'text-muted-foreground',
                   )}>
                     {horaDoBalao(m.criado_em)}
-                    {meu && <span className="ml-1">{lida ? '✓✓' : '✓'}</span>}
+                    {estado && <StatusMensagem estado={estado} noBalao className="ml-1" />}
                   </p>
                 </div>
               </div>

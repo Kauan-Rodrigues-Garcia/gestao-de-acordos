@@ -10,7 +10,7 @@
  * minhas conversas e desenha o que vier.
  */
 import { useCallback, useState } from 'react';
-import { ChevronDown, Loader2, MessageSquarePlus, Search, Send, Trash2 } from 'lucide-react';
+import { ChevronDown, Loader2, MessageSquarePlus, Plus, Search, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import type {
@@ -23,6 +23,8 @@ import { AvatarChat, horaCurta, TagEmpresa } from './comum';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cargosChatLiberados } from '@/lib/permissoes-chat';
+import { StatusMensagem } from './StatusMensagem';
+import { estadoMensagem } from './estadoMensagem';
 
 type Aba = 'conversas' | 'disparos';
 
@@ -222,8 +224,8 @@ export function ListaConversas({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Abas */}
-      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 px-2 pt-2 shrink-0">
-        <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+      <div className="relative flex items-center px-2 pr-10 pt-2 shrink-0">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
           {(['conversas', 'disparos'] as const).map(a => (
             <button
               key={a} onClick={() => setAba(a)}
@@ -240,10 +242,11 @@ export function ListaConversas({
           ))}
         </div>
         {podeIniciar && (
-          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+          <Button variant="ghost" size="icon"
+                  className="absolute right-2 top-2 z-20 h-7 w-7"
                   onClick={aba === 'conversas' ? onNovaConversa : onNovoDisparo}
                   aria-label={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}>
-            {aba === 'conversas' ? <MessageSquarePlus className="w-4 h-4" /> : <Send className="w-4 h-4" />}
+            {aba === 'conversas' ? <MessageSquarePlus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           </Button>
         )}
       </div>
@@ -297,9 +300,6 @@ export function ListaConversas({
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-medium truncate min-w-0">{c.outro_nome}</p>
                       <TagEmpresa slug={c.outro_empresa} />
-                      <span className="text-[10px] text-muted-foreground shrink-0 ml-auto">
-                        {horaCurta(c.ultima_mensagem_em)}
-                      </span>
                     </div>
                     <p className={cn(
                       'text-xs truncate',
@@ -313,14 +313,27 @@ export function ListaConversas({
                           </>}
                     </p>
                   </div>
-                  {c.nao_lidas > 0 && (
-                    <span
-                      aria-label={`${c.nao_lidas} ${c.nao_lidas === 1 ? 'mensagem não lida' : 'mensagens não lidas'}`}
-                      className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center"
-                    >
-                      {c.nao_lidas > 99 ? '99+' : c.nao_lidas}
+                  <span className="flex min-w-[30px] shrink-0 flex-col items-end gap-0.5 self-stretch justify-center">
+                    <span className="text-[10px] text-muted-foreground">
+                      {horaCurta(c.ultima_mensagem_em)}
                     </span>
-                  )}
+                    {c.nao_lidas > 0 ? (
+                      <span
+                        aria-label={`${c.nao_lidas} ${c.nao_lidas === 1 ? 'mensagem não lida' : 'mensagens não lidas'}`}
+                        className="min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center"
+                      >
+                        {c.nao_lidas > 99 ? '99+' : c.nao_lidas}
+                      </span>
+                    ) : c.ultimo_autor_id === meuId && c.ultima_mensagem_em ? (
+                      <StatusMensagem
+                        estado={estadoMensagem(
+                          c.ultima_mensagem_em,
+                          c.entrega_do_outro,
+                          c.leitura_do_outro,
+                        )}
+                      />
+                    ) : null}
+                  </span>
                 </button>
 
                 {/* Apagar some com a conversa da MINHA lista. A do outro fica,

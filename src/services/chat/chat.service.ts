@@ -78,6 +78,10 @@ export interface ConversaChat {
   nao_lidas:          number;
   /** Quando o OUTRO leu por último — é o «visualizou» das minhas mensagens. */
   leitura_do_outro:   string | null;
+  /** Até onde este aparelho já recebeu mensagens desta conversa. */
+  entrega_minha:      string | null;
+  /** Até onde o OUTRO recebeu — é o segundo check das minhas mensagens. */
+  entrega_do_outro:   string | null;
   /**
    * A empresa da outra pessoa, para a tag da lista.
    *
@@ -212,6 +216,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
     ultima_mensagem_em: string | null; ultimo_texto: string | null;
     ultimo_anexos: AnexoChat[] | null; ultimo_autor_id: string | null;
     nao_lidas: number; leitura_do_outro: string | null;
+    entrega_minha: string | null; entrega_do_outro: string | null;
   }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
@@ -233,6 +238,8 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       ultimo_autor_id:    c.ultimo_autor_id,
       nao_lidas:          c.nao_lidas ?? 0,
       leitura_do_outro:   c.leitura_do_outro,
+      entrega_minha:      c.entrega_minha,
+      entrega_do_outro:   c.entrega_do_outro,
       outro_empresa:      c.outro_empresa,
     };
   });
@@ -280,6 +287,8 @@ export async function buscarConversa(
     ultimo_autor_id:    null,
     nao_lidas:          0,
     leitura_do_outro:   null,
+    entrega_minha:      null,
+    entrega_do_outro:   null,
     outro_empresa:      c.outro_empresa,
   };
 }
@@ -438,10 +447,20 @@ export async function enviarMensagem(params: {
   return { erro: error ? traduzir(error.message) : null };
 }
 
-/** Marca a conversa como lida até agora. */
-export async function marcarLido(conversaId: string, meuId: string): Promise<void> {
+/** Confirma que este cliente recebeu as mensagens da conversa. */
+export async function marcarEntregue(conversaId: string, meuId: string): Promise<void> {
   const { error } = await db('chat_participantes')
-    .update({ ultima_leitura_em: new Date().toISOString() })
+    .update({ ultima_entrega_em: new Date().toISOString() })
+    .eq('conversa_id', conversaId)
+    .eq('perfil_id', meuId);
+  if (error) console.warn('[chat] marcarEntregue:', error.message);
+}
+
+/** Marca a conversa como recebida e lida até agora. */
+export async function marcarLido(conversaId: string, meuId: string): Promise<void> {
+  const agora = new Date().toISOString();
+  const { error } = await db('chat_participantes')
+    .update({ ultima_entrega_em: agora, ultima_leitura_em: agora })
     .eq('conversa_id', conversaId)
     .eq('perfil_id', meuId);
   if (error) console.warn('[chat] marcarLido:', error.message);

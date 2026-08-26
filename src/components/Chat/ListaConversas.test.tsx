@@ -65,6 +65,8 @@ describe('ListaConversas', () => {
       ultimo_autor_id: 'p-1',
       nao_lidas: 7,
       leitura_do_outro: null,
+      entrega_minha: null,
+      entrega_do_outro: null,
       outro_empresa: null,
     };
 
@@ -128,8 +130,24 @@ describe('ListaConversas', () => {
     await user.click(screen.getByRole('button', { name: /Disparos 1/i }));
 
     const botao = screen.getByRole('button', { name: 'Novo disparo' });
-    expect(botao).toHaveClass('shrink-0');
+    expect(botao).toHaveClass('absolute', 'right-2', 'z-20');
     await user.click(botao);
     expect(baseProps.onNovoDisparo).toHaveBeenCalledTimes(1);
+  });
+
+  it('mostra abaixo do horário o estado da última mensagem enviada', () => {
+    const conversa: ConversaChat = {
+      id: 'c-status', outro_id: 'p-2', outro_nome: 'Bruno', outro_usuario: 'bruno',
+      outro_foto: null, outro_empresa: null,
+      ultima_mensagem_em: '2026-08-26T10:00:00Z',
+      ultimo_texto: 'Recebeu?', ultimo_autor_id: 'eu', nao_lidas: 0,
+      entrega_minha: '2026-08-26T09:00:00Z',
+      entrega_do_outro: '2026-08-26T10:00:01Z',
+      leitura_do_outro: null,
+    };
+
+    render(<ListaConversas {...baseProps} conversas={[conversa]} disparos={[]} />);
+
+    expect(screen.getByRole('img', { name: 'Entregue' })).toBeInTheDocument();
   });
 });
