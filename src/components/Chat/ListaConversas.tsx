@@ -9,12 +9,16 @@
  * Quem decide o que aparece é o banco (`oculta_em`), não esta tela: ela pede as
  * minhas conversas e desenha o que vier.
  */
-import { useState } from 'react';
-import { MessageSquarePlus, Search, Send, Trash2 } from 'lucide-react';
+import { useCallback, useState } from 'react';
+import { ChevronDown, Loader2, MessageSquarePlus, Search, Send, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import type { ConversaChat, DisparoChat } from '@/services/chat/chat.service';
-import { rotuloAnexo } from '@/services/chat/chat.service';
+import type {
+  ConversaChat, DestinoDisparoChat, DisparoChat,
+} from '@/services/chat/chat.service';
+import {
+  listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, rotuloAnexo,
+} from '@/services/chat/chat.service';
 import { AvatarChat, horaCurta, TagEmpresa } from './comum';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
@@ -33,6 +37,163 @@ interface Props {
   onApagar:    (id: string) => void;
   onNovaConversa: () => void;
   onNovoDisparo:  () => void;
+}
+
+interface CardDisparoProps {
+  disparo: DisparoChat;
+  online: Set<string>;
+  onAbrir: (conversaId: string) => void;
+}
+
+/**
+ * Um disparo abre a própria lista de destinatários, sem misturá-la à lista
+ * principal de conversas. O estado fica no card para que fechar e reabrir não
+ * baixe novamente as páginas que a pessoa acabou de ver.
+ */
+function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
+  const [expandido, setExpandido] = useState(false);
+  const [destinos, setDestinos] = useState<DestinoDisparoChat[]>([]);
+  const [carregado, setCarregado] = useState(false);
+  const [carregando, setCarregando] = useState(false);
+  const [temMais, setTemMais] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const carregar = useCallback(async (reiniciar = false) => {
+    if (carregando) return;
+    setCarregando(true);
+    setErro(null);
+
+    const inicio = reiniciar ? 0 : destinos.length;
+    const resultado = await listarDestinosDisparo(disparo.id, inicio);
+
+    setCarregando(false);
+    setCarregado(true);
+    setErro(resultado.erro);
+    if (resultado.erro) return;
+
+    setDestinos(atuais => reiniciar
+      ? resultado.destinos
+      : [...atuais, ...resultado.destinos]);
+    setTemMais(resultado.temMais);
+  }, [carregando, destinos.length, disparo.id]);
+
+  const alternar = () => {
+    const vaiAbrir = !expandido;
+    setExpandido(vaiAbrir);
+    if (vaiAbrir && !carregado && !carregando) void carregar(true);
+  };
+
+  const conteudo = disparo.texto
+    ?? (disparo.anexos.length ? rotuloAnexo(disparo.anexos) : '—');
+  const listaId = `destinos-disparo-${disparo.id}`;
+
+  return (
+    <article className="border-b border-border/50 last:border-0">
+      <button
+        type="button"
+        onClick={alternar}
+        aria-expanded={expandido}
+        aria-controls={listaId}
+        className={cn(
+          'w-full px-3 py-2.5 text-left transition-colors',
+          'hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+          expandido && 'bg-muted/40',
+        )}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <p className="text-xs font-medium flex-1">
+                {disparo.total_destinos} {disparo.total_destinos === 1 ? 'pessoa' : 'pessoas'}
+              </p>
+              <span className="text-[10px] text-muted-foreground shrink-0">
+                {horaCurta(disparo.criado_em)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground truncate mt-0.5">{conteudo}</p>
+          </div>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              'w-4 h-4 shrink-0 text-muted-foreground transition-transform duration-200',
+              expandido && 'rotate-180',
+            )}
+          />
+        </div>
+      </button>
+
+      {expandido && (
+        <div id={listaId} className="bg-muted/15" aria-busy={carregando}>
+          {carregando && destinos.length === 0 && (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Carregando destinatários…
+            </div>
+          )}
+
+          {erro && destinos.length === 0 && (
+            <div className="px-4 py-5 text-center">
+              <p className="text-xs text-muted-foreground">{erro}</p>
+              <Button variant="link" size="sm" className="text-xs mt-1"
+                      onClick={() => void carregar(true)}>
+                Tentar novamente
+              </Button>
+            </div>
+          )}
+
+          {!carregando && !erro && carregado && destinos.length === 0 && (
+            <p className="px-4 py-5 text-center text-xs text-muted-foreground">
+              Nenhum destinatário encontrado.
+            </p>
+          )}
+
+          {destinos.map(destino => (
+            <button
+              type="button"
+              key={`${disparo.id}-${destino.perfil_id}`}
+              onClick={() => onAbrir(destino.conversa_id)}
+              className={cn(
+                'w-full grid grid-cols-[auto_minmax(0,1fr)] items-center gap-2.5 px-4 py-2 text-left',
+                'border-t border-border/40 hover:bg-muted/50 transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+              )}
+            >
+              <AvatarChat nome={destino.nome} foto={destino.foto_url} tamanho={34}
+                          online={online.has(destino.perfil_id)} />
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <p className="text-xs font-medium truncate min-w-0">{destino.nome}</p>
+                  <TagEmpresa slug={destino.empresa_slug} />
+                </div>
+                {destino.usuario && (
+                  <p className="text-[11px] text-muted-foreground truncate">@{destino.usuario}</p>
+                )}
+              </div>
+            </button>
+          ))}
+
+          {(temMais || (carregando && destinos.length > 0)) && (
+            <div className="border-t border-border/40 px-3 py-2 text-center">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs"
+                disabled={carregando}
+                onClick={() => void carregar(false)}
+              >
+                {carregando ? (
+                  <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />Carregando…</>
+                ) : (
+                  `Ver mais ${Math.min(PAGINA_DESTINOS_DISPARO, Math.max(0, disparo.total_destinos - destinos.length))}`
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  );
 }
 
 export function ListaConversas({
@@ -121,7 +282,9 @@ export function ListaConversas({
                 <button
                   onClick={() => onAbrir(c.id)}
                   className={cn(
-                    'w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
+                    // A terceira coluna fica reservada para o contador. Texto
+                    // grande só encolhe a coluna do meio, inclusive a 360 px.
+                    'w-full grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 px-3 py-2.5 text-left transition-colors',
                     selecionada === c.id ? 'bg-muted' : 'hover:bg-muted/50',
                   )}
                 >
@@ -148,7 +311,10 @@ export function ListaConversas({
                     </p>
                   </div>
                   {c.nao_lidas > 0 && (
-                    <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center">
+                    <span
+                      aria-label={`${c.nao_lidas} ${c.nao_lidas === 1 ? 'mensagem não lida' : 'mensagens não lidas'}`}
+                      className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold flex items-center justify-center"
+                    >
                       {c.nao_lidas > 99 ? '99+' : c.nao_lidas}
                     </span>
                   )}
@@ -186,19 +352,7 @@ export function ListaConversas({
               </div>
             )}
             {disparos.map(d => (
-              <div key={d.id} className="px-3 py-2.5 border-b border-border/50 last:border-0">
-                <div className="flex items-baseline gap-2">
-                  <p className="text-xs font-medium flex-1">
-                    {d.total_destinos} {d.total_destinos === 1 ? 'pessoa' : 'pessoas'}
-                  </p>
-                  <span className="text-[10px] text-muted-foreground shrink-0">
-                    {horaCurta(d.criado_em)}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground truncate mt-0.5">
-                  {d.texto ?? (d.anexos.length ? rotuloAnexo(d.anexos) : '—')}
-                </p>
-              </div>
+              <CardDisparo key={d.id} disparo={d} online={online} onAbrir={onAbrir} />
             ))}
           </>
         )}

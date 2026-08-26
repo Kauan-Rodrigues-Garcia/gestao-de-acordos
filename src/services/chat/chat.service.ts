@@ -110,6 +110,18 @@ export interface DisparoChat {
   total_destinos: number;
 }
 
+/** Uma pessoa que recebeu um disparo, ligada à conversa individual dela. */
+export interface DestinoDisparoChat {
+  perfil_id:   string;
+  conversa_id: string;
+  nome:        string;
+  usuario:     string | null;
+  foto_url:    string | null;
+  empresa_slug: string | null;
+}
+
+export const PAGINA_DESTINOS_DISPARO = 50;
+
 // ── A trava de lançamento ────────────────────────────────────────────────────
 
 /**
@@ -340,6 +352,60 @@ export async function listarDisparos(): Promise<DisparoChat[]> {
   return ((data ?? []) as DisparoChat[]).map(d => ({
     ...d, anexos: Array.isArray(d.anexos) ? d.anexos : [],
   }));
+}
+
+/**
+ * Destinatários de um disparo, cinquenta por vez.
+ *
+ * A autorização continua inteira no banco. A RPC confere que `auth.uid()` é o
+ * autor do disparo e que o chat segue liberado antes de atravessar a RLS mais
+ * estreita de `perfis`. Isso evita que cargos não administrativos recebam 50
+ * linhas chamadas apenas de «Pessoa indisponível».
+ *
+ * Pedimos uma linha a mais para descobrir se existe próxima página sem fazer
+ * uma consulta de contagem.
+ */
+export async function listarDestinosDisparo(
+  disparoId: string,
+  inicio = 0,
+): Promise<{ destinos: DestinoDisparoChat[]; temMais: boolean; erro: string | null }> {
+  type LinhaDestino = {
+    perfil_id: string;
+    conversa_id: string;
+    nome: string | null;
+    usuario: string | null;
+    foto_url: string | null;
+    empresa_slug: string | null;
+  };
+
+  const { data, error } = await rpcSemTipo<LinhaDestino[]>('fn_chat_destinos_disparo', {
+    p_disparo: disparoId,
+    p_inicio: inicio,
+    p_limite: PAGINA_DESTINOS_DISPARO + 1,
+  });
+
+  if (error) {
+    console.warn('[chat] listarDestinosDisparo:', error.message);
+    return { destinos: [], temMais: false, erro: 'Não foi possível carregar os destinatários.' };
+  }
+
+  const linhas = ((data ?? []) as LinhaDestino[]);
+  const temMais = linhas.length > PAGINA_DESTINOS_DISPARO;
+
+  return {
+    destinos: linhas.slice(0, PAGINA_DESTINOS_DISPARO).map(linha => {
+      return {
+        perfil_id:    linha.perfil_id,
+        conversa_id:  linha.conversa_id,
+        nome:         linha.nome?.trim() || 'Pessoa indisponível',
+        usuario:      linha.usuario ?? null,
+        foto_url:     linha.foto_url ?? null,
+        empresa_slug: linha.empresa_slug ?? null,
+      };
+    }),
+    temMais,
+    erro: null,
+  };
 }
 
 // ── Escrita ──────────────────────────────────────────────────────────────────
