@@ -22,6 +22,7 @@ import {
 import { AvatarChat, horaCurta, TagEmpresa } from './comum';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
+import { cargosChatLiberados } from '@/lib/permissoes-chat';
 
 type Aba = 'conversas' | 'disparos';
 
@@ -209,7 +210,8 @@ export function ListaConversas({
    * mesmo vale para o disparo, que é iniciar várias de uma vez.
    */
   const { temPermissao } = useCargoPermissoes();
-  const podeIniciar = niveisLiberados('chat', temPermissao).length > 0;
+  const podeIniciar = niveisLiberados('chat', temPermissao).length > 0
+    && cargosChatLiberados(temPermissao).length > 0;
 
   const filtradas = busca.trim()
     ? conversas.filter(c =>
@@ -220,24 +222,25 @@ export function ListaConversas({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Abas */}
-      <div className="flex items-center gap-1 px-2 pt-2 shrink-0">
-        {(['conversas', 'disparos'] as const).map(a => (
-          <button
-            key={a} onClick={() => setAba(a)}
-            className={cn(
-              'text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors',
-              aba === a ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {a === 'conversas' ? 'Conversas' : 'Disparos'}
-            {a === 'disparos' && disparos.length > 0 && (
-              <span className="ml-1 opacity-60">{disparos.length}</span>
-            )}
-          </button>
-        ))}
-        <div className="flex-1" />
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-1 px-2 pt-2 shrink-0">
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+          {(['conversas', 'disparos'] as const).map(a => (
+            <button
+              key={a} onClick={() => setAba(a)}
+              className={cn(
+                'min-w-0 truncate text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors',
+                aba === a ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {a === 'conversas' ? 'Conversas' : 'Disparos'}
+              {a === 'disparos' && disparos.length > 0 && (
+                <span className="ml-1 opacity-60">{disparos.length}</span>
+              )}
+            </button>
+          ))}
+        </div>
         {podeIniciar && (
-          <Button variant="ghost" size="icon" className="h-7 w-7"
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
                   onClick={aba === 'conversas' ? onNovaConversa : onNovoDisparo}
                   aria-label={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}>
             {aba === 'conversas' ? <MessageSquarePlus className="w-4 h-4" /> : <Send className="w-4 h-4" />}

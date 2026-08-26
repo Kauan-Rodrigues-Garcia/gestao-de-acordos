@@ -44,18 +44,17 @@ export default function AdminPermissoes() {
         </p>
       </div>
 
-      {/* O aviso de camada existe porque a confusão é fácil e cara: forçar
-          `ver_acordos_gerais` num operador NÃO faz ele enxergar acordo alheio.
-          A RLS continua negando — e é isso que protege o dado. */}
+      {/* O painel e o banco precisam prometer a mesma coisa. As permissões de
+          alcance são lidas pelas policies/RPCs; ações apenas visuais continuam
+          sendo aplicadas na interface. */}
       <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/20 px-4 py-3">
         <Info className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Estas permissões controlam <strong className="text-foreground">navegação e
-          interface</strong>: qual menu aparece, qual tela abre, qual botão fica
-          visível. O acesso ao <strong className="text-foreground">dado</strong> é
-          governado pelas políticas do banco (RLS) e não muda aqui — um operador
-          com &laquo;ver acordos de outras pessoas&raquo; ligado continua sem
-          enxergar acordo alheio, e isso é o correto.
+          Este painel é a fonte das permissões. Ele controla a
+          <strong className="text-foreground"> interface</strong> e, nas opções de
+          alcance, também as <strong className="text-foreground">regras do banco</strong>.
+          No Chat, setor, equipe e cargos permitidos são conferidos novamente pelo
+          servidor antes de abrir uma conversa ou realizar um disparo.
         </p>
       </div>
 

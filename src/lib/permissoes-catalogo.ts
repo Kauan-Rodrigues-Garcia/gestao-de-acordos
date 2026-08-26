@@ -229,6 +229,10 @@ const TODOS: Partial<Record<CargoConfiguravel, boolean>> = {
   operador: true, ouvidoria: true, lider: true, elite: true,
   gerencia: true, diretoria: true,
 };
+/** Todos os cargos editáveis, inclusive RH. Usado por controles transversais. */
+const TODOS_COM_RH: Partial<Record<CargoConfiguravel, boolean>> = {
+  ...TODOS, rh: true,
+};
 
 /*
  * `rh` NÃO entra em `TODOS`, e a ausência é deliberada.
@@ -316,6 +320,60 @@ export const PERMISSOES: PermissaoMeta[] = [
     descricao: 'Iniciar conversa com qualquer pessoa da empresa',
     grupo: 'Chat', padrao: {},
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o alcance valer.' },
+  },
+  {
+    key: 'chat_cargo_operador', label: 'Chat: cargo Operador',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Operador',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_lider', label: 'Chat: cargo Líder',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Líder',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_elite', label: 'Chat: cargo Elite',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Elite',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_gerencia', label: 'Chat: cargo Gerência',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Gerência',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_diretoria', label: 'Chat: cargo Diretoria',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Diretoria',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_ouvidoria', label: 'Chat: cargo Ouvidoria',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Ouvidoria',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_rh', label: 'Chat: cargo RH',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo RH',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_administrador', label: 'Chat: cargo Administrador',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Administrador',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
+  },
+  {
+    key: 'chat_cargo_super_admin', label: 'Chat: cargo Super Admin',
+    descricao: 'Permitir iniciar conversa com pessoas do cargo Super Admin',
+    grupo: 'Chat', padrao: TODOS_COM_RH,
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
   {
     key: 'ver_tickets', label: 'Aba Tickets',

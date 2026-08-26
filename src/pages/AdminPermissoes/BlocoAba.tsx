@@ -16,13 +16,14 @@
  * funciona: um cargo pode ter "só os próprios" e "do setor" sem ter "da
  * equipe". Um seletor único mentiria sobre isso.
  */
-import { AlertTriangle, ChevronDown, Lock } from 'lucide-react';
+import { AlertTriangle, Check, ChevronDown, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { ROTULO_NIVEL, type BlocoDeAba } from '@/lib/permissoes-abas';
 import type { PermissaoMeta } from '@/lib/permissoes-catalogo';
 import { CartaoPermissao, GradeDeCartoes } from './CartaoPermissao';
+import { cargoDaPermissaoChat, rotuloCargoChat } from '@/lib/permissoes-chat';
 
 /** «analitico_escopo_setor» → «Do setor», para o atalho falar a língua da tela. */
 function rotuloDaChave(chave: string): string {
@@ -64,10 +65,15 @@ export function BlocoAba({
     || p.label.toLowerCase().includes(filtro)
     || p.descricao.toLowerCase().includes(filtro);
 
-  const acoesVisiveis = bloco.acoes.filter(casa);
+  const cargosDoChat = bloco.aba === 'chat'
+    ? bloco.acoes.filter(a => cargoDaPermissaoChat(a.key))
+    : [];
+  const outrasAcoes = bloco.acoes.filter(a => !cargoDaPermissaoChat(a.key));
+  const cargosVisiveis = cargosDoChat.filter(casa);
+  const acoesVisiveis = outrasAcoes.filter(casa);
   const buscando = filtro.length > 0;
   // Buscando, um bloco sem resultado só ocuparia espaço.
-  if (buscando && acoesVisiveis.length === 0
+  if (buscando && acoesVisiveis.length === 0 && cargosVisiveis.length === 0
       && !bloco.rotulo.toLowerCase().includes(filtro)) return null;
 
   const acoesLigadas = bloco.acoes.filter(a => valorDe(a.key)).length;
@@ -175,6 +181,46 @@ export function BlocoAba({
                       )}
                     >
                       {ROTULO_NIVEL[nivel] ?? nivel}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {cargosVisiveis.length > 0 && (
+            <div className="border-b border-border/60 px-4 py-3">
+              <div className="flex flex-wrap items-baseline gap-x-2">
+                <p className="text-xs font-semibold text-foreground">
+                  Com quais cargos pode conversar
+                </p>
+                <p className="text-[11px] text-muted-foreground">
+                  vale para novas conversas e disparos; respostas antigas continuam disponíveis
+                </p>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {cargosVisiveis.map(permissao => {
+                  const cargoAlvo = cargoDaPermissaoChat(permissao.key)!;
+                  const ligado = valorDe(permissao.key);
+                  return (
+                    <button
+                      key={permissao.key}
+                      type="button"
+                      disabled={somenteLeitura || !abaLigada}
+                      onClick={() => alternar(permissao.key)}
+                      title={permissao.descricao}
+                      aria-pressed={ligado}
+                      className={cn(
+                        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium transition-all',
+                        'disabled:cursor-not-allowed disabled:opacity-60',
+                        ligado
+                          ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/50 hover:text-foreground',
+                        alterada(permissao.key) && 'ring-2 ring-amber-500/60',
+                      )}
+                    >
+                      {ligado && <Check className="h-3 w-3" />}
+                      {rotuloCargoChat(cargoAlvo)}
                     </button>
                   );
                 })}

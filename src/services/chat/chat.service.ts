@@ -518,14 +518,17 @@ export const LIMITE_ANEXO = 10 * 1024 * 1024;
  * expurgo de CPF que a mesma migration instala.
  */
 export async function subirAnexo(
-  arquivo: File, conversaId: string,
+  arquivo: File, pasta: string,
 ): Promise<{ anexo: AnexoChat | null; erro: string | null }> {
   if (arquivo.size > LIMITE_ANEXO) {
     return { anexo: null, erro: `«${arquivo.name}» passa de 10 MB.` };
   }
 
   const limpo = arquivo.name.replace(/[^\w.-]+/g, '_').slice(-80);
-  const caminho = `${conversaId}/${crypto.randomUUID()}-${limpo}`;
+  // Conversa normal usa o UUID da conversa. Um disparo ainda não tem id antes
+  // do upload, então usa `disparos/<uuid-do-rascunho>`; a policy continua a
+  // mesma e o caminho evita misturar anexos de composições diferentes.
+  const caminho = `${pasta}/${crypto.randomUUID()}-${limpo}`;
 
   const { error } = await supabase.storage.from('chat').upload(caminho, arquivo, {
     contentType: arquivo.type || 'application/octet-stream',

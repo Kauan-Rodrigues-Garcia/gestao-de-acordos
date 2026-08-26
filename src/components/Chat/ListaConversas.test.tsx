@@ -116,4 +116,20 @@ describe('ListaConversas', () => {
     await user.click(card);
     await waitFor(() => expect(screen.queryByText('Pessoa 1')).not.toBeInTheDocument());
   });
+
+  it('mantém o botão de novo disparo reservado no cabeçalho estreito', async () => {
+    const user = userEvent.setup();
+    const disparo: DisparoChat = {
+      id: 'd-compacto', texto: 'Aviso', anexos: [],
+      criado_em: '2026-08-26T09:00:00Z', total_destinos: 123,
+    };
+
+    render(<ListaConversas {...baseProps} conversas={[]} disparos={[disparo]} />);
+    await user.click(screen.getByRole('button', { name: /Disparos 1/i }));
+
+    const botao = screen.getByRole('button', { name: 'Novo disparo' });
+    expect(botao).toHaveClass('shrink-0');
+    await user.click(botao);
+    expect(baseProps.onNovoDisparo).toHaveBeenCalledTimes(1);
+  });
 });

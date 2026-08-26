@@ -17,8 +17,10 @@
  * Clone aparece nas duas equipes dele — é assim que ele existe no sistema, e
  * marcar as duas não manda a mensagem duas vezes: a RPC trabalha por pessoa.
  */
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Loader2, Search, Send, Users } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowLeft, FileText, Image as ImageIcon, Loader2, Paperclip, Search, Send, Users, X,
+} from 'lucide-react';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
@@ -26,9 +28,11 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 import {
-  listarContatos, dispararMensagem, type ContatoChat,
+  listarContatos, dispararMensagem, subirAnexo, LIMITE_ANEXO,
+  type AnexoChat, type ContatoChat,
 } from '@/services/chat/chat.service';
-import { AvatarChat } from './comum';
+import { AvatarChat, tamanhoLegivel } from './comum';
+import { PERFIL_COLORS } from '@/lib/index';
 
 interface Props {
   aberto:    boolean;
@@ -44,6 +48,9 @@ interface Grupo {
   pessoas: ContatoChat[];
 }
 
+/** Ordem e tag são apresentação do cadastro, não autorização de acesso. */
+const PRIORIDADE_NO_DISPARO: Record<string, number> = { lider: 0 };
+
 export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
   const [passo, setPasso] = useState<1 | 2>(1);
   const [contatos, setContatos] = useState<ContatoChat[]>([]);
@@ -51,8 +58,20 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState('');
   const [texto, setTexto] = useState('');
+  const [pendentes, setPendentes] = useState<File[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [arrastando, setArrastando] = useState(false);
+  const pastaDoDisparo = useRef(`disparos/${crypto.randomUUID()}`);
+
+  const previas = useMemo(() => pendentes.map(arquivo => ({
+    arquivo,
+    url: arquivo.type.startsWith('image/') ? URL.createObjectURL(arquivo) : null,
+  })), [pendentes]);
+
+  useEffect(() => () => {
+    for (const previa of previas) if (previa.url) URL.revokeObjectURL(previa.url);
+  }, [previas]);
 
   useEffect(() => {
     if (!aberto) return;
@@ -64,7 +83,9 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
   // acidental esperando para acontecer.
   useEffect(() => {
     if (aberto) return;
-    setPasso(1); setMarcados(new Set()); setTexto(''); setBusca(''); setErro(null);
+    setPasso(1); setMarcados(new Set()); setTexto(''); setPendentes([]);
+    setBusca(''); setErro(null); setArrastando(false);
+    pastaDoDisparo.current = `disparos/${crypto.randomUUID()}`;
   }, [aberto]);
 
   /** Setores, e as equipes dentro de cada um. Pessoa sem equipe fica no setor. */
@@ -81,13 +102,19 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
       porSetor.set(chave, [...(porSetor.get(chave) ?? []), c]);
     }
 
+    const ordenar = (pessoas: ContatoChat[]) => [...pessoas].sort((a, b) => {
+      const prioridadeA = PRIORIDADE_NO_DISPARO[a.cargo] ?? 1;
+      const prioridadeB = PRIORIDADE_NO_DISPARO[b.cargo] ?? 1;
+      return prioridadeA - prioridadeB || a.nome.localeCompare(b.nome, 'pt-BR');
+    });
+
     const saida: Grupo[] = [];
     for (const [setorId, pessoas] of porSetor) {
       saida.push({
         chave: `setor:${setorId}`,
         rotulo: pessoas[0]?.setor_nome ?? 'Sem setor',
         nivel: 'setor',
-        pessoas,
+        pessoas: ordenar(pessoas),
       });
       const porEquipe = new Map<string, ContatoChat[]>();
       for (const c of pessoas) {
@@ -99,12 +126,41 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
           chave: `equipe:${equipeId}`,
           rotulo: membros[0]?.equipe_nome ?? 'Equipe',
           nivel: 'equipe',
-          pessoas: membros,
+          pessoas: ordenar(membros),
+        });
+      }
+
+      // Este era o buraco da lista: a pessoa entrava no número do setor, mas
+      // só desenhávamos linhas dentro de equipes. Líderes e outros usuários
+      // vinculados apenas ao setor ficavam invisíveis para seleção individual.
+      const semEquipe = pessoas.filter(p => !p.equipe_id);
+      if (semEquipe.length > 0) {
+        saida.push({
+          chave: `equipe:${setorId}:sem-equipe`,
+          rotulo: 'Sem equipe',
+          nivel: 'equipe',
+          pessoas: ordenar(semEquipe),
         });
       }
     }
     return saida;
   }, [contatos, busca]);
+
+  const receberArquivos = useCallback((arquivos: File[]) => {
+    const grandes = arquivos.filter(a => a.size > LIMITE_ANEXO);
+    const bons = arquivos.filter(a => a.size <= LIMITE_ANEXO);
+    if (grandes.length) {
+      setErro(grandes.length === 1
+        ? `«${grandes[0].name}» tem ${tamanhoLegivel(grandes[0].size)} e o limite é 10 MB.`
+        : `${grandes.length} arquivos passam de 10 MB e ficaram de fora.`);
+    }
+    if (bons.length) setPendentes(atuais => [...atuais, ...bons]);
+  }, []);
+
+  const aoColar = useCallback((e: React.ClipboardEvent) => {
+    const arquivos = [...e.clipboardData.files];
+    if (arquivos.length) { e.preventDefault(); receberArquivos(arquivos); }
+  }, [receberArquivos]);
 
   const alternarPessoa = (id: string) => {
     setMarcados(atual => {
@@ -125,17 +181,27 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
   };
 
   const disparar = async () => {
-    if (!marcados.size || !texto.trim() || enviando) return;
+    if (!marcados.size || (!texto.trim() && !pendentes.length) || enviando) return;
     setEnviando(true);
     setErro(null);
-    const r = await dispararMensagem([...marcados], texto);
+
+    const anexos: AnexoChat[] = [];
+    for (const arquivo of pendentes) {
+      const { anexo, erro: falha } = await subirAnexo(arquivo, pastaDoDisparo.current);
+      if (falha) { setErro(falha); setEnviando(false); return; }
+      if (anexo) anexos.push(anexo);
+    }
+
+    const r = await dispararMensagem([...marcados], texto, anexos);
     setEnviando(false);
     if (r.erro) { setErro(r.erro); return; }
     onPronto(r.enviados);
     onFechar();
   };
 
-  const escolhidos = contatos.filter(c => marcados.has(c.perfil_id));
+  const escolhidos = [...new Map(
+    contatos.filter(c => marcados.has(c.perfil_id)).map(c => [c.perfil_id, c]),
+  ).values()];
 
   return (
     <Dialog open={aberto} onOpenChange={o => { if (!o) onFechar(); }}>
@@ -207,6 +273,14 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
                         <Checkbox checked={marcados.has(p.perfil_id)} />
                         <AvatarChat nome={p.nome} foto={p.foto_url} tamanho={24} />
                         <span className="text-xs truncate flex-1 text-left">{p.nome}</span>
+                        {PRIORIDADE_NO_DISPARO[p.cargo] === 0 && (
+                          <span className={cn(
+                            'shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold',
+                            PERFIL_COLORS.lider,
+                          )}>
+                            Líder
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>
@@ -248,11 +322,79 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
               )}
             </div>
 
-            <textarea
-              value={texto} onChange={e => setTexto(e.target.value)} rows={6} autoFocus
-              placeholder="Escreva a mensagem que todos vão receber"
-              className="w-full resize-none bg-muted/60 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
-            />
+            <div
+              className={cn(
+                'relative rounded-xl border border-transparent transition-colors',
+                arrastando && 'border-primary bg-primary/5',
+              )}
+              onDragOver={e => { e.preventDefault(); setArrastando(true); }}
+              onDragLeave={e => { if (e.currentTarget === e.target) setArrastando(false); }}
+              onDrop={e => {
+                e.preventDefault(); setArrastando(false);
+                receberArquivos([...e.dataTransfer.files]);
+              }}
+            >
+              {previas.length > 0 && (
+                <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto border-b border-border/60 p-2">
+                  {previas.map((previa, i) => (
+                    <div key={`${previa.arquivo.name}-${i}`}
+                         className="relative overflow-hidden rounded-lg border border-border bg-muted">
+                      {previa.url ? (
+                        <img src={previa.url} alt={previa.arquivo.name}
+                             className="h-16 w-16 object-cover" />
+                      ) : (
+                        <div className="flex h-16 min-w-[110px] max-w-[160px] items-center gap-2 px-2 pr-7">
+                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="min-w-0">
+                            <span className="block truncate text-[10px]">{previa.arquivo.name}</span>
+                            <span className="block text-[9px] text-muted-foreground">
+                              {tamanhoLegivel(previa.arquivo.size)}
+                            </span>
+                          </span>
+                        </div>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPendentes(atuais => atuais.filter((_, j) => j !== i))}
+                        className="absolute right-0.5 top-0.5 rounded-full bg-background/90 p-0.5 hover:bg-background"
+                        aria-label={`Tirar ${previa.arquivo.name}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <textarea
+                value={texto} onChange={e => setTexto(e.target.value)} rows={6} autoFocus
+                onPaste={aoColar}
+                placeholder="Escreva a mensagem que todos vão receber"
+                className="w-full resize-none rounded-t-xl bg-muted/60 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-ring"
+              />
+              <div className="flex items-center border-t border-border/60 bg-muted/30 px-1.5 py-1">
+                <label className="inline-flex cursor-pointer items-center">
+                  <span className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <Paperclip className="h-4 w-4" />
+                    Anexar foto ou arquivo
+                  </span>
+                  <input type="file" multiple className="sr-only"
+                         onChange={e => {
+                           receberArquivos([...(e.target.files ?? [])]); e.target.value = '';
+                         }} />
+                </label>
+                {pendentes.some(a => a.type.startsWith('image/')) && (
+                  <span className="ml-auto inline-flex items-center gap-1 pr-2 text-[10px] text-muted-foreground">
+                    <ImageIcon className="h-3 w-3" /> imagem pronta
+                  </span>
+                )}
+              </div>
+              {arrastando && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-background/85 text-sm font-medium text-primary">
+                  Solte para anexar ao disparo
+                </div>
+              )}
+            </div>
 
             {erro && <p className="text-xs text-destructive">{erro}</p>}
 
@@ -260,7 +402,7 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
               <Button variant="ghost" size="sm" onClick={() => setPasso(1)}>Voltar</Button>
               <div className="flex-1" />
               <Button size="sm" onClick={() => void disparar()}
-                      disabled={enviando || !texto.trim()}>
+                      disabled={enviando || (!texto.trim() && !pendentes.length)}>
                 {enviando
                   ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Enviando…</>
                   : <><Send className="w-3.5 h-3.5 mr-1.5" /> Enviar para {marcados.size}</>}
