@@ -251,6 +251,11 @@ export const PERMISSOES: PermissaoMeta[] = [
   // Uma permissão por destino do menu. É o grupo que o admin procura primeiro,
   // porque é assim que ele pensa o problema: "quem pode abrir essa aba?".
   {
+    key: 'ver_dashboard', label: 'Exibir Dashboard',
+    descricao: 'Abrir a tela inicial do sistema',
+    grupo: 'Dashboard', produtos: TODA_OPERACAO, padrao: TODOS_COM_RH,
+  },
+  {
     key: 'ver_acordos', label: 'Aba Acordos',
     descricao: 'Abrir a lista completa de acordos em /acordos',
     grupo: 'Abas e telas', tenants: ['bookplay'], padrao: TODOS,
@@ -420,6 +425,36 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
   },
   {
+    key: 'config_sub_geral', label: 'Configurações: Geral',
+    descricao: 'Abrir a aba interna Geral',
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
+  },
+  {
+    key: 'config_sub_permissoes', label: 'Configurações: Permissões',
+    descricao: 'Abrir a aba interna Permissões',
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
+  },
+  {
+    key: 'config_sub_direto_extra', label: 'Configurações: Direto e Extra',
+    descricao: 'Abrir a aba interna Direto e Extra',
+    grupo: 'Abas e telas', padrao: {},
+  },
+  {
+    key: 'config_sub_tags', label: 'Configurações: Tags',
+    descricao: 'Abrir a aba interna Tags',
+    grupo: 'Abas e telas', padrao: {},
+  },
+  {
+    key: 'config_sub_documentacoes', label: 'Configurações: Documentações',
+    descricao: 'Abrir a aba interna Documentações',
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
+  },
+  {
+    key: 'config_sub_multiempresa', label: 'Configurações: Multiempresa',
+    descricao: 'Abrir a aba interna Multiempresa',
+    grupo: 'Abas e telas', produtos: TODA_OPERACAO, padrao: {},
+  },
+  {
     key: 'ver_monitoramento_uso', label: 'Monitoramento de uso',
     descricao: 'Abrir a aba «Monitoramento de uso» dentro de Logs: quem acessa o sistema, quais telas e por quanto tempo',
     /*
@@ -559,6 +594,17 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
   },
   {
+    key: 'usuarios_sub_usuarios', label: 'Aba interna Usuários',
+    descricao: 'Abrir a lista de pessoas dentro do módulo Usuários',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
+  },
+  {
+    key: 'ver_setores', label: 'Aba interna Setores',
+    descricao: 'Abrir a administração de setores dentro do módulo Usuários',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    padrao: { gerencia: true, diretoria: true },
+  },
+  {
     key: 'ver_equipes', label: 'Ver equipes',
     descricao: 'Abrir a lista de equipes e seus membros',
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: LIDERANCA,
@@ -574,6 +620,11 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'ver_metas', label: 'Ver metas',
     descricao: 'Abrir a tela de metas, feriados e quartis',
     grupo: 'Metas', padrao: LIDERANCA,
+  },
+  {
+    key: 'ver_comemoracoes', label: 'Aba interna Comemorações',
+    descricao: 'Abrir a administração de comemorações dentro do módulo Usuários',
+    grupo: 'Gestão de pessoas', padrao: { diretoria: true },
   },
 
   // ── Filtros e visão ──────────────────────────────────────────────────────
@@ -644,6 +695,24 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'usuarios_desfazer_transferencia', label: 'Usuários: desfazer transferência',
     descricao: 'Reverter uma transferência de setor ou empresa já concluída',
     grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO, padrao: {},
+  },
+  {
+    key: 'setores_criar_editar', label: 'Setores: criar e editar',
+    descricao: 'Criar setores e alterar nome, descrição e demais dados',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'setores_ativar_desativar', label: 'Setores: ativar e desativar',
+    descricao: 'Alterar a situação ativa de um setor',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    padrao: { gerencia: true, diretoria: true },
+  },
+  {
+    key: 'setores_reordenar', label: 'Setores: alterar ordem',
+    descricao: 'Reordenar os cards de setores na tela',
+    grupo: 'Gestão de pessoas', produtos: TODA_OPERACAO,
+    padrao: { gerencia: true, diretoria: true },
   },
   {
     key: 'acesso_multiempresa_permitido', label: 'Acesso às duas operações',
@@ -988,10 +1057,6 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'analitico_sub_ranking', label: 'Analítico: Ranking',
     descricao: 'Abrir a aba interna do ranking de recebimento',
     grupo: 'Analítico', padrao: TODOS,
-    depende: {
-      chaves: ['analitico_escopo_setor', 'analitico_escopo_todos_setores'],
-      motivo: 'vive na visao de setor — com «so os proprios» a tela abre a lista individual, que nao tem regua de abas',
-    },
   },
   {
     key: 'analitico_sub_destaques_dia', label: 'Analítico: Destaques do dia',
@@ -1138,6 +1203,16 @@ export const PERMISSOES: PermissaoMeta[] = [
     key: 'criar_solicitacao_whatsapp', label: 'Abrir solicitação de WhatsApp',
     descricao: 'Pedir o envio de uma mensagem, além de acompanhar as existentes',
     grupo: 'Ações específicas', padrao: TODOS,
+  },
+  {
+    key: 'solicitacoes_ver_todas', label: 'Solicitações: visão geral',
+    descricao: 'Ver e atender solicitações de outras pessoas da empresa',
+    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: LIDERANCA,
+  },
+  {
+    key: 'solicitacoes_definir_responsavel', label: 'Solicitações: definir responsáveis',
+    descricao: 'Adicionar e remover pessoas responsáveis pelo atendimento',
+    grupo: 'Ações específicas', tenants: ['pagueplay'], padrao: LIDERANCA,
   },
   {
     key: 'aprovar_pix_automatico', label: 'Aprovar Pix automático',

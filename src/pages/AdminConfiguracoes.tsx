@@ -67,6 +67,23 @@ export default function AdminConfiguracoes() {
    * dentro da tela, e nenhuma régua as alcançava.
    */
   const ehCobranca = produtoDaEmpresa(empresa, tenantSlug) === 'cobranca';
+  const podeVerGeral = temPermissao('config_sub_geral');
+  const podeVerPermissoes = temPermissao('config_sub_permissoes');
+  const podeVerDiretoExtra = ehCobranca && temPermissao('config_sub_direto_extra');
+  const podeVerTags = ehCobranca && temPermissao('config_sub_tags');
+  const podeVerLogs = temPermissao('ver_logs');
+  const podeVerDocumentacoes = temPermissao('config_sub_documentacoes');
+  const podeVerMultiempresa = temPermissao('config_sub_multiempresa');
+  const abasVisiveis = [
+    podeVerGeral && 'geral',
+    podeVerPermissoes && 'permissoes',
+    podeVerDiretoExtra && 'direto_extra',
+    podeVerTags && 'tags',
+    podeVerLogs && 'logs',
+    podeVerDocumentacoes && 'documentacoes',
+    podeVerMultiempresa && 'multiempresa',
+  ].filter((aba): aba is string => Boolean(aba));
+  const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -186,22 +203,22 @@ export default function AdminConfiguracoes() {
       </div>
 
       {/* Abas internas */}
-      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
+      {tabAtiva ? <Tabs value={tabAtiva} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            <TabsTrigger
+            {podeVerGeral && <TabsTrigger
               value="geral"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Settings className="w-4 h-4" /> Geral
-            </TabsTrigger>
-            <TabsTrigger
+            </TabsTrigger>}
+            {podeVerPermissoes && <TabsTrigger
               value="permissoes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <ShieldCheck className="w-4 h-4" /> Permissões
-            </TabsTrigger>
-            {ehCobranca && (
+            </TabsTrigger>}
+            {podeVerDiretoExtra && (
             <TabsTrigger
               value="direto_extra"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -209,7 +226,7 @@ export default function AdminConfiguracoes() {
               <ArrowLeftRight className="w-4 h-4" /> Direto e Extra
             </TabsTrigger>
             )}
-            {ehCobranca && (
+            {podeVerTags && (
             <TabsTrigger
               value="tags"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -217,7 +234,7 @@ export default function AdminConfiguracoes() {
               <Tag className="w-4 h-4" /> Tags
             </TabsTrigger>
             )}
-            {temPermissao('ver_logs') && (
+            {podeVerLogs && (
             <TabsTrigger
               value="logs"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -225,13 +242,13 @@ export default function AdminConfiguracoes() {
               <ClipboardList className="w-4 h-4" /> Logs
             </TabsTrigger>
             )}
-            <TabsTrigger
+            {podeVerDocumentacoes && <TabsTrigger
               value="documentacoes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <FileText className="w-4 h-4" /> Documentações
-            </TabsTrigger>
-            {ehSuperAdmin && (
+            </TabsTrigger>}
+            {podeVerMultiempresa && (
             <TabsTrigger
               value="multiempresa"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -247,7 +264,7 @@ export default function AdminConfiguracoes() {
         </div>
 
         {/* ─── Aba: Geral ──────────────────────────────────────────────── */}
-        <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerGeral && <TabsContent value="geral" className="flex-1 overflow-y-auto p-6 mt-0">
           <div className="max-w-4xl mx-auto space-y-6">
 
           {/* ── Chat interno ─────────────────────────────────────────────
@@ -384,47 +401,51 @@ export default function AdminConfiguracoes() {
           </Card>
 
           </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── Aba: Permissões ─────────────────────────────────────────── */}
-        <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
+        {podeVerPermissoes && <TabsContent value="permissoes" className="flex-1 overflow-y-auto mt-0">
           <AdminPermissoes />
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── Aba: Direto e Extra ─────────────────────────────────────── */}
-        {ehCobranca && (
+        {podeVerDiretoExtra && (
         <TabsContent value="direto_extra" className="flex-1 overflow-y-auto mt-0">
           <AdminDiretoExtra />
         </TabsContent>
         )}
 
         {/* ─── Aba: Tags ───────────────────────────────────────────────── */}
-        {ehCobranca && (
+        {podeVerTags && (
         <TabsContent value="tags" className="flex-1 overflow-y-auto p-6 mt-0">
           <AdminTags />
         </TabsContent>
         )}
 
         {/* ─── Aba: Logs ───────────────────────────────────────────────── */}
-        {temPermissao('ver_logs') && (
+        {podeVerLogs && (
         <TabsContent value="logs" className="flex-1 overflow-y-auto mt-0">
           <AdminLogs />
         </TabsContent>
         )}
 
         {/* ─── Aba: Documentações LGPD ─────────────────────────────────── */}
-        <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
+        {podeVerDocumentacoes && <TabsContent value="documentacoes" className="flex-1 overflow-y-auto mt-0">
           <AdminDocumentacoes />
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── Aba: Multiempresa (só super_admin) ──────────────────────── */}
-        {ehSuperAdmin && (
+        {podeVerMultiempresa && (
         <TabsContent value="multiempresa" className="flex-1 overflow-y-auto p-6 mt-0">
           <AcessoMultiempresa />
         </TabsContent>
         )}
 
-      </Tabs>
+      </Tabs> : (
+        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+          Nenhuma aba interna de Configurações foi liberada para este cargo.
+        </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg" aria-describedby="cfg-modelo-desc">

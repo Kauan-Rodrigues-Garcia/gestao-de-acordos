@@ -61,20 +61,18 @@ describe('<MenuLateralEditor />', () => {
     expect(rotulos.indexOf('Configurações')).toBeLessThan(rotulos.indexOf('Dashboard'));
   });
 
-  it('com todas as permissões negadas, a ordem geral ainda mostra o Dashboard', () => {
+  it('com todas as permissões negadas, nenhuma aba fica presa na ordem geral', () => {
     /*
      * Não é falha da prévia — é a régua respondendo certo.
      *
-     * A ordem geral é desenhada do ponto de vista de quem enxerga tudo (é o
-     * único que dá onde posicionar cada aba), e o Dashboard não declara
-     * `permissaoKey`: quem responde por ele é a lista de cargos, que o
-     * super_admin sempre atravessa. Negar permissão não some com ele.
+     * O Dashboard agora declara `ver_dashboard`, como qualquer outra aba.
+     * Portanto também desaparece da prévia quando a chave é negada.
      *
      * O estado «este cargo não enxerga nenhuma aba» existe e está coberto em
      * `lib/menuLateral.test.ts`, no nível em que ele é decidido.
      */
     montar({ valorDoCargo: () => false });
-    expect(screen.getByText('Dashboard')).toBeInTheDocument();
+    expect(screen.queryByText('Dashboard')).not.toBeInTheDocument();
     expect(screen.queryByText('Configurações')).not.toBeInTheDocument();
   });
 

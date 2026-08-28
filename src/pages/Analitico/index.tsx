@@ -491,6 +491,7 @@ export default function PaginaAnalitico() {
           empresaId={empresa.id}
           mes={mesFiltro}
           liderId={liderId}
+          podeVerRanking={temPermissao('analitico_sub_ranking')}
           onAbrirNovoAcordo={onAbrirNovoAcordo}
           onVerAcordo={onVerAcordo}
           onRefetch={refetchOperador}

@@ -20,10 +20,7 @@
  * `AdminSetores.tsx` (rota /admin/setores) foi removida — a rota agora
  * redireciona para esta aba dentro de /admin/usuarios.
  *
- * Gate de acesso: visível/acessível apenas para perfis Gerência ou acima
- * (gerencia, diretoria, administrador, super_admin). A verificação é feita
- * pelo consumidor (AdminUsuarios.tsx) antes de montar este componente;
- * o componente em si também faz defesa-em-profundidade.
+ * O painel de permissões controla tanto a abertura da aba quanto cada ação.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -80,18 +77,6 @@ type PerfilComClone = Perfil & { _cloneDe?: string | null };
 // Quantos usuários mostrar por setor antes do "ver todos"
 const LIMITE_USUARIOS = 20;
 
-// ─── Gate helper (usado localmente) ─────────────────────────────────────────
-const PERFIS_GERENCIA_OU_ACIMA = [
-  'gerencia',
-  'diretoria',
-  'administrador',
-  'super_admin',
-];
-
-function temAcessoSetores(perfil: string | undefined): boolean {
-  return !!perfil && PERFIS_GERENCIA_OU_ACIMA.includes(perfil);
-}
-
 // ─── Componente ─────────────────────────────────────────────────────────────
 
 export default function AdminSetoresAba() {
@@ -100,6 +85,10 @@ export default function AdminSetoresAba() {
   // Transferir mexe em setor e ate em empresa da pessoa. Era lista de cargo
   // dentro do RLS; agora e interruptor do painel.
   const { temPermissao } = useCargoPermissoes();
+  const podeVerSetores = temPermissao('ver_setores');
+  const podeCriarEditar = temPermissao('setores_criar_editar');
+  const podeAtivarDesativar = temPermissao('setores_ativar_desativar');
+  const podeReordenar = temPermissao('setores_reordenar');
   const podeTransferir = temPermissao('usuarios_transferir');
   const tenant = useTenant();
 
@@ -141,8 +130,6 @@ export default function AdminSetoresAba() {
   const [empresas, setEmpresas] = useState<{ id: string; nome: string }[]>([]);
   // Seleção múltipla via checkbox nas listas de usuários
   const [selecionados, setSelecionados] = useState<Set<string>>(new Set());
-
-  const acessoOk = temAcessoSetores(perfilAtual?.perfil);
 
   /** O destino é outra empresa? Muda o título, some a escolha e o aviso troca. */
   const trocaDeEmpresa = !!transferEmpresa && transferEmpresa !== empresaAtual?.id;
@@ -416,10 +403,12 @@ export default function AdminSetoresAba() {
   // ─── Drag & Drop ──────────────────────────────────────────────────────────
 
   function handleDragStart(setorId: string) {
+    if (!podeReordenar) return;
     draggedSetorId = setorId;
   }
 
   function handleDropOver(alvoId: string) {
+    if (!podeReordenar) return;
     const srcId = draggedSetorId;
     draggedSetorId = null;
     if (!srcId || srcId === alvoId || !empresaAtual?.id) return;
@@ -439,12 +428,14 @@ export default function AdminSetoresAba() {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   function abrirCriar() {
+    if (!podeCriarEditar) return;
     setEditando(null);
     setForm({ nome: '', descricao: '', ativo: true, alternativo: false });
     setDialogOpen(true);
   }
 
   function abrirEditar(s: Setor) {
+    if (!podeCriarEditar) return;
     setEditando(s);
     setForm({ nome: s.nome, descricao: s.descricao ?? '', ativo: s.ativo, alternativo: s.alternativo === true });
     setDialogOpen(true);
@@ -505,6 +496,7 @@ export default function AdminSetoresAba() {
   }
 
   async function toggleAtivo(s: Setor) {
+    if (!podeAtivarDesativar) return;
     const { error } = await supabase
       .from('setores')
       .update({ ativo: !s.ativo })
@@ -521,11 +513,11 @@ export default function AdminSetoresAba() {
 
   const totalAtivos = useMemo(() => setores.filter(s => s.ativo).length, [setores]);
 
-  if (!acessoOk) {
+  if (!podeVerSetores) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-sm text-muted-foreground gap-2">
         <Building2 className="w-6 h-6 opacity-60" />
-        <p>Acesso restrito à Gerência ou superior.</p>
+        <p>A aba Setores não foi liberada para este cargo.</p>
       </div>
     );
   }
@@ -540,16 +532,18 @@ export default function AdminSetoresAba() {
             {totalAtivos} ativo{totalAtivos !== 1 && 's'}
           </p>
           <p className="text-[11px] text-muted-foreground/80 mt-0.5">
-            Arraste um setor sobre outro para reordenar. A ordem é salva automaticamente.
+            {podeReordenar
+              ? 'Arraste um setor sobre outro para reordenar. A ordem é salva automaticamente.'
+              : 'A ordem dos setores está disponível somente para visualização.'}
           </p>
         </div>
-        <Button size="sm" onClick={abrirCriar} className="gap-1.5">
+        {podeCriarEditar && <Button size="sm" onClick={abrirCriar} className="gap-1.5">
           <Plus className="w-4 h-4" /> Novo Setor
-        </Button>
+        </Button>}
       </div>
 
       {/* Barra de seleção múltipla (marque usuários nas listas dos setores) */}
-      {selecionados.size > 0 && (
+      {podeTransferir && selecionados.size > 0 && (
         <div className="mb-3 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
           <p className="text-xs text-foreground flex-1">
             <strong>{selecionados.size}</strong> usuário{selecionados.size !== 1 && 's'} selecionado{selecionados.size !== 1 && 's'}
@@ -572,9 +566,9 @@ export default function AdminSetoresAba() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-sm text-muted-foreground gap-2">
             <Building2 className="w-6 h-6 opacity-60" />
             <p>Nenhum setor cadastrado ainda.</p>
-            <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
+            {podeCriarEditar && <Button size="sm" variant="outline" onClick={abrirCriar} className="mt-1 gap-1.5">
               <Plus className="w-3.5 h-3.5" /> Criar primeiro setor
-            </Button>
+            </Button>}
           </CardContent>
         </Card>
       ) : (
@@ -600,16 +594,19 @@ export default function AdminSetoresAba() {
               >
                 {/* Cabeçalho do setor (área de arraste) */}
                 <div
-                  draggable
+                  draggable={podeReordenar}
                   onDragStart={() => handleDragStart(s.id)}
                   onDragOver={e => e.preventDefault()}
                   onDrop={e => {
                     e.preventDefault();
                     handleDropOver(s.id);
                   }}
-                  className="flex items-center gap-3 px-3 py-2.5 cursor-grab active:cursor-grabbing select-none"
+                  className={cn(
+                    'flex items-center gap-3 px-3 py-2.5 select-none',
+                    podeReordenar && 'cursor-grab active:cursor-grabbing',
+                  )}
                 >
-                  <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />
+                  {podeReordenar && <GripVertical className="w-4 h-4 text-muted-foreground/50 flex-shrink-0" />}
                   <div className="flex items-center gap-2 flex-1 min-w-0">
                     <Building2 className="w-4 h-4 text-primary flex-shrink-0" />
                     <div className="min-w-0 flex-1">
@@ -630,7 +627,7 @@ export default function AdminSetoresAba() {
                     )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
-                    <Button
+                    {podeAtivarDesativar && <Button
                       variant="ghost"
                       size="sm"
                       className="h-7 gap-1 text-xs px-2"
@@ -639,8 +636,8 @@ export default function AdminSetoresAba() {
                     >
                       <Users className="w-3.5 h-3.5" /> {usuarios.length}
                       <ChevronDown className={cn('w-3 h-3 transition-transform', aberto && 'rotate-180')} />
-                    </Button>
-                    <Button
+                    </Button>}
+                    {podeCriarEditar && <Button
                       variant="ghost"
                       size="icon"
                       className="w-7 h-7"
@@ -648,7 +645,7 @@ export default function AdminSetoresAba() {
                       onClick={() => toggleAtivo(s)}
                     >
                       <Power className={cn('w-3.5 h-3.5', s.ativo ? 'text-success' : 'text-muted-foreground')} />
-                    </Button>
+                    </Button>}
                     <Button
                       variant="ghost"
                       size="icon"
@@ -672,7 +669,7 @@ export default function AdminSetoresAba() {
                           const ehClone = !!u._cloneDe;
                           return (
                           <div key={ehClone ? `clone-${u.id}` : u.id} className="flex items-center gap-2 py-1 px-1.5 rounded-lg hover:bg-muted/50">
-                            {ehClone ? (
+                            {ehClone || !podeTransferir ? (
                               <span className="h-3.5 w-3.5 flex-shrink-0" aria-hidden />
                             ) : (
                               <input
@@ -701,7 +698,7 @@ export default function AdminSetoresAba() {
                               </p>
                               <p className="text-[10px] text-muted-foreground capitalize truncate">{u.perfil}</p>
                             </div>
-                            {!ehClone && (
+                            {!ehClone && podeTransferir && (
                               <Button
                                 variant="outline"
                                 size="sm"

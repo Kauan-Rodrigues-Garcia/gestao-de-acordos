@@ -20,17 +20,17 @@ import { PorCargo } from './PorCargo';
 import { PorPessoa } from './PorPessoa';
 
 export default function AdminPermissoes() {
-  const { isAdmin, loading } = useCargoPermissoes();
+  const { temPermissao, loading } = useCargoPermissoes();
   const [aba, setAba] = useState('cargo');
 
   if (loading) {
     return <div className="p-6 text-sm text-muted-foreground">Carregando permissões...</div>;
   }
 
-  if (!isAdmin) {
+  if (!temPermissao('administrar_sistema')) {
     return (
       <div className="p-6 text-center text-muted-foreground text-sm">
-        Só administradores gerenciam permissões.
+        A administração de permissões não foi liberada para este cargo.
       </div>
     );
   }

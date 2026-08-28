@@ -32,8 +32,9 @@ import { useCargoPermissoes, type EstadoExcecao } from '@/hooks/useCargoPermisso
 import {
   CARGOS_ACESSO_TOTAL, catalogoDoTenant, gruposDoTenant,
 } from '@/lib/permissoes-catalogo';
+import { montarPorAba } from '@/lib/permissoes-abas';
 import { cn } from '@/lib/utils';
-import { GrupoPermissoes } from './GrupoPermissoes';
+import { BlocoAba } from './BlocoAba';
 import { useRascunho, type ValorRascunho } from './useRascunho';
 import { usePessoasDaEmpresa } from './usePessoasDaEmpresa';
 
@@ -52,6 +53,7 @@ export function PorPessoa() {
   const { pessoas, carregando } = usePessoasDaEmpresa(empresa?.id);
 
   const [busca, setBusca] = useState('');
+  const [buscaPermissao, setBuscaPermissao] = useState('');
   const [soComExcecao, setSoComExcecao] = useState(false);
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -59,6 +61,10 @@ export function PorPessoa() {
 
   const catalogo = useMemo(() => catalogoDoTenant(tenantSlug), [tenantSlug]);
   const grupos   = useMemo(() => gruposDoTenant(tenantSlug), [tenantSlug]);
+  const { blocos } = useMemo(
+    () => montarPorAba(catalogo, grupos),
+    [catalogo, grupos],
+  );
 
   /** Quantas exceções cada pessoa tem — vira o contador da lista. */
   const excecoesPorPessoa = useMemo(() => {
@@ -104,6 +110,14 @@ export function PorPessoa() {
       const atual = estadoExcecao(pessoa.id, k);
       return atual === 'herda' ? 'herda' : atual === 'sim';
     });
+  }
+
+  function valorEfetivo(key: string): boolean {
+    if (!pessoa) return false;
+    const estado = estadoDe(key);
+    if (estado === 'sim') return true;
+    if (estado === 'nao') return false;
+    return resolverParaUsuario(pessoa.id, pessoa.perfil, key);
   }
 
   async function salvar() {
@@ -244,57 +258,48 @@ export function PorPessoa() {
             )}
           </div>
 
-          {grupos.map(g => {
-            const doGrupo = catalogo.filter(p => p.grupo === g);
-            return (
-              <GrupoPermissoes
-                key={g}
-                grupo={g}
-                permissoes={doGrupo}
-                concedidas={doGrupo.filter(p => {
-                  const e = estadoDe(p.key);
-                  return e === 'sim'
-                    || (e === 'herda' && resolverParaUsuario(pessoa.id, pessoa.perfil, p.key));
-                }).length}
-                alterada={p => p.key in rascunho.alteracoes}
-                cartoesLargos
-                ligada={p => {
-                  const e = estadoDe(p.key);
-                  return e === 'sim'
-                    || (e === 'herda' && resolverParaUsuario(pessoa.id, pessoa.perfil, p.key));
-                }}
-                renderControle={p => {
-                  const estado = estadoDe(p.key);
-                  const doCargo = valorDoCargo(pessoa.perfil, p.key);
-                  return (
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                        cargo: <strong className={doCargo ? 'text-emerald-500' : 'text-muted-foreground'}>
-                          {doCargo ? 'sim' : 'não'}
-                        </strong>
-                      </span>
-                      <div className="inline-flex rounded-lg border border-border overflow-hidden">
-                        {ESTADOS.map(op => (
-                          <button
-                            key={op.valor}
-                            data-on={estado === op.valor}
-                            onClick={() => definirEstado(p.key, op.valor)}
-                            className={cn(
-                              'px-2 py-1 text-[11px] font-medium transition-colors',
-                              'text-muted-foreground hover:text-foreground',
-                              op.classe,
-                            )}
-                          >
-                            {op.label}
-                          </button>
-                        ))}
-                      </div>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={buscaPermissao} onChange={e => setBuscaPermissao(e.target.value)}
+              placeholder="Buscar permissão desta pessoa..." className="h-9 pl-9 text-sm" />
+          </div>
+
+          {blocos.map(bloco => (
+            <BlocoAba
+              key={bloco.aba}
+              bloco={bloco}
+              valorDe={valorEfetivo}
+              alterada={key => key in rascunho.alteracoes}
+              somenteLeitura={false}
+              filtro={buscaPermissao.trim().toLowerCase()}
+              renderControle={(p, contexto) => {
+                const estado = estadoDe(p.key);
+                const doCargo = valorDoCargo(pessoa.perfil, p.key);
+                return (
+                  <div className={cn('flex items-center gap-2', contexto.disabled && 'opacity-60')}>
+                    <span className="whitespace-nowrap text-[10px] text-muted-foreground">
+                      cargo: <strong className={doCargo ? 'text-emerald-500' : 'text-muted-foreground'}>
+                        {doCargo ? 'sim' : 'não'}
+                      </strong>
+                    </span>
+                    <div className="inline-flex overflow-hidden rounded-lg border border-border">
+                      {ESTADOS.map(op => (
+                        <button key={op.valor} type="button" data-on={estado === op.valor}
+                          disabled={contexto.disabled}
+                          onClick={() => definirEstado(p.key, op.valor)}
+                          className={cn(
+                            'px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors',
+                            'hover:text-foreground disabled:cursor-not-allowed', op.classe,
+                          )}>
+                          {op.label}
+                        </button>
+                      ))}
                     </div>
-                  );
-                }}
-              />
-            );
-          })}
+                  </div>
+                );
+              }}
+            />
+          ))}
         </div>
       )}
     </div>

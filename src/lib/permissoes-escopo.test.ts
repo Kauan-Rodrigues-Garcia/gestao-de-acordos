@@ -124,14 +124,13 @@ describe('uma aba nao fala pela outra', () => {
   });
 });
 
-describe('aba sem interruptor', () => {
+describe('Dashboard com interruptor próprio', () => {
   /*
-   * O Dashboard e a rota `/`, para onde o login e tres redirecionamentos
-   * apontam. Uma chave que o desligue tranca a pessoa fora do app, entao ele
-   * nao tem interruptor — so escopo. Estes testes travam esse desenho.
+   * O Dashboard agora é configurável como qualquer aba. A rota `/` mostra um
+   * estado sem acesso quando a chave está desligada, sem esconder o menu.
    */
   it('resolve escopo mesmo sem nenhuma chave de aba ligada', () => {
-    const tem = comChaves(chaveEscopo('dashboard', 'setor'));
+    const tem = comChaves('ver_dashboard', chaveEscopo('dashboard', 'setor'));
     expect(escopoEfetivo('dashboard', tem)).toBe('setor');
   });
 
@@ -142,6 +141,7 @@ describe('aba sem interruptor', () => {
   it('e continua nao ouvindo as chaves de outras abas', () => {
     const tem = comChaves(
       chaveEscopo('dashboard', 'individual'),
+      'ver_dashboard',
       chaveEscopo('lixeira', 'todos_setores'),
       chaveEscopo('painel_lider', 'todos_setores'),
     );
@@ -324,6 +324,7 @@ describe('Painel Diretoria: duas abas que dividiam o mesmo hook', () => {
 
   it('o caso da gerencia da PaguePlay: abre a aba e ve so o proprio setor', () => {
     const tem = comChaves(
+      'ver_dashboard',
       'ver_painel_diretoria',
       chaveEscopo('painel_diretoria', 'setor'),
     );
@@ -332,6 +333,7 @@ describe('Painel Diretoria: duas abas que dividiam o mesmo hook', () => {
 
   it('alcance amplo no Dashboard nao abre o Painel Diretoria', () => {
     const tem = comChaves(
+      'ver_dashboard',
       'ver_painel_diretoria',
       chaveEscopo('painel_diretoria', 'setor'),
       chaveEscopo('dashboard', 'todos_setores'),
@@ -341,6 +343,7 @@ describe('Painel Diretoria: duas abas que dividiam o mesmo hook', () => {
 
   it('e o contrario tambem: o Painel Diretoria nao amplia o Dashboard', () => {
     const tem = comChaves(
+      'ver_dashboard',
       'ver_painel_diretoria',
       chaveEscopo('painel_diretoria', 'todos_setores'),
       chaveEscopo('dashboard', 'setor'),

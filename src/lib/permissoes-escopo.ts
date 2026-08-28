@@ -98,11 +98,12 @@ export const ABAS_COM_ESCOPO = {
     niveis: ['setor', 'todos_setores'],
   },
   /*
-   * O Dashboard usa os quatro níveis e não tem chave de aba — ver o comentário
-   * de `chaveAba`. Ele é a tela inicial e hoje aparece para todo cargo.
+   * O Dashboard usa os quatro níveis. Ele continua sendo a rota inicial, mas
+   * agora possui interruptor como qualquer outra aba; o guard de rota mostra o
+   * estado sem acesso sem apagar as demais opções do menu.
    */
   dashboard: {
-    chaveAba: null as string | null,
+    chaveAba: 'ver_dashboard',
     prefixo: 'dashboard',
     niveis: NIVEIS_ESCOPO,
   },

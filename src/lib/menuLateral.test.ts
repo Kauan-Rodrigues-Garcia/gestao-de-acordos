@@ -39,12 +39,13 @@ describe('abasDoMenu', () => {
     expect(rotulos(semAcordos)).not.toContain('Acordos');
   });
 
-  it('o cargo decide os itens que não declaram permissão', () => {
-    // Dashboard não tem `permissaoKey`: quem responde é a lista de cargos, e
-    // `rh` não está nela.
-    const rh = abasDoMenu(ctx({ cargo: 'rh' }));
-    expect(rotulos(rh)).not.toContain('Dashboard');
-    expect(rotulos(abasDoMenu(ctx({ cargo: 'operador' })))).toContain('Dashboard');
+  it('a permissão do Dashboard decide a tela inicial em qualquer cargo', () => {
+    const semDashboard = abasDoMenu(ctx({
+      cargo: 'rh',
+      temPermissao: chave => chave !== 'ver_dashboard',
+    }));
+    expect(rotulos(semDashboard)).not.toContain('Dashboard');
+    expect(rotulos(abasDoMenu(ctx({ cargo: 'rh' })))).toContain('Dashboard');
   });
 
   it('PaguePlay não tem Acordos, Novo Acordo nem Campanha Fácil', () => {

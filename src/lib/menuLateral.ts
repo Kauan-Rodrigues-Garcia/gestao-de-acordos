@@ -27,7 +27,6 @@ import {
   Ticket, ClipboardList,
 } from 'lucide-react';
 import { ROUTE_PATHS } from '@/lib/index';
-import { podeAcessarAbaWpp } from '@/pages/SolicitacoesWhatsapp/permissoes';
 import { produtoPermite, type Produto } from '@/lib/produto';
 
 export interface NavItem {
@@ -81,7 +80,7 @@ const SO_COBRANCA: readonly Produto[] = ['cobranca'];
 export const NAV_ITEMS: NavItem[] = [
   // A única aba que existe em todo produto por necessidade: é a rota `/`, a
   // porta de entrada. O que ela DESENHA muda por produto — ver `Dashboard`.
-  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, roles: ['operador','lider','administrador','elite','gerencia','diretoria','ouvidoria'] },
+  { label: 'Dashboard',        icon: LayoutDashboard, to: ROUTE_PATHS.DASHBOARD,           produtos: TODOS_OS_PRODUTOS, permissaoKey: 'ver_dashboard' },
   // Visibilidade especial (cargo ouvidoria/admin OU acesso concedido) — ver filtro abaixo
   { label: 'Ouvidoria',        icon: LifeBuoy,        to: ROUTE_PATHS.OUVIDORIA,           produtos: SO_COBRANCA, permissaoKey: 'ver_ouvidoria' },
   // Visibilidade especial (PaguePlay + gate de rollout) — ver filtro abaixo
@@ -198,7 +197,7 @@ export function abasDoMenu(ctx: ContextoMenu): NavItem[] {
     // Solicitar Atendimento: PaguePlay. O operador enxerga só os pedidos dele,
     // e quem garante isso é a RLS, não este filtro.
     if (item.to === ROUTE_PATHS.SOLICITACOES_WHATSAPP) {
-      return ctx.isPaguePlay && podeAcessarAbaWpp(ctx.cargo);
+      return ctx.isPaguePlay;
     }
 
     // Tickets: nasce só para administrador. A liderança entra quando a chave

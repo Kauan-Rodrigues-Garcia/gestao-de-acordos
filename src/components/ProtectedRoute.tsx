@@ -64,9 +64,11 @@ interface ProtectedRouteProps {
    * rota é a porta.
    */
   produtos?: readonly Produto[];
+  /** Mantém o layout aberto e mostra uma mensagem em vez de redirecionar. */
+  mostrarSemAcesso?: boolean;
 }
 
-export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos }: ProtectedRouteProps): React.ReactElement | null {
+export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermissao, produtos, mostrarSemAcesso = false }: ProtectedRouteProps): React.ReactElement | null {
   const { user, perfil, loading } = useAuth();
   const { temPermissao, loading: permLoading } = useCargoPermissoes();
   const { empresa, tenantSlug, loading: empresaLoading } = useEmpresa();
@@ -119,6 +121,16 @@ export function ProtectedRoute({ children, roles, allowedProfiles, requiredPermi
      * Ausência agora nega, como em todo o resto do sistema.
      */
     if (!temPermissao(requiredPermissao)) {
+      if (mostrarSemAcesso) {
+        return (
+          <div className="flex min-h-[50vh] items-center justify-center p-8 text-center">
+            <div>
+              <p className="font-medium text-foreground">Esta aba não foi liberada para seu cargo.</p>
+              <p className="mt-1 text-sm text-muted-foreground">Escolha no menu uma das abas disponíveis.</p>
+            </div>
+          </div>
+        );
+      }
       return <Navigate to={ROUTE_PATHS.DASHBOARD} replace />;
     }
     return <>{children}</> as React.ReactElement;

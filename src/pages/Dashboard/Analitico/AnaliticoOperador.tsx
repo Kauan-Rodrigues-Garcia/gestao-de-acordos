@@ -33,6 +33,7 @@ interface AnaliticoOperadorProps {
   /** Mês exibido ('yyyy-MM') — usado para carregar o ranking */
   mes: string;
   liderId?: string | null;
+  podeVerRanking: boolean;
   onAbrirNovoAcordo: (dados: {
     instituicao: string;
     nomeCliente: string;
@@ -61,7 +62,7 @@ function chipForma(forma: AnaliticoRecebimento['forma_pagamento'], detalhe?: str
 }
 
 export function AnaliticoOperador({
-  dados, loading, operadorId, operadorNome, empresaId, mes, liderId,
+  dados, loading, operadorId, operadorNome, empresaId, mes, liderId, podeVerRanking,
   onAbrirNovoAcordo, onVerAcordo, onRefetch,
 }: AnaliticoOperadorProps) {
   const tenant = useTenant();
@@ -92,8 +93,12 @@ export function AnaliticoOperador({
   }, [empresaId, mes]);
 
   useEffect(() => {
-    if (abaOp === 'ranking') void carregarRanking();
-  }, [abaOp, carregarRanking]);
+    if (!podeVerRanking && abaOp === 'ranking') {
+      setAbaOp('meus');
+      return;
+    }
+    if (podeVerRanking && abaOp === 'ranking') void carregarRanking();
+  }, [abaOp, carregarRanking, podeVerRanking]);
 
   const dadosFiltrados = useMemo(() => {
     if (!filtroInicio && !filtroFim) return dados;
@@ -119,7 +124,7 @@ export function AnaliticoOperador({
       <div className="flex items-center gap-1 border-b border-border">
         {([
           { key: 'meus',    label: 'Meus recebimentos', Icon: ListChecks },
-          { key: 'ranking', label: 'Ranking',           Icon: Trophy },
+          ...(podeVerRanking ? [{ key: 'ranking' as const, label: 'Ranking', Icon: Trophy }] : []),
         ] as const).map(({ key, label, Icon }) => (
           <button key={key} onClick={() => setAbaOp(key)}
             className={cn(
@@ -331,7 +336,7 @@ export function AnaliticoOperador({
       )}
 
       {/* ── Aba: Ranking ──────────────────────────────────────────────────── */}
-      {abaOp === 'ranking' && (
+      {podeVerRanking && abaOp === 'ranking' && (
         <div className="space-y-4">
           {loadingRanking ? (
             <div className="space-y-2 animate-pulse">

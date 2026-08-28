@@ -22,16 +22,12 @@ import { PERMISSOES, CARGOS_CONFIGURAVEIS, exigeConcessaoExplicita } from './per
 const MIGRATIONS = path.resolve(__dirname, '../../supabase/migrations');
 
 /** A definição mais recente da função, pelo nome ordenável do arquivo. */
-function sqlDoCatalogo(): string {
-  const arquivo = fs.readdirSync(MIGRATIONS)
+function arquivosDoCatalogo(): string[] {
+  return fs.readdirSync(MIGRATIONS)
     .filter(f => f.endsWith('.sql'))
     .sort()
-    .reverse()
-    .find(f => /CREATE\s+(OR\s+REPLACE\s+)?FUNCTION\s+public\.fn_permissoes_catalogo/i
+    .filter(f => /CREATE\s+(OR\s+REPLACE\s+)?FUNCTION\s+public\.fn_permissoes_catalogo/i
       .test(fs.readFileSync(path.join(MIGRATIONS, f), 'utf8')));
-
-  if (!arquivo) throw new Error('Nenhuma migration define fn_permissoes_catalogo().');
-  return fs.readFileSync(path.join(MIGRATIONS, arquivo), 'utf8');
 }
 
 /** Os atalhos declarados no CTE `atalhos` da função. */
@@ -51,14 +47,25 @@ function listaDeArray(texto: string): string[] {
 interface LinhaSql { chave: string; tenants: string[] | null; padrao: string[]; explicita: boolean }
 
 function catalogoSql(): LinhaSql[] {
-  const sql = sqlDoCatalogo();
-  // Só o corpo do VALUES: o resto da migration cita as mesmas chaves em
-  // comentários e no bloco de verificação.
-  const corpo = sql.slice(sql.indexOf('LATERAL (VALUES'), sql.indexOf('AS t(chave'));
+  const arquivos = arquivosDoCatalogo();
+  const definicoes = arquivos.map(arquivo => ({
+    arquivo,
+    sql: fs.readFileSync(path.join(MIGRATIONS, arquivo), 'utf8'),
+  }));
+  const baseIndex = definicoes.findLastIndex(d => d.sql.includes('LATERAL (VALUES'));
+  if (baseIndex < 0) throw new Error('Nenhuma migration traz o catálogo base completo.');
 
-  const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\]),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\]),\s*(true|false)\s*\)/g;
+  const base = definicoes[baseIndex].sql;
+  const corpos = [base.slice(base.indexOf('LATERAL (VALUES'), base.indexOf('AS t(chave'))];
+  for (const { sql } of definicoes.slice(baseIndex + 1)) {
+    const inicio = sql.indexOf('SELECT * FROM (VALUES');
+    const fim = sql.indexOf('AS novas(chave');
+    if (inicio >= 0 && fim > inicio) corpos.push(sql.slice(inicio, fim));
+  }
 
-  return [...corpo.matchAll(linha)].map(m => ({
+  const linha = /\(\s*'([a-z_]+)',\s*(NULL::TEXT\[\]|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(lideranca|todos|cupula|ninguem|ARRAY\[[^\]]*\](?:\s*::TEXT\[\])?),\s*(true|false)\s*\)/g;
+
+  return [...corpos.join('\n').matchAll(linha)].map(m => ({
     chave: m[1],
     tenants: /^NULL/i.test(m[2]) ? null : listaDeArray(m[2]),
     padrao: listaDeArray(m[3]),

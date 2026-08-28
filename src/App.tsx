@@ -201,7 +201,11 @@ export default function App() {
                   ponta (recebimento, acordo, meta, ticket médio) e não significa
                   nada em Vendas ou RH. Ver `PainelDeEntrada`. */}
               <Route path={ROUTE_PATHS.DASHBOARD} element={
-                <LayoutWrapper><PainelDeEntrada /></LayoutWrapper>
+                <LayoutWrapper>
+                  <ProtectedRoute requiredPermissao="ver_dashboard" mostrarSemAcesso>
+                    <PainelDeEntrada />
+                  </ProtectedRoute>
+                </LayoutWrapper>
               } />
               {/* A lista da BookPlay. Era livre: qualquer cargo logado abria. */}
               <Route path={ROUTE_PATHS.ACORDOS} element={

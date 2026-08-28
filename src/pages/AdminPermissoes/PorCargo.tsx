@@ -24,7 +24,6 @@ import { Save, RotateCcw, ShieldCheck, Loader2, Search, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/lib/supabase';
 import { PERFIL_LABELS } from '@/lib/index';
 import { useEmpresa } from '@/hooks/useEmpresa';
@@ -35,7 +34,6 @@ import {
 } from '@/lib/permissoes-catalogo';
 import { montarPorAba } from '@/lib/permissoes-abas';
 import { cn } from '@/lib/utils';
-import { GrupoPermissoes } from './GrupoPermissoes';
 import { BlocoAba } from './BlocoAba';
 import { useRascunho } from './useRascunho';
 
@@ -59,7 +57,7 @@ export function PorCargo() {
    * "o que o líder pode no Analítico?" exigia caçar a chave da aba num grupo, o
    * alcance em outro e as ações num terceiro.
    */
-  const { blocos, avulsos } = useMemo(
+  const { blocos } = useMemo(
     () => montarPorAba(catalogo, grupos),
     [catalogo, grupos],
   );
@@ -99,20 +97,6 @@ export function PorCargo() {
   function alternar(key: string) {
     if (acessoTotal) return;
     rascunho.definir(key, !valorDe(key));
-    rascunho.podar(k => !!salvo[k]);
-  }
-
-  /**
-   * Liga ou desliga o que está VISÍVEL naquele grupo.
-   *
-   * Recebe a lista em vez de filtrar o catálogo por nome: as chaves de aba
-   * migraram para os blocos por aba, e um filtro por grupo alcançaria também o
-   * que sumiu da tela — o botão mexeria no que ninguém está vendo.
-   */
-  function ligarGrupo(visiveis: { key: string }[], ligar: boolean) {
-    if (acessoTotal) return;
-    const alvo = Object.fromEntries(visiveis.map(p => [p.key, ligar]));
-    rascunho.definirVarios(alvo);
     rascunho.podar(k => !!salvo[k]);
   }
 
@@ -264,36 +248,6 @@ export function PorCargo() {
               />
             ))}
 
-            {avulsos.map(({ grupo: g, permissoes: doGrupo }) => (
-              <GrupoPermissoes
-                key={g}
-                grupo={g}
-                permissoes={doGrupo}
-                filtro={filtro}
-                concedidas={doGrupo.filter(p => valorDe(p.key)).length}
-                ligada={p => valorDe(p.key)}
-                alterada={p => p.key in rascunho.alteracoes}
-                acoes={
-                  <>
-                    <button onClick={() => ligarGrupo(doGrupo, true)}
-                      className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
-                      Ligar tudo
-                    </button>
-                    <button onClick={() => ligarGrupo(doGrupo, false)}
-                      className="rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:text-foreground">
-                      Desligar tudo
-                    </button>
-                  </>
-                }
-                renderControle={p => (
-                  <Switch
-                    checked={valorDe(p.key)}
-                    onCheckedChange={() => alternar(p.key)}
-                    aria-label={p.label}
-                  />
-                )}
-              />
-            ))}
           </>
         )}
       </div>

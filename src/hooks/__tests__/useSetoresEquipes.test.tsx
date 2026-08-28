@@ -53,7 +53,9 @@ beforeEach(() => {
   empresaRef.current   = { id: 'emp-1' };
   // Padrao: o caso do lider — enxerga o proprio setor e escolhe equipe, mas
   // nao escolhe setor.
-  chavesRef.current = new Set(['dashboard_escopo_individual', 'dashboard_escopo_equipe']);
+  chavesRef.current = new Set([
+    'ver_dashboard', 'dashboard_escopo_individual', 'dashboard_escopo_equipe',
+  ]);
   fromSpy.mockReset();
   fromSpy.mockImplementation((tabela: string) =>
     construtor(tabela === 'equipes'
@@ -123,7 +125,8 @@ describe('useSetoresEquipes — o que cada nivel enxerga', () => {
   it('sem o nivel equipe, nenhuma equipe e carregada', async () => {
     perfilRef.current = { perfil: 'administrador', setor_id: null };
     chavesRef.current = new Set([
-      'dashboard_escopo_individual', 'dashboard_escopo_setor', 'dashboard_escopo_todos_setores',
+      'ver_dashboard', 'dashboard_escopo_individual',
+      'dashboard_escopo_setor', 'dashboard_escopo_todos_setores',
     ]);
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -134,7 +137,7 @@ describe('useSetoresEquipes — o que cada nivel enxerga', () => {
 
   it('so com individual nao consulta nada', async () => {
     perfilRef.current = { perfil: 'operador', setor_id: 'setor-1' };
-    chavesRef.current = new Set(['dashboard_escopo_individual']);
+    chavesRef.current = new Set(['ver_dashboard', 'dashboard_escopo_individual']);
     const { result } = renderHook(() => useSetoresEquipes());
     await waitFor(() => expect(result.current.loading).toBe(false));
 

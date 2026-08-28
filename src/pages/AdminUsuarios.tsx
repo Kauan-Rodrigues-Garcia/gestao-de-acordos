@@ -7,13 +7,13 @@ import {
   type ResumoExclusao,
 } from '@/services/admin/exclusaoUsuario.service';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
+import { filtrarUsuariosVisiveis } from '@/lib/usuarios-visibilidade';
 import { iniciarImpersonacao } from '@/services/impersonacao.service';
 import { redefinirSenhaDeUsuario, MIN_SENHA } from '@/services/senha.service';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import AdminEquipes from '@/pages/AdminEquipes';
 import AdminSetoresAba from '@/pages/AdminSetoresAba';
 import MetasConfig from '@/pages/MetasConfig';
-import { podeGerenciarComemoracoes } from '@/pages/Comemoracoes/permissoes';
 import { useTenant } from '@/lib/tenant-config';
 import { aplicarOrdemSetores } from '@/lib/setores-ordem';
 import { useAuth } from '@/hooks/useAuth';
@@ -106,7 +106,8 @@ export default function AdminUsuarios() {
    * permissão diz quem pode; o produto diz se a coisa existe.
    */
   const ehCobranca = produtoDaEmpresa(empresaAtual, tenant.slug) === 'cobranca';
-  const podeVerComemoracoes = ehCobranca && podeGerenciarComemoracoes(temPermissao);
+  const podeVerUsuarios = temPermissao('usuarios_sub_usuarios');
+  const podeVerComemoracoes = ehCobranca && temPermissao('ver_comemoracoes');
   /*
    * Dois eixos, duas chaves — e eles não são a mesma pergunta.
    *
@@ -125,12 +126,18 @@ export default function AdminUsuarios() {
   // Item 5: líder+ pode definir a situação (ativo/férias/desligado). A RLS ainda
   // limita o líder ao próprio setor; quem administra atinge qualquer usuário.
   const podeGerenciarSituacao = podeAdministrarContas
-    || ['lider', 'elite', 'gerencia', 'diretoria'].includes(perfilAtual?.perfil ?? '');
-  // Gate para a aba Setores: visível apenas para Gerência ou superior
-  // (gerencia, diretoria, administrador, super_admin).
-  const podeVerSetores =
-    !!perfilAtual?.perfil &&
-    ['gerencia', 'diretoria', 'administrador', 'super_admin'].includes(perfilAtual.perfil);
+    || temPermissao('usuarios_editar_do_setor');
+  const podeVerSetores = temPermissao('ver_setores');
+  const podeVerEquipes = temPermissao('ver_equipes');
+  const podeVerMetas = metasComoAba && temPermissao('ver_metas');
+  const abasVisiveis = [
+    podeVerUsuarios && 'usuarios',
+    podeVerSetores && 'setores',
+    podeVerEquipes && 'equipes',
+    podeVerMetas && 'metas',
+    podeVerComemoracoes && 'comemoracoes',
+  ].filter((aba): aba is string => Boolean(aba));
+  const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -586,18 +593,15 @@ export default function AdminUsuarios() {
    */
   const PERFIS_ADMIN = ['administrador', 'super_admin'];
 
-  const aplicarFiltroAcesso = (lista: Perfil[]): Perfil[] => {
-    if (podeVerAdministradores) return lista;
-    // Cargo não-admin nunca vê administrador nem super_admin.
-    const semAdmins = lista.filter(u => !PERFIS_ADMIN.includes(u.perfil));
-    if (veUsuariosDeTodosSetores) return semAdmins;
-    return semAdmins.filter(u => u.setor_id === perfilAtual?.setor_id);
-  };
-
-  const usuariosFiltrados = aplicarFiltroAcesso(
+  const usuariosFiltrados = filtrarUsuariosVisiveis(
     isSuperAdmin && filtroEmpresa
       ? usuarios.filter(u => u.empresa_id === filtroEmpresa)
-      : usuarios
+      : usuarios,
+    {
+      podeVerAdministradores,
+      veTodosSetores: veUsuariosDeTodosSetores,
+      setorAtualId: perfilAtual?.setor_id,
+    },
   );
 
   // ── Agrupamento por setor ────────────────────────────────────────────────────
@@ -610,10 +614,13 @@ export default function AdminUsuarios() {
   }, {});
 
   // BookPlay: injeta os clones de OUTRO setor no grupo do setor destino, com tag.
-  // Respeita o acesso: cargo escopado (operador/líder/elite) só vê o próprio setor
-  // — o grupo do setor dele é criado mesmo se for formado só por clones.
+  // Respeita o alcance configurado para qualquer cargo: sem "todos os setores",
+  // o grupo do setor da pessoa é o único destino possível, mesmo só com clones.
   if (tenant.slug === 'bookplay' && clonesCross.length) {
-    const escopadoAoSetor = ['operador', 'lider', 'elite'].includes(perfilAtual?.perfil ?? '');
+    // O painel manda no alcance. Cargo nenhum ganha todos os setores por estar
+    // ausente de uma lista fixa; se a chave ampla está desligada, até clones só
+    // entram no grupo do setor da pessoa logada.
+    const escopadoAoSetor = !veUsuariosDeTodosSetores;
     const perfilPorId = new Map(usuarios.map(p => [p.id, p]));
     const nomeSetorPorId = (id: string) => setores.find(s => s.id === id)?.nome ?? 'Setor';
     for (const c of clonesCross) {
@@ -670,15 +677,15 @@ export default function AdminUsuarios() {
         </div>
       </div>
 
-      <Tabs defaultValue={tabFromUrl} className="flex-1 flex flex-col">
+      {tabAtiva ? <Tabs value={tabAtiva} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
-            <TabsTrigger
+            {podeVerUsuarios && <TabsTrigger
               value="usuarios"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
             >
               <Users className="w-4 h-4" /> Usuários
-            </TabsTrigger>
+            </TabsTrigger>}
             {podeVerSetores && (
               <TabsTrigger
                 value="setores"
@@ -687,7 +694,7 @@ export default function AdminUsuarios() {
                 <Building2 className="w-4 h-4" /> Setores
               </TabsTrigger>
             )}
-            {temPermissao('ver_equipes') && (
+            {podeVerEquipes && (
             <TabsTrigger
               value="equipes"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -695,7 +702,7 @@ export default function AdminUsuarios() {
               <Users2 className="w-4 h-4" /> Equipes
             </TabsTrigger>
             )}
-            {metasComoAba && temPermissao('ver_metas') && (
+            {podeVerMetas && (
             <TabsTrigger
               value="metas"
               className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent px-4 h-10 text-sm gap-2"
@@ -715,7 +722,7 @@ export default function AdminUsuarios() {
         </div>
 
         {/* ─── Aba: Usuários ─────────────────────────────────────────── */}
-        <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
+        {podeVerUsuarios && <TabsContent value="usuarios" className="flex-1 overflow-y-auto p-6 mt-0">
         <div className="max-w-6xl mx-auto">
         <div className="flex items-center justify-end mb-4 gap-2">
           {isSuperAdmin && empresas.length > 1 && (
@@ -945,7 +952,7 @@ export default function AdminUsuarios() {
         </div>
       )}
         </div>
-        </TabsContent>
+        </TabsContent>}
 
         {/* ─── Aba: Setores ──────────────────────────────────────────── */}
         {podeVerSetores && (
@@ -955,14 +962,14 @@ export default function AdminUsuarios() {
         )}
 
         {/* ─── Aba: Equipes ──────────────────────────────────────────── */}
-        {temPermissao('ver_equipes') && (
+        {podeVerEquipes && (
         <TabsContent value="equipes" className="flex-1 overflow-y-auto mt-0">
           <AdminEquipes />
         </TabsContent>
         )}
 
         {/* ─── Aba: Metas (BookPlay) ─────────────────────────────────── */}
-        {metasComoAba && temPermissao('ver_metas') && (
+        {podeVerMetas && (
           <TabsContent value="metas" className="flex-1 overflow-y-auto p-6 mt-0">
             <MetasConfig />
           </TabsContent>
@@ -983,7 +990,11 @@ export default function AdminUsuarios() {
           </TabsContent>
         )}
 
-      </Tabs>
+      </Tabs> : (
+        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
+          Nenhuma aba interna de Usuários foi liberada para este cargo.
+        </div>
+      )}
 
       {/* ── Dialog unificado: editar/criar usuário (dados + foto + senha) ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
