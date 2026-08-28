@@ -36,6 +36,13 @@ import {
 /** Espera antes de refazer a lista. Junta a rajada de eventos numa consulta só. */
 const ESPERA_REFAZER = 250;
 
+/** A classificação do banco usa esta mesma zona. */
+function diaDoChat(agora = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit',
+  }).format(agora);
+}
+
 export interface UseChat {
   conversas:      ConversaChat[];
   disparos:       DisparoChat[];
@@ -110,6 +117,25 @@ export function useChat(
   }, [meuId, ativo]);
 
   useEffect(() => { void recarregar(); }, [recarregar]);
+
+  /*
+   * Se a janela atravessar a meia-noite, refaz a consulta uma única vez na
+   * virada. Não é cron e não consulta o banco a cada intervalo: o relógio só
+   * compara a chave local do dia; a RPC é chamada apenas quando ela muda.
+   * Quem abrir o chat depois da virada já recebe a classificação correta na
+   * carga inicial acima.
+   */
+  useEffect(() => {
+    if (!ativo || !meuId) return;
+    let dia = diaDoChat();
+    const relogio = window.setInterval(() => {
+      const atual = diaDoChat();
+      if (atual === dia) return;
+      dia = atual;
+      void recarregar();
+    }, 15_000);
+    return () => window.clearInterval(relogio);
+  }, [ativo, meuId, recarregar]);
 
   // ── Refazer a lista, sem repetir na rajada ─────────────────────────────────
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);

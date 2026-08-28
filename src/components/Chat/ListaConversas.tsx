@@ -1,13 +1,13 @@
 /**
- * ListaConversas.tsx — as duas abas da coluna esquerda.
+ * ListaConversas.tsx — as três abas da coluna esquerda.
  *
  * «Conversas» é a lista de sempre. «Disparos» existe para que mandar a mesma
  * mensagem para vinte pessoas não vire vinte linhas aqui — dezenove das quais
  * ninguém responde. Quem responder aparece em «Conversas» naquele instante; o
  * resto fica registrado ali do lado, e a lista continua servindo para conversar.
  *
- * Quem decide o que aparece é o banco (`oculta_em`), não esta tela: ela pede as
- * minhas conversas e desenha o que vier.
+ * «Histórico» recebe o que não teve atividade válida hoje. A classificação já
+ * vem do banco no horário de São Paulo; esta tela apenas separa a lista única.
  */
 import { useCallback, useState } from 'react';
 import { ChevronDown, Loader2, MessageSquarePlus, Plus, Search, Trash2 } from 'lucide-react';
@@ -26,7 +26,7 @@ import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
 
-type Aba = 'conversas' | 'disparos';
+type Aba = 'conversas' | 'historico' | 'disparos';
 
 interface Props {
   conversas:   ConversaChat[];
@@ -215,33 +215,42 @@ export function ListaConversas({
   const podeIniciar = niveisLiberados('chat', temPermissao).length > 0
     && cargosChatLiberados(temPermissao).length > 0;
 
+  const atuais = conversas.filter(c => !c.em_historico);
+  const historico = conversas.filter(c => c.em_historico);
+  const listaDaAba = aba === 'historico' ? historico : atuais;
   const filtradas = busca.trim()
-    ? conversas.filter(c =>
+    ? listaDaAba.filter(c =>
         c.outro_nome.toLowerCase().includes(busca.trim().toLowerCase())
         || (c.outro_usuario ?? '').toLowerCase().includes(busca.trim().toLowerCase()))
-    : conversas;
+    : listaDaAba;
 
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Abas */}
-      <div className="relative flex items-center px-2 pr-10 pt-2 shrink-0">
-        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden">
-          {(['conversas', 'disparos'] as const).map(a => (
+      <div className={cn(
+        'relative flex items-center px-2 pt-2 shrink-0',
+        aba === 'historico' ? 'pr-2' : 'pr-10',
+      )}>
+        <div className="grid min-w-0 flex-1 grid-cols-3 gap-0.5 overflow-hidden rounded-lg bg-muted/35 p-0.5">
+          {(['conversas', 'historico', 'disparos'] as const).map(a => (
             <button
               key={a} onClick={() => setAba(a)}
               className={cn(
-                'min-w-0 truncate text-xs font-medium px-2.5 py-1.5 rounded-lg transition-colors',
-                aba === a ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground',
+                'min-w-0 truncate rounded-md px-1.5 py-1.5 text-[11px] font-medium transition-colors',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                aba === a
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {a === 'conversas' ? 'Conversas' : 'Disparos'}
+              {a === 'conversas' ? 'Conversas' : a === 'historico' ? 'Histórico' : 'Disparos'}
               {a === 'disparos' && disparos.length > 0 && (
                 <span className="ml-1 opacity-60">{disparos.length}</span>
               )}
             </button>
           ))}
         </div>
-        {podeIniciar && (
+        {podeIniciar && aba !== 'historico' && (
           <Button variant="ghost" size="icon"
                   className="absolute right-2 top-2 z-20 h-7 w-7"
                   onClick={aba === 'conversas' ? onNovaConversa : onNovoDisparo}
@@ -251,7 +260,7 @@ export function ListaConversas({
         )}
       </div>
 
-      {aba === 'conversas' && (
+      {aba !== 'disparos' && (
         <div className="px-2 py-2 shrink-0">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -265,7 +274,7 @@ export function ListaConversas({
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {aba === 'conversas' ? (
+        {aba !== 'disparos' ? (
           <>
             {carregando && (
               <p className="text-center text-xs text-muted-foreground py-8">Carregando…</p>
@@ -273,9 +282,13 @@ export function ListaConversas({
             {!carregando && filtradas.length === 0 && (
               <div className="text-center py-10 px-4">
                 <p className="text-xs text-muted-foreground">
-                  {busca.trim() ? 'Ninguém com esse nome por aqui.' : 'Nenhuma conversa ainda.'}
+                  {busca.trim()
+                    ? 'Ninguém com esse nome por aqui.'
+                    : aba === 'historico'
+                      ? 'Nenhuma conversa no histórico.'
+                      : 'Nenhuma conversa hoje.'}
                 </p>
-                {!busca.trim() && podeIniciar && (
+                {!busca.trim() && aba === 'conversas' && podeIniciar && (
                   <Button variant="link" size="sm" className="text-xs mt-1" onClick={onNovaConversa}>
                     Começar uma
                   </Button>
@@ -357,8 +370,8 @@ export function ListaConversas({
                   Nenhum disparo ainda.
                 </p>
                 <p className="text-[11px] text-muted-foreground/70 mt-1.5 leading-relaxed">
-                  Mandar a mesma mensagem para várias pessoas não enche a lista
-                  de conversas. Quem responder aparece lá.
+                  Mandar a mesma mensagem para várias pessoas não reativa a
+                  lista. Uma resposta ou mensagem manual abre a conversa.
                 </p>
                 {podeIniciar && (
                   <Button variant="link" size="sm" className="text-xs mt-1" onClick={onNovoDisparo}>

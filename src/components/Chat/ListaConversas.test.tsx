@@ -61,6 +61,8 @@ describe('ListaConversas', () => {
       outro_usuario: 'ana',
       outro_foto: null,
       ultima_mensagem_em: '2026-08-26T10:00:00Z',
+      ultima_atividade_em: '2026-08-26T10:00:00Z',
+      em_historico: false,
       ultimo_texto: 'Mensagem muito grande '.repeat(80),
       ultimo_autor_id: 'p-1',
       nao_lidas: 7,
@@ -140,6 +142,7 @@ describe('ListaConversas', () => {
       id: 'c-status', outro_id: 'p-2', outro_nome: 'Bruno', outro_usuario: 'bruno',
       outro_foto: null, outro_empresa: null,
       ultima_mensagem_em: '2026-08-26T10:00:00Z',
+      ultima_atividade_em: '2026-08-26T10:00:00Z', em_historico: false,
       ultimo_texto: 'Recebeu?', ultimo_autor_id: 'eu', nao_lidas: 0,
       entrega_minha: '2026-08-26T09:00:00Z',
       entrega_do_outro: '2026-08-26T10:00:01Z',
@@ -149,5 +152,40 @@ describe('ListaConversas', () => {
     render(<ListaConversas {...baseProps} conversas={[conversa]} disparos={[]} />);
 
     expect(screen.getByRole('img', { name: 'Entregue' })).toBeInTheDocument();
+  });
+
+  it('separa conversas de hoje do histórico sem duplicar a lista', async () => {
+    const user = userEvent.setup();
+    const hoje: ConversaChat = {
+      id: 'c-hoje', outro_id: 'p-hoje', outro_nome: 'Hoje', outro_usuario: 'hoje',
+      outro_foto: null, outro_empresa: null,
+      ultima_mensagem_em: '2026-08-28T12:00:00Z',
+      ultima_atividade_em: '2026-08-28T12:00:00Z', em_historico: false,
+      ultimo_texto: 'Mensagem atual', ultimo_autor_id: 'p-hoje', nao_lidas: 0,
+      leitura_do_outro: null, entrega_minha: null, entrega_do_outro: null,
+    };
+    const antiga: ConversaChat = {
+      ...hoje,
+      id: 'c-antiga', outro_id: 'p-antiga', outro_nome: 'Antiga', outro_usuario: 'antiga',
+      ultima_mensagem_em: '2026-08-27T12:00:00Z',
+      ultima_atividade_em: '2026-08-27T12:00:00Z', em_historico: true,
+      ultimo_texto: 'Mensagem anterior',
+    };
+
+    render(<ListaConversas {...baseProps} conversas={[hoje, antiga]} disparos={[]} />);
+
+    expect(screen.getByText('Hoje')).toBeInTheDocument();
+    expect(screen.queryByText('Antiga')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Histórico' }));
+    expect(screen.getByText('Antiga')).toBeInTheDocument();
+    expect(screen.queryByText('Hoje')).not.toBeInTheDocument();
+  });
+
+  it('mostra as abas na ordem Conversas, Histórico e Disparos', () => {
+    render(<ListaConversas {...baseProps} conversas={[]} disparos={[]} />);
+    const abas = screen.getAllByRole('button').filter(b =>
+      ['Conversas', 'Histórico', 'Disparos'].includes(b.textContent ?? ''));
+    expect(abas.map(a => a.textContent)).toEqual(['Conversas', 'Histórico', 'Disparos']);
   });
 });

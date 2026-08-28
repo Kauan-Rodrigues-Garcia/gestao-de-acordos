@@ -24,6 +24,7 @@ import type { ConversaChat, MensagemChat } from '@/services/chat/chat.service';
 const conversa: ConversaChat = {
   id: 'c-1', outro_id: 'ana', outro_nome: 'Ana', outro_usuario: 'ana',
   outro_foto: null, outro_empresa: null, ultima_mensagem_em: null,
+  ultima_atividade_em: null, em_historico: false,
   ultimo_texto: null, ultimo_autor_id: null, nao_lidas: 0,
   leitura_do_outro: null, entrega_minha: null, entrega_do_outro: null,
 };

@@ -398,7 +398,7 @@ export function BolhaChat() {
         onPronto={enviados => {
           toast({
             title: `Enviado para ${enviados} ${enviados === 1 ? 'pessoa' : 'pessoas'}`,
-            description: 'Quem responder aparece na sua lista de conversas.',
+            description: 'Uma resposta ou mensagem manual reativa a conversa.',
           });
           chat.recarregar();
         }}

@@ -71,6 +71,10 @@ export interface ConversaChat {
   outro_usuario:      string | null;
   outro_foto:         string | null;
   ultima_mensagem_em: string | null;
+  /** Última mensagem que realmente reativou esta lista (disparo próprio não conta). */
+  ultima_atividade_em: string | null;
+  /** Calculado no banco pela meia-noite de America/Sao_Paulo. */
+  em_historico:       boolean;
   /** Prévia da última mensagem, para a lista não precisar de uma consulta por linha. */
   ultimo_texto:       string | null;
   ultimo_autor_id:    string | null;
@@ -213,7 +217,8 @@ export async function listarConversas(): Promise<ConversaChat[]> {
   const { data, error } = await rpcSemTipo<{
     id: string; outro_id: string; outro_nome: string; outro_usuario: string | null;
     outro_foto: string | null; outro_empresa: string | null;
-    ultima_mensagem_em: string | null; ultimo_texto: string | null;
+    ultima_mensagem_em: string | null; ultima_atividade_em: string | null;
+    em_historico: boolean; ultimo_texto: string | null;
     ultimo_anexos: AnexoChat[] | null; ultimo_autor_id: string | null;
     nao_lidas: number; leitura_do_outro: string | null;
     entrega_minha: string | null; entrega_do_outro: string | null;
@@ -233,6 +238,8 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       outro_usuario:      c.outro_usuario,
       outro_foto:         c.outro_foto,
       ultima_mensagem_em: c.ultima_mensagem_em,
+      ultima_atividade_em: c.ultima_atividade_em,
+      em_historico:       c.em_historico === true,
       // Sem texto e com anexo, a prévia vira «Foto», «Áudio», «2 arquivos».
       ultimo_texto:       c.ultimo_texto ?? (anexos.length ? rotuloAnexo(anexos) : null),
       ultimo_autor_id:    c.ultimo_autor_id,
@@ -283,6 +290,8 @@ export async function buscarConversa(
     outro_usuario:      c.outro_usuario,
     outro_foto:         c.outro_foto,
     ultima_mensagem_em: c.ultima_mensagem_em,
+    ultima_atividade_em: c.ultima_mensagem_em,
+    em_historico:       false,
     ultimo_texto:       null,
     ultimo_autor_id:    null,
     nao_lidas:          0,
