@@ -705,7 +705,7 @@ export function AcordoNovoInline({
     if (!acordoParaParcela) return;
     setSalvandoParcela(true);
     try {
-      const r = await adicionarParcelasAoGrupo(acordoParaParcela, inputs, { isPaguePlay, modo: 'proxima' });
+      const r = await adicionarParcelasAoGrupo(acordoParaParcela, inputs, { isPaguePlay });
       // `'erro' in r`, e não `!r.ok`: o tsconfig roda com `strict: false` e o
       // TypeScript não estreita união por discriminante booleano.
       if ('erro' in r) { toast.error(r.erro); return; }

@@ -78,7 +78,7 @@ function payloadNovaParcela(
  * `nao_pago` encerrou (e já liberou o NR).
  *
  * É o que decide se uma parcela nova deve virar registro agora — ver
- * `adicionarParcelasAoGrupo`, modo `'proxima'`.
+ * `adicionarParcelasAoGrupo`, que materializa somente a próxima parcela.
  */
 export function temParcelaEmAberto(
   linhas: readonly { status?: string | null }[],
@@ -192,21 +192,10 @@ export async function adicionarParcelaAoGrupo(
  * virtuais. A regra da operação é que exista **uma parcela em aberto por vez**:
  * a próxima só vira registro quando a atual for quitada e reagendada.
  *
- * Daí os dois modos:
- *
- * | `modo` | Total declarado | Linhas criadas |
- * |---|---|---|
- * | `'todas'` (padrão) | +N | as N |
- * | `'proxima'` | +N | **1** se o grupo não tem parcela em aberto; **0** se tem |
- *
- * `'todas'` é usado por `aplicarQuantidade`, onde o operador está justamente
- * editando quais linhas existem. `'proxima'` é o botão "Adicionar parcela":
- * antes ele gravava as 10 de uma vez, o que enchia o acordo de parcelas em
- * aberto e contrariava o resto do sistema.
- *
- * Em `'todas'`, a inserção é UM comando e não um laço de N: com 10 parcelas,
- * um laço que falhasse na 6ª deixaria o grupo com metade das linhas e um
- * contador N/N mentindo. Ou entram todas, ou não entra nenhuma.
+ * O total declarado recebe o lote inteiro, mas no banco nasce no máximo UMA
+ * linha: a próxima, e somente quando o grupo não possui parcela pendente. Isso
+ * vale igualmente para "Adicionar parcela" e para aumentar a quantidade na
+ * edição do acordo. As demais continuam virtuais até a anterior ser quitada.
  *
  * Cada linha recebe seu próprio `numero_parcela`, seguindo o maior já existente
  * no grupo — as parcelas do lote não colidem entre si nem com as antigas.
@@ -214,7 +203,7 @@ export async function adicionarParcelaAoGrupo(
 export async function adicionarParcelasAoGrupo(
   acordoBase: Acordo,
   inputs: readonly NovaParcelaInput[],
-  opts: { isPaguePlay: boolean; modo?: 'todas' | 'proxima' },
+  opts: { isPaguePlay: boolean },
 ): Promise<AdicionarLoteResultado> {
   if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
   if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
@@ -242,16 +231,17 @@ export async function adicionarParcelasAoGrupo(
   // é ele que faz as parcelas que faltam aparecerem como virtuais no detalhe.
   const novoTotal = Math.max(novoNumero + inputs.length - 1, totalAtual);
 
-  // Quantas viram registro AGORA. No modo 'proxima', só a próxima — e só se
-  // não houver parcela em aberto: com uma pendente, adicionar outra criaria
-  // duas cobranças vivas ao mesmo tempo.
+  // Quantas viram registro AGORA: só a próxima — e só se não houver parcela
+  // em aberto. Não existe mais um modo que materializa o lote inteiro: deixar
+  // essa saída disponível foi o que permitiu a edição 1→15 criar 14 cobranças
+  // futuras de uma vez.
   //
   // O grupo pode ainda não ter linha nenhuma no banco (acordo de uma parcela
   // só, sem `acordo_grupo_id` até agora), então o status da base entra na
   // conta junto com o das linhas lidas.
-  const aInserir = opts.modo === 'proxima'
-    ? (temParcelaEmAberto([...linhas, acordoBase]) ? [] : inputs.slice(0, 1))
-    : inputs;
+  const aInserir = temParcelaEmAberto([...linhas, acordoBase])
+    ? []
+    : inputs.slice(0, 1);
 
   let novas: Acordo[] = [];
   if (aInserir.length > 0) {
@@ -296,9 +286,8 @@ export async function adicionarParcelasAoGrupo(
     }
   }
 
-  // Espelha no par Direto↔Extra as parcelas que de fato entraram — no modo
-  // 'proxima' espelhar as 10 criaria no par o que não existe deste lado. A
-  // falha de um espelho não desfaz o lote (para operador comum a RLS pode
+  // Espelha no par Direto↔Extra somente a parcela que de fato entrou. A falha
+  // de um espelho não desfaz a inclusão (para operador comum o RLS pode
   // recusar).
   if (acordoBase.vinculo_operador_id) {
     for (const input of aInserir) {
@@ -311,68 +300,6 @@ export async function adicionarParcelasAoGrupo(
   }
 
   return { ok: true, novasParcelas: novas, novoTotal };
-}
-
-export interface ParcelaNumerada extends NovaParcelaInput {
-  /** Posição EXATA no acordo — não é continuação do maior número existente. */
-  numero: number;
-}
-
-export type CriarNumeradasResultado =
-  | { ok: true; criadas: Acordo[] }
-  | { ok: false; erro: string };
-
-/**
- * Cria parcelas em posições determinadas do acordo.
- *
- * Diferente de `adicionarParcelasAoGrupo`, que empilha no fim: aqui o número de
- * cada parcela vem de fora. É o caso da tela de editar parcelas, onde um acordo
- * de 17 parcelas com 2 linhas no banco mostra as 15 que faltam — e materializar
- * a 9ª tem de gravar 9, não "a próxima da fila".
- *
- * O total (`parcelas`) NÃO muda: essas parcelas já eram contadas pelo acordo,
- * só não existiam como registro.
- */
-export async function criarParcelasNumeradas(
-  acordoBase: Acordo,
-  entradas: readonly ParcelaNumerada[],
-  opts: { camposExtras?: Record<string, unknown> } = {},
-): Promise<CriarNumeradasResultado> {
-  if (!acordoBase?.id)        return { ok: false, erro: 'Acordo base não informado' };
-  if (!acordoBase.empresa_id) return { ok: false, erro: 'Acordo sem empresa vinculada' };
-  if (!entradas.length)       return { ok: false, erro: 'Nenhuma parcela para criar' };
-  for (const p of entradas) {
-    if (!(p.numero > 0))  return { ok: false, erro: 'Parcela sem número válido' };
-    if (!p.vencimento)    return { ok: false, erro: `Parcela ${p.numero}: informe o vencimento` };
-    if (!(p.valor > 0))   return { ok: false, erro: `Parcela ${p.numero}: informe um valor válido` };
-  }
-
-  const grupo = await garantirGrupo(acordoBase);
-  if ('erro' in grupo) return { ok: false, erro: grupo.erro };
-
-  const total = Math.max(
-    acordoBase.parcelas ?? 1,
-    ...entradas.map(p => p.numero),
-  );
-
-  const payloads = entradas.map(p => ({
-    ...payloadNovaParcela(acordoBase, p, grupo.grupoId, p.numero, total),
-    // Entrada e afins vêm por fora: `payloadNovaParcela` zera `valor_total`
-    // porque parcela avulsa fica fora de rateio, e no acordo com entrada esse
-    // campo é do GRUPO inteiro.
-    ...(opts.camposExtras ?? {}),
-  }));
-
-  const { data, error } = await supabase
-    .from('acordos')
-    .insert(payloads as never)
-    .select('*, perfis(id, nome, email, perfil, setor_id)');
-  if (error) return { ok: false, erro: `Erro ao criar parcelas: ${error.message}` };
-
-  const criadas: Acordo[] = Array.isArray(data)
-    ? data as Acordo[]
-    : (data ? [data as Acordo] : []);
-  return { ok: true, criadas };
 }
 
 /**

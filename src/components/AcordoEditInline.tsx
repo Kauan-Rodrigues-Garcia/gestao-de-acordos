@@ -898,7 +898,7 @@ export function AcordoEditInline({
                   {!isPaguePlay && editandoParcelas && parcelasNumAtual !== (acordo.parcelas ?? 1) && (
                     <p className="text-[10px] text-amber-700 dark:text-amber-400 leading-tight">
                       {parcelasNumAtual > (acordo.parcelas ?? 1)
-                        ? 'Ao salvar, as parcelas que faltam são criadas seguindo as datas do acordo.'
+                        ? 'Ao salvar, o total muda; cada parcela será registrada somente após a anterior ser quitada.'
                         : 'Ao salvar, as parcelas acima desse número são apagadas (com confirmação).'}
                     </p>
                   )}

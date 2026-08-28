@@ -29,7 +29,6 @@ import {
 } from '@/lib/money';
 import { camposDeEntradaAposEdicao } from '@/services/entradaSincronizada';
 import { montarLinhasEditaveis } from '@/services/linhasParcelas';
-import { criarParcelasNumeradas } from '@/services/parcelas.service';
 import { _TIPO_LABELS_BK } from './helpers';
 
 interface ModalEditarParceladoProps {
@@ -54,8 +53,6 @@ type ParcRow = {
   vencimento: string;
   valor:      string;
   tipo:       Acordo['tipo'];
-  /** Virtual que foi editada: vira registro ao salvar. */
-  criar:      boolean;
 };
 
 export function ModalEditarAcordoParcelado({
@@ -79,7 +76,8 @@ export function ModalEditarAcordoParcelado({
    *
    * O acordo declara `parcelas` mas pode ter menos linhas: um acordo de 17 com
    * duas registradas mostrava duas para editar. As que faltam entram na lista
-   * com data e valor calculados e viram registro se a pessoa mexer nelas.
+   * com data e valor calculados, somente para visualização. Elas serão
+   * registradas uma por vez quando a anterior for quitada.
    */
   function preencher(registrosDoGrupo: Acordo[]) {
     const valoresComEntrada = temEntrada(acordo) && acordo.parcelas
@@ -113,7 +111,6 @@ export function ModalEditarAcordoParcelado({
       vencimento: l.vencimento,
       valor:      l.valor.toFixed(2).replace('.', ','),
       tipo:       l.tipo as Acordo['tipo'],
-      criar:      false,
     })));
   }
 
@@ -142,16 +139,15 @@ export function ModalEditarAcordoParcelado({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, acordo.id, acordo.acordo_grupo_id, registrosReais?.length]);
 
-  /** Editar uma linha que ainda não existe é o mesmo que pedir para criá-la. */
   function updateRow(
     chave: string, field: 'vencimento' | 'valor' | 'tipo', value: string,
   ) {
     setParcRows(prev => prev.map(r => r.chave === chave
-      ? { ...r, [field]: value, criar: r.id === null ? true : r.criar }
+      ? (r.id === null ? r : { ...r, [field]: value })
       : r));
   }
 
-  const editaveis = parcRows.filter(r => r.id !== null || r.vencimento);
+  const editaveis = parcRows.filter(r => r.id !== null);
   const todasMarcadas = editaveis.length > 0 && selecionadas.length === editaveis.length;
 
   function alternarSelecao(chave: string) {
@@ -179,7 +175,6 @@ export function ModalEditarAcordoParcelado({
           vencimento: loteData || r.vencimento,
           valor:      loteValor.trim() || r.valor,
           tipo:       (loteTipo || r.tipo) as Acordo['tipo'],
-          criar:      r.id === null ? true : r.criar,
         }
       : r));
     toast.success(`Aplicado a ${selecionadas.length} parcela(s). Salve para gravar.`);
@@ -206,9 +201,9 @@ export function ModalEditarAcordoParcelado({
 
   async function handleSave() {
     if (!parcRows.length) { toast.error('Nenhuma parcela para salvar.'); return; }
-    // Só o que vai ao banco é conferido: linha virtual intocada continua
-    // virtual, e cobrar vencimento dela travaria o salvamento à toa.
-    const paraGravar = parcRows.filter(r => r.id !== null || r.criar);
+    // Parcela virtual nunca é gravada por esta tela. A próxima nasce somente
+    // pelo fluxo de quitação/reagendamento da parcela anterior.
+    const paraGravar = parcRows.filter(r => r.id !== null);
     for (const row of paraGravar) {
       const valorNum = parseCurrencyInput(row.valor);
       if (isNaN(valorNum) || valorNum <= 0) { toast.error(`Valor inválido na parcela ${row.numero}`); return; }
@@ -240,29 +235,8 @@ export function ModalEditarAcordoParcelado({
         if (errP) { toast.error(`Erro parcela ${row.numero}: ${errP.message}`); return; }
       }
 
-      // Parcelas que a pessoa editou e que ainda não existiam: nascem agora,
-      // na posição certa (a 9ª grava 9, não "a próxima da fila").
-      const novas = paraGravar.filter(r => r.id === null);
-      let criadas: Acordo[] = [];
-      if (novas.length) {
-        const r = await criarParcelasNumeradas(
-          acordo,
-          novas.map(n => ({
-            numero:     n.numero,
-            vencimento: n.vencimento,
-            valor:      parseCurrencyInput(n.valor),
-            tipo:       n.tipo,
-            status:     'verificar_pendente',
-          })),
-          { camposExtras: camposGrupo },
-        );
-        if ('erro' in r) { toast.error(r.erro); return; }
-        criadas = r.criadas;
-      }
-
       const atualizadas: Acordo[] = paraGravar.map(row => {
-        const real = registros.find(r => r.id === row.id)
-          ?? criadas.find(c => (c.numero_parcela ?? 1) === row.numero);
+        const real = registros.find(r => r.id === row.id);
         return {
           ...(real ?? acordo),
           ...camposGrupo,
@@ -287,9 +261,7 @@ export function ModalEditarAcordoParcelado({
         });
       }
 
-      toast.success(criadas.length
-        ? `Parcelas atualizadas — ${criadas.length} criada(s).`
-        : 'Parcelas atualizadas!');
+      toast.success('Parcelas registradas atualizadas!');
       onSaved(atualizadas);
       onClose();
     } finally {
@@ -333,8 +305,8 @@ export function ModalEditarAcordoParcelado({
             <p className="text-[11px] text-muted-foreground bg-muted/40 border border-border rounded-md px-2.5 py-1.5">
               Este acordo tem <strong>{parcRows.length}</strong> parcelas, mas{' '}
               <strong>{parcRows.filter(r => r.id === null).length}</strong> ainda não existem como
-              registro. Elas aparecem com data e valor calculados: editar uma delas cria a parcela
-              ao salvar. As que você não mexer continuam como estão.
+              registro. Elas aparecem apenas como previsão e serão registradas uma por vez,
+              depois que a parcela anterior for quitada.
             </p>
           )}
 
@@ -409,7 +381,7 @@ export function ModalEditarAcordoParcelado({
               className={cn(
                 'flex items-center gap-2 bg-muted/30 rounded-lg px-3 py-2 border transition-colors',
                 selecionadas.includes(row.chave) ? 'border-primary/60 bg-primary/5' : 'border-border/40',
-                row.id === null && !row.criar && 'opacity-70 border-dashed',
+                row.id === null && 'opacity-70 border-dashed',
                 !row.vencimento && row.id === null && 'opacity-50',
               )}
             >
@@ -417,7 +389,7 @@ export function ModalEditarAcordoParcelado({
                 type="checkbox"
                 checked={selecionadas.includes(row.chave)}
                 onChange={() => alternarSelecao(row.chave)}
-                disabled={row.id === null && !row.vencimento}
+                disabled={row.id === null}
                 aria-label={`Selecionar parcela ${row.numero}`}
                 className="h-3.5 w-3.5 accent-primary cursor-pointer shrink-0"
               />
@@ -429,17 +401,10 @@ export function ModalEditarAcordoParcelado({
               )}
               {row.id === null && (
                 <span
-                  title={row.criar
-                    ? 'Vai ser criada ao salvar'
-                    : 'Ainda não existe como registro — editar cria ao salvar'}
-                  className={cn(
-                    'text-[9px] font-semibold uppercase tracking-wide rounded px-1 py-0.5 shrink-0 border',
-                    row.criar
-                      ? 'text-primary bg-primary/15 border-primary/30'
-                      : 'text-muted-foreground bg-muted border-border',
-                  )}
+                  title="Será registrada depois que a parcela anterior for quitada"
+                  className="text-[9px] font-semibold uppercase tracking-wide rounded px-1 py-0.5 shrink-0 border text-muted-foreground bg-muted border-border"
                 >
-                  {row.criar ? 'criar' : 'não registrada'}
+                  previsão
                 </span>
               )}
               <div className="flex-1 space-y-0.5">
@@ -448,6 +413,7 @@ export function ModalEditarAcordoParcelado({
                   onChange={(v) => updateRow(row.chave, 'vencimento', v)}
                   label="Vencimento"
                   size="sm"
+                  disabled={row.id === null}
                   placeholder="Paga antes da tabulação"
                 />
               </div>
@@ -457,6 +423,7 @@ export function ModalEditarAcordoParcelado({
                   value={row.valor}
                   onChange={e => updateRow(row.chave, 'valor', e.target.value)}
                   inputMode="decimal"
+                  disabled={row.id === null}
                   className="h-7 text-xs font-mono"
                 />
               </div>
@@ -465,6 +432,7 @@ export function ModalEditarAcordoParcelado({
                 <Select
                   value={row.tipo}
                   onValueChange={v => updateRow(row.chave, 'tipo', v)}
+                  disabled={row.id === null}
                 >
                   <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>

@@ -256,7 +256,7 @@ describe('adicionarParcelaAoGrupo — validações', () => {
   });
 });
 
-// ── Modo 'proxima': declarar não é materializar ──────────────────────────────
+// ── Materialização incremental: declarar não é registrar tudo ────────────────
 //
 // O botão "Adicionar parcela" gravava as N linhas de uma vez. Errado: o sistema
 // mantém UMA parcela em aberto por vez, e a próxima só vira registro quando a
@@ -282,7 +282,7 @@ describe('temParcelaEmAberto', () => {
   });
 });
 
-describe("adicionarParcelasAoGrupo — modo 'proxima'", () => {
+describe('adicionarParcelasAoGrupo — materialização incremental', () => {
   const dez = Array.from({ length: 10 }, (_, i) => ({
     vencimento: `2026-0${i < 3 ? 8 : 9}-1${i % 10}`,
     valor: 100, tipo: 'boleto', status: 'verificar_pendente',
@@ -291,7 +291,7 @@ describe("adicionarParcelasAoGrupo — modo 'proxima'", () => {
   it('base PAGA: declara as 10 e materializa só 1', async () => {
     routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'pago' }], error: null };
     const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'pago' }), dez, {
-      isPaguePlay: false, modo: 'proxima',
+      isPaguePlay: false,
     });
     if ('erro' in r) throw new Error(r.erro);
 
@@ -307,7 +307,7 @@ describe("adicionarParcelasAoGrupo — modo 'proxima'", () => {
   it('base EM ABERTO: declara as 10 e não materializa nenhuma', async () => {
     routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente' }], error: null };
     const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'verificar_pendente' }), dez, {
-      isPaguePlay: false, modo: 'proxima',
+      isPaguePlay: false,
     });
     if ('erro' in r) throw new Error(r.erro);
 
@@ -322,17 +322,17 @@ describe("adicionarParcelasAoGrupo — modo 'proxima'", () => {
     routes.selectGrupo  = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'verificar_pendente' }], error: null };
     routes.updateAcordo = { data: null, error: { message: 'permission denied' } };
     const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'verificar_pendente' }), dez, {
-      isPaguePlay: false, modo: 'proxima',
+      isPaguePlay: false,
     });
     expect('erro' in r).toBe(true);
   });
 
-  it("modo padrão ('todas') segue gravando o lote inteiro — é o alterar quantidade", async () => {
+  it('alterar quantidade também materializa somente a próxima parcela', async () => {
     routes.selectGrupo = { data: [{ id: 'a-entrada', numero_parcela: 1, parcelas: 1, status: 'pago' }], error: null };
     const r = await adicionarParcelasAoGrupo(makeAcordo({ status: 'pago' }), dez, { isPaguePlay: false });
     if ('erro' in r) throw new Error(r.erro);
 
     const inserts = supabaseCalls.filter(c => c.table === 'acordos' && c.op === 'insert');
-    expect(Array.isArray(inserts[0].payload) ? inserts[0].payload.length : 1).toBe(10);
+    expect(Array.isArray(inserts[0].payload) ? inserts[0].payload.length : 1).toBe(1);
   });
 });

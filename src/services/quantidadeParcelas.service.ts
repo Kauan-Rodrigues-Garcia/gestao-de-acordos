@@ -79,6 +79,8 @@ export async function aplicarQuantidade(
   const removidas: string[] = [];
 
   if (plano.acao === 'criar') {
+    // Aumentar 1→15 declara o total 15, mas materializa no máximo a próxima.
+    // Com uma parcela pendente, nenhuma futura entra antes da hora.
     const r = await adicionarParcelasAoGrupo(acordo, plano.inputs, { isPaguePlay: opts.isPaguePlay });
     if ('erro' in r) return { ok: false, erro: r.erro };
     criadas.push(...r.novasParcelas);
