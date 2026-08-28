@@ -62,8 +62,8 @@ export function PorPessoa() {
   const catalogo = useMemo(() => catalogoDoTenant(tenantSlug), [tenantSlug]);
   const grupos   = useMemo(() => gruposDoTenant(tenantSlug), [tenantSlug]);
   const { blocos } = useMemo(
-    () => montarPorAba(catalogo, grupos),
-    [catalogo, grupos],
+    () => montarPorAba(catalogo, grupos, tenantSlug),
+    [catalogo, grupos, tenantSlug],
   );
 
   /** Quantas exceções cada pessoa tem — vira o contador da lista. */

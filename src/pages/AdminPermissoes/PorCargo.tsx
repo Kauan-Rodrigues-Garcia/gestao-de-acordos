@@ -58,8 +58,8 @@ export function PorCargo() {
    * alcance em outro e as ações num terceiro.
    */
   const { blocos } = useMemo(
-    () => montarPorAba(catalogo, grupos),
-    [catalogo, grupos],
+    () => montarPorAba(catalogo, grupos, tenantSlug),
+    [catalogo, grupos, tenantSlug],
   );
 
   const acessoTotal = (CARGOS_ACESSO_TOTAL as readonly string[]).includes(cargo);

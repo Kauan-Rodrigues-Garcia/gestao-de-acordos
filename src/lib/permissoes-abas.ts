@@ -41,6 +41,8 @@ interface DefinicaoModulo {
   interruptor: string;
   escopo?: AbaEscopada;
   grupos?: readonly GrupoPermissao[];
+  /** Grupos técnicos que mudam de card conforme a tela real de cada empresa. */
+  gruposPorTenant?: Partial<Record<TenantSlug, readonly GrupoPermissao[]>>;
   chaves?: readonly string[];
   tenants?: readonly TenantSlug[];
 }
@@ -53,6 +55,10 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'dashboard', rotulo: 'Dashboard', interruptor: 'ver_dashboard', escopo: 'dashboard',
     descricao: 'Tela inicial e os dados exibidos nela.', grupos: ['Dashboard'],
+    // Na PaguePlay, cadastrar e administrar acordos acontece dentro do próprio
+    // Dashboard. As chaves continuam estáveis; só aparecem no card da tela em
+    // que a pessoa realmente executa essas ações.
+    gruposPorTenant: { pagueplay: ['Acordos'] },
   },
   {
     id: 'ouvidoria', rotulo: 'Ouvidoria', interruptor: 'ver_ouvidoria', tenants: ['pagueplay'],
@@ -118,9 +124,7 @@ export const MODULOS_PERMISSAO: readonly DefinicaoModulo[] = [
   {
     id: 'analitico', rotulo: 'Analítico', interruptor: 'ver_analitico', escopo: 'analitico',
     descricao: 'Relatórios, ranking, recebimento diário e conferências.',
-    // Na PaguePlay a tabulação de acordo vive dentro do Analítico. Na BookPlay
-    // essas chaves já foram consumidas antes pelo card Acordos.
-    grupos: ['Analítico', 'Acordos', 'Filtros e visão'],
+    grupos: ['Analítico', 'Filtros e visão'],
     chaves: [
       'importar_analitico', 'importar_diario',
       'ajuste_recebimento_lancar', 'ajuste_recebimento_administrar',
@@ -223,7 +227,17 @@ const SECOES_ANALITICO: Record<string, string> = {
   desafios_configurar: 'Desafios',
 };
 
+const SECOES_DASHBOARD: Record<string, string> = {
+  criar_acordos: 'Acordos',
+  editar_acordos: 'Acordos',
+  excluir_acordos: 'Acordos',
+  excluir_em_lote: 'Acordos',
+  acordos_autorizar_tabulacao: 'Acordos',
+  acordos_capturar_erp: 'Acordos',
+};
+
 function secaoDaPermissao(modulo: ModuloPermissaoId, chave: string): string {
+  if (modulo === 'dashboard') return SECOES_DASHBOARD[chave] ?? 'Dashboard';
   if (modulo === 'usuarios') return SECOES_USUARIOS[chave] ?? 'Usuários';
   if (modulo === 'configuracoes') return SECOES_CONFIG[chave] ?? 'Configurações';
   if (modulo === 'analitico') return SECOES_ANALITICO[chave] ?? 'Relatório';
@@ -234,6 +248,7 @@ function secaoDaPermissao(modulo: ModuloPermissaoId, chave: string): string {
 export function montarPorAba(
   catalogo: PermissaoMeta[],
   gruposNaOrdem: readonly GrupoPermissao[],
+  tenantSlug?: string | null,
 ): LeituraPorAba {
   const porChave = new Map(catalogo.map(p => [p.key, p]));
   const consumidas = new Set<string>();
@@ -253,10 +268,16 @@ export function montarPorAba(
     niveis.forEach(p => consumidas.add(p.key));
 
     const chavesNominais = new Set(modulo.chaves ?? []);
+    const gruposDoModulo = new Set<GrupoPermissao>(modulo.grupos ?? []);
+    if (tenantSlug === 'bookplay' || tenantSlug === 'pagueplay') {
+      for (const grupo of modulo.gruposPorTenant?.[tenantSlug] ?? []) {
+        gruposDoModulo.add(grupo);
+      }
+    }
     const acoes = catalogo.filter(p =>
       p.key !== interruptor.key
       && !niveis.some(n => n.key === p.key)
-      && ((modulo.grupos ?? []).includes(p.grupo) || chavesNominais.has(p.key))
+      && (gruposDoModulo.has(p.grupo) || chavesNominais.has(p.key))
       && !consumidas.has(p.key));
     acoes.forEach(p => consumidas.add(p.key));
 
