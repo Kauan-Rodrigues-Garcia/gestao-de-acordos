@@ -34,7 +34,7 @@ CREATE INDEX IF NOT EXISTS idx_acordos_instituicao
   WHERE instituicao IS NOT NULL;`;
 
 export default function AdminConfiguracoes() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') ?? 'geral';
   const [modelos, setModelos] = useState<ModeloMensagem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,6 +84,12 @@ export default function AdminConfiguracoes() {
     podeVerMultiempresa && 'multiempresa',
   ].filter((aba): aba is string => Boolean(aba));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
+  const selecionarAba = (aba: string) => {
+    if (!abasVisiveis.includes(aba)) return;
+    const novosParametros = new URLSearchParams(searchParams);
+    novosParametros.set('tab', aba);
+    setSearchParams(novosParametros, { replace: true });
+  };
 
   // ── Schema status ─────────────────────────────────────────────────────────
   const [schemaStatus, setSchemaStatus] = useState<'checking' | 'ok' | 'missing'>('checking');
@@ -203,7 +209,7 @@ export default function AdminConfiguracoes() {
       </div>
 
       {/* Abas internas */}
-      {tabAtiva ? <Tabs value={tabAtiva} className="flex-1 flex flex-col">
+      {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
             {podeVerGeral && <TabsTrigger

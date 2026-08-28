@@ -77,7 +77,7 @@ interface UserForm {
 type PerfilComClone = Perfil & { _cloneDe?: string | null };
 
 export default function AdminUsuarios() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get('tab') ?? 'usuarios';
   const { perfil: perfilAtual } = useAuth();
   const { empresa: empresaAtual } = useEmpresa();
@@ -138,6 +138,12 @@ export default function AdminUsuarios() {
     podeVerComemoracoes && 'comemoracoes',
   ].filter((aba): aba is string => Boolean(aba));
   const tabAtiva = abasVisiveis.includes(tabFromUrl) ? tabFromUrl : abasVisiveis[0];
+  const selecionarAba = (aba: string) => {
+    if (!abasVisiveis.includes(aba)) return;
+    const novosParametros = new URLSearchParams(searchParams);
+    novosParametros.set('tab', aba);
+    setSearchParams(novosParametros, { replace: true });
+  };
   const [usuarios,    setUsuarios]    = useState<Perfil[]>([]);
   const [setores,     setSetores]     = useState<Setor[]>([]);
   const [empresas,    setEmpresas]    = useState<Empresa[]>([]);
@@ -677,7 +683,7 @@ export default function AdminUsuarios() {
         </div>
       </div>
 
-      {tabAtiva ? <Tabs value={tabAtiva} className="flex-1 flex flex-col">
+      {tabAtiva ? <Tabs value={tabAtiva} onValueChange={selecionarAba} className="flex-1 flex flex-col">
         <div className="px-6 border-b border-border">
           <TabsList className="h-10 bg-transparent p-0 gap-0">
             {podeVerUsuarios && <TabsTrigger
