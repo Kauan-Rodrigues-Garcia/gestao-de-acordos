@@ -49,6 +49,7 @@ const LOGS: LogSistema[] = [
     origem: 'trigger',
     criado_em: '2026-08-12T14:30:00.000Z',
     empresa_id: 'emp-1',
+    ip: '177.10.20.30',
     // Sem `perfis`: o autor foi desligado e a junção não traz mais nada. O nome
     // tem de vir da própria linha.
   },
@@ -137,6 +138,20 @@ vi.mock('@/services/logs.service', () => ({
   LOGS_POR_PAGINA: 50,
   RESUMO_VAZIO: {},
 }));
+
+vi.mock('@/services/ipLocalizacao.service', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@/services/ipLocalizacao.service')>();
+  return {
+    ...original,
+    buscarLocalizacoesIps: vi.fn().mockResolvedValue({
+      '177.10.20.30': {
+        ip: '177.10.20.30', cidade: 'Marília', estado: 'São Paulo', estadoCodigo: 'SP',
+        pais: 'Brasil', paisCodigo: 'BR', consultadoEm: '2026-08-12T14:31:00.000Z',
+        aproximada: true,
+      },
+    }),
+  };
+});
 
 vi.mock('@/hooks/useLogs', async (importOriginal) => {
   // As funções puras (`intervaloDoPeriodo`, `PERIODO_LABEL`) continuam as reais:
@@ -278,6 +293,15 @@ describe('AdminLogs 2.0 — detalhe do evento', () => {
     fireEvent.click(screen.getByText(/Mudou o status do acordo NR 12345/));
     await waitFor(() => {
       expect(screen.getByText(/perfil deste autor não existe mais/)).toBeInTheDocument();
+    });
+  });
+
+  it('mostra a localização aproximada junto do IP', async () => {
+    render(<AdminLogs />);
+    fireEvent.click(screen.getByText(/Mudou o status do acordo NR 12345/));
+    await waitFor(() => {
+      expect(screen.getByText('Localização aproximada')).toBeInTheDocument();
+      expect(screen.getByText('Marília, SP')).toBeInTheDocument();
     });
   });
 

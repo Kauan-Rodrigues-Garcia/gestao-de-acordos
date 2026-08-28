@@ -2013,6 +2013,48 @@ export type Database = {
           },
         ]
       }
+      ip_localizacoes: {
+        Row: {
+          cidade: string | null
+          consultado_em: string | null
+          estado: string | null
+          estado_codigo: string | null
+          expira_em: string
+          ip: unknown
+          pais: string | null
+          pais_codigo: string | null
+          status: string
+          ultima_tentativa_em: string
+          ultimo_erro: string | null
+        }
+        Insert: {
+          cidade?: string | null
+          consultado_em?: string | null
+          estado?: string | null
+          estado_codigo?: string | null
+          expira_em?: string
+          ip: unknown
+          pais?: string | null
+          pais_codigo?: string | null
+          status?: string
+          ultima_tentativa_em?: string
+          ultimo_erro?: string | null
+        }
+        Update: {
+          cidade?: string | null
+          consultado_em?: string | null
+          estado?: string | null
+          estado_codigo?: string | null
+          expira_em?: string
+          ip?: unknown
+          pais?: string | null
+          pais_codigo?: string | null
+          status?: string
+          ultima_tentativa_em?: string
+          ultimo_erro?: string | null
+        }
+        Relationships: []
+      }
       menu_lateral_ordem: {
         Row: {
           atualizado_em: string

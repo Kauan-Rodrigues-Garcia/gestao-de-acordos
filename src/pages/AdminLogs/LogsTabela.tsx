@@ -17,15 +17,19 @@ import { descreverAcao, campoLabel, formatarValorLog, origemLabel, normalizarDes
 import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
 import { dataHoraCompleta, tempoRelativo } from './formatos';
 import { Vazio } from './LogsTimeline';
+import { rotuloLocalizacaoIp, type LocalizacoesPorIp } from '@/services/ipLocalizacao.service';
 
 interface Props {
   logs: LogSistema[];
   onAbrir: (log: LogSistema) => void;
   idDestacado?: string | null;
   mostrarEmpresa: boolean;
+  localizacoesIp?: LocalizacoesPorIp;
 }
 
-export default function LogsTabela({ logs, onAbrir, idDestacado, mostrarEmpresa }: Props) {
+export default function LogsTabela({
+  logs, onAbrir, idDestacado, mostrarEmpresa, localizacoesIp = {},
+}: Props) {
   if (logs.length === 0) return <Vazio />;
 
   return (
@@ -124,9 +128,16 @@ export default function LogsTabela({ logs, onAbrir, idDestacado, mostrarEmpresa 
                 <Td>
                   <span className="text-[10px] text-muted-foreground">{origemLabel(log.origem)}</span>
                   {log.ip && (
-                    <span className="block text-[10px] font-mono text-muted-foreground/50" title={log.ip}>
-                      {log.ip}
-                    </span>
+                    <>
+                      {rotuloLocalizacaoIp(localizacoesIp[log.ip]) && (
+                        <span className="block text-[10px] text-foreground/70">
+                          {rotuloLocalizacaoIp(localizacoesIp[log.ip])}
+                        </span>
+                      )}
+                      <span className="block text-[10px] font-mono text-muted-foreground/50" title={log.ip}>
+                        {log.ip}
+                      </span>
+                    </>
                   )}
                 </Td>
               </tr>

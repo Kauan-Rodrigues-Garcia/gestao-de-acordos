@@ -33,6 +33,7 @@ import {
 import { fetchHistoricoRegistro } from '@/services/logs.service';
 import { SeloCategoria, SeloSeveridade, AvatarAutor } from './comum';
 import { iconeDaCategoria, dataHoraCompleta, tempoRelativo } from './formatos';
+import { rotuloLocalizacaoIp, type LocalizacaoIp } from '@/services/ipLocalizacao.service';
 
 interface Props {
   log: LogSistema | null;
@@ -42,9 +43,12 @@ interface Props {
   onFiltrarCampo: (campo: string) => void;
   /** Filtra pelo autor deste evento. */
   onFiltrarAutor: (usuarioId: string) => void;
+  localizacaoIp?: LocalizacaoIp;
 }
 
-export default function LogDetalhe({ log, aberto, onFechar, onFiltrarCampo, onFiltrarAutor }: Props) {
+export default function LogDetalhe({
+  log, aberto, onFechar, onFiltrarCampo, onFiltrarAutor, localizacaoIp,
+}: Props) {
   const [historico, setHistorico] = useState<LogSistema[]>([]);
   const [carregandoHistorico, setCarregandoHistorico] = useState(false);
   const [historicoAberto, setHistoricoAberto] = useState(false);
@@ -233,6 +237,13 @@ export default function LogDetalhe({ log, aberto, onFechar, onFiltrarCampo, onFi
               <Linha icone={User} termo="Origem" valor={origemLabel(log.origem)} />
               {log.rota && <Linha icone={Route} termo="Rota" valor={log.rota} mono />}
               {log.ip && <Linha icone={Globe} termo="IP" valor={log.ip} mono />}
+              {rotuloLocalizacaoIp(localizacaoIp) && (
+                <Linha
+                  icone={Globe}
+                  termo="Localização aproximada"
+                  valor={rotuloLocalizacaoIp(localizacaoIp) as string}
+                />
+              )}
               {log.user_agent && (
                 <Linha icone={Monitor} termo="Navegador" valor={log.user_agent} truncar />
               )}

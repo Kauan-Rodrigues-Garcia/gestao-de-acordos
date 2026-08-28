@@ -63,6 +63,9 @@ import MonitoramentoUso from './MonitoramentoUso';
 import UsuariosOnline from './UsuariosOnline';
 import { numeroBr, tempoRelativo } from './formatos';
 import { useSubAbaUso } from '@/providers/RastreioUsoProvider';
+import {
+  buscarLocalizacoesIps, type LocalizacoesPorIp,
+} from '@/services/ipLocalizacao.service';
 
 type Vista = 'timeline' | 'tabela';
 /** Trilha = o que mudou. Uso = quem está usando. Ver o comentário nas abas. */
@@ -90,6 +93,20 @@ export default function AdminLogs() {
   const [selecionado, setSelecionado] = useState<LogSistema | null>(null);
   const [exportando, setExportando] = useState(false);
   const [expurgoAberto, setExpurgoAberto] = useState(false);
+  const [localizacoesIp, setLocalizacoesIp] = useState<LocalizacoesPorIp>({});
+
+  const ipsVisiveis = useMemo(
+    () => [...new Set(logs.map(log => log.ip).filter((ip): ip is string => Boolean(ip)))].sort(),
+    [logs],
+  );
+
+  useEffect(() => {
+    let ativo = true;
+    buscarLocalizacoesIps(ipsVisiveis).then(localizacoes => {
+      if (ativo) setLocalizacoesIp(localizacoes);
+    });
+    return () => { ativo = false; };
+  }, [ipsVisiveis]);
 
   // A própria tela é medida: `admin/configuracoes:logs` ou `:uso`. Sem isto, as
   // duas abas internas apareceriam somadas como uma só no monitoramento.
@@ -373,6 +390,7 @@ export default function AdminLogs() {
               onAbrir={setSelecionado}
               idDestacado={selecionado?.id ?? null}
               mostrarEmpresa={mostrarEmpresa}
+              localizacoesIp={localizacoesIp}
             />
           </motion.div>
         )}
@@ -425,6 +443,7 @@ export default function AdminLogs() {
         onFechar={() => setSelecionado(null)}
         onFiltrarCampo={(campo) => setFiltro('campo', campo)}
         onFiltrarAutor={(id) => setFiltro('usuarioId', id)}
+        localizacaoIp={selecionado?.ip ? localizacoesIp[selecionado.ip] : undefined}
       />
 
       </>
