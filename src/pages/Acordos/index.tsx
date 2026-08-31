@@ -197,14 +197,22 @@ export default function Acordos() {
       if (filtroTipo)   params.set('tipo',   filtroTipo);   else params.delete('tipo');
       if (filtroData)   params.set('data',   filtroData);   else params.delete('data');
       if (filtroOperador) params.set('operador', filtroOperador); else params.delete('operador');
-      if (activeTab !== 'todos') params.set('tab', activeTab); else params.delete('tab');
+      // O Pix Automático é uma aba como as outras para quem olha a tela, mas
+      // mora em `pixAba`, fora da união de `activeTab`. Enquanto só `activeTab`
+      // alimentava a URL, entrar no Pix APAGAVA o `tab=pix` 400 ms depois — e
+      // qualquer remontagem (voltar de outro app, refresh do token, realtime
+      // reconectando) relia a URL sem `pix` e devolvia a pessoa para "Todos"
+      // sozinha. A aba agora só sai quando alguém clica em outra.
+      if (pixAba)                    params.set('tab', 'pix');
+      else if (activeTab !== 'todos') params.set('tab', activeTab);
+      else                            params.delete('tab');
       if (filtroVinculo !== 'todos') params.set('vinculo', filtroVinculo); else params.delete('vinculo');
       if (filtroTag && filtroTag !== 'all') params.set('tag', filtroTag); else params.delete('tag');
       params.set('page', currentPage.toString());
       setSearchParams(params);
     }, 400);
     return () => clearTimeout(timer);
-  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, filtroVinculo, filtroTag, currentPage, setSearchParams]);
+  }, [busca, filtroStatus, filtroTipo, filtroData, filtroOperador, activeTab, pixAba, filtroVinculo, filtroTag, currentPage, setSearchParams]);
 
   const statusFiltro = filtroStatus && filtroStatus !== 'all'
     ? filtroStatus

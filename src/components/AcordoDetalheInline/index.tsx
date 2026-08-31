@@ -33,6 +33,7 @@ import {
   calcularParcelas, foiUsadoQuarentaPct, valorDemaisParcelas, calcularParcelasComEntrada,
 } from '@/lib/money';
 import { isTipoParcelado, addMonths } from './helpers';
+import { datasDoLote } from '@/lib/vencimentos';
 import { ModalExtraParaDireto } from './ModalExtraParaDireto';
 
 // Re-export for external consumers. O detalhe não abre mais o modal de
@@ -517,15 +518,45 @@ export function AcordoDetalheInline({
   })();
 
   type LinhaTabela = { index: number; real: Acordo | null; dataCalc: string; };
-  // Âncora: primeira parcela REAL do grupo (acordos vindos do analítico podem
-  // nascer no meio do plano — ex.: 4ª de 12; as anteriores são virtuais pagas).
+  // Âncora de fallback: primeira parcela REAL do grupo (acordos vindos do
+  // analítico podem nascer no meio do plano — ex.: 4ª de 12; as anteriores são
+  // virtuais pagas).
   const numeroBase = registrosReais[0]?.numero_parcela ?? acordoLocal.numero_parcela ?? 1;
   const vencBase   = registrosReais[0]?.vencimento ?? acordoLocal.vencimento;
+
+  /**
+   * Data de uma parcela ainda não materializada.
+   *
+   * Conta a partir da última parcela REAL anterior a ela, não da primeira do
+   * grupo. Era esse o bug: um acordo de 1x que venceu dia 28 e recebeu mais 10
+   * parcelas com a primeira em 01/09 mostrava 28/10, 28/11, ... — a série
+   * inteira continuava ancorada no 28 da parcela paga, ignorando a data que o
+   * operador tinha acabado de escolher. Ancorando na parcela anterior, a
+   * escolha se propaga: 01/09 leva a 01/10, 01/11, ...
+   *
+   * Usa `datasDoLote` (a mesma regra do modal de adicionar e do reagendamento)
+   * em vez de `addMonths`, para a linha virtual mostrar exatamente a data que
+   * a parcela vai receber quando nascer. De quebra respeita o fim de mês da
+   * PaguePlay e satura mês curto — `addMonths` produzia "31 de fevereiro".
+   */
+  function dataDaLinha(index: number): string {
+    // `.at(-1)` não está no lib do tsconfig deste projeto.
+    const anteriores = registrosReais
+      .filter(r => (r.numero_parcela ?? 1) < index)
+      .sort((a, b) => (a.numero_parcela ?? 1) - (b.numero_parcela ?? 1));
+    const anterior = anteriores[anteriores.length - 1];
+    const base    = anterior?.vencimento ?? vencBase;
+    const numBase = anterior?.numero_parcela ?? numeroBase;
+    const passos  = index - numBase;
+    if (!base) return '';
+    if (passos <= 0) return addMonths(base, passos);
+    return datasDoLote(base, passos + 1, isPaguePlay)[passos] ?? '';
+  }
+
   const linhas: LinhaTabela[] = Array.from({ length: totalParcelas }, (_, i) => {
     const index = i + 1;
     const real  = registrosReais.find(r => (r.numero_parcela ?? 1) === index) ?? null;
-    const dataCalc = addMonths(vencBase, index - numeroBase);
-    return { index, real, dataCalc };
+    return { index, real, dataCalc: dataDaLinha(index) };
   });
 
   return (
