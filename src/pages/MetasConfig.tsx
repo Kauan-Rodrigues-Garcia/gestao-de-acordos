@@ -25,6 +25,8 @@ import {
   type MetaValidacaoStatus,
 } from "@/services/metas/metasValidacao.service";
 import { listarClonesEquipes } from "@/services/equipes/equipesClones.service";
+import { limparAvisoDeFerias } from "@/services/situacaoUsuario.service";
+import { AvisoVoltouDeFerias } from "@/components/TagFerias";
 import {
   fetchDiretoExtraConfigs, resolverDiretoExtraAtivo, type DiretoExtraConfig,
 } from "@/services/direto_extra.service";
@@ -81,6 +83,16 @@ interface Operador {
   /** Nome do setor de origem quando o operador entra aqui como CLONE. A meta é
    *  a mesma nos dois setores — a linha em `metas` é por operador, sem setor. */
   clonadoDe?: string | null;
+  situacao?: string | null;
+  /**
+   * Rastro das últimas férias, para avisar quem define a meta.
+   *
+   * A meta é mensal e as férias não: quem esteve fora meia competência não
+   * entrega o mês cheio, e essa informação não aparece em lugar nenhum na hora
+   * de digitar o número — no fim do mês a meta está batida ou não, e ninguém
+   * lembra do motivo. Zerado ao salvar (`limparAvisoDeFerias`).
+   */
+  ferias_ate?: string | null;
 }
 interface MetaInput {
   meta_valor: string; meta_ho: string; extras: string[]; proporcional: boolean;
@@ -143,6 +155,8 @@ interface MetaRowProps {
   label: string;
   sublabel?: string;
   icon?: React.ReactNode;
+  /** Etiqueta ao lado do nome — hoje só o «esteve de férias». */
+  aviso?: React.ReactNode;
   input: MetaInput;
   onChangeValor: (v: string) => void;
   /** PaguePlay: campo Meta H.O. (24,96% do total, conversão bidirecional). */
@@ -170,7 +184,7 @@ interface MetaRowProps {
 }
 
 function MetaRow({
-  label, sublabel, icon, input, onChangeValor, mostrarHO, onChangeHO,
+  label, sublabel, icon, aviso, input, onChangeValor, mostrarHO, onChangeHO,
   numExtras = 0, onChangeExtra, disabled, proporcional, onChangeProporcional,
   permiteIndireta, onChangeIndiretaAtiva, onChangeIndireta, onChangeIndiretaHO,
 }: MetaRowProps) {
@@ -182,6 +196,7 @@ function MetaRow({
         <div className="min-w-0">
           <p className="text-sm font-medium truncate">{String(label ?? "")}</p>
           {sublabel && <p className="text-xs text-muted-foreground truncate">{sublabel}</p>}
+          {aviso && <div className="mt-0.5">{aviso}</div>}
         </div>
       </div>
       <div className="flex flex-1 flex-wrap items-center gap-2">
@@ -500,10 +515,11 @@ export default function MetasConfig() {
     if (!setorSelecionado) return;
     setLoadingOperadores(true);
     try {
-      const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id, setor_id")
+      const { data, error } = await supabase.from("perfis").select("id, nome, equipe_id, setor_id, situacao, ferias_ate")
         .eq("setor_id", setorSelecionado).in("perfil", ["operador", "elite"]).order("nome");
       if (error) throw error;
-      const proprios = (data ?? []).filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0);
+      const proprios = ((data ?? []) as unknown as Operador[])
+        .filter((o): o is Operador => typeof o?.id === "string" && o.id.length > 0);
       setOperadores([...proprios, ...(await buscarClonadosNoSetor(proprios))]);
     } catch (err: unknown) {
       toast.error("Erro ao carregar operadores", { description: err instanceof Error ? err.message : String(err) });
@@ -534,9 +550,9 @@ export default function MetasConfig() {
     if (!faltando.length) return [];
 
     const { data: perfisClonados } = await supabase.from("perfis")
-      .select("id, nome, setor_id").in("id", faltando)
+      .select("id, nome, setor_id, situacao, ferias_ate").in("id", faltando)
       .in("perfil", ["operador", "elite"]).order("nome");
-    const linhas = (perfisClonados ?? []) as { id: string; nome: string; setor_id: string | null }[];
+    const linhas = (perfisClonados ?? []) as unknown as { id: string; nome: string; setor_id: string | null; situacao?: string | null; ferias_ate?: string | null }[];
     if (!linhas.length) return [];
 
     // Nome do setor de origem para a etiqueta (o líder pode não ter esse setor carregado)
@@ -757,6 +773,31 @@ export default function MetasConfig() {
       if (payloads.length > 0) {
         const { salvos, bloqueados, error } = await upsertMetas(payloads);
         if (error) throw new Error(error);
+
+        /*
+         * O aviso «esteve de férias» morre aqui, e é o único lugar onde isso
+         * pode acontecer: ele existe para quem está digitando a meta, e a meta
+         * acabou de ser digitada. Só apaga de quem REALMENTE teve meta salva —
+         * um operador cuja linha foi bloqueada por setor validado continua
+         * precisando do aviso na próxima tentativa.
+         *
+         * Best-effort: falhar aqui não pode desfazer o salvamento das metas,
+         * que é o que a pessoa pediu. O pior caso é o aviso aparecer de novo.
+         */
+        const bloqueadosSet = new Set(bloqueados.map(b => b.referencia_id));
+        const comMetaSalva = payloads
+          .filter(p => p.tipo === 'operador' && !bloqueadosSet.has(p.referencia_id))
+          .map(p => p.referencia_id);
+        const paraLimpar = operadores
+          .filter(op => op.ferias_ate && comMetaSalva.includes(op.id))
+          .map(op => op.id);
+        if (paraLimpar.length > 0) {
+          try {
+            await limparAvisoDeFerias(paraLimpar);
+            setOperadores(atual => atual.map(op =>
+              paraLimpar.includes(op.id) ? { ...op, ferias_ate: null } : op));
+          } catch { /* o aviso reaparece na próxima abertura, e só */ }
+        }
         if (bloqueados.length > 0) {
           toast.warning(
             `${bloqueados.length} meta(s) não salva(s) — setor já validado.`,
@@ -1150,6 +1191,7 @@ export default function MetasConfig() {
                   <MetaRow key={op.id} label={String(op.nome ?? "")}
                     sublabel={op.clonadoDe ? `Operador · clone de ${op.clonadoDe} — meta compartilhada` : "Operador"}
                     icon={<User className="h-4 w-4" />}
+                    aviso={<AvisoVoltouDeFerias situacao={op.situacao} feriasAte={op.ferias_ate} />}
                     input={getInput(op.id)}
                     disabled={!podeGerenciarMetas || metaTravada}
                     mostrarHO={isPP}

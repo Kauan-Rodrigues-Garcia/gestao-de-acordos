@@ -11,6 +11,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { TagDesligado } from '@/components/TagDesligado';
+import { TagFerias } from '@/components/TagFerias';
 import {
   Users,
   Plus,
@@ -172,6 +173,10 @@ function OperadorChip({
       {/* Saiu, mas continua na equipe até a virada do mês: o recebimento dele é
           desta equipe no mês em que trabalhou. Ver a migration 20260831160000. */}
       <TagDesligado situacao={(operador as { situacao?: string | null }).situacao} />
+      <TagFerias
+        situacao={(operador as { situacao?: string | null }).situacao}
+        feriasAte={(operador as { ferias_ate?: string | null }).ferias_ate}
+      />
       <span className={`inline-flex items-center rounded-full border font-medium flex-shrink-0 ${compact ? 'text-[9px] px-1 py-0 h-3.5' : 'text-[10px] px-1.5 py-0 h-4'} ${cargoCss}`}>
         {cargoLabel}
       </span>
@@ -389,7 +394,7 @@ export default function AdminEquipes() {
 
       let operadoresQuery = supabase
         .from('perfis')
-        .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id, situacao')
+        .select('id, nome, email, perfil, setor_id, equipe_id, empresa_id, situacao, ferias_ate')
         .eq('empresa_id', empresaId)
         .in('perfil', ['operador', 'lider', 'elite'])
         .order('nome');
@@ -414,7 +419,9 @@ export default function AdminEquipes() {
       const setoresList = aplicarOrdemSetores(setoresRes.data ?? [], empresaId);
       setSetores(setoresList);
       setEquipes(equipesRes.data ?? []);
-      setOperadores(operadoresRes.data ?? []);
+      // `ferias_ate` ainda nao esta em database.types.ts (migration 20260901100000
+      // pendente): o PostgREST devolve a coluna, o tipo gerado nao a conhece.
+      setOperadores((operadoresRes.data ?? []) as unknown as Operador[]);
       const [clonesData, lideresData] = await Promise.all([
         listarClonesEquipes(empresaId),
         listarLideresEquipes(empresaId),

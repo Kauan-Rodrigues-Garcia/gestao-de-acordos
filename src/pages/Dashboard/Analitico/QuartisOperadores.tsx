@@ -71,6 +71,7 @@ import {
 import { SeletorUnidade } from '@/components/PainelMetas/SeletorUnidade';
 import { cn } from '@/lib/utils';
 import { TagDesligado } from '@/components/TagDesligado';
+import { TagFerias } from '@/components/TagFerias';
 import {
   getTodayISO, PERFIS_QUE_CONTAM_NO_RECEBIMENTO, PP_HO_PERCENTUAL,
 } from '@/lib/index';
@@ -118,6 +119,7 @@ interface PerfilOp {
   situacao?: string | null;
   arquivado?: boolean | null;
   desligado_em?: string | null;
+  ferias_ate?: string | null;
 }
 interface MetaOpRow {
   referencia_id: string;
@@ -581,7 +583,7 @@ export function QuartisOperadores({
            * porque a coluna é nula nas linhas antigas, e `arquivado <> true`
            * sozinho descartaria todas elas.
            */
-          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao, arquivado, desligado_em')
+          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao, arquivado, desligado_em, ferias_ate')
             .eq('empresa_id', empresaId)
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
             .or('ativo.eq.true,situacao.eq.desligado')
@@ -603,7 +605,7 @@ export function QuartisOperadores({
             .eq('empresa_id', empresaId),
         ]);
         if (cancelado) return;
-        setOperadores((ops as PerfilOp[]) ?? []);
+        setOperadores((ops as unknown as PerfilOp[]) ?? []);
         const mMap: Record<string, number> = {};
         const iMap: Record<string, number> = {};
         for (const m of (metasData as MetaOpRow[]) ?? []) {
@@ -941,6 +943,7 @@ export function QuartisOperadores({
                                   {l.op.nome}
                                 </span>
                                 <TagDesligado situacao={l.op.situacao} />
+                                <TagFerias situacao={l.op.situacao} feriasAte={l.op.ferias_ate} />
                                 {/* Sem este selo, a META e o RECEBIMENTO desta
                                     linha pareceriam errados para quem sabe a
                                     meta direta de cabeça. */}

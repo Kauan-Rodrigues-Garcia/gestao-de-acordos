@@ -32,7 +32,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ChevronDown } from 'lucide-react';
 import { supabase, createIsolatedAuthClient, Perfil, PerfilUsuario, Setor, Empresa, SituacaoUsuario } from '@/lib/supabase';
-import { definirSituacao, arquivarDesligadosAnteriores } from '@/services/situacaoUsuario.service';
+import { definirSituacao, arquivarDesligadosAnteriores, encerrarFeriasVencidas } from '@/services/situacaoUsuario.service';
 import { AdminDesligadosAba } from '@/pages/AdminDesligadosAba';
 import { buildAuthRedirectUrl } from '@/lib/tenant';
 import { fetchEmpresas } from '@/services/empresas.service';
@@ -221,6 +221,21 @@ export default function AdminUsuarios() {
     // Item 5: arquiva desligados de meses anteriores antes de listar (some da lista).
     const empAlvo = (!isSuperAdmin ? empresaAtual?.id : filtroEmpresa) ?? empresaAtual?.id;
     if (empAlvo) { try { await arquivarDesligadosAnteriores(empAlvo, { isPaguePlay: tenant.isPaguePlay }); } catch { /* best-effort */ } }
+    /*
+     * Devolve ao ativo quem passou da data de retorno — o `pg_cron` já faz isso
+     * às 00:15, e esta chamada cobre o dia em que ele não rodou. Barata e
+     * idempotente: o WHERE da função só encontra quem ainda está pendente.
+     */
+    if (empAlvo) {
+      try {
+        const voltaram = await encerrarFeriasVencidas(empAlvo);
+        if (voltaram > 0) {
+          toast.info(voltaram === 1
+            ? '1 pessoa voltou de férias e já aparece no analítico.'
+            : `${voltaram} pessoas voltaram de férias e já aparecem no analítico.`);
+        }
+      } catch { /* best-effort */ }
+    }
     let usuariosData: Perfil[] = [];
     try {
       let usersQuery = supabase
@@ -465,9 +480,35 @@ export default function AdminUsuarios() {
     } finally { setSalvandoSenha(false); }
   }
 
+  /*
+   * Férias precisa da data de retorno ANTES de gravar.
+   *
+   * Este estado é o pedido em espera: o dropdown não grava mais direto quando a
+   * escolha é "férias" — ele abre a caixa, e só o "Confirmar" dela chama
+   * `definirSituacao`. Sem isso a etiqueta nasceria sem prazo e voltaria a ser
+   * o estado sem fim que ninguém desliga.
+   */
+  const [feriasAlvo, setFeriasAlvo] = useState<Perfil | null>(null);
+  const [feriasAte, setFeriasAte]   = useState('');
+  const [salvandoFerias, setSalvandoFerias] = useState(false);
+
+  /** Amanhã, em 'yyyy-MM-dd'. Voltar hoje ou ontem não é férias. */
+  const minRetorno = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }, []);
+
   // Item 5: define a situação (ativo/férias/desligado) com efeitos colaterais.
   async function handleSituacao(u: Perfil, sit: SituacaoUsuario) {
     if ((u.situacao ?? 'ativo') === sit) return;
+    if (sit === 'ferias') {
+      // Semeia com o retorno anterior quando existe: renovação de férias é o
+      // caso comum, e o mês costuma ser o mesmo.
+      setFeriasAte(u.ferias_ate && u.ferias_ate >= minRetorno ? u.ferias_ate : '');
+      setFeriasAlvo(u);
+      return;
+    }
     const { error } = await definirSituacao(u.id, sit, {
       empresaId:   empresaAtual?.id ?? null,
       isPaguePlay: tenant.isPaguePlay,
@@ -475,10 +516,30 @@ export default function AdminUsuarios() {
     if (error) { toast.error('Erro ao alterar situação'); return; }
     toast.success(
       sit === 'ativo' ? 'Usuário marcado como ativo'
-      : sit === 'ferias' ? 'Usuário marcado como férias (sai de ranking e quartil)'
       : 'Usuário desligado (sem acesso; acordos liberados para retabulação)',
     );
     fetchDados();
+  }
+
+  async function confirmarFerias() {
+    if (!feriasAlvo || !feriasAte) return;
+    setSalvandoFerias(true);
+    try {
+      const { error } = await definirSituacao(feriasAlvo.id, 'ferias', {
+        empresaId:   empresaAtual?.id ?? null,
+        isPaguePlay: tenant.isPaguePlay,
+        feriasAte,
+      });
+      if (error) { toast.error(error); return; }
+      const [a, m, d] = feriasAte.split('-');
+      toast.success(
+        `${feriasAlvo.nome} está de férias até ${d}/${m}/${a}. `
+        + 'Volta ao normal sozinho no dia seguinte.',
+      );
+      setFeriasAlvo(null);
+      setFeriasAte('');
+      fetchDados();
+    } finally { setSalvandoFerias(false); }
   }
 
   // #6: excluir usuário direto do modal Editar.
@@ -905,6 +966,13 @@ export default function AdminUsuarios() {
                                     <button className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] font-medium transition-colors hover:bg-accent">
                                       <span className={cn('inline-flex w-2 h-2 rounded-full', SITU_DOT[u.situacao ?? 'ativo'])} />
                                       {SITU_LABEL[u.situacao ?? 'ativo']}
+                                      {/* A data faz o botão responder "até quando",
+                                          que é o que se pergunta em seguida. */}
+                                      {u.situacao === 'ferias' && u.ferias_ate && (
+                                        <span className="tabular-nums text-muted-foreground">
+                                          até {u.ferias_ate.slice(8, 10)}/{u.ferias_ate.slice(5, 7)}
+                                        </span>
+                                      )}
                                       <ChevronDown className="w-3 h-3 text-muted-foreground" />
                                     </button>
                                   </DropdownMenuTrigger>
@@ -1336,6 +1404,63 @@ export default function AdminUsuarios() {
           e.target.value = '';
         }}
       />
+
+      {/* ── Férias: a data de retorno é obrigatória ─────────────────────────
+          A caixa existe para que a etiqueta nunca nasça sem prazo. Antes dela,
+          marcar férias era um estado que só outra pessoa desfazia — e ninguém
+          desfazia, porque a falha é silenciosa: quem não volta simplesmente
+          não aparece no analítico. */}
+      <Dialog
+        open={!!feriasAlvo}
+        onOpenChange={o => { if (!o) { setFeriasAlvo(null); setFeriasAte(''); } }}
+      >
+        <DialogContent className="max-w-md" aria-describedby="dlg-ferias-desc">
+          <DialogHeader>
+            <DialogTitle>Marcar férias</DialogTitle>
+            <DialogDescription id="dlg-ferias-desc">
+              Quando <strong>{feriasAlvo?.nome}</strong> volta das férias?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="ferias-ate" className="text-xs">Último dia de férias</Label>
+              <Input
+                id="ferias-ate"
+                type="date"
+                value={feriasAte}
+                min={minRetorno}
+                onChange={e => setFeriasAte(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+              A etiqueta de férias vale até esse dia. No dia seguinte a situação
+              volta para <strong>ativo</strong> sozinha e a pessoa reaparece no
+              analítico — ninguém precisa lembrar de desligar.
+              <br />
+              Depois disso, a tela de <strong>Metas</strong> avisa que ela esteve
+              fora, até você configurar a próxima meta.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setFeriasAlvo(null); setFeriasAte(''); }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => void confirmarFerias()}
+              disabled={!feriasAte || feriasAte < minRetorno || salvandoFerias}
+            >
+              {salvandoFerias && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              Confirmar férias
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Recorte da foto antes do upload */}
       <ModalRecortarFoto

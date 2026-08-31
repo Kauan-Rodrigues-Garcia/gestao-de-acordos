@@ -403,7 +403,7 @@ export function AutorizacaoDock({ recuoEsquerda = 16 }: PropsDock = {}) {
       >
         {aberta ? <X className="w-4 h-4" /> : <ShieldQuestion className="w-4 h-4" />}
         <span className="text-xs font-semibold">
-          {qtd > 0 ? `${qtd} autorização${qtd > 1 ? 'ões' : ''}` : 'Autorizações'}
+          {qtd > 0 ? `${qtd} ${qtd > 1 ? 'autorizações' : 'autorização'}` : 'Autorizações'}
         </span>
         {qtd > 0 && !aberta && (
           <span className="w-2 h-2 rounded-full bg-primary-foreground animate-pulse" />

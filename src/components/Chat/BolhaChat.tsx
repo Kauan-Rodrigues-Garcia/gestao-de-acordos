@@ -59,8 +59,20 @@ export function BolhaChat() {
   const { toast } = useToast();
 
   const [aberto, setAberto] = useState(false);
+  /*
+   * Nasce GRANDE, desde 31/08/2026.
+   *
+   * A janela pequena era o padrão porque um chat de canto não deve tomar a
+   * tela sem ser convidado. Só que a lista de conversas não cabe nela: no
+   * tamanho menor a tela alterna entre lista e conversa, e quem abre o chat
+   * para responder alguém precisa de dois cliques só para chegar na pessoa.
+   *
+   * Por isso a comparação é `!== 'nao'` e não `=== 'sim'`: quem nunca decidiu
+   * nada (chave ausente) cai no grande; só quem clicou em diminuir — e ficou
+   * gravado o 'nao' — continua no pequeno.
+   */
   const [expandido, setExpandido] = useState(() => {
-    try { return localStorage.getItem(CHAVE_LARGURA) === 'sim'; } catch { return false; }
+    try { return localStorage.getItem(CHAVE_LARGURA) !== 'nao'; } catch { return true; }
   });
   const [novaConversa, setNovaConversa] = useState(false);
   const [novoDisparo, setNovoDisparo] = useState(false);

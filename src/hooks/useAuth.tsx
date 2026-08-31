@@ -244,6 +244,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Apenas SIGNED_IN (novo login) e SIGNED_OUT devem disparar side-effects.
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
       if (!mounted) return;
+
+      /*
+       * O Realtime precisa do token ANTES de qualquer outra coisa aqui.
+       *
+       * O walrus reavalia a RLS de cada linha do WAL no papel do assinante. Sem
+       * `setAuth`, o socket carrega a chave anônima até que o supabase-js
+       * resolva propagar a sessão sozinho — e nessa janela o papel é `anon`,
+       * que não tem GRANT nas funções do painel usadas pelas policies. O erro
+       * sobe de `apply_rls` para `list_changes` e derruba o lote de eventos de
+       * TODOS os assinantes, não só do anônimo (33 lotes perdidos em 24h, em
+       * 31/08/2026).
+       *
+       * Fica FORA dos `if` de evento de propósito: `TOKEN_REFRESHED` é
+       * justamente quando o token velho deixou de valer, e é o caso que mais
+       * some sozinho de madrugada. Chamar aqui não re-renderiza nada — não
+       * mexe em estado do React.
+       *
+       * O GRANT a `anon` da migration 20260901110000 cobre o mesmo buraco pelo
+       * outro lado. Os dois existem: este evita o papel errado, aquele evita
+       * que o papel errado derrube a replicação.
+       */
+      try { supabase.realtime.setAuth(s?.access_token ?? null); } catch { /* socket ainda não existe */ }
+
       // Só atualizamos session/user em eventos relevantes — assim o React não re-renderiza
       // o AuthProvider a cada refresh silencioso de token (que ocorre ao voltar para a aba).
       if (_event === 'SIGNED_OUT') {

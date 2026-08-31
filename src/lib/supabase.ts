@@ -128,6 +128,12 @@ export interface Perfil {
   desligado_em?: string | null;
   /** true após ser arquivado (desligado de mês anterior) — some das listas. */
   arquivado?: boolean | null;
+  /** 'yyyy-MM-dd' — primeiro dia de férias. Informativo. */
+  ferias_desde?: string | null;
+  /** 'yyyy-MM-dd' — ÚLTIMO dia de férias. Passando dele a situação volta a
+   *  'ativo' sozinha (pg_cron). Não é apagada no retorno: vira o aviso «esteve
+   *  de férias» na tela de Metas, que é quem zera. Ver 20260901100000. */
+  ferias_ate?: string | null;
   criado_em: string;
   atualizado_em: string;
   setores?: Setor;
