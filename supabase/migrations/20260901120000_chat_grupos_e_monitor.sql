@@ -342,7 +342,23 @@ AS $function$
      WHERE p.conversa_id = p_conversa
        AND p.perfil_id   = (SELECT auth.uid())
        AND p.saiu_em IS NULL
-       AND (NOT c.somente_lideranca OR p.admin)
+       AND (
+         NOT c.somente_lideranca
+         OR p.admin
+         /*
+          * A trava separa LIDERANÇA de OPERAÇÃO, não «o dono do grupo» de todo
+          * o resto — foi assim que ela nasceu e estava errado: um segundo líder
+          * convidado para o grupo ficava mudo, e a gerência também.
+          *
+          * Quem é liderança aqui é quem o painel deixa criar grupo. É a mesma
+          * régua, e ela é CONFIGURÁVEL: por padrão vale líder, elite, ouvidoria,
+          * gerência e diretoria, e o administrador muda isso na tela de Cargos
+          * sem ninguém tocar em SQL. Uma lista de cargos escrita aqui dentro
+          * seria o modelo antigo que este projeto passou agosto inteiro
+          * desmontando (ver o cabeçalho de permissoes-catalogo.ts).
+          */
+         OR public.fn_user_tem('chat_grupo_criar')
+       )
   );
 $function$;
 

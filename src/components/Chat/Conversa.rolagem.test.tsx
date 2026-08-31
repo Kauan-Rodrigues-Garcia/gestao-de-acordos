@@ -5,6 +5,12 @@ vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ perfil: { id: 'eu' } }),
 }));
 
+// A conversa pergunta ao painel quem escreve em grupo travado; o hook real
+// puxa EmpresaProvider, que este teste de rolagem nao monta.
+vi.mock('@/hooks/useCargoPermissoes', () => ({
+  useCargoPermissoes: () => ({ temPermissao: () => true, loading: false }),
+}));
+
 vi.mock('@/hooks/useGravadorAudio', () => ({
   useGravadorAudio: () => ({
     gravando: false, segundos: 0, erro: null, suportado: false,

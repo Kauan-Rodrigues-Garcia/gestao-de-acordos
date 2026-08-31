@@ -123,11 +123,20 @@ export async function listarMembros(conversaId: string): Promise<MembroGrupo[]> 
 export const LIMITE_FOTO_GRUPO = 5 * 1024 * 1024;
 
 /**
- * Sobe a foto do grupo e devolve a URL pública.
+ * Sobe a foto do grupo e devolve o CAMINHO dentro do balde.
  *
- * Vai para `grupos/<conversaId>/` no balde `chat`, e a policy de escrita do
- * storage confere `fn_chat_grupo_administro` a partir dessa segunda pasta —
- * é o caminho que autoriza, não um campo enviado pelo cliente.
+ * Caminho, e não URL — o balde `chat` é PRIVADO, o mesmo dos anexos e pelo
+ * mesmo motivo: conversa interna não fica em endereço público adivinhável.
+ * `getPublicUrl()` num balde privado devolve um endereço bem-formado e morto,
+ * e foi exatamente o que a primeira versão gravou: o navegador desenhava o
+ * ícone de imagem quebrada sem erro em lugar nenhum.
+ *
+ * Quem assina na hora de mostrar é `useFotoResolvida`, em `comum.tsx`, com o
+ * mesmo cache de `urlDoAnexo`.
+ *
+ * A policy de escrita confere `fn_chat_grupo_administro` a partir da SEGUNDA
+ * pasta do caminho — é o caminho que autoriza, não um campo enviado pelo
+ * cliente.
  */
 export async function subirFotoDoGrupo(
   conversaId: string, arquivo: File,
@@ -148,6 +157,5 @@ export async function subirFotoDoGrupo(
     .upload(caminho, arquivo, { upsert: true, contentType: arquivo.type });
   if (error) return { url: null, erro: error.message };
 
-  const { data } = supabase.storage.from('chat').getPublicUrl(caminho);
-  return { url: data.publicUrl, erro: null };
+  return { url: caminho, erro: null };
 }

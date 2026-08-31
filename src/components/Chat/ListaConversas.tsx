@@ -48,13 +48,18 @@ interface Props {
   /** Abre o diálogo de criar grupo. Ausente = sem permissão de criar. */
   onNovoGrupo?:   () => void;
   /**
-   * O painel de monitoria, desenhado pelo pai.
+   * A aba Monitor existe? Ela NÃO abre aqui dentro.
    *
-   * Chega pronto em vez de a lista montá-lo: a aba Monitor tem estado próprio
-   * (a pessoa escolhida, a conversa dela aberta) que não tem nada a ver com a
-   * lista de conversas e a poluiria. Ausente = a aba não existe.
+   * Monitoria tem duas colunas próprias — a lista de conversas da pessoa e a
+   * conversa aberta — e não cabe na coluna estreita da lista, que na janela
+   * compacta é a tela toda e na expandida tem 260 px. Renderizada aqui, ela
+   * empilhava as duas no mesmo lugar e simplesmente não abria no tamanho menor.
+   *
+   * Então o botão é só um GATILHO: clicar avisa o pai, que troca o corpo
+   * inteiro da janela pelo painel. Ausente = sem permissão, sem aba.
    */
-  painelMonitor?: React.ReactNode;
+  podeMonitorar?:  boolean;
+  onAbrirMonitor?: () => void;
 }
 
 interface CardDisparoProps {
@@ -216,7 +221,8 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
-  onAbrir, onApagar, onNovaConversa, onNovoDisparo, onNovoGrupo, painelMonitor,
+  onAbrir, onApagar, onNovaConversa, onNovoDisparo, onNovoGrupo,
+  podeMonitorar = false, onAbrirMonitor,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -237,7 +243,7 @@ export function ListaConversas({
    * ao passar (ou não) `painelMonitor`. Repetir a pergunta aqui seria uma
    * segunda régua de acesso para manter em dia.
    */
-  const ABAS: Aba[] = painelMonitor
+  const ABAS: Aba[] = podeMonitorar
     ? ['conversas', 'historico', 'disparos', 'monitor']
     : ['conversas', 'historico', 'disparos'];
   const ROTULO_ABA: Record<Aba, string> = {
@@ -287,7 +293,8 @@ export function ListaConversas({
         <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg bg-muted/35 p-0.5">
           {ABAS.map(a => (
             <button
-              key={a} onClick={() => setAba(a)}
+              // Monitor nao vira aba selecionada: ele troca a janela inteira.
+              key={a} onClick={() => (a === 'monitor' ? onAbrirMonitor?.() : setAba(a))}
               title={ROTULO_ABA[a]}
               className={cn(
                 'min-w-0 flex-1 basis-0 truncate rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',
@@ -344,11 +351,7 @@ export function ListaConversas({
         )}
       </div>
 
-      {aba === 'monitor' && (
-        <div className="min-w-0 flex-1 overflow-hidden min-h-0">{painelMonitor}</div>
-      )}
-
-      {aba !== 'disparos' && aba !== 'monitor' && (
+      {aba !== 'disparos' && (
         <div className="px-2 py-2 shrink-0">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -361,7 +364,6 @@ export function ListaConversas({
         </div>
       )}
 
-      {aba !== 'monitor' && (
       <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {aba !== 'disparos' ? (
           <>
@@ -486,7 +488,6 @@ export function ListaConversas({
           </>
         )}
       </div>
-      )}
     </div>
   );
 }

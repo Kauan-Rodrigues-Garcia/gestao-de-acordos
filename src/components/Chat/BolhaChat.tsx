@@ -81,6 +81,15 @@ export function BolhaChat() {
   const [novoGrupo, setNovoGrupo] = useState(false);
   /** Painel de configuracoes do grupo aberto. */
   const [configGrupo, setConfigGrupo] = useState(false);
+  /*
+   * A monitoria toma a JANELA INTEIRA, nao um pedaco da lista.
+   *
+   * Ela tem duas colunas proprias (as conversas da pessoa e a conversa aberta)
+   * e nao cabe na coluna da lista — que no tamanho compacto e a tela toda e no
+   * expandido tem 260 px. Dentro dela, a conversa monitorada abria por cima da
+   * lista e, no chat menor, nao abria de jeito nenhum.
+   */
+  const [modoMonitor, setModoMonitor] = useState(false);
   const [novoDisparo, setNovoDisparo] = useState(false);
   /** Mouse ou teclado em cima do botão — acende o brilho e os pontos. */
   const [sobre, setSobre] = useState(false);
@@ -364,6 +373,15 @@ export function BolhaChat() {
         </header>
 
         <div className="flex-1 min-h-0 flex">
+          {/* A monitoria substitui o corpo inteiro — lista e conversa. Ela tem
+              as próprias duas colunas e o próprio «voltar». */}
+          {modoMonitor ? (
+            <PainelMonitor
+              expandido={expandido}
+              onSair={() => setModoMonitor(false)}
+            />
+          ) : (
+          <>
           {mostraLista && (
             <div className={cn(
               // `min-w-0`: item de flex nao encolhe abaixo do conteudo sem isso,
@@ -384,7 +402,8 @@ export function BolhaChat() {
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
                 onNovoGrupo={podeCriarGrupo ? () => setNovoGrupo(true) : undefined}
-                painelMonitor={podeMonitorar ? <PainelMonitor expandido={expandido} /> : undefined}
+                podeMonitorar={podeMonitorar}
+                onAbrirMonitor={() => setModoMonitor(true)}
               />
             </div>
           )}
@@ -421,6 +440,8 @@ export function BolhaChat() {
             <div className="flex-1 flex items-center justify-center">
               <p className="text-xs text-muted-foreground">Escolha uma conversa</p>
             </div>
+          )}
+          </>
           )}
         </div>
       </div>

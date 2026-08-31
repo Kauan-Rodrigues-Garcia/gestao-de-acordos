@@ -22,6 +22,7 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { useToast } from '@/components/ui/use-toast';
 import {
   subirAnexo, curtirMensagem, curtidasDasMensagens, quemCurtiu, LIMITE_ANEXO,
@@ -32,6 +33,7 @@ import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service'
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat, AnexoNoBalao, EMOJIS, BalaoDigitando, EstiloEntrada, PlayerAudio,
+  useFotoResolvida,
   TagAdm,
   ANIMACAO_ENTRADA,
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
@@ -77,7 +79,23 @@ export function Conversa({
 }: Props) {
   const { perfil } = useAuth();
   const { toast } = useToast();
+  const { temPermissao } = useCargoPermissoes();
   const meuId = perfil?.id ?? '';
+
+  /*
+   * Grupo travado: quem escreve.
+   *
+   * A trava separa LIDERANÇA de OPERAÇÃO, não «o dono do grupo» de todo o
+   * resto — a primeira versão exigia ser administrador DAQUELE grupo, e com
+   * isso um segundo líder convidado ficava mudo. Liderança aqui é quem o painel
+   * deixa criar grupos: a mesma régua do banco (`fn_chat_posso_escrever`), e
+   * configurável na tela de Cargos.
+   *
+   * A tela só antecipa o resultado; quem recusa de verdade é a policy de
+   * INSERT. Se as duas divergirem, o campo aparece e a mensagem não sai — por
+   * isso as duas perguntam a mesma coisa.
+   */
+  const podeEscreverNoGrupo = conversa.sou_admin || temPermissao('chat_grupo_criar');
 
   const [texto, setTexto] = useState('');
   const [pendentes, setPendentes] = useState<File[]>([]);
@@ -351,17 +369,33 @@ export function Conversa({
     [membros],
   );
 
-  /** Cor estável por pessoa, como no WhatsApp — o olho separa antes de ler. */
+  /*
+   * Cor do nome no grupo — estável para a pessoa, diferente em cada grupo.
+   *
+   * A semente é `perfil_id + conversa_id`, e a segunda metade é o ponto: se a
+   * cor viesse só da pessoa, os mesmos quatro colegas apareceriam com as mesmas
+   * quatro cores em todo grupo, e dois grupos com quase os mesmos membros
+   * ficariam indistinguíveis de relance. Misturando o grupo, cada conversa
+   * ganha a própria paleta — e dentro dela a cor nunca muda, nem entre
+   * mensagens nem entre sessões, porque é uma conta e não um sorteio.
+   *
+   * A paleta é fixa e legível nos dois temas: cor sorteada de verdade cairia
+   * em amarelo sobre branco mais cedo ou mais tarde.
+   */
   const corDoAutor = useCallback((id: string) => {
     const paleta = [
-      'text-sky-600 dark:text-sky-400', 'text-emerald-600 dark:text-emerald-400',
+      'text-sky-600 dark:text-sky-400',     'text-emerald-600 dark:text-emerald-400',
       'text-violet-600 dark:text-violet-400', 'text-amber-600 dark:text-amber-400',
-      'text-rose-600 dark:text-rose-400', 'text-cyan-600 dark:text-cyan-400',
+      'text-rose-600 dark:text-rose-400',   'text-cyan-600 dark:text-cyan-400',
+      'text-fuchsia-600 dark:text-fuchsia-400', 'text-lime-600 dark:text-lime-400',
+      'text-orange-600 dark:text-orange-400', 'text-teal-600 dark:text-teal-400',
     ];
-    let soma = 0;
-    for (let i = 0; i < id.length; i++) soma = (soma + id.charCodeAt(i)) % 997;
-    return paleta[soma % paleta.length];
-  }, []);
+    const semente = `${id}:${conversa.id}`;
+    // djb2: espalha bem para textos curtos e é a mesma conta em toda máquina.
+    let h = 5381;
+    for (let i = 0; i < semente.length; i++) h = ((h << 5) + h + semente.charCodeAt(i)) >>> 0;
+    return paleta[h % paleta.length];
+  }, [conversa.id]);
 
   const curtir = useCallback(async (m: MensagemChat) => {
     if (somenteLeitura) return;   // monitor observa, não interage
@@ -764,7 +798,7 @@ export function Conversa({
           <Eye className="h-3.5 w-3.5 shrink-0" />
           Monitoramento em tempo real — somente leitura.
         </div>
-      ) : conversa.tipo === 'grupo' && conversa.somente_lideranca && !conversa.sou_admin ? (
+      ) : conversa.tipo === 'grupo' && conversa.somente_lideranca && !podeEscreverNoGrupo ? (
         <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-3 py-3 text-center text-xs text-muted-foreground">
           <Lock className="h-3.5 w-3.5 shrink-0" />
           Só a liderança pode enviar mensagens neste grupo.
@@ -1032,6 +1066,27 @@ function SeloDeCurtidas({
 }
 
 /**
+ * A miniatura do antes e do depois na troca de foto do grupo.
+ *
+ * O que está gravado é um CAMINHO no balde privado do chat, não uma URL — daí
+ * o `useFotoResolvida`, que assina na hora. Enquanto a assinatura não volta,
+ * desenha o lugar dela em cinza: um `<img>` sem `src` viraria o ícone de
+ * imagem quebrada, que é exatamente o defeito que esta migração corrigiu.
+ */
+function MiniFoto({
+  caminho, rotulo, apagada = false,
+}: { caminho: string; rotulo: string; apagada?: boolean }) {
+  const src = useFotoResolvida(caminho);
+  if (!src) return <span className="h-7 w-7 rounded-full bg-muted" aria-hidden="true" />;
+  return (
+    <img
+      src={src} alt={rotulo} title={rotulo}
+      className={cn('h-7 w-7 rounded-full object-cover', apagada && 'opacity-60')}
+    />
+  );
+}
+
+/**
  * O aviso cinza no meio da conversa: quem entrou, quem saiu, o que mudou.
  *
  * É uma MENSAGEM com `sistema` preenchido, e não uma tabela de eventos, porque
@@ -1078,9 +1133,9 @@ function AvisoDeSistema({
             do WhatsApp faz, e responde «que foto era?» sem abrir nada. */}
         {m.sistema === 'foto' && (antes || depois) && (
           <span className="mt-1 flex items-center justify-center gap-1.5">
-            {antes && <img src={antes} alt="Foto anterior" className="h-7 w-7 rounded-full object-cover opacity-60" />}
+            {antes && <MiniFoto caminho={antes} rotulo="Foto anterior" apagada />}
             {antes && depois && <span className="text-[10px]">→</span>}
-            {depois && <img src={depois} alt="Foto nova" className="h-7 w-7 rounded-full object-cover" />}
+            {depois && <MiniFoto caminho={depois} rotulo="Foto nova" />}
           </span>
         )}
         <span className="ml-1.5 opacity-60">{horaDoBalao(m.criado_em)}</span>

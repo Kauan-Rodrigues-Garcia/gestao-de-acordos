@@ -38,7 +38,7 @@ import {
   adicionarAoGrupo, subirFotoDoGrupo, type MembroGrupo,
 } from '@/services/chat/grupos.service';
 import { listarContatos, type ContatoChat, type ConversaChat } from '@/services/chat/chat.service';
-import { AvatarChat } from './comum';
+import { AvatarChat, useFotoResolvida } from './comum';
 
 interface Props {
   aberto:   boolean;
@@ -64,6 +64,8 @@ export function ConfigGrupoDialog({
   const [adicionando, setAdicionando] = useState(false);
   const [candidatos, setCandidatos] = useState<ContatoChat[]>([]);
   const inputFoto = useRef<HTMLInputElement>(null);
+  // O balde do chat e privado: o caminho gravado vira URL assinada aqui.
+  const fotoAtual = useFotoResolvida(conversa.outro_foto);
 
   const souAdmin = conversa.sou_admin;
   const podeEditar    = souAdmin && temPermissao('chat_grupo_editar');
@@ -148,8 +150,8 @@ export function ConfigGrupoDialog({
                 podeEditar ? 'hover:bg-muted' : 'cursor-not-allowed opacity-70',
               )}
             >
-              {conversa.outro_foto
-                ? <img src={conversa.outro_foto} alt="" className="h-full w-full object-cover" />
+              {fotoAtual
+                ? <img src={fotoAtual} alt="" className="h-full w-full object-cover" />
                 : <Camera className="h-5 w-5 text-muted-foreground" />}
             </button>
             <input
@@ -198,8 +200,9 @@ export function ConfigGrupoDialog({
                   <Lock className="h-3.5 w-3.5" /> Só a liderança escreve
                 </p>
                 <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Ligado, quem não administra o grupo continua LENDO tudo, mas o
-                  campo de escrita dá lugar a um aviso.
+                  Ligado, só a liderança escreve — quem opera continua LENDO
+                  tudo, e o campo de escrita dá lugar a um aviso. Liderança aqui
+                  é quem o painel deixa criar grupos.
                 </p>
               </div>
               <Switch

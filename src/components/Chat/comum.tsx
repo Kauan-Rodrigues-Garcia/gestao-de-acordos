@@ -12,6 +12,35 @@ import { cn } from '@/lib/utils';
 
 // ── Avatar ───────────────────────────────────────────────────────────────────
 
+/**
+ * A foto pronta para o `<img>`, venha ela de onde vier.
+ *
+ * Foto de PESSOA é uma URL pública inteira (`https://…/object/public/perfis/…`)
+ * e vai direto para a tag. Foto de GRUPO é um CAMINHO dentro do balde `chat`,
+ * que é privado — o mesmo balde dos anexos, e pelo mesmo motivo: conversa
+ * interna não fica em endereço público adivinhável.
+ *
+ * A primeira versão dos grupos gravou `getPublicUrl()` do balde privado, que
+ * devolve um endereço bem-formado e morto: o navegador desenhava o ícone de
+ * imagem quebrada, sem erro em lugar nenhum. Caminho que não começa com `http`
+ * passa a ser assinado aqui, com o mesmo cache de `urlDoAnexo`.
+ */
+export function useFotoResolvida(foto: string | null): string | null {
+  const [url, setUrl] = useState<string | null>(
+    foto && /^(https?:|data:|blob:)/i.test(foto) ? foto : null,
+  );
+
+  useEffect(() => {
+    if (!foto) { setUrl(null); return; }
+    if (/^(https?:|data:|blob:)/i.test(foto)) { setUrl(foto); return; }
+    let vivo = true;
+    void urlDoAnexo(foto).then(u => { if (vivo) setUrl(u); });
+    return () => { vivo = false; };
+  }, [foto]);
+
+  return url;
+}
+
 export function AvatarChat({
   nome, foto, tamanho = 36, online = false,
 }: {
@@ -19,11 +48,12 @@ export function AvatarChat({
 }) {
   const iniciais = nome.trim().split(/\s+/).slice(0, 2).map(p => p[0]).join('').toUpperCase();
   const estilo = { width: tamanho, height: tamanho };
+  const src = useFotoResolvida(foto);
 
   return (
     <div className="relative shrink-0" style={estilo}>
-      {foto ? (
-        <img src={foto} alt="" className="rounded-full object-cover w-full h-full" />
+      {src ? (
+        <img src={src} alt="" className="rounded-full object-cover w-full h-full" />
       ) : (
         <div
           className="rounded-full bg-muted flex items-center justify-center font-semibold text-muted-foreground w-full h-full"
