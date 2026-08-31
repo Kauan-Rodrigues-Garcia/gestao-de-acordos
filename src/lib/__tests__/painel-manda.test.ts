@@ -106,6 +106,10 @@ const EXCECOES: Record<string, Excecao> = {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'super_admin vê os logs das duas operações; administrador vê só a própria empresa.',
   },
+  'components/Chat/comum.tsx': {
+    linhas: 1, familia: 'chave-mestra',
+    motivo: 'a etiqueta ADM do chat ROTULA o super_admin, não libera nada — não há acesso a conceder, e uma chave de painel para "mostrar quem é o dono do sistema" seria uma permissão que ninguém deveria poder desligar.',
+  },
   'pages/AdminLogs/index.tsx': {
     linhas: 1, familia: 'chave-mestra',
     motivo: 'idem useLogs: o seletor de empresa da trilha só existe para super_admin.',

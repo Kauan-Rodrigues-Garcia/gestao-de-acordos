@@ -75,6 +75,8 @@ export interface ConversaChat {
   outro_nome:         string;
   outro_usuario:      string | null;
   outro_foto:         string | null;
+  /** Cargo do outro. A tela usa so para marcar o super_admin com "ADM". */
+  outro_perfil:       string | null;
   ultima_mensagem_em: string | null;
   /** Última mensagem que realmente reativou esta lista (disparo próprio não conta). */
   ultima_atividade_em: string | null;
@@ -227,6 +229,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
     ultimo_anexos: AnexoChat[] | null; ultimo_autor_id: string | null;
     nao_lidas: number; leitura_do_outro: string | null;
     entrega_minha: string | null; entrega_do_outro: string | null;
+    outro_perfil: string | null;
   }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
@@ -253,6 +256,7 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       entrega_minha:      c.entrega_minha,
       entrega_do_outro:   c.entrega_do_outro,
       outro_empresa:      c.outro_empresa,
+      outro_perfil:       c.outro_perfil ?? null,
     };
   });
 }
@@ -304,6 +308,10 @@ export async function buscarConversa(
     entrega_minha:      null,
     entrega_do_outro:   null,
     outro_empresa:      c.outro_empresa,
+    // `fn_chat_uma_conversa` nao devolve o cargo, e esta funcao so cobre a
+    // conversa recem-criada: a etiqueta ADM aparece no primeiro refresh da
+    // lista, segundos depois. Nao vale uma RPC nova por isso.
+    outro_perfil:       null,
   };
 }
 

@@ -450,3 +450,31 @@ export const EMOJIS = [
   '😮', '😎', '🥳', '😴', '🤝', '👀', '💡', '⚠️',
   '❤️', '⭐', '📌', '📎', '📊', '💰', '⏰', '🚀',
 ] as const;
+
+/**
+ * Etiqueta "ADM" — quem é super_admin.
+ *
+ * Vermelha e ao lado do nome, nos dois lugares em que o nome da pessoa
+ * aparece: a linha da lista e o cabeçalho da conversa aberta. É informação de
+ * AUTORIDADE, não de status: serve para quem recebe uma cobrança pelo chat
+ * saber de imediato de onde ela vem.
+ *
+ * Só `super_admin`. Administrador comum não recebe etiqueta — se recebesse,
+ * quase toda a gestão teria uma, e uma marca que quase todos têm não marca
+ * ninguém.
+ */
+export function TagAdm({ perfil, className }: { perfil: string | null | undefined; className?: string }) {
+  if (perfil !== 'super_admin') return null;
+  return (
+    <span
+      title="Super administrador"
+      className={cn(
+        'inline-flex shrink-0 items-center rounded px-1 py-px text-[9px] font-bold uppercase leading-none tracking-wide',
+        'bg-red-600 text-white',
+        className,
+      )}
+    >
+      ADM
+    </span>
+  );
+}

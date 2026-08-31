@@ -30,6 +30,7 @@ import {
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat, AnexoNoBalao, EMOJIS, BalaoDigitando, EstiloEntrada, PlayerAudio,
+  TagAdm,
   ANIMACAO_ENTRADA,
   horaDoBalao, rotuloDoDia, diaDaMensagem, tamanhoLegivel, duracaoCurta,
 } from './comum';
@@ -250,6 +251,30 @@ export function Conversa({
   }, []);
 
   /*
+   * Trava do duplo clique.
+   *
+   * Dois cliques rápidos curtem; mais dois, descurtem. Sem trava, quem clica
+   * quatro vezes seguidas (ou dá um duplo clique com a mão pesada, que o
+   * navegador entrega como dois `dblclick`) manda duas chamadas em sequência e
+   * o coração pisca e volta ao que era — parecendo que não funcionou.
+   *
+   * A janela é por MENSAGEM, não global: curtir duas mensagens diferentes em
+   * seguida é uso normal e não pode ser engolido.
+   */
+  const ultimoToque = useRef<Map<string, number>>(new Map());
+  const ESPERA_DUPLO_CLIQUE = 600;
+
+  const curtirPorToque = useCallback((m: MensagemChat) => {
+    const agora = Date.now();
+    const anterior = ultimoToque.current.get(m.id) ?? 0;
+    if (agora - anterior < ESPERA_DUPLO_CLIQUE) return;
+    ultimoToque.current.set(m.id, agora);
+    void curtir(m);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  /*
    * Aviso de curtida.
    *
    * Não é notificação de banco: a curtida já viaja como UPDATE no realtime que
@@ -363,7 +388,10 @@ export function Conversa({
         )}
         <AvatarChat nome={conversa.outro_nome} foto={conversa.outro_foto} tamanho={34} online={online} />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium truncate leading-tight">{conversa.outro_nome}</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium leading-tight">
+            <span className="truncate">{conversa.outro_nome}</span>
+            <TagAdm perfil={conversa.outro_perfil} />
+          </p>
           {/*
             Login não entra aqui: quem está conversando já sabe com quem fala, e
             o que muda de minuto a minuto é se a pessoa está do outro lado.
@@ -437,13 +465,21 @@ export function Conversa({
               */}
               <div className={cn('group flex items-center gap-1', meu ? 'justify-end' : 'justify-start')}>
                 {meu && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} />}
-                <div className={cn(
-                  'relative max-w-[78%] rounded-2xl px-3 py-1.5 space-y-1.5',
-                  meu ? 'bg-primary text-primary-foreground rounded-br-md'
-                      : 'bg-muted rounded-bl-md',
-                  // Espaço para o coração não encostar na hora.
-                  m.curtida_por && 'mb-2',
-                )}>
+                {/*
+                  Duplo clique no balão curte, como no Instagram.
+                  `select-none` evita que o gesto marque o texto no caminho, e o
+                  botão de coração ao lado continua existindo para quem prefere
+                  o alvo explícito (e para o teclado, que não dá duplo clique).
+                */}
+                <div
+                  onDoubleClick={() => { if (!m.expurgado_em) curtirPorToque(m); }}
+                  className={cn(
+                    'relative max-w-[78%] select-none rounded-2xl px-3 py-1.5 space-y-1.5',
+                    meu ? 'bg-primary text-primary-foreground rounded-br-md'
+                        : 'bg-muted rounded-bl-md',
+                    // Espaço para o coração não encostar na hora.
+                    m.curtida_por && 'mb-2',
+                  )}>
                   {/* Citação: o pedaço de cima do balão, como no WhatsApp. */}
                   {m.respondendo_id && (
                     <Citacao

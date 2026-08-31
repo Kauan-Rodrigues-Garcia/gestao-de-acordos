@@ -19,7 +19,7 @@ import type {
 import {
   listarDestinosDisparo, PAGINA_DESTINOS_DISPARO, rotuloAnexo,
 } from '@/services/chat/chat.service';
-import { AvatarChat, horaCurta, TagEmpresa } from './comum';
+import { AvatarChat, horaCurta, TagEmpresa, TagAdm } from './comum';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { cargosChatLiberados } from '@/lib/permissoes-chat';
@@ -329,6 +329,7 @@ export function ListaConversas({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
                       <p className="text-sm font-medium truncate min-w-0">{c.outro_nome}</p>
+                      <TagAdm perfil={c.outro_perfil} />
                       <TagEmpresa slug={c.outro_empresa} />
                     </div>
                     <p className={cn(
