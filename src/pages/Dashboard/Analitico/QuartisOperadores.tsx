@@ -112,7 +112,13 @@ interface QuartisOperadoresProps {
   loading: boolean;
 }
 
-interface PerfilOp { id: string; nome: string; foto_url: string | null; setor_id: string | null; equipe_id: string | null; situacao?: string | null }
+interface PerfilOp {
+  id: string; nome: string; foto_url: string | null;
+  setor_id: string | null; equipe_id: string | null;
+  situacao?: string | null;
+  arquivado?: boolean | null;
+  desligado_em?: string | null;
+}
 interface MetaOpRow {
   referencia_id: string;
   meta_valor: number;
@@ -575,11 +581,10 @@ export function QuartisOperadores({
            * porque a coluna é nula nas linhas antigas, e `arquivado <> true`
            * sozinho descartaria todas elas.
            */
-          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao, arquivado')
+          supabase.from('perfis').select('id, nome, foto_url, setor_id, equipe_id, situacao, arquivado, desligado_em')
             .eq('empresa_id', empresaId)
             .in('perfil', [...PERFIS_QUE_CONTAM_NO_RECEBIMENTO])
             .or('ativo.eq.true,situacao.eq.desligado')
-            .or('arquivado.is.null,arquivado.eq.false')
             .order('nome'),
           // `select('*')` de propósito, e não a lista de colunas: as duas da
           // meta indireta só existem depois da migration 20260818160000, e o
@@ -702,6 +707,13 @@ export function QuartisOperadores({
        * consulta de perfis. Ver a migration 20260831160000.
        */
       .filter(o => (o.situacao ?? 'ativo') !== 'ferias')
+      /*
+       * Arquivado sai — mas so dos meses POSTERIORES a saida. Filtrar sempre
+       * reescrevia o passado: no dia 1 de setembro, abrir AGOSTO mostrava um
+       * total menor do que agosto teve. Mes fechado e fato consumado.
+       */
+      .filter(o => o.arquivado !== true
+        || (!!o.desligado_em && mes <= o.desligado_em.slice(0, 7)))
       .filter(o => !setorEfetivo || setoresDoOperador(
         o.id, operadorEquipeMap, equipesExtrasPorOperador, setorDaEquipe,
       ).has(setorEfetivo))

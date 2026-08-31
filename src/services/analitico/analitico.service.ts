@@ -178,8 +178,15 @@ export async function resolverOperadores(
    * recebimento do desligado continua contando na equipe e no setor, inclusive
    * o que entra depois do desligamento.
    *
-   * `arquivado` fica de fora: é o desligado de mês anterior, que já não aparece
-   * em lista nenhuma.
+   * `arquivado` NAO filtra aqui.
+   *
+   * Esta funcao casa o nome do relatorio com o perfil na hora da IMPORTACAO, e
+   * atribuicao nao e visibilidade: importar agosto em setembro tem de continuar
+   * achando quem trabalhou em agosto, mesmo ja arquivado. Excluindo, as linhas
+   * dessa pessoa viravam orfas e o dinheiro dela saia de qualquer equipe.
+   *
+   * Quem decide o que aparece na tela sao as consultas de composicao, que
+   * conhecem o mes em foco. Esta aqui so precisa acertar a pessoa.
    */
   const { data } = await supabase
     .from('perfis')
@@ -188,7 +195,6 @@ export async function resolverOperadores(
     .order('nome');
 
   const todosPerfis: PerfilResumido[] = (data ?? [])
-    .filter(p => (p as { arquivado?: boolean | null }).arquivado !== true)
     .map(p => ({
       id:      p.id,
       usuario: p.usuario ?? '',
@@ -1886,7 +1892,7 @@ async function buscarComposicaoAoVivo(
    */
   const { data } = await supabase
     .from('perfis')
-    .select('id, equipe_id, setor_id, situacao, ativo, arquivado, equipes(id, nome, setor_id)')
+    .select('id, equipe_id, setor_id, situacao, ativo, arquivado, desligado_em, equipes(id, nome, setor_id)')
     .eq('empresa_id', empresaId);
 
   // Equipes vêm da tabela, não dos perfis: uma equipe formada SÓ por clones
