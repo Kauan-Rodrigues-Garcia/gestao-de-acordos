@@ -234,21 +234,74 @@ export function Conversa({
     campo.current?.focus();
   }, [texto, pendentes, subindo, conversa.id, onEnviar, respondendo]);
 
-  /** Índice por id: a citação precisa achar a mensagem original para desenhar. */
-  const porId = useMemo(() => new Map(mensagens.map(m => [m.id, m])), [mensagens]);
+
 
   const responder = useCallback((m: MensagemChat) => {
     setRespondendo(m);
     campo.current?.focus();
   }, []);
 
-  const curtir = useCallback(async (m: MensagemChat) => {
-    // Otimista de propósito: o coração é a interação mais leve do chat e
-    // esperar o servidor para pintá-lo faz o toque parecer que não pegou.
-    // O realtime traz o valor real logo em seguida; se falhar, some sozinho.
-    const { erro: falha } = await curtirMensagem(m.id, !m.curtida_por);
-    if (falha) setErro(falha);
+  /*
+   * Curtida otimista.
+   *
+   * O coração é a interação mais leve do chat, e esperar a ida ao servidor MAIS
+   * a volta pelo realtime fazia o toque parecer que não pegou — a pessoa clicava
+   * de novo e acabava descurtindo.
+   *
+   * Aqui fica só o que ainda não voltou do servidor: `id → quem curtiu` (ou
+   * `null`, para descurtido). O render prefere este valor; assim que o servidor
+   * concorda, a entrada some e a fonte volta a ser uma só. Falhou, some também,
+   * e a mensagem reaparece como estava.
+   */
+  const [curtidasLocais, setCurtidasLocais] = useState<Map<string, string | null>>(new Map());
+
+  const soltarLocal = useCallback((id: string) => {
+    setCurtidasLocais(atual => {
+      if (!atual.has(id)) return atual;
+      const copia = new Map(atual);
+      copia.delete(id);
+      return copia;
+    });
   }, []);
+
+  // O servidor alcançou o palpite: a marca local não serve mais para nada.
+  useEffect(() => {
+    if (curtidasLocais.size === 0) return;
+    for (const m of mensagens) {
+      if (curtidasLocais.has(m.id) && curtidasLocais.get(m.id) === m.curtida_por) {
+        soltarLocal(m.id);
+      }
+    }
+  }, [mensagens, curtidasLocais, soltarLocal]);
+
+  /** As mensagens como a tela deve desenhá-las, já com o palpite aplicado. */
+  const mensagensNaTela = useMemo(
+    () => (curtidasLocais.size === 0 ? mensagens : mensagens.map(m => (
+      curtidasLocais.has(m.id)
+        ? { ...m, curtida_por: curtidasLocais.get(m.id) ?? null }
+        : m
+    ))),
+    [mensagens, curtidasLocais],
+  );
+
+  /** Índice por id: a citação precisa achar a mensagem original para desenhar. */
+  const porId = useMemo(
+    () => new Map(mensagensNaTela.map(m => [m.id, m])),
+    [mensagensNaTela],
+  );
+
+
+  const curtir = useCallback(async (m: MensagemChat) => {
+    const vaiCurtir = !m.curtida_por;
+    // Pinta AGORA. O realtime confirma depois e a marca local se apaga sozinha.
+    setCurtidasLocais(atual => new Map(atual).set(m.id, vaiCurtir ? meuId : null));
+
+    const { erro: falha } = await curtirMensagem(m.id, vaiCurtir);
+    if (falha) {
+      setErro(falha);
+      soltarLocal(m.id);   // desfaz o palpite: a mensagem volta como estava
+    }
+  }, [meuId, soltarLocal]);
 
   /*
    * Trava do duplo clique.
@@ -436,7 +489,7 @@ export function Conversa({
           </p>
         )}
 
-        {mensagens.map(m => {
+        {mensagensNaTela.map(m => {
           const meu = m.autor_id === meuId;
           const dia = diaDaMensagem(m.criado_em);
           const novoDia = dia !== diaAnterior;
