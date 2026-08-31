@@ -16,9 +16,11 @@
 import { supabase } from '@/lib/supabase';
 import { tabelaSemTipo, rpcSemTipo } from '@/lib/supabaseSemTipo';
 import type { Database } from '@/lib/database.types';
+import { primeiroDiaDoMes, type MesRef } from '@/lib/mesReferencia';
 
 type PixAutoAcordoInsert = Database['public']['Tables']['pix_automatico_acordos']['Insert'];
 type PixAutoAcordoUpdate = Database['public']['Tables']['pix_automatico_acordos']['Update'];
+export type PixPremiacaoPagamento = Database['public']['Tables']['pix_automatico_premiacoes_pagamento']['Row'];
 
 export type PixAutoStatus = 'pendente' | 'aprovado' | 'desaprovado';
 
@@ -372,6 +374,56 @@ export async function marcarComissaoPaga(p: {
   const { data, error } = await q.select('id');
   if (error) return { ok: false, count: 0, error: error.message };
   return { ok: true, count: (data ?? []).length };
+}
+
+// ── Confirmação mensal da premiação ────────────────────────────────────────
+
+/** Status manual exibido ao lado de “Falta pagar”, uma linha por pessoa/mês. */
+export async function fetchPremiacoesPagamento(
+  empresaId: string,
+  mes: MesRef,
+): Promise<PixPremiacaoPagamento[]> {
+  const { data, error } = await supabase
+    .from('pix_automatico_premiacoes_pagamento')
+    .select('*')
+    .eq('empresa_id', empresaId)
+    .eq('mes', primeiroDiaDoMes(mes));
+
+  if (error) {
+    console.warn('[pix_automatico.service] fetchPremiacoesPagamento:', error.message);
+    return [];
+  }
+  return data ?? [];
+}
+
+function mensagemPremiacaoPagamento(bruta: string): string {
+  if (bruta.includes('PIX_PREMIACAO_SEM_PERMISSAO'))
+    return 'Somente a gerência ou um cargo superior pode alterar este status.';
+  if (bruta.includes('PIX_PREMIACAO_OPERADOR'))
+    return 'Esta pessoa não pertence à empresa selecionada.';
+  if (bruta.includes('PIX_PREMIACAO_EMPRESA'))
+    return 'Esta empresa não está no seu acesso.';
+  if (/function|does not exist|schema cache/i.test(bruta))
+    return 'O controle de pagamento da premiação ainda não está disponível neste banco.';
+  return bruta;
+}
+
+/** Escrita atômica e auditada; a RPC confere novamente cargo e empresa. */
+export async function marcarPremiacaoPaga(p: {
+  empresaId: string;
+  operadorId: string;
+  mes: MesRef;
+  pago: boolean;
+}): Promise<{ ok: boolean; pagamento?: PixPremiacaoPagamento; error?: string }> {
+  const { data, error } = await supabase.rpc('fn_pix_premiacao_marcar_pagamento', {
+    p_empresa_id: p.empresaId,
+    p_operador_id: p.operadorId,
+    p_mes: primeiroDiaDoMes(p.mes),
+    p_pago: p.pago,
+  });
+
+  if (error) return { ok: false, error: mensagemPremiacaoPagamento(error.message) };
+  return { ok: true, pagamento: data ?? undefined };
 }
 
 export async function criarAcordoPix(p: {

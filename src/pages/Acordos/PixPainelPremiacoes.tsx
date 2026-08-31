@@ -39,16 +39,18 @@
  */
 import { useMemo, useState } from 'react';
 import {
-  Wallet, ChevronDown, TrendingUp, AlertTriangle, Check, Search,
+  Wallet, ChevronDown, TrendingUp, AlertTriangle, Check, Search, Clock3, Loader2,
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
 import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import type { MetaRecebimentoDobra } from './pixAutomaticoView';
 import { painelPremiacoes, totalDoPainel, type Premiacao } from './pixPremiacao';
 import type { MesRef } from '@/lib/mesReferencia';
+import type { PixPremiacaoPagamento } from '@/services/pix_automatico.service';
 
 interface Props {
   itens: PixAutoAcordo[];
@@ -58,6 +60,10 @@ interface Props {
   /** Meta de recebimento por operador — é ela que decide a dobra. */
   metaPorOperador?: Record<string, MetaRecebimentoDobra>;
   metaPorSetor?: Record<string, number>;
+  pagamentos?: readonly PixPremiacaoPagamento[];
+  podeMarcarPago?: boolean;
+  alterandoOperadorId?: string | null;
+  onMarcarPago?: (operadorId: string, pago: boolean) => void | Promise<void>;
 }
 
 /** Uma parcela da conta, com o rótulo em cima e o número embaixo. */
@@ -76,15 +82,28 @@ function Parcela({
   );
 }
 
-function LinhaPremiacao({ l }: { l: Premiacao }) {
+function LinhaPremiacao({
+  l, pagamento, podeMarcarPago, alterando, onMarcarPago,
+}: {
+  l: Premiacao;
+  pagamento?: PixPremiacaoPagamento;
+  podeMarcarPago: boolean;
+  alterando: boolean;
+  onMarcarPago?: (operadorId: string, pago: boolean) => void | Promise<void>;
+}) {
   const quitado = Math.abs(l.falta) < 0.005;
   const deve    = l.falta < -0.005;
+  const pago    = pagamento?.pago === true;
+  const tituloPagamento = pago
+    ? `Pago${pagamento?.pago_por_nome ? ` por ${pagamento.pago_por_nome}` : ''}${pagamento?.pago_em ? ` em ${new Date(pagamento.pago_em).toLocaleString('pt-BR')}` : ''}`
+    : 'Premiação ainda não marcada como paga';
 
   return (
     <div className={cn(
-      'grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-3',
+      'grid min-w-[720px] grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))_minmax(105px,0.8fr)_minmax(0,1fr)] items-center gap-3',
       'border-t border-border/60 px-3 py-2.5 transition-colors hover:bg-muted/30',
       quitado && 'opacity-60',
+      pago && !quitado && 'bg-emerald-500/[0.035]',
     )}>
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{l.nome}</p>
@@ -123,9 +142,41 @@ function LinhaPremiacao({ l }: { l: Premiacao }) {
         )}
       </div>
       <Parcela rotulo="Já pago" valor={l.jaPago} cls="text-muted-foreground" />
+      <div className="flex min-w-0 items-center gap-2" title={tituloPagamento}>
+        {podeMarcarPago ? (
+          <>
+            <Switch
+              checked={pago}
+              disabled={alterando}
+              onCheckedChange={marcado => void onMarcarPago?.(l.operadorId, marcado)}
+              aria-label={`${pago ? 'Desmarcar' : 'Marcar'} premiação de ${l.nome} como paga`}
+            />
+            {alterando
+              ? <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+              : (
+                <span className={cn(
+                  'truncate text-[11px] font-medium',
+                  pago ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+                )}>
+                  {pago ? 'Pago' : 'Não pago'}
+                </span>
+              )}
+          </>
+        ) : (
+          <span className={cn(
+            'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold',
+            pago
+              ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+              : 'border-border bg-muted/30 text-muted-foreground',
+          )}>
+            {pago ? <Check className="h-3 w-3" /> : <Clock3 className="h-3 w-3" />}
+            {pago ? 'Pago' : 'Não pago'}
+          </span>
+        )}
+      </div>
       <Parcela
         rotulo="Falta pagar" valor={l.falta}
-        cls={deve ? 'text-destructive' : quitado ? 'text-muted-foreground' : 'text-primary'}
+        cls={deve ? 'text-destructive' : quitado || pago ? 'text-muted-foreground' : 'text-primary'}
         titulo={deve ? 'Negativo: já saiu mais do que era devido' : undefined}
       />
     </div>
@@ -134,6 +185,7 @@ function LinhaPremiacao({ l }: { l: Premiacao }) {
 
 export function PixPainelPremiacoes({
   itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
+  pagamentos = [], podeMarcarPago = false, alterandoOperadorId, onMarcarPago,
 }: Props) {
   const [aberto, setAberto] = useState(true);
   const [busca, setBusca] = useState('');
@@ -147,6 +199,16 @@ export function PixPainelPremiacoes({
   );
 
   const total = useMemo(() => totalDoPainel(linhas), [linhas]);
+  const pagamentoPorOperador = useMemo(
+    () => new Map(pagamentos.map(p => [p.operador_id, p])),
+    [pagamentos],
+  );
+  const faltaPagar = useMemo(
+    () => totalDoPainel(
+      linhas.filter(l => pagamentoPorOperador.get(l.operadorId)?.pago !== true),
+    ).falta,
+    [linhas, pagamentoPorOperador],
+  );
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase();
@@ -154,8 +216,10 @@ export function PixPainelPremiacoes({
       .filter(l => (termo ? l.nome.toLowerCase().includes(termo) : true))
       // «Só quem falta» é o modo de trabalho: a lista fica com o que ainda
       // precisa de ação, e some quem já está quitado.
-      .filter(l => (soPendentes ? Math.abs(l.falta) >= 0.005 : true));
-  }, [linhas, busca, soPendentes]);
+      .filter(l => (soPendentes
+        ? Math.abs(l.falta) >= 0.005 && pagamentoPorOperador.get(l.operadorId)?.pago !== true
+        : true));
+  }, [linhas, busca, soPendentes, pagamentoPorOperador]);
 
   if (linhas.length === 0) return null;
 
@@ -184,7 +248,7 @@ export function PixPainelPremiacoes({
               Falta pagar
             </p>
             <p className="mt-0.5 text-base font-bold tabular-nums text-primary leading-tight">
-              {formatCurrency(total.falta)}
+              {formatCurrency(faltaPagar)}
             </p>
           </div>
           <ChevronDown className={cn(
@@ -216,20 +280,32 @@ export function PixPainelPremiacoes({
 
             {/* Cabeçalho das colunas: sem ele as quatro parcelas viram quatro
                 números soltos, e o leitor tem de adivinhar qual é qual. */}
-            <div className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] gap-3 border-t border-border/60 bg-muted/30 px-3 py-1.5">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pessoa</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Premiação</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Já pago</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Falta pagar</span>
-            </div>
+            <div className="overflow-x-auto">
+              <div className="grid min-w-[720px] grid-cols-[minmax(0,1.5fr)_repeat(2,minmax(0,1fr))_minmax(105px,0.8fr)_minmax(0,1fr)] gap-3 border-t border-border/60 bg-muted/30 px-3 py-1.5">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pessoa</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Premiação</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Já pago</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Foi pago?</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Falta pagar</span>
+              </div>
 
-            {visiveis.length === 0 ? (
-              <p className="border-t border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
-                {busca.trim() ? 'Ninguém com esse nome.' : 'Tudo quitado por aqui.'}
-              </p>
-            ) : (
-              visiveis.map(l => <LinhaPremiacao key={l.operadorId} l={l} />)
-            )}
+              {visiveis.length === 0 ? (
+                <p className="min-w-[720px] border-t border-border/60 px-4 py-6 text-center text-xs text-muted-foreground">
+                  {busca.trim() ? 'Ninguém com esse nome.' : 'Tudo quitado por aqui.'}
+                </p>
+              ) : (
+                visiveis.map(l => (
+                  <LinhaPremiacao
+                    key={l.operadorId}
+                    l={l}
+                    pagamento={pagamentoPorOperador.get(l.operadorId)}
+                    podeMarcarPago={podeMarcarPago}
+                    alterando={alterandoOperadorId === l.operadorId}
+                    onMarcarPago={onMarcarPago}
+                  />
+                ))
+              )}
+            </div>
 
             {/* A dobra nao acontece sem os DOIS requisitos, e o segundo depende
                 de a meta do mes estar cadastrada. Sem esta nota, quem esperava

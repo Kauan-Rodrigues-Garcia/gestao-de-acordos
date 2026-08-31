@@ -3408,6 +3408,80 @@ export type Database = {
           },
         ]
       }
+      pix_automatico_premiacoes_pagamento: {
+        Row: {
+          atualizado_em: string
+          atualizado_por: string | null
+          atualizado_por_nome: string | null
+          empresa_id: string
+          id: number
+          mes: string
+          operador_id: string
+          operador_nome: string
+          pago: boolean
+          pago_em: string | null
+          pago_por: string | null
+          pago_por_nome: string | null
+        }
+        Insert: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          empresa_id: string
+          id?: never
+          mes: string
+          operador_id: string
+          operador_nome: string
+          pago?: boolean
+          pago_em?: string | null
+          pago_por?: string | null
+          pago_por_nome?: string | null
+        }
+        Update: {
+          atualizado_em?: string
+          atualizado_por?: string | null
+          atualizado_por_nome?: string | null
+          empresa_id?: string
+          id?: never
+          mes?: string
+          operador_id?: string
+          operador_nome?: string
+          pago?: boolean
+          pago_em?: string | null
+          pago_por?: string | null
+          pago_por_nome?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pix_automatico_premiacoes_pagamento_empresa_id_fkey"
+            columns: ["empresa_id"]
+            isOneToOne: false
+            referencedRelation: "empresas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_premiacoes_pagamento_operador_id_fkey"
+            columns: ["operador_id"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_premiacoes_pagamento_atualizado_por_fkey"
+            columns: ["atualizado_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pix_automatico_premiacoes_pagamento_pago_por_fkey"
+            columns: ["pago_por"]
+            isOneToOne: false
+            referencedRelation: "perfis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pix_automatico_nr_registro: {
         Row: {
           acordo_id: string | null
@@ -5377,6 +5451,15 @@ export type Database = {
       }
       fn_pix_nr_normalizar: { Args: { p_nr: string }; Returns: string }
       fn_pix_pode_ajustar_saldo: { Args: Record<string, never>; Returns: boolean }
+      fn_pix_premiacao_marcar_pagamento: {
+        Args: {
+          p_empresa_id: string
+          p_mes: string
+          p_operador_id: string
+          p_pago: boolean
+        }
+        Returns: Database["public"]["Tables"]["pix_automatico_premiacoes_pagamento"]["Row"]
+      }
       fn_pix_saldo_aplicar: {
         Args: { p_acordo_id: string }
         Returns: Database["public"]["Tables"]["pix_automatico_acordos"]["Row"]

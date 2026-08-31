@@ -50,7 +50,7 @@ import { useEmpresa } from '@/hooks/useEmpresa';
 import { useCargoPermissoes } from '@/hooks/useCargoPermissoes';
 import { supabase } from '@/lib/supabase';
 import type { MetasConfigMes } from '@/lib/supabase';
-import { formatCurrency, parseCurrencyInput, getTodayISO } from '@/lib/index';
+import { formatCurrency, parseCurrencyInput, getTodayISO, PERFIL_NIVEL } from '@/lib/index';
 import { niveisLiberados } from '@/lib/permissoes-escopo';
 import { cn } from '@/lib/utils';
 import { copiarTexto } from '@/lib/clipboard';
@@ -84,7 +84,8 @@ import {
   expurgarDesaprovadosVencidos, PIX_DIAS_UTEIS_EXPURGO,
   fetchSaldosPix, saldosPorOperador, aplicarSaldoNoAcordo, retirarSaldoDoAcordo,
   fetchPedidosNr, pedirAutorizacaoNr, type PixNrPedido,
-  type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo,
+  fetchPremiacoesPagamento, marcarPremiacaoPaga,
+  type LinhaPixLote, type PixAutoMeta, type PixAutoSaldo, type PixPremiacaoPagamento,
 } from '@/services/pix_automatico.service';
 import { PixSaldoPainel } from './PixSaldoPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
@@ -209,6 +210,8 @@ export function PixAutomatico() {
   const [setores, setSetores]       = useState<{ id: string; nome: string }[]>([]);
   const [nrsBloqueados, setNrsBloqueados] = useState<Set<string>>(new Set());
   const [saldos, setSaldos]         = useState<PixAutoSaldo[]>([]);
+  const [pagamentosPremiacao, setPagamentosPremiacao] = useState<PixPremiacaoPagamento[]>([]);
+  const [alterandoPremiacaoId, setAlterandoPremiacaoId] = useState<string | null>(null);
   const [ajustandoId, setAjustandoId] = useState<string | null>(null);
   const [loading, setLoading]       = useState(true);
 
@@ -336,6 +339,8 @@ export function PixAutomatico() {
   const podeRegistrar = podeAgirSobreOutros
     || meuSetor == null
     || (configs[meuSetor]?.permite_registro_operador ?? true);
+  const podeMarcarPremiacaoPaga =
+    (PERFIL_NIVEL[perfil?.perfil ?? ''] ?? 0) >= PERFIL_NIVEL.gerencia;
 
   /*
    * `carregar` é chamada depois de TODA ação da aba: aprovar, pagar, excluir,
@@ -371,7 +376,7 @@ export function PixAutomatico() {
         }
       }
 
-      const [lista, cfgs, bloqueados, saldosDoEscopo, pedidos] = await Promise.all([
+      const [lista, cfgs, bloqueados, saldosDoEscopo, pedidos, pagamentos] = await Promise.all([
         fetchAcordosPix(empresa.id, podeVerDeOutros
           ? { setorId: setorEscopo }
           : { operadorId: perfil.id }),
@@ -385,6 +390,9 @@ export function PixAutomatico() {
         // A RLS ja recorta: o operador so ve os proprios pedidos, quem aprova
         // Pix ve os da empresa. Nao ha filtro a repetir aqui.
         fetchPedidosNr(empresa.id),
+        podeVerDeOutros
+          ? fetchPremiacoesPagamento(empresa.id, mesAtual())
+          : Promise.resolve([]),
       ]);
       // Reconciliação: a linha que não mudou volta com a MESMA referência, e
       // uma releitura sem novidade devolve o array anterior — nesse caso o
@@ -392,6 +400,9 @@ export function PixAutomatico() {
       setItens(atual => reconciliarLista(atual, lista, { chave: i => i.id }));
       setSaldos(atual => reconciliarLista(atual, saldosDoEscopo, { chave: s => s.id }));
       setPedidosNr(atual => reconciliarLista(atual, pedidos, { chave: x => x.id }));
+      setPagamentosPremiacao(atual => reconciliarLista(
+        atual, pagamentos, { chave: x => x.id },
+      ));
       const mapa: Record<string, PixAutoConfig> = {};
       cfgs.forEach(c => { mapa[c.setor_id] = { ...c, permite_registro_operador: c.permite_registro_operador ?? true }; });
       setConfigs(atual => reconciliarMapa(atual, mapa));
@@ -880,6 +891,32 @@ export function PixAutomatico() {
       await carregar();
     } finally {
       setAvaliandoId(null);
+    }
+  }
+
+  async function alternarPremiacaoPaga(operadorId: string, pago: boolean) {
+    if (!empresa?.id || !podeMarcarPremiacaoPaga) return;
+    setAlterandoPremiacaoId(operadorId);
+    try {
+      const resultado = await marcarPremiacaoPaga({
+        empresaId: empresa.id,
+        operadorId,
+        mes: mesAtual(),
+        pago,
+      });
+      if (!resultado.ok || !resultado.pagamento) {
+        toast.error(resultado.error ?? 'Não foi possível alterar o pagamento da premiação.');
+        return;
+      }
+      setPagamentosPremiacao(atual => [
+        ...atual.filter(x => x.operador_id !== operadorId),
+        resultado.pagamento!,
+      ]);
+      toast.success(pago
+        ? 'Premiação marcada como paga.'
+        : 'Pagamento da premiação desmarcado.');
+    } finally {
+      setAlterandoPremiacaoId(null);
     }
   }
 
@@ -1594,6 +1631,10 @@ export function PixAutomatico() {
           mes={mesAtual()}
           metaPorOperador={metaPorOperador}
           metaPorSetor={metaPorSetor}
+          pagamentos={pagamentosPremiacao}
+          podeMarcarPago={podeMarcarPremiacaoPaga}
+          alterandoOperadorId={alterandoPremiacaoId}
+          onMarcarPago={alternarPremiacaoPaga}
         />
       )}
 
