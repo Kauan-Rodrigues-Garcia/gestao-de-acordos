@@ -15,7 +15,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { FileSpreadsheet, ChevronDown, ChevronUp } from 'lucide-react';
+import { FileSpreadsheet, ChevronDown, ChevronUp, CalendarClock } from 'lucide-react';
 import { getTodayISO } from '@/lib/index';
 import { SkeletonCard, BannerNaoTabulado } from '@/components/AnalyticsPanel/SubComponents';
 import { usePainelMetas } from '@/hooks/usePainelMetas';
@@ -139,15 +139,34 @@ export function PainelMetas({
       )}
 
       {secundarios && (
-        <div className="space-y-2">
+        <div className="space-y-3">
+          {/*
+            Era um link de 11px em `text-muted-foreground`, indistinguível de
+            legenda: quem não sabia que existia não achava. Vira um alvo de
+            largura inteira, com area de toque de dedo e contraste de card.
+          */}
           <button
+            type="button"
             onClick={() => setSecundariosAbertos(v => !v)}
-            className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors"
+            aria-expanded={secundariosAbertos}
+            className="group flex w-full items-center gap-3 rounded-xl border border-border bg-card px-4 py-3 text-left shadow-sm transition-colors hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <CalendarClock className="h-[18px] w-[18px]" />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-sm font-semibold text-foreground">
+                Agendamentos e conversão
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                {secundariosAbertos
+                  ? 'Clique para ocultar'
+                  : 'Agendado por dia, taxa de conversão e quebra por tipo'}
+              </span>
+            </span>
             {secundariosAbertos
-              ? <ChevronUp className="w-3.5 h-3.5" />
-              : <ChevronDown className="w-3.5 h-3.5" />}
-            {secundariosAbertos ? 'Ocultar' : 'Ver'} agendamentos e conversão
+              ? <ChevronUp className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+              : <ChevronDown className="h-5 w-5 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />}
           </button>
           {secundariosAbertos && secundarios}
         </div>
