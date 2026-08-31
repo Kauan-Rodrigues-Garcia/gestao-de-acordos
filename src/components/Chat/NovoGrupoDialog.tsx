@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { PERFIL_COLORS } from '@/lib/index';
 import { listarContatos, type ContatoChat } from '@/services/chat/chat.service';
 import { criarGrupo, configurarGrupo, subirFotoDoGrupo } from '@/services/chat/grupos.service';
 import { AvatarChat, TagEmpresa } from './comum';
@@ -38,6 +39,9 @@ interface Props {
   /** Recebe o id do grupo criado, para a janela já abri-lo. */
   onCriado: (conversaId: string) => void;
 }
+
+/** Ordem e tag descrevem o cadastro; não alteram o alcance autorizado do chat. */
+const PRIORIDADE_NO_GRUPO: Record<string, number> = { lider: 0 };
 
 export function NovoGrupoDialog({ aberto, onFechar, onCriado }: Props) {
   const [contatos, setContatos] = useState<ContatoChat[]>([]);
@@ -80,10 +84,14 @@ export function NovoGrupoDialog({ aberto, onFechar, onCriado }: Props) {
     for (const c of contatos) if (!unicas.has(c.perfil_id)) unicas.set(c.perfil_id, c);
     const termo = busca.trim().toLowerCase();
     const lista = [...unicas.values()];
-    return termo
+    const filtrada = termo
       ? lista.filter(c =>
           c.nome.toLowerCase().includes(termo) || (c.usuario ?? '').toLowerCase().includes(termo))
       : lista;
+    // Sort estável: líderes sobem, e a ordem que veio do banco permanece igual
+    // dentro do bloco de líderes e dentro do restante da lista.
+    return filtrada.sort((a, b) =>
+      (PRIORIDADE_NO_GRUPO[a.cargo] ?? 1) - (PRIORIDADE_NO_GRUPO[b.cargo] ?? 1));
   }, [contatos, busca]);
 
   function alternar(id: string) {
@@ -193,6 +201,14 @@ export function NovoGrupoDialog({ aberto, onFechar, onCriado }: Props) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm leading-tight flex items-center gap-1.5">
                     <span className="truncate">{p.nome}</span>
+                    {PRIORIDADE_NO_GRUPO[p.cargo] === 0 && (
+                      <span className={cn(
+                        'shrink-0 rounded border px-1.5 py-px text-[9px] font-semibold',
+                        PERFIL_COLORS.lider,
+                      )}>
+                        Líder
+                      </span>
+                    )}
                     <TagEmpresa slug={p.multiempresa ? null : p.empresa_slug} />
                   </p>
                   <p className="text-[11px] text-muted-foreground truncate leading-tight">
