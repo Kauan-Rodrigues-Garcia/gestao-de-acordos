@@ -160,6 +160,13 @@ export function VisualizadorMidia({ midias, inicial, onFechar }: Props) {
   return (
     <div
       className="fixed inset-0 z-[60] bg-black/90 backdrop-blur-sm flex flex-col animate-in fade-in duration-150"
+      // É um diálogo modal de fato, e o `role` não é só acessibilidade: o ESC
+      // do chat procura por `[role="dialog"][data-state="open"]` para não fechar
+      // a conversa que está atrás de um modal aberto. Ver BolhaChat.
+      role="dialog"
+      aria-modal="true"
+      aria-label="Visualizador de mídia"
+      data-state="open"
       // Clique no fundo fecha; clique na mídia não. Por isso a checagem de alvo.
       onMouseDown={e => { if (e.target === e.currentTarget) onFechar(); }}
     >

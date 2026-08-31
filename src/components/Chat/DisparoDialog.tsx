@@ -288,19 +288,26 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
               })}
             </div>
 
-            <div className="flex items-center gap-2 pt-2 border-t border-border shrink-0">
-              <p className="text-xs text-muted-foreground flex-1">
+            {/*
+              `min-w-0 truncate` no texto e `shrink-0` nos botões.
+              Sem isso o contador `flex-1` empurrava e o flexbox espremia os
+              botões: em janela estreita "Limpar" e "Avançar" perdiam o padding,
+              o rótulo quebrava em duas linhas e a caixa saía torta.
+            */}
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-border shrink-0">
+              <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                 {marcados.size
                   ? `${marcados.size} ${marcados.size === 1 ? 'selecionada' : 'selecionadas'}`
                   : 'Ninguém selecionado'}
               </p>
               {marcados.size > 0 && (
-                <Button variant="ghost" size="sm" className="text-xs"
+                <Button variant="ghost" size="sm" className="shrink-0 text-xs"
                         onClick={() => setMarcados(new Set())}>
                   Limpar
                 </Button>
               )}
-              <Button size="sm" disabled={!marcados.size} onClick={() => setPasso(2)}>
+              <Button size="sm" className="shrink-0" disabled={!marcados.size}
+                      onClick={() => setPasso(2)}>
                 Avançar
               </Button>
             </div>
@@ -398,10 +405,13 @@ export function DisparoDialog({ aberto, onFechar, onPronto }: Props) {
 
             {erro && <p className="text-xs text-destructive">{erro}</p>}
 
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="ghost" size="sm" onClick={() => setPasso(1)}>Voltar</Button>
+            {/* Mesmo motivo do rodapé do passo 1: o botão "Enviar para N" tem
+                rótulo longo e era o primeiro a ser espremido. */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <Button variant="ghost" size="sm" className="shrink-0"
+                      onClick={() => setPasso(1)}>Voltar</Button>
               <div className="flex-1" />
-              <Button size="sm" onClick={() => void disparar()}
+              <Button size="sm" className="shrink-0" onClick={() => void disparar()}
                       disabled={enviando || (!texto.trim() && !pendentes.length)}>
                 {enviando
                   ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Enviando…</>

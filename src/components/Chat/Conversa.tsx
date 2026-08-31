@@ -40,10 +40,14 @@ interface Props {
   mensagens:  MensagemChat[];
   online:     boolean;
   digitando:  boolean;
+  /** A pessoa do outro lado está gravando um áudio para mim agora. */
+  gravando:   boolean;
   expandido:  boolean;
   onVoltar?:  () => void;
   onEnviar:   (texto: string, anexos: AnexoChat[]) => Promise<string | null>;
   onDigitando: () => void;
+  /** Avisa o outro lado que estou gravando. Chamado em ritmo — ver o efeito. */
+  onGravando: () => void;
   /** Há página anterior para carregar? */
   temMais:        boolean;
   carregandoMais: boolean;
@@ -51,8 +55,8 @@ interface Props {
 }
 
 export function Conversa({
-  conversa, mensagens, online, digitando, expandido, onVoltar, onEnviar, onDigitando,
-  temMais, carregandoMais, onVerAnteriores,
+  conversa, mensagens, online, digitando, gravando, expandido, onVoltar, onEnviar,
+  onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
 }: Props) {
   const { perfil } = useAuth();
   const meuId = perfil?.id ?? '';
@@ -128,8 +132,29 @@ export function Conversa({
   // O balão nasce no fim da lista. Descer depois de ele montar evita que os
   // três pontos fiquem escondidos logo abaixo da área visível.
   useLayoutEffect(() => {
-    if (digitando) descer(true);
-  }, [digitando, descer]);
+    if (digitando || gravando) descer(true);
+  }, [digitando, gravando, descer]);
+
+  /*
+   * Enquanto o microfone está aberto, reavisa o outro lado.
+   *
+   * Diferente do «digitando», que nasce de um evento (a tecla), gravar é um
+   * ESTADO sem eventos: sem este pulso a marca do outro lado expiraria em três
+   * segundos e o "gravando áudio…" piscaria e sumiria no meio da gravação. O
+   * ritmo é menor que a validade da marca, e `avisarAtividade` estrangula o
+   * excesso do lado de lá.
+   */
+  const avisoGravando = useRef(onGravando);
+  avisoGravando.current = onGravando;
+  useEffect(() => {
+    if (!gravador.gravando) return;
+    // Pela ref, e não pela dependência: o pai passa uma arrow nova a cada
+    // render, e depender dela reiniciaria o intervalo o tempo todo.
+    const pulsar = () => avisoGravando.current();
+    pulsar();
+    const id = setInterval(pulsar, 1200);
+    return () => clearInterval(id);
+  }, [gravador.gravando]);
 
   useEffect(() => {
     jaVistas.current = new Set(mensagens.map(m => m.id));
@@ -258,12 +283,19 @@ export function Conversa({
             o que muda de minuto a minuto é se a pessoa está do outro lado.
             «online» quer dizer com o sistema aberto agora — não é «trabalhando».
           */}
+          {/*
+            Gravando vem ANTES de digitando: quem está com o microfone aberto
+            não está escrevendo, e mostrar "digitando…" enquanto o outro grava
+            faz a pessoa esperar um texto que nunca chega.
+          */}
           <p className="text-[11px] leading-tight">
-            {digitando
-              ? <span className="text-primary">digitando…</span>
-              : online
-                ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
-                : <span className="text-muted-foreground">offline</span>}
+            {gravando
+              ? <span className="text-primary">gravando áudio…</span>
+              : digitando
+                ? <span className="text-primary">digitando…</span>
+                : online
+                  ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
+                  : <span className="text-muted-foreground">offline</span>}
           </p>
         </div>
       </header>
@@ -349,7 +381,7 @@ export function Conversa({
 
         {/* No fim da conversa, como em qualquer chat: é ali que a próxima
             mensagem vai nascer, e é para lá que o olho já está indo. */}
-        {digitando && <BalaoDigitando />}
+        {(gravando || digitando) && <BalaoDigitando gravando={gravando} />}
       </div>
 
       {/* Escrita */}

@@ -6,7 +6,7 @@
  * mostrarem exatamente a mesma coisa — duas cópias divergem no primeiro ajuste.
  */
 import { useEffect, useRef, useState } from 'react';
-import { FileText, ImageIcon, Music, Video, Download, Play, Pause } from 'lucide-react';
+import { FileText, ImageIcon, Music, Video, Download, Play, Pause, Mic } from 'lucide-react';
 import { urlDoAnexo, type AnexoChat } from '@/services/chat/chat.service';
 import { cn } from '@/lib/utils';
 
@@ -371,7 +371,12 @@ export function PlayerAudio({ url, meu }: { url: string | null; meu: boolean }) 
  * o movimento é o que lê como «alguém está escrevendo», e piscar lê como
  * «carregando».
  */
-export function BalaoDigitando() {
+/**
+ * @param gravando desenha o balão de ÁUDIO em vez dos três pontinhos. Os
+ *   pontinhos dizem "está escrevendo", e usá-los para o microfone faria a
+ *   pessoa esperar um texto que não vem.
+ */
+export function BalaoDigitando({ gravando = false }: { gravando?: boolean } = {}) {
   return (
     <>
       <style>{`
@@ -385,12 +390,21 @@ export function BalaoDigitando() {
       `}</style>
       <div className="flex justify-start">
         <div
-          className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-3 flex items-center gap-1"
-          role="status" aria-label="digitando"
+          className="bg-muted rounded-2xl rounded-bl-md px-3.5 py-3 flex items-center gap-1.5"
+          role="status" aria-label={gravando ? 'gravando áudio' : 'digitando'}
         >
-          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
-          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
-          <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+          {gravando ? (
+            <>
+              <Mic className="w-3.5 h-3.5 text-primary chat-d" />
+              <span className="text-[11px] text-muted-foreground">gravando áudio…</span>
+            </>
+          ) : (
+            <>
+              <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+              <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+              <span className="chat-d w-1.5 h-1.5 rounded-full bg-muted-foreground" />
+            </>
+          )}
         </div>
       </div>
     </>

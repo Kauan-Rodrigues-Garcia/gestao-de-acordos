@@ -227,9 +227,16 @@ export function ListaConversas({
   return (
     <div className="flex flex-col h-full min-h-0">
       {/* Abas */}
+      {/*
+        O espaço à direita é reservado para o botão de ação, que é `absolute`.
+        Reservar por `aba !== 'historico'` sobrava 40px de vazio para quem NÃO
+        pode iniciar conversa — e nessas contas as três abas eram espremidas
+        (e truncadas) para abrir lugar a um botão que nunca era desenhado.
+        A condição agora é a MESMA do botão, então os dois nunca divergem.
+      */}
       <div className={cn(
         'relative flex items-center px-2 pt-2 shrink-0',
-        aba === 'historico' ? 'pr-2' : 'pr-10',
+        podeIniciar && aba !== 'historico' ? 'pr-10' : 'pr-2',
       )}>
         <div className="grid min-w-0 flex-1 grid-cols-3 gap-0.5 overflow-hidden rounded-lg bg-muted/35 p-0.5">
           {(['conversas', 'historico', 'disparos'] as const).map(a => (
