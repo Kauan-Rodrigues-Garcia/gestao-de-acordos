@@ -89,7 +89,6 @@ import {
 import { PixSaldoPainel } from './PixSaldoPainel';
 import { PixPainelPremiacoes } from './PixPainelPremiacoes';
 import { PixPedidosNr } from './PixPedidosNr';
-import { aPagarComDivergencia } from './pixPremiacao';
 import { reconciliarLista, reconciliarMapa } from '@/lib/dadosVivos';
 import { ValorAnimado } from '@/components/ValorAnimado';
 import { LinhaViva } from '@/components/LinhaViva';
@@ -272,6 +271,16 @@ export function PixAutomatico() {
   const [metaValor, setMetaValor]   = useState<number | null>(null);
   const [configMes, setConfigMes]   = useState<MetasConfigMes | null>(null);
   const [recebidoMes, setRecebidoMes] = useState<number | null>(null);
+  /*
+   * Meta de recebimento e recebido do mes, POR OPERADOR.
+   *
+   * E o segundo requisito da comissao dobrada, e sem ele o painel do lider
+   * mostrava a comissao simples de quem tinha direito ao dobro — o defeito de
+   * 02/09/2026. A meta de ACORDOS por setor nao substitui esta: sao os dois
+   * requisitos, e os dois precisam fechar.
+   */
+  const [metaPorOperador, setMetaPorOperador] =
+    useState<Record<string, { metaValor: number | null; recebidoMes: number | null }>>({});
 
   // Meta de Pix do setor (independente do recebimento)
   const [metasPix, setMetasPix]         = useState<PixAutoMeta[]>([]);
@@ -448,19 +457,37 @@ export function PixAutomatico() {
       const ano = hoje.getFullYear();
       const mesStr = `${ano}-${String(mes).padStart(2, '0')}`;
       try {
-        const [{ data: metaRow }, cfg, resumo] = await Promise.all([
-          supabase.from('metas').select('meta_valor')
-            .eq('tipo', 'operador').eq('referencia_id', perfil.id)
-            .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano)
-            .maybeSingle(),
+        const [{ data: metasRows }, cfg, resumo] = await Promise.all([
+          // TODAS as metas de operador do mes, e nao so a minha: o painel do
+          // lider precisa saber quem bateu a meta para saber quem dobra.
+          supabase.from('metas').select('referencia_id, meta_valor')
+            .eq('tipo', 'operador')
+            .eq('empresa_id', empresa.id).eq('mes', mes).eq('ano', ano),
           getMetasConfig(empresa.id, mes, ano),
           buscarResumoOperadoresAnalitico(empresa.id, mesStr),
         ]);
         if (cancelado) return;
-        setMetaValor(metaRow ? Number((metaRow as { meta_valor: number }).meta_valor) || null : null);
+
+        const linhasMeta = (metasRows ?? []) as { referencia_id: string; meta_valor: number }[];
+        const minhaMeta = linhasMeta.find(m => m.referencia_id === perfil.id);
+        setMetaValor(minhaMeta ? Number(minhaMeta.meta_valor) || null : null);
         setConfigMes(cfg.data);
         const minha = resumo.data.find(r => r.operador_id === perfil.id);
         setRecebidoMes(minha ? Number(minha.total_recebido) || 0 : 0);
+
+        // Cruza meta com recebido. Quem tem uma das duas pontas entra: sem
+        // meta a dobra nao fecha (e correto), e sem recebido o valor e zero.
+        const recebidoPor = new Map(
+          resumo.data.map(r => [r.operador_id, Number(r.total_recebido) || 0]),
+        );
+        const mapa: Record<string, { metaValor: number | null; recebidoMes: number | null }> = {};
+        for (const m of linhasMeta) {
+          mapa[m.referencia_id] = {
+            metaValor: Number(m.meta_valor) || null,
+            recebidoMes: recebidoPor.get(m.referencia_id) ?? 0,
+          };
+        }
+        setMetaPorOperador(mapa);
       } catch { /* sem meta/config → card não aparece */ }
     })();
     return () => { cancelado = true; };
@@ -531,21 +558,6 @@ export function PixAutomatico() {
   // nada na tela explicando a diferença. Agora os dois números aparecem.
   const pagamento = useMemo(() => totalPagoPix(visiveis, pctPorSetor), [visiveis, pctPorSetor]);
 
-  /*
-   * O que de fato vai sair, ja com a divergencia em aberto descontada.
-   *
-   * Ate 02/09/2026 o saldo de divergencia era so um painel ao lado: nao
-   * entrava em numero nenhum, e quem devia R$ 20,00 aparecia com a premiacao
-   * cheia. So descia para o valor certo se alguem lembrasse de carimbar o
-   * acerto num acordo a mao — e quem nao lembrasse pagava a mais.
-   *
-   * A divergencia ja RESERVADA num acordo nao entra aqui: ela ja esta dentro
-   * de `valorAPagarDe` daquela linha, e contar duas vezes seria o erro oposto.
-   */
-  const aPagarLiquido = useMemo(
-    () => aPagarComDivergencia(visiveis, saldos, pctPorSetor),
-    [visiveis, saldos, pctPorSetor],
-  );
 
   const meusDesaprovados = itens.filter(i => i.operador_id === perfil?.id && i.status === 'desaprovado').length;
 
@@ -1328,13 +1340,7 @@ export function PixAutomatico() {
       cls: 'from-teal-500/15 to-teal-600/5 border-teal-500/25', icon: <Banknote className="w-4 h-4 text-teal-400" />,
       comissaoCls: 'text-teal-400',
       rodape: pagamento.aPagar.comissao > 0
-        ? (Math.abs(aPagarLiquido.divergencia) >= 0.005
-            // O bruto continua a vista: sem ele o numero encolhe sem explicacao,
-            // e um valor que muda sozinho e o que ninguem confere.
-            ? `Ainda a receber: ${formatCurrency(aPagarLiquido.liquido)} `
-              + `(${formatCurrency(aPagarLiquido.bruto)} − `
-              + `${formatCurrency(Math.abs(aPagarLiquido.divergencia))} de divergência)`
-            : `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`)
+        ? `Ainda a receber: ${formatCurrency(pagamento.aPagar.comissao)}`
         : null,
     },
   ];
@@ -1584,9 +1590,9 @@ export function PixAutomatico() {
       {!loading && podeVerDeOutros && (
         <PixPainelPremiacoes
           itens={visiveis}
-          saldos={saldos}
           pctPorSetor={pctPorSetor}
           mes={mesAtual()}
+          metaPorOperador={metaPorOperador}
           metaPorSetor={metaPorSetor}
         />
       )}

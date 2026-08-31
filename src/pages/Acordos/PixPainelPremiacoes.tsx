@@ -8,19 +8,28 @@
  * abria a lista, filtrava por operador, somava as linhas pagas de cabeça e
  * subtraía. Toda semana, para cada nome.
  *
- * Duas coisas erravam essa conta, e as duas para MAIS:
+ * E errava no caso que mais custa: a **dobra** aparecia como o total do mês e
+ * não como o resto. «R$ 2.000,00» com R$ 1.000,00 já pagos, e quem lesse
+ * pagaria duas vezes.
  *
- *   • a **divergência** aparecia num painel ao lado e não entrava em número
- *     nenhum — quem devia R$ 20,00 era mostrado com a premiação cheia;
- *   • a **dobra** mostrava o total do mês, não o resto — «R$ 2.000,00» com
- *     R$ 1.000,00 já pagos, e quem lesse pagaria duas vezes.
+ * ## As três parcelas ficam à vista
  *
- * ## As quatro parcelas ficam à vista
+ * Premiação, já pago e falta, lado a lado, sempre. O resultado sozinho seria
+ * mais limpo e seria pior: um número que encolheu sem explicação é o tipo de
+ * coisa que ninguém confere, porque não se sabe o que conferir.
  *
- * Premiação, já pago, divergência e falta, lado a lado, sempre. O resultado
- * sozinho seria mais limpo e seria pior: um número que encolheu sem explicação
- * é o tipo de coisa que ninguém confere, porque não se sabe o que conferir.
- * Aqui dá para apontar qual parcela está errada.
+ * Quando a premiação dobrou, a linha de baixo mostra a conta — «R$ 1.039,18 ×
+ * 2» —, senão o valor cheio pareceria erro para quem sabe de cor quanto a
+ * pessoa fez.
+ *
+ * ## A divergência NÃO tem coluna aqui
+ *
+ * Ela teve uma, por um dia, e saiu a pedido do Cleber em 02/09/2026. O acerto
+ * já acontece do outro lado — a liderança carimba o saldo num acordo pela ação
+ * «Corrigir valor», e ele entra no pagamento por ali. Uma segunda coluna
+ * dizendo a mesma coisa confundia mais do que informava, e uma linha de
+ * «−R$ 17,50» para quem tinha R$ 0,00 de premiação parecia dívida nova em vez
+ * de acerto pendente.
  *
  * ## Quem vê
  *
@@ -36,14 +45,13 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/index';
-import type { PixAutoAcordo, PixAutoSaldo } from '@/services/pix_automatico.service';
+import type { PixAutoAcordo } from '@/services/pix_automatico.service';
 import type { MetaRecebimentoDobra } from './pixAutomaticoView';
 import { painelPremiacoes, totalDoPainel, type Premiacao } from './pixPremiacao';
 import type { MesRef } from '@/lib/mesReferencia';
 
 interface Props {
   itens: PixAutoAcordo[];
-  saldos: PixAutoSaldo[];
   pctPorSetor: Record<string, number>;
   mes: MesRef;
   nomePorOperador?: Record<string, string>;
@@ -74,7 +82,7 @@ function LinhaPremiacao({ l }: { l: Premiacao }) {
 
   return (
     <div className={cn(
-      'grid grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))] items-center gap-3',
+      'grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] items-center gap-3',
       'border-t border-border/60 px-3 py-2.5 transition-colors hover:bg-muted/30',
       quitado && 'opacity-60',
     )}>
@@ -98,32 +106,34 @@ function LinhaPremiacao({ l }: { l: Premiacao }) {
         </div>
       </div>
 
-      <Parcela
-        rotulo="Premiação" valor={l.premiacao}
-        titulo={l.dobrou
-          ? `Comissão de ${formatCurrency(l.comissao)} dobrada`
-          : 'Comissão aprovada do mês'}
-      />
+      <div className="min-w-0">
+        <Parcela
+          rotulo="Premiação" valor={l.premiacao}
+          cls={l.dobrou ? 'text-amber-600 dark:text-amber-400' : undefined}
+          titulo={l.dobrou
+            ? `Comissão de ${formatCurrency(l.comissao)} dobrada por bater os dois requisitos`
+            : 'Comissão aprovada do mês'}
+        />
+        {/* A conta embaixo do valor dobrado: sem ela, quem sabe de cor quanto a
+            pessoa fez acha que o número está errado. */}
+        {l.dobrou && (
+          <p className="text-[10px] leading-tight text-muted-foreground tabular-nums">
+            {formatCurrency(l.comissao)} × 2
+          </p>
+        )}
+      </div>
       <Parcela rotulo="Já pago" valor={l.jaPago} cls="text-muted-foreground" />
-      <Parcela
-        rotulo="Divergência"
-        valor={l.divergencia}
-        cls={l.divergencia < 0 ? 'text-destructive' : l.divergencia > 0 ? 'text-emerald-500' : 'text-muted-foreground/50'}
-        titulo={l.divergenciaMotivo ?? 'Sem divergência em aberto'}
-      />
       <Parcela
         rotulo="Falta pagar" valor={l.falta}
         cls={deve ? 'text-destructive' : quitado ? 'text-muted-foreground' : 'text-primary'}
-        titulo={deve
-          ? 'Negativo: já saiu mais do que era devido, ou a dívida passa da premiação'
-          : undefined}
+        titulo={deve ? 'Negativo: já saiu mais do que era devido' : undefined}
       />
     </div>
   );
 }
 
 export function PixPainelPremiacoes({
-  itens, saldos, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
+  itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
 }: Props) {
   const [aberto, setAberto] = useState(true);
   const [busca, setBusca] = useState('');
@@ -131,9 +141,9 @@ export function PixPainelPremiacoes({
 
   const linhas = useMemo(
     () => painelPremiacoes({
-      itens, saldos, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
+      itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor,
     }),
-    [itens, saldos, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor],
+    [itens, pctPorSetor, mes, nomePorOperador, metaPorOperador, metaPorSetor],
   );
 
   const total = useMemo(() => totalDoPainel(linhas), [linhas]);
@@ -165,9 +175,8 @@ export function PixPainelPremiacoes({
             <p className="text-sm font-semibold leading-tight">Premiação a pagar</p>
             <p className="text-[11px] leading-tight text-muted-foreground">
               {linhas.length} {linhas.length === 1 ? 'pessoa' : 'pessoas'}
-              {total.comDobra > 0 && ` · ${total.comDobra} com premiação dobrada`}
-              {Math.abs(total.divergencia) >= 0.005
-                && ` · ${formatCurrency(total.divergencia)} de divergência`}
+              {total.comDobra > 0
+                && ` · ${total.comDobra} com premiação dobrada (+${formatCurrency(total.bonus)})`}
             </p>
           </div>
           <div className="hidden shrink-0 text-right sm:block">
@@ -207,11 +216,10 @@ export function PixPainelPremiacoes({
 
             {/* Cabeçalho das colunas: sem ele as quatro parcelas viram quatro
                 números soltos, e o leitor tem de adivinhar qual é qual. */}
-            <div className="grid grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))] gap-3 border-t border-border/60 bg-muted/30 px-3 py-1.5">
+            <div className="grid grid-cols-[minmax(0,1.6fr)_repeat(3,minmax(0,1fr))] gap-3 border-t border-border/60 bg-muted/30 px-3 py-1.5">
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Pessoa</span>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Premiação</span>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Já pago</span>
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Divergência</span>
               <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Falta pagar</span>
             </div>
 
@@ -223,15 +231,17 @@ export function PixPainelPremiacoes({
               visiveis.map(l => <LinhaPremiacao key={l.operadorId} l={l} />)
             )}
 
-            {/* O aviso da dívida: é o caso que precisa de decisão de gente, e
-                não pode ficar só como número vermelho no meio da lista. */}
-            {total.divergencia < -0.005 && (
-              <p className="flex items-start gap-1.5 border-t border-border/60 bg-amber-500/5 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
-                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-amber-500" />
+            {/* A dobra nao acontece sem os DOIS requisitos, e o segundo depende
+                de a meta do mes estar cadastrada. Sem esta nota, quem esperava
+                o dobro e nao viu ficaria procurando defeito no lugar errado. */}
+            {total.comDobra === 0 && (
+              <p className="flex items-start gap-1.5 border-t border-border/60 bg-muted/20 px-4 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                <AlertTriangle className="mt-px h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 <span>
-                  A divergência já está descontada de «falta pagar». Ela some da
-                  lista quando o pagamento que a levou for marcado como pago —
-                  não desconte de novo no próximo mês.
+                  Ninguém com premiação dobrada aqui. A dobra exige os dois
+                  requisitos — a quantidade de acordos Pix do mês <strong>e</strong> a
+                  meta de recebimento batida. Sem meta cadastrada em Metas, o
+                  segundo requisito não fecha.
                 </span>
               </p>
             )}

@@ -447,6 +447,19 @@ export function PainelMonitor({ expandido, onSair }: Props) {
           carregandoMais={carregandoMais}
           onVerAnteriores={verAnteriores}
           somenteLeitura
+          /*
+           * A conversa é desenhada do ponto de vista DELE, não do meu.
+           *
+           * Eu sou um terceiro aqui. Sem isto, `Conversa` comparava o autor de
+           * cada mensagem com o MEU id, não achava ninguém, e pintava as duas
+           * pontas de cinza — a conversa virava um monólogo de balões iguais e
+           * perdia o que a cor existe para dizer: quem falou.
+           *
+           * Numa conversa dele comigo o efeito parece estranho e é o certo: as
+           * minhas mensagens ficam cinza e as dele coloridas. A tela mostra o
+           * chat como ELE o vê.
+           */
+          perspectivaDe={alvo.perfil_id}
         />
       </div>
     </div>

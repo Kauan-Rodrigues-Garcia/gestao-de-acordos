@@ -68,6 +68,20 @@ interface Props {
    * oferecer campo nenhum.
    */
   somenteLeitura?: boolean;
+  /**
+   * De quem é o ponto de vista desta tela. Ausente = o meu.
+   *
+   * O balão colorido é o de quem FALA do lado de dentro, e na monitoria esse
+   * lado não é o meu: eu sou um terceiro lendo a conversa de outra pessoa. Sem
+   * isto, tudo virava balão cinza — nem o operador monitorado nem o outro lado
+   * ganhavam a cor, e a conversa perdia justamente o que a cor diz, que é
+   * QUEM falou.
+   *
+   * Numa conversa dele COMIGO o efeito é o certo e parece estranho de início:
+   * as minhas mensagens ficam cinza e as dele coloridas. É o ponto — a tela
+   * mostra o chat como ele o vê, não como eu o veria.
+   */
+  perspectivaDe?: string | null;
   /** Abre o painel de configurações do grupo. Ausente = grupo não configurável. */
   onConfigurarGrupo?: () => void;
 }
@@ -75,12 +89,23 @@ interface Props {
 export function Conversa({
   conversa, mensagens, online, digitando, gravando, expandido, onVoltar, onEnviar,
   onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
-  somenteLeitura = false, onConfigurarGrupo,
+  somenteLeitura = false, perspectivaDe, onConfigurarGrupo,
 }: Props) {
   const { perfil } = useAuth();
   const { toast } = useToast();
   const { temPermissao } = useCargoPermissoes();
   const meuId = perfil?.id ?? '';
+  /*
+   * Quem ocupa o lado de dentro da conversa.
+   *
+   * É `meuId` em tudo que não é monitoria — e o resto do componente pergunta a
+   * ESTE, não ao `meuId`, para decidir cor, lado e a palavra «Você».
+   *
+   * `meuId` continua servindo ao que é de fato meu: o aviso de curtida na
+   * minha mensagem e o carregamento das curtidas. Na monitoria eu não curto
+   * nem sou curtido, então essas duas coisas ficam inertes sozinhas.
+   */
+  const euNaTela = perspectivaDe ?? meuId;
 
   /*
    * Grupo travado: quem escreve.
@@ -599,7 +624,7 @@ export function Conversa({
                 // responde a pergunta que o nome do grupo não responde.
                 <span className="truncate text-muted-foreground">
                   {membros.length > 0
-                    ? membros.slice(0, 4).map(x => (x.perfil_id === meuId ? 'Você' : x.nome.split(' ')[0])).join(', ')
+                    ? membros.slice(0, 4).map(x => (x.perfil_id === euNaTela ? 'Você' : x.nome.split(' ')[0])).join(', ')
                       + (membros.length > 4 ? ` e mais ${membros.length - 4}` : '')
                     : `${conversa.participantes} participantes`}
                 </span>
@@ -653,7 +678,7 @@ export function Conversa({
         )}
 
         {mensagens.map(m => {
-          const meu = m.autor_id === meuId;
+          const meu = m.autor_id === euNaTela;
           const dia = diaDaMensagem(m.criado_em);
           const novoDia = dia !== diaAnterior;
           diaAnterior = dia;
@@ -678,7 +703,7 @@ export function Conversa({
                 )}
                 <AvisoDeSistema
                   m={m}
-                  nomeDoAutor={m.autor_id === meuId ? 'Você' : (autores.get(m.autor_id ?? '') ?? 'Alguém')}
+                  nomeDoAutor={m.autor_id === euNaTela ? 'Você' : (autores.get(m.autor_id ?? '') ?? 'Alguém')}
                 />
               </div>
             );
@@ -738,7 +763,7 @@ export function Conversa({
                     <Citacao
                       alvo={porId.get(m.respondendo_id) ?? null}
                       meu={meu}
-                      souOAutorDoAlvo={porId.get(m.respondendo_id)?.autor_id === meuId}
+                      souOAutorDoAlvo={porId.get(m.respondendo_id)?.autor_id === euNaTela}
                       nomeDoOutro={conversa.outro_nome}
                     />
                   )}

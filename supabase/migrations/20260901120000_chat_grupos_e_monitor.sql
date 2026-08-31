@@ -641,8 +641,12 @@ BEGIN
 
     -- Quem já saiu volta pela mesma linha: recriar apagaria o corte de leitura
     -- e o grupo reapareceria com tudo por ler.
+    --
+    -- `apagada_em` volta a NULL junto: sair marca os dois (ver
+    -- `fn_chat_grupo_sair`), e limpar só um devolveria a pessoa ao grupo com a
+    -- conversa ainda escondida da lista dela.
     UPDATE public.chat_participantes
-       SET saiu_em = NULL, entrou_em = NOW(), adicionado_por = v_eu
+       SET saiu_em = NULL, apagada_em = NULL, entrou_em = NOW(), adicionado_por = v_eu
      WHERE conversa_id = p_conversa AND perfil_id = v_membro AND saiu_em IS NOT NULL;
 
     IF NOT FOUND THEN
@@ -710,8 +714,22 @@ DECLARE
   v_era_admin BOOLEAN;
   v_herdeiro UUID;
 BEGIN
+  /*
+   * `apagada_em` junto com `saiu_em`, e não só o segundo.
+   *
+   * São duas coisas diferentes que precisam acontecer juntas aqui: `saiu_em`
+   * tira a pessoa do grupo (para de receber, não escreve mais), e `apagada_em`
+   * tira a conversa da LISTA dela. Sem o segundo o grupo continuava aparecendo
+   * na lista, mudo — dava para abrir e ler o histórico, e não dava para
+   * escrever nem receber mensagem nova. Quem saiu não entende por que a linha
+   * ficou ali, e quem não saiu não entende por que ela não responde.
+   *
+   * O histórico não some do banco: as mensagens ficam, e readicionar a pessoa
+   * (`fn_chat_grupo_adicionar` limpa os dois campos) devolve a conversa
+   * inteira, com o corte de leitura onde estava.
+   */
   UPDATE public.chat_participantes
-     SET saiu_em = NOW()
+     SET saiu_em = NOW(), apagada_em = NOW()
    WHERE conversa_id = p_conversa AND perfil_id = v_eu AND saiu_em IS NULL
   RETURNING admin INTO v_era_admin;
   IF NOT FOUND THEN RETURN; END IF;
