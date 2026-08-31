@@ -63,15 +63,47 @@ export interface MensagemChat {
   expurgado_em: string | null;
   /** Mensagem citada por esta, se for uma resposta. */
   respondendo_id: string | null;
-  /** Quem curtiu. Uma por mensagem: o chat e 1 para 1. */
-  curtida_por:  string | null;
+  /**
+   * Carimbo da última mudança de curtida NESTA mensagem.
+   *
+   * Não diz quem curtiu — `chat_curtidas` faz isso desde 01/09/2026, porque em
+   * grupo a coluna única apagava a curtida anterior em silêncio. O campo ficou
+   * porque é ele que acorda o Realtime: `chat_curtidas` não está na publicação,
+   * e sem um UPDATE aqui a curtida só apareceria no F5 do outro lado.
+   */
   curtida_em:   string | null;
+  /**
+   * Aviso do sistema no meio da conversa: 'entrou', 'saiu', 'removido',
+   * 'foto', 'nome', 'escrita', 'criou'. `null` é mensagem de gente.
+   */
+  sistema:       string | null;
+  sistema_dados: Record<string, unknown> | null;
+}
+
+/** Quantas curtidas uma mensagem tem, e se eu sou uma delas. */
+export interface CurtidasDaMensagem {
+  total:   number;
+  euCurti: boolean;
+}
+
+/** Uma pessoa no cartão que abre ao passar o mouse sobre o coração. */
+export interface QuemCurtiu {
+  perfil_id: string;
+  nome:      string;
+  foto_url:  string | null;
 }
 
 /** Uma linha da lista de conversas, já com a outra pessoa resolvida. */
 export interface ConversaChat {
   id:                 string;
-  outro_id:           string;
+  /**
+   * A outra pessoa — `null` em GRUPO, onde não existe «a outra».
+   *
+   * Nada mais no tipo é opcional por causa do grupo: `outro_nome` vira o nome
+   * do grupo e `outro_foto` a foto dele, de propósito, para a lista continuar
+   * desenhando as duas coisas com o mesmo componente.
+   */
+  outro_id:           string | null;
   outro_nome:         string;
   outro_usuario:      string | null;
   outro_foto:         string | null;
@@ -100,6 +132,14 @@ export interface ConversaChat {
    * verdade sobre onde ela está.
    */
   outro_empresa:      string | null;
+  /** 'direta' (duas pessoas) ou 'grupo' (N pessoas, com nome e foto). */
+  tipo:               'direta' | 'grupo';
+  /** Quantas pessoas estão dentro. Sempre 1 na direta — a tela não usa lá. */
+  participantes:      number;
+  /** Administro este grupo? Abre o painel de configurações. */
+  sou_admin:          boolean;
+  /** Grupo travado: só quem administra escreve. Sempre false na direta. */
+  somente_lideranca:  boolean;
 }
 
 export interface ContatoChat {
@@ -230,6 +270,10 @@ export async function listarConversas(): Promise<ConversaChat[]> {
     nao_lidas: number; leitura_do_outro: string | null;
     entrega_minha: string | null; entrega_do_outro: string | null;
     outro_perfil: string | null;
+    // Só existem depois da migration 20260901120000; até lá chegam undefined
+    // e caem nos padrões de conversa direta lá embaixo.
+    tipo?: 'direta' | 'grupo'; participantes?: number;
+    sou_admin?: boolean; somente_lideranca?: boolean;
   }[]>('fn_chat_minhas_conversas', {});
 
   if (error) {
@@ -257,6 +301,10 @@ export async function listarConversas(): Promise<ConversaChat[]> {
       entrega_do_outro:   c.entrega_do_outro,
       outro_empresa:      c.outro_empresa,
       outro_perfil:       c.outro_perfil ?? null,
+      tipo:               c.tipo ?? 'direta',
+      participantes:      c.participantes ?? 1,
+      sou_admin:          c.sou_admin === true,
+      somente_lideranca:  c.somente_lideranca === true,
     };
   });
 }
@@ -290,7 +338,13 @@ export async function buscarConversa(
   }[]>('fn_chat_uma_conversa', { p_conversa: conversaId });
 
   const c = data?.[0];
-  if (error || !c) return null;
+  /*
+   * Sem linha pode ser GRUPO: `fn_chat_uma_conversa` resolve o par, e grupo não
+   * tem par. Vale a segunda tentativa em `chat_conversas` — a RLS já garante
+   * que só chega o que eu posso ver, e é este caminho que faz o grupo recém
+   * criado abrir em vez de cair numa tela em branco.
+   */
+  if (error || !c) return buscarGrupo(conversaId);
 
   return {
     id:                 c.id,
@@ -303,6 +357,10 @@ export async function buscarConversa(
     em_historico:       false,
     ultimo_texto:       null,
     ultimo_autor_id:    null,
+    tipo:               'direta',
+    participantes:      1,
+    sou_admin:          false,
+    somente_lideranca:  false,
     nao_lidas:          0,
     leitura_do_outro:   null,
     entrega_minha:      null,
@@ -312,6 +370,57 @@ export async function buscarConversa(
     // conversa recem-criada: a etiqueta ADM aparece no primeiro refresh da
     // lista, segundos depois. Nao vale uma RPC nova por isso.
     outro_perfil:       null,
+  };
+}
+
+/**
+ * O grupo, quando `fn_chat_uma_conversa` não devolveu nada.
+ *
+ * Lê `chat_conversas` direto porque a RLS já é a autorização: a policy de
+ * SELECT exige ser parte da conversa (ou estar monitorando), então uma linha
+ * que chega aqui é uma linha que eu posso ver.
+ *
+ * `sou_admin` vem da RPC e não de uma leitura em `chat_participantes`: a policy
+ * daquela tabela deixa ver TODOS os participantes da minha conversa, então um
+ * `select('admin').limit(1)` responderia sobre uma pessoa qualquer do grupo.
+ */
+async function buscarGrupo(conversaId: string): Promise<ConversaChat | null> {
+  const { data, error } = await db('chat_conversas')
+    .select('id, tipo, nome, foto_url, ultima_mensagem_em, somente_lideranca')
+    .eq('id', conversaId)
+    .limit(1);
+
+  const g = (data ?? [])[0] as {
+    id: string; tipo: string; nome: string | null; foto_url: string | null;
+    ultima_mensagem_em: string | null; somente_lideranca: boolean | null;
+  } | undefined;
+  if (error || !g || g.tipo !== 'grupo') return null;
+
+  const { data: souAdmin } = await rpcSemTipo<boolean>(
+    'fn_chat_grupo_administro', { p_conversa: conversaId },
+  );
+
+  return {
+    id:                 g.id,
+    outro_id:           null,
+    outro_nome:         g.nome ?? 'Grupo',
+    outro_usuario:      null,
+    outro_foto:         g.foto_url,
+    outro_perfil:       null,
+    ultima_mensagem_em: g.ultima_mensagem_em,
+    ultima_atividade_em: g.ultima_mensagem_em,
+    em_historico:       false,
+    ultimo_texto:       null,
+    ultimo_autor_id:    null,
+    nao_lidas:          0,
+    leitura_do_outro:   null,
+    entrega_minha:      null,
+    entrega_do_outro:   null,
+    outro_empresa:      null,
+    tipo:               'grupo',
+    participantes:      0,
+    sou_admin:          souAdmin === true,
+    somente_lideranca:  g.somente_lideranca === true,
   };
 }
 
@@ -332,7 +441,7 @@ export async function listarMensagens(
   conversaId: string, antesDe?: string,
 ): Promise<{ mensagens: MensagemChat[]; temMais: boolean }> {
   let q = db('chat_mensagens')
-    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_por, curtida_em')
+    .select('id, conversa_id, autor_id, texto, anexos, criado_em, disparo_id, expurgado_em, respondendo_id, curtida_em, sistema, sistema_dados')
     .eq('conversa_id', conversaId);
 
   if (antesDe) q = q.lt('criado_em', antesDe);
@@ -650,10 +759,60 @@ function traduzir(mensagem: string): string {
 export async function curtirMensagem(
   mensagemId: string,
   curtir: boolean,
-): Promise<{ erro: string | null }> {
-  const { error } = await rpcSemTipo<string>('fn_chat_curtir', {
+): Promise<{ total: number | null; erro: string | null }> {
+  const { data, error } = await rpcSemTipo<number>('fn_chat_curtir', {
     p_mensagem_id: mensagemId,
     p_curtir:      curtir,
   });
-  return { erro: error ? traduzir(error.message) : null };
+  if (error) return { total: null, erro: traduzir(error.message) };
+  return { total: Number(data ?? 0), erro: null };
+}
+
+/**
+ * As curtidas de uma página de mensagens, de uma vez.
+ *
+ * Uma consulta para a página inteira, e não uma por balão: numa conversa de 60
+ * mensagens seriam 60 idas para desenhar meia dúzia de corações.
+ *
+ * `chat_curtidas` não vai ao Realtime — quem avisa a mudança é o UPDATE em
+ * `chat_mensagens.curtida_em`, e a tela relê só a mensagem que mexeu.
+ */
+export async function curtidasDasMensagens(
+  mensagemIds: readonly string[], meuId: string,
+): Promise<Map<string, CurtidasDaMensagem>> {
+  const mapa = new Map<string, CurtidasDaMensagem>();
+  if (mensagemIds.length === 0) return mapa;
+
+  const { data, error } = await db('chat_curtidas')
+    .select('mensagem_id, perfil_id')
+    .in('mensagem_id', [...mensagemIds]);
+
+  if (error) {
+    // A tabela só existe depois da migration 20260901120000. Sem ela a tela
+    // desenha zero curtidas — que é o estado correto, não um erro na cara.
+    if (!/does not exist|schema cache/i.test(error.message)) {
+      console.warn('[chat] curtidasDasMensagens:', error.message);
+    }
+    return mapa;
+  }
+
+  for (const linha of (data ?? []) as { mensagem_id: string; perfil_id: string }[]) {
+    const atual = mapa.get(linha.mensagem_id) ?? { total: 0, euCurti: false };
+    atual.total += 1;
+    if (linha.perfil_id === meuId) atual.euCurti = true;
+    mapa.set(linha.mensagem_id, atual);
+  }
+  return mapa;
+}
+
+/** Quem curtiu esta mensagem — o cartão que abre ao passar o mouse. */
+export async function quemCurtiu(mensagemId: string): Promise<QuemCurtiu[]> {
+  const { data, error } = await rpcSemTipo<QuemCurtiu[]>('fn_chat_quem_curtiu', {
+    p_mensagem_id: mensagemId,
+  });
+  if (error) {
+    console.warn('[chat] quemCurtiu:', error.message);
+    return [];
+  }
+  return data ?? [];
 }

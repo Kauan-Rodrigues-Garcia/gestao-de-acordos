@@ -80,6 +80,24 @@ export const ABAS_COM_ESCOPO = {
     prefixo: 'chat',
     niveis: ['equipe', 'setor', 'todos_setores'],
   },
+  /*
+   * A Monitoria tem escopo PRÓPRIO, separado do alcance do chat, e isso é a
+   * decisão central da aba.
+   *
+   * Alcance do chat responde «com quem eu converso»; o da monitoria responde
+   * «quem eu observo sem participar». São perguntas de gravidade diferente:
+   * um líder conversa com o setor inteiro sem que isso signifique que ele deva
+   * LER as conversas do setor inteiro. Amarrar os dois faria ampliar um
+   * ampliar o outro em silêncio — exatamente o defeito que a divisão por aba
+   * existe para impedir.
+   *
+   * `individual` não entra: monitorar a si mesmo é abrir o próprio chat.
+   */
+  chat_monitor: {
+    chaveAba: 'chat_monitor',
+    prefixo: 'chat_monitor',
+    niveis: ['equipe', 'setor', 'todos_setores'],
+  },
   lixeira: {
     chaveAba: 'ver_lixeira',
     prefixo: 'lixeira',

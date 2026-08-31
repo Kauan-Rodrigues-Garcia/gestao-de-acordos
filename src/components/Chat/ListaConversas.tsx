@@ -10,9 +10,14 @@
  * vem do banco no horário de São Paulo; esta tela apenas separa a lista única.
  */
 import { useCallback, useState } from 'react';
-import { ChevronDown, Loader2, MessageSquarePlus, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  ChevronDown, Loader2, MessageSquarePlus, Plus, Search, Trash2, Users, Lock,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type {
   ConversaChat, DestinoDisparoChat, DisparoChat,
 } from '@/services/chat/chat.service';
@@ -26,7 +31,7 @@ import { cargosChatLiberados } from '@/lib/permissoes-chat';
 import { StatusMensagem } from './StatusMensagem';
 import { estadoMensagem } from './estadoMensagem';
 
-type Aba = 'conversas' | 'historico' | 'disparos';
+type Aba = 'conversas' | 'historico' | 'disparos' | 'monitor';
 
 interface Props {
   conversas:   ConversaChat[];
@@ -40,6 +45,16 @@ interface Props {
   onApagar:    (id: string) => void;
   onNovaConversa: () => void;
   onNovoDisparo:  () => void;
+  /** Abre o diálogo de criar grupo. Ausente = sem permissão de criar. */
+  onNovoGrupo?:   () => void;
+  /**
+   * O painel de monitoria, desenhado pelo pai.
+   *
+   * Chega pronto em vez de a lista montá-lo: a aba Monitor tem estado próprio
+   * (a pessoa escolhida, a conversa dela aberta) que não tem nada a ver com a
+   * lista de conversas e a poluiria. Ausente = a aba não existe.
+   */
+  painelMonitor?: React.ReactNode;
 }
 
 interface CardDisparoProps {
@@ -201,7 +216,7 @@ function CardDisparo({ disparo, online, onAbrir }: CardDisparoProps) {
 
 export function ListaConversas({
   conversas, disparos, online, digitando, selecionada, carregando, meuId,
-  onAbrir, onApagar, onNovaConversa, onNovoDisparo,
+  onAbrir, onApagar, onNovaConversa, onNovoDisparo, onNovoGrupo, painelMonitor,
 }: Props) {
   const [aba, setAba] = useState<Aba>('conversas');
   const [busca, setBusca] = useState('');
@@ -214,6 +229,21 @@ export function ListaConversas({
   const { temPermissao } = useCargoPermissoes();
   const podeIniciar = niveisLiberados('chat', temPermissao).length > 0
     && cargosChatLiberados(temPermissao).length > 0;
+
+  /*
+   * A régua de abas é montada, não escrita à mão.
+   *
+   * «Monitor» só existe para quem tem a permissão — e o pai já respondeu isso
+   * ao passar (ou não) `painelMonitor`. Repetir a pergunta aqui seria uma
+   * segunda régua de acesso para manter em dia.
+   */
+  const ABAS: Aba[] = painelMonitor
+    ? ['conversas', 'historico', 'disparos', 'monitor']
+    : ['conversas', 'historico', 'disparos'];
+  const ROTULO_ABA: Record<Aba, string> = {
+    conversas: 'Conversas', historico: 'Histórico',
+    disparos: 'Disparos',  monitor: 'Monitor',
+  };
 
   const atuais = conversas.filter(c => !c.em_historico);
   const historico = conversas.filter(c => c.em_historico);
@@ -255,10 +285,10 @@ export function ListaConversas({
       */}
       <div className="flex shrink-0 items-center gap-1 px-2 pt-2">
         <div className="flex min-w-0 flex-1 gap-0.5 rounded-lg bg-muted/35 p-0.5">
-          {(['conversas', 'historico', 'disparos'] as const).map(a => (
+          {ABAS.map(a => (
             <button
               key={a} onClick={() => setAba(a)}
-              title={a === 'conversas' ? 'Conversas' : a === 'historico' ? 'Histórico' : 'Disparos'}
+              title={ROTULO_ABA[a]}
               className={cn(
                 'min-w-0 flex-1 basis-0 truncate rounded-md px-1 py-1.5 text-[11px] font-medium transition-colors',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -267,25 +297,58 @@ export function ListaConversas({
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              {a === 'conversas' ? 'Conversas' : a === 'historico' ? 'Histórico' : 'Disparos'}
+              {ROTULO_ABA[a]}
               {a === 'disparos' && disparos.length > 0 && (
                 <span className="ml-1 opacity-60">{disparos.length}</span>
               )}
             </button>
           ))}
         </div>
-        {podeIniciar && aba !== 'historico' && (
-          <Button variant="ghost" size="icon"
-                  className="h-7 w-7 shrink-0"
-                  onClick={aba === 'conversas' ? onNovaConversa : onNovoDisparo}
-                  title={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}
-                  aria-label={aba === 'conversas' ? 'Nova conversa' : 'Novo disparo'}>
-            {aba === 'conversas' ? <MessageSquarePlus className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+
+        {/* Uma ação por aba. Em «Conversas» são duas — pessoa ou grupo — e aí
+            vira menu: dois botões redondos lado a lado voltariam a espremer a
+            régua de abas na janela compacta, que é o defeito que ela acabou de
+            deixar de ter. */}
+        {podeIniciar && aba === 'conversas' && (
+          onNovoGrupo ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                        title="Começar" aria-label="Começar uma conversa ou um grupo">
+                  <MessageSquarePlus className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem className="gap-2 text-xs" onClick={onNovaConversa}>
+                  <MessageSquarePlus className="w-3.5 h-3.5" /> Nova conversa
+                </DropdownMenuItem>
+                <DropdownMenuItem className="gap-2 text-xs" onClick={onNovoGrupo}>
+                  <Users className="w-3.5 h-3.5" /> Novo grupo
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                    onClick={onNovaConversa}
+                    title="Nova conversa" aria-label="Nova conversa">
+              <MessageSquarePlus className="w-4 h-4" />
+            </Button>
+          )
+        )}
+        {podeIniciar && aba === 'disparos' && (
+          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
+                  onClick={onNovoDisparo}
+                  title="Novo disparo" aria-label="Novo disparo">
+            <Plus className="w-4 h-4" />
           </Button>
         )}
       </div>
 
-      {aba !== 'disparos' && (
+      {aba === 'monitor' && (
+        <div className="min-w-0 flex-1 overflow-hidden min-h-0">{painelMonitor}</div>
+      )}
+
+      {aba !== 'disparos' && aba !== 'monitor' && (
         <div className="px-2 py-2 shrink-0">
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -298,6 +361,7 @@ export function ListaConversas({
         </div>
       )}
 
+      {aba !== 'monitor' && (
       <div className="min-w-0 flex-1 overflow-y-auto overflow-x-hidden min-h-0">
         {aba !== 'disparos' ? (
           <>
@@ -332,11 +396,21 @@ export function ListaConversas({
                     selecionada === c.id ? 'bg-muted' : 'hover:bg-muted/50',
                   )}
                 >
+                  {/* Grupo nao tem "outro": o ponto verde e a presenca de UMA
+                      pessoa, e num grupo ele nao pertenceria a ninguem. */}
                   <AvatarChat nome={c.outro_nome} foto={c.outro_foto} tamanho={40}
-                              online={online.has(c.outro_id)} />
+                              online={!!c.outro_id && online.has(c.outro_id)} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-1.5">
+                      {c.tipo === 'grupo' && (
+                        <Users aria-hidden="true" className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      )}
                       <p className="text-sm font-medium truncate min-w-0">{c.outro_nome}</p>
+                      {c.tipo === 'grupo' && c.somente_lideranca && (
+                        <span title="Só a liderança escreve neste grupo" className="shrink-0">
+                          <Lock aria-hidden="true" className="h-3 w-3 text-muted-foreground" />
+                        </span>
+                      )}
                       <TagAdm perfil={c.outro_perfil} />
                       <TagEmpresa slug={c.outro_empresa} />
                     </div>
@@ -344,7 +418,7 @@ export function ListaConversas({
                       'text-xs truncate',
                       c.nao_lidas > 0 ? 'text-foreground font-medium' : 'text-muted-foreground',
                     )}>
-                      {digitando.has(c.outro_id)
+                      {!!c.outro_id && digitando.has(c.outro_id)
                         ? <span className="text-primary">digitando…</span>
                         : <>
                             {c.ultimo_autor_id === meuId && <span className="opacity-60">Você: </span>}
@@ -380,7 +454,7 @@ export function ListaConversas({
                 <button
                   onClick={() => onApagar(c.id)}
                   className="absolute right-1 top-1 p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-background transition-opacity"
-                  aria-label={`Tirar a conversa com ${c.outro_nome} da lista`}
+                  aria-label={`Tirar ${c.tipo === 'grupo' ? 'o grupo' : 'a conversa com'} ${c.outro_nome} da lista`}
                   title="Tirar da minha lista"
                 >
                   <Trash2 className="w-3 h-3 text-muted-foreground" />
@@ -412,6 +486,7 @@ export function ListaConversas({
           </>
         )}
       </div>
+      )}
     </div>
   );
 }

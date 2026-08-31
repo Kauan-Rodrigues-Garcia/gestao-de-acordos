@@ -380,6 +380,77 @@ export const PERMISSOES: PermissaoMeta[] = [
     grupo: 'Chat', padrao: TODOS_COM_RH,
     depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para o cargo valer.' },
   },
+  /*
+   * ── Grupos ───────────────────────────────────────────────────────────────
+   *
+   * Quatro chaves e não uma: criar um grupo e mexer no grupo dos outros são
+   * poderes diferentes, e a operação já pediu a distinção («o líder cria, mas
+   * quem tira gente é a gerência» é uma configuração legítima).
+   *
+   * Nenhuma delas decide COM QUEM se monta o grupo: isso é o alcance do chat
+   * (`chat_escopo_*`), o mesmo da conversa direta. Uma segunda régua de
+   * alcance só para grupos seria uma segunda coisa para manter em dia.
+   */
+  {
+    key: 'chat_grupo_criar', label: 'Chat: criar grupos',
+    descricao: 'Montar um grupo com as pessoas que já estão no seu alcance',
+    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
+  },
+  {
+    key: 'chat_grupo_editar', label: 'Chat: configurar grupos',
+    descricao: 'Alterar nome, foto e a trava «só a liderança escreve» dos grupos que administra',
+    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
+  },
+  {
+    key: 'chat_grupo_adicionar', label: 'Chat: adicionar ao grupo',
+    descricao: 'Colocar pessoas nos grupos que administra',
+    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
+  },
+  {
+    key: 'chat_grupo_remover', label: 'Chat: remover do grupo',
+    descricao: 'Tirar pessoas dos grupos que administra',
+    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para haver grupo.' },
+  },
+  /*
+   * ── Monitoria ────────────────────────────────────────────────────────────
+   *
+   * Abre a aba Monitor, onde se escolhe uma pessoa e se acompanha o chat dela
+   * em tempo real. É uma chave de VIGILÂNCIA, e por isso os níveis existem
+   * separados: um líder acompanhar o próprio setor é uma coisa, e alguém
+   * acompanhar a empresa inteira é outra, que deve ser decidida de propósito.
+   *
+   * Monitoria é só leitura, sempre. Nenhum nível permite escrever, curtir ou
+   * marcar como lida na conversa de outra pessoa — ver `fn_chat_curtir` e
+   * `fn_chat_posso_escrever`, que exigem participação e não aceitam monitor.
+   */
+  {
+    key: 'chat_monitor', label: 'Chat: aba Monitor',
+    descricao: 'Acompanhar em tempo real as conversas de outra pessoa (somente leitura)',
+    grupo: 'Chat', padrao: { ...LIDERANCA, ouvidoria: true },
+    depende: { chaves: ['ver_chat'], motivo: 'O chat precisa estar ligado para monitorar.' },
+  },
+  {
+    key: 'chat_monitor_escopo_equipe', label: 'Monitor: pessoas da equipe',
+    descricao: 'Acompanhar quem está na mesma equipe',
+    grupo: 'Chat', padrao: {},
+    depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
+  },
+  {
+    key: 'chat_monitor_escopo_setor', label: 'Monitor: pessoas do setor',
+    descricao: 'Acompanhar quem está no mesmo setor',
+    grupo: 'Chat', padrao: { lider: true, elite: true, gerencia: true, ouvidoria: true },
+    depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
+  },
+  {
+    key: 'chat_monitor_escopo_todos_setores', label: 'Monitor: a empresa inteira',
+    descricao: 'Acompanhar qualquer pessoa da empresa',
+    grupo: 'Chat', padrao: { diretoria: true },
+    depende: { chaves: ['chat_monitor'], motivo: 'A aba Monitor precisa estar ligada para o alcance valer.' },
+  },
   {
     key: 'ver_tickets', label: 'Aba Tickets',
     descricao: 'Abrir a fila de chamados internos',

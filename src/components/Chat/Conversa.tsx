@@ -16,7 +16,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft, Paperclip, Send, Smile, X, Loader2, Mic, Trash2, Check,
-  Heart, CornerUpLeft,
+  Heart, CornerUpLeft, Settings2, Lock, Eye,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -24,9 +24,11 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
 import {
-  subirAnexo, curtirMensagem, LIMITE_ANEXO,
+  subirAnexo, curtirMensagem, curtidasDasMensagens, quemCurtiu, LIMITE_ANEXO,
   type MensagemChat, type ConversaChat, type AnexoChat,
+  type CurtidasDaMensagem, type QuemCurtiu,
 } from '@/services/chat/chat.service';
+import { listarMembros, type MembroGrupo } from '@/services/chat/grupos.service';
 import { useGravadorAudio } from '@/hooks/useGravadorAudio';
 import {
   AvatarChat, AnexoNoBalao, EMOJIS, BalaoDigitando, EstiloEntrada, PlayerAudio,
@@ -55,11 +57,23 @@ interface Props {
   temMais:        boolean;
   carregandoMais: boolean;
   onVerAnteriores: () => void;
+  /**
+   * Observação pura: sem campo de escrita, sem curtir, sem responder.
+   *
+   * É a aba Monitor. Não é só cosmética — o banco recusaria essas escritas de
+   * qualquer forma (`fn_chat_posso_escrever` e `fn_chat_curtir` exigem
+   * participação) —, mas oferecer um campo que sempre falha é pior que não
+   * oferecer campo nenhum.
+   */
+  somenteLeitura?: boolean;
+  /** Abre o painel de configurações do grupo. Ausente = grupo não configurável. */
+  onConfigurarGrupo?: () => void;
 }
 
 export function Conversa({
   conversa, mensagens, online, digitando, gravando, expandido, onVoltar, onEnviar,
   onDigitando, onGravando, temMais, carregandoMais, onVerAnteriores,
+  somenteLeitura = false, onConfigurarGrupo,
 }: Props) {
   const { perfil } = useAuth();
   const { toast } = useToast();
@@ -253,55 +267,125 @@ export function Conversa({
    * concorda, a entrada some e a fonte volta a ser uma só. Falhou, some também,
    * e a mensagem reaparece como estava.
    */
-  const [curtidasLocais, setCurtidasLocais] = useState<Map<string, string | null>>(new Map());
+  const [curtidas, setCurtidas] = useState<Map<string, CurtidasDaMensagem>>(new Map());
 
-  const soltarLocal = useCallback((id: string) => {
-    setCurtidasLocais(atual => {
-      if (!atual.has(id)) return atual;
-      const copia = new Map(atual);
-      copia.delete(id);
-      return copia;
-    });
-  }, []);
-
-  // O servidor alcançou o palpite: a marca local não serve mais para nada.
+  /*
+   * Carrega as curtidas da página inteira de uma vez.
+   *
+   * `chat_curtidas` é uma tabela à parte desde 01/09/2026 — em grupo, a coluna
+   * única de antes apagava a curtida anterior em silêncio a cada nova. O preço
+   * é esta consulta; ela cobre as 60 mensagens da página numa ida só.
+   *
+   * A dependência é a IDENTIDADE das mensagens, não o array: `mensagens` é
+   * recriado a cada evento de realtime, e depender dele relançaria a consulta
+   * a cada tecla digitada do outro lado.
+   */
+  const chaveDaPagina = mensagens.map(m => m.id).join(',');
   useEffect(() => {
-    if (curtidasLocais.size === 0) return;
-    for (const m of mensagens) {
-      if (curtidasLocais.has(m.id) && curtidasLocais.get(m.id) === m.curtida_por) {
-        soltarLocal(m.id);
-      }
-    }
-  }, [mensagens, curtidasLocais, soltarLocal]);
+    const ids = chaveDaPagina ? chaveDaPagina.split(',') : [];
+    if (!ids.length || !meuId) { setCurtidas(new Map()); return; }
+    let cancelado = false;
+    void curtidasDasMensagens(ids, meuId).then(mapa => {
+      if (!cancelado) setCurtidas(mapa);
+    });
+    return () => { cancelado = true; };
+  }, [chaveDaPagina, meuId]);
 
-  /** As mensagens como a tela deve desenhá-las, já com o palpite aplicado. */
-  const mensagensNaTela = useMemo(
-    () => (curtidasLocais.size === 0 ? mensagens : mensagens.map(m => (
-      curtidasLocais.has(m.id)
-        ? { ...m, curtida_por: curtidasLocais.get(m.id) ?? null }
-        : m
-    ))),
-    [mensagens, curtidasLocais],
-  );
+  /*
+   * Recarrega quando alguém curte do outro lado.
+   *
+   * `curtida_em` é o carimbo de qualquer mudança de curtida, e viaja como
+   * UPDATE de `chat_mensagens` pelo realtime que `useChat` já escuta. É ele
+   * que dispara este efeito — `chat_curtidas` não está na publicação, e
+   * publicá-la dobraria o tráfego para dizer a mesma coisa.
+   */
+  const carimboDasCurtidas = mensagens.map(m => m.curtida_em ?? '').join(',');
+  useEffect(() => {
+    const ids = mensagens.filter(m => m.curtida_em).map(m => m.id);
+    if (!ids.length || !meuId) return;
+    let cancelado = false;
+    void curtidasDasMensagens(ids, meuId).then(mapa => {
+      if (cancelado) return;
+      // Mescla em vez de substituir: as mensagens sem `curtida_em` nunca
+      // tiveram curtida, e não estão no resultado desta consulta.
+      setCurtidas(atual => {
+        const copia = new Map(atual);
+        for (const id of ids) {
+          const novo = mapa.get(id);
+          if (novo) copia.set(id, novo); else copia.delete(id);
+        }
+        return copia;
+      });
+    });
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- o carimbo É a dependência; `mensagens` muda a cada evento.
+  }, [carimboDasCurtidas, meuId]);
 
   /** Índice por id: a citação precisa achar a mensagem original para desenhar. */
   const porId = useMemo(
-    () => new Map(mensagensNaTela.map(m => [m.id, m])),
-    [mensagensNaTela],
+    () => new Map(mensagens.map(m => [m.id, m])),
+    [mensagens],
   );
 
+  /*
+   * Quem é quem no grupo.
+   *
+   * Numa conversa direta o nome do autor é redundante — só há dois lados, e a
+   * posição do balão já diz qual. Em grupo é a informação que falta: sem ela,
+   * dez pessoas viram uma coluna anônima de balões cinza.
+   *
+   * Carregado uma vez por conversa. A lista muda quando alguém entra ou sai, e
+   * isso chega como aviso de sistema — que recarrega a lista pelo efeito.
+   */
+  const [membros, setMembros] = useState<MembroGrupo[]>([]);
+  const entradasESaidas = mensagens.filter(m => m.sistema).length;
+  useEffect(() => {
+    if (conversa.tipo !== 'grupo') { setMembros([]); return; }
+    let cancelado = false;
+    void listarMembros(conversa.id).then(r => { if (!cancelado) setMembros(r); });
+    return () => { cancelado = true; };
+  }, [conversa.id, conversa.tipo, entradasESaidas]);
+
+  const autores = useMemo(
+    () => new Map(membros.map(m => [m.perfil_id, m.nome])),
+    [membros],
+  );
+
+  /** Cor estável por pessoa, como no WhatsApp — o olho separa antes de ler. */
+  const corDoAutor = useCallback((id: string) => {
+    const paleta = [
+      'text-sky-600 dark:text-sky-400', 'text-emerald-600 dark:text-emerald-400',
+      'text-violet-600 dark:text-violet-400', 'text-amber-600 dark:text-amber-400',
+      'text-rose-600 dark:text-rose-400', 'text-cyan-600 dark:text-cyan-400',
+    ];
+    let soma = 0;
+    for (let i = 0; i < id.length; i++) soma = (soma + id.charCodeAt(i)) % 997;
+    return paleta[soma % paleta.length];
+  }, []);
 
   const curtir = useCallback(async (m: MensagemChat) => {
-    const vaiCurtir = !m.curtida_por;
-    // Pinta AGORA. O realtime confirma depois e a marca local se apaga sozinha.
-    setCurtidasLocais(atual => new Map(atual).set(m.id, vaiCurtir ? meuId : null));
+    if (somenteLeitura) return;   // monitor observa, não interage
+    const antes = curtidas.get(m.id) ?? { total: 0, euCurti: false };
+    const vaiCurtir = !antes.euCurti;
 
-    const { erro: falha } = await curtirMensagem(m.id, vaiCurtir);
+    // Pinta AGORA, com a contagem já ajustada. A consulta de confirmação chega
+    // pelo realtime e substitui este palpite pelo número real.
+    setCurtidas(atual => new Map(atual).set(m.id, {
+      total:   Math.max(0, antes.total + (vaiCurtir ? 1 : -1)),
+      euCurti: vaiCurtir,
+    }));
+
+    const { total, erro: falha } = await curtirMensagem(m.id, vaiCurtir);
     if (falha) {
       setErro(falha);
-      soltarLocal(m.id);   // desfaz o palpite: a mensagem volta como estava
+      // Desfaz o palpite: a mensagem volta exatamente como estava.
+      setCurtidas(atual => new Map(atual).set(m.id, antes));
+      return;
     }
-  }, [meuId, soltarLocal]);
+    if (total !== null) {
+      setCurtidas(atual => new Map(atual).set(m.id, { total, euCurti: vaiCurtir }));
+    }
+  }, [curtidas, somenteLeitura]);
 
   /*
    * Trava do duplo clique.
@@ -338,23 +422,31 @@ export function Conversa({
    * `curtidasVistas` começa preenchido com o que já estava na tela — sem isso,
    * abrir uma conversa antiga dispararia um toast para cada coração antigo.
    */
-  const curtidasVistas = useRef<Set<string> | null>(null);
+  const curtidasVistas = useRef<Map<string, number> | null>(null);
   useEffect(() => {
-    const minhasCurtidas = new Set(
-      mensagens.filter(m => m.curtida_por && m.autor_id === meuId).map(m => m.id),
-    );
-    if (curtidasVistas.current === null) { curtidasVistas.current = minhasCurtidas; return; }
-    for (const id of minhasCurtidas) {
-      if (curtidasVistas.current.has(id)) continue;
+    // Só as MINHAS mensagens: o aviso é «curtiram o que você escreveu».
+    const minhas = new Map<string, number>();
+    for (const m of mensagens) {
+      if (m.autor_id !== meuId) continue;
+      const c = curtidas.get(m.id);
+      if (c && c.total > 0) minhas.set(m.id, c.total);
+    }
+
+    if (curtidasVistas.current === null) { curtidasVistas.current = minhas; return; }
+    for (const [id, total] of minhas) {
+      const antes = curtidasVistas.current.get(id) ?? 0;
+      if (total <= antes) continue;                     // não subiu: nada a avisar
+      if (curtidas.get(id)?.euCurti && total === 1) continue;  // curtir a própria não avisa
       const m = mensagens.find(x => x.id === id);
-      if (m?.curtida_por === meuId) continue;   // curtir a própria não avisa
       toast({
-        title: `${conversa.outro_nome} curtiu sua mensagem`,
+        title: conversa.tipo === 'grupo'
+          ? `Sua mensagem tem ${total} ${total === 1 ? 'curtida' : 'curtidas'}`
+          : `${conversa.outro_nome} curtiu sua mensagem`,
         description: m?.texto ? m.texto.slice(0, 80) : 'Anexo',
       });
     }
-    curtidasVistas.current = minhasCurtidas;
-  }, [mensagens, meuId, conversa.outro_nome]);
+    curtidasVistas.current = minhas;
+  }, [mensagens, curtidas, meuId, conversa.outro_nome, conversa.tipo, toast]);
 
   // Conversa trocada: o conjunto de curtidas já vistas é de outra conversa.
   useEffect(() => { curtidasVistas.current = null; }, [conversa.id]);
@@ -439,11 +531,22 @@ export function Conversa({
             <ArrowLeft className="w-4 h-4" />
           </button>
         )}
-        <AvatarChat nome={conversa.outro_nome} foto={conversa.outro_foto} tamanho={34} online={online} />
+        <AvatarChat
+          nome={conversa.outro_nome} foto={conversa.outro_foto} tamanho={34}
+          // O ponto verde é presença de UMA pessoa. Num grupo ele responderia
+          // «quem está online?» com um sim ou não que não pertence a ninguém.
+          online={conversa.tipo === 'grupo' ? false : online}
+        />
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1.5 text-sm font-medium leading-tight">
             <span className="truncate">{conversa.outro_nome}</span>
             <TagAdm perfil={conversa.outro_perfil} />
+            {conversa.tipo === 'grupo' && conversa.somente_lideranca && (
+              <span title="Só a liderança escreve neste grupo"
+                    className="shrink-0 rounded bg-muted px-1 py-px text-[9px] font-bold uppercase text-muted-foreground ring-1 ring-border">
+                travado
+              </span>
+            )}
           </p>
           {/*
             Login não entra aqui: quem está conversando já sabe com quem fala, e
@@ -456,15 +559,41 @@ export function Conversa({
             faz a pessoa esperar um texto que nunca chega.
           */}
           <p className="text-[11px] leading-tight">
-            {gravando
-              ? <span className="text-primary">gravando áudio…</span>
-              : digitando
-                ? <span className="text-primary">digitando…</span>
-                : online
-                  ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
-                  : <span className="text-muted-foreground">offline</span>}
+            {conversa.tipo === 'grupo'
+              ? (
+                // No grupo, quem está dentro. É o subtítulo do WhatsApp, e
+                // responde a pergunta que o nome do grupo não responde.
+                <span className="truncate text-muted-foreground">
+                  {membros.length > 0
+                    ? membros.slice(0, 4).map(x => (x.perfil_id === meuId ? 'Você' : x.nome.split(' ')[0])).join(', ')
+                      + (membros.length > 4 ? ` e mais ${membros.length - 4}` : '')
+                    : `${conversa.participantes} participantes`}
+                </span>
+              )
+              : gravando
+                ? <span className="text-primary">gravando áudio…</span>
+                : digitando
+                  ? <span className="text-primary">digitando…</span>
+                  : online
+                    ? <span className="text-emerald-600 dark:text-emerald-500">online</span>
+                    : <span className="text-muted-foreground">offline</span>}
           </p>
         </div>
+
+        {/* Configurações do grupo. Só aparece para quem administra: o botão
+            que abre uma tela onde tudo está desabilitado é pior que a ausência
+            do botão. */}
+        {conversa.tipo === 'grupo' && onConfigurarGrupo && (
+          <button
+            type="button"
+            onClick={onConfigurarGrupo}
+            title="Configurações do grupo"
+            aria-label="Abrir as configurações do grupo"
+            className="shrink-0 rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <Settings2 className="h-4 w-4" />
+          </button>
+        )}
       </header>
 
       {/* Mensagens */}
@@ -489,11 +618,38 @@ export function Conversa({
           </p>
         )}
 
-        {mensagensNaTela.map(m => {
+        {mensagens.map(m => {
           const meu = m.autor_id === meuId;
           const dia = diaDaMensagem(m.criado_em);
           const novoDia = dia !== diaAnterior;
           diaAnterior = dia;
+
+          /*
+           * Aviso de sistema sai do fluxo de balões inteiro.
+           *
+           * Ele não tem autor visível, não tem status de entrega, não se
+           * responde nem se curte — tratá-lo como mensagem só para depois
+           * desligar cada uma dessas coisas encheria o corpo do laço de
+           * condições que não descrevem nada.
+           */
+          if (m.sistema) {
+            return (
+              <div key={m.id} className={cn(!jaVistas.current.has(m.id) && ANIMACAO_ENTRADA)}>
+                {novoDia && (
+                  <div className="flex justify-center my-3">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground bg-muted/60 rounded-full px-2.5 py-0.5">
+                      {rotuloDoDia(m.criado_em)}
+                    </span>
+                  </div>
+                )}
+                <AvisoDeSistema
+                  m={m}
+                  nomeDoAutor={m.autor_id === meuId ? 'Você' : (autores.get(m.autor_id ?? '') ?? 'Alguém')}
+                />
+              </div>
+            );
+          }
+
           const estado = meu
             ? estadoMensagem(m.criado_em, conversa.entrega_do_outro, conversa.leitura_do_outro)
             : null;
@@ -517,7 +673,7 @@ export function Conversa({
                 `focus-within` mantém as duas alcançáveis por teclado.
               */}
               <div className={cn('group flex items-center gap-1', meu ? 'justify-end' : 'justify-start')}>
-                {meu && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} />}
+                {meu && !somenteLeitura && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
                 {/*
                   Duplo clique no balão curte, como no Instagram.
                   `select-none` evita que o gesto marque o texto no caminho, e o
@@ -531,8 +687,18 @@ export function Conversa({
                     meu ? 'bg-primary text-primary-foreground rounded-br-md'
                         : 'bg-muted rounded-bl-md',
                     // Espaço para o coração não encostar na hora.
-                    m.curtida_por && 'mb-2',
+                    (curtidas.get(m.id)?.total ?? 0) > 0 && 'mb-2',
                   )}>
+                  {/* Em grupo, quem falou. Só no balão do outro: o meu já
+                      está do meu lado, e «Você» acima dele é ruído. */}
+                  {conversa.tipo === 'grupo' && !meu && (
+                    <p className={cn(
+                      'text-[11px] font-semibold leading-none',
+                      corDoAutor(m.autor_id ?? ''),
+                    )}>
+                      {autores.get(m.autor_id ?? '') ?? 'Alguém'}
+                    </p>
+                  )}
                   {/* Citação: o pedaço de cima do balão, como no WhatsApp. */}
                   {m.respondendo_id && (
                     <Citacao
@@ -570,20 +736,13 @@ export function Conversa({
                   {/* O coração encosta na quina de baixo do balão, meio para
                       fora, como no Instagram: pertence à mensagem sem ocupar
                       uma linha dela. */}
-                  {m.curtida_por && (
-                    <span
-                      className={cn(
-                        'absolute -bottom-2 flex h-5 w-5 items-center justify-center',
-                        'rounded-full bg-background shadow ring-1 ring-border',
-                        meu ? 'left-1' : 'right-1',
-                      )}
-                      title={m.curtida_por === meuId ? 'Você curtiu' : `${conversa.outro_nome} curtiu`}
-                    >
-                      <Heart className="h-3 w-3 fill-red-500 text-red-500" />
-                    </span>
-                  )}
+                  <SeloDeCurtidas
+                    mensagemId={m.id}
+                    curtidas={curtidas.get(m.id)}
+                    ladoEsquerdo={meu}
+                  />
                 </div>
-                {!meu && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} />}
+                {!meu && !somenteLeitura && <AcoesBalao m={m} onResponder={responder} onCurtir={curtir} euCurti={curtidas.get(m.id)?.euCurti} />}
               </div>
             </div>
           );
@@ -594,7 +753,24 @@ export function Conversa({
         {(gravando || digitando) && <BalaoDigitando gravando={gravando} />}
       </div>
 
-      {/* Escrita */}
+      {/*
+        ── Quando NÃO se escreve ────────────────────────────────────────────
+        Duas situações, dois avisos diferentes, e nenhum campo desabilitado:
+        um campo cinza que não aceita texto faz a pessoa clicar, digitar e só
+        então descobrir que não podia. A frase no lugar dele responde antes.
+      */}
+      {somenteLeitura ? (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-3 py-3 text-xs text-muted-foreground">
+          <Eye className="h-3.5 w-3.5 shrink-0" />
+          Monitoramento em tempo real — somente leitura.
+        </div>
+      ) : conversa.tipo === 'grupo' && conversa.somente_lideranca && !conversa.sou_admin ? (
+        <div className="flex shrink-0 items-center justify-center gap-2 border-t border-border bg-muted/40 px-3 py-3 text-center text-xs text-muted-foreground">
+          <Lock className="h-3.5 w-3.5 shrink-0" />
+          Só a liderança pode enviar mensagens neste grupo.
+        </div>
+      ) : (
+      /* Escrita */
       <div className="border-t border-border px-2.5 py-2 space-y-2 shrink-0">
         {/*
           A citação em edição fica acima do campo, como no WhatsApp: quem está
@@ -757,6 +933,7 @@ export function Conversa({
         </div>
         )}
       </div>
+      )}
 
       {/* Foto e vídeo abrem aqui dentro, e não numa aba com a URL assinada
           à mostra. PDF continua abrindo fora — ver `VisualizadorMidia`. */}
@@ -774,6 +951,145 @@ export function Conversa({
 }
 
 /**
+ * O selo de curtidas na quina do balão.
+ *
+ * Mostra o coração e, a partir de duas, o número — uma curtida só não precisa
+ * de «1» ao lado, e o algarismo aí atrapalharia mais do que informa.
+ *
+ * A lista de QUEM curtiu é buscada no primeiro hover, não junto das mensagens:
+ * numa conversa de sessenta balões seriam sessenta consultas de nomes para
+ * desenhar um cartão que talvez ninguém abra. Buscada uma vez, fica em cache
+ * pelo tempo de vida do componente.
+ */
+function SeloDeCurtidas({
+  mensagemId, curtidas, ladoEsquerdo,
+}: {
+  mensagemId: string;
+  curtidas?: CurtidasDaMensagem;
+  /** Balão meu: o selo vai para a esquerda, longe da ponta da bolha. */
+  ladoEsquerdo: boolean;
+}) {
+  const [pessoas, setPessoas] = useState<QuemCurtiu[] | null>(null);
+  const [buscando, setBuscando] = useState(false);
+
+  const total = curtidas?.total ?? 0;
+  if (total === 0) return null;
+
+  async function abrir() {
+    if (pessoas !== null || buscando) return;
+    setBuscando(true);
+    try { setPessoas(await quemCurtiu(mensagemId)); }
+    finally { setBuscando(false); }
+  }
+
+  return (
+    <span
+      className={cn(
+        'group/curtida absolute -bottom-2 z-10 flex items-center gap-0.5',
+        'rounded-full bg-background px-1 py-px shadow ring-1 ring-border',
+        ladoEsquerdo ? 'left-1' : 'right-1',
+      )}
+      onMouseEnter={() => void abrir()}
+      onFocus={() => void abrir()}
+      tabIndex={0}
+    >
+      <Heart className="h-3 w-3 fill-red-500 text-red-500" />
+      {total > 1 && (
+        <span className="text-[10px] font-semibold leading-none tabular-nums text-foreground">
+          {total}
+        </span>
+      )}
+
+      {/* O cartão de quem curtiu, como no Instagram. `pointer-events-none`:
+          ele é para LER, e deixar o mouse entrar nele faria a bolha fugir
+          quando a pessoa tentasse alcançá-lo. */}
+      <span
+        className={cn(
+          'pointer-events-none absolute bottom-full left-1/2 z-30 mb-1.5 -translate-x-1/2',
+          'min-w-[150px] max-w-[220px] rounded-lg border border-border bg-popover p-2',
+          'opacity-0 shadow-lg transition-opacity',
+          'group-hover/curtida:opacity-100 group-focus-within/curtida:opacity-100',
+        )}
+      >
+        <span className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          {total === 1 ? '1 curtida' : `${total} curtidas`}
+        </span>
+        {pessoas === null ? (
+          <span className="block text-[11px] text-muted-foreground">Carregando…</span>
+        ) : (
+          <span className="block space-y-1">
+            {pessoas.map(p => (
+              <span key={p.perfil_id} className="flex items-center gap-1.5">
+                <AvatarChat nome={p.nome} foto={p.foto_url} tamanho={18} />
+                <span className="truncate text-[11px] text-popover-foreground">{p.nome}</span>
+              </span>
+            ))}
+          </span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * O aviso cinza no meio da conversa: quem entrou, quem saiu, o que mudou.
+ *
+ * É uma MENSAGEM com `sistema` preenchido, e não uma tabela de eventos, porque
+ * precisa aparecer intercalada com as mensagens, na ordem, com paginação — que
+ * é exatamente o que `chat_mensagens` já faz.
+ *
+ * A frase é montada aqui, não gravada no banco: o nome de quem fez a ação vem
+ * do autor da mensagem, e gravar «Beatriz adicionou Kleber» congelaria os dois
+ * nomes de então. Quem trocar de nome depois aparece com o nome novo.
+ */
+function AvisoDeSistema({
+  m, nomeDoAutor,
+}: {
+  m: MensagemChat;
+  nomeDoAutor: string;
+}) {
+  const dados = (m.sistema_dados ?? {}) as Record<string, string | boolean | null>;
+  const alvo = typeof dados.quem_nome === 'string' ? dados.quem_nome : 'alguém';
+
+  let frase: React.ReactNode;
+  switch (m.sistema) {
+    case 'criou':    frase = <>{nomeDoAutor} criou o grupo <strong>{String(dados.nome ?? '')}</strong></>; break;
+    case 'entrou':   frase = <>{nomeDoAutor} adicionou {alvo}</>; break;
+    case 'removido': frase = <>{nomeDoAutor} removeu {alvo}</>; break;
+    case 'saiu':     frase = <>{nomeDoAutor} saiu do grupo</>; break;
+    case 'nome':     frase = <>{nomeDoAutor} mudou o nome para <strong>{String(dados.para ?? '')}</strong></>; break;
+    case 'escrita':  frase = dados.travado
+      ? <>{nomeDoAutor} deixou o grupo só para a liderança escrever</>
+      : <>{nomeDoAutor} liberou a escrita para todos</>; break;
+    case 'foto':     frase = String(dados.para ?? '')
+      ? <>{nomeDoAutor} mudou a foto do grupo</>
+      : <>{nomeDoAutor} removeu a foto do grupo</>; break;
+    default:         frase = <>{nomeDoAutor} alterou o grupo</>;
+  }
+
+  const antes  = typeof dados.de === 'string' ? dados.de : null;
+  const depois = typeof dados.para === 'string' ? dados.para : null;
+
+  return (
+    <div className="flex justify-center py-1">
+      <div className="max-w-[85%] rounded-full bg-muted/70 px-3 py-1 text-center text-[11px] leading-snug text-muted-foreground">
+        {frase}
+        {/* Na troca de foto, o antes e o depois lado a lado: é o que o aviso
+            do WhatsApp faz, e responde «que foto era?» sem abrir nada. */}
+        {m.sistema === 'foto' && (antes || depois) && (
+          <span className="mt-1 flex items-center justify-center gap-1.5">
+            {antes && <img src={antes} alt="Foto anterior" className="h-7 w-7 rounded-full object-cover opacity-60" />}
+            {antes && depois && <span className="text-[10px]">→</span>}
+            {depois && <img src={depois} alt="Foto nova" className="h-7 w-7 rounded-full object-cover" />}
+          </span>
+        )}
+        <span className="ml-1.5 opacity-60">{horaDoBalao(m.criado_em)}</span>
+      </div>
+    </div>
+  );
+}
+
+/**
  * Responder e curtir, ao lado do balão.
  *
  * Aparecem no hover (e no foco, para quem usa teclado). Ficam fora do balão de
@@ -784,11 +1100,13 @@ export function Conversa({
  * conversa, e a de baixo é a que só reage.
  */
 function AcoesBalao({
-  m, onResponder, onCurtir,
+  m, onResponder, onCurtir, euCurti = false,
 }: {
   m: MensagemChat;
   onResponder: (m: MensagemChat) => void;
   onCurtir: (m: MensagemChat) => void;
+  /** Já curti esta? Vem do mapa de curtidas — a mensagem não carrega mais isso. */
+  euCurti?: boolean;
 }) {
   // Mensagem sem conteúdo (expurgada) não se responde nem se curte.
   if (m.expurgado_em) return null;
@@ -806,12 +1124,12 @@ function AcoesBalao({
       <button
         type="button"
         onClick={() => void onCurtir(m)}
-        title={m.curtida_por ? 'Descurtir' : 'Curtir'}
-        aria-label={m.curtida_por ? 'Descurtir esta mensagem' : 'Curtir esta mensagem'}
-        aria-pressed={!!m.curtida_por}
+        title={euCurti ? 'Descurtir' : 'Curtir'}
+        aria-label={euCurti ? 'Descurtir esta mensagem' : 'Curtir esta mensagem'}
+        aria-pressed={euCurti}
         className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-red-500 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        <Heart className={cn('h-3.5 w-3.5', m.curtida_por && 'fill-red-500 text-red-500')} />
+        <Heart className={cn('h-3.5 w-3.5', euCurti && 'fill-red-500 text-red-500')} />
       </button>
     </div>
   );

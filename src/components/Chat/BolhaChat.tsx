@@ -42,6 +42,9 @@ import { ListaConversas } from './ListaConversas';
 import { Conversa } from './Conversa';
 import { DisparoDialog } from './DisparoDialog';
 import { NovaConversaDialog } from './NovaConversaDialog';
+import { NovoGrupoDialog } from './NovoGrupoDialog';
+import { ConfigGrupoDialog } from './ConfigGrupoDialog';
+import { PainelMonitor } from './PainelMonitor';
 import { BoasVindasChat } from './BoasVindasChat';
 import { useToast } from '@/components/ui/use-toast';
 import { toast as toastFlutuante } from '@/components/ui/sonner';
@@ -75,6 +78,9 @@ export function BolhaChat() {
     try { return localStorage.getItem(CHAVE_LARGURA) !== 'nao'; } catch { return true; }
   });
   const [novaConversa, setNovaConversa] = useState(false);
+  const [novoGrupo, setNovoGrupo] = useState(false);
+  /** Painel de configuracoes do grupo aberto. */
+  const [configGrupo, setConfigGrupo] = useState(false);
   const [novoDisparo, setNovoDisparo] = useState(false);
   /** Mouse ou teclado em cima do botão — acende o brilho e os pontos. */
   const [sobre, setSobre] = useState(false);
@@ -168,6 +174,16 @@ export function BolhaChat() {
   }, [permLoading, temPermissao]);
 
   const podeVer = liberadoNoBanco === true;
+
+  /*
+   * Grupo e Monitor sao chaves do painel, lidas UMA vez aqui.
+   *
+   * Passar `undefined` para a lista e o que faz a aba e o item de menu nao
+   * existirem — em vez de existirem desabilitados. Botao que aparece e nao
+   * funciona e pior que botao ausente: ele promete.
+   */
+  const podeCriarGrupo = podeVer && temPermissao('chat_grupo_criar');
+  const podeMonitorar   = podeVer && temPermissao('chat_monitor');
 
   /*
    * O chat continua ligado com a janela fechada.
@@ -367,26 +383,36 @@ export function BolhaChat() {
                 onApagar={id => void apagar(id)}
                 onNovaConversa={() => setNovaConversa(true)}
                 onNovoDisparo={() => setNovoDisparo(true)}
+                onNovoGrupo={podeCriarGrupo ? () => setNovoGrupo(true) : undefined}
+                painelMonitor={podeMonitorar ? <PainelMonitor expandido={expandido} /> : undefined}
               />
             </div>
           )}
 
           {mostraConversa && conversaAtual && (
             <div className="flex-1 min-w-0 min-h-0">
+              {/*
+                Presença é de UMA pessoa, e grupo não tem «a outra»: as três
+                marcas ficam desligadas lá. Anunciar «digitando…» num grupo de
+                dez exigiria saber QUEM, e a presença atual guarda um par.
+              */}
               <Conversa
                 conversa={conversaAtual}
                 mensagens={chat.mensagens}
-                online={online.has(conversaAtual.outro_id)}
-                digitando={digitando.has(conversaAtual.outro_id)}
-                gravando={gravando.has(conversaAtual.outro_id)}
+                online={!!conversaAtual.outro_id && online.has(conversaAtual.outro_id)}
+                digitando={!!conversaAtual.outro_id && digitando.has(conversaAtual.outro_id)}
+                gravando={!!conversaAtual.outro_id && gravando.has(conversaAtual.outro_id)}
                 expandido={expandido}
                 onVoltar={() => chat.abrir(null)}
                 onEnviar={chat.enviar}
-                onDigitando={() => avisarAtividade(conversaAtual.outro_id, 'digitando')}
-                onGravando={() => avisarAtividade(conversaAtual.outro_id, 'gravando')}
+                onDigitando={() => { if (conversaAtual.outro_id) avisarAtividade(conversaAtual.outro_id, 'digitando'); }}
+                onGravando={() => { if (conversaAtual.outro_id) avisarAtividade(conversaAtual.outro_id, 'gravando'); }}
                 temMais={chat.temMais}
                 carregandoMais={chat.carregandoMais}
                 onVerAnteriores={chat.verAnteriores}
+                onConfigurarGrupo={
+                  conversaAtual.tipo === 'grupo' ? () => setConfigGrupo(true) : undefined
+                }
               />
             </div>
           )}
@@ -404,6 +430,25 @@ export function BolhaChat() {
         onFechar={() => setNovaConversa(false)}
         onEscolher={pedirPessoa}
       />
+
+      <NovoGrupoDialog
+        aberto={novoGrupo}
+        onFechar={() => setNovoGrupo(false)}
+        onCriado={id => { chat.recarregar(); chat.abrir(id); }}
+      />
+
+      {/* O painel de configuracoes so monta com um GRUPO aberto: ele fala de
+          nome, foto e membros, que a conversa direta nao tem. */}
+      {conversaAtual?.tipo === 'grupo' && (
+        <ConfigGrupoDialog
+          aberto={configGrupo}
+          conversa={conversaAtual}
+          meuId={perfil?.id ?? ''}
+          onFechar={() => setConfigGrupo(false)}
+          onMudou={() => chat.recarregar()}
+          onSai={() => { chat.abrir(null); chat.recarregar(); }}
+        />
+      )}
 
       {/* Uma vez por pessoa, antes da primeira conversa. Ver o componente. */}
       <BoasVindasChat aberto={!!pendente} onAceitar={depoisDeLer} />
